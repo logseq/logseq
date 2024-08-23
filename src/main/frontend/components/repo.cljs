@@ -144,7 +144,7 @@
                              (unlink-or-remote-fn!))))}
             (if only-cloud? "Remove (server)" "Unlink (local)")]))]]]))
 
-(rum/defc repos < rum/reactive
+(rum/defc repos-cp < rum/reactive
   []
   (let [login? (boolean (state/sub :auth/id-token))
         repos (state/sub [:me :repos])

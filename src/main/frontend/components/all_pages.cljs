@@ -46,8 +46,8 @@
   []
   (let [db (db/get-db)
         [data set-data!] (rum/use-state (get-all-pages))
-        columns (views/build-columns {} (columns db)
-                                     {:with-object-name? false})
+        columns' (views/build-columns {} (columns db)
+                                      {:with-object-name? false})
         view-entity (first (ldb/get-all-pages-views db))]
     (rum/use-effect!
      (fn []
@@ -61,7 +61,7 @@
      (views/view view-entity {:data data
                               :set-data! set-data!
                               :title-key :all-pages/table-title
-                              :columns columns
+                              :columns columns'
                               :on-delete-rows (fn [table selected-rows]
                                                 (shui/dialog-open!
                                                  (component-page/batch-delete-dialog

@@ -802,8 +802,7 @@
     (rum/local 1 ::current-page)
   [state]
   (let [*list-node-ref        (rum/create-ref)
-        installed-plugins     (state/sub [:plugin/installed-plugins])
-        installed-plugins     (vals installed-plugins)
+        installed-plugins'    (vals (state/sub [:plugin/installed-plugins]))
         updating              (state/sub :plugin/installing)
         develop-mode?         (state/sub :ui/developer-mode?)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
@@ -816,9 +815,9 @@
         *cached-query-flag    (::cached-query-flag state)
         *current-page         (::current-page state)
         default-filter-by?    (= :default @*filter-by)
-        theme-plugins         (filter #(:theme %) installed-plugins)
-        normal-plugins        (filter #(not (:theme %)) installed-plugins)
-        filtered-plugins      (when (seq installed-plugins)
+        theme-plugins         (filter #(:theme %) installed-plugins')
+        normal-plugins        (filter #(not (:theme %)) installed-plugins')
+        filtered-plugins      (when (seq installed-plugins')
                                 (if (= @*category :themes) theme-plugins normal-plugins))
         total-nums            [(count normal-plugins) (count theme-plugins)]
         filtered-plugins      (if-not default-filter-by?

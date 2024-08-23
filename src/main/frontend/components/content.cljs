@@ -454,7 +454,6 @@
   [state id {:keys [format
                     config
                     hiccup
-                    content
                     on-click
                     on-hide]
              :as option}]
@@ -463,4 +462,4 @@
      (hiccup-content id option)]
     ;; TODO: remove this
     (let [format (common-util/normalize-format format)]
-      (non-hiccup-content id content on-click on-hide config format))))
+      (non-hiccup-content id (:content option) on-click on-hide config format))))

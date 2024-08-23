@@ -104,7 +104,7 @@
                            :sidebar? sidebar?})
          (str (:block/uuid page-e) "-hiccup"))])))
 
-(declare page)
+(declare page-cp)
 
 (if config/publishing?
   (rum/defc dummy-block
@@ -245,7 +245,7 @@
                (query/custom-query (component-block/wrap-query-components
                                      {:attr {:class "mt-10"}
                                       :editor-box editor/box
-                                      :page page})
+                                      :page page-cp})
                  query))
              (str repo "-custom-query-" (:query query))))]))))
 
@@ -653,7 +653,7 @@
   [state option]
   (page-inner (assoc option :*loading? (::loading? state))))
 
-(rum/defcs page
+(rum/defcs page-cp
   [state option]
   (rum/with-key
     (page-aux option)

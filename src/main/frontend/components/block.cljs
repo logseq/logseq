@@ -1637,8 +1637,8 @@
             (youtube/youtube-video youtube-id nil))))
 
       (= name "youtube-timestamp")
-      (when-let [timestamp (first arguments)]
-        (when-let [seconds (youtube/parse-timestamp timestamp)]
+      (when-let [timestamp' (first arguments)]
+        (when-let [seconds (youtube/parse-timestamp timestamp')]
           (youtube/timestamp seconds)))
 
       (= name "zotero-imported-file")
@@ -2370,12 +2370,12 @@
   "Tags without inline tags"
   [config block hover?]
   (when (:block/raw-title block)
-    (let [tags (->>
+    (let [tags' (->>
                 (:block/tags block)
                 (remove (fn [t] (ldb/inline-tag? (:block/raw-title block) t))))
-          block-tags (if (and (not hover?) (= [:logseq.class/Task] (map :db/ident tags)))
-                       (remove (fn [t] (= (:db/ident t) :logseq.class/Task)) tags)
-                       tags)]
+          block-tags (if (and (not hover?) (= [:logseq.class/Task] (map :db/ident tags')))
+                       (remove (fn [t] (= (:db/ident t) :logseq.class/Task)) tags')
+                       tags')]
       (when (seq block-tags)
         [:div.block-tags.flex.flex-row.flex-wrap.items-center.gap-1
          (for [tag block-tags]
@@ -2504,8 +2504,8 @@
         nil)]]))
 
 (rum/defc block-refs-count < rum/static
-  [block block-refs-count *hide-block-refs?]
-  (when (> block-refs-count 0)
+  [block block-refs-count' *hide-block-refs?]
+  (when (> block-refs-count' 0)
     (shui/button {:variant :ghost
                   :title "Open block references"
                   :class "px-2 py-0 w-6 h-6 opacity-70 hover:opacity-100"
@@ -2517,7 +2517,7 @@
                                  (:db/id block)
                                  :block-ref)
                                 (swap! *hide-block-refs? not)))}
-      [:span.text-sm block-refs-count])))
+      [:span.text-sm block-refs-count'])))
 
 (rum/defc block-left-menu < rum/reactive
   [_config {:block/keys [uuid] :as _block}]
@@ -2747,7 +2747,7 @@
                                       (if (seq ast-title)
                                         (->elem :span.inline-wrap (map-inline config ast-title))
                                         (->elem :div (markup-elements-cp config ast-body))))]))))
-              breadcrumb (->> (into [] parents-props)
+              breadcrumbs (->> (into [] parents-props)
                               (concat [page-name-props] (when more? [:more]))
                               (filterv identity)
                               (map (fn [x]
@@ -2756,9 +2756,9 @@
                                          (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
                                        [:span.opacity-70 "⋯"])))
                               (interpose (breadcrumb-separator)))]
-          (when (seq breadcrumb)
+          (when (seq breadcrumbs)
             [:div.breadcrumb.block-parents
-             {:class (when (seq breadcrumb)
+             {:class (when (seq breadcrumbs)
                        (str (when-not (:search? config)
                               " my-2")
                             (when indent?
@@ -2766,11 +2766,11 @@
              (when (and (false? (:top-level? config))
                         (seq parents))
                (breadcrumb-separator))
-             breadcrumb
+             breadcrumbs
              (when end-separator? (breadcrumb-separator))]))))))
 
 (defn- block-drag-over
-  [event uuid top? block-id *move-to]
+  [event uuid top? block-id *move-to']
   (util/stop event)
   (when-not (dnd-same-block? uuid)
     (let [over-block (gdom/getElement block-id)
@@ -2789,25 +2789,25 @@
                           :else
                           :sibling)]
       (reset! *drag-to-block block-id)
-      (reset! *move-to move-to-value))))
+      (reset! *move-to' move-to-value))))
 
 (defn- block-drag-leave
-  [*move-to]
-  (reset! *move-to nil))
+  [*move-to']
+  (reset! *move-to' nil))
 
 (defn block-drag-end
   ([_event]
    (block-drag-end _event *move-to))
-  ([_event *move-to]
+  ([_event *move-to']
    (reset! *dragging? false)
    (reset! *dragging-block nil)
    (reset! *drag-to-block nil)
-   (reset! *move-to nil)
+   (reset! *move-to' nil)
    (editor-handler/unhighlight-blocks!)))
 
 (defn- block-drop
   "Block on-drop handler"
-  [^js event uuid target-block original-block *move-to]
+  [^js event uuid target-block original-block *move-to']
   (util/stop event)
   (when-not (dnd-same-block? uuid)
     (let [block-uuids (state/get-selection-block-ids)
@@ -2817,7 +2817,7 @@
           blocks (remove-nils blocks)]
       (if (seq blocks)
         ;; dnd block moving in current Logseq instance
-        (dnd/move-blocks event blocks target-block original-block @*move-to)
+        (dnd/move-blocks event blocks target-block original-block @*move-to')
         ;; handle DataTransfer
         (let [repo (state/get-current-repo)
               data-transfer (.-dataTransfer event)
@@ -2829,8 +2829,8 @@
                text
                {:block-uuid  uuid
                 :edit-block? false
-                :sibling?    (= @*move-to :sibling)
-                :before?     (= @*move-to :top)}))
+                :sibling?    (= @*move-to' :sibling)
+                :before?     (= @*move-to' :top)}))
 
             (contains? transfer-types "Files")
             (let [files (.-files data-transfer)
@@ -2862,7 +2862,7 @@
 
             :else
             (prn ::unhandled-drop-data-transfer-type transfer-types))))))
-  (block-drag-end event *move-to))
+  (block-drag-end event *move-to'))
 
 (defn- block-mouse-over
   [e *control-show? block-id doc-mode?]
@@ -2893,15 +2893,15 @@
     (state/into-selection-mode!)))
 
 (defn- on-drag-and-mouse-attrs
-  [block original-block uuid top? block-id *move-to]
+  [block original-block uuid top? block-id *move-to']
   {:on-drag-over (fn [event]
-                   (block-drag-over event uuid top? block-id *move-to))
+                   (block-drag-over event uuid top? block-id *move-to'))
    :on-drag-leave (fn [_event]
-                    (block-drag-leave *move-to))
+                    (block-drag-leave *move-to'))
    :on-drop (fn [event]
-              (block-drop event uuid block original-block *move-to))
+              (block-drop event uuid block original-block *move-to'))
    :on-drag-end (fn [event]
-                  (block-drag-end event *move-to))})
+                  (block-drag-end event *move-to'))})
 
 (defn- root-block?
   [config block]

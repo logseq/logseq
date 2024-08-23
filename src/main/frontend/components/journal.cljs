@@ -13,7 +13,7 @@
   [page]
   [:div.journal-item.content {:key (:db/id page)}
    (let [repo (state/sub :git/current-repo)]
-     (page/page {:repo repo
+     (page/page-cp {:repo repo
                  :page-name (str (:block/uuid page))}))])
 
 (defn on-scroll
