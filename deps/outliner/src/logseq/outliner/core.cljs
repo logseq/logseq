@@ -445,10 +445,10 @@
     (if-let [list-type (and target-block (list-type-fn target-block))]
       (mapv
        (fn [{:block/keys [title format] :as block}]
-         (let [list? (and (some? (:block/uuid block))
-                          (nil? (list-type-fn block)))]
+         (let [list?' (and (some? (:block/uuid block))
+                           (nil? (list-type-fn block)))]
            (cond-> block
-             list?
+             list?'
              ((fn [b]
                 (if db-based?
                   (assoc b :logseq.property/order-list-type list-type)
@@ -493,10 +493,10 @@
         get-new-id (fn [block lookup]
                      (cond
                        (or (map? lookup) (vector? lookup) (de/entity? lookup))
-                       (when-let [uuid (if (and (vector? lookup) (= (first lookup) :block/uuid))
+                       (when-let [uuid' (if (and (vector? lookup) (= (first lookup) :block/uuid))
                                          (get uuids (last lookup))
                                          (get id->new-uuid (:db/id lookup)))]
-                         [:block/uuid uuid])
+                         [:block/uuid uuid'])
 
                        (integer? lookup)
                        lookup
@@ -505,14 +505,14 @@
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))
         orders (get-block-orders blocks target-block sibling? keep-block-order?)]
     (map-indexed (fn [idx {:block/keys [parent] :as block}]
-                   (when-let [uuid (get uuids (:block/uuid block))]
+                   (when-let [uuid' (get uuids (:block/uuid block))]
                      (let [top-level? (= (:block/level block) 1)
                            parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
 
                            order (nth orders idx)
                            _ (assert (and parent order) (str "Parent or order is nil: " {:parent parent :order order}))
                            m {:db/id (:db/id block)
-                              :block/uuid uuid
+                              :block/uuid uuid'
                               :block/page target-page
                               :block/parent parent
                               :block/order order}]
@@ -647,7 +647,7 @@
                        :target-block target-block}))
       (let [uuids-tx (->> (map :block/uuid tx')
                           (remove nil?)
-                          (map (fn [uuid] {:block/uuid uuid})))
+                          (map (fn [uuid'] {:block/uuid uuid'})))
             tx (assign-temp-id tx' replace-empty-target? target-block)
             from-property (:logseq.property/created-from-property target-block)
             property-values-tx (when (and sibling? from-property)
@@ -776,10 +776,10 @@
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
     (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                (not original-position?))
-      (let [parents (->> (ldb/get-block-parents db (:block/uuid target-block) {})
-                         (map :db/id)
-                         (set))
-            move-parents-to-child? (some parents (map :db/id blocks))]
+      (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})
+                          (map :db/id)
+                          (set))
+            move-parents-to-child? (some parents' (map :db/id blocks))]
         (when-not move-parents-to-child?
           (batch-tx/with-batch-tx-mode conn {:outliner-op :move-blocks}
             (doseq [[idx block] (map vector (range (count blocks)) blocks)]

@@ -5,12 +5,12 @@
   "A wrapper around deftest that handles async and done in all cases.
   Importantly, it prevents unexpected failures in an async test from abruptly
   ending a test suite"
-  [name opts & body]
+  [name' opts & body]
   (let [[opts body]
         (if (map? opts)
           [opts body]
           [nil (cons opts body)])]
-    `(cljs.test/deftest ~name
+    `(cljs.test/deftest ~name'
        ~@(when-let [pre (:before opts)]
            [pre])
        (cljs.test/async

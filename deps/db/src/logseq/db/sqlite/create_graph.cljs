@@ -61,9 +61,9 @@
 (defn kv
   "Creates a key-value pair tx with the key and value respectively stored under
   :db/ident and :kv/value.  The key must be under the namespace :logseq.kv"
-  [key value]
-  {:pre [(= "logseq.kv" (namespace key))]}
-  {:db/ident key
+  [k value]
+  {:pre [(= "logseq.kv" (namespace k))]}
+  {:db/ident k
    :kv/value value})
 
 (def built-in-pages-names

@@ -71,12 +71,12 @@
     v-str))
 
 (defn- update-datascript-schema
-  [property {:keys [type cardinality]}]
+  [property {type' :type :keys [cardinality]}]
   (let [ident (:db/ident property)
         cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
         old-type (get-in property [:block/schema :type])
         old-ref-type? (db-property-type/ref-property-types old-type)
-        ref-type? (db-property-type/ref-property-types type)]
+        ref-type? (db-property-type/ref-property-types type')]
     [(cond->
       {:db/ident ident
        :db/cardinality cardinality}
