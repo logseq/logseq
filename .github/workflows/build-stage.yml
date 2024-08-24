@@ -12,7 +12,7 @@ on:
       cloudflare-project-name:
         description: "Cloudflare pages project name"
         required: true
-        default: "logseq-demo"
+        default: "logseq-dev"
 
   release:
     types: [released]
@@ -55,7 +55,7 @@ jobs:
       - name: Build Released-Web
         run: |
           yarn gulp:build && clojure -M:cljs release app  --config-merge '{:asset-path "${{env.asset-path}}" :compiler-options {:source-map-include-sources-content false :source-map-detail-level :symbols}}'
-          ls -ah ./static/js
+          ls -ah ./public
 
       - name: Publish to Cloudflare Pages
         uses: cloudflare/pages-action@1
@@ -63,6 +63,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
           projectName: ${{ github.event.inputs.cloudflare-project-name || 'logseq-demo' }}
-          directory: 'static'
+          directory: 'public'
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           branch: 'production'
