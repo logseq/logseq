@@ -673,7 +673,7 @@
                                             (util/stop e)
                                             (shui/popup-show! (.-target e)
                                               (fn [{:keys [id]}]
-                                                (property-v2/dropdown-editor id property
+                                                (property-v2/dropdown-editor id property block
                                                   {:debug? (.-altKey e)}))
                                               {:content-props
                                                {:class "ls-property-dropdown-editor as-root"}
