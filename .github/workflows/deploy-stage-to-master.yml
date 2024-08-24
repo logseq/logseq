@@ -2,17 +2,7 @@ name: Deploy master to cloudflare pages for test
 
 on:
   push:
-    branches: [ "master" ]
-  workflow_dispatch:
-    inputs:
-      git-ref:
-        description: "Release Git Ref (Which branch or tag to build?)"
-        required: true
-        default: "master"
-      cloudflare-project-name:
-        description: "Cloudflare pages project name"
-        required: true
-        default: "logseq-dev"
+    branches: ["master"]
 
 env:
   CLOJURE_VERSION: "1.10.1.763"
@@ -57,6 +47,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
           projectName: "logseq-dev"
-          directory: "public"
+          directory: "static"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           branch: "production"
