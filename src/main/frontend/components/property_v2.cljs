@@ -264,18 +264,26 @@
                                    {:id :ls-base-edit-form
                                     :align "start"}))}})]))
 
+(def position-labels
+  {:properties {:icon :layout-distribute-horizontal :title "Block properties"}
+   :block-left {:icon :layout-align-right :title "Beginning of the block"}
+   :block-right {:icon :layout-align-left :title "End of the block"}
+   :block-below {:icon :layout-align-top :title "Below of the block"}})
+
 (rum/defc ui-position-sub-pane
-  [_property {:keys [id set-sub-open!]}]
+  [property {:keys [id set-sub-open! _position]}]
   (let [handle-select! (fn [^js e]
-                         (shui/toast! (.-innerText (.-target e)))
-                         (set-sub-open! false)
-                         (restore-root-highlight-item! id))
+                         (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
+                           (db-property-handler/upsert-property!
+                             (:db/ident property)
+                             (assoc (:block/schema property) :position (keyword v))
+                             {:property-name (:block/title property)})
+                           (set-sub-open! false)
+                           (restore-root-highlight-item! id)))
         item-props {:on-select handle-select!}]
     [:div.ls-property-dropdown-editor.ls-property-ui-position-sub-pane
-     (dropdown-editor-menuitem {:icon :layout-distribute-horizontal :title "Block properties" :item-props item-props})
-     (dropdown-editor-menuitem {:icon :layout-align-right :title "Beginning of the block" :item-props item-props})
-     (dropdown-editor-menuitem {:icon :layout-align-left :title "End of the block" :item-props item-props})
-     (dropdown-editor-menuitem {:icon :layout-align-top :title "Below of the block" :item-props item-props})]))
+     (for [[k v] position-labels]
+       (dropdown-editor-menuitem (assoc v :item-props (assoc item-props :data-value k))))]))
 
 (defn- property-type-label
   [property-type]
@@ -284,10 +292,24 @@
     "Text"
     ((comp string/capitalize name) property-type)))
 
+(defn- handle-delete-property!
+  [block property & {:keys [class? class-schema?]}]
+  (let [class? (or class? (ldb/class? block))
+        remove! #(let [repo (state/get-current-repo)]
+                   (if (and class? class-schema?)
+                     (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
+                     (property-handler/remove-block-property! repo (:block/uuid block) (:db/ident property))))]
+    (if (and class? class-schema?)
+      (-> (shui/dialog-confirm!
+            ;; Only ask for confirmation on class schema properties
+            [:p (str "Are you sure you want to delete this property?")])
+        (p/then remove!))
+      (remove!))))
+
 (rum/defc dropdown-editor-impl
   "popup-id: dropdown popup id
    property: block entity"
-  [_popup-id property opts]
+  [_popup-id property owner-block opts]
   (let [title (:block/title property)
         property-schema (:block/schema property)
         property-type (get property-schema :type)
@@ -317,12 +339,14 @@
                                                                (assoc property-schema :cardinality (if many? :one :many)) {})}))
 
      (shui/dropdown-menu-separator)
-     (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc "beginning of the block"
-                                :item-props {:class "ui__position-trigger-item"}
-                                :submenu-content (fn [ops] (ui-position-sub-pane property ops))})
+     (let [position (:position property-schema)]
+       (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
+                                  :item-props {:class "ui__position-trigger-item"}
+                                  :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :position position)))}))
+
      (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
                                 :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
-                                                             (assoc property-schema  :hide? %) {})})
+                                                             (assoc property-schema :hide? %) {})})
 
      (shui/dropdown-menu-separator)
      (dropdown-editor-menuitem
@@ -336,8 +360,10 @@
         :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-09"
                      :on-select (fn [^js e]
                                   (util/stop e)
-                                  (-> (shui/dialog-confirm! "remove?")
-                                    (p/then (fn [] (shui/popup-hide-all!)))
+                                  (-> (shui/dialog-confirm! "Are you sure you want to delete property from this node?")
+                                    (p/then (fn []
+                                              (handle-delete-property! owner-block property {:class-schema? false})
+                                              (shui/popup-hide-all!)))
                                     (p/catch (fn [] (restore-root-highlight-item! :remove-property)))))}})
      (when (:debug? opts)
        [:<>
@@ -350,6 +376,6 @@
                                      (shui/popup-hide!))}})])]))
 
 (rum/defc dropdown-editor < rum/reactive
-  [popup-id property opts]
+  [popup-id property owner-block opts]
   (let [property1 (db/sub-block (:db/id property))]
-    (dropdown-editor-impl popup-id property1 opts)))
+    (dropdown-editor-impl popup-id property1 owner-block opts)))
