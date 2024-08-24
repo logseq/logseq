@@ -289,7 +289,8 @@
    property: block entity"
   [_popup-id property opts]
   (let [title (:block/title property)
-        property-type (get-in property [:block/schema :type])
+        property-schema (:block/schema property)
+        property-type (get property-schema :type)
         property-type-label' (some-> property-type (property-type-label))
         enable-closed-values? (contains? db-property-type/closed-value-property-types
                                 (or property-type :default))
@@ -313,14 +314,15 @@
        (dropdown-editor-menuitem {:icon :checks :title "Multiple values"
                                   :toggle-checked? many? :disabled? disabled?
                                   :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
-                                                               (assoc (:block/schema property) :cardinality (if many? :one :many)) {})}))
+                                                               (assoc property-schema :cardinality (if many? :one :many)) {})}))
 
      (shui/dropdown-menu-separator)
      (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc "beginning of the block"
                                 :item-props {:class "ui__position-trigger-item"}
                                 :submenu-content (fn [ops] (ui-position-sub-pane property ops))})
-     (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? false
-                                :on-toggle-checked-change (fn [v] (shui/toast! (str title ": " v)))})
+     (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
+                                :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
+                                                             (assoc property-schema  :hide? %) {})})
 
      (shui/dropdown-menu-separator)
      (dropdown-editor-menuitem
@@ -331,7 +333,7 @@
                                   (route-handler/redirect-to-page! (:block/uuid property)))}})
      (dropdown-editor-menuitem
        {:id :remove-property :icon :square-x :title "Remove property" :desc "" :disabled? false
-        :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-08"
+        :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-09"
                      :on-select (fn [^js e]
                                   (util/stop e)
                                   (-> (shui/dialog-confirm! "remove?")
