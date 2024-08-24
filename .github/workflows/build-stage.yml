@@ -62,7 +62,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
-          projectName: ${{ github.event.inputs.cloudflare-project-name || 'logseq-demo' }}
+          projectName: ${{ github.event.inputs.cloudflare-project-name || 'logseq-dev' }}
           directory: 'public'
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           branch: 'production'
