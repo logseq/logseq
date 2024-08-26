@@ -734,8 +734,8 @@
     (when (seq filters)
       [:div.filters-row.flex.flex-row.items-center.gap-4.flex-wrap.pb-2
        (map-indexed
-        (fn [idx filter]
-          (let [[property-ident operator value] filter
+        (fn [idx filter']
+          (let [[property-ident operator value] filter'
                 property (if (= property-ident :block/title)
                            {:db/ident property-ident
                             :block/title "Name"}
@@ -757,7 +757,7 @@
                :variant "ghost"
                :size :sm
                :on-click (fn [_e]
-                           (let [new-filters (vec (remove #{filter} filters))]
+                           (let [new-filters (vec (remove #{filter'} filters))]
                              (set-filters! new-filters)))}
               (ui/icon "x"))]))
         filters)])))

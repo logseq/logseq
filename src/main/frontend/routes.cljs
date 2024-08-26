@@ -27,7 +27,7 @@
 
    ["/graphs"
     {:name :graphs
-     :view repo/repos}]
+     :view repo/repos-cp}]
 
    ["/whiteboards"
     {:name :whiteboards
@@ -40,11 +40,11 @@
                    whiteboard? (ldb/whiteboard? (db/get-page page-name))]
                (if whiteboard?
                  (whiteboard/whiteboard-route route-match)
-                 (page/page route-match))))}]
+                 (page/page-cp route-match))))}]
 
    ["/page/:name/block/:block-route-name"
     {:name :page-block
-     :view page/page}]
+     :view page/page-cp}]
 
    ["/all-pages"
     {:name :all-pages

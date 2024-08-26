@@ -210,7 +210,7 @@
 (defn- text-with-refs?
   "Detects if a property value has text with refs e.g. `#Logseq is #awesome`
   instead of `#Logseq #awesome`. If so the property type is :default instead of :page"
-  [vals val-text]
+  [prop-vals val-text]
   (let [replace-regex (re-pattern
                        ;; Regex removes all characters of a tag or page-ref
                        ;; so that only ref chars are left
@@ -219,7 +219,7 @@
                             ;; Sorts ref names in descending order so that longer names
                             ;; come first. Order matters since (foo-bar|foo) correctly replaces
                             ;; "foo-bar" whereas (foo|foo-bar) does not
-                            (->> vals (sort >) (map common-util/escape-regex-chars) (string/join "|"))
+                            (->> prop-vals (sort >) (map common-util/escape-regex-chars) (string/join "|"))
                             ")"))
         remaining-text (string/replace val-text replace-regex "$1")
         non-ref-char (some #(if (or (string/blank? %) (#{"[" "]" "," "#"} %))
@@ -839,11 +839,11 @@
         ;; _ (when (seq new-properties) (prn :new-properties new-properties))
         [properties-tx pages-tx'] ((juxt filter remove)
                                    #(contains? new-properties (keyword (:block/name %))) pages-tx)
-        property-pages-tx (map (fn [{:block/keys [title uuid]}]
+        property-pages-tx (map (fn [{block-uuid :block/uuid :block/keys [title]}]
                                  (let [db-ident (get @(:all-idents import-state) (keyword (string/lower-case title)))]
                                    (sqlite-util/build-new-property db-ident
                                                                    (get @(:property-schemas import-state) (keyword title))
-                                                                   {:title title :block-uuid uuid})))
+                                                                   {:title title :block-uuid block-uuid})))
                                properties-tx)
         converted-property-pages-tx
         (map (fn [kw-name]

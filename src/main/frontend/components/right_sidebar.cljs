@@ -37,22 +37,22 @@
 (rum/defc block-cp < rum/reactive
   [repo idx block]
   (let [id (:block/uuid block)]
-    (page/page {:parameters  {:path {:name (str id)}}
+    (page/page-cp {:parameters  {:path {:name (str id)}}
                 :sidebar?    true
                 :sidebar/idx idx
                 :repo        repo})))
 
 (rum/defc page-cp < rum/reactive
   [repo page-name]
-  (page/page {:parameters {:path {:name page-name}}
+  (page/page-cp {:parameters {:path {:name page-name}}
               :sidebar?   true
               :repo       repo}))
 
 (rum/defc contents < rum/reactive db-mixins/query
   []
   [:div.contents.flex-col.flex.ml-3
-   (when-let [contents (db/get-page "contents")]
-     (page/contents-page contents))])
+   (when-let [contents-page (db/get-page "contents")]
+     (page/contents-page contents-page))])
 
 (rum/defc shortcut-settings
   []

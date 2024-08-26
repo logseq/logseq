@@ -661,10 +661,10 @@ Some bindings in this fn:
    (query repo query-string {}))
   ([repo query-string query-opts]
    (when (and (string? query-string) (not= "\"\"" query-string))
-     (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string)]
-       (when-let [query' (some-> query (query-wrapper {:blocks? blocks?
-                                                       :block-attrs (when (config/db-based-graph? repo)
-                                                                      db-block-attrs)}))]
+     (let [{query* :query :keys [rules sort-by blocks? sample]} (parse-query query-string)]
+       (when-let [query' (some-> query* (query-wrapper {:blocks? blocks?
+                                                        :block-attrs (when (config/db-based-graph? repo)
+                                                                       db-block-attrs)}))]
          (let [random-samples (if @sample
                                 (fn [col]
                                   (take @sample (shuffle col)))
@@ -690,9 +690,9 @@ Some bindings in this fn:
   (when (seq (:query query-m))
     (let [query-string (template/resolve-dynamic-template! (pr-str (:query query-m)))
           db-graph? (config/db-based-graph? repo)
-          {:keys [query sort-by blocks? rules]} (parse query-string {:db-graph? db-graph?})]
-      (when-let [query' (some-> query (query-wrapper {:blocks? blocks?
-                                                      :block-attrs (when db-graph? db-block-attrs)}))]
+          {query* :query :keys [sort-by blocks? rules]} (parse query-string {:db-graph? db-graph?})]
+      (when-let [query' (some-> query* (query-wrapper {:blocks? blocks?
+                                                       :block-attrs (when db-graph? db-block-attrs)}))]
         (query-react/react-query repo
                                  (merge
                                   query-m

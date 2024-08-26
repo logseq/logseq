@@ -78,7 +78,7 @@ $ bb lang:missing es --copy
 ...
 ```
 
-Almost all translations are small. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These translations are files that are part of the onboarding tutorial and can be found under [src/resources/tutorials/](https://github.com/logseq/logseq/blob/master/src/resources/tutorials/).
+Almost all translations are small. The only exceptions to this are keys that point to files e.g. their value is prefixed with `#resource`. TODO: Update when new tutorials are written
 
 ### Editing Tips
 

@@ -767,7 +767,7 @@
         editing? (or editing?
                      (and (state/sub-editing? [container-id (:block/uuid block)])
                           (= (:db/id property) (:db/id (:property (state/get-editor-action-data))))))
-        select-type? (select-type? property type)
+        select-type?' (select-type? property type)
         closed-values? (seq (:property/closed-values property))
         select-opts {:on-chosen on-chosen}
         value (if (and (de/entity? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
@@ -775,7 +775,7 @@
                 value*)]
     (if (= :logseq.property/icon (:db/ident property))
       (icon-row block)
-      (if (and select-type?
+      (if (and select-type?'
                (not (and (not closed-values?) (= type :date))))
         (single-value-select block property value
                              (fn [] (select-item property type value opts))

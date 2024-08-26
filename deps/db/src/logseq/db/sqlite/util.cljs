@@ -24,8 +24,8 @@
   (transit/write transit-w data))
 
 (defn transit-read
-  [str]
-  (transit/read transit-r str))
+  [s]
+  (transit/read transit-r s))
 
 (def write-transit-str
   (let [write-handlers (->> (assoc dt/write-handlers

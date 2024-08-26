@@ -14,16 +14,16 @@
 (defn journal-title->
   [journal-title then-fn formatters]
   (when-not (string/blank? journal-title)
-    (when-let [time (->> (map
-                          (fn [formatter]
-                            (try
-                              (tf/parse (tf/formatter formatter) (common-util/capitalize-all journal-title))
-                              (catch :default _e
-                                nil)))
-                          formatters)
-                         (filter some?)
-                         first)]
-      (then-fn time))))
+    (when-let [time' (->> (map
+                           (fn [formatter]
+                             (try
+                               (tf/parse (tf/formatter formatter) (common-util/capitalize-all journal-title))
+                               (catch :default _e
+                                 nil)))
+                           formatters)
+                          (filter some?)
+                          first)]
+      (then-fn time'))))
 
 (defn journal-title->int
   [journal-title formatters]

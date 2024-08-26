@@ -39,7 +39,7 @@
   (let [ids (mapv :id col)
         items' (bean/->js ids)
         id->item (zipmap ids col)
-        [items set-items] (rum/use-state items')
+        [items-state set-items] (rum/use-state items')
         _ (rum/use-effect! (fn [] (set-items items')) [col])
         [_active-id set-active-id] (rum/use-state nil)
         sensors (useSensors (useSensor PointerSensor (bean/->js {:activationConstraint {:distance 8}})))
@@ -55,7 +55,7 @@
                                    (when-not (= active-id over-id)
                                      (let [old-index (.indexOf ids active-id)
                                            new-index (.indexOf ids over-id)
-                                           new-items (arrayMove items old-index new-index)]
+                                           new-items (arrayMove items-state old-index new-index)]
                                        (when (fn? on-drag-end)
                                          (let [new-values (->> (map (fn [id]
                                                                       (let [item (id->item id)]
@@ -66,7 +66,7 @@
                                            (if (not= (count new-values) (count ids))
                                              (do
                                                (js/console.error "Dnd length not matched: ")
-                                               {:old-items items
+                                               {:old-items items-state
                                                 :new-items new-items})
                                              (do
                                                (set-items new-items)
@@ -76,7 +76,7 @@
                                                                                      :down
                                                                                      :up)}))))))))
                                  (set-active-id nil)))}
-        sortable-opts {:items items
+        sortable-opts {:items items-state
                        :strategy (if vertical?
                                    verticalListSortingStrategy
                                    horizontalListSortingStrategy)}
