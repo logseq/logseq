@@ -638,11 +638,12 @@
                 s (if (re-find db-content/special-id-ref-pattern s)
                     (db-content/special-id-ref->page s (:block/refs page-entity))
                     s)
-                s (if tag? (str "#" s) s)
-                inline-list (gp-mldoc/inline->edn s (mldoc/get-default-config (get page-entity :block/format :markdown)))]
+                s (if tag? (str "#" s) s)]
             (if (ldb/page? page-entity)
               s
-              (->elem :span (map-inline config inline-list))))))]
+              (let [inline-list (gp-mldoc/inline->edn (first (string/split-lines s))
+                                                      (mldoc/get-default-config (get page-entity :block/format :markdown)))]
+                (->elem :span (map-inline config inline-list)))))))]
      (let [repo (state/get-current-repo)
            block-id (:block/uuid config)
            block (when block-id (db/entity [:block/uuid block-id]))]
