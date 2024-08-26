@@ -20,39 +20,47 @@
   (when-let [current-repo (state/get-current-repo)]
     (let [db-based? (config/db-based-graph? current-repo)]
       [:div.export
-       [:h1.title (t :export)]
-       [:ul.mr-1
+       [:h1.title.mb-8 (t :export)]
+
+       [:div.flex.flex-col.gap-4.ml-1
         (when-not db-based?
-          [:li.mb-4
+          [:div
            [:a.font-medium {:on-click #(export/export-repo-as-edn! current-repo)}
             (t :export-edn)]])
         (when-not db-based?
-          [:li.mb-4
+          [:div
            [:a.font-medium {:on-click #(export/export-repo-as-json! current-repo)}
             (t :export-json)]])
         (when (config/db-based-graph? current-repo)
-          [:li.mb-4
+          [:div
            [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
             (t :export-sqlite-db)]])
+        (when (config/db-based-graph? current-repo)
+          [:div
+           [:a.font-medium {:on-click #(export/export-repo-as-debug-json! current-repo)}
+            "Export debug JSON"]
+           [:p.text-sm.opacity-70 "Any sensitive data will be removed in the exported json file, you can send it to us for debugging."]])
         (when-not db-based?
           (when (util/electron?)
-            [:li.mb-4
+            [:div
              [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
               (t :export-public-pages)]]))
         (when-not (or (mobile-util/native-platform?) db-based?)
-          [:li.mb-4
+          [:div
            [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
             (t :export-markdown)]])
         (when-not (or (mobile-util/native-platform?) db-based?)
-          [:li.mb-4
+          [:div
            [:a.font-medium {:on-click #(export-opml/export-repo-as-opml! current-repo)}
             (t :export-opml)]])
         (when-not (or (mobile-util/native-platform?) db-based?)
-          [:li.mb-4
+          [:div
            [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
             (t :export-roam-json)]])]
+
        [:a#download-as-edn-v2.hidden]
        [:a#download-as-json-v2.hidden]
+       [:a#download-as-json-debug.hidden]
        [:a#download-as-sqlite-db.hidden]
        [:a#download-as-roam-json.hidden]
        [:a#download-as-html.hidden]
