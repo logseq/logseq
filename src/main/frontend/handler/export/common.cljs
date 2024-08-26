@@ -4,7 +4,6 @@
   when use together with dynamic var."
   (:refer-clojure :exclude [map filter mapcat concat remove])
   (:require [cljs.core.match :refer [match]]
-            [clojure.edn :as edn]
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
@@ -16,7 +15,8 @@
             [frontend.common.file.core :as common-file]
             [malli.core :as m]
             [malli.util :as mu]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db :as ldb]))
 
 ;;; TODO: split frontend.handler.export.text related states
 (def ^:dynamic *state*
@@ -186,13 +186,19 @@
   [repo]
   (when-let [^object worker @db-browser/*worker]
     (p/let [result (.get-all-pages worker repo)]
-      (edn/read-string result))))
+      (ldb/read-transit-str result))))
+
+(defn <get-debug-datoms
+  [repo]
+  (when-let [^object worker @db-browser/*worker]
+    (p/let [result (.get-debug-datoms worker repo)]
+      (ldb/read-transit-str result))))
 
 (defn <get-all-page->content
   [repo]
   (when-let [^object worker @db-browser/*worker]
     (p/let [result (.get-all-page->content worker repo)]
-      (edn/read-string result))))
+      (ldb/read-transit-str result))))
 
 (defn <get-file-contents
   [repo suffix]

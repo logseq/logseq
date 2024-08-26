@@ -88,6 +88,29 @@
   [^js pool data]
   (.importDb ^js pool repo-path data))
 
+(comment
+  (defn- gc-kvs-table!
+    [^Object db]
+    (let [schema (some->> (.exec db #js {:sql "select content from kvs where addr = 0"
+                                         :rowMode "array"})
+                          bean/->clj
+                          ffirst
+                          sqlite-util/transit-read)
+          result (->> (.exec db #js {:sql "select addr, addresses from kvs"
+                                     :rowMode "array"})
+                      bean/->clj
+                      (map (fn [[addr addresses]]
+                             [addr (bean/->clj (js/JSON.parse addresses))])))
+          used-addresses (set (concat (mapcat second result)
+                                      [0 1 (:eavt schema) (:avet schema) (:aevt schema)]))
+          unused-addresses (set/difference (set (map first result)) used-addresses)]
+      (when unused-addresses
+        (prn :debug :db-gc :unused-addresses unused-addresses)
+        (.transaction db (fn [tx]
+                           (doseq [addr unused-addresses]
+                             (.exec tx #js {:sql "Delete from kvs where addr = ?"
+                                            :bind #js [addr]}))))))))
+
 (defn upsert-addr-content!
   "Upsert addr+data-seq"
   [repo data delete-addrs & {:keys [client-ops-db?] :or {client-ops-db? false}}]
@@ -95,37 +118,51 @@
     (assert (some? db) "sqlite db not exists")
     (.transaction db (fn [tx]
                        (doseq [item data]
-                         (.exec tx #js {:sql "INSERT INTO kvs (addr, content) values ($addr, $content) on conflict(addr) do update set content = $content"
-                                        :bind item}))
-
-                       (doseq [addr delete-addrs]
-                         (.exec db #js {:sql "Delete from kvs where addr = ?"
-                                        :bind #js [addr]}))))))
+                         (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
+                                        :bind item}))))
+    (when (seq delete-addrs)
+      (.transaction db (fn [tx]
+                         ;; (prn :debug :delete-addrs delete-addrs)
+                         (doseq [addr delete-addrs]
+                           (.exec tx #js {:sql "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);"
+                                          :bind #js [addr]})))))))
 
 (defn restore-data-from-addr
   [repo addr & {:keys [client-ops-db?] :or {client-ops-db? false}}]
   (let [^Object db (worker-state/get-sqlite-conn repo (if client-ops-db? :client-ops :db))]
     (assert (some? db) "sqlite db not exists")
-    (when-let [content (-> (.exec db #js {:sql "select content from kvs where addr = ?"
-                                          :bind #js [addr]
-                                          :rowMode "array"})
-                           ffirst)]
-      (try
-        (let [data (sqlite-util/transit-read content)]
-          (if-let [addresses (:addresses data)]
-            (assoc data :addresses (bean/->js addresses))
-            data))
-        (catch :default _e              ; TODO: remove this once db goes to test
-          (edn/read-string content))))))
+    (when-let [result (-> (.exec db #js {:sql "select content, addresses from kvs where addr = ?"
+                                         :bind #js [addr]
+                                         :rowMode "array"})
+                          first)]
+      (let [[content addresses] (bean/->clj result)
+            addresses (when addresses
+                        (js/JSON.parse addresses))
+            data (sqlite-util/transit-read content)]
+        (if (and addresses (map? data))
+          (assoc data :addresses addresses)
+          data)))))
 
 (defn new-sqlite-storage
   [repo _opts]
   (reify IStorage
     (-store [_ addr+data-seq delete-addrs]
-      (let [data (map
+      (let [used-addrs (set (mapcat
+                             (fn [[addr data]]
+                               (cons addr
+                                     (when (map? data)
+                                       (:addresses data))))
+                             addr+data-seq))
+            delete-addrs (remove used-addrs delete-addrs)
+            data (map
                   (fn [[addr data]]
-                    #js {:$addr addr
-                         :$content (sqlite-util/transit-write data)})
+                    (let [data' (if (map? data) (dissoc data :addresses) data)
+                          addresses (when (map? data)
+                                      (when-let [addresses (:addresses data)]
+                                        (js/JSON.stringify (bean/->js addresses))))]
+                      #js {:$addr addr
+                           :$content (sqlite-util/transit-write data')
+                           :$addresses addresses}))
                   addr+data-seq)]
         (upsert-addr-content! repo data delete-addrs)))
 
@@ -136,10 +173,22 @@
   [repo]
   (reify IStorage
     (-store [_ addr+data-seq delete-addrs]
-      (let [data (map
+      (let [used-addrs (set (mapcat
+                             (fn [[addr data]]
+                               (cons addr
+                                     (when (map? data)
+                                       (:addresses data))))
+                             addr+data-seq))
+            delete-addrs (remove used-addrs delete-addrs)
+            data (map
                   (fn [[addr data]]
-                    #js {:$addr addr
-                         :$content (sqlite-util/transit-write data)})
+                    (let [data' (if (map? data) (dissoc data :addresses) data)
+                          addresses (when (map? data)
+                                      (when-let [addresses (:addresses data)]
+                                        (js/JSON.stringify (bean/->js addresses))))]
+                      #js {:$addr addr
+                           :$content (sqlite-util/transit-write data')
+                           :$addresses addresses}))
                   addr+data-seq)]
         (upsert-addr-content! repo data delete-addrs :client-ops-db? true)))
 
@@ -197,11 +246,14 @@
       (.exec db "PRAGMA locking_mode=exclusive")
       (sqlite-common-db/create-kvs-table! db)
       (sqlite-common-db/create-kvs-table! client-ops-db)
+      (db-migrate/migrate-sqlite-db db)
+      (db-migrate/migrate-sqlite-db client-ops-db)
       (search/create-tables-and-triggers! search-db)
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)
             client-ops-conn (sqlite-common-db/get-storage-conn client-ops-storage client-op/schema-in-db)
-            initial-data-exists? (d/entity @conn :logseq.class/Root)]
+            initial-data-exists? (and (d/entity @conn :logseq.class/Root)
+                                      (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type))))]
         (swap! *datascript-conns assoc repo conn)
         (swap! *client-ops-conns assoc repo client-ops-conn)
         (when (and (sqlite-util/db-based-graph? repo) (not initial-data-exists?))
@@ -209,9 +261,12 @@
                 initial-data (sqlite-create-graph/build-db-initial-data config)]
             (d/transact! conn initial-data {:initial-db? true})))
 
-        (when-not (ldb/page-exists? @conn common-config/views-page-name "hidden")
-          (ldb/create-views-page! conn))
+        (try
+          (when-not (ldb/page-exists? @conn common-config/views-page-name "hidden")
+            (ldb/create-views-page! conn))
+          (catch :default _e))
 
+        ;; (gc-kvs-table! db)
         (db-migrate/migrate conn search-db)
 
         (db-listener/listen-db-changes! repo conn)))))
@@ -603,6 +658,11 @@
        (common-file/block->content repo @conn block-uuid
                                    (ldb/read-transit-str tree->file-opts)
                                    (ldb/read-transit-str context)))))
+
+  (get-debug-datoms
+   [this repo]
+   (when-let [db (worker-state/get-sqlite-conn repo)]
+     (ldb/write-transit-str (worker-export/get-debug-datoms db))))
 
   (get-all-pages
    [this repo]
