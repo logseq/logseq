@@ -112,7 +112,7 @@
                                             :bind #js [addr]}))))))))
 
 (defn upsert-addr-content!
-  "Upsert addr+data-seq"
+  "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
   [repo data delete-addrs & {:keys [client-ops-db?] :or {client-ops-db? false}}]
   (let [^Object db (worker-state/get-sqlite-conn repo (if client-ops-db? :client-ops :db))]
     (assert (some? db) "sqlite db not exists")
@@ -128,6 +128,7 @@
                                           :bind #js [addr]})))))))
 
 (defn restore-data-from-addr
+  "Update sqlite-cli/restore-data-from-addr when making changes"
   [repo addr & {:keys [client-ops-db?] :or {client-ops-db? false}}]
   (let [^Object db (worker-state/get-sqlite-conn repo (if client-ops-db? :client-ops :db))]
     (assert (some? db) "sqlite db not exists")
@@ -144,6 +145,7 @@
           data)))))
 
 (defn new-sqlite-storage
+  "Update sqlite-cli/new-sqlite-storage when making changes"
   [repo _opts]
   (reify IStorage
     (-store [_ addr+data-seq delete-addrs]
