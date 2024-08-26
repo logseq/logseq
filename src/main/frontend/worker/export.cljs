@@ -81,7 +81,7 @@
                                   (and ident
                                        (contains? #{"class" "property"} type)
                                        (not (string/starts-with? (namespace ident) "logseq")))))
-                            [e a (str "debug " (random-uuid)) t]
+                            [e a (str "debug " e) t]
 
                             (= a :block/uuid)
                             [e a (str v) t]
