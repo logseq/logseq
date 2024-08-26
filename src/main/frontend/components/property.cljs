@@ -319,16 +319,20 @@
              [:div.col-span-3.flex.flex-row.items-center.gap-2
               (icon-component/icon-picker icon-value
                                           {:on-chosen (fn [_e icon]
-                                                        (db-property-handler/upsert-property!
-                                                         (:db/ident property)
-                                                         (:block/schema property)
-                                                         {:properties {:logseq.property/icon icon}}))})
+                                                        (p/do!
+                                                         (db-property-handler/upsert-property!
+                                                          (:db/ident property)
+                                                          (:block/schema property)
+                                                          {:properties {:logseq.property/icon icon}})
+                                                         (shui/popup-hide!)))})
 
               (when icon-value
                 [:a.fade-link.flex {:on-click (fn [_e]
-                                                (db-property-handler/remove-block-property!
-                                                 (:db/ident property)
-                                                 :logseq.property/icon))
+                                                (p/do!
+                                                 (db-property-handler/remove-block-property!
+                                                  (:db/ident property)
+                                                  :logseq.property/icon)
+                                                 (shui/popup-hide!)))
                                     :title "Delete this icon"}
                  (ui/icon "X")])])]
 
@@ -936,17 +940,12 @@
                                        (state/set-selection-blocks! [block])
                                        (some-> js/document.activeElement (.blur)))
                                      (d/remove-class! target "ls-popup-closed")))))
-       (let [properties' (cond
-                           (and page? page-configure?)
+       (let [properties' (if (and page? page-configure?)
                            (concat [[:block/tags (:block/tags block)]
                                     [:logseq.property/icon (:logseq.property/icon block)]]
                                    (remove (fn [[k _v]] (contains? #{:block/tags :logseq.property/icon} k)) full-properties))
 
-                           page?
-                           (remove (fn [[k _v]] (contains? #{:logseq.property/icon} k)) full-properties)
-
-                           :else
-                           full-properties)]
+                           (remove (fn [[k _v]] (contains? #{:logseq.property/icon} k)) full-properties))]
          (properties-section block (if class-schema? properties properties') opts))
 
        (rum/with-key (new-property block opts) (str id "-add-property"))])))

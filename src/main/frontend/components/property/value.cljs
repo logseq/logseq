@@ -38,22 +38,29 @@
   [:span.inline-flex.items-center.cursor-pointer
    (merge {:class "empty-text-btn" :variant :text} opts) "Empty"])
 
-(rum/defc icon-row < rum/reactive
-  [block]
+(rum/defc icon-row
+  [block editing?]
   (let [icon-value (:logseq.property/icon block)]
     [:div.col-span-3.flex.flex-row.items-center.gap-2
      (icon-component/icon-picker icon-value
                                  {:disabled? config/publishing?
+                                  :initial-open? editing?
                                   :on-chosen (fn [_e icon]
-                                               (db-property-handler/set-block-property!
-                                                (:db/id block)
-                                                :logseq.property/icon
-                                                (select-keys icon [:type :id :color])))})
+                                               (p/do!
+                                                (db-property-handler/set-block-property!
+                                                 (:db/id block)
+                                                 :logseq.property/icon
+                                                 (select-keys icon [:type :id :color]))
+                                                (shui/popup-hide!)
+                                                (shui/dialog-close!)))})
      (when (and icon-value (not config/publishing?))
        [:a.fade-link.flex {:on-click (fn [_e]
-                                       (db-property-handler/remove-block-property!
-                                        (:db/id block)
-                                        :logseq.property/icon))
+                                       (p/do!
+                                        (db-property-handler/remove-block-property!
+                                         (:db/id block)
+                                         :logseq.property/icon)
+                                        (shui/popup-hide!)
+                                        (shui/dialog-close!)))
                            :title "Delete this icon"}
         (ui/icon "X")])]))
 
@@ -762,6 +769,7 @@
   [state block property value* {:keys [container-id editing? on-chosen]
                                 :as opts}]
   (let [property (model/sub-block (:db/id property))
+        block (db/sub-block (:db/id block))
         schema (:block/schema property)
         type (get schema :type :default)
         editing? (or editing?
@@ -774,7 +782,7 @@
                 nil
                 value*)]
     (if (= :logseq.property/icon (:db/ident property))
-      (icon-row block)
+      (icon-row block editing?)
       (if (and select-type?'
                (not (and (not closed-values?) (= type :date))))
         (single-value-select block property value

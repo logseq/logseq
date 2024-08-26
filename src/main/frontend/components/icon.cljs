@@ -417,30 +417,38 @@
             (:native (first (:skins @*hover))))]])]]))
 
 (rum/defc icon-picker
-  [icon-value {:keys [empty-label disabled? on-chosen icon-props popup-opts]}]
-  (let [content-fn
+  [icon-value {:keys [empty-label disabled? initial-open? on-chosen icon-props popup-opts]}]
+  (let [*trigger-ref (rum/use-ref nil)
+        content-fn
         (if config/publishing?
           (constantly [])
           (fn [{:keys [id]}]
             (icon-search
-              {:on-chosen (fn [e icon-value]
-                            (on-chosen e icon-value)
-                            (shui/popup-hide! id))})))]
+             {:on-chosen (fn [e icon-value]
+                           (on-chosen e icon-value)
+                           (shui/popup-hide! id))})))]
+    (rum/use-effect!
+     (fn []
+       (when initial-open?
+         (js/setTimeout #(some-> (rum/deref *trigger-ref) (.click)) 32)))
+     [initial-open?])
+
     ;; trigger
     (let [has-icon? (not (nil? icon-value))]
       (shui/button
-        {:variant (if has-icon? :ghost :text)
-         :size :sm
-         :class (if has-icon? "px-1 leading-none" "font-normal text-sm px-[0.5px] opacity-50")
-         :on-click (fn [^js e]
-                     (when-not disabled?
-                       (shui/popup-show! (.-target e) content-fn
-                         (medley/deep-merge
-                           {:id :ls-icon-picker
-                            :content-props {:class "ls-icon-picker"
-                                            :onEscapeKeyDown #(.preventDefault %)}}
-                           popup-opts))))}
-        (if has-icon?
-          [:span {:style {:color (or (:color icon-value) "inherit")}}
-           (icon icon-value (merge {:size 18} icon-props))]
-          (or empty-label "Empty"))))))
+       {:ref *trigger-ref
+        :variant (if has-icon? :ghost :text)
+        :size :sm
+        :class (if has-icon? "px-1 leading-none" "font-normal text-sm px-[0.5px] opacity-50")
+        :on-click (fn [^js e]
+                    (when-not disabled?
+                      (shui/popup-show! (.-target e) content-fn
+                                        (medley/deep-merge
+                                         {:id :ls-icon-picker
+                                          :content-props {:class "ls-icon-picker"
+                                                          :onEscapeKeyDown #(.preventDefault %)}}
+                                         popup-opts))))}
+       (if has-icon?
+         [:span {:style {:color (or (:color icon-value) "inherit")}}
+          (icon icon-value (merge {:size 18} icon-props))]
+         (or empty-label "Empty"))))))
