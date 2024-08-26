@@ -522,108 +522,7 @@
             (p/do!
              (reset! *show-new-property-config? false))))))))
 
-(rum/defcs property-input < rum/reactive
-  (rum/local nil ::ref)
-  (rum/local false ::show-new-property-config?)
-  (rum/local false ::show-class-select?)
-  (rum/local {} ::property-schema)
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/hide-when-esc-or-outside
-      state
-      :on-hide (fn [_state _e type]
-                 (when (= type :esc)
-                   (shui/popup-hide!)
-                   (shui/dialog-close!)
-                   (when-let [^js input (state/get-input)]
-                     (.focus input)))))))
-  {:init (fn [state]
-           (state/set-editor-action! :property-input)
-           (assoc state ::property (or (:*property (last (:rum/args state)))
-                                       (atom nil))))
-   :will-unmount (fn [state]
-                   (let [args (:rum/args state)
-                         *property-key (second args)
-                         {:keys [original-block edit-original-block]} (last args)
-                         editing-default-property? (and original-block (state/get-edit-block)
-                                                        (not= (:db/id original-block) (:db/id (state/get-edit-block))))]
-                     (when *property-key (reset! *property-key nil))
-                     (when (and original-block edit-original-block)
-                       (edit-original-block {:editing-default-property? editing-default-property?})))
-                   (state/set-editor-action! nil)
-                   state)}
-  [state block *property-key {:keys [class-schema? page?]
-                              :as opts}]
-  (let [*ref (::ref state)
-        *property (::property state)
-        *show-new-property-config? (::show-new-property-config? state)
-        *show-class-select? (::show-class-select? state)
-        *property-schema (::property-schema state)
-        existing-tag-alias (->> db-property/db-attribute-properties
-                                (map db-property/built-in-properties)
-                                (keep #(when (get block (:attribute %)) (:title %)))
-                                set)
-        exclude-properties (fn [m]
-                             (or (and (not page?) (contains? existing-tag-alias (:block/title m)))
-                                 ;; Filters out properties from being in wrong :view-context
-                                 (and (not page?) (= :page (get-in m [:block/schema :view-context])))
-                                 (and page? (= :block (get-in m [:block/schema :view-context])))))
-        property (rum/react *property)
-        property-key (rum/react *property-key)]
-    [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
-     {:ref #(reset! *ref %)}
-     (if property-key
-       [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
-        [:div.flex.flex-row.items-center.col-span-2.property-key.gap-1
-         (property-icon property (:type @*property-schema))
-         [:div property-key]]
-        [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
-         (when (not= @*show-new-property-config? :adding-property)
-           (cond
-             @*show-new-property-config?
-             (property-type-select property (merge opts
-                                                   {:*property *property
-                                                    :*property-name *property-key
-                                                    :*property-schema *property-schema
-                                                    :default-open? true
-                                                    :block block
-                                                    :*show-new-property-config? *show-new-property-config?
-                                                    :*show-class-select? *show-class-select?}))
-
-             (and property @*show-class-select?)
-             (class-select property (assoc opts
-                                           :on-hide #(reset! *show-class-select? false)
-                                           :multiple-choices? false
-                                           :default-open? true
-                                           :no-class? true))
-
-             :else
-             (when (and property (not class-schema?))
-               (pv/property-value block property (get block (:db/ident property)) (assoc opts :editing? true)))))]]
-
-       (let [on-chosen (property-input-on-chosen block *property *property-key *show-new-property-config? opts)
-             input-opts {:on-key-down
-                         (fn [e]
-                           ;; `Backspace` to close property popup and back to editing the current block
-                           (when (and (= (util/ekey e) "Backspace")
-                                      (= "" (.-value (.-target e))))
-                             (util/stop e)
-                             (shui/popup-hide!)))}]
-         (property-select exclude-properties {:on-chosen on-chosen
-                                              :input-opts input-opts})))]))
-
-(rum/defcs new-property < rum/reactive
-  [state block opts]
-  (when (and (:page-configure? opts) (not config/publishing?))
-    [:div.ls-new-property
-     [:a.fade-link.flex.add-property
-      {:on-click (fn []
-                   (state/pub-event! [:editor/new-property (merge opts {:block block})]))}
-      [:div.flex.flex-row.items-center
-       (ui/icon "plus" {:size 15})
-       [:div.ml-1.text-sm "Add property"]]]]))
-
-(rum/defcs property-key <
+(rum/defcs property-key-cp <
   (rum/local false ::hover?)
   [state block property {:keys [class-schema? page-cp inline-text other-position?]}]
   (let [*hover? (::hover? state)
@@ -714,6 +613,109 @@
                                         :auto-focus? true}))}
          (:block/title property)))]))
 
+(rum/defcs property-input < rum/reactive
+  (rum/local nil ::ref)
+  (rum/local false ::show-new-property-config?)
+  (rum/local false ::show-class-select?)
+  (rum/local {} ::property-schema)
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/hide-when-esc-or-outside
+      state
+      :on-hide (fn [_state _e type]
+                 (when (= type :esc)
+                   (shui/popup-hide!)
+                   (shui/dialog-close!)
+                   (when-let [^js input (state/get-input)]
+                     (.focus input)))))))
+  {:init (fn [state]
+           (state/set-editor-action! :property-input)
+           (assoc state ::property (or (:*property (last (:rum/args state)))
+                                       (atom nil))))
+   :will-unmount (fn [state]
+                   (let [args (:rum/args state)
+                         *property-key (second args)
+                         {:keys [original-block edit-original-block]} (last args)
+                         editing-default-property? (and original-block (state/get-edit-block)
+                                                        (not= (:db/id original-block) (:db/id (state/get-edit-block))))]
+                     (when *property-key (reset! *property-key nil))
+                     (when (and original-block edit-original-block)
+                       (edit-original-block {:editing-default-property? editing-default-property?})))
+                   (state/set-editor-action! nil)
+                   state)}
+  [state block *property-key {:keys [class-schema? page?]
+                              :as opts}]
+  (let [*ref (::ref state)
+        *property (::property state)
+        *show-new-property-config? (::show-new-property-config? state)
+        *show-class-select? (::show-class-select? state)
+        *property-schema (::property-schema state)
+        existing-tag-alias (->> db-property/db-attribute-properties
+                                (map db-property/built-in-properties)
+                                (keep #(when (get block (:attribute %)) (:title %)))
+                                set)
+        exclude-properties (fn [m]
+                             (or (and (not page?) (contains? existing-tag-alias (:block/title m)))
+                                 ;; Filters out properties from being in wrong :view-context
+                                 (and (not page?) (= :page (get-in m [:block/schema :view-context])))
+                                 (and page? (= :block (get-in m [:block/schema :view-context])))))
+        property (rum/react *property)
+        property-key (rum/react *property-key)]
+    [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
+     {:ref #(reset! *ref %)}
+     (if property-key
+       [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
+        [:div.flex.flex-row.items-center.col-span-2.property-key.gap-1
+         (when-not (:db/id property) (property-icon property (:type @*property-schema)))
+         (if (:db/id property)          ; property exists already
+           (property-key-cp block property opts)
+           [:div property-key])]
+        [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
+         (when (not= @*show-new-property-config? :adding-property)
+           (cond
+             @*show-new-property-config?
+             (property-type-select property (merge opts
+                                                   {:*property *property
+                                                    :*property-name *property-key
+                                                    :*property-schema *property-schema
+                                                    :default-open? true
+                                                    :block block
+                                                    :*show-new-property-config? *show-new-property-config?
+                                                    :*show-class-select? *show-class-select?}))
+
+             (and property @*show-class-select?)
+             (class-select property (assoc opts
+                                           :on-hide #(reset! *show-class-select? false)
+                                           :multiple-choices? false
+                                           :default-open? true
+                                           :no-class? true))
+
+             :else
+             (when (and property (not class-schema?))
+               (pv/property-value block property (get block (:db/ident property)) (assoc opts :editing? true)))))]]
+
+       (let [on-chosen (property-input-on-chosen block *property *property-key *show-new-property-config? opts)
+             input-opts {:on-key-down
+                         (fn [e]
+                           ;; `Backspace` to close property popup and back to editing the current block
+                           (when (and (= (util/ekey e) "Backspace")
+                                      (= "" (.-value (.-target e))))
+                             (util/stop e)
+                             (shui/popup-hide!)))}]
+         (property-select exclude-properties {:on-chosen on-chosen
+                                              :input-opts input-opts})))]))
+
+(rum/defcs new-property < rum/reactive
+  [state block opts]
+  (when (and (:page-configure? opts) (not config/publishing?))
+    [:div.ls-new-property
+     [:a.fade-link.flex.add-property
+      {:on-click (fn []
+                   (state/pub-event! [:editor/new-property (merge opts {:block block})]))}
+      [:div.flex.flex-row.items-center
+       (ui/icon "plus" {:size 15})
+       [:div.ml-1.text-sm "Add property"]]]]))
+
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
   For example, the block below has a reference to the page \"How to solve it\",
@@ -745,7 +747,7 @@
                         (contains? #{:default} type))
             date? (= type :date)
             checkbox? (= type :checkbox)
-            property-key-cp (property-key block property (assoc (select-keys opts [:class-schema?])
+            property-key-cp (property-key-cp block property (assoc (select-keys opts [:class-schema?])
                                                            :block? block?
                                                            :inline-text inline-text
                                                            :page-cp page-cp))]
