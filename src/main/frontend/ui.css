@@ -211,19 +211,6 @@ html.is-mobile {
   }
 }
 
-.ui__confirm-modal {
-  .sublabel {
-    display: flex;
-    padding: 2px 0;
-    align-items: center;
-    font-size: 14px;
-
-    input[type='checkbox'] {
-      margin-right: 8px;
-    }
-  }
-}
-
 .dropdown-wrapper {
   @apply border min-w-[12rem] rounded-md bg-popover overflow-hidden;
 
