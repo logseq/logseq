@@ -849,10 +849,9 @@
                 (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
               (when date?
                 [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
-             (when-not editing?
-               (if date?
-                 [(property-empty-text-value) (property-value-date-picker block property nil {:toggle-fn toggle-fn})]
-                 (property-empty-text-value)))))]))))
+             (if date?
+               (property-value-date-picker block property nil {:toggle-fn toggle-fn})
+               (property-empty-text-value))))]))))
 
 (rum/defc multiple-values < rum/reactive db-mixins/query
   [block property opts schema]
