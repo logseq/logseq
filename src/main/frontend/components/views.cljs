@@ -381,7 +381,8 @@
   [rows property]
   (let [property-ident (:db/ident property)
         block-type? (= property-ident :block/type)
-        values (->> (mapcat (fn [e] (let [v (get e property-ident)]
+        values (->> (mapcat (fn [e] (let [e' (if (de/entity? e) e (db/entity (:db/id e)))
+                                          v (get e' property-ident)]
                                       (if (set? v) v #{v}))) rows)
                     (remove nil?)
                     (distinct))]

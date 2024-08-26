@@ -145,7 +145,9 @@
          (when-let [view (first views)]
            (set-view-entity! view))
          (p/let [result (db-async/<get-property-objects (state/get-current-repo) (:db/ident property))]
-           (set-data! (mapv #(assoc % :id (:db/id %)) result))
+           (set-data! (mapv (fn [m]
+                              (let [e (db/entity (:db/id m))]
+                                (assoc e :id (:db/id m)))) result))
            (set-loading? false))))
      [])
 
