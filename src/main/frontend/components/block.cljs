@@ -19,7 +19,6 @@
             [frontend.components.query.builder :as query-builder-component]
             [frontend.components.svg :as svg]
             [frontend.components.query :as query]
-            [frontend.components.icon :as icon]
             [frontend.components.property :as property-component]
             [frontend.components.property.value :as pv]
             [frontend.components.icon :as icon-component]
@@ -600,7 +599,7 @@
        (when-let [icon (get page-entity (pu/get-pid :logseq.property/icon))]
          [:span.mr-1.inline-flex.items-center
           {:style {:color (or (:color icon) "inherit")}}
-          (icon/icon icon)]))
+          (icon-component/icon icon)]))
      [:span
       (if (and (coll? children) (seq children))
         (for [child children]
