@@ -22,6 +22,7 @@
             [frontend.components.icon :as icon]
             [frontend.components.property :as property-component]
             [frontend.components.property.value :as pv]
+            [frontend.components.icon :as icon-component]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -1896,6 +1897,10 @@
 
      (every? #(= % ["Horizontal_Rule"]) ast-body))))
 
+(defn- get-block-icon
+  [block]
+  (some :logseq.property/icon (cons block (:block/tags block))))
+
 (rum/defcs block-control < rum/reactive
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected?]}]
   (let [doc-mode?          (state/sub :document/mode?)
@@ -1949,15 +1954,20 @@
                                      " hide-inner-bullet")
                                    (when order-list? " as-order-list typed-list"))}
 
-                      (if link?
-                        (ui/icon "link" {:size 14})
-                        [:span.bullet (cond->
-                                       {:blockid (str uuid)}
-                                        selected?
-                                        (assoc :class "selected"))
-                         (when
-                           order-list?
-                           [:label (str order-list-idx ".")])])]]]
+                      (let [icon (get-block-icon block)]
+                        (cond
+                          link?
+                          (ui/icon "link" {:size 14})
+                          icon
+                          (icon-component/icon icon)
+                          :else
+                          [:span.bullet (cond->
+                                         {:blockid (str uuid)}
+                                          selected?
+                                          (assoc :class "selected"))
+                           (when
+                            order-list?
+                             [:label (str order-list-idx ".")])]))]]]
          (cond
            (and (or (mobile-util/native-platform?)
                     (:ui/show-empty-bullets? (state/get-config))
