@@ -3,7 +3,17 @@
  :config-in-ns
  ;; :used-underscored-binding is turned off for components because of false positive
  ;; for rum/defcs and _state.
- {all-components {:linters {:used-underscored-binding {:level :off}}}
+ {all-components
+  {:linters {:used-underscored-binding {:level :off}
+             ;; TODO: Apply this to all of frontend
+             :shadowed-var {:level :warning
+                            ;; FIXME: Remove most of these as shadowing core fns isn't a good practice
+                            :exclude [t name binding type uuid key val time fn ex-data list
+                                      keys vals sort-by namespace count parents int? hash subs
+                                      load-file exists? rest object? min max class array range string? delay?
+                                      new var re-pattern update iter ns char resolve sequence identity
+                                      dispatch-fn identity comp max-key vec meta next delay str vector list? chars
+                                      chunk test]}}}
   ;; false positive with match/match and _
   frontend.handler.paste {:linters {:used-underscored-binding {:level :off}}}
   frontend.db {:linters {:aliased-namespace-symbol

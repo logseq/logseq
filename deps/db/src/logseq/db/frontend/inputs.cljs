@@ -17,10 +17,10 @@ it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00."
    (.setHours (js/Date. date) hours mins secs millisecs)))
 
 (defn- old->new-relative-date-format [input]
-  (let [count (re-find #"^\d+" (name input))
+  (let [count' (re-find #"^\d+" (name input))
         plus-minus (if (re-find #"after" (name input)) "+" "-")
         ms? (string/ends-with? (name input) "-ms")]
-    (keyword :today (str plus-minus count "d" (if ms? "-ms" "")))))
+    (keyword :today (str plus-minus count' "d" (if ms? "-ms" "")))))
 
 (comment
   (old->new-relative-date-format "1d")

@@ -162,7 +162,7 @@
             (db/entity (:db/id result))))
         (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)))))
 
-(rum/defcs property-type <
+(rum/defcs property-type-select <
   shortcut/disable-all-shortcuts
   [state property {:keys [*property *property-name *property-schema built-in? disabled?
                           show-type-change-hints? block *show-new-property-config?
@@ -343,12 +343,12 @@
                          :interactive true
                          :disabled    false}
                         (svg/help-circle))]
-             (property-type property {:*property-name *property-name
-                                    :*property-schema *property-schema
-                                    :built-in? built-in?
-                                    :disabled? disabled?
-                                    :show-type-change-hints? true
-                                    :*show-class-select? *show-class-select?}))]
+             (property-type-select property {:*property-name *property-name
+                                             :*property-schema *property-schema
+                                             :built-in? built-in?
+                                             :disabled? disabled?
+                                             :show-type-change-hints? true
+                                             :*show-class-select? *show-class-select?}))]
 
           (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
             (case (:type @*property-schema)
@@ -581,14 +581,14 @@
          (when (not= @*show-new-property-config? :adding-property)
            (cond
              @*show-new-property-config?
-             (property-type property (merge opts
-                                          {:*property *property
-                                           :*property-name *property-key
-                                           :*property-schema *property-schema
-                                           :default-open? true
-                                           :block block
-                                           :*show-new-property-config? *show-new-property-config?
-                                           :*show-class-select? *show-class-select?}))
+             (property-type-select property (merge opts
+                                                   {:*property *property
+                                                    :*property-name *property-key
+                                                    :*property-schema *property-schema
+                                                    :default-open? true
+                                                    :block block
+                                                    :*show-new-property-config? *show-new-property-config?
+                                                    :*show-class-select? *show-class-select?}))
 
              (and property @*show-class-select?)
              (class-select property (assoc opts
@@ -673,7 +673,7 @@
                                             (util/stop e)
                                             (shui/popup-show! (.-target e)
                                               (fn [{:keys [id]}]
-                                                (property-v2/dropdown-editor id property
+                                                (property-v2/dropdown-editor id property block
                                                   {:debug? (.-altKey e)}))
                                               {:content-props
                                                {:class "ls-property-dropdown-editor as-root"}

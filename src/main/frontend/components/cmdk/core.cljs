@@ -86,8 +86,8 @@
   (let [sidebar? (:sidebar? (last (:rum/args state)))
         results @(::results state)
         input @(::input state)
-        filter @(::filter state)
-        filter-group (:group filter)
+        filter' @(::filter state)
+        filter-group (:group filter')
         index (volatile! -1)
         visible-items (fn [group]
                         (let [{:keys [items show]} (get results group)]
@@ -556,7 +556,7 @@
         highlighted-item (or @(::highlighted-item state) first-item)
         highlighted-group @(::highlighted-group state)
         *mouse-active? (::mouse-active? state')
-        filter @(::filter state)
+        filter' @(::filter state)
         can-show-less? (< GROUP-LIMIT (count visible-items))
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
@@ -586,7 +586,7 @@
 
          (when (and (= group highlighted-group)
                     (or can-show-more? can-show-less?)
-                    (empty? filter)
+                    (empty? filter')
                     (not sidebar?))
            [:a.text-link.select-node.opacity-50.hover:opacity-90
             {:on-click (if (= show :more) show-less show-more)}
@@ -737,11 +737,11 @@
       (and enter? (not composing?)) (do
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
-      esc? (let [filter @(::filter state)]
+      esc? (let [filter' @(::filter state)]
              (when-not (string/blank? input)
                (util/stop e)
                (handle-input-change state nil ""))
-             (when (and filter (string/blank? input))
+             (when (and filter' (string/blank? input))
                (util/stop e)
                (reset! (::filter state) nil)
                (load-results :default state)))
@@ -830,9 +830,9 @@
   {:init (fn [state]
            (assoc state ::rand-tip (rand-tip)))}
   [inner-state state]
-  (let [filter @(::filter state)]
+  (let [filter' @(::filter state)]
     (cond
-      filter
+      filter'
       [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
        [:div "Type"]
        (shui/shortcut "esc" {:tiled false})

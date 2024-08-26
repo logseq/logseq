@@ -189,11 +189,11 @@
 
 (defn page-exists?
   "Whether a page exists with the `type`."
-  [db page-name type]
+  [db page-name type']
   (when page-name
     (if (db-based-graph? db)
       ;; Classes and properties are case sensitive
-      (if (#{"class" "property"} type)
+      (if (#{"class" "property"} type')
         (seq
          (d/q
           '[:find [?p ...]
@@ -203,7 +203,7 @@
             [?p :block/type ?type]]
           db
           page-name
-          type))
+          type'))
         ;; TODO: Decouple db graphs from file specific :block/name
         (seq
          (d/q
@@ -214,7 +214,7 @@
             [?p :block/type ?type]]
           db
           (common-util/page-name-sanity-lc page-name)
-          type)))
+          type')))
       (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))))
 
 (defn get-page
@@ -260,7 +260,7 @@
                         (map
                          (fn [page]
                            (when-let [page (get-page db page)]
-                             (let [name (:block/name page)]
+                             (let [name' (:block/name page)]
                                (and
                                 (empty-ref-f page)
                                 (or
@@ -271,13 +271,14 @@
                                     first-child
                                     (= 1 (count children))
                                     (contains? #{"" "-" "*"} (string/trim (:block/title first-child))))))
-                                (not (contains? built-in-pages name))
+                                (not (contains? built-in-pages name'))
                                 (not (whiteboard? page))
                                 (not (:block/_namespace page))
                                 (not (property? page))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
-                                (not (and (string/includes? name "/")
+                                (not (and (string/includes? name' "/")
                                           (not (journal? page))))
+                                (not (:block/properties page))
                                 page))))
                          pages)
                         (remove false?)
@@ -322,13 +323,13 @@
 (defn get-block-parents
   [db block-id {:keys [depth] :or {depth 100}}]
   (loop [block-id block-id
-         parents (list)
+         parents' (list)
          d 1]
     (if (> d depth)
-      parents
+      parents'
       (if-let [parent (:block/parent (d/entity db [:block/uuid block-id]))]
-        (recur (:block/uuid parent) (conj parents parent) (inc d))
-        parents))))
+        (recur (:block/uuid parent) (conj parents' parent) (inc d))
+        parents'))))
 
 (def get-block-children-ids sqlite-common-db/get-block-children-ids)
 (def get-block-children sqlite-common-db/get-block-children)
@@ -532,9 +533,9 @@
 ;; File based fns
 (defn get-namespace-pages
   "Accepts both sanitized and unsanitized namespaces"
-  [db namespace {:keys [db-graph?]}]
-  (assert (string? namespace))
-  (let [namespace (common-util/page-name-sanity-lc namespace)
+  [db namespace' {:keys [db-graph?]}]
+  (assert (string? namespace'))
+  (let [namespace'' (common-util/page-name-sanity-lc namespace')
         pull-attrs  (cond-> [:db/id :block/name :block/title :block/namespace]
                       (not db-graph?)
                       (conj {:block/file [:db/id :file/path]}))]
@@ -546,16 +547,16 @@
       (list 'namespace '?p '?c)]
      db
      (:namespace rules/rules)
-     namespace)))
+     namespace'')))
 
 (defn get-pages-by-name-partition
-  [db partition]
-  (when-not (string/blank? partition)
-    (let [partition (common-util/page-name-sanity-lc (string/trim partition))
+  [db partition']
+  (when-not (string/blank? partition')
+    (let [partition'' (common-util/page-name-sanity-lc (string/trim partition'))
           ids (->> (d/datoms db :aevt :block/name)
                    (filter (fn [datom]
                              (let [page (:v datom)]
-                               (string/includes? page partition))))
+                               (string/includes? page partition''))))
                    (map :e))]
       (when (seq ids)
         (d/pull-many db

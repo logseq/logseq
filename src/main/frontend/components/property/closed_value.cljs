@@ -200,15 +200,15 @@
         dropdown-opts {:modal-class (util/hiccup->class
                                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}]
     [:div.closed-values.flex.flex-col
-     (let [choices (doall
-                    (keep (fn [value]
-                            (when-let [block (db/sub-block (:db/id value))]
-                              (let [id (:block/uuid block)]
-                                {:id (str id)
-                                 :value id
-                                 :content (choice-item-content property block (merge opts dropdown-opts))})))
-                          values))]
-       (dnd/items choices
+     (let [choice-items (doall
+                         (keep (fn [value]
+                                 (when-let [block (db/sub-block (:db/id value))]
+                                   (let [id (:block/uuid block)]
+                                     {:id (str id)
+                                      :value id
+                                      :content (choice-item-content property block (merge opts dropdown-opts))})))
+                               values))]
+       (dnd/items choice-items
                   {:on-drag-end (fn [_ {:keys [active-id over-id direction]}]
                                   (let [move-down? (= direction :down)
                                         over (db/entity [:block/uuid (uuid over-id)])

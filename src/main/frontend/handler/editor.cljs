@@ -3814,10 +3814,12 @@
   ([]
    (escape-editing true))
   ([select?]
-   (if select?
-     (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-       (state/exit-editing-and-set-selected-blocks! [node]))
-     (state/clear-edit!))))
+   (p/do!
+    (save-current-block!)
+    (if select?
+      (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+        (state/exit-editing-and-set-selected-blocks! [node]))
+      (state/clear-edit!)))))
 
 (defn replace-block-reference-with-content-at-point
   []

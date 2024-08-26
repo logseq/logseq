@@ -395,8 +395,6 @@
               chosen' (string/replace-first chosen (str (t :new-page) " ") "")
               ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
                          (cond
-                           (and db-based? (seq (:block/tags chosen-result)))
-                           (page-ref/->page-ref (:block/title chosen-result))
                            db-based?
                            (page-ref/->page-ref (:block/uuid chosen-result))
                            :else

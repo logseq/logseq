@@ -43,10 +43,10 @@
                                                                                      :ref-type? true})
                            property-attributes)]
     (into [property-tx]
-          (map (fn [{:keys [db-ident value icon uuid]}]
+          (map (fn [{uuid' :uuid :keys [db-ident value icon]}]
                  (cond->
                   (build-closed-value-block
-                   uuid
+                   uuid'
                    value
                    property
                    {:db-ident db-ident :icon icon})

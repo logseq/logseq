@@ -613,7 +613,6 @@ independent of format as format specific heading characters are stripped"
    (when repo
      (when (conn/get-db repo)
        (let [entity (db-utils/entity eid)
-             page? (ldb/page? entity)
              ids (page-alias-set repo eid)]
          (->>
           (react/q repo

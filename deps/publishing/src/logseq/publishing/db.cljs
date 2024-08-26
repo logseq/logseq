@@ -16,13 +16,13 @@
     (let [prop-lookup-fn (if (entity-util/db-based-graph? db)
                            #(db-property/property-value-content (get %1 %2))
                            #(get %1 (keyword (name %2))))]
-      (when-some [uuid (:block/uuid block)]
+      (when-some [uuid' (:block/uuid block)]
         (when-some [stamp (prop-lookup-fn props :logseq.property.pdf/hl-stamp)]
           (let [group-key      (string/replace-first (:block/title page) #"^hls__" "")
                 hl-page        (prop-lookup-fn props :logseq.property.pdf/hl-page)
                 encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
                 group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
-            (str "./assets/" group-key "/" (str hl-page "_" uuid "_" stamp ".png"))))))))
+            (str "./assets/" group-key "/" (str hl-page "_" uuid' "_" stamp ".png"))))))))
 
 (defn- clean-asset-path-prefix
   [path]
@@ -170,8 +170,8 @@
                                (set (concat (get-public-false-pages db) (get-public-false-block-ids db))))
         filtered-db (d/filter db
                               (fn [_db datom]
-                                (let [ns (namespace (:a datom))]
-                                  (and (not (remove? ns))
+                                (let [ns' (namespace (:a datom))]
+                                  (and (not (remove? ns'))
                                        (not (contains? #{:block/file} (:a datom)))
                                        (not (contains? non-public-datom-ids (:e datom)))))))
         datoms (d/datoms filtered-db :eavt)
@@ -189,13 +189,13 @@
         exported-namespace? #(contains? #{"block" "recent"} %)
         filtered-db (d/filter db
                               (fn [db datom]
-                                (let [ns (namespace (:a datom))]
+                                (let [ns' (namespace (:a datom))]
                                   (and
                                    (not (contains? #{:block/file} (:a datom)))
-                                   (not= ns "file")
+                                   (not= ns' "file")
                                    (or
-                                    (not (exported-namespace? ns))
-                                    (and (= ns "block")
+                                    (not (exported-namespace? ns'))
+                                    (and (= ns' "block")
                                          (or
                                           (contains? public-pages (:e datom))
                                           (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))))

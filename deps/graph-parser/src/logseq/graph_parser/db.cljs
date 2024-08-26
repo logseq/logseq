@@ -31,12 +31,12 @@
 
 (defn- build-pages-tx
   [pages]
-  (let [time (common-util/time-ms)]
+  (let [time' (common-util/time-ms)]
     (map
      (fn [m]
        (-> m
-           (assoc :block/created-at time)
-           (assoc :block/updated-at time)))
+           (assoc :block/created-at time')
+           (assoc :block/updated-at time')))
      pages)))
 
 (defn create-default-pages!
@@ -44,8 +44,8 @@
    fn is idempotent"
   [db-conn]
   (when-not (ldb/get-page @db-conn "card")
-    (let [built-in-pages (build-pages-tx built-in-pages)]
-      (ldb/transact! db-conn built-in-pages))))
+    (let [built-in-pages' (build-pages-tx built-in-pages)]
+      (ldb/transact! db-conn built-in-pages'))))
 
 (defn start-conn
   "Create datascript conn with schema and default data"

@@ -167,16 +167,16 @@
         (rfe/push-state :page {:name "Favorites"})
         (util/stop e))}
      (when (seq favorite-entities)
-       (let [favorites (map
-                        (fn [e]
-                          (let [icon (icon/get-node-icon e {})]
-                            {:id (str (:db/id e))
-                             :value (:block/uuid e)
-                             :content [:li.favorite-item (page-name e icon false)]}))
-                        favorite-entities)]
-         (dnd-component/items favorites
-                              {:on-drag-end (fn [favorites]
-                                              (page-handler/<reorder-favorites! favorites))
+       (let [favorite-items (map
+                             (fn [e]
+                               (let [icon (icon/get-node-icon e {})]
+                                 {:id (str (:db/id e))
+                                  :value (:block/uuid e)
+                                  :content [:li.favorite-item (page-name e icon false)]}))
+                             favorite-entities)]
+         (dnd-component/items favorite-items
+                              {:on-drag-end (fn [favorites']
+                                              (page-handler/<reorder-favorites! favorites'))
                                :parent-node :ul.favorites.text-sm}))))))
 
 (rum/defc recent-pages < rum/reactive db-mixins/query
@@ -845,7 +845,7 @@
      (mixins/listen state js/window "keyup"
                     (fn [_e]
                       (state/set-state! :editor/latest-shortcut nil)))))
-  [state route-match main-content]
+  [state route-match main-content']
   (let [{:keys [open-fn]} state
         current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
@@ -939,7 +939,7 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content
+               :main-content        main-content'
                :show-action-bar?    show-action-bar?
                :show-recording-bar? show-recording-bar?})]
 

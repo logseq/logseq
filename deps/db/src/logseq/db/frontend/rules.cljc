@@ -234,10 +234,10 @@
    * :deps - A map of rule names to their dependencies. Only one-level of dependencies are resolved.
    No dependencies are detected by default though we could add it later e.g. find-rules-in-where"
   ([rules-m] (extract-rules rules-m (keys rules-m)))
-  ([rules-m rules & {:keys [deps]}]
-   (let [rules-with-deps (concat rules
+  ([rules-m rules' & {:keys [deps]}]
+   (let [rules-with-deps (concat rules'
                                  (when (map? deps)
-                                   (mapcat deps rules)))]
+                                   (mapcat deps rules')))]
      (vec
       (mapcat #(let [val (rules-m %)]
                  ;; if vector?, rule has multiple clauses

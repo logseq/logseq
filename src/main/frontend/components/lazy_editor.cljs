@@ -32,10 +32,10 @@
                     (reset! loaded? true))))
      state)}
   [config id attr code options]
-  (let [loaded? (rum/react loaded?)
+  (let [loaded?' (rum/react loaded?)
         theme   (state/sub :ui/theme)
         code    (or code "")
         code    (string/replace-first code #"\n$" "")]      ;; See-also: #3410
-    (if loaded?
+    (if loaded?'
       (@lazy-editor config id attr code theme options)
       (ui/loading "CodeMirror"))))

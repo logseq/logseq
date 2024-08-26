@@ -25,13 +25,13 @@
 (defn- macro-expand-value
   "Checks a string for a macro and expands it if there's a macro entry for it.
    This is a slimmer version of macro-else-cp"
-  [val macros]
-  (if-let [[_ macro args] (and (string? val)
-                               (seq (re-matches #"\{\{(\S+)\s+(.*)\}\}" val)))]
+  [value macros]
+  (if-let [[_ macro args] (and (string? value)
+                               (seq (re-matches #"\{\{(\S+)\s+(.*)\}\}" value)))]
     (if-let [content (get macros macro)]
       (macro-subs content (string/split args #"\s+"))
-      val)
-    val))
+      value)
+    value))
 
 (defn expand-value-if-macro
   [s macros]
