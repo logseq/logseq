@@ -360,7 +360,10 @@
         :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-09"
                      :on-select (fn [^js e]
                                   (util/stop e)
-                                  (-> (shui/dialog-confirm! "Are you sure you want to delete property from this node?")
+                                  (-> (shui/dialog-confirm!
+                                        "Are you sure you want to delete property from this node?"
+                                        {:id :delete-property-from-node
+                                         :data-reminder :ok})
                                     (p/then (fn []
                                               (handle-delete-property! owner-block property {:class-schema? false})
                                               (shui/popup-hide-all!)))
