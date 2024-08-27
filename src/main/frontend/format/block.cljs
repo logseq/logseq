@@ -44,13 +44,6 @@ and handles unexpected failure."
         (notification/show! "An unexpected error occurred during block extraction." :error)
         []))))
 
-(defn page-name->map
-  "Wrapper around logseq.graph-parser.block/page-name->map that adds in db"
-  ([original-page-name]
-   (page-name->map original-page-name true))
-  ([original-page-name with-timestamp?]
-   (gp-block/page-name->map original-page-name (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
-
 (defn- normalize-as-percentage
   [block]
   (some->> block

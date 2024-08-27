@@ -1,17 +1,15 @@
 (ns frontend.format.mldoc
   "Contains any mldoc code needed by app but not graph-parser. Implements format
   protocol for org and and markdown formats"
-  (:require [clojure.string :as string]
+  (:require ["mldoc" :as mldoc :refer [Mldoc]]
+            [clojure.string :as string]
+            [clojure.walk :as walk]
             [frontend.format.protocol :as protocol]
             [frontend.state :as state]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            ["mldoc" :as mldoc :refer [Mldoc]]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.common.util :as common-util]
-            [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.block :as gp-block]
-            [clojure.walk :as walk]))
+            [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseOPML (gobj/get Mldoc "parseOPML"))
@@ -90,29 +88,6 @@
          f))
      ast)
     @*result))
-
-(defn extract-tags
-  "Extract tags from content"
-  [content]
-  (let [ast (->edn content :markdown)
-        *result (atom [])]
-    (walk/prewalk
-     (fn [f]
-       (cond
-           ;; tag
-         (and (vector? f)
-              (= "Tag" (first f)))
-         (let [tag (-> (gp-block/get-tag f)
-                       text/page-ref-un-brackets!)]
-           (swap! *result conj tag)
-           nil)
-
-         :else
-         f))
-     ast)
-    (->> @*result
-         (remove string/blank?)
-         (distinct))))
 
 (defn get-title&body
   "parses content and returns [title body]
