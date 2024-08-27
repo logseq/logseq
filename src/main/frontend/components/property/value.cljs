@@ -181,18 +181,21 @@
                  (ui/hide-popups-until-preview-popup!)
                  (shui/dialog-close!))))))]
     (shui/calendar
-     (cond->
-      {:mode "single"
-       :initial-focus true
-       :selected initial-day
-       :id @*ident
-       :class-names {:months ""}
-       :on-day-key-down (fn [^js d _ ^js e]
-                          (when (= "Enter" (.-key e))
-                            (select-handler! d)))
-       :on-select select-handler!}
-       initial-month
-       (assoc :default-month initial-month)))))
+      (cond->
+        {:mode "single"
+         :initial-focus true
+         :caption-layout "dropdown-buttons"
+         :fromYear 1900
+         :toYear 2099
+         :selected initial-day
+         :id @*ident
+         :class-names {:months ""}
+         :on-day-key-down (fn [^js d _ ^js e]
+                            (when (= "Enter" (.-key e))
+                              (select-handler! d)))
+         :on-select select-handler!}
+        initial-month
+        (assoc :default-month initial-month)))))
 
 (rum/defc date-picker
   [value {:keys [on-change editing? multiple-values? other-position?]}]
