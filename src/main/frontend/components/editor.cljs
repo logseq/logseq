@@ -1,7 +1,6 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
-            [frontend.commands :as commands
-             :refer [*matched-block-commands *matched-commands]]
+            [frontend.commands :as commands :refer [*matched-commands]]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.svg :as svg]
             [frontend.components.search :as search]
@@ -100,19 +99,6 @@
                 :command command}))))
        :class
        "cp__commands-slash"})))
-
-(rum/defc block-commands < rum/reactive
-  [id format]
-  (when (= :block-commands (state/get-editor-action))
-    (let [matched (util/react *matched-block-commands)]
-      (ui/auto-complete
-        (map first matched)
-        {:on-chosen (fn [chosen]
-                      (editor-handler/insert-command! id (get (into {} matched) chosen)
-                        format
-                        {:last-pattern commands/angle-bracket
-                         :command :block-commands}))
-         :class "black"}))))
 
 (defn- page-on-chosen-handler
   [embed? input id q pos format]
@@ -500,11 +486,11 @@
    {:not-matched-handler (editor-handler/keydown-not-matched-handler format)}))
 
 (defn- set-up-key-up!
-  [state input' input-id]
+  [state input']
   (mixins/on-key-up
    state
    {}
-   (editor-handler/keyup-handler state input' input-id)))
+   (editor-handler/keyup-handler state input')))
 
 (def search-timeout (atom nil))
 
@@ -514,7 +500,7 @@
         input-id id
         input' (gdom/getElement input-id)]
     (set-up-key-down! state format)
-    (set-up-key-up! state input' input-id)))
+    (set-up-key-up! state input')))
 
 (defn get-editor-style-class
   "Get textarea css class according to it's content"
@@ -624,11 +610,6 @@
                     (commands id format)
                     {:content-props {:withoutAnimation false}})
 
-                  :block-commands
-                  (open-editor-popup! :block-commands
-                    (block-commands id format)
-                    {:content-props {:withoutAnimation true}})
-
                   (:block-search :page-search :page-search-hashtag)
                   (open-editor-popup! action
                     (if (= :block-search action)
@@ -698,10 +679,9 @@
       nil
 
       (or (contains?
-           #{:commands :block-commands
-             :page-search :page-search-hashtag :block-search :template-search
-             :property-search :property-value-search
-             :datepicker} action)
+           #{:commands :page-search :page-search-hashtag :block-search :template-search
+             :property-search :property-value-search :datepicker}
+           action)
           (and (keyword? action)
                (= (namespace action) "editor.action")))
       (when e (util/stop e))

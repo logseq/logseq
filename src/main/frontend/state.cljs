@@ -1112,10 +1112,6 @@ Similar to re-frame subscriptions"
   []
   (when-not (get-editor-action) (set-editor-action! :commands)))
 
-(defn set-editor-show-block-commands!
-  []
-  (when-not (get-editor-action) (set-editor-action! :block-commands)))
-
 (defn clear-editor-action!
   []
   (set-state! :editor/action nil))

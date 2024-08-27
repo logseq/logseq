@@ -87,7 +87,7 @@
                   ;; Ignore as none of its behaviors are tested
                   editor/default-case-for-keyup-handler (constantly nil)
                   cursor/pos (constantly pos)]
-      ((editor/keyup-handler nil input nil)
+      ((editor/keyup-handler nil input)
        #js {:key (subs value (dec (count value)))}
        nil))))
 
