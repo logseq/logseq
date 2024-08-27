@@ -8,7 +8,8 @@
             [logseq.outliner.property :as outliner-property]
             [rum.core :as rum]
             [frontend.components.property.config :as property-config]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [frontend.db-mixins :as db-mixins]))
 
 (rum/defc page-properties
   "This component is called by page-inner and within configure/info modal. This should not
@@ -49,7 +50,7 @@
       (class-component/configure page {:show-title? false})
       (page-properties page (assoc page-opts :mode :tag))]]))
 
-(rum/defcs page-info < rum/reactive
+(rum/defcs page-info < rum/reactive db-mixins/query
   (rum/local false ::hover?)
   [state page]
   (let [page (db/sub-block (:db/id page))
