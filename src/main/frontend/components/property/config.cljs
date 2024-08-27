@@ -367,7 +367,7 @@
         property-type (get property-schema :type)
         property-type-label' (some-> property-type (property-type-label))
         enable-closed-values? (contains? db-property-type/closed-value-property-types
-                                (or property-type :default))
+                                         (or property-type :default))
         icon (:logseq.property/icon property)
         icon (when icon [:span.float-left.w-4.h-4.overflow-hidden.leading-4.relative
                          (icon-component/icon icon {:size 15})])
@@ -379,16 +379,16 @@
      (dropdown-editor-menuitem {:icon :hash :title "Property type" :desc (str property-type-label') :disabled? true})
 
      (when enable-closed-values? (empty? (:property/schema.classes property))
-       (let [values (:property/closed-values property)]
-         (dropdown-editor-menuitem {:icon :list :title "Available choices"
-                                    :desc (when (seq values) (str (count values) " choices"))
-                                    :submenu-content (fn [] (choices-sub-pane property))})))
+           (let [values (:property/closed-values property)]
+             (dropdown-editor-menuitem {:icon :list :title "Available choices"
+                                        :desc (when (seq values) (str (count values) " choices"))
+                                        :submenu-content (fn [] (choices-sub-pane property))})))
 
      (let [many? (db-property/many? property)]
        (dropdown-editor-menuitem {:icon :checks :title "Multiple values"
                                   :toggle-checked? many? :disabled? disabled?
                                   :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
-                                                               (assoc property-schema :cardinality (if many? :one :many)) {})}))
+                                                                                                   (assoc property-schema :cardinality (if many? :one :many)) {})}))
 
      (shui/dropdown-menu-separator)
      (let [position (:position property-schema)]
@@ -398,37 +398,42 @@
 
      (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
                                 :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
-                                                             (assoc property-schema :hide? %) {})})
+                                                                                                 (assoc property-schema :hide? %) {})})
 
-     (shui/dropdown-menu-separator)
-     (dropdown-editor-menuitem
-       {:icon :share-3 :title "Go to the node" :desc ""
-        :item-props {:class "opacity-90 focus:opacity-100"
-                     :on-select (fn []
-                                  (shui/popup-hide-all!)
-                                  (route-handler/redirect-to-page! (:block/uuid property)))}})
-     (dropdown-editor-menuitem
-       {:id :remove-property :icon :square-x :title "Remove property" :desc "" :disabled? false
-        :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-09"
-                     :on-select (fn [^js e]
-                                  (util/stop e)
-                                  (-> (shui/dialog-confirm!
+     (when owner-block
+       (shui/dropdown-menu-separator))
+
+     (when owner-block
+       (dropdown-editor-menuitem
+        {:icon :share-3 :title "Go to the node" :desc ""
+         :item-props {:class "opacity-90 focus:opacity-100"
+                      :on-select (fn []
+                                   (shui/popup-hide-all!)
+                                   (route-handler/redirect-to-page! (:block/uuid property)))}}))
+
+     (when owner-block
+       (dropdown-editor-menuitem
+        {:id :remove-property :icon :square-x :title "Remove property" :desc "" :disabled? false
+         :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-09"
+                      :on-select (fn [^js e]
+                                   (util/stop e)
+                                   (-> (shui/dialog-confirm!
                                         "Are you sure you want to delete property from this node?"
                                         {:id :delete-property-from-node
                                          :data-reminder :ok})
-                                    (p/then (fn []
-                                              (handle-delete-property! owner-block property {:class-schema? false})
-                                              (shui/popup-hide-all!)))
-                                    (p/catch (fn [] (restore-root-highlight-item! :remove-property)))))}})
+                                       (p/then (fn []
+                                                 (handle-delete-property! owner-block property {:class-schema? false})
+                                                 (shui/popup-hide-all!)))
+                                       (p/catch (fn [] (restore-root-highlight-item! :remove-property)))))}}))
      (when (:debug? opts)
        [:<>
         (shui/dropdown-menu-separator)
         (dropdown-editor-menuitem
-          {:icon :bug :title (str (:db/ident property)) :desc "" :disabled? false
-           :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-08"
-                        :on-select (fn []
-                                     (dev-common-handler/show-entity-data (:db/id property))
-                                     (shui/popup-hide!))}})])]))
+         {:icon :bug :title (str (:db/ident property)) :desc "" :disabled? false
+          :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-08"
+                       :on-select (fn []
+                                    (dev-common-handler/show-entity-data (:db/id property))
+                                    (shui/popup-hide!))}})])]))
 
 (rum/defc dropdown-editor < rum/reactive db-mixins/query
   [property* owner-block opts]

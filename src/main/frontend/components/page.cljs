@@ -554,15 +554,13 @@
                (lsp-pagebar-slot)])
 
             (when db-based?
-              (db-page/page-info page (atom true)))
+              (db-page/page-info page))
 
             (when (and db-based? (ldb/class? page))
-              [:div.mt-8
-               (objects/class-objects page)])
+              (objects/class-objects page))
 
             (when (and db-based? (ldb/property? page))
-              [:div.mt-8
-               (objects/property-related-objects page)])
+              (objects/property-related-objects page))
 
             (when (and block? (not sidebar?) (not whiteboard?))
               (let [config (merge config {:id "block-parent"

@@ -35,7 +35,7 @@
      {:on-value-change on-select
       :default-value (:block/uuid (:class/parent page))}
      (shui/select-trigger
-      {:class "!px-2 !py-0 !h-8"}
+      {:class "!px-2 !py-0 !h-8 !border-none"}
       (shui/select-value
        {:placeholder "Empty"}))
      (shui/select-content
