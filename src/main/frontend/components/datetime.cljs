@@ -8,7 +8,6 @@
             [frontend.handler.repeated :as repeated]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [rum.core :as rum]
