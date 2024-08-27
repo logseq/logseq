@@ -26,7 +26,6 @@
             [frontend.handler.property.util :as pu]
             [logseq.db.frontend.property.type :as db-property-type]
             [dommy.core :as d]
-            [cljs-bean.core :as bean]
             [frontend.search :as search]
             [goog.functions :refer [debounce]]))
 
@@ -161,7 +160,7 @@
                    (shui/dialog-close!)
                    (state/set-editor-action! nil)
                    state)}
-  [state id {:keys [on-change value del-btn? on-delete]}]
+  [state id {:keys [on-change value _del-btn? _on-delete]}]
   (let [*ident (::identity state)
         initial-day (or (some-> value (.getTime) (js/Date.)) (js/Date.))
         initial-month (when value
