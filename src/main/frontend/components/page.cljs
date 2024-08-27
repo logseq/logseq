@@ -339,7 +339,7 @@
      :on-click #(swap! *show-page-info? not)}
     "Configure")])
 
-(rum/defcs ^:large-vars/cleanup-todo page-title-cp < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo page-title-cp < rum/reactive db-mixins/query
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
   {:init (fn [state]
@@ -440,6 +440,52 @@
 
            (when (and db-based? @*hover? (not preview?))
              (page-title-configure *show-page-info?))])))))
+
+(rum/defc db-page-title < rum/reactive db-mixins/query
+  [state repo page whiteboard-page?]
+  (let [page (db/sub-block (:db/id page))
+        icon (or (get page (pu/get-pid :logseq.property/icon))
+                 (or (when (ldb/class? page)
+                       {:type :tabler-icon
+                        :id "hash"})
+                     (when (ldb/property? page)
+                       {:type :tabler-icon
+                        :id "letter-p"})))]
+    [:div.ls-page-title.flex.flex-1.w-full.content.items-center
+     {:class (when-not whiteboard-page? "title")
+      :on-pointer-down (fn [e]
+                         (when (util/right-click? e)
+                           (state/set-state! :page-title/context {:page (:block/title page)
+                                                                  :page-entity page})))
+      :on-click (fn [e]
+                  (when-not (= (.-nodeName (.-target e)) "INPUT")
+                    (when (gobj/get e "shiftKey")
+                      (.preventDefault e)
+                      (state/sidebar-add-block!
+                       repo
+                       (:db/id page)
+                       :page))))}
+
+     (when icon
+       [:div.page-icon
+        {:on-pointer-down util/stop-propagation}
+        (cond
+          (map? icon)
+          (icon-component/icon-picker icon
+                                      {:on-chosen (fn [_e icon]
+                                                    (db-property-handler/set-block-property!
+                                                     (:db/id page)
+                                                     (pu/get-pid :logseq.property/icon)
+                                                     (select-keys icon [:id :type :color])))
+                                       :icon-props {:size 38}})
+
+          :else
+          icon)])
+
+     [:div.w-full
+      (component-block/block-container {:page-title? true
+                                        :hide-children? true
+                                        :container-id (:container-id state)} page)]]))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -569,23 +615,7 @@
                   (page-blocks-collapse-control title *control-show? *all-collapsed?)])
                (when (and (not whiteboard?) (ldb/page? page))
                  (if db-based?
-                   [:div.ls-page-title.w-full.content
-                    {:class (when-not whiteboard-page? "title")
-                     :on-pointer-down (fn [e]
-                                        (when (util/right-click? e)
-                                          (state/set-state! :page-title/context {:page (:block/title page)
-                                                                                 :page-entity page})))
-                     :on-click (fn [e]
-                                 (when-not (= (.-nodeName (.-target e)) "INPUT")
-                                   (when (gobj/get e "shiftKey")
-                                     (.preventDefault e)
-                                     (state/sidebar-add-block!
-                                      repo
-                                      (:db/id page)
-                                      :page))))}
-                    (component-block/block-container {:page-title? true
-                                                      :hide-children? true
-                                                      :container-id (:container-id state)} page)]
+                   (db-page-title state repo page whiteboard-page?)
                    (page-title-cp page {:journal? journal?
                                         :fmt-journal? fmt-journal?
                                         :preview? preview?
