@@ -354,14 +354,19 @@
                      (property-handler/remove-block-property! repo (:block/uuid block) (:db/ident property))))]
     (if (and class? class-schema?)
       (-> (shui/dialog-confirm!
-            ;; Only ask for confirmation on class schema properties
-            [:p (str "Are you sure you want to delete this property?")])
-        (p/then remove!))
-      (remove!))))
+           [:p (str "Are you sure you want to delete this property?")]
+           {:id :delete-property-from-class
+            :data-reminder :ok})
+          (p/then remove!))
+      (-> (shui/dialog-confirm!
+           "Are you sure you want to delete the property from this node?"
+           {:id :delete-property-from-node
+            :data-reminder :ok})
+          (p/then remove!)))))
 
 (rum/defc dropdown-editor-impl
   "property: block entity"
-  [property owner-block opts]
+  [property owner-block {:keys [class-schema? debug?]}]
   (let [title (:block/title property)
         property-schema (:block/schema property)
         property-type (get property-schema :type)
@@ -413,19 +418,15 @@
 
      (when owner-block
        (dropdown-editor-menuitem
-        {:id :remove-property :icon :square-x :title "Remove property" :desc "" :disabled? false
+        {:id :remove-property :icon :square-x :title "Delete property" :desc "" :disabled? false
          :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-09"
                       :on-select (fn [^js e]
                                    (util/stop e)
-                                   (-> (shui/dialog-confirm!
-                                        "Are you sure you want to delete property from this node?"
-                                        {:id :delete-property-from-node
-                                         :data-reminder :ok})
-                                       (p/then (fn []
-                                                 (handle-delete-property! owner-block property {:class-schema? false})
-                                                 (shui/popup-hide-all!)))
+                                   (-> (p/do!
+                                        (handle-delete-property! owner-block property {:class-schema? class-schema?})
+                                        (shui/popup-hide-all!))
                                        (p/catch (fn [] (restore-root-highlight-item! :remove-property)))))}}))
-     (when (:debug? opts)
+     (when debug?
        [:<>
         (shui/dropdown-menu-separator)
         (dropdown-editor-menuitem

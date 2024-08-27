@@ -305,7 +305,7 @@
 
 (rum/defcs property-key-cp <
   (rum/local false ::hover?)
-  [state block property {:keys [other-position?]}]
+  [state block property {:keys [other-position? class-schema?]}]
   (let [*hover? (::hover? state)
         icon (:logseq.property/icon property)]
     [:div.flex.flex-row.items-center.gap-1
@@ -352,7 +352,8 @@
                          :on-click (fn [^js/MouseEvent e]
                                      (shui/popup-show! (.-target e)
                                                        (fn []
-                                                         (property-config/dropdown-editor property block {:debug? (.-altKey e)}))
+                                                         (property-config/dropdown-editor property block {:debug? (.-altKey e)
+                                                                                                          :class-schema? class-schema?}))
                                                        {:content-props
                                                         {:class "ls-property-dropdown-editor as-root"}
                                                         :align "start"
