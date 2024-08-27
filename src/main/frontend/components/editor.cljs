@@ -603,7 +603,6 @@
         {:keys [left top rect]} (cursor/get-caret-pos input)
         pos [(+ left (:left rect) -20) (+ top (:top rect) line-height)]
         {:keys [root-props content-props]} opts]
-    (prn :debug :line-height)
     (shui/popup-show!
      pos content
      (merge
