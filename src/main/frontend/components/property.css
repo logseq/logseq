@@ -361,11 +361,11 @@ a.control-link {
   > ul.choices-list {
     @apply m-0 px-1.5 pt-1 pb-1;
 
-    > li {
+    li {
       @apply flex items-center gap-1 relative;
 
       .ls-icon-grip-vertical {
-        @apply opacity-50 cursor-move;
+        @apply opacity-50 cursor-move active:opacity-80;
       }
 
       > strong {

@@ -572,8 +572,7 @@
                                             (when (util/meta-key? e)
                                               (route-handler/redirect-to-page! (:block/uuid property))
                                               (.preventDefault e)))
-                         :on-context-menu (fn [^js/MouseEvent e]
-                                            (util/stop e)
+                         :on-click (fn [^js/MouseEvent e]
                                             (shui/popup-show! (.-target e)
                                               (fn [{:keys [id]}]
                                                 (property-v2/dropdown-editor id property block
@@ -582,39 +581,40 @@
                                                {:class "ls-property-dropdown-editor as-root"}
                                                :align "start"
                                                :as-dropdown? true}))
-                         :on-click (fn [^js e]
-                                     (shui/popup-show!
-                                       (.-target e)
-                                       (fn [{:keys [id]}]
-                                         [:div.p-2
-                                          [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
-                                          [:span.close.absolute.right-2.top-2
-                                           (shui/button
-                                             {:variant :ghost :size :sm :class "!w-4 !h-6"
-                                              :on-click #(shui/popup-hide! id)}
-                                             (shui/tabler-icon "x" {:size 16}))]
+                           :on-context-menu (fn [^js e]
+                                              (util/stop e)
+                                              (shui/popup-show!
+                                                (.-target e)
+                                                (fn [{:keys [id]}]
+                                                  [:div.p-2
+                                                   [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
+                                                   [:span.close.absolute.right-2.top-2
+                                                    (shui/button
+                                                      {:variant :ghost :size :sm :class "!w-4 !h-6"
+                                                       :on-click #(shui/popup-hide! id)}
+                                                      (shui/tabler-icon "x" {:size 16}))]
 
-                                          (property-config property
-                                            {:inline-text inline-text
-                                             :page-cp page-cp})
+                                                   (property-config property
+                                                     {:inline-text inline-text
+                                                      :page-cp page-cp})
 
-                                          (when-not (ldb/built-in-class-property? block property)
-                                            [:div.mt-4.border-t.pt-3.px-3.-mx-4.-mb-1
-                                             (shui/button
-                                               {:variant :ghost
-                                                :class "!text-red-rx-09 opacity-50 hover:opacity-100"
-                                                :size :sm
-                                                :on-click (fn []
-                                                            (handle-delete-property! block property {:class-schema? class-schema?})
-                                                            (shui/popup-hide!))}
-                                               "Delete property from this node")])])
-                                       {:content-props {:class "property-configure-popup-content"
-                                                        :collisionPadding {:bottom 10 :top 10}
-                                                        :avoidCollisions true
-                                                        :align "start"}
-                                        :align "start"
-                                        :auto-side? true
-                                        :auto-focus? true}))}
+                                                   (when-not (ldb/built-in-class-property? block property)
+                                                     [:div.mt-4.border-t.pt-3.px-3.-mx-4.-mb-1
+                                                      (shui/button
+                                                        {:variant :ghost
+                                                         :class "!text-red-rx-09 opacity-50 hover:opacity-100"
+                                                         :size :sm
+                                                         :on-click (fn []
+                                                                     (handle-delete-property! block property {:class-schema? class-schema?})
+                                                                     (shui/popup-hide!))}
+                                                        "Delete property from this node")])])
+                                                {:content-props {:class "property-configure-popup-content"
+                                                                 :collisionPadding {:bottom 10 :top 10}
+                                                                 :avoidCollisions true
+                                                                 :align "start"}
+                                                 :align "start"
+                                                 :auto-side? true
+                                                 :auto-focus? true}))}
          (:block/title property)))]))
 
 (rum/defcs property-input < rum/reactive
@@ -623,25 +623,25 @@
   (rum/local false ::show-class-select?)
   (rum/local {} ::property-schema)
   (mixins/event-mixin
-   (fn [state]
-     (mixins/hide-when-esc-or-outside
-      state
-      :on-hide (fn [_state _e type]
-                 (when (= type :esc)
-                   (shui/popup-hide!)
-                   (shui/dialog-close!)
-                   (when-let [^js input (state/get-input)]
-                     (.focus input)))))))
+    (fn [state]
+      (mixins/hide-when-esc-or-outside
+        state
+        :on-hide (fn [_state _e type]
+                   (when (= type :esc)
+                     (shui/popup-hide!)
+                     (shui/dialog-close!)
+                     (when-let [^js input (state/get-input)]
+                       (.focus input)))))))
   {:init (fn [state]
            (state/set-editor-action! :property-input)
            (assoc state ::property (or (:*property (last (:rum/args state)))
-                                       (atom nil))))
+                                     (atom nil))))
    :will-unmount (fn [state]
                    (let [args (:rum/args state)
                          *property-key (second args)
                          {:keys [original-block edit-original-block]} (last args)
                          editing-default-property? (and original-block (state/get-edit-block)
-                                                        (not= (:db/id original-block) (:db/id (state/get-edit-block))))]
+                                                     (not= (:db/id original-block) (:db/id (state/get-edit-block))))]
                      (when *property-key (reset! *property-key nil))
                      (when (and original-block edit-original-block)
                        (edit-original-block {:editing-default-property? editing-default-property?})))
@@ -655,14 +655,14 @@
         *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
         existing-tag-alias (->> db-property/db-attribute-properties
-                                (map db-property/built-in-properties)
-                                (keep #(when (get block (:attribute %)) (:title %)))
-                                set)
+                             (map db-property/built-in-properties)
+                             (keep #(when (get block (:attribute %)) (:title %)))
+                             set)
         exclude-properties (fn [m]
                              (or (and (not page?) (contains? existing-tag-alias (:block/title m)))
-                                 ;; Filters out properties from being in wrong :view-context
-                                 (and (not page?) (= :page (get-in m [:block/schema :view-context])))
-                                 (and page? (= :block (get-in m [:block/schema :view-context])))))
+                               ;; Filters out properties from being in wrong :view-context
+                               (and (not page?) (= :page (get-in m [:block/schema :view-context])))
+                               (and page? (= :block (get-in m [:block/schema :view-context])))))
         property (rum/react *property)
         property-key (rum/react *property-key)]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
@@ -671,7 +671,7 @@
        [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
         [:div.flex.flex-row.items-center.col-span-2.property-key.gap-1
          (when-not (:db/id property) (property-icon property (:type @*property-schema)))
-         (if (:db/id property)          ; property exists already
+         (if (:db/id property)                              ; property exists already
            (property-key-cp block property opts)
            [:div property-key])]
         [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
@@ -679,20 +679,20 @@
            (cond
              @*show-new-property-config?
              (property-type-select property (merge opts
-                                                   {:*property *property
-                                                    :*property-name *property-key
-                                                    :*property-schema *property-schema
-                                                    :default-open? true
-                                                    :block block
-                                                    :*show-new-property-config? *show-new-property-config?
-                                                    :*show-class-select? *show-class-select?}))
+                                              {:*property *property
+                                               :*property-name *property-key
+                                               :*property-schema *property-schema
+                                               :default-open? true
+                                               :block block
+                                               :*show-new-property-config? *show-new-property-config?
+                                               :*show-class-select? *show-class-select?}))
 
              (and property @*show-class-select?)
              (class-select property (assoc opts
-                                           :on-hide #(reset! *show-class-select? false)
-                                           :multiple-choices? false
-                                           :default-open? true
-                                           :no-class? true))
+                                      :on-hide #(reset! *show-class-select? false)
+                                      :multiple-choices? false
+                                      :default-open? true
+                                      :no-class? true))
 
              :else
              (when (and property (not class-schema?))
@@ -703,7 +703,7 @@
                          (fn [e]
                            ;; `Backspace` to close property popup and back to editing the current block
                            (when (and (= (util/ekey e) "Backspace")
-                                      (= "" (.-value (.-target e))))
+                                   (= "" (.-value (.-target e))))
                              (util/stop e)
                              (shui/popup-hide!)))}]
          (property-select exclude-properties {:on-chosen on-chosen
