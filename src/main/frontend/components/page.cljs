@@ -614,6 +614,7 @@
                  (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
             (page-blocks-cp repo page (merge option {:sidebar? sidebar?
+                                                     :container-id (:container-id state)
                                                      :whiteboard? whiteboard?}))])
 
          (when (and (not preview?) @(::main-ready? state))

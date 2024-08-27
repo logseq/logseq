@@ -1102,12 +1102,14 @@
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
               lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-              blocks (db/pull-many repo '[*] lookup-refs)
-              top-level-blocks (block-handler/get-top-level-blocks blocks)
+              blocks (->> (map db/entity lookup-refs)
+                          (remove ldb/page?))
+              top-level-blocks (when (seq blocks) (block-handler/get-top-level-blocks blocks))
               sorted-blocks (mapcat (fn [block]
                                       (tree/get-sorted-block-and-children repo (:db/id block)))
                                     top-level-blocks)]
-          (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks))))))
+          (when (seq sorted-blocks)
+            (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks)))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."
