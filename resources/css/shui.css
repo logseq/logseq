@@ -371,14 +371,14 @@ div[data-radix-popper-content-wrapper] {
     }
 
     .months-years-nav {
-      @apply flex items-center relative left-2 opacity-80;
+      @apply flex items-center relative left-1 opacity-80;
 
       select {
-        @apply px-2 py-0 border-none;
+        @apply px-2 py-0 border-none bg-transparent;
       }
 
       input {
-        @apply border-none ml-0.5;
+        @apply border-none ml-0.5 bg-transparent;
       }
     }
   }
