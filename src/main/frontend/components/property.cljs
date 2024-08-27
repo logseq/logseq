@@ -867,7 +867,7 @@
           (remove (fn [property]
                     (let [id (if (vector? property) (first property) property)]
                       (or
-                       (when-not page? (= id :block/tags))
+                       (= id :block/tags)
                        (when-let [ent (db/entity id)]
                          (or
                           ;; built-in
@@ -875,8 +875,7 @@
                                ;; TODO: Use ldb/built-in? when intermittent lazy loading issue fixed
                                (get db-property/built-in-properties (:db/ident ent)))
                           ;; other position
-                          (when-not (or (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
-                                        (ldb/page? block))
+                          (when-not (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
                             (outliner-property/property-with-other-position? ent)))))))
                   properties))
         {:keys [all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))

@@ -24,9 +24,8 @@
   (let [edit-input-id-prefix (str "edit-block-" (:block/uuid page))
         configure-opts {:selected? false
                         :page-configure? configure?}
-        has-viewable-properties? (outliner-property/block-has-viewable-properties? page)
-        hide-properties? (:logseq.property/hide-properties? page)]
-    (when (or configure? (and (not hide-properties?) has-viewable-properties?))
+        has-viewable-properties? (outliner-property/block-has-viewable-properties? page)]
+    (when (or configure? has-viewable-properties?)
       [:div.ls-page-properties
        {:class (util/classnames [{:no-properties (not has-viewable-properties?)}])}
        (if configure?

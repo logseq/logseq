@@ -594,20 +594,27 @@
 
 (defn- open-editor-popup!
   [id content opts]
-  (let [{:keys [left top rect]} (cursor/get-caret-pos (state/get-input))
-        pos [(+ left (:left rect) -20) (+ top (:top rect) 20)]
+  (let [input (state/get-input)
+        line-height (or (when input
+                          (some-> (.-lineHeight (js/window.getComputedStyle input))
+                                  (js/parseFloat)
+                                  (- 4)))
+                        20)
+        {:keys [left top rect]} (cursor/get-caret-pos input)
+        pos [(+ left (:left rect) -20) (+ top (:top rect) line-height)]
         {:keys [root-props content-props]} opts]
+    (prn :debug :line-height)
     (shui/popup-show!
-      pos content
-      (merge
-        {:id (keyword :editor.commands id)
-         :align :start
-         :root-props (merge {:onOpenChange #(when-not % (state/clear-editor-action!))} root-props)
-         :content-props (merge {:onOpenAutoFocus #(.preventDefault %)
-                                :onCloseAutoFocus #(.preventDefault %)
-                                :data-editor-popup-ref (name id)} content-props)
-         :force-popover? true}
-        (dissoc opts :root-props :content-props)))))
+     pos content
+     (merge
+      {:id (keyword :editor.commands id)
+       :align :start
+       :root-props (merge {:onOpenChange #(when-not % (state/clear-editor-action!))} root-props)
+       :content-props (merge {:onOpenAutoFocus #(.preventDefault %)
+                              :onCloseAutoFocus #(.preventDefault %)
+                              :data-editor-popup-ref (name id)} content-props)
+       :force-popover? true}
+      (dissoc opts :root-props :content-props)))))
 
 (rum/defc shui-editor-popups
   [id format action _data]

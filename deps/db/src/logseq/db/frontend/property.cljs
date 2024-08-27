@@ -54,8 +54,6 @@
                                                     :hide? true}}
    :logseq.property/built-in?             {:schema {:type :checkbox
                                                     :hide? true}}
-   :logseq.property/hide-properties?      {:schema {:type :checkbox
-                                                    :hide? true}}
    :logseq.property/query-table {:schema {:type :checkbox
                                           :hide? true}}
    ;; query-properties is a coll of property db-idents and keywords where keywords are special frontend keywords

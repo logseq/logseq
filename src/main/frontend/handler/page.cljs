@@ -503,14 +503,6 @@
       (url-util/get-logseq-graph-page-url nil (state/get-current-repo) (str page-uuid)))
      (notification/show! "No page found to copy" :warning))))
 
-(defn toggle-properties!
-  [page-entity]
-  (let [e (db/entity (:db/id page-entity))]
-    (property-handler/set-block-property! (state/get-current-repo)
-                                         (:block/uuid page-entity)
-                                         :logseq.property/hide-properties?
-                                         (not (:logseq.property/hide-properties? e)))))
-
 (defn convert-to-tag!
   [page-entity]
   (let [class (db-class/build-new-class (db/get-db)
