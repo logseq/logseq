@@ -409,12 +409,15 @@
                                                                   :page-entity page})))
       :on-click (fn [e]
                   (when-not (= (.-nodeName (.-target e)) "INPUT")
-                    (when (gobj/get e "shiftKey")
-                      (.preventDefault e)
-                      (state/sidebar-add-block!
-                       repo
-                       (:db/id page)
-                       :page))))}
+                    (cond
+                      (util/meta-key? e)
+                      (do
+                        (.preventDefault e)
+                        (route-handler/redirect-to-page! (:block/uuid page)))
+                      (gobj/get e "shiftKey")
+                      (do
+                        (.preventDefault e)
+                        (state/sidebar-add-block! repo (:db/id page) :page)))))}
 
      [:div.w-full
       (component-block/block-container {:page-title? true
