@@ -1,5 +1,6 @@
 (ns frontend.components.property-v2
   (:require [clojure.string :as string]
+            [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.config :as config]
             [frontend.handler.common.developer :as dev-common-handler]
@@ -10,6 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.core :as outliner-core]
@@ -251,8 +253,25 @@
     [:div.ls-property-dropdown-editor.ls-property-choices-sub-pane
      (when (seq choices)
        [:ul.choices-list
-        (for [c choices]
-          (:content c))])
+        (dnd/items choices
+          {:sort-by-inner-element? false
+           :on-drag-end (fn [_ {:keys [active-id over-id direction]}]
+                          (let [move-down? (= direction :down)
+                                over (db/entity [:block/uuid (uuid over-id)])
+                                active (db/entity [:block/uuid (uuid active-id)])
+                                over-order (:block/order over)
+                                new-order (if move-down?
+                                            (let [next-order (db-order/get-next-order (db/get-db) property (:db/id over))]
+                                              (db-order/gen-key over-order next-order))
+                                            (let [prev-order (db-order/get-prev-order (db/get-db) property (:db/id over))]
+                                              (db-order/gen-key prev-order over-order)))]
+
+                            (db/transact! (state/get-current-repo)
+                              [{:db/id (:db/id active)
+                                :block/order new-order}
+                               (outliner-core/block-with-updated-at
+                                 {:db/id (:db/id property)})]
+                              {:outliner-op :save-block})))})])
 
      ;; add choice
      (dropdown-editor-menuitem
