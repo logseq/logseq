@@ -51,12 +51,14 @@
       (page-properties page (assoc page-opts :mode :tag))]]))
 
 (rum/defcs page-info < rum/reactive db-mixins/query
-  (rum/local false ::hover?)
+  (rum/local false ::show?)
   [state page]
-  (let [page (db/sub-block (:db/id page))
+  (let [*show? (::show? state)
+        page (db/sub-block (:db/id page))
         type (:block/type page)]
-    (if (= type "property")
-      [:div.py-2.-ml-1
+    (case type
+      "property"
+      [:div.pb-4.-ml-1
        (shui/button
         {:variant "ghost"
          :class "opacity-50 hover:opacity-90"
@@ -70,6 +72,17 @@
                                         :as-dropdown? true}))}
         "Configure property")]
 
-      [:div.page-info.border.rounded.mb-4
-       [:div.px-4.py-2
-        (page-configure page)]])))
+      "class"
+      [:div.pb-4.-ml-1
+       (shui/button
+        {:variant "ghost"
+         :class "opacity-50 hover:opacity-90"
+         :size :sm
+         :on-click (fn [] (swap! *show? not))}
+        "Configure tag")
+       (when @*show?
+         [:div.page-info.border.rounded.my-2
+          [:div.px-4.py-2
+           (page-configure page)]])]
+
+      nil)))
