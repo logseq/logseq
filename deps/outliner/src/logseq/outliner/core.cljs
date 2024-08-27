@@ -257,6 +257,12 @@
           block-uuid (:block/uuid this)
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
+          m* (if (and (ldb/page? block-entity)
+                      (:block/title m*)
+                      (not= (string/trim (:block/title m*))
+                            (string/trim (:block/title block-entity))))
+               (assoc m* :block/name (common-util/page-name-sanity-lc (string/trim (:block/title m*))))
+               m*)
           m (cond-> m*
               db-based?
               (dissoc :block/priority :block/marker :block/properties-order))]

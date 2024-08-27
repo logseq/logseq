@@ -444,9 +444,8 @@
                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
           (when (db/page-empty? repo today-page)
             (if (config/db-based-graph? repo)
-              (let [page-exists (db/get-page today-page)]
-                (when-not page-exists
-                  (create-f)))
+              (when-not (model/get-journal-page title)
+                (create-f))
               (p/let [file-name (date/journal-title->default title)
                       file-rpath (str (config/get-journals-directory) "/" file-name "."
                                       (config/get-file-extension format))

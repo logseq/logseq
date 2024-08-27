@@ -2420,7 +2420,8 @@
                 (property-component/property-key-cp block property opts)
                 [:div.select-none ":"]]
                (pv/property-value block property v opts)]))]
-         [:div.positioned-properties.right-align.flex.flex-row.items-start.gap-1.select-none
+         [:div.positioned-properties.right-align.flex.flex-row.gap-1.select-none
+          {:class (if (:page-title? config) "items-center" "items-start")}
           (for [pid properties]
             (when-let [property (db/entity pid)]
               (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
