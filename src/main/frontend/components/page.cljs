@@ -505,7 +505,7 @@
        (plugins/hook-ui-items :pagebar)])))
 
 ;; A page is just a logical block
-(rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query
+(rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query mixins/container-id
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
@@ -559,7 +559,7 @@
            [:div.relative.grid.gap-2.page-inner
             (when (and (not sidebar?) (not block?))
               [:div.flex.flex-row.space-between
-               (when (or (mobile-util/native-platform?) (util/mobile?))
+               (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))
                  [:div.flex.flex-row.pr-2
                   {:style {:margin-left -15}
                    :on-mouse-over (fn [e]
@@ -568,22 +568,30 @@
                                      (page-mouse-leave e *control-show?))}
                   (page-blocks-collapse-control title *control-show? *all-collapsed?)])
                (when (and (not whiteboard?) (ldb/page? page))
-                 (page-title-cp page {:journal? journal?
-                                      :fmt-journal? fmt-journal?
-                                      :preview? preview?
-                                      :*hover? (::hover-title? state)
-                                      :*show-page-info? (::show-page-info? state)}))
+                 (if db-based?
+                   [:div.ls-page-title.w-full.content
+                    {:class (when-not whiteboard-page? "title")
+                     :on-pointer-down (fn [e]
+                                        (when (util/right-click? e)
+                                          (state/set-state! :page-title/context {:page (:block/title page)
+                                                                                 :page-entity page})))
+                     :on-click (fn [e]
+                                 (when-not (= (.-nodeName (.-target e)) "INPUT")
+                                   (when (gobj/get e "shiftKey")
+                                     (.preventDefault e)
+                                     (state/sidebar-add-block!
+                                      repo
+                                      (:db/id page)
+                                      :page))))}
+                    (component-block/block-container {:page-title? true
+                                                      :hide-children? true
+                                                      :container-id (:container-id state)} page)]
+                   (page-title-cp page {:journal? journal?
+                                        :fmt-journal? fmt-journal?
+                                        :preview? preview?
+                                        :*hover? (::hover-title? state)
+                                        :*show-page-info? (::show-page-info? state)})))
                (lsp-pagebar-slot)])
-
-            (cond
-              (and db-based? (not block?))
-              (db-page/page-info page
-                                 (if (and (ldb/class? page) sidebar?)
-                                   (atom true)
-                                   (::show-page-info? state)))
-
-              (and (not db-based?) (not block?))
-              [:<>])
 
             (when (and db-based? (ldb/class? page))
               [:div.mt-8

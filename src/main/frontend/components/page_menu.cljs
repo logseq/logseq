@@ -7,6 +7,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -67,7 +68,13 @@
                                     (file-sync-handler/get-current-graph-uuid))]
       (when (not block?)
         (->>
-         [(when-not config/publishing?
+         [(when (not= (state/get-current-page) (str (:block/uuid page)))
+            {:title   (t :page/go-to-page)
+             :options {:on-click
+                       (fn []
+                         (route-handler/redirect-to-page! (:block/uuid page)))}})
+
+          (when-not config/publishing?
             {:title   (if favorited?
                         (t :page/unfavorite)
                         (t :page/add-to-favorites))
@@ -126,7 +133,7 @@
                {:title   (t :page/open-with-default-app)
                 :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 
-          (when (or (state/get-current-page) whiteboard?)
+          (when page
             {:title   (t :export-page)
              :options {:on-click #(shui/dialog-open!
                                    (fn []
@@ -153,11 +160,6 @@
               {:title label
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page page-name) action)}}))
-
-          (when (and db-based? (not whiteboard?))
-            {:title (t :page/toggle-properties)
-             :options {:on-click (fn []
-                                   (page-handler/toggle-properties! page))}})
 
           (when (and db-based? (= (:block/type page) "page"))
             {:title (t :page/convert-to-tag)
