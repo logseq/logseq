@@ -149,8 +149,6 @@
                     (outliner-op/rename-page! page-uuid new-name))
             result' (ldb/read-transit-str result)]
       (case (if (string? result') (keyword result') result')
-        :built-in-page
-        (notification/show! "Built-in page's name cannot be modified" :warning)
         :invalid-empty-name
         (notification/show! "Please use a valid name, empty name is not allowed!" :warning)
         :rename-page-exists
