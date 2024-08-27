@@ -21,7 +21,8 @@
             [promesa.core :as p]
             [frontend.config :as config]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [frontend.db-mixins :as db-mixins]))
 
 (rum/defc page-block-selector
   [*find]
@@ -150,7 +151,7 @@
                                   db-ident
                                   (keyword value)))))))
 
-(rum/defc property-value-select
+(rum/defc property-value-select < rum/reactive db-mixins/query
   [repo *property *find *tree opts loc]
   (let [db-graph? (sqlite-util/db-based-graph? repo)
         [values set-values!] (rum/use-state nil)]

@@ -7,7 +7,8 @@
             [frontend.ui :as ui]
             [rum.core :as rum]
             [frontend.components.block :as block]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [frontend.db-mixins :as db-mixins]))
 
 (rum/defc class-select
   [page class on-select]
@@ -59,7 +60,7 @@
                                       [[:db.fn/retractAttribute (:db/id page) :class/parent]]
                                       {:outliner-op :save-block}))))))
 
-(rum/defcs configure < rum/reactive
+(rum/defcs configure < rum/reactive db-mixins/query
   "Configure a class page"
   [state page {:keys [show-title?]
                :or {show-title? true}}]
