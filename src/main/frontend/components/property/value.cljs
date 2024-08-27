@@ -155,10 +155,10 @@
   [:div.months-years-nav
    (if (= name "years")
      [:label [:input.py-0.px-1.w-auto
-              {:type "number" :default-value value :on-change onChange :min 1 :max 9999}]]
+              {:type "number" :value value :on-change onChange :min 1 :max 9999}]]
 
      ;; months
-     [:select children])])
+     [:select {:on-change onChange :value value} children])])
 
 (rum/defcs calendar-inner <
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
@@ -201,8 +201,8 @@
         {:mode "single"
          :initial-focus true
          :caption-layout "dropdown-buttons"
-         :fromYear 2019
-         :toYear 2024
+         :fromYear 1899
+         :toYear 2099
          :components (cond-> {:Dropdown #(DateNavSelect (bean/bean %))}
                        del-btn? (assoc :Head #(DelDateButton on-delete)))
          :selected initial-day
