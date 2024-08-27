@@ -329,6 +329,37 @@ div[data-radix-popper-content-wrapper] {
   }
 }
 
+.ui__calendar {
+  .rdp-caption_dropdowns {
+    @apply flex items-center justify-center w-[70%];
+
+    .rdp-vhidden {
+      @apply hidden;
+    }
+
+    .rdp-dropdown_month,
+    .rdp-dropdown_year {
+      @apply relative pr-3 mr-3;
+
+      select {
+        @apply absolute px-2 py-0 border left-0 z-[2] opacity-0;
+      }
+
+      > .text-sm {
+        @apply w-full z-[1];
+
+        svg {
+          @apply absolute right-0 top-[6px];
+        }
+      }
+    }
+
+    .rdp-dropdown_month {
+      @apply ml-4;
+    }
+  }
+}
+
 .popper-arrow {
   fill: white;
   filter: drop-shadow(0 0 3px var(--lx-gray-12));
