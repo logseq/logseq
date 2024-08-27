@@ -263,7 +263,11 @@
           m* (if (and db-based? page-title-changed?)
                (let [page-name (common-util/page-name-sanity-lc (:block/title m*))]
                  (when (string/blank? page-name)
-                   (throw (ex-info "Page title shouldn't be blank" m*)))
+                   (throw (ex-info "Page title can't be blank"
+                                   {:type :notification
+                                    :payload {:message "Page title can't be blank"
+                                              :type :error}
+                                    :node m*})))
                  (assoc m* :block/name page-name))
                m*)
           m (cond-> m*
