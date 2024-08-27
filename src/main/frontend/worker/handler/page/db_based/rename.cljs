@@ -81,9 +81,6 @@
           new-page-exists?
           :rename-page-exists
 
-          (ldb/built-in? page-e)
-          :built-in-page
-
           (and old-name new-name name-changed?)
           (if (= old-page-name new-page-name) ; case changed
             (ldb/transact! conn

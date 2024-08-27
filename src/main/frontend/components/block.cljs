@@ -3106,7 +3106,7 @@
                                    (when (ldb/property? block)
                                      {:type :tabler-icon
                                       :id "letter-p"}))))]
-        [:div {:class (when (:page-title? config) "ls-page-icon")}
+        [:div.flex.items-center.page-icon
          (icon-component/icon-picker icon
                                     {:on-chosen (fn [_e icon]
                                                   (db-property-handler/set-block-property!
