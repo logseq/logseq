@@ -29,7 +29,6 @@
 
 ;; TODO: move to frontend.handler.editor.commands
 
-(defonce angle-bracket "<")
 (defonce hashtag "#")
 (defonce colon ":")
 (defonce command-trigger "/")
@@ -230,46 +229,15 @@
                         (+ 1 (count right))
                         (count right))]
      [[:editor/input template {:type "block"
-                               :last-pattern angle-bracket
+                               :last-pattern command-trigger
                                :backward-pos backward-pos}]])))
 
 (defn ->properties
   []
-  [[:editor/clear-current-bracket]
+  [[:editor/clear-current-slash]
    [:editor/insert-properties]
    [:editor/move-cursor-to-properties]])
 
-;; https://orgmode.org/manual/Structure-Templates.html
-(defn block-commands-map
-  []
-  (->>
-   (concat
-    [["Quote" (->block "quote")
-      "Add a quote"
-      "More"]
-     ["Src" (->block "src" "")]
-     ["Query" (->block "query")]
-     ["Latex export" (->block "export" "latex")]
-     ;; FIXME: current page's format
-     (when (= :org (state/get-preferred-format))
-       ["Properties" (->properties)])
-     ["Note" (->block "note")]
-     ["Tip" (->block "tip")]
-     ["Important" (->block "important")]
-     ["Caution" (->block "caution")]
-     ["Pinned" (->block "pinned")]
-     ["Warning" (->block "warning")]
-     ["Example" (->block "example")]
-     ["Export" (->block "export")]
-     ["Verse" (->block "verse")]
-     ["Ascii" (->block "export" "ascii")]
-     ["Center" (->block "center")]
-     ["Comment" (->block "comment")]]
-
-    ;; Allow user to modify or extend, should specify how to extend.
-    (state/get-commands))
-   (remove nil?)
-   (util/distinct-by-last-wins first)))
 
 (defn ^:large-vars/cleanup-todo commands-map
   [get-page-ref-text]
@@ -346,6 +314,32 @@
         "Number children"
         :icon/numberedChildren]]
 
+      ;; https://orgmode.org/manual/Structure-Templates.html
+      (cond->
+       [["Quote" (->block "quote")
+         "Create a quote block"
+         :icon/quote-block
+         "BLOCK TYPE"]
+        ;; Should this be replaced by "Code block"?
+        ["Src" (->block "src") "Create a code block"]
+        ["Advanced Query" (->block "query") "Create an advanced query block"]
+        ["Latex export" (->block "export" "latex") "Create a latex block"]
+        ["Note" (->block "note") "Create a note block"]
+        ["Tip" (->block "tip") "Create a tip block"]
+        ["Important" (->block "important") "Create an important block"]
+        ["Caution" (->block "caution") "Create a caution block"]
+        ["Pinned" (->block "pinned") "Create a pinned block"]
+        ["Warning" (->block "warning") "Create a warning block"]
+        ["Example" (->block "example") "Create an example block"]
+        ["Export" (->block "export") "Create an export block"]
+        ["Verse" (->block "verse") "Create a verse block"]
+        ["Ascii" (->block "export" "ascii") "Create an ascii block"]
+        ["Center" (->block "center") "Create a center block"]]
+
+        ;; FIXME: current page's format
+        (= :org (state/get-preferred-format))
+        (conj ["Properties" (->properties)]))
+
       ;; advanced
       [["Query"
         [[:editor/input "{{query }}" {:backward-pos 2}]
@@ -417,21 +411,14 @@
     (reset! *initial-commands commands)
     (reset! *matched-commands commands)))
 
-(defonce *matched-block-commands (atom (block-commands-map)))
-
 (defn reinit-matched-commands!
   []
   (reset! *matched-commands @*initial-commands))
 
-(defn reinit-matched-block-commands!
-  []
-  (reset! *matched-block-commands (block-commands-map)))
-
 (defn restore-state
   []
   (state/clear-editor-action!)
-  (reinit-matched-commands!)
-  (reinit-matched-block-commands!))
+  (reinit-matched-commands!))
 
 (defn insert!
   [id value
@@ -640,19 +627,6 @@
             current-pos (cursor/pos current-input)
             prefix (subs edit-content 0 current-pos)
             prefix (util/replace-last command-trigger prefix "" (boolean space?))
-            new-value (str prefix
-                           (subs edit-content current-pos))]
-        (state/set-block-content-and-last-pos! input-id
-                                               new-value
-                                               (count prefix))))))
-
-(defmethod handle-step :editor/clear-current-bracket [[_ space?]]
-  (when-let [input-id (state/get-edit-input-id)]
-    (when-let [current-input (gdom/getElement input-id)]
-      (let [edit-content (gobj/get current-input "value")
-            current-pos (cursor/pos current-input)
-            prefix (subs edit-content 0 current-pos)
-            prefix (util/replace-last angle-bracket prefix "" (boolean space?))
             new-value (str prefix
                            (subs edit-content current-pos))]
         (state/set-block-content-and-last-pos! input-id

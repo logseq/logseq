@@ -1725,25 +1725,6 @@
       (js/console.error e)
       nil)))
 
-(defn get-matched-block-commands
-  [input]
-  (try
-    (let [edit-content (gobj/get input "value")
-          pos (cursor/pos input)
-          last-command (subs edit-content
-                             (:pos (:pos (state/get-editor-action-data)))
-                             pos)]
-      (when (> pos 0)
-        (or
-         (and (= \< (util/nth-safe edit-content (dec pos)))
-              (commands/block-commands-map))
-         (and last-command
-              (commands/get-matched-commands
-               last-command
-               (commands/block-commands-map))))))
-    (catch :default _error
-      nil)))
-
 (defn auto-complete?
   []
   (or @*asset-uploading?
@@ -1935,12 +1916,6 @@
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (commands/reinit-matched-commands!)
         (state/set-editor-show-commands!))
-
-      (and (not db-based?) (= last-input-char commands/angle-bracket))
-      (do
-        (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
-        (commands/reinit-matched-block-commands!)
-        (state/set-editor-show-block-commands!))
 
       (and (= last-input-char last-prev-input-char commands/colon)
            (or (nil? prev-prev-input-char)
@@ -2792,7 +2767,7 @@
                 (delete-block! repo))))
 
           (and (> current-pos 0)
-            (contains? #{commands/command-trigger commands/angle-bracket commands/command-ask}
+            (contains? #{commands/command-trigger commands/command-ask}
               (util/nth-safe value (dec current-pos))))
           (do
             (util/stop e)
@@ -2989,7 +2964,7 @@
        (> current-pos 0)))
 
 (defn- default-case-for-keyup-handler
-  [input current-pos k code is-processed? c]
+  [input current-pos k code is-processed?]
   (let [last-key-code (state/get-last-key-code)
         blank-selected? (string/blank? (util/get-selected-text))
         non-enter-processed? (and is-processed? ;; #3251
@@ -3040,21 +3015,11 @@
             (commands/handle-step [:editor/search-block :reference])
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
-         ;; Handle non-ascii angle brackets
-          (and (= "〈" c)
-               (= "《" (util/nth-safe (gobj/get input "value") (dec (dec current-pos))))
-               (> current-pos 0))
-          (do
-            (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
-                                                                         :backward-pos 0}])
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
-            (state/set-editor-show-block-commands!))
-
           :else
           nil)))))
 
 (defn keyup-handler
-  [_state input input-id]
+  [_state input]
   (fn [e key-code]
     (when-not (util/goog-event-is-composing? e)
       (let [current-pos (cursor/pos input)
@@ -3094,32 +3059,8 @@
                 (reset! commands/*matched-commands matched-commands)
                 (state/clear-editor-action!))))
 
-          ;; When you type search text after < (and when you release shift after typing <)
-          (and (not (config/db-based-graph? (state/get-current-repo))) (= :block-commands (state/get-editor-action)) (not= key-code 188)) ; not <
-          (let [matched-block-commands (get-matched-block-commands input)
-                format (:format (get-state))]
-            (if (seq matched-block-commands)
-              (cond
-                (= key-code 9)          ;tab
-                (do
-                  (util/stop e)
-                  (insert-command! input-id
-                                   (last (first matched-block-commands))
-                                   format
-                                   {:last-pattern commands/angle-bracket
-                                    :command :block-commands}))
-
-                :else
-                (reset! commands/*matched-block-commands matched-block-commands))
-              (state/clear-editor-action!)))
-
-          ;; When you type two spaces after a command character (may always just be handled by the above instead?)
-          (and (contains? #{:block-commands} (state/get-editor-action))
-               (= c (util/nth-safe value (dec (dec current-pos))) " "))
-          (state/clear-editor-action!)
-
           :else
-          (default-case-for-keyup-handler input current-pos k code is-processed? c))
+          (default-case-for-keyup-handler input current-pos k code is-processed?))
 
         (close-autocomplete-if-outside input)
 
