@@ -319,7 +319,7 @@ i.ti {
 /** endregion **/
 
 /* region FIXME: override elements (?) */
-h1.title, h1.title input, .ls-page-title-container {
+h1.title, h1.title input, .ls-page-title-container, .ls-page-icon {
   @apply font-medium;
 
   color: var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))));

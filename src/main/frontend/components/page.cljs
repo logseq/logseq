@@ -441,17 +441,9 @@
            (when (and db-based? @*hover? (not preview?))
              (page-title-configure *show-page-info?))])))))
 
-(rum/defc db-page-title < rum/reactive db-mixins/query
+(rum/defc db-page-title
   [state repo page whiteboard-page?]
-  (let [page (db/sub-block (:db/id page))
-        icon (or (get page (pu/get-pid :logseq.property/icon))
-                 (or (when (ldb/class? page)
-                       {:type :tabler-icon
-                        :id "hash"})
-                     (when (ldb/property? page)
-                       {:type :tabler-icon
-                        :id "letter-p"})))]
-    [:div.ls-page-title.flex.flex-1.w-full.content.items-center
+  [:div.ls-page-title.flex.flex-1.w-full.content.items-start
      {:class (when-not whiteboard-page? "title")
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
@@ -466,26 +458,10 @@
                        (:db/id page)
                        :page))))}
 
-     (when icon
-       [:div.page-icon
-        {:on-pointer-down util/stop-propagation}
-        (cond
-          (map? icon)
-          (icon-component/icon-picker icon
-                                      {:on-chosen (fn [_e icon]
-                                                    (db-property-handler/set-block-property!
-                                                     (:db/id page)
-                                                     (pu/get-pid :logseq.property/icon)
-                                                     (select-keys icon [:id :type :color])))
-                                       :icon-props {:size 38}})
-
-          :else
-          icon)])
-
      [:div.w-full
       (component-block/block-container {:page-title? true
                                         :hide-children? true
-                                        :container-id (:container-id state)} page)]]))
+                                        :container-id (:container-id state)} page)]])
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]

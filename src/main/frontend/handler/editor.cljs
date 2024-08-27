@@ -284,10 +284,9 @@
   ([block value
     {:keys [force?]
      :as opts}]
-   (let [{:block/keys [uuid page format repo title properties]} block
+   (let [{:block/keys [uuid format repo title properties]} block
          repo (or repo (state/get-current-repo))
          format (or format (state/get-preferred-format))
-         page (db/entity repo (:db/id page))
          block-id (when (and (not (config/db-based-graph? repo)) (map? properties))
                     (get properties :id))
          content (if (config/db-based-graph? repo)
@@ -307,7 +306,7 @@
        :else
        (when content
          (let [content-changed? (not= (string/trim content) (string/trim value))]
-           (when (and content-changed? page)
+           (when content-changed?
              (save-block-inner! block value opts))))))))
 
 (defn- compute-fst-snd-block-text
@@ -1330,19 +1329,7 @@
       (let [value (string/trim value)]
         ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
         ;; maybe we shouldn't save the block/file in "will-unmount" event?
-        (if (ldb/page? entity)
-          (let [existing-tags (:block/tags block)
-                tags (mldoc/extract-tags value)]
-            (when (seq tags)
-              (let [tag-pages (concat
-                               (map #(block/page-name->map % true) tags)
-                               (map :db/id existing-tags))
-                    opts {:outliner-op :save-block}]
-                (ui-outliner-tx/transact!
-                 opts
-                 (outliner-save-block! {:db/id (:db/id block)
-                                        :block/tags tag-pages})))))
-          (save-block-if-changed! block value opts))))))
+        (save-block-if-changed! block value opts)))))
 
 (defn save-block!
   ([repo block-or-uuid content]
