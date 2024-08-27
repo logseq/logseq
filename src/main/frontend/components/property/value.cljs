@@ -633,8 +633,8 @@
           (cond
             icon
             (if icon?
-              (icon-component/icon icon)
-              [:div.flex.flex-row.items-center.gap-2
+              [:div.h-6.flex.items-center (icon-component/icon icon)]
+              [:div.flex.flex-row.items-center.gap-2.h-6
                (icon-component/icon icon)
                (when value'
                  [:span value'])])
