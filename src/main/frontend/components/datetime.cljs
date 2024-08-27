@@ -167,7 +167,7 @@
     [:div#date-time-picker.flex.flex-col.sm:flex-row
      ;; inline container
      [:div.border-red-500
-      (shui/calendar
+      (ui/single-calendar
         {:mode "single"
          :initial-focus true
          :show-week-number false
