@@ -144,7 +144,7 @@
   {:init (fn [state]
            (let [config (first (:rum/args state))
                  key (select-keys config [:id :sidebar? :whiteboard? :embed? :custom-query? :query :current-block])
-                 container-id (state/get-container-id key)]
+                 container-id (or (:container-id config) (state/get-container-id key))]
              (assoc state :container-id container-id)))})
 
 (defn perf-measure-mixin
