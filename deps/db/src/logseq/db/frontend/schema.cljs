@@ -86,7 +86,7 @@
    :block/title {:db/index true}
 
    ;; page's journal day
-   :block/journal-day {}
+   :block/journal-day {:db/index true}
 
    ;; macros in block
    :block/macros {:db/valueType :db.type/ref
