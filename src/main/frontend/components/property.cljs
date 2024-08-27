@@ -2,39 +2,38 @@
   "Block properties management."
   (:require [clojure.set :as set]
             [clojure.string :as string]
+            [dommy.core :as d]
+            [frontend.components.dnd :as dnd]
+            [frontend.components.icon :as icon-component]
+            [frontend.components.property.config :as property-config]
+            [frontend.components.property.util :as components-pu]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.db.async :as db-async]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as model]
-            [logseq.outliner.property :as outliner-property]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.property :as property-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.shui.ui :as shui]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [rum.core :as rum]
-            [frontend.handler.route :as route-handler]
-            [frontend.components.icon :as icon-component]
-            [frontend.components.dnd :as dnd]
-            [frontend.components.property.closed-value :as closed-value]
-            [frontend.components.property.util :as components-pu]
-            [frontend.components.property-v2 :as property-v2]
-            [promesa.core :as p]
             [logseq.db :as ldb]
             [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.core :as outliner-core]
-            [dommy.core :as d]
-            [frontend.mixins :as mixins]))
+            [logseq.outliner.property :as outliner-property]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defn- <create-class-if-not-exists!
   [value]
@@ -237,213 +236,6 @@
                   :disabled    false}
                  (svg/info)))]))
 
-(defn- set-property-description
-  [property *property-description]
-  (if-let [ent (:logseq.property/description property)]
-    (db/transact! (state/get-current-repo)
-                  [(outliner-core/block-with-updated-at
-                    {:db/id (:db/id ent) :block/title @*property-description})]
-                  {:outliner-op :save-block})
-    (when-not (string/blank? @*property-description)
-      (db-property-handler/set-block-property!
-       (:db/id property)
-       :logseq.property/description
-       @*property-description))))
-
-(rum/defcs ^:large-vars/cleanup-todo property-config
-  "All changes to a property must update the db and the *property-schema. Failure to do
-   so can result in data loss"
-  <
-  shortcut/disable-all-shortcuts
-  rum/reactive
-  db-mixins/query
-  (rum/local nil ::property-name)
-  (rum/local nil ::property-schema)
-  (rum/local nil ::property-description)
-  (rum/local false ::show-class-select?)
-  {:init (fn [state]
-           (let [*values (atom :loading)
-                 repo (state/get-current-repo)
-                 property (first (:rum/args state))
-                 ident (:db/ident property)]
-             (p/let [_ (db-async/<get-block repo (:block/uuid property))
-                     result (db-async/<get-block-property-values repo ident)]
-               (reset! *values result))
-             (assoc state ::values *values)))
-   :will-mount (fn [state]
-                 (let [[property _opts] (:rum/args state)
-                       property (db/entity (:db/id property))]
-                   (reset! (::property-name state) (:block/title property))
-                   (reset! (::property-schema state) (:block/schema property))
-                   (reset! (::property-description state) (db-property/property-value-content (:logseq.property/description property)))
-                   (state/set-state! :editor/property-configure? true)
-                   state))
-   :will-unmount (fn [state]
-                   (util/schedule #(state/set-state! :editor/property-configure? false))
-                   (when-let [*show-property-config? (:*show-new-property-config? (last (:rum/args state)))]
-                     (reset! *show-property-config? false))
-                   state)}
-  [state property {:keys [add-new-property?] :as opts}]
-  (let [property (db/entity (:db/id property))
-        values (rum/react (::values state))]
-    (when-not (= :loading values)
-      (let [*property-name (::property-name state)
-            *property-schema (::property-schema state)
-            *property-description (::property-description state)
-            *show-class-select? (::show-class-select? state)
-            property (db/sub-block (:db/id property))
-            built-in? (ldb/built-in? property)
-            disabled? (or built-in? config/publishing?)
-            property-type (get-in property [:block/schema :type])
-            save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
-            enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))
-            tags? (= (:db/ident property) :block/tags)]
-        [:div.property-configure.flex.flex-1.flex-col
-         [:div.grid.gap-2.p-1
-          [:div.grid.grid-cols-5.gap-1.items-center.leading-8
-           [:label.col-span-2 "Name:"]
-           (shui/input
-            {:class         "col-span-2 !px-2 !py-0 !h-8"
-             :auto-focus    (not add-new-property?)
-             :on-change     #(reset! *property-name (util/evalue %))
-             :on-blur       save-property-fn
-             :on-key-down  (fn [e]
-                             (when (= "Enter" (util/ekey e))
-                               (save-property-fn)))
-             :disabled      disabled?
-             :default-value @*property-name})]
-
-          [:div.grid.grid-cols-5.gap-1.items-center.leading-8
-           [:label.col-span-2 "Icon:"]
-           (let [icon-value (:logseq.property/icon property)]
-             [:div.col-span-3.flex.flex-row.items-center.gap-2
-              (icon-component/icon-picker icon-value
-                                          {:on-chosen (fn [_e icon]
-                                                        (p/do!
-                                                         (db-property-handler/upsert-property!
-                                                          (:db/ident property)
-                                                          (:block/schema property)
-                                                          {:properties {:logseq.property/icon icon}})
-                                                         (shui/popup-hide!)))})
-
-              (when icon-value
-                [:a.fade-link.flex {:on-click (fn [_e]
-                                                (p/do!
-                                                 (db-property-handler/remove-block-property!
-                                                  (:db/ident property)
-                                                  :logseq.property/icon)
-                                                 (shui/popup-hide!)))
-                                    :title "Delete this icon"}
-                 (ui/icon "X")])])]
-
-          [:div.grid.grid-cols-5.gap-1.items-center.leading-8
-           [:label.col-span-2 "Property type:"]
-           (if (or (ldb/built-in? property)
-                   (and property-type (seq values)))
-             [:div.flex.items-center.col-span-2
-              (property-type-label property-type)
-              (ui/tippy {:html        "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."
-                         :class       "tippy-hover ml-2"
-                         :interactive true
-                         :disabled    false}
-                        (svg/help-circle))]
-             (property-type-select property {:*property-name *property-name
-                                             :*property-schema *property-schema
-                                             :built-in? built-in?
-                                             :disabled? disabled?
-                                             :show-type-change-hints? true
-                                             :*show-class-select? *show-class-select?}))]
-
-          (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
-            (case (:type @*property-schema)
-              ;; Question: 1. should we still support classes for `page` type?
-              ;;           2. flexible query instead of classes? e.g. find all papers are related to either Clojure or OCaml `(and (tag :paper) (or (tag :clojure) (tag :ocaml)))`
-              :node
-              (when (and (empty? (:property/closed-values property)) (not tags?))
-                [:div.grid.grid-cols-5.gap-1.items-center.leading-8
-                 [:label.col-span-2 "Specify tags:"]
-                 (class-select property (assoc opts :disabled? disabled?))])
-
-              nil))
-
-          (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :cardinality)
-            [:div.grid.grid-cols-5.gap-1.items-center.leading-8
-             [:label.col-span-2 "Multiple values:"]
-             (let [many? (db-property/many? property)]
-               (shui/checkbox
-                {:checked           many?
-                 :disabled          disabled?
-                 :on-checked-change (fn []
-                                      (swap! *property-schema assoc :cardinality (if many? :one :many))
-                                      (save-property-fn))}))])
-
-          (when (and enable-closed-values? (empty? (:property/schema.classes property)))
-            [:div.grid.grid-cols-5.gap-1.items-start.leading-8
-             [:label.col-span-2 "Available choices:"]
-             [:div.col-span-3
-              (closed-value/choices property opts)]])
-
-          (when (and (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :position) (not tags?))
-            (let [position (:position @*property-schema)
-                  choices (map
-                           (fn [item]
-                             (assoc item :selected
-                                    (or (and position (= (:value item) position))
-                                        (and (nil? position) (= (:value item) :properties)))))
-                           [{:label "Block properties"
-                             :value :properties}
-                            {:label "Beginning of the block"
-                             :value :block-left}
-                            {:label "Ending of the block"
-                             :value :block-right}
-                            {:label "Below the block"
-                             :value :block-below}])]
-              [:div.grid.grid-cols-5.gap-1.items-center.leading-8
-               [:label.col-span-2 "UI position:"]
-               [:div.col-span-3
-                (shui/select
-                 (cond-> {:disabled config/publishing?
-                          :on-value-change (fn [v]
-                                             (swap! *property-schema assoc :position (keyword v))
-                                             (save-property-fn))}
-                   (keyword? position)
-                   (assoc :default-value position))
-                 (shui/select-trigger
-                  {:class "!px-2 !py-0 !h-8"}
-                  (shui/select-value
-                   {:placeholder "Select a position mode"}))
-                 (shui/select-content
-                  (shui/select-group
-                   (for [{:keys [label value]} choices]
-                     (shui/select-item {:value value} label)))))]]))
-
-          (when (not tags?)
-            (let [hide? (:hide? @*property-schema)]
-              [:div.grid.grid-cols-5.gap-1.items-center.leading-8
-               [:label.col-span-2 "Hide by default:"]
-               (shui/checkbox
-                {:checked           hide?
-                 :disabled          config/publishing?
-                 :on-checked-change (fn []
-                                      (swap! *property-schema assoc :hide? (not hide?))
-                                      (save-property-fn))})]))
-
-          (let [description (or @*property-description "")]
-            [:div.grid.grid-cols-5.gap-1.items-start.leading-8
-             [:label.col-span-2 "Description:"]
-             [:div.col-span-3
-              [:div.mt-1
-               (shui/textarea
-                {:on-change (fn [e]
-                              (reset! *property-description (util/evalue e)))
-                 :on-key-down (fn [e]
-                                (when (= "Enter" (util/ekey e))
-                                  (set-property-description property *property-description)))
-                 :on-blur (fn []
-                            (set-property-description property *property-description))
-                 :disabled disabled?
-                 :default-value description})]]])]]))))
-
 (rum/defc property-select
   [exclude-properties select-opts]
   (let [[properties set-properties!] (rum/use-state nil)
@@ -528,7 +320,7 @@
 
 (rum/defcs property-key-cp <
   (rum/local false ::hover?)
-  [state block property {:keys [class-schema? page-cp inline-text other-position?]}]
+  [state block property {:keys [other-position?]}]
   (let [*hover? (::hover? state)
         icon (:logseq.property/icon property)]
     [:div.flex.flex-row.items-center.gap-1
@@ -551,9 +343,9 @@
           (-> (when-not config/publishing?
                 {:on-click (fn [^js e]
                              (shui/popup-show! (.-target e) content-fn
-                               {:as-dropdown? true :auto-focus? true
-                                :content-props {:onEscapeKeyDown #(.preventDefault %)}}))})
-            (assoc :class "flex items-center"))
+                                               {:as-dropdown? true :auto-focus? true
+                                                :content-props {:onEscapeKeyDown #(.preventDefault %)}}))})
+              (assoc :class "flex items-center"))
           (if icon
             [:span.flex.items-center {:style {:color (or (some-> icon :color) "inherit")}}
              (icon-component/icon icon {:size 15})]
@@ -573,49 +365,14 @@
                                               (route-handler/redirect-to-page! (:block/uuid property))
                                               (.preventDefault e)))
                          :on-click (fn [^js/MouseEvent e]
-                                            (shui/popup-show! (.-target e)
-                                              (fn [{:keys [id]}]
-                                                (property-v2/dropdown-editor id property block
-                                                  {:debug? (.-altKey e)}))
-                                              {:content-props
-                                               {:class "ls-property-dropdown-editor as-root"}
-                                               :align "start"
-                                               :as-dropdown? true}))
-                           :on-context-menu (fn [^js e]
-                                              (util/stop e)
-                                              (shui/popup-show!
-                                                (.-target e)
-                                                (fn [{:keys [id]}]
-                                                  [:div.p-2
-                                                   [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
-                                                   [:span.close.absolute.right-2.top-2
-                                                    (shui/button
-                                                      {:variant :ghost :size :sm :class "!w-4 !h-6"
-                                                       :on-click #(shui/popup-hide! id)}
-                                                      (shui/tabler-icon "x" {:size 16}))]
-
-                                                   (property-config property
-                                                     {:inline-text inline-text
-                                                      :page-cp page-cp})
-
-                                                   (when-not (ldb/built-in-class-property? block property)
-                                                     [:div.mt-4.border-t.pt-3.px-3.-mx-4.-mb-1
-                                                      (shui/button
-                                                        {:variant :ghost
-                                                         :class "!text-red-rx-09 opacity-50 hover:opacity-100"
-                                                         :size :sm
-                                                         :on-click (fn []
-                                                                     (handle-delete-property! block property {:class-schema? class-schema?})
-                                                                     (shui/popup-hide!))}
-                                                        "Delete property from this node")])])
-                                                {:content-props {:class "property-configure-popup-content"
-                                                                 :collisionPadding {:bottom 10 :top 10}
-                                                                 :avoidCollisions true
-                                                                 :align "start"}
-                                                 :align "start"
-                                                 :auto-side? true
-                                                 :auto-focus? true}))}
-         (:block/title property)))]))
+                                     (shui/popup-show! (.-target e)
+                                                       (fn []
+                                                         (property-config/dropdown-editor property block {:debug? (.-altKey e)}))
+                                                       {:content-props
+                                                        {:class "ls-property-dropdown-editor as-root"}
+                                                        :align "start"
+                                                        :as-dropdown? true}))}
+                        (:block/title property)))]))
 
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)

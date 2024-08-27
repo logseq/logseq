@@ -46,7 +46,8 @@
     [:div.flex.flex-col.gap-1.pb-4
      (case (:block/type page)
        "property"
-       (property-component/property-config page {:inline-text component-block/inline-text})
+       [:div "Configure"]
+       ;; (property-component/property-config page {:inline-text component-block/inline-text})
 
        "class"
        [:div.mt-2.flex.flex-col.gap-2
