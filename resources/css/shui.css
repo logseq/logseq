@@ -331,7 +331,7 @@ div[data-radix-popper-content-wrapper] {
 
 .ui__calendar {
   .rdp-caption_dropdowns {
-    @apply flex items-center justify-center w-[70%];
+    @apply flex items-center justify-center relative -left-3;
 
     .rdp-vhidden {
       @apply hidden;
@@ -356,6 +356,37 @@ div[data-radix-popper-content-wrapper] {
 
     .rdp-dropdown_month {
       @apply ml-4;
+    }
+
+    & + div {
+      @apply absolute -right-1 flex gap-2;
+
+      button[name=previous-month] {
+        @apply relative;
+      }
+
+      button[name=next-month] {
+        @apply relative;
+      }
+    }
+  }
+
+  .rdp-caption_start {
+    > div {
+      @apply justify-start;
+    }
+  }
+
+  .del-date-btn {
+    @apply absolute right-2 top-4 px-1 opacity-70 hover:opacity-100
+    active:opacity-80 hover:text-red-rx-09;
+  }
+
+  &.has-del-btn {
+    .rdp-caption_dropdowns {
+      & + div {
+        @apply right-5;
+      }
     }
   }
 }

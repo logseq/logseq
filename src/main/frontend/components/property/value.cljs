@@ -144,6 +144,11 @@
           (shui/popup-hide!))))
      (when (fn? refresh-result-f) (refresh-result-f)))))
 
+(rum/defc DelDateButton
+  [on-delete]
+  (shui/button {:variant :outline :size :sm :class "del-date-btn" :on-click on-delete}
+    (shui/tabler-icon "trash")))
+
 (rum/defcs calendar-inner <
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
   {:init (fn [state]
@@ -160,7 +165,7 @@
                    (shui/dialog-close!)
                    (state/set-editor-action! nil)
                    state)}
-  [state id on-change value]
+  [state id {:keys [on-change value del-btn? on-delete]}]
   (let [*ident (::identity state)
         initial-day (or (some-> value (.getTime) (js/Date.)) (js/Date.))
         initial-month (when value
@@ -187,9 +192,10 @@
          :caption-layout "dropdown-buttons"
          :fromYear 1900
          :toYear 2099
+         :components (when del-btn? {:Head #(DelDateButton on-delete)})
          :selected initial-day
          :id @*ident
-         :class-names {:months ""}
+         :class-names {:months "" :root (when del-btn? "has-del-btn")}
          :on-day-key-down (fn [^js d _ ^js e]
                             (when (= "Enter" (.-key e))
                               (select-handler! d)))
@@ -198,13 +204,15 @@
         (assoc :default-month initial-month)))))
 
 (rum/defc date-picker
-  [value {:keys [on-change editing? multiple-values? other-position?]}]
+  [value {:keys [on-change on-delete del-btn? editing? multiple-values? other-position?]}]
   (let [*trigger-ref (rum/use-ref nil)
         page value
         title (when page (:block/title page))
         value' (when title
                  (js/Date. (date/journal-title->long title)))
-        content-fn (fn [{:keys [id]}] (calendar-inner id on-change value'))
+        content-fn (fn [{:keys [id]}] (calendar-inner id
+                                        {:on-change on-change :value value'
+                                         :del-btn? del-btn? :on-delete on-delete}))
         open-popup! (fn [e]
                       (when-not (or (util/meta-key? e) (util/shift-key? e))
                         (util/stop e)
@@ -245,15 +253,20 @@
 
 (rum/defc property-value-date-picker
   [block property value opts]
-  (let [multiple-values? (db-property/many? property)]
+  (let [multiple-values? (db-property/many? property)
+        repo (state/get-current-repo)]
     (date-picker value
-                 (merge opts
-                        {:multiple-values? multiple-values?
-                         :on-change (fn [page]
-                                      (let [repo (state/get-current-repo)]
-                                        (property-handler/set-block-property! repo (:block/uuid block)
-                                                                              (:db/ident property)
-                                                                              (:db/id page))))}))))
+      (merge opts
+        {:multiple-values? multiple-values?
+         :on-change (fn [page]
+                      (property-handler/set-block-property! repo (:block/uuid block)
+                        (:db/ident property)
+                        (:db/id page)))
+         :del-btn? true
+         :on-delete (fn []
+                      (property-handler/set-block-property! repo (:block/uuid block)
+                        (:db/ident property) nil)
+                      (shui/popup-hide!))}))))
 
 (defn- <create-page-if-not-exists!
   [property classes page]
