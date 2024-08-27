@@ -38,7 +38,7 @@
    "src/main/frontend/worker/handler/page/db_based"
    "src/main/frontend/components/class.cljs"
    "src/main/frontend/components/property.cljs"
-   "src/main/frontend/components/property_v2.cljs"
+   "src/main/frontend/components/property/config.cljs"
    "src/main/frontend/components/property"
    "src/main/frontend/components/objects.cljs"
    "src/main/frontend/components/db_based"

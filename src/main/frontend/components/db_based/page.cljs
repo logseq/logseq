@@ -3,13 +3,13 @@
   (:require [frontend.components.block :as component-block]
             [frontend.components.class :as class-component]
             [frontend.components.editor :as editor]
+            [frontend.components.property.config :as property-config]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
             [frontend.util :as util]
             [logseq.outliner.property :as outliner-property]
-            [rum.core :as rum]
-            [frontend.components.property.config :as property-config]
             [logseq.shui.ui :as shui]
-            [frontend.db-mixins :as db-mixins]))
+            [rum.core :as rum]))
 
 (rum/defc page-properties
   "This component is called by page-inner and within configure/info modal. This should not

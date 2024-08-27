@@ -436,27 +436,26 @@
                                            [:strong mode])
                             :class "code-block-mode-picker"})]))))
 
-(rum/defcs input < rum/reactive
-                   (rum/local {} ::input-value)
-                   (mixins/event-mixin
-                     (fn [state]
-                       (mixins/on-key-down
-                         state
-                         {;; enter
-                          13 (fn [state e]
-                               (let [input-value (get state ::input-value)
-                                     input-option (:options (state/get-editor-show-input))]
-                                 (when (seq @input-value)
+(rum/defcs editor-input < rum/reactive (rum/local {} ::input-value)
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/on-key-down
+      state
+      {;; enter
+       13 (fn [state e]
+            (let [input-value (get state ::input-value)
+                  input-option (:options (state/get-editor-show-input))]
+              (when (seq @input-value)
                                    ;; no new line input
-                                   (util/stop e)
-                                   (let [[_id on-submit] (:rum/args state)
-                                         command (:command (first input-option))]
-                                     (on-submit command @input-value))
-                                   (reset! input-value nil))))
+                (util/stop e)
+                (let [[_id on-submit] (:rum/args state)
+                      command (:command (first input-option))]
+                  (on-submit command @input-value))
+                (reset! input-value nil))))
                           ;; escape
-                          27 (fn [_state _e]
-                               (let [[id _on-submit on-cancel] (:rum/args state)]
-                                 (on-cancel id)))})))
+       27 (fn [_state _e]
+            (let [[id _on-submit on-cancel] (:rum/args state)]
+              (on-cancel id)))})))
   [state _id on-submit _on-cancel]
   (when-let [action-data (state/get-editor-action-data)]
     (let [{:keys [pos options]} action-data
@@ -466,21 +465,21 @@
           [:div.p-2.rounded-md.flex.flex-col.gap-2
            (for [{:keys [id placeholder type]} options]
              (shui/input
-               (cond->
-                 {:key (str "modal-input-" (name id))
-                  :type (or type "text")
-                  :auto-complete (if (util/chrome?) "chrome-off" "off")
-                  :on-change (fn [e]
-                               (swap! input-value assoc id (util/evalue e)))}
+              (cond->
+               {:key (str "modal-input-" (name id))
+                :type (or type "text")
+                :auto-complete (if (util/chrome?) "chrome-off" "off")
+                :on-change (fn [e]
+                             (swap! input-value assoc id (util/evalue e)))}
 
-                 placeholder
-                 (assoc :placeholder placeholder))))
+                placeholder
+                (assoc :placeholder placeholder))))
            (ui/button
-             "Submit"
-             :on-click
-             (fn [e]
-               (util/stop e)
-               (on-submit command @input-value pos)))])))))
+            "Submit"
+            :on-click
+            (fn [e]
+              (util/stop e)
+              (on-submit command @input-value pos)))])))))
 
 (rum/defc image-uploader < rum/reactive
   [id format]
@@ -648,7 +647,7 @@
 
                   :input
                   (open-editor-popup! :input
-                    (input id
+                    (editor-input id
                       (fn [command m]
                         (editor-handler/handle-command-input command id format m))
                       (fn []
