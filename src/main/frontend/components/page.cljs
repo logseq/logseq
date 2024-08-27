@@ -2,28 +2,28 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [frontend.components.block :as component-block]
+            [frontend.components.class :as class-component]
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
+            [frontend.components.file-based.hierarchy :as hierarchy]
+            [frontend.components.objects :as objects]
             [frontend.components.plugins :as plugins]
             [frontend.components.query :as query]
             [frontend.components.reference :as reference]
             [frontend.components.scheduled-deadlines :as scheduled]
-            [frontend.components.icon :as icon-component]
             [frontend.components.db-based.page :as db-page]
-            [frontend.components.class :as class-component]
             [frontend.components.svg :as svg]
-            [frontend.components.objects :as objects]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.async :as db-async]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
+            [frontend.extensions.graph.pixi :as pixi]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.format.mldoc :as mldoc]
-            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.dnd :as dnd]
@@ -36,20 +36,17 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [frontend.extensions.graph.pixi :as pixi]
-            [logseq.db :as ldb]
-            [frontend.handler.property.util :as pu]
-            [frontend.components.file-based.hierarchy :as hierarchy]))
+            [rum.core :as rum]))
 
 (defn- get-page-name
   [state]
@@ -330,15 +327,6 @@
       :on-focus (fn []
                   (when untitled? (reset! *title-value "")))}]))
 
-(rum/defc page-title-configure
-  [*show-page-info?]
-  [:div.absolute.-top-5.-left-2.scale-75.faster.fade-in
-   (shui/button
-    {:variant :outline
-     :size :xs
-     :on-click #(swap! *show-page-info? not)}
-    "Configure")])
-
 (rum/defcs ^:large-vars/cleanup-todo page-title-cp < rum/reactive db-mixins/query
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
@@ -347,22 +335,13 @@
                  title (:block/title page)
                  *title-value (atom title)]
              (assoc state ::title-value *title-value)))}
-  [state page {:keys [fmt-journal? preview? *hover? *show-page-info?]}]
+  [state page {:keys [fmt-journal? preview?]}]
   (when page
     (let [page (db/sub-block (:db/id page))
           title (:block/title page)]
       (when title
         (let [repo (state/get-current-repo)
-              db-based? (config/db-based-graph? repo)
               journal? (ldb/journal? page)
-              icon (or (get page (pu/get-pid :logseq.property/icon))
-                       (when db-based?
-                         (or (when (ldb/class? page)
-                               {:type :tabler-icon
-                                :id "hash"})
-                             (when (ldb/property? page)
-                               {:type :tabler-icon
-                                :id "letter-p"}))))
               *title-value (get state ::title-value)
               *edit? (get state ::edit?)
               *input-value (get state ::input-value)
@@ -376,23 +355,6 @@
                         title))
               old-name title]
           [:div.ls-page-title.flex.flex-1.flex-row.flex-wrap.w-full.relative.items-center.gap-2
-           {:on-mouse-over #(when-not @*edit? (reset! *hover? true))
-            :on-mouse-out #(reset! *hover? false)}
-           (when icon
-             [:div.page-icon
-              {:on-pointer-down util/stop-propagation}
-              (cond
-                (and (map? icon) db-based?)
-                (icon-component/icon-picker icon
-                                            {:on-chosen (fn [_e icon]
-                                                          (db-property-handler/set-block-property!
-                                                           (:db/id page)
-                                                           (pu/get-pid :logseq.property/icon)
-                                                           (select-keys icon [:id :type :color])))
-                                             :icon-props {:size 38}})
-
-                :else
-                icon)])
            [:h1.page-title.flex-1.cursor-pointer.gap-1
             {:class (when-not whiteboard-page? "title")
              :on-pointer-down (fn [e]
@@ -412,7 +374,6 @@
                                         (not config/publishing?)
                                         (not (ldb/built-in? page)))
                                (reset! *input-value (if untitled? "" old-name))
-                               (reset! *hover? false)
                                (reset! *edit? true)))))}
 
             (if @*edit?
@@ -436,10 +397,7 @@
                  (cond untitled? [:span.opacity-50 (t :untitled)]
                        nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (mldoc/get-default-config
                                                                                            (:block/format page))))
-                       :else title))])]
-
-           (when (and db-based? @*hover? (not preview?))
-             (page-title-configure *show-page-info?))])))))
+                       :else title))])]])))))
 
 (rum/defc db-page-title
   [state repo page whiteboard-page?]
@@ -531,8 +489,6 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
-  (rum/local false ::hover-title?)
-  (rum/local false ::show-page-info?)
   (rum/local false ::main-ready?)
   {:did-mount (fn [state]
                 (assoc state ::main-ready-timer
@@ -594,10 +550,11 @@
                    (db-page-title state repo page whiteboard-page?)
                    (page-title-cp page {:journal? journal?
                                         :fmt-journal? fmt-journal?
-                                        :preview? preview?
-                                        :*hover? (::hover-title? state)
-                                        :*show-page-info? (::show-page-info? state)})))
+                                        :preview? preview?})))
                (lsp-pagebar-slot)])
+
+            (when db-based?
+              (db-page/page-info page (atom true)))
 
             (when (and db-based? (ldb/class? page))
               [:div.mt-8
