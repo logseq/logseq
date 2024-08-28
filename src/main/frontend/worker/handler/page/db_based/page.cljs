@@ -65,14 +65,14 @@
        :block/format format})]))
 
 (defn create!
-  [conn config title
+  [conn title
    {:keys [create-first-block? properties uuid persist-op? whiteboard? class? today-journal?]
     :or   {create-first-block?      true
            properties               nil
            uuid                     nil
            persist-op?              true}
     :as options}]
-  (let [date-formatter (common-config/get-date-formatter config)
+  (let [date-formatter (:logseq.property/title-format (d/entity @conn :logseq.class/Journal))
         [title page-name] (get-title-and-pagename title)
         type (cond class?
                    "class"

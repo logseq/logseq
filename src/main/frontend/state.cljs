@@ -21,7 +21,9 @@
             [rum.core :as rum]
             [frontend.rum :as r]
             [logseq.db.sqlite.util :as sqlite-util]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.db.conn-state :as db-conn-state]
+            [datascript.core :as d]))
 
 (defonce *profile-state
   (atom {}))
@@ -591,7 +593,13 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-date-formatter
   []
-  (common-config/get-date-formatter (get-config)))
+  (let [repo (get-current-repo)]
+    (if (sqlite-util/db-based-graph? repo)
+      (when-let [conn (db-conn-state/get-conn repo)]
+        (get (d/entity @conn :logseq.class/Journal)
+           :logseq.property/title-format
+           "MMM do, yyyy"))
+      (common-config/get-date-formatter (get-config)))))
 
 (defn shortcuts []
   (:shortcuts (get-config)))

@@ -91,6 +91,26 @@
                                   :schema {:type :map
                                            :hide? true}}
 
+   :logseq.property/title-format {:title "Title format"
+                                  :schema
+                                  {:type :string
+                                   :public? true}}
+
+   ;; Journal props
+
+   :logseq.property.journal/year {:title "Journal year"
+                                  :schema
+                                  {:type :raw-number
+                                   :public? false}}
+   :logseq.property.journal/month {:title "Journal month"
+                                   :schema
+                                   {:type :raw-number
+                                    :public? false}}
+   :logseq.property.journal/day {:title "Journal day"
+                                 :schema
+                                 {:type :raw-number
+                                  :public? false}}
+
    ;; Task props
    :logseq.task/status
    {:title "Status"

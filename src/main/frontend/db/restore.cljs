@@ -21,7 +21,7 @@
                  (catch :default e
                    (js/console.error e)
                    (throw e)))
-          db-name (db-conn/datascript-db repo)
+          db-name (db-conn/get-repo-path repo)
           _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]
 

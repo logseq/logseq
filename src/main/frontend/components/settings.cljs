@@ -1,10 +1,10 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
-            [logseq.shui.ui :as shui]
             [frontend.colors :as colors]
             [frontend.components.assets :as assets]
             [frontend.components.file-sync :as fs]
+            [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -12,18 +12,18 @@
             [frontend.db :as db]
             [frontend.dicts :as dicts]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
-            [frontend.components.shortcut :as shortcut]
             [frontend.spec.storage :as storage-spec]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -32,10 +32,11 @@
             [frontend.version :as fv]
             [goog.object :as gobj]
             [goog.string :as gstring]
+            [logseq.db :as ldb]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [logseq.db :as ldb]))
+            [rum.core :as rum]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -439,12 +440,20 @@
      [:select.form-select.is-small
       {:value     preferred-date-format
        :on-change (fn [e]
-                    (let [format (util/evalue e)]
+                    (let [repo (state/get-current-repo)
+                          format (util/evalue e)]
                       (when-not (string/blank? format)
-                        (config-handler/set-config! :journal/page-title-format format)
-                        (notification/show!
-                          [:div (t :settings-page/custom-date-format-notification)]
-                          :warning false)
+                        (if (config/db-based-graph? repo)
+                          (property-handler/set-block-property! repo
+                                                                :logseq.class/Journal
+                                                                :logseq.property/title-format
+                                                                format)
+                          (do
+                            (config-handler/set-config! :journal/page-title-format format)
+                            (notification/show!
+                             [:div (t :settings-page/custom-date-format-notification)]
+                             :warning false)))
+
                         (state/close-modal!)
                         (route-handler/redirect! {:to :graphs}))))}
       (for [format (sort (date/journal-title-formatters))]
