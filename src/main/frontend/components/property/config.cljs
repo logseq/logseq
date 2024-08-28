@@ -200,14 +200,14 @@
                                     (p/finally #(set-saving! false))))}
           "Save")])]))
 
-(rum/defc base-edit-form
+(rum/defc choice-base-edit-form
   [own-property block]
   (let [create? (:create? block)
         uuid (:block/uuid block)
         *form-data (rum/use-ref
                      {:value (or (:block/title block) "")
                       :icon (:logseq.property/icon block)
-                      :description ""})
+                      :description (or (db-property/property-value-content (:logseq.property/description block)) "")})
         [form-data, set-form-data!] (rum/use-state (rum/deref *form-data))
         *input-ref (rum/use-ref nil)]
 
@@ -317,7 +317,7 @@
                                          :empty-label "?"}))
      [:strong {:on-click (fn [^js e]
                            (shui/popup-show! (.-target e)
-                             (fn [] (base-edit-form property block))
+                             (fn [] (choice-base-edit-form property block))
                              {:id :ls-base-edit-form
                               :align "start"}))}
       value]
@@ -397,7 +397,7 @@
                                                                distinct)]
                                               (if (seq values')
                                                 (add-existing-values property values' opts)
-                                                (base-edit-form property {:create? true}))))
+                                                (choice-base-edit-form property {:create? true}))))
                                           {:id :ls-base-edit-form
                                            :align "start"})))}})]))
 
@@ -472,7 +472,7 @@
                      :item-props (assoc item-props :data-value value)}]
          (dropdown-editor-menuitem option)))]))
 
-(rum/defc dropdown-editor-impl
+(rum/defc ^:large-vars/cleanup-todo dropdown-editor-impl
   "property: block entity"
   [property owner-block values {:keys [class-schema? debug?]}]
   (let [title (:block/title property)
