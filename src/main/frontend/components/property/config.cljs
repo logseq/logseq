@@ -170,8 +170,8 @@
 
 (rum/defc dropdown-editor-menuitem
   [{:keys [id icon title desc submenu-content item-props sub-content-props disabled? toggle-checked? on-toggle-checked-change]}]
-
-  (let [[sub-open? set-sub-open!] (rum/use-state false)
+  (let [submenu-content (when-not disabled? submenu-content)
+        [sub-open? set-sub-open!] (rum/use-state false)
         toggle? (boolean? toggle-checked?)
         id1 (str (or id icon (random-uuid)))
         id2 (str "d2-" id1)
@@ -364,9 +364,33 @@
             :data-reminder :ok})
           (p/then remove!)))))
 
+(rum/defc property-type-sub-pane
+  [property {:keys [id set-sub-open! _position]}]
+  (let [handle-select! (fn [^js e]
+                         (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
+                           (p/do!
+                             (db-property-handler/upsert-property!
+                             (:db/ident property)
+                             (assoc (:block/schema property) :type (keyword v))
+                             {})
+                             (set-sub-open! false)
+                             (restore-root-highlight-item! id))))
+        item-props {:on-select handle-select!}
+        schema-types (->> db-property-type/user-built-in-property-types
+                          (map (fn [type]
+                                 {:label (property-type-label type)
+                                  :value type})))]
+    [:div.ls-property-dropdown-editor.ls-property-type-sub-pane
+     (for [{:keys [label value]} schema-types]
+       (let [option {:id label
+                     :title label
+                     :desc ""
+                     :item-props (assoc item-props :data-value value)}]
+         (dropdown-editor-menuitem option)))]))
+
 (rum/defc dropdown-editor-impl
   "property: block entity"
-  [property owner-block {:keys [class-schema? debug?]}]
+  [property owner-block values {:keys [class-schema? debug?]}]
   (let [title (:block/title property)
         property-schema (:block/schema property)
         property-type (get property-schema :type)
@@ -381,7 +405,13 @@
     [:<>
      (dropdown-editor-menuitem {:icon :edit :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
                                 :submenu-content (fn [ops] (name-edit-pane property (assoc ops :disabled? disabled?)))})
-     (dropdown-editor-menuitem {:icon :hash :title "Property type" :desc (str property-type-label') :disabled? true})
+     (let [disabled? (or (ldb/built-in? property) (and property-type (seq values)))]
+       (dropdown-editor-menuitem {:icon :hash
+                                  :title "Property type"
+                                  :desc (str property-type-label')
+                                  :disabled? disabled?
+                                  :submenu-content (fn [ops]
+                                                     (property-type-sub-pane property ops))}))
 
      (when enable-closed-values? (empty? (:property/schema.classes property))
            (let [values (:property/closed-values property)]
@@ -410,7 +440,7 @@
 
      (when owner-block
        (dropdown-editor-menuitem
-        {:icon :share-3 :title "Go to the node" :desc ""
+        {:icon :share-3 :title "Go to this property" :desc ""
          :item-props {:class "opacity-90 focus:opacity-100"
                       :on-select (fn []
                                    (shui/popup-hide-all!)
@@ -436,7 +466,18 @@
                                     (dev-common-handler/show-entity-data (:db/id property))
                                     (shui/popup-hide!))}})])]))
 
-(rum/defc dropdown-editor < rum/reactive db-mixins/query
-  [property* owner-block opts]
-  (let [property (db/sub-block (:db/id property*))]
-    (dropdown-editor-impl property owner-block opts)))
+(rum/defcs dropdown-editor < rum/reactive db-mixins/query
+  {:init (fn [state]
+           (let [*values (atom :loading)
+                 repo (state/get-current-repo)
+                 property (first (:rum/args state))
+                 ident (:db/ident property)]
+             (p/let [_ (db-async/<get-block repo (:block/uuid property))
+                     result (db-async/<get-block-property-values repo ident)]
+               (reset! *values result))
+             (assoc state ::values *values)))}
+  [state property* owner-block opts]
+  (let [property (db/sub-block (:db/id property*))
+        values (rum/react (::values state))]
+    (when-not (= :loading values)
+        (dropdown-editor-impl property owner-block values opts))))
