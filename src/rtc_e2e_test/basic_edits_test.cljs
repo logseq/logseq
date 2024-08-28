@@ -1,0 +1,45 @@
+(ns basic-edits-test
+  (:require [cljs.test :as t :refer [deftest testing is]]
+            [fixture]
+            [helper]
+            [frontend.worker.rtc.client-op :as client-op]
+            [const]
+            [datascript.core :as d]
+            [logseq.db :as ldb]
+            [logseq.outliner.batch-tx :as batch-tx]))
+
+(t/use-fixtures :once
+  fixture/install-some-consts
+  fixture/install-example-db-fixture
+  fixture/clear-test-remote-graphs-fixture
+  fixture/build-two-conns-by-download-example-graph-fixture)
+
+(deftest basic-edits-test
+  (let [conn1 (helper/get-downloaded-test-conn)
+        conn2 (helper/get-downloaded-test-conn2)
+        [page-uuid1 block-uuid1] (repeatedly random-uuid)]
+    (testing "create page first"
+      (let [tx-data [{:db/id "page"
+                      :block/name "basic-edits-test"
+                      :block/title "basic-edits-test"
+                      :block/uuid page-uuid1
+                      :block/created-at 1724836490809
+                      :block/updated-at 1724836490809
+                      :block/type "page"
+                      :block/format :markdown}
+                     {:block/uuid block-uuid1
+                      :block/updated-at 1724836490810
+                      :block/created-at 1724836490810
+                      :block/format :markdown
+                      :block/title "block1"
+                      :block/parent "page"
+                      :block/order "a0"
+                      :block/page "page"}]]
+        (batch-tx/with-batch-tx-mode conn1 {:e2e-test const/downloaded-test-repo}
+          (d/transact! conn1 tx-data))
+        (is (=
+             #{[:update page-uuid1] [:update-page page-uuid1] [:move block-uuid1] [:update block-uuid1]}
+             (set (map (juxt first (comp :block-uuid last)) (client-op/get-all-ops const/downloaded-test-repo)))))
+        (prn :all-ops
+             (client-op/get-all-ops const/downloaded-test-repo)
+             (client-op/get-local-tx const/downloaded-test-repo))))))

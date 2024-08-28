@@ -50,6 +50,10 @@
   []
   (worker-state/get-datascript-conn const/downloaded-test-repo))
 
+(defn get-downloaded-test-conn2
+  []
+  (worker-state/get-datascript-conn const/downloaded-test-repo2))
+
 (defn get-example-test-conn
   []
   (worker-state/get-datascript-conn const/test-repo))

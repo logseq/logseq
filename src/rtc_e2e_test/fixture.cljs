@@ -5,6 +5,7 @@
             [example]
             [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.db-listener]
             [frontend.worker.state :as worker-state]
             [helper]
             [missionary.core :as m]))
@@ -42,6 +43,9 @@
      (c.m/run-task-throw
       (m/sp
         (swap! worker-state/*datascript-conns dissoc const/downloaded-test-repo const/downloaded-test-repo2)
+        (swap! worker-state/*client-ops-conns assoc
+               const/downloaded-test-repo (d/create-conn client-op/schema-in-db)
+               const/downloaded-test-repo2 (d/create-conn client-op/schema-in-db))
         (let [{:keys [graph-uuid]} (m/? helper/new-task--upload-example-graph)]
           (m/? (helper/new-task--wait-creating-graph graph-uuid))
           (m/? (helper/new-task--download-graph graph-uuid const/downloaded-test-graph-name))
@@ -49,4 +53,5 @@
           (done)))
       :build-two-conns-by-download-example-graph-fixture))
    :after
-   #(swap! worker-state/*datascript-conns dissoc const/downloaded-test-repo const/downloaded-test-repo2)})
+   #(do (swap! worker-state/*datascript-conns dissoc const/downloaded-test-repo const/downloaded-test-repo2)
+        (swap! worker-state/*client-ops-conns dissoc const/downloaded-test-repo const/downloaded-test-repo2))})

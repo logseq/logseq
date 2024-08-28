@@ -91,7 +91,7 @@
 
   :rtc-e2e-test {:target :browser-test
                  :test-dir "static/rtc-e2e-test"
-                 :closure-defines {frontend.worker.rtc.const/RTC-E2E-TEST true}
+                 :closure-defines {frontend.worker.rtc.const/RTC-E2E-TEST* true}
                  :devtools {:enabled false}
                  :compiler-options {:infer-externs      :auto
                                     :output-feature-set :es-next-in
