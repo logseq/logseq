@@ -14,10 +14,8 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as model]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
@@ -34,80 +32,6 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(defn- <create-class-if-not-exists!
-  [value]
-  (when (string? value)
-    (let [page-name (string/trim value)]
-      (when-not (string/blank? page-name)
-        (p/let [page (page-handler/<create-class! page-name {:redirect? false
-                                                             :create-first-block? false})]
-          (:block/uuid page))))))
-
-(rum/defc class-select
-  [property {:keys [multiple-choices? disabled? default-open? no-class? on-hide]
-             :or {multiple-choices? true}}]
-  (let [*ref (rum/use-ref nil)]
-    (rum/use-effect!
-     (fn []
-       (when default-open?
-         (some-> (rum/deref *ref)
-                 (.click))))
-     [default-open?])
-    (let [schema-classes (:property/schema.classes property)]
-      [:div.flex.flex-1.col-span-3
-       (let [content-fn
-             (fn [{:keys [id]}]
-               (let [toggle-fn #(do
-                                  (when (fn? on-hide) (on-hide))
-                                  (shui/popup-hide! id))
-                     classes (model/get-all-classes (state/get-current-repo) {:except-root-class? true})
-                     options (map (fn [class]
-                                    {:label (:block/title class)
-                                     :value (:block/uuid class)})
-                                  classes)
-                     options (if no-class?
-                               (cons {:label "Skip choosing tag"
-                                      :value :no-tag}
-                                     options)
-                               options)
-                     opts {:items options
-                           :input-default-placeholder (if multiple-choices? "Choose tags" "Choose tag")
-                           :dropdown? false
-                           :close-modal? false
-                           :multiple-choices? multiple-choices?
-                           :selected-choices (map :block/uuid schema-classes)
-                           :extract-fn :label
-                           :extract-chosen-fn :value
-                           :show-new-when-not-exact-match? true
-                           :input-opts {:on-key-down
-                                        (fn [e]
-                                          (case (util/ekey e)
-                                            "Escape"
-                                            (do
-                                              (util/stop e)
-                                              (toggle-fn))
-                                            nil))}
-                           :on-chosen (fn [value select?]
-                                        (if (= value :no-tag)
-                                          (toggle-fn)
-                                          (p/let [result (<create-class-if-not-exists! value)
-                                                 value' (or result value)
-                                                 tx-data [[(if select? :db/add :db/retract) (:db/id property) :property/schema.classes [:block/uuid value']]]
-                                                 _ (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})]
-                                           (when-not multiple-choices? (toggle-fn)))))}]
-
-                 (select/select opts)))]
-
-         [:div.flex.flex-1.cursor-pointer
-          {:ref *ref
-           :on-click (if disabled?
-                       (constantly nil)
-                       #(shui/popup-show! (.-target %) content-fn))}
-          (if (seq schema-classes)
-            [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
-             (for [class schema-classes]
-               [:a.text-sm (str "#" (:block/title class))])]
-            (pv/property-empty-btn-value))])])))
 
 (defn- property-type-label
   [property-type]
@@ -366,25 +290,25 @@
   (rum/local false ::show-class-select?)
   (rum/local {} ::property-schema)
   (mixins/event-mixin
-    (fn [state]
-      (mixins/hide-when-esc-or-outside
-        state
-        :on-hide (fn [_state _e type]
-                   (when (= type :esc)
-                     (shui/popup-hide!)
-                     (shui/dialog-close!)
-                     (when-let [^js input (state/get-input)]
-                       (.focus input)))))))
+   (fn [state]
+     (mixins/hide-when-esc-or-outside
+      state
+      :on-hide (fn [_state _e type]
+                 (when (= type :esc)
+                   (shui/popup-hide!)
+                   (shui/dialog-close!)
+                   (when-let [^js input (state/get-input)]
+                     (.focus input)))))))
   {:init (fn [state]
            (state/set-editor-action! :property-input)
            (assoc state ::property (or (:*property (last (:rum/args state)))
-                                     (atom nil))))
+                                       (atom nil))))
    :will-unmount (fn [state]
                    (let [args (:rum/args state)
                          *property-key (second args)
                          {:keys [original-block edit-original-block]} (last args)
                          editing-default-property? (and original-block (state/get-edit-block)
-                                                     (not= (:db/id original-block) (:db/id (state/get-edit-block))))]
+                                                        (not= (:db/id original-block) (:db/id (state/get-edit-block))))]
                      (when *property-key (reset! *property-key nil))
                      (when (and original-block edit-original-block)
                        (edit-original-block {:editing-default-property? editing-default-property?})))
@@ -398,14 +322,14 @@
         *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
         existing-tag-alias (->> db-property/db-attribute-properties
-                             (map db-property/built-in-properties)
-                             (keep #(when (get block (:attribute %)) (:title %)))
-                             set)
+                                (map db-property/built-in-properties)
+                                (keep #(when (get block (:attribute %)) (:title %)))
+                                set)
         exclude-properties (fn [m]
                              (or (and (not page?) (contains? existing-tag-alias (:block/title m)))
                                ;; Filters out properties from being in wrong :view-context
-                               (and (not page?) (= :page (get-in m [:block/schema :view-context])))
-                               (and page? (= :block (get-in m [:block/schema :view-context])))))
+                                 (and (not page?) (= :page (get-in m [:block/schema :view-context])))
+                                 (and page? (= :block (get-in m [:block/schema :view-context])))))
         property (rum/react *property)
         property-key (rum/react *property-key)]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
@@ -422,20 +346,20 @@
            (cond
              @*show-new-property-config?
              (property-type-select property (merge opts
-                                              {:*property *property
-                                               :*property-name *property-key
-                                               :*property-schema *property-schema
-                                               :default-open? true
-                                               :block block
-                                               :*show-new-property-config? *show-new-property-config?
-                                               :*show-class-select? *show-class-select?}))
+                                                   {:*property *property
+                                                    :*property-name *property-key
+                                                    :*property-schema *property-schema
+                                                    :default-open? true
+                                                    :block block
+                                                    :*show-new-property-config? *show-new-property-config?
+                                                    :*show-class-select? *show-class-select?}))
 
              (and property @*show-class-select?)
-             (class-select property (assoc opts
-                                      :on-hide #(reset! *show-class-select? false)
-                                      :multiple-choices? false
-                                      :default-open? true
-                                      :no-class? true))
+             (property-config/class-select property (assoc opts
+                                                           :on-hide #(reset! *show-class-select? false)
+                                                           :multiple-choices? false
+                                                           :default-open? true
+                                                           :no-class? true))
 
              :else
              (when (and property (not class-schema?))
@@ -446,7 +370,7 @@
                          (fn [e]
                            ;; `Backspace` to close property popup and back to editing the current block
                            (when (and (= (util/ekey e) "Backspace")
-                                   (= "" (.-value (.-target e))))
+                                      (= "" (.-value (.-target e))))
                              (util/stop e)
                              (shui/popup-hide!)))}]
          (property-select exclude-properties {:on-chosen on-chosen
