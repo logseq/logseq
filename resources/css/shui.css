@@ -331,7 +331,7 @@ div[data-radix-popper-content-wrapper] {
 
 .ui__calendar {
   .rdp-caption_dropdowns {
-    @apply flex items-center justify-center relative -left-3;
+    @apply flex items-center justify-center relative border rounded opacity-80;
 
     .rdp-vhidden {
       @apply hidden;
@@ -342,7 +342,7 @@ div[data-radix-popper-content-wrapper] {
       @apply relative pr-3 mr-3;
 
       select {
-        @apply absolute px-2 py-0 border left-0 z-[2] opacity-0;
+        @apply absolute px-2 py-0 border left-0 z-[2] opacity-0 bg-none;
       }
 
       > .text-sm {
@@ -371,14 +371,27 @@ div[data-radix-popper-content-wrapper] {
     }
 
     .months-years-nav {
-      @apply flex items-center relative left-1 opacity-80;
+      @apply flex items-center relative left-0 pr-0 py-[1px] font-[500];
 
       select {
-        @apply px-2 py-0 border-none bg-transparent;
+        @apply pl-2.5 pr-1 py-0 border-none bg-transparent bg-none text-center overflow-hidden w-auto;
+
+        &[data-month="0"], &[data-month="1"] {
+          @apply w-[86px];
+        }
+
+        &[data-month="2"], &[data-month="7"] {
+          @apply w-[74px];
+        }
+
+        &[data-month="3"], &[data-month="4"],
+        &[data-month="5"], &[data-month="6"] {
+          @apply px-0 w-[60px];
+        }
       }
 
       input {
-        @apply border-none ml-0.5 bg-transparent;
+        @apply border-none ml-0 mr-2 bg-transparent;
       }
     }
   }

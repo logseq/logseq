@@ -1139,7 +1139,7 @@
               {:type "number" :value value :on-change onChange :min 1 :max 9999}]]
 
      ;; months
-     [:select {:on-change onChange :value value} children])])
+     [:select {:on-change onChange :value value :data-month value} children])])
 
 (defn single-calendar
   [{:keys [del-btn? on-delete on-select] :as opts}]
