@@ -522,8 +522,16 @@
        (dropdown-editor-menuitem {:icon :checks :title "Multiple values"
                                   :toggle-checked? many?
                                   :disabled? (or disabled? (not (contains? db-property-type/cardinality-property-types property-type)))
-                                  :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
-                                                                                                   (assoc property-schema :cardinality (if many? :one :many)) {})}))
+                                  :on-toggle-checked-change
+                                  (fn []
+                                    (let [update-cardinality-fn #(db-property-handler/upsert-property! (:db/ident property)
+                                                                                                       (assoc property-schema :cardinality (if many? :one :many)) {})]
+                                      ;; Only show dialog for existing values as it can be reversed for unused properties
+                                      (if (seq values)
+                                        (-> (shui/dialog-confirm!
+                                             "This action cannot be undone. Do you want to change this property to have multiple values?")
+                                            (p/then update-cardinality-fn))
+                                        (update-cardinality-fn))))}))
 
      (shui/dropdown-menu-separator)
      (let [position (:position property-schema)]
@@ -548,14 +556,14 @@
 
      (when owner-block
        (dropdown-editor-menuitem
-        {:id :remove-property :icon :x :title "Remove property" :desc "" :disabled? false
+        {:id :delete-property :icon :x :title "Delete property" :desc "" :disabled? false
          :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
                       :on-select (fn [^js e]
                                    (util/stop e)
                                    (-> (p/do!
                                         (handle-delete-property! owner-block property {:class-schema? class-schema?})
                                         (shui/popup-hide-all!))
-                                       (p/catch (fn [] (restore-root-highlight-item! :remove-property)))))}}))
+                                       (p/catch (fn [] (restore-root-highlight-item! :delete-property)))))}}))
      (when debug?
        [:<>
         (shui/dropdown-menu-separator)
