@@ -21,7 +21,13 @@
             [promesa.core :as p]
             [goog.dom :as gdom]
             [rum.core :as rum]
-            [frontend.db-mixins :as db-mixins]))
+            [frontend.db-mixins :as db-mixins]
+            [frontend.components.property.value :as pv]
+            [frontend.components.select :as select]
+            [frontend.db.model :as model]
+            [frontend.handler.page :as page-handler]
+            [frontend.ui :as ui]
+            [frontend.components.svg :as svg]))
 
 (defn- re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
@@ -63,6 +69,81 @@
       (db-property-handler/set-block-property!
         (:db/id property)
         :logseq.property/description description))))
+
+(defn- <create-class-if-not-exists!
+  [value]
+  (when (string? value)
+    (let [page-name (string/trim value)]
+      (when-not (string/blank? page-name)
+        (p/let [page (page-handler/<create-class! page-name {:redirect? false
+                                                             :create-first-block? false})]
+          (:block/uuid page))))))
+
+(rum/defc class-select
+  [property {:keys [multiple-choices? disabled? default-open? no-class? on-hide]
+             :or {multiple-choices? true}}]
+  (let [*ref (rum/use-ref nil)]
+    (rum/use-effect!
+     (fn []
+       (when default-open?
+         (some-> (rum/deref *ref)
+                 (.click))))
+     [default-open?])
+    (let [schema-classes (:property/schema.classes property)]
+      [:div.flex.flex-1.col-span-3
+       (let [content-fn
+             (fn [{:keys [id]}]
+               (let [toggle-fn #(do
+                                  (when (fn? on-hide) (on-hide))
+                                  (shui/popup-hide! id))
+                     classes (model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                     options (map (fn [class]
+                                    {:label (:block/title class)
+                                     :value (:block/uuid class)})
+                                  classes)
+                     options (if no-class?
+                               (cons {:label "Skip choosing tag"
+                                      :value :no-tag}
+                                     options)
+                               options)
+                     opts {:items options
+                           :input-default-placeholder (if multiple-choices? "Choose tags" "Choose tag")
+                           :dropdown? false
+                           :close-modal? false
+                           :multiple-choices? multiple-choices?
+                           :selected-choices (map :block/uuid schema-classes)
+                           :extract-fn :label
+                           :extract-chosen-fn :value
+                           :show-new-when-not-exact-match? true
+                           :input-opts {:on-key-down
+                                        (fn [e]
+                                          (case (util/ekey e)
+                                            "Escape"
+                                            (do
+                                              (util/stop e)
+                                              (toggle-fn))
+                                            nil))}
+                           :on-chosen (fn [value select?]
+                                        (if (= value :no-tag)
+                                          (toggle-fn)
+                                          (p/let [result (<create-class-if-not-exists! value)
+                                                 value' (or result value)
+                                                 tx-data [[(if select? :db/add :db/retract) (:db/id property) :property/schema.classes [:block/uuid value']]]
+                                                 _ (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})]
+                                           (when-not multiple-choices? (toggle-fn)))))}]
+
+                 (select/select opts)))]
+
+         [:div.flex.flex-1.cursor-pointer
+          {:ref *ref
+           :on-click (if disabled?
+                       (constantly nil)
+                       #(shui/popup-show! (.-target %) content-fn))}
+          (if (seq schema-classes)
+            [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
+             (for [class schema-classes]
+               [:a.text-sm (str "#" (:block/title class))])]
+            (pv/property-empty-btn-value))])])))
 
 (rum/defc name-edit-pane
   [property {:keys [set-sub-open! disabled?]}]
@@ -201,7 +282,8 @@
       [:div.inner-wrap
        {:class (util/classnames [{:disabled disabled?}])}
        [:strong
-        (some-> icon (name) (shui/tabler-icon))
+        (some-> icon (name) (shui/tabler-icon {:size 14
+                                               :style {:margin-top "-1"}}))
         [:span title]]
        (if (fn? desc) (desc)
          (if (boolean? toggle-checked?)
@@ -403,15 +485,30 @@
         built-in? (ldb/built-in? property)
         disabled? (or built-in? config/publishing?)]
     [:<>
-     (dropdown-editor-menuitem {:icon :edit :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
+     (dropdown-editor-menuitem {:icon :pencil :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
                                 :submenu-content (fn [ops] (name-edit-pane property (assoc ops :disabled? disabled?)))})
      (let [disabled? (or (ldb/built-in? property) (and property-type (seq values)))]
        (dropdown-editor-menuitem {:icon :hash
                                   :title "Property type"
-                                  :desc (str property-type-label')
+                                  :desc (if disabled?
+                                          (ui/tippy {:html        [:div.w-96
+                                                                   "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."]
+                                                     :class       "tippy-hover ml-2"
+                                                     :interactive true
+                                                     :disabled    false}
+                                                    (str property-type-label'))
+                                          (str property-type-label'))
                                   :disabled? disabled?
                                   :submenu-content (fn [ops]
                                                      (property-type-sub-pane property ops))}))
+
+     (when (= property-type :node)
+       (dropdown-editor-menuitem {:icon :hash
+                                  :title "Specify node tags"
+                                  :desc ""
+                                  :submenu-content (fn [_ops]
+                                                     [:div.px-4
+                                                      (class-select property {:default-open? false})])}))
 
      (when enable-closed-values? (empty? (:property/schema.classes property))
            (let [values (:property/closed-values property)]
@@ -448,8 +545,8 @@
 
      (when owner-block
        (dropdown-editor-menuitem
-        {:id :remove-property :icon :square-x :title "Delete property" :desc "" :disabled? false
-         :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-09"
+        {:id :remove-property :icon :x :title "Remove property" :desc "" :disabled? false
+         :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
                       :on-select (fn [^js e]
                                    (util/stop e)
                                    (-> (p/do!
