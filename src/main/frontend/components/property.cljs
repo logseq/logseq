@@ -10,6 +10,7 @@
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
             [frontend.components.svg :as svg]
+            [frontend.handler.property.util :as pu]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -241,16 +242,19 @@
                           (icon-component/icon-search
                            {:on-chosen
                             (fn [_e icon]
-                              (when icon
-                                (p/let [_ (db-property-handler/upsert-property! (:db/ident property)
-                                                                                (:block/schema property)
-                                                                                {:properties {:logseq.property/icon icon}})]
-                                  (shui/popup-hide! id))))}))]
+                              (if icon
+                                (db-property-handler/upsert-property! (:db/ident property)
+                                  (:block/schema property)
+                                  {:properties {:logseq.property/icon icon}})
+                                (db-property-handler/remove-block-property! (:db/id property)
+                                  (pu/get-pid :logseq.property/icon)))
+                              (shui/popup-hide! id))
+                            :del-btn? (boolean icon)}))]
 
          (shui/trigger-as
-          :button
-          (-> (when-not config/publishing?
-                {:on-click (fn [^js e]
+           :button
+           (-> (when-not config/publishing?
+                 {:on-click (fn [^js e]
                              (shui/popup-show! (.-target e) content-fn
                                                {:as-dropdown? true :auto-focus? true
                                                 :content-props {:onEscapeKeyDown #(.preventDefault %)}}))})

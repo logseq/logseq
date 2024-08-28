@@ -105,6 +105,13 @@
       }
     }
   }
+
+  .ui__button {
+    &[data-action=del] {
+      @apply !w-6 !h-6 overflow-hidden rounded-md ml-1 opacity-60
+      hover:text-red-rx-09 hover:opacity-90;
+    }
+  }
 }
 
 .color-picker-presets {
