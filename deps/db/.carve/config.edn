@@ -1,6 +1,5 @@
 {:paths ["src"]
  :api-namespaces [logseq.db.sqlite.common-db
-                  logseq.db.sqlite.rtc
                   logseq.db.sqlite.util
                   logseq.db.sqlite.cli
                   logseq.db.frontend.property
