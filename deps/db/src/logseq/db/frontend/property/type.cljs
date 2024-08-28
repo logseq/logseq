@@ -12,7 +12,7 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any :entity})
+  #{:keyword :map :coll :any :entity :string :raw-number})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -146,6 +146,8 @@
    ;; Internal usage
    ;; ==============
 
+   :string   string?
+   :raw-number number?
    :entity   entity?
    :keyword  keyword?
    :map      map?
