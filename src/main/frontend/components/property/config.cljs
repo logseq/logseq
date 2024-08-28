@@ -171,6 +171,7 @@
       (icon-component/icon-picker (:icon form-data)
         {:on-chosen (fn [_e icon] (set-form-data! (assoc form-data :icon icon)))
          :popup-opts {:align "start"}
+         :del-btn? (boolean (:icon form-data))
          :empty-label "?"})
       (shui/input {:ref *input-ref :size "sm" :default-value title :placeholder "name"
                    :disabled disabled? :on-change (fn [^js e] (set-form-data! (assoc form-data :title (util/trim-safe (util/evalue e)))))})]
@@ -223,6 +224,7 @@
         (:icon form-data)
         {:on-chosen (fn [_e icon] (set-form-data! (assoc form-data :icon icon)))
          :empty-label "?"
+         :del-btn? (boolean (:icon form-data))
          :popup-opts {:align "start"}})
 
       (shui/input {:ref *input-ref :size "sm"
@@ -312,6 +314,7 @@
      (shui/button {:size "sm" :variant :outline}
        (icon-component/icon-picker icon {:on-chosen (fn [_e icon] (update-icon! icon))
                                          :popup-opts {:align "start"}
+                                         :del-btn? (boolean icon)
                                          :empty-label "?"}))
      [:strong {:on-click (fn [^js e]
                            (shui/popup-show! (.-target e)

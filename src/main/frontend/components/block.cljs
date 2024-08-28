@@ -3099,22 +3099,29 @@
       (when (and @*show-left-menu? (not in-whiteboard?) (not table?))
         (block-left-menu config block))
 
-      (when-let [icon (and (ldb/page? block)
-                           (or (get block (pu/get-pid :logseq.property/icon))
-                               (or (when (ldb/class? block)
-                                     {:type :tabler-icon
-                                      :id "hash"})
-                                   (when (ldb/property? block)
-                                     {:type :tabler-icon
-                                      :id "letter-p"}))))]
-        [:div.flex.items-center.page-icon
-         (icon-component/icon-picker icon
-                                    {:on-chosen (fn [_e icon]
-                                                  (db-property-handler/set-block-property!
-                                                   (:db/id block)
-                                                   (pu/get-pid :logseq.property/icon)
-                                                   (select-keys icon [:id :type :color])))
-                                     :icon-props {:size (if (:page-title? config) 38 18)}})])
+      (let [icon' (get block (pu/get-pid :logseq.property/icon))]
+        (when-let [icon (and (ldb/page? block)
+                          (or icon'
+                            (or (when (ldb/class? block)
+                                  {:type :tabler-icon
+                                   :id "hash"})
+                              (when (ldb/property? block)
+                                {:type :tabler-icon
+                                 :id "letter-p"}))))]
+          [:div.flex.items-center.page-icon
+           (icon-component/icon-picker icon
+             {:on-chosen (fn [_e icon]
+                           (if icon
+                             (db-property-handler/set-block-property!
+                               (:db/id block)
+                               (pu/get-pid :logseq.property/icon)
+                               (select-keys icon [:id :type :color]))
+                             ;; del
+                             (db-property-handler/remove-block-property!
+                               (:db/id block)
+                               (pu/get-pid :logseq.property/icon))))
+              :del-btn? (boolean icon')
+              :icon-props {:size (if (:page-title? config) 38 18)}})]))
 
       (if whiteboard-block?
         (block-reference {} (str uuid) nil)
