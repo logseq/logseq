@@ -22,12 +22,19 @@
   "Valid property :type for closed values"
   #{:default :number :url})
 
-(def position-property-types
-  "Valid property :type for position"
-  #{:default :number :date :checkbox :url :node})
+(def cardinality-property-types
+  "Valid property types that can change cardinality"
+  #{:default :number :url :date :node})
+
+(assert (set/subset? cardinality-property-types (set user-built-in-property-types))
+        "All closed value types are valid property types")
 
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
+
+(def position-property-types
+  "Valid property :type for position"
+  #{:default :number :date :checkbox :url :node})
 
 (def original-value-ref-property-types
   "Property value ref types where the refed entity stores its value in
