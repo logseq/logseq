@@ -277,7 +277,8 @@ div[data-radix-popper-content-wrapper] {
   background-color: or(--lx-accent-08-alpha, --color-level-4);
 }
 
-.ui__dropdown-menu-content, div[data-radix-menu-content] {
+.ui__dropdown-menu-content, div[data-radix-menu-content],
+.ui__select-content {
   @apply overflow-y-auto;
 
   &[data-side=top] {
