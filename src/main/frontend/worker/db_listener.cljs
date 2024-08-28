@@ -83,6 +83,12 @@ generate asset-change events.")
               (when (seq blocks-to-add)
                 (.search-upsert-blocks wo repo (bean/->js blocks-to-add))))))))))
 
+(comment
+  (defmethod listen-db-changes :debug-listen-db-changes
+    [_ {:keys [tx-data tx-meta]}]
+    (prn :debug-listen-db-changes)
+    (prn :tx-data tx-data)
+    (prn :tx-meta tx-meta)))
 
 (defn listen-db-changes!
   [repo conn & {:keys [handler-keys]}]
@@ -90,7 +96,7 @@ generate asset-change events.")
                    (select-keys (methods listen-db-changes) handler-keys)
                    (methods listen-db-changes))]
     (d/unlisten! conn ::listen-db-changes!)
-    (prn :listen-db-changes! (keys handlers))
+    (prn :listen-db-changes! (keys handlers) :repo repo)
     (d/listen! conn ::listen-db-changes!
                (fn [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
                  (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)
