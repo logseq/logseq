@@ -1,18 +1,29 @@
 (ns basic-edits-test
-  (:require [cljs.test :as t :refer [deftest testing is]]
-            [fixture]
-            [helper]
-            [frontend.worker.rtc.client-op :as client-op]
+  (:require [cljs.test :as t :refer [deftest is testing]]
             [const]
             [datascript.core :as d]
-            [logseq.db :as ldb]
-            [logseq.outliner.batch-tx :as batch-tx]))
+            [fixture]
+            [frontend.worker.rtc.client-op :as client-op]
+            [helper]
+            [logseq.outliner.batch-tx :as batch-tx]
+            [meander.epsilon :as me]))
 
 (t/use-fixtures :once
   fixture/install-some-consts
   fixture/install-example-db-fixture
   fixture/clear-test-remote-graphs-fixture
   fixture/build-two-conns-by-download-example-graph-fixture)
+
+(defn- simplify-client-op
+  [client-op]
+  #_:clj-kondo/ignore
+  (me/find
+   client-op
+    [?op-type _t {:block-uuid ?block-uuid :av-coll [[!a !v _t !add] ...]}]
+    [?op-type ?block-uuid (map vector !a !v !add)]
+
+    [?op-type _t {:block-uuid ?block-uuid}]
+    [?op-type ?block-uuid]))
 
 (deftest basic-edits-test
   (let [conn1 (helper/get-downloaded-test-conn)
@@ -37,9 +48,17 @@
                       :block/page "page"}]]
         (batch-tx/with-batch-tx-mode conn1 {:e2e-test const/downloaded-test-repo}
           (d/transact! conn1 tx-data))
+
         (is (=
-             #{[:update page-uuid1] [:update-page page-uuid1] [:move block-uuid1] [:update block-uuid1]}
-             (set (map (juxt first (comp :block-uuid last)) (client-op/get-all-ops const/downloaded-test-repo)))))
-        (prn :all-ops
-             (client-op/get-all-ops const/downloaded-test-repo)
-             (client-op/get-local-tx const/downloaded-test-repo))))))
+             #{[:update-page page-uuid1]
+               [:update page-uuid1
+                [[:block/title "[\"~#'\",\"basic-edits-test\"]" true]
+                 [:block/created-at "[\"~#'\",1724836490809]" true]
+                 [:block/updated-at "[\"~#'\",1724836490809]" true]
+                 [:block/type "[\"~#'\",\"page\"]" true]]]
+               [:move block-uuid1]
+               [:update block-uuid1
+                [[:block/updated-at "[\"~#'\",1724836490810]" true]
+                 [:block/created-at "[\"~#'\",1724836490810]" true]
+                 [:block/title "[\"~#'\",\"block1\"]" true]]]}
+             (set (map simplify-client-op (client-op/get-all-ops const/downloaded-test-repo)))))))))
