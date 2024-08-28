@@ -1,15 +1,14 @@
 .cp__emoji-icon-picker {
   --ls-color-icon-preset: "inherit";
 
-  @apply w-[380px] max-h-[396px] relative flex flex-col overflow-hidden;
-  @apply pt-14 pb-[40px];
+  @apply w-[380px] max-h-[408px] relative flex flex-col overflow-hidden;
 
   > .hd {
-    @apply absolute w-full pt-3 pb-1 px-3 top-0 left-0;
+    @apply absolute w-full pt-2.5 pb-1 px-3 top-[38px] left-0;
   }
 
   > .bd {
-    @apply py-1 h-full;
+    @apply pt-[96px] py-1 h-full;
 
     &.all, &:has(.search-result) {
       @apply overflow-y-scroll;
@@ -17,7 +16,7 @@
   }
 
   > .ft {
-    @apply absolute w-full py-3 px-3 bg-gray-02 bottom-0 left-0;
+    @apply absolute w-full py-3 px-3 bg-gray-02 top-[-1px] left-0;
     @apply flex items-center border-t h-[40px] overflow-hidden;
 
     .tab-item {
@@ -52,8 +51,6 @@
       }
     }
   }
-
-  .search-result {}
 
   .pane-section {
     @apply pl-2 overflow-y-scroll h-full;
@@ -97,7 +94,7 @@
   }
 
   .color-picker {
-    @apply rounded-full w-[24px] h-[24px] overflow-hidden flex relative p-0;
+    @apply rounded-md w-[24px] h-[24px] overflow-hidden flex relative p-0;
 
     > strong {
       @apply w-[18px] h-[18px] rounded-full absolute opacity-90
