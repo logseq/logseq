@@ -333,7 +333,7 @@
                      64))]
     [:div.cp__emoji-icon-picker
      ;; header
-     [:div.hd
+     [:div.hd.bg-popover
       (tab-observer @*tab {:reset-q! reset-q!})
       (when @*select-mode?
         (select-observer *input-ref))
@@ -409,11 +409,11 @@
         [:div.hover-preview
          [:strong (:name @*hover)]
          [:button
-          {:style {:font-size 30}
+          {:style {:font-size 28}
            :key   (:id @*hover)
            :title (:name @*hover)}
           (if (= :tabler-icon (:type @*hover))
-            (ui/icon (:icon @*hover) {:size 30})
+            (ui/icon (:icon @*hover) {:size 28})
             (:native (first (:skins @*hover))))]])]]))
 
 (rum/defc icon-picker
