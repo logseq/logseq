@@ -211,8 +211,7 @@
         (let [user-uuid (:sub (worker-util/parse-jwt token))
               config (worker-state/get-config repo)
               date-formatter (common-config/get-date-formatter config)
-              {:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users]
-               onstarted-task :onstarted-task}
+              {:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users onstarted-task]}
               (create-rtc-loop graph-uuid repo conn date-formatter token)
               canceler (c.m/run-task rtc-loop-task :rtc-loop-task)
               start-ex (m/? onstarted-task)]

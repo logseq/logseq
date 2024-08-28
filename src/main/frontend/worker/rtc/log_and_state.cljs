@@ -6,6 +6,7 @@
             [missionary.core :as m]))
 
 (def ^:private *rtc-log (atom nil))
+(def rtc-log-flow (m/watch *rtc-log))
 
 (sr/defkeyword :rtc.log/upload
   "rtc log type for upload-graph.")
