@@ -488,7 +488,7 @@
      (dropdown-editor-menuitem {:icon :pencil :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
                                 :submenu-content (fn [ops] (name-edit-pane property (assoc ops :disabled? disabled?)))})
      (let [disabled? (or (ldb/built-in? property) (and property-type (seq values)))]
-       (dropdown-editor-menuitem {:icon :hash
+       (dropdown-editor-menuitem {:icon :letter-t
                                   :title "Property type"
                                   :desc (if disabled?
                                           (ui/tippy {:html        [:div.w-96
