@@ -17,7 +17,7 @@
            graph (some (fn [graph] (when (= graph-uuid (:graph-uuid graph)) graph)) graphs)]
        (when-not graph
          (throw (ex-info "graph not exist" {:graph-uuid graph-uuid})))
-       (prn "waiting for graph " graph-uuid " finish creating")
+       (println "waiting for graph " graph-uuid " finish creating")
        (when (= "creating" (:graph-status graph))
          (throw (ex-info "wait creating-graph" {:missionary/retry true})))))))
 
