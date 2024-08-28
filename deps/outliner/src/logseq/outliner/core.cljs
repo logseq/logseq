@@ -232,6 +232,40 @@
          (map (fn [tag]
                 [:db/retract (:db/id block) :block/tags (:db/id tag)])))))
 
+;; TODO: Validate tagless pages and other block types
+(defn- validate-unique-by-name-tag-and-block-type
+  [db new-title {:block/keys [tags] :as entity}]
+  ;; (prn :entity entity)
+  (cond
+    (ldb/page? entity)
+    (when-let [res (seq (d/q '[:find [(pull ?b [* {:block/tags [:block/title]}])]
+                               :in $ ?title [?tag-id ...]
+                               :where
+                               [?b :block/title ?title]
+                               [?b :block/tags ?tag-id]
+                               [?b :block/type "page"]]
+                             db
+                             new-title
+                             (map :db/id tags)))]
+      (throw (ex-info "Duplicate tagged page"
+                      {:type :notification
+                       :payload {:message (str "Another page with the new name already exists for tag " (pr-str (-> res first :block/tags first :block/title)))
+                                 :type :error}})))
+    :else
+    (when-let [res (seq (d/q '[:find [(pull ?b [* {:block/tags [:block/title]}])]
+                               :in $ ?title [?tag-id ...]
+                               :where
+                               [?b :block/title ?title]
+                               [?b :block/tags ?tag-id]
+                               [(missing? $ ?b :block/type)]]
+                             db
+                             new-title
+                             (map :db/id tags)))]
+      (throw (ex-info "Duplicate tagged block"
+                      {:type :notification
+                       :payload {:message (str "Another block with the new name already exists for tag " (pr-str (-> res first :block/tags first :block/title)))
+                                 :type :error}})))))
+
 (extend-type Entity
   otree/INode
   (-save [this txs-state conn repo _date-formatter {:keys [retract-attributes? retract-attributes]
@@ -270,6 +304,12 @@
                                     :node m*})))
                  (assoc m* :block/name page-name))
                m*)
+          _ (when (and db-based?
+                      ;; page or object changed?
+                       (and (or (ldb/page? block-entity) (seq (:block/tags block-entity)))
+                            (:block/title m*)
+                            (not= (:block/title m*) (:block/title block-entity))))
+              (validate-unique-by-name-tag-and-block-type db (:block/title m*) block-entity))
           m (cond-> m*
               db-based?
               (dissoc :block/priority :block/marker :block/properties-order))]
