@@ -71,6 +71,7 @@
             (db/entity (:db/id result))))
         (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)))))
 
+;; TODO: This component should be cleaned up as it's only used for new properties and used to be used for existing properties
 (rum/defcs property-type-select <
   shortcut/disable-all-shortcuts
   [state property {:keys [*property *property-name *property-schema built-in? disabled?
@@ -94,13 +95,7 @@
         :on-value-change
         (fn [v]
           (let [type (keyword (string/lower-case v))
-                update-schema-fn (apply comp
-                                        #(assoc % :type type)
-                                        (keep
-                                         (fn [attr]
-                                           (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
-                                             #(dissoc % attr)))
-                                         [:cardinality :position]))]
+                update-schema-fn #(assoc % :type type)]
             (when *property-schema
               (swap! *property-schema update-schema-fn))
             (let [schema (or (and *property-schema @*property-schema)
@@ -244,17 +239,17 @@
                             (fn [_e icon]
                               (if icon
                                 (db-property-handler/upsert-property! (:db/ident property)
-                                  (:block/schema property)
-                                  {:properties {:logseq.property/icon icon}})
+                                                                      (:block/schema property)
+                                                                      {:properties {:logseq.property/icon icon}})
                                 (db-property-handler/remove-block-property! (:db/id property)
-                                  (pu/get-pid :logseq.property/icon)))
+                                                                            (pu/get-pid :logseq.property/icon)))
                               (shui/popup-hide! id))
                             :del-btn? (boolean icon)}))]
 
          (shui/trigger-as
-           :button
-           (-> (when-not config/publishing?
-                 {:on-click (fn [^js e]
+          :button
+          (-> (when-not config/publishing?
+                {:on-click (fn [^js e]
                              (shui/popup-show! (.-target e) content-fn
                                                {:as-dropdown? true :auto-focus? true
                                                 :content-props {:onEscapeKeyDown #(.preventDefault %)}}))})
@@ -423,9 +418,9 @@
             date? (= type :date)
             checkbox? (= type :checkbox)
             property-key-cp' (property-key-cp block property (assoc (select-keys opts [:class-schema?])
-                                                           :block? block?
-                                                           :inline-text inline-text
-                                                           :page-cp page-cp))]
+                                                                    :block? block?
+                                                                    :inline-text inline-text
+                                                                    :page-cp page-cp))]
         [:div {:class (cond
                         (or date? checkbox?)
                         "property-pair items-center"

@@ -257,14 +257,11 @@
     page-attrs
     page-or-block-attrs)))
 
-(def property-type-schema-attrs
-  "Property :schema attributes that vary by :type"
-  [;; For closed values
-   [:position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
-  [[:hide? {:optional true} :boolean]])
+  [[:hide? {:optional true} :boolean]
+   [:position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
 
 (def internal-property
   (vec
@@ -280,8 +277,7 @@
          [:public? {:optional true} :boolean]
          [:view-context {:optional true} [:enum :page :block]]
          [:shortcut {:optional true} :string]]
-        property-common-schema-attrs
-        property-type-schema-attrs))]]
+        property-common-schema-attrs))]]
     property-attrs
     page-attrs
     page-or-block-attrs)))
@@ -297,9 +293,7 @@
          [:map
           ;; Once a schema is defined it must have :type as this is an irreversible decision
           [:type :keyword]]
-         property-common-schema-attrs
-         (remove #(not (db-property-type/property-type-allows-schema-attribute? prop-type (first %)))
-                 property-type-schema-attrs)))])
+         property-common-schema-attrs))])
     db-property-type/user-built-in-property-types)))
 
 (def user-property
