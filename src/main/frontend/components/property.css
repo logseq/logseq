@@ -385,6 +385,9 @@ a.control-link {
       &:hover a.del {
         @apply flex;
       }
+      &:hover .ls-icon-grip-vertical {
+        @apply opacity-80;
+      }
     }
   }
 }
