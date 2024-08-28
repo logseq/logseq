@@ -513,7 +513,8 @@
            item-render
            class
            header]}]
-  (let [*current-idx (get state ::current-idx)]
+  (let [*current-idx (get state ::current-idx)
+        *groups (atom #{})]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
@@ -528,26 +529,26 @@
                    :on-mouse-move  #(reset! *current-idx idx)}
                   (let [chosen? (= @*current-idx idx)]
                     (menu-link
-                      {:id (str "ac-" idx)
-                       :tab-index "0"
-                       :class (when chosen? "chosen")
+                     {:id (str "ac-" idx)
+                      :tab-index "0"
+                      :class (when chosen? "chosen")
                        ;; TODO: should have more tests on touch devices
                        ;:on-pointer-down #(util/stop %)
-                       :on-click (fn [e]
-                                   (util/stop e)
-                                   (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                     (on-shift-chosen item)
-                                     (on-chosen item e)))}
-                      (if item-render (item-render item chosen?) item)))]]
+                      :on-click (fn [e]
+                                  (util/stop e)
+                                  (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                    (on-shift-chosen item)
+                                    (on-chosen item e)))}
+                     (if item-render (item-render item chosen?) item)))]]
 
-             (if get-group-name
-               (if-let [group-name (get-group-name item)]
-                 [:div
-                  [:div.ui__ac-group-name group-name]
-                  item-cp]
-                 item-cp)
-
-               item-cp))])]
+             (let [group-name (and (fn? get-group-name) (get-group-name item))]
+               (if (and group-name (not (contains? @*groups group-name)))
+                 (do
+                   (swap! *groups conj group-name)
+                   [:div
+                    [:div.ui__ac-group-name group-name]
+                    item-cp])
+                 item-cp)))])]
        (when empty-placeholder
          empty-placeholder))]))
 
