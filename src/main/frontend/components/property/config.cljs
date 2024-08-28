@@ -26,8 +26,7 @@
             [frontend.components.select :as select]
             [frontend.db.model :as model]
             [frontend.handler.page :as page-handler]
-            [frontend.ui :as ui]
-            [frontend.components.svg :as svg]))
+            [frontend.ui :as ui]))
 
 (defn- re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
@@ -490,10 +489,10 @@
     [:<>
      (dropdown-editor-menuitem {:icon :pencil :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
                                 :submenu-content (fn [ops] (name-edit-pane property (assoc ops :disabled? disabled?)))})
-     (let [disabled? (or (ldb/built-in? property) (and property-type (seq values)))]
+     (let [disabled?' (or disabled? (and property-type (seq values)))]
        (dropdown-editor-menuitem {:icon :letter-t
                                   :title "Property type"
-                                  :desc (if disabled?
+                                  :desc (if disabled?'
                                           (ui/tippy {:html        [:div.w-96
                                                                    "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."]
                                                      :class       "tippy-hover ml-2"
@@ -501,7 +500,7 @@
                                                      :disabled    false}
                                                     (str property-type-label'))
                                           (str property-type-label'))
-                                  :disabled? disabled?
+                                  :disabled? disabled?'
                                   :submenu-content (fn [ops]
                                                      (property-type-sub-pane property ops))}))
 
@@ -513,7 +512,7 @@
                                                      [:div.px-4
                                                       (class-select property {:default-open? false})])}))
 
-     (when enable-closed-values? (empty? (:property/schema.classes property))
+     (when enable-closed-values?
            (let [values (:property/closed-values property)]
              (dropdown-editor-menuitem {:icon :list :title "Available choices"
                                         :desc (when (seq values) (str (count values) " choices"))
@@ -521,7 +520,8 @@
 
      (let [many? (db-property/many? property)]
        (dropdown-editor-menuitem {:icon :checks :title "Multiple values"
-                                  :toggle-checked? many? :disabled? disabled?
+                                  :toggle-checked? many?
+                                  :disabled? (or disabled? (not (contains? db-property-type/cardinality-property-types property-type)))
                                   :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
                                                                                                    (assoc property-schema :cardinality (if many? :one :many)) {})}))
 
