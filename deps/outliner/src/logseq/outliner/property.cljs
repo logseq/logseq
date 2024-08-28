@@ -149,8 +149,12 @@
         (d/entity @conn db-ident')))))
 
 (defn- validate-property-value
-  [schema value]
-  (me/humanize (mu/explain-data schema value)))
+  [schema value {:keys [many?]}]
+  ;; normalize :many values since most components update them as a single value
+  (let [value' (if (and many? (not (coll? value)))
+                 #{value}
+                 value)]
+    (me/humanize (mu/explain-data schema value'))))
 
 (defn- ->eid
   [id]
@@ -164,11 +168,7 @@
         schema (get-property-value-schema @conn property-type property)]
     (if-let [msg (and
                   (not= new-value :logseq.property/empty-placeholder)
-                  (validate-property-value schema
-                                           ;; normalize :many values for components that only provide single value
-                                           (if (and (db-property/many? property) (not (coll? new-value)))
-                                             #{new-value}
-                                             new-value)))]
+                  (validate-property-value schema new-value {:many? (db-property/many? property)}))]
       (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
         (throw (ex-info "Schema validation failed"
                         {:type :notification
@@ -441,7 +441,8 @@
             resolved-value (convert-property-input-string (:type property-schema) value')
             validate-message (validate-property-value
                               (get-property-value-schema @conn property-type property {:new-closed-value? true})
-                              resolved-value)]
+                              resolved-value
+                              {:many? (db-property/many? property)})]
         (cond
           (some (fn [b]
                   (and (= (str resolved-value) (str (or (db-property/closed-value-content b)
