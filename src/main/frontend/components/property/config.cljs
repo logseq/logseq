@@ -205,7 +205,7 @@
   (let [create? (:create? block)
         uuid (:block/uuid block)
         *form-data (rum/use-ref
-                     {:value (or (:block/title block) "")
+                     {:value (or (str (db-property/closed-value-content block)) "")
                       :icon (:logseq.property/icon block)
                       :description (or (db-property/property-value-content (:logseq.property/description block)) "")})
         [form-data, set-form-data!] (rum/use-state (rum/deref *form-data))
@@ -527,7 +527,7 @@
                                     (let [update-cardinality-fn #(db-property-handler/upsert-property! (:db/ident property)
                                                                                                        (assoc property-schema :cardinality (if many? :one :many)) {})]
                                       ;; Only show dialog for existing values as it can be reversed for unused properties
-                                      (if (seq values)
+                                      (if (and (seq values) (not many?))
                                         (-> (shui/dialog-confirm!
                                              "This action cannot be undone. Do you want to change this property to have multiple values?")
                                             (p/then update-cardinality-fn))
