@@ -32,10 +32,6 @@
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
 
-(def position-property-types
-  "Valid property :type for position"
-  #{:default :number :date :checkbox :url :node})
-
 (def original-value-ref-property-types
   "Property value ref types where the refed entity stores its value in
   :property.value/content e.g. :number is stored as a number. new value-ref-property-types
@@ -58,20 +54,6 @@
                      (set user-built-in-property-types))
         "All ref types are valid property types")
 
-(def ^:private user-built-in-allowed-schema-attributes
-  "Map of types to their set of allowed :schema attributes"
-  (merge-with into
-              (zipmap closed-value-property-types (repeat #{:values}))
-              (zipmap position-property-types (repeat #{:position}))
-              {:default #{:cardinality}
-               :number #{:cardinality}
-               :date #{:cardinality}
-               :url #{:cardinality}
-               :node #{:cardinality :classes}
-               :checkbox #{}}))
-
-(assert (= (set user-built-in-property-types) (set (keys user-built-in-allowed-schema-attributes)))
-        "Each user built in type should have an allowed schema attribute")
 
 ;; Property value validation
 ;; =========================
@@ -171,12 +153,6 @@
 
 ;; Helper fns
 ;; ==========
-(defn property-type-allows-schema-attribute?
-  "Returns boolean to indicate if property type allows the given :schema attribute"
-  [property-type schema-attribute]
-  (contains? (get user-built-in-allowed-schema-attributes property-type)
-             schema-attribute))
-
 (defn infer-property-type-from-value
   "Infers a user defined built-in :type from property value(s)"
   [val]
