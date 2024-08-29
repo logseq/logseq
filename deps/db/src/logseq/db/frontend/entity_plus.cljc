@@ -23,6 +23,20 @@
   (date-time-util/int->journal-title (:block/journal-day e)
                                      (:logseq.property/title-format (d/entity db :logseq.class/Journal))))
 
+(defn- get-block-title
+  [^Entity e k default-value]
+  (let [db (.-db e)]
+    (if (and (db-based-graph? db) (= "journal" (:block/type e)))
+      (get-journal-title db e)
+      (or
+       (get (.-kv e) k)
+       (let [result (lookup-entity e k default-value)]
+         (or
+          (if (string? result)
+            (db-content/special-id-ref->page-ref result (:block/refs e))
+            result)
+          default-value))))))
+
 (defn lookup-kv-then-entity
   ([e k] (lookup-kv-then-entity e k nil))
   ([^Entity e k default-value]
@@ -45,17 +59,7 @@
              (lookup-entity e :block/properties nil)))
 
          :block/title
-         (let [db (.-db e)]
-           (if (and (db-based-graph? db) (= "journal" (:block/type e)))
-             (get-journal-title db e)
-             (or
-              (get (.-kv e) k)
-              (let [result (lookup-entity e k default-value)]
-                (or
-                 (if (string? result)
-                   (db-content/special-id-ref->page-ref result (:block/refs e))
-                   result)
-                 default-value)))))
+         (get-block-title e k default-value)
 
          :block/_parent
          (->> (lookup-entity e k default-value)
