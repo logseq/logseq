@@ -3698,9 +3698,8 @@
         (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
        (for [[parent blocks] parent-blocks]
          (let [blocks' (map (fn [b]
-                              ;; Block might be a datascript entity
                               (if (e/entity? b)
-                                (db/pull (:db/id b))
+                                b
                                 (update b :block/children
                                         (fn [col]
                                           (tree/non-consecutive-blocks->vec-tree col))))) blocks)]

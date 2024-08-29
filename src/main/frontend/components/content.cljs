@@ -339,7 +339,7 @@
               (shui/dropdown-menu-item
                {:key "(Dev) Show block AST"
                 :on-click (fn []
-                            (let [block (db/pull [:block/uuid block-id])]
+                            (let [block (db/entity [:block/uuid block-id])]
                               (dev-common-handler/show-content-ast (:block/title block) (:block/format block))))}
                (t :dev/show-block-ast))
               (shui/dropdown-menu-item

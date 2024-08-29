@@ -36,7 +36,7 @@
   TODO: Add other options"
   [repo conn config title & {:as options}]
   (if (ldb/db-based-graph? @conn)
-    (db-worker-page/create! conn config title options)
+    (db-worker-page/create! conn title options)
     (file-worker-page/create! repo conn config title options)))
 
 (defn db-refs->page

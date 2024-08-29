@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [frontend.util :as util]
             [frontend.mobile.util :as mobile-util]
-            [frontend.state :as state]
             [frontend.config :as config]
             [frontend.util.text :as text-util]
             [logseq.graph-parser.text :as text]
@@ -11,14 +10,26 @@
             [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.common.util :as common-util]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [frontend.db.conn-state :as db-conn-state]
+            [frontend.state :as state]))
 
-(defonce conns (atom {}))
+(defonce conns db-conn-state/conns)
+(def get-repo-path db-conn-state/get-repo-path)
 
-(defn get-repo-path
-  [url]
-  (assert (string? url) (str "url is not a string: " (type url)))
-  url)
+(defn get-db
+  ([]
+   (get-db (state/get-current-repo) true))
+  ([repo-or-deref?]
+   (if (boolean? repo-or-deref?)
+     (get-db (state/get-current-repo) repo-or-deref?)
+     (get-db repo-or-deref? true)))
+  ([repo deref?]
+   (when-let [repo (or repo (state/get-current-repo))]
+     (when-let [conn (db-conn-state/get-conn repo)]
+       (if deref?
+         @conn
+         conn)))))
 
 (defn get-repo-name
   [repo-url]
@@ -30,7 +41,7 @@
     (config/get-local-dir repo-url)
 
     :else
-    (get-repo-path repo-url)))
+    (db-conn-state/get-repo-path repo-url)))
 
 (defn get-short-repo-name
   "repo-name: from get-repo-name. Dir/Name => Name"
@@ -48,30 +59,9 @@
       (string/replace-first repo-name' config/db-version-prefix "")
       repo-name')))
 
-(defn datascript-db
-  [repo]
-  (when repo
-    (let [path (get-repo-path repo)]
-      (str (if (util/electron?) "" config/idb-db-prefix)
-           path))))
-
-(defn get-db
-  ([]
-   (get-db (state/get-current-repo) true))
-  ([repo-or-deref?]
-   (if (boolean? repo-or-deref?)
-     (get-db (state/get-current-repo) repo-or-deref?)
-     (get-db repo-or-deref? true)))
-  ([repo deref?]
-   (let [repo (if repo repo (state/get-current-repo))]
-     (when-let [conn (get @conns (datascript-db repo))]
-       (if deref?
-         @conn
-         conn)))))
-
 (defn remove-conn!
   [repo]
-  (swap! conns dissoc (datascript-db repo)))
+  (swap! conns dissoc (db-conn-state/get-repo-path repo)))
 
 (if util/node-test?
   (defn transact!
@@ -89,7 +79,7 @@
   ([repo]
    (start! repo {}))
   ([repo {:keys [listen-handler]}]
-   (let [db-name (datascript-db repo)
+   (let [db-name (db-conn-state/get-repo-path repo)
          db-conn (if (config/db-based-graph? repo)
                    (d/create-conn db-schema/schema-for-db-based-graph)
                    (gp-db/start-conn))]
