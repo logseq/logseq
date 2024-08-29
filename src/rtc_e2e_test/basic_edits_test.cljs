@@ -11,6 +11,9 @@
             [meander.epsilon :as me]
             [missionary.core :as m]))
 
+(when (exists? js/__karma__)
+  (prn :config.testvar js/__karma__.config.testvar))
+
 (t/use-fixtures :once
   fixture/install-some-consts
   fixture/install-example-db-fixture
