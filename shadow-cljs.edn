@@ -102,6 +102,13 @@
                                                :redef false}
                                     :cross-chunk-method-motion false
                                     :static-fns false}}
+  :rtc-e2e-test-karma {:target :karma
+                       :closure-defines {frontend.worker.rtc.const/RTC-E2E-TEST* true}
+                       :output-to "static/rtc-e2e-test-karma/main.js"
+                       :compiler-options {:source-map true
+                                          :warnings {:fn-deprecated false
+                                                     :redef false}}}
+
 
   :gen-malli-kondo-config {:target :node-script
                            :closure-defines {frontend.util/NODETEST true}
