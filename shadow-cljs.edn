@@ -89,26 +89,12 @@
          :compiler-options {:static-fns false}
          :main frontend.test.frontend-node-test-runner/main}
 
-  :rtc-e2e-test {:target :browser-test
-                 :test-dir "static/rtc-e2e-test"
+  :rtc-e2e-test {:target :karma
                  :closure-defines {frontend.worker.rtc.const/RTC-E2E-TEST* true}
-                 :devtools {:enabled false}
-                 :compiler-options {:infer-externs      :auto
-                                    :output-feature-set :es-next-in
-                                    :source-map true
-                                    :externs ["datascript/externs.js"
-                                              "externs.js"]
+                 :output-to "static/rtc-e2e-test/main.js"
+                 :compiler-options {:source-map true
                                     :warnings {:fn-deprecated false
-                                               :redef false}
-                                    :cross-chunk-method-motion false
-                                    :static-fns false}}
-  :rtc-e2e-test-karma {:target :karma
-                       :closure-defines {frontend.worker.rtc.const/RTC-E2E-TEST* true}
-                       :output-to "static/rtc-e2e-test-karma/main.js"
-                       :compiler-options {:source-map true
-                                          :warnings {:fn-deprecated false
-                                                     :redef false}}}
-
+                                               :redef false}}}
 
   :gen-malli-kondo-config {:target :node-script
                            :closure-defines {frontend.util/NODETEST true}
