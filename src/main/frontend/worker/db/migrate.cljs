@@ -3,6 +3,7 @@
   (:require [datascript.core :as d]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [frontend.worker.search :as search]
@@ -127,6 +128,10 @@
     (d/reset-schema! conn (update schema :block/type #(assoc % :db/cardinality :db.cardinality/one)))
     []))
 
+(defn- add-title-format
+  [conn _search-db]
+  )
+
 (defn- add-addresses-in-kvs-table
   [^Object sqlite-db]
   (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
@@ -176,7 +181,10 @@
    [9 {:fix update-task-ident}]
    [10 {:fix update-table-properties}]
    [11 {:fix property-checkbox-type-non-ref}]
-   [12 {:fix update-block-type-many->one}]])
+   [12 {:fix update-block-type-many->one}]
+   [13 {:classes [:logseq.class/Journal]
+        :properties [:logseq.property/title-format]
+        :fix add-title-format}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
@@ -206,8 +214,6 @@
                               updates))
                           schema-version->updates)
             properties (mapcat :properties updates)
-            ;; TODO: add classes migration support
-            ;; classes (mapcat :classes updates)
             new-properties (->> (select-keys db-property/built-in-properties properties)
                                 ;; property already exists, this should never happen
                                 (remove (fn [[k _]]
@@ -216,12 +222,21 @@
                                 (into {})
                                 sqlite-create-graph/build-initial-properties*
                                 (map (fn [b] (assoc b :logseq.property/built-in? true))))
+            classes (mapcat :classes updates)
+            new-classes (->> (select-keys db-class/built-in-classes classes)
+                             ;; class already exists, this should never happen
+                             (remove (fn [[k _]]
+                                       (when (d/entity db k)
+                                         (assert (str "DB migration: class already exists " k)))))
+                             (into {})
+                             (#(sqlite-create-graph/build-initial-classes* % {}))
+                             (map (fn [b] (assoc b :logseq.property/built-in? true))))
             fixes (mapcat
                    (fn [update]
                      (when-let [fix (:fix update)]
                        (when (fn? fix)
                          (fix conn search-db)))) updates)
-            tx-data' (if db-based? (concat new-properties fixes) fixes)]
+            tx-data' (if db-based? (concat new-properties new-classes fixes) fixes)]
         (when (seq tx-data')
           (let [tx-data' (concat tx-data' [(sqlite-create-graph/kv :logseq.kv/schema-version db-schema/version)])]
             (ldb/transact! conn tx-data' {:db-migrate? true}))
