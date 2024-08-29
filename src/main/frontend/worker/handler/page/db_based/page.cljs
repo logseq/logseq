@@ -42,15 +42,14 @@
                      (db-property-build/build-properties-with-ref-values property-vals-tx-m)))))))
 
 ;; TODO: Revisit title cleanup as this was copied from file implementation
-(defn get-title-and-pagename
+(defn sanitize-title
   [title]
   (let [title      (-> (string/trim title)
                        (text/page-ref-un-brackets!)
                         ;; remove `#` from tags
                        (string/replace #"^#+" ""))
-        title      (common-util/remove-boundary-slashes title)
-        page-name  (common-util/page-name-sanity-lc title)]
-    [title page-name]))
+        title      (common-util/remove-boundary-slashes title)]
+    title))
 
 (defn build-first-block-tx
   [page-uuid format]
@@ -64,7 +63,7 @@
        :block/format format})]))
 
 (defn create!
-  [conn title
+  [conn title*
    {:keys [create-first-block? properties uuid persist-op? whiteboard? class? today-journal?]
     :or   {create-first-block?      true
            properties               nil
@@ -72,7 +71,7 @@
            persist-op?              true}
     :as options}]
   (let [date-formatter (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal))
-        [title page-name] (get-title-and-pagename title)
+        title (sanitize-title title*)
         type (cond class?
                    "class"
                    whiteboard?
@@ -104,5 +103,5 @@
                                            :outliner-op :create-page}
                                     today-journal?
                                     (assoc :create-today-journal? true
-                                           :today-journal-name page-name))))
-        [page-name page-uuid]))))
+                                           :today-journal-name title))))
+        [title page-uuid]))))

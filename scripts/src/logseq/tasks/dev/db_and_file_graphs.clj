@@ -92,11 +92,13 @@
                        (map str)
                        (into [;; e.g. block/properties :title
                               "block/properties :"
+                              "block/name"
                               ;; anything org mode
                               "org"
                               "pre-block"
                               "namespace"
-                              "db/get-page"]))
+                              "db/get-page"
+                              "/page-name-sanity-lc"]))
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" file-concepts) ")")
                    db-graph-paths)]

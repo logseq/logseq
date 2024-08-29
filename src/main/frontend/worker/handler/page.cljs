@@ -6,6 +6,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.db.frontend.content :as db-content]
             [frontend.worker.handler.page.db-based.page :as db-worker-page]
             [frontend.worker.handler.page.file-based.page :as file-worker-page]))
@@ -14,7 +15,8 @@
   [conn config title {:keys [uuid]}]
   (assert (uuid? uuid) (str "rtc-create-page! `uuid` is not a uuid " uuid))
   (let [date-formatter    (common-config/get-date-formatter config)
-        [title page-name] (db-worker-page/get-title-and-pagename title)
+        title (db-worker-page/sanitize-title title)
+        page-name (common-util/page-name-sanity-lc title)
         page              (-> (gp-block/page-name->map title @conn true date-formatter
                                                        {:page-uuid uuid
                                                         :skip-existing-page-check? true})
