@@ -612,7 +612,7 @@
               (property-normal-block-value block property v-block)
 
               ;; page/class/etc.
-              (:block/name v-block)
+              (ldb/page? v-block)
               (rum/with-key
                 (page-cp {:disable-preview? true
                           :hide-close-button? true
