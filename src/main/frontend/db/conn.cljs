@@ -25,7 +25,7 @@
      (get-db (state/get-current-repo) repo-or-deref?)
      (get-db repo-or-deref? true)))
   ([repo deref?]
-   (let [repo (if repo repo (state/get-current-repo))]
+   (when-let [repo (or repo (state/get-current-repo))]
      (when-let [conn (db-conn-state/get-conn repo)]
        (if deref?
          @conn
