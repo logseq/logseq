@@ -21,7 +21,7 @@
 (defn- get-journal-title
   [db e]
   (date-time-util/int->journal-title (:block/journal-day e)
-                                     (:logseq.property/title-format (d/entity db :logseq.class/Journal))))
+                                     (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))))
 
 (defn- get-block-title
   [^Entity e k default-value]
