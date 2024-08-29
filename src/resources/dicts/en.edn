@@ -531,6 +531,7 @@
  :plugin/delete-alert "Are you sure you want to uninstall the plugin [{1}]?"
  :plugin/open-settings "Open settings"
  :plugin/open-package "Open package"
+ :plugin/report-security "Report plugin"
  :plugin/load-unpacked "Load unpacked plugin"
  :plugin/restart "Restart App"
  :plugin/unpacked-tips "Select the plugin directory"
