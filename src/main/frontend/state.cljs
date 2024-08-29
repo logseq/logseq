@@ -597,7 +597,7 @@ should be done through this fn in order to get global config and config defaults
     (if (sqlite-util/db-based-graph? repo)
       (when-let [conn (db-conn-state/get-conn repo)]
         (get (d/entity @conn :logseq.class/Journal)
-           :logseq.property/title-format
+           :logseq.property.journal/title-format
            "MMM do, yyyy"))
       (common-config/get-date-formatter (get-config)))))
 

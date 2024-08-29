@@ -14,7 +14,7 @@
    :logseq.class/Card {:title "Card"}
 
    :logseq.class/Journal {:title "Journal"
-                          :properties {:logseq.property/title-format "MMM do, yyyy"}}
+                          :properties {:logseq.property.journal/title-format "MMM do, yyyy"}}
 
    ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project
    })

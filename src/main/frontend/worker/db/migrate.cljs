@@ -179,7 +179,7 @@
    [11 {:fix property-checkbox-type-non-ref}]
    [12 {:fix update-block-type-many->one}]
    [13 {:classes [:logseq.class/Journal]
-        :properties [:logseq.property/title-format]}]])
+        :properties [:logseq.property.journal/title-format]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

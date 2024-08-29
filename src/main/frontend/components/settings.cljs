@@ -446,7 +446,7 @@
                         (if (config/db-based-graph? repo)
                           (property-handler/set-block-property! repo
                                                                 :logseq.class/Journal
-                                                                :logseq.property/title-format
+                                                                :logseq.property.journal/title-format
                                                                 format)
                           (do
                             (config-handler/set-config! :journal/page-title-format format)

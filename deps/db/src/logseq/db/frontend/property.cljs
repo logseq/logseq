@@ -91,14 +91,13 @@
                                   :schema {:type :map
                                            :hide? true}}
 
-   :logseq.property/title-format {:title "Title format"
-                                  :schema
-                                  {:type :string
-                                   :public? false}}
-
    ;; Journal props
+   :logseq.property.journal/title-format {:title "Title format"
+                                          :schema
+                                          {:type :string
+                                           :public? false}}
 
-   ;; TODO:
+   ;; TODO: should we replace block/journal-day with those separate props?
    ;; :logseq.property.journal/year {:title "Journal year"
    ;;                                :schema
    ;;                                {:type :raw-number

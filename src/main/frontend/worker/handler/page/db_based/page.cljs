@@ -71,7 +71,7 @@
            uuid                     nil
            persist-op?              true}
     :as options}]
-  (let [date-formatter (:logseq.property/title-format (d/entity @conn :logseq.class/Journal))
+  (let [date-formatter (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal))
         [title page-name] (get-title-and-pagename title)
         type (cond class?
                    "class"
