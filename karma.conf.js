@@ -12,7 +12,8 @@ module.exports = function (config) {
         client: {
             args: ["shadow.test.karma.init"],
             singleRun: true,
-	    testvar: config.testvar
+	    testvar: config.testvar,
+	    seed: config.seed
         }
     })
 };
