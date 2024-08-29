@@ -232,7 +232,7 @@
          (map (fn [tag]
                 [:db/retract (:db/id block) :block/tags (:db/id tag)])))))
 
-(defn validate-unique-by-name-tag-and-block-type
+(defn ^:api validate-unique-by-name-tag-and-block-type
   "Validates uniqueness of blocks and pages for the following cases:
    - Page names are unique by tag e.g. their can be Apple #Company and Apple #Fruit
    - Page names are unique when they have no tag
