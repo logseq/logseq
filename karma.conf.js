@@ -2,7 +2,7 @@ module.exports = function (config) {
     config.set({
         browsers: ['Chrome'],
         // The directory where the output file lives
-        basePath: 'static/rtc-e2e-test-karma',
+        basePath: 'static/rtc-e2e-test',
         // The file itself
         files: ['main.js'],
         frameworks: ['cljs-test'],
