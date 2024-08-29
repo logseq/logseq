@@ -128,10 +128,6 @@
     (d/reset-schema! conn (update schema :block/type #(assoc % :db/cardinality :db.cardinality/one)))
     []))
 
-(defn- add-title-format
-  [conn _search-db]
-  )
-
 (defn- add-addresses-in-kvs-table
   [^Object sqlite-db]
   (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
@@ -183,8 +179,7 @@
    [11 {:fix property-checkbox-type-non-ref}]
    [12 {:fix update-block-type-many->one}]
    [13 {:classes [:logseq.class/Journal]
-        :properties [:logseq.property/title-format]
-        :fix add-title-format}]])
+        :properties [:logseq.property/title-format]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

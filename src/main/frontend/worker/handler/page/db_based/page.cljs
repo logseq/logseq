@@ -7,7 +7,6 @@
             [clojure.string :as string]
             [logseq.graph-parser.text :as text]
             [logseq.common.util :as common-util]
-            [logseq.common.config :as common-config]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.frontend.property.build :as db-property-build]
