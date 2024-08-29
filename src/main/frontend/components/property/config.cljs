@@ -137,11 +137,14 @@
           {:ref *ref
            :on-click (if disabled?
                        (constantly nil)
-                       #(shui/popup-show! (.-target %) content-fn))}
+                       #(shui/popup-show! (.-target %) content-fn {:id :ls-node-tags-sub-pane}))}
           (if (seq schema-classes)
             [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
+             {:class "max-w-[300px]"}
              (for [class schema-classes]
-               [:a.text-sm (str "#" (:block/title class))])]
+               [:a.text-sm (str "#" (:block/title class))])
+             [:span.opacity-60.pl-1.top-1.relative.hover:opacity-80.active:opacity-60
+              (shui/tabler-icon "edit")]]
             (pv/property-empty-btn-value))])])))
 
 (rum/defc name-edit-pane
@@ -259,7 +262,8 @@
         id2 (str "d2-" id1)
         or-close-menu-sub! (fn []
                              (when (and (not (shui-popup/get-popup :ls-icon-picker))
-                                     (not (shui-popup/get-popup :ls-base-edit-form)))
+                                     (not (shui-popup/get-popup :ls-base-edit-form))
+                                     (not (shui-popup/get-popup :ls-node-tags-sub-pane)))
                                (set-sub-open! false)
                                (restore-root-highlight-item! id1)))
         wrap-menuitem (if submenu-content
