@@ -312,7 +312,7 @@
               (validate-unique-by-name-tag-and-block-type db (:block/title m*) block-entity))
           m (cond-> m*
               db-based?
-              (dissoc :block/priority :block/marker :block/properties-order))]
+              (dissoc :block/pre-block? :block/priority :block/marker :block/properties-order))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)

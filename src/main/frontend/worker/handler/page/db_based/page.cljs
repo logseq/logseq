@@ -7,7 +7,6 @@
             [clojure.string :as string]
             [logseq.graph-parser.text :as text]
             [logseq.common.util :as common-util]
-            [logseq.common.config :as common-config]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.frontend.property.build :as db-property-build]
@@ -65,14 +64,14 @@
        :block/format format})]))
 
 (defn create!
-  [conn config title
+  [conn title
    {:keys [create-first-block? properties uuid persist-op? whiteboard? class? today-journal?]
     :or   {create-first-block?      true
            properties               nil
            uuid                     nil
            persist-op?              true}
     :as options}]
-  (let [date-formatter (common-config/get-date-formatter config)
+  (let [date-formatter (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal))
         [title page-name] (get-title-and-pagename title)
         type (cond class?
                    "class"

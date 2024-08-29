@@ -28,7 +28,7 @@
 
 (defn delete-graph!
   [graph]
-  (let [key (db-conn/datascript-db graph)
+  (let [key (db-conn/get-repo-path graph)
         db-based? (config/db-based-graph? graph)]
     (p/let [_ (persist-db/<unsafe-delete graph)]
       (if (util/electron?)
@@ -37,8 +37,8 @@
 
 (defn rename-graph!
   [old-repo new-repo]
-  (let [old-key (db-conn/datascript-db old-repo)
-        new-key (db-conn/datascript-db new-repo)]
+  (let [old-key (db-conn/get-repo-path old-repo)
+        new-key (db-conn/get-repo-path new-repo)]
     (if (util/electron?)
       (do
         (js/console.error "rename-graph! is not supported in electron")

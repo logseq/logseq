@@ -156,7 +156,7 @@
                                      "square-asterisk")]
                           [command (->marker m) (str "Set status to " m) icon]))))]
     (when (seq result)
-      (update result 0 (fn [v] (conj v "TASK"))))))
+      (map (fn [v] (conj v "TASK")) result))))
 
 (defn file-based-priorities
   []
@@ -183,10 +183,10 @@
                            (if db-based?
                              (str "priorityLvl" item)
                              (str "circle-letter-" (util/safe-lower-case item)))])))
-                 (with-no-priority)
-                 (vec))]
+                (with-no-priority)
+                (vec))]
     (when (seq result)
-      (update result 0 (fn [v] (conj v "PRIORITY"))))))
+      (map (fn [v] (conj v "PRIORITY")) result))))
 
 ;; Credits to roamresearch.com
 
