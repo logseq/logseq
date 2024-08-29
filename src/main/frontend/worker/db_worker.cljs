@@ -14,7 +14,6 @@
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.handler.page.db-based.rename :as db-worker-page-rename]
             [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
             [frontend.worker.rtc.asset-db-listener]
             [frontend.worker.rtc.client-op :as client-op]
@@ -786,7 +785,7 @@
   [repo conn page-uuid new-name]
   (let [config (worker-state/get-config repo)
         f (if (sqlite-util/db-based-graph? repo)
-            db-worker-page-rename/rename!
+            (throw (ex-info "Rename page is a file graph only operation" {}))
             file-worker-page-rename/rename!)]
     (f repo conn config page-uuid new-name)))
 
