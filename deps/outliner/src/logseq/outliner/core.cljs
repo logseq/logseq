@@ -238,7 +238,7 @@
   ;; (prn :entity entity)
   (cond
     (ldb/page? entity)
-    (when-let [res (seq (d/q '[:find [(pull ?b [* {:block/tags [:block/title]}])]
+    (when-let [res (seq (d/q '[:find [?b ...]
                                :in $ ?title [?tag-id ...]
                                :where
                                [?b :block/title ?title]
@@ -249,10 +249,11 @@
                              (map :db/id tags)))]
       (throw (ex-info "Duplicate tagged page"
                       {:type :notification
-                       :payload {:message (str "Another page with the new name already exists for tag " (pr-str (-> res first :block/tags first :block/title)))
+                       :payload {:message (str "Another page with the new name already exists for tag "
+                                               (pr-str (->> res first (d/entity db) :block/tags first :block/title)))
                                  :type :error}})))
     :else
-    (when-let [res (seq (d/q '[:find [(pull ?b [* {:block/tags [:block/title]}])]
+    (when-let [res (seq (d/q '[:find [?b ...]
                                :in $ ?title [?tag-id ...]
                                :where
                                [?b :block/title ?title]
@@ -261,9 +262,11 @@
                              db
                              new-title
                              (map :db/id tags)))]
+      (prn :res res)
       (throw (ex-info "Duplicate tagged block"
                       {:type :notification
-                       :payload {:message (str "Another block with the new name already exists for tag " (pr-str (-> res first :block/tags first :block/title)))
+                       :payload {:message (str "Another block with the new name already exists for tag "
+                                               (pr-str (->> res first (d/entity db) :block/tags first :block/title)))
                                  :type :error}})))))
 
 (extend-type Entity
