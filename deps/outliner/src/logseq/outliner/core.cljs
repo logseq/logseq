@@ -232,12 +232,14 @@
          (map (fn [tag]
                 [:db/retract (:db/id block) :block/tags (:db/id tag)])))))
 
-;; TODO: Validate tagless pages and other block types
-(defn- validate-unique-by-name-tag-and-block-type
+(defn validate-unique-by-name-tag-and-block-type
+  "Validates uniqueness of blocks and pages for the following cases:
+   - Page names are unique by tag e.g. their can be Apple #Company and Apple #Fruit
+   - Page names are unique when they have no tag
+   - Block names are unique by tag"
   [db new-title {:block/keys [tags] :as entity}]
-  ;; (prn :entity entity)
   (cond
-    (ldb/page? entity)
+    (and (ldb/page? entity) (seq tags))
     (when-let [res (seq (d/q '[:find [?b ...]
                                :in $ ?title [?tag-id ...]
                                :where
@@ -247,12 +249,26 @@
                              db
                              new-title
                              (map :db/id tags)))]
-      (throw (ex-info "Duplicate tagged page"
+      (throw (ex-info "Duplicate page by tag"
                       {:type :notification
-                       :payload {:message (str "Another page with the new name already exists for tag "
+                       :payload {:message (str "Another page named " (pr-str new-title) " already exists for tag "
                                                (pr-str (->> res first (d/entity db) :block/tags first :block/title)))
-                                 :type :error}})))
-    :else
+                                 :type :warning}})))
+
+    (ldb/page? entity)
+    (when-let [_res (seq (d/q '[:find [?b ...]
+                                :in $ ?title
+                                :where
+                                [?b :block/title ?title]
+                                [?b :block/type "page"]]
+                              db
+                              new-title))]
+      (throw (ex-info "Duplicate page without tag"
+                      {:type :notification
+                       :payload {:message (str "Another page named " (pr-str new-title) " already exists")
+                                 :type :warning}})))
+
+    (and (not (:block/type entity)) (seq tags))
     (when-let [res (seq (d/q '[:find [?b ...]
                                :in $ ?title [?tag-id ...]
                                :where
@@ -262,12 +278,11 @@
                              db
                              new-title
                              (map :db/id tags)))]
-      (prn :res res)
-      (throw (ex-info "Duplicate tagged block"
+      (throw (ex-info "Duplicate block by tag"
                       {:type :notification
-                       :payload {:message (str "Another block with the new name already exists for tag "
+                       :payload {:message (str "Another block named " (pr-str new-title) " already exists for tag "
                                                (pr-str (->> res first (d/entity db) :block/tags first :block/title)))
-                                 :type :error}})))))
+                                 :type :warning}})))))
 
 (extend-type Entity
   otree/INode
