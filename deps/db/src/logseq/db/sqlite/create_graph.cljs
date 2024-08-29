@@ -80,7 +80,8 @@
                          (vec conflicting-idents))
                     {:idents conflicting-idents}))))
 
-(defn- build-initial-classes [db-ident->properties]
+(defn build-initial-classes*
+  [built-in-classes db-ident->properties]
   (map
    (fn [[db-ident {:keys [properties schema title]}]]
      (let [title' (or title (name db-ident))]
@@ -89,7 +90,7 @@
          (let [schema-properties (mapv
                                   (fn [db-ident]
                                     (let [property (get db-ident->properties db-ident)]
-                                      (assert property (str "Built-in property " db-ident " is not defined yet"))
+                                      (assert property (str "Built-in property " db-ident "is not defined yet"))
                                       db-ident))
                                   (:properties schema))]
            (cond->
@@ -101,7 +102,11 @@
              (assoc :class/schema.properties schema-properties)
              (seq properties)
              (merge properties)))))))
-   db-class/built-in-classes))
+   built-in-classes))
+
+(defn- build-initial-classes
+  [db-ident->properties]
+  (build-initial-classes* db-class/built-in-classes db-ident->properties))
 
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
