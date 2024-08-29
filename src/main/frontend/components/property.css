@@ -355,6 +355,12 @@ a.control-link {
   }
 }
 
+.ui__dropdown-menu-sub-content {
+  .cp__select-main {
+    @apply -mx-4 my-0;
+  }
+}
+
 .ls-property-choices-sub-pane {
   @apply w-[220px] p-0;
 
