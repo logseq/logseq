@@ -441,13 +441,16 @@
       {:value     preferred-date-format
        :on-change (fn [e]
                     (let [repo (state/get-current-repo)
-                          format (util/evalue e)]
+                          format (util/evalue e)
+                          db-based? (config/db-based-graph? repo)]
                       (when-not (string/blank? format)
-                        (if (config/db-based-graph? repo)
-                          (property-handler/set-block-property! repo
+                        (if db-based?
+                          (p/do!
+                            (property-handler/set-block-property! repo
                                                                 :logseq.class/Journal
                                                                 :logseq.property.journal/title-format
                                                                 format)
+                            (notification/show! "Please refresh the app for this change to take effect"))
                           (do
                             (config-handler/set-config! :journal/page-title-format format)
                             (notification/show!
@@ -455,7 +458,8 @@
                              :warning false)))
 
                         (state/close-modal!)
-                        (route-handler/redirect! {:to :graphs}))))}
+                        (shui/dialog-close-all!)
+                        (when-not db-based? (route-handler/redirect! {:to :graphs})))))}
       (for [format (sort (date/journal-title-formatters))]
         [:option {:key format} format])]]]])
 
