@@ -15,7 +15,7 @@
 
 (defn- reset-datascript
   [repo]
-  (let [db-name (conn/datascript-db repo)
+  (let [db-name (conn/get-repo-path repo)
         db-conn (d/create-conn db-schema/schema)]
     (state/set-current-repo! repo)
     (swap! conn/conns assoc db-name db-conn)))
