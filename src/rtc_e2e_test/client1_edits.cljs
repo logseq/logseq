@@ -16,27 +16,25 @@
     (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo}
       (d/transact! conn tx-data))
     (is (=
-         #{[:update-page const/page-uuid1]
-           [:update const/page-uuid1
+         #{[:update-page const/page1-uuid]
+           [:update const/page1-uuid
             [[:block/title "[\"~#'\",\"basic-edits-test\"]" true]
              [:block/created-at "[\"~#'\",1724836490809]" true]
              [:block/updated-at "[\"~#'\",1724836490809]" true]
              [:block/type "[\"~#'\",\"page\"]" true]]]
-           [:move const/block-uuid1]
-           [:update const/block-uuid1
+           [:move const/block1-uuid]
+           [:update const/block1-uuid
             [[:block/updated-at "[\"~#'\",1724836490810]" true]
              [:block/created-at "[\"~#'\",1724836490810]" true]
              [:block/title "[\"~#'\",\"block1\"]" true]]]}
          (set (map helper/simplify-client-op (client-op/get-all-ops const/downloaded-test-repo)))))))
 
-(defn step2--task-start-rtc
-  []
+(def step2--task-start-rtc
   (m/sp
     (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
       (is (nil? r)))))
 
-(defn step3--task-wait-:create-page-synced
-  []
+(def step3--task-wait-page1-synced
   (m/sp
     (let [r (m/? (m/timeout
                   (m/reduce (fn [_ v]
