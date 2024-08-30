@@ -13,7 +13,7 @@
   []
   (let [conn (helper/get-downloaded-test-conn)
         tx-data (const/tx-data-map :create-page)]
-    (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo}
+    (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
       (d/transact! conn tx-data))
     (is (=
          #{[:update-page const/page1-uuid]
@@ -38,7 +38,8 @@
   (m/sp
     (let [r (m/? (m/timeout
                   (m/reduce (fn [_ v]
-                              (when (= :rtc.log/push-local-update (:type v))
+                              (when (and (= :rtc.log/push-local-update (:type v))
+                                         (empty? (client-op/get-all-ops const/downloaded-test-repo)))
                                 (reduced v)))
                             rtc-log-and-state/rtc-log-flow)
                   6000 :timeout))]
