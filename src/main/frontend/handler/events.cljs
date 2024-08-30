@@ -844,9 +844,10 @@
   (persist-db/export-current-graph! {:succ-notification? true}))
 
 (defmethod handle :class/configure [[_ page]]
+  ;; FIXME: show block container instead
   (shui/dialog-open!
     #(vector :<>
-       (class-component/configure page {})
+       ;; (class-component/configure page {})
        (db-page/page-properties page {:configure? true
                                       :mode :tag}))
     {:label "page-configure"

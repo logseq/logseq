@@ -346,7 +346,7 @@
   [db class]
   (let [class-parents (get-class-parents db [class])]
     (->> (mapcat (fn [class]
-                   (:class/schema.properties class)) (concat [class] class-parents))
+                   (:logseq.property.class/properties class)) (concat [class] class-parents))
          (common-util/distinct-by :db/id)
          (ldb/sort-by-order))))
 
@@ -359,9 +359,9 @@
         class-parents (get-class-parents db classes)
         all-classes (->> (concat classes class-parents)
                          (filter (fn [class]
-                                   (seq (:class/schema.properties class)))))
+                                   (seq (:logseq.property.class/properties class)))))
         all-properties (-> (mapcat (fn [class]
-                                     (map :db/ident (:class/schema.properties class))) all-classes)
+                                     (map :db/ident (:logseq.property.class/properties class))) all-classes)
                            distinct)]
     {:classes classes
      :all-classes all-classes           ; block own classes + parent classes
@@ -521,7 +521,7 @@
   (when-let [class (d/entity @conn class-id)]
     (if (ldb/class? class)
       (ldb/transact! conn
-                     [[:db/add (:db/id class) :class/schema.properties property-id]]
+                     [[:db/add (:db/id class) :logseq.property.class/properties property-id]]
                      {:outliner-op :save-block})
       (throw (ex-info "Can't add a property to a block that isn't a class"
                       {:class-id class-id :property-id property-id})))))
@@ -532,5 +532,5 @@
     (when (ldb/class? class)
       (when-let [property (d/entity @conn property-id)]
         (when-not (ldb/built-in-class-property? class property)
-          (ldb/transact! conn [[:db/retract (:db/id class) :class/schema.properties property-id]]
+          (ldb/transact! conn [[:db/retract (:db/id class) :logseq.property.class/properties property-id]]
                          {:outliner-op :save-block}))))))

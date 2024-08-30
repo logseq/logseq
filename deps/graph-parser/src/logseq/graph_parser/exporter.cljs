@@ -1076,7 +1076,7 @@
                      {}))
         tx (mapv (fn [[class-id prop-ids]]
                    {:db/id class-id
-                    :class/schema.properties (vec prop-ids)})
+                    :logseq.property.class/properties (vec prop-ids)})
                  class-to-prop-uuids)]
     (ldb/transact! repo-or-conn tx)))
 

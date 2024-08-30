@@ -3397,7 +3397,7 @@
                     (not (db-pu/all-hidden-properties? property-keys)))
                (and db-based? (seq tags)
                     (some (fn [t]
-                            (let [properties (map :db/ident (:class/schema.properties (:block/schema t)))]
+                            (let [properties (map :db/ident (:logseq.property.class/properties (:block/schema t)))]
                               (and (seq properties)
                                    (not (db-pu/all-hidden-properties? properties))))) tags))
                (and

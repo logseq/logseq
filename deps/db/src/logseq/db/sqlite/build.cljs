@@ -209,7 +209,7 @@
                                 (or (class-db-ids class-parent)
                                     (throw (ex-info (str "No :db/id for " class-parent) {})))})
                              (when schema-properties
-                               {:class/schema.properties
+                               {:logseq.property.class/properties
                                 (mapv #(hash-map :db/ident (get-ident all-idents %))
                                       schema-properties)}))))))
                      classes))]

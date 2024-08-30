@@ -3649,7 +3649,7 @@
               (fn []
                 (when-let [_inst (rum/deref *virtualized-ref)]
                   (when-let [^js target (.-firstElementChild (rum/deref *wrap-ref))]
-                    (let [set-wrap-h! #(set! (.-height (.-style (rum/deref *wrap-ref))) %)
+                    (let [set-wrap-h! #(when-let [ref (rum/deref *wrap-ref)] (set! (.-height (.-style ref)) %))
                           set-wrap-h! (debounce set-wrap-h! 16)
                           ob (js/ResizeObserver.
                                (fn []

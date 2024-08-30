@@ -586,7 +586,7 @@
             (when (and (not block?) (not db-based?))
               (tagged-pages repo page page-title))
 
-            (when (ldb/class? page)
+            (when (and (ldb/page? page) (:logseq.property/_parent page))
               (class-component/class-children page))
 
             ;; referenced blocks

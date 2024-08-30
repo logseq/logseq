@@ -243,7 +243,7 @@
 (def class-attrs
   [[:db/ident class-ident]
    [:logseq.property/parent {:optional true} :int]
-   [:class/schema.properties {:optional true} [:set :int]]])
+   [:logseq.property.class/properties {:optional true} [:set :int]]])
 
 (def class-page
   (vec

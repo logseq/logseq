@@ -66,7 +66,7 @@
 
 (defn- select-type?
   [property type]
-  (or (contains? #{:node :number :url :date} type)
+  (or (contains? #{:node :number :url :date :page :class :property} type)
     ;; closed values
     (seq (:property/closed-values property))))
 
@@ -443,7 +443,7 @@
                                   (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
                                     (let [repo (state/get-current-repo)
                                           descendent-classes (->> classes'
-                                                               (mapcat #(model/get-class-children repo (:db/id %)))
+                                                               (mapcat #(model/get-structured-children repo (:db/id %)))
                                                                (map #(db/entity repo %)))]
                                       (->> (concat classes' descendent-classes)
                                         (filter #(string/includes? (:block/title %) class-input))
@@ -678,7 +678,7 @@
                      :meta-click? other-position?} value)
            (:db/id value)))
 
-       (= type :node)
+       (contains? #{:node :class :property :page} type)
        (when-let [reference (state/get-component :block/reference)]
          (reference {} (:block/uuid value)))
 
@@ -713,7 +713,7 @@
                              (:number :url :default)
                              (select block property select-opts' opts)
 
-                             (:node :date)
+                             (:node :class :property :page :date)
                              (property-value-select-node block property select-opts' opts))])
           trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
           show! (fn [e]
@@ -828,7 +828,7 @@
                                           select-opts
                                           {:dropdown? false})]
                         [:div.property-select
-                         (if (= :node type)
+                         (if (contains? #{:node :page :class :property} type)
                            (property-value-select-node block property
                              select-opts
                              opts)

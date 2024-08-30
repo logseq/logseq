@@ -2,7 +2,7 @@
   "Main datascript schemas for the Logseq app"
   (:require [clojure.set :as set]))
 
-(def version 14)
+(def version 15)
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
   {:db/ident        {:db/unique :db.unique/identity}
@@ -113,12 +113,6 @@
            :block/properties :block/properties-order :block/repeated? :block/deadline :block/scheduled :block/priority
            :block/marker :block/macros)
    {:block/name {:db/index true}        ; remove db/unique for :block/name
-    ;; class properties
-    :logseq.property/parent {:db/valueType :db.type/ref
-                             :db/index true}
-    :class/schema.properties {:db/valueType :db.type/ref
-                              :db/cardinality :db.cardinality/many
-                              :db/index true}
     ;; closed value
     :block/closed-value-property {:db/valueType :db.type/ref
                                   :db/cardinality :db.cardinality/many}

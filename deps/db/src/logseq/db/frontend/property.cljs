@@ -39,11 +39,16 @@
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
    :logseq.property/parent {:title "Parent"
-                            :schema {:type :node
+                            :schema {:type :page
                                      :public? true
                                      :view-context :page}}
+   :logseq.property.class/properties {:title "Tag properties"
+                                      :schema {:type :property
+                                               :cardinality :many
+                                               :public? true
+                                               :view-context :class}}
    :logseq.property/page-tags {:title "pageTags"
-                               :schema {:type :node
+                               :schema {:type :page
                                         :public? true
                                         :view-context :page
                                         :cardinality :many}}
@@ -318,7 +323,7 @@
 
 (defn get-class-ordered-properties
   [class-entity]
-  (->> (:class/schema.properties class-entity)
+  (->> (:logseq.property.class/properties class-entity)
        (sort-by :block/order)))
 
 (defn property-created-block?

@@ -450,7 +450,7 @@
 
     (is (= #{:user.property/url :user.property/sameas :user.property/rangeincludes}
            (->> (d/entity @conn :user.class/Property)
-                :class/schema.properties
+                :logseq.property.class/properties
                 (map :db/ident)
                 set))
         "Properties are correctly inferred for a class")

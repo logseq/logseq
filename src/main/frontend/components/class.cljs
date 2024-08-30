@@ -13,7 +13,7 @@
 (rum/defc class-select
   [page class on-select]
   (let [repo (state/get-current-repo)
-        children-pages (model/get-class-children repo (:db/id page))
+        children-pages (model/get-structured-children repo (:db/id page))
         ;; Disallows cyclic hierarchies
         exclude-ids (-> (set (map (fn [id] (:block/uuid (db/entity id))) children-pages))
                         (conj (:block/uuid page))) ; break cycle
@@ -105,12 +105,12 @@
 
 (defn class-children-aux
   [class {:keys [default-collapsed?] :as opts}]
-  (let [children (:class/_parent class)]
+  (let [children (:logseq.property/_parent class)]
     (when (seq children)
       [:ul
        (for [child (sort-by :block/title children)]
          (let [title [:li.ml-2 (block/page-reference false (:block/title child) {:show-brackets? false} nil)]]
-           (if (seq (:class/_parent child))
+           (if (seq (:logseq.property/_parent child))
              (ui/foldable
               title
               (class-children-aux child opts)
@@ -119,13 +119,13 @@
 
 (rum/defc class-children
   [class]
-  (when (seq (:class/_parent class))
-    (let [children-pages (model/get-class-children (state/get-current-repo) (:db/id class))
+  (when (seq (:logseq.property/_parent class))
+    (let [children-pages (model/get-structured-children (state/get-current-repo) (:db/id class))
           ;; Expand children if there are about a pageful of total blocks to display
           default-collapsed? (> (count children-pages) 30)]
       [:div.mt-4
        (ui/foldable
-        [:h2.font-medium "Child tags (" (count children-pages) ")"]
+        [:h2.font-medium "Children (" (count children-pages) ")"]
         [:div.mt-2.ml-1 (class-children-aux class {:default-collapsed? default-collapsed?})]
         {:default-collapsed? false
          :title-trigger? true})])))

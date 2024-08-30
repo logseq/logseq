@@ -99,7 +99,7 @@
              :db/ident db-ident
              :block/uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)}
              (seq schema-properties)
-             (assoc :class/schema.properties schema-properties)
+             (assoc :logseq.property.class/properties schema-properties)
              (seq properties)
              (merge properties)))))))
    built-in-classes))

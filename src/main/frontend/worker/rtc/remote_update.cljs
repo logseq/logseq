@@ -335,7 +335,7 @@
     :block/tags
     :block/link
     :block/journal-day
-    :class/schema.properties
+    :logseq.property.class/properties
     :property/schema.classes
     :property.value/content})
 

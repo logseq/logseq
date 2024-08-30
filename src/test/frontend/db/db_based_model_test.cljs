@@ -80,5 +80,5 @@
                          {:db/id (:db/id class3)
                           :logseq.property/parent (:db/id class2)}])]
     (is
-     (= (model/get-class-children repo (:db/id (db/get-case-page "class1")))
+     (= (model/get-structured-children repo (:db/id (db/get-case-page "class1")))
         [(:db/id class2) (:db/id class3)]))))

@@ -508,7 +508,8 @@
                                   :submenu-content (fn [ops]
                                                      (property-type-sub-pane property ops))}))
 
-     (when (= property-type :node)
+     (when (and (= property-type :node)
+                (not (contains? #{:logseq.property/parent} (:db/ident property))))
        (dropdown-editor-menuitem {:icon :hash
                                   :title "Specify node tags"
                                   :desc ""
@@ -517,10 +518,10 @@
                                                       (class-select property {:default-open? false})])}))
 
      (when enable-closed-values?
-           (let [values (:property/closed-values property)]
-             (dropdown-editor-menuitem {:icon :list :title "Available choices"
-                                        :desc (when (seq values) (str (count values) " choices"))
-                                        :submenu-content (fn [] (choices-sub-pane property))})))
+       (let [values (:property/closed-values property)]
+         (dropdown-editor-menuitem {:icon :list :title "Available choices"
+                                    :desc (when (seq values) (str (count values) " choices"))
+                                    :submenu-content (fn [] (choices-sub-pane property))})))
 
      (let [many? (db-property/many? property)]
        (dropdown-editor-menuitem {:icon :checks :title "Multiple values"
@@ -538,10 +539,11 @@
                                         (update-cardinality-fn))))}))
 
      (shui/dropdown-menu-separator)
-     (let [position (:position property-schema)]
-       (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
-                                  :item-props {:class "ui__position-trigger-item"}
-                                  :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :position position)))}))
+     (when (not (contains? #{:logseq.property/parent} (:db/ident property)))
+       (let [position (:position property-schema)]
+         (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
+                                    :item-props {:class "ui__position-trigger-item"}
+                                    :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :position position)))})))
 
      (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
                                 :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
@@ -558,7 +560,7 @@
                                    (shui/popup-hide-all!)
                                    (route-handler/redirect-to-page! (:block/uuid property)))}}))
 
-     (when owner-block
+     (when (and owner-block (not (contains? #{:logseq.property/parent} (:db/ident property))))
        (dropdown-editor-menuitem
         {:id :delete-property :icon :x :title "Delete property" :desc "" :disabled? false
          :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
