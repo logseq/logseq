@@ -3656,7 +3656,8 @@
                                  (when-let [h (.-height (.-style target))]
                                    ;(prn "==>> debug: " h)
                                    (set-wrap-h! h))))]
-                      (.observe ob target))))))
+                      (.observe ob target)
+                      (vreset! *ob ob))))))
             #(some-> @*ob (.disconnect)))))
       [])
 
