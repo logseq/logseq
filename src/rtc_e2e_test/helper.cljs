@@ -68,10 +68,6 @@
   []
   (worker-state/get-datascript-conn const/downloaded-test-repo))
 
-(defn get-example-test-conn
-  []
-  (worker-state/get-datascript-conn const/test-repo))
-
 (defn simplify-client-op
   [client-op]
   #_:clj-kondo/ignore
