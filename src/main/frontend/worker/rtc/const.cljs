@@ -259,4 +259,7 @@
 (def data-to-ws-encoder (m/encoder data-to-ws-schema (mt/transformer
                                                       mt/string-transformer
                                                       (mt/key-transformer {:encode m/-keyword->string}))))
-(def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer nil #(m/-fail! ::data-to-ws-schema %)))
+(def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer nil
+                                   #(do
+                                      (prn ::data-to-ws-schema %)
+                                      (m/-fail! ::data-to-ws-schema %))))

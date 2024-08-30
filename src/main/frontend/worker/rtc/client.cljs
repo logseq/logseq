@@ -347,7 +347,7 @@
                     (rollback repo block-ops-map-coll)
                     ;; else
                     (do (rollback repo block-ops-map-coll)
-                        (throw (ex-info "Unavailable" {:remote-ex remote-ex})))))
+                        (throw (ex-info "Unavailable1" {:remote-ex remote-ex})))))
 
               (do (assert (pos? (:t r)) r)
                   (r.remote-update/apply-remote-update
@@ -367,7 +367,7 @@
               :graph-lock-missing (throw r.ex/ex-remote-graph-lock-missing)
               :rtc.exception/get-s3-object-failed nil
               ;;else
-              (throw (ex-info "Unavailable" {:remote-ex remote-ex}))))
+              (throw (ex-info "Unavailable3" {:remote-ex remote-ex}))))
         (do (assert (pos? (:t r)) r)
             (r.remote-update/apply-remote-update
              graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn)
