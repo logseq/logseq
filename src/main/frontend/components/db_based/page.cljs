@@ -15,8 +15,7 @@
    be displaying properties from both components at the same time"
   < rum/reactive
   [page {:keys [mode configure?]}]
-  (let [edit-input-id-prefix (str "edit-block-" (:block/uuid page))
-        configure-opts {:selected? false
+  (let [configure-opts {:selected? false
                         :page-configure? configure?}
         has-viewable-properties? (outliner-property/block-has-viewable-properties? page)]
     (when (or configure? has-viewable-properties?)
@@ -27,18 +26,15 @@
            (= mode :tag)
            (component-block/db-properties-cp {:editor-box editor/box}
                                              page
-                                             (str edit-input-id-prefix "-schema")
                                              (assoc configure-opts :class-schema? true))
 
            (= mode :page)
            (component-block/db-properties-cp {:editor-box editor/box}
                                              page
-                                             (str edit-input-id-prefix "-page")
                                              (assoc configure-opts :class-schema? false :page? true)))
          ;; default view for page-inner
          (component-block/db-properties-cp {:editor-box editor/box}
                                            page
-                                           (str edit-input-id-prefix "-page")
                                            (assoc configure-opts :class-schema? false :page? true)))])))
 
 (rum/defc page-info < rum/reactive db-mixins/query

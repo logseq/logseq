@@ -2184,15 +2184,14 @@
            (let [container-id (or (:container-id (first (:rum/args state)))
                                   (state/get-next-container-id))]
              (assoc state ::initial-container-id container-id)))}
-  [state config block _edit-input-id opts]
+  [state config block opts]
   (property-component/properties-area block
                                       (merge
                                        config
                                        {:inline-text inline-text
                                         :page-cp page-cp
                                         :block-cp blocks-container
-                                        :properties-cp db-properties-cp
-                                        :editor-box (get config :editor-box)
+                                        :editor-box (state/get-component :editor/box)
                                         :container-id (or (:container-id config)
                                                           (::initial-container-id state))
                                         :id (:id config)}
@@ -3145,7 +3144,7 @@
 
      (when (and db-based? (not collapsed?) (not table?))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
-        (db-properties-cp config block edit-input-id {:in-block-container? true})])
+        (db-properties-cp config block {:in-block-container? true})])
 
      (when-not (or (:hide-children? config) in-whiteboard? table?)
        (let [config' (-> (update config :level inc)

@@ -875,53 +875,59 @@
   [state block property v {:keys [show-tooltip?]
                            :as opts}]
   (ui/catch-error
-    (ui/block-error "Something wrong" {})
-    (let [block-cp (state/get-component :block/blocks-container)
-          opts (merge opts
-                 {:page-cp (state/get-component :block/page-cp)
-                  :inline-text (state/get-component :block/inline-text)
-                  :editor-box (state/get-component :editor/box)
-                  :block-cp block-cp
-                  :properties-cp (state/get-component :block/properties-cp)})
-          dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
-          editor-id (str dom-id "-editor")
-          schema (:block/schema property)
-          type (some-> schema (get :type :default))
-          multiple-values? (db-property/many? property)
-          v (cond
-              (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
-              v
-              multiple-values?
-              #{v}
-              (set? v)
-              (first v)
-              :else
-              v)
-          empty-value? (when (coll? v) (= :logseq.property/empty-placeholder (:db/ident (first v))))
-          closed-values? (seq (:property/closed-values property))
-          value-cp [:div.property-value-inner
-                    {:data-type type
-                     :class (str (when empty-value? "empty-value")
-                              (when-not (:other-position? opts) " w-full"))}
-                    (cond
-                      (and multiple-values? (= type :default) (not closed-values?))
-                      (property-normal-block-value block property v)
+   (ui/block-error "Something wrong" {})
+   (let [block-cp (state/get-component :block/blocks-container)
+         properties-cp (state/get-component :block/properties-cp)
+         opts (merge opts
+                     {:page-cp (state/get-component :block/page-cp)
+                      :inline-text (state/get-component :block/inline-text)
+                      :editor-box (state/get-component :editor/box)
+                      :block-cp block-cp
+                      :properties-cp :properties-cp})
+         dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
+         editor-id (str dom-id "-editor")
+         schema (:block/schema property)
+         type (some-> schema (get :type :default))
+         multiple-values? (db-property/many? property)
+         v (cond
+             (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
+             v
+             multiple-values?
+             #{v}
+             (set? v)
+             (first v)
+             :else
+             v)
+         empty-value? (when (coll? v) (= :logseq.property/empty-placeholder (:db/ident (first v))))
+         closed-values? (seq (:property/closed-values property))
+         value-cp [:div.property-value-inner
+                   {:data-type type
+                    :class (str (when empty-value? "empty-value")
+                                (when-not (:other-position? opts) " w-full"))}
+                   (cond
+                     (= (:db/ident property) :logseq.property.class/properties)
+                     (properties-cp {} block {:selected? false
+                                              :class-schema? true
+                                              :page-configure? true})
 
-                      multiple-values?
-                      (multiple-values block property opts schema)
+                     (and multiple-values? (= type :default) (not closed-values?))
+                     (property-normal-block-value block property v)
 
-                      :else
-                      (property-scalar-value block property v
-                        (merge
-                          opts
-                          {:editor-id editor-id
-                           :dom-id dom-id})))]]
-      (if show-tooltip?
-        (shui/tooltip-provider
-          (shui/tooltip
-            {:delayDuration 1200}
-            (shui/tooltip-trigger
-              {:onFocusCapture #(util/stop-propagation %)} value-cp)
-            (shui/tooltip-content
-              (str "Change " (:block/title property)))))
-        value-cp))))
+                     multiple-values?
+                     (multiple-values block property opts schema)
+
+                     :else
+                     (property-scalar-value block property v
+                                            (merge
+                                             opts
+                                             {:editor-id editor-id
+                                              :dom-id dom-id})))]]
+     (if show-tooltip?
+       (shui/tooltip-provider
+        (shui/tooltip
+         {:delayDuration 1200}
+         (shui/tooltip-trigger
+          {:onFocusCapture #(util/stop-propagation %)} value-cp)
+         (shui/tooltip-content
+          (str "Change " (:block/title property)))))
+       value-cp))))

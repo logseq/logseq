@@ -430,15 +430,14 @@
            (dnd/sortable-item (assoc sortable-opts :class "property-key col-span-2") property-key-cp')
            [:div.property-key.col-span-2 property-key-cp'])
 
-         [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
-          (when-not block? [:div.opacity-30 {:style {:margin-left 5}}
-                            [:span.bullet-container.cursor [:span.bullet]]])
-          [:div.flex.flex-1
-           (if (and (:class-schema? opts) (:page-configure? opts))
-             [:div.property-description.text-sm.opacity-70
-              (inline-text {} :markdown (db-property/property-value-content (:logseq.property/description property)))]
+         (when-not (:class-schema? opts)
+           [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
+            (when-not block?
+              [:div.opacity-30 {:style {:margin-left 5}}
+               [:span.bullet-container.cursor [:span.bullet]]])
+            [:div.flex.flex-1
              [:div.property-value.flex.flex-1
-              (pv/property-value block property v opts)])]]]))))
+              (pv/property-value block property v opts)]]])]))))
 
 (rum/defcs ordered-properties < rum/reactive
   {:init (fn [state]
