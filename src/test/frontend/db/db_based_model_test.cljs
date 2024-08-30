@@ -39,7 +39,7 @@
       ;; set class2's parent to class1
       (let [class2 (db/get-case-page "class2")]
         (db/transact! [{:db/id (:db/id class2)
-                        :class/parent (:db/id class)}]))
+                        :logseq.property/parent (:db/id class)}]))
       (test-helper/save-block! repo sbid "Block 2" {:tags ["class2"]})
       (is (= (map :db/id (model/get-class-objects repo (:db/id class)))
              [(:db/id (db/entity [:block/uuid fbid]))
@@ -76,9 +76,9 @@
         class2 (db/get-case-page "class2")
         class3 (db/get-case-page "class3")
         _ (db/transact! [{:db/id (:db/id class2)
-                          :class/parent (:db/id class1)}
+                          :logseq.property/parent (:db/id class1)}
                          {:db/id (:db/id class3)
-                          :class/parent (:db/id class2)}])]
+                          :logseq.property/parent (:db/id class2)}])]
     (is
      (= (model/get-class-children repo (:db/id (db/get-case-page "class1")))
         [(:db/id class2) (:db/id class3)]))))

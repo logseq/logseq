@@ -13,9 +13,9 @@
 
    :class-parent
    '[[(class-parent ?p ?c)
-      [?c :class/parent ?p]]
+      [?c :logseq.property/parent ?p]]
      [(class-parent ?p ?c)
-      [?t :class/parent ?p]
+      [?t :logseq.property/parent ?p]
       (class-parent ?t ?c)]]
 
    :alias

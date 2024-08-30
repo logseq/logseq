@@ -87,7 +87,7 @@
     (let [conn (d/conn-from-db empty-db)
           tx-data [[:db/add 62 :block/uuid #uuid "66856a29-6eb3-4122-af97-8580a853c6a6" 536870954]
                    [:db/add 62 :block/updated-at 1720019497643 536870954]
-                   [:db/add 62 :class/parent 4 536870954]
+                   [:db/add 62 :logseq.property/parent 4 536870954]
                    [:db/add 62 :block/created-at 1720019497643 536870954]
                    [:db/add 62 :block/format :markdown 536870954]
                    [:db/add 62 :db/ident :user.class/zzz 536870954]

@@ -242,7 +242,7 @@
 
 (def class-attrs
   [[:db/ident class-ident]
-   [:class/parent {:optional true} :int]
+   [:logseq.property/parent {:optional true} :int]
    [:class/schema.properties {:optional true} [:set :int]]])
 
 (def class-page

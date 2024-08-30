@@ -205,7 +205,7 @@
                              (when-let [props (not-empty (:build/properties class-m))]
                                (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) uuid-maps all-idents))
                              (when class-parent
-                               {:class/parent
+                               {:logseq.property/parent
                                 (or (class-db-ids class-parent)
                                     (throw (ex-info (str "No :db/id for " class-parent) {})))})
                              (when schema-properties

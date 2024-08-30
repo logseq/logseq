@@ -38,6 +38,10 @@
                                    :cardinality :many
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
+   :logseq.property/parent {:title "Parent"
+                            :schema {:type :node
+                                     :public? true
+                                     :view-context :page}}
    :logseq.property/page-tags {:title "pageTags"
                                :schema {:type :node
                                         :public? true

@@ -34,7 +34,7 @@
                       options)]
     (shui/select
      {:on-value-change on-select
-      :default-value (:block/uuid (:class/parent page))}
+      :default-value (:block/uuid (:logseq.property/parent page))}
      (shui/select-trigger
       {:class "!px-2 !py-0 !h-8 !border-none"}
       (shui/select-value
@@ -53,11 +53,11 @@
                                      (db/transact!
                                       repo
                                       [{:db/id (:db/id page)
-                                        :class/parent [:block/uuid value]}]
+                                        :logseq.property/parent [:block/uuid value]}]
                                       {:outliner-op :save-block})
                                      (db/transact!
                                       repo
-                                      [[:db.fn/retractAttribute (:db/id page) :class/parent]]
+                                      [[:db.fn/retractAttribute (:db/id page) :logseq.property/parent]]
                                       {:outliner-op :save-block}))))))
 
 (rum/defcs configure < rum/reactive db-mixins/query
@@ -70,24 +70,25 @@
       [:div.property-configure.grid.gap-2
        (when show-title? [:h1.title.mb-4 "Configure tag"])
 
-       (when-not (= (:db/ident page) :logseq.class/Root)
-         [:div.grid.grid-cols-5.gap-1.items-center.class-parent
-          [:div.col-span-2 "Parent tag:"]
-          (if config/publishing?
-            [:div.col-span-3
-             (if-let [parent-class (some-> (:db/id (:class/parent page))
-                                           db/entity)]
-               [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid parent-class))}
-                (:block/title parent-class)]
-               "None")]
-            [:div.col-span-3
-             (let [parent (some-> (:db/id (:class/parent page))
-                                  db/entity)]
-               (page-parent page parent))])])
+       (comment
+         (when-not (= (:db/ident page) :logseq.class/Root)
+           [:div.grid.grid-cols-5.gap-1.items-center.class-parent
+            [:div.col-span-2 "Parent tag:"]
+            (if config/publishing?
+              [:div.col-span-3
+               (if-let [parent-class (some-> (:db/id (:logseq.property/parent page))
+                                             db/entity)]
+                 [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid parent-class))}
+                  (:block/title parent-class)]
+                 "None")]
+              [:div.col-span-3
+               (let [parent (some-> (:db/id (:logseq.property/parent page))
+                                    db/entity)]
+                 (page-parent page parent))])]))
 
-       (when (:class/parent page)
+       (when (:logseq.property/parent page)
          (let [ancestor-pages (loop [parents [page]]
-                                (if-let [parent (:class/parent (last parents))]
+                                (if-let [parent (:logseq.property/parent (last parents))]
                                   (recur (conj parents parent))
                                   parents))
                class-ancestors (reverse ancestor-pages)]

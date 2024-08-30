@@ -117,7 +117,7 @@
                   {:block/type "class"
                    :block/format :markdown})
      (not= (:db/ident block) :logseq.class/Root)
-     (assoc :class/parent :logseq.class/Root))))
+     (assoc :logseq.property/parent :logseq.class/Root))))
 
 (defn build-new-page
   "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"

@@ -46,7 +46,7 @@
     ;; TODO: remove this in later releases
     :block/heading-level
     :block/file
-    :class/parent
+    :logseq.property/parent
     {:block/page [:db/id :block/name :block/title :block/journal-day]}
     {:block/_parent ...}])
 
@@ -572,14 +572,14 @@
 (defn get-class-parents
   [class]
   (let [*classes (atom #{})]
-    (when-let [parent (:class/parent class)]
+    (when-let [parent (:logseq.property/parent class)]
       (loop [current-parent parent]
         (when (and
                current-parent
                (class? parent)
                (not (contains? @*classes (:db/id parent))))
           (swap! *classes conj (:db/id current-parent))
-          (recur (:class/parent current-parent)))))
+          (recur (:logseq.property/parent current-parent)))))
     @*classes))
 
 (defn get-all-pages-views

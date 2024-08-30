@@ -554,7 +554,7 @@
               (seq parent-classes-from-properties)
               (merge (find-or-create-class db (:block/title block) (:all-idents import-state)))
               (seq parent-classes-from-properties)
-              (assoc :class/parent
+              (assoc :logseq.property/parent
                      (let [new-class (first parent-classes-from-properties)
                            class-m (find-or-create-class db new-class (:all-idents import-state))]
                        (when (> (count parent-classes-from-properties) 1)
@@ -707,7 +707,7 @@
                            (let [;; These attributes are not allowed to be transacted because they must not change across files
                                  disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                                         :block/created-at :block/updated-at]
-                                 allowed-attributes (into [:block/tags :block/alias :class/parent :block/type :db/ident]
+                                 allowed-attributes (into [:block/tags :block/alias :logseq.property/parent :block/type :db/ident]
                                                           (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                                                 m))
                                  block-changes (cond-> (select-keys m allowed-attributes)
