@@ -17,6 +17,17 @@
    (take 4 c.m/delays)
    (m/sp
      (let [conn (helper/get-downloaded-test-conn)
-           page (d/entity @conn [:block/uuid const/page1-uuid])]
-       (when-not page
-         (throw (ex-info "wait page1 synced" {:missionary/retry true})))))))
+           page1 (d/pull @conn '[*] [:block/uuid const/page1-uuid])
+           block1 (d/pull @conn '[*] [:block/uuid const/block1-uuid])]
+       (when-not (:block/uuid page1)
+         (throw (ex-info "wait page1 synced" {:missionary/retry true})))
+       (is
+        (= {:block/title "basic-edits-test"
+            :block/name "basic-edits-test"
+            :block/type "page"}
+           (select-keys page1 [:block/title :block/name :block/type])))
+       (is
+        (= {:block/title "block1"
+            :block/order "a0"
+            :block/parent {:db/id (:db/id page1)}}
+           (select-keys block1 [:block/title :block/order :block/parent])))))))
