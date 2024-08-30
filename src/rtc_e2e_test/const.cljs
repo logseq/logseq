@@ -16,9 +16,9 @@
 (def downloaded-test-repo "logseq_db_TEST-REPO-downloaded")
 
 ;;; tests data
-(def page1-uuid (random-uuid))
+(def page1-uuid #uuid "c051d36f-98b3-4afb-b52a-d5a06bd8591d")
 
-(def block1-uuid (random-uuid))
+(def block1-uuid #uuid "aa6d5e60-5d3a-4468-812f-bd60dc9639fb")
 
 (def tx-data-map
   {:create-page
