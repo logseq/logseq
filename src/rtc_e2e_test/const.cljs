@@ -16,21 +16,21 @@
 (def downloaded-test-repo "logseq_db_TEST-REPO-downloaded")
 
 ;;; tests data
-(def page-uuid1 (random-uuid))
+(def page1-uuid (random-uuid))
 
-(def block-uuid1 (random-uuid))
+(def block1-uuid (random-uuid))
 
 (def tx-data-map
   {:create-page
    [{:db/id "page"
      :block/name "basic-edits-test"
      :block/title "basic-edits-test"
-     :block/uuid page-uuid1
+     :block/uuid page1-uuid
      :block/created-at 1724836490809
      :block/updated-at 1724836490809
      :block/type "page"
      :block/format :markdown}
-    {:block/uuid block-uuid1
+    {:block/uuid block1-uuid
      :block/updated-at 1724836490810
      :block/created-at 1724836490810
      :block/format :markdown

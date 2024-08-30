@@ -1,5 +1,6 @@
 (ns basic-edits-test
   (:require [client1-edits]
+            [client2-edits]
             [cljs.test :as t :refer [deftest testing]]
             [const]
             [fixture]
@@ -21,11 +22,14 @@
       (m/sp
         (testing "create page first"
           (client1-edits/step1--create-page))
-        (testing "start rtc on repo"
-          (m/? (client1-edits/step2--task-start-rtc)))
-        (testing "waiting for :create-page synced"
-          (m/? (client1-edits/step3--task-wait-:create-page-synced)))
+        (testing "start rtc for client1"
+          (m/? client1-edits/step2--task-start-rtc))
+        (testing "wait page1 synced"
+          (m/? client1-edits/step3--task-wait-page1-synced))
         (done))
       (m/sp
-        (testing "TODO: client2 cases")
+        (testing "start rtc for client2"
+          (m/? client2-edits/step1--task-start-rtc))
+        (testing "wait page1 synced from client1"
+          (m/? client2-edits/step2--task-wait-page1-synced))
         (done))))))
