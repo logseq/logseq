@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [range])
   (:require-macros [hiccups.core])
   (:require ["/frontend/utils" :as utils]
+            [goog.functions :refer [debounce]]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [cljs.reader :as reader]
@@ -3618,8 +3619,10 @@
                                     {:top? top?
                                      :bottom? bottom?})))
         virtualized? (and virtualized? (seq blocks))
+        *virtualized-ref (rum/use-ref nil)
         virtual-opts (when virtualized?
-                       {:custom-scroll-parent (gdom/getElement "main-content-container")
+                       {:ref *virtualized-ref
+                        :custom-scroll-parent (gdom/getElement "main-content-container")
                         :compute-item-key (fn [idx]
                                             (let [block (nth blocks idx)]
                                               (str (:container-id config) "-" (:db/id block))))
@@ -3634,9 +3637,32 @@
                                           (block-item (assoc config :top? top?)
                                                       block
                                                       {:top? top?
-                                                       :bottom? bottom?})))})]
+                                                       :bottom? bottom?})))})
+        *wrap-ref (rum/use-ref nil)]
+
+    (rum/use-effect!
+      (fn []
+        ;; Try to fix virtuoso scrollable container blink for the block insertion at bottom
+        (when virtualized?
+          (let [^js *ob (volatile! nil)]
+            (js/setTimeout
+              (fn []
+                (when-let [_inst (rum/deref *virtualized-ref)]
+                  (when-let [^js target (.-firstElementChild (rum/deref *wrap-ref))]
+                    (let [set-wrap-h! #(set! (.-height (.-style (rum/deref *wrap-ref))) %)
+                          set-wrap-h! (debounce set-wrap-h! 16)
+                          ob (js/ResizeObserver.
+                               (fn []
+                                 (when-let [h (.-height (.-style target))]
+                                   ;(prn "==>> debug: " h)
+                                   (set-wrap-h! h))))]
+                      (.observe ob target))))))
+            #(some-> @*ob (.disconnect)))))
+      [])
+
     [:div.blocks-list-wrap
-     {:data-level (or (:level config) 0)}
+     {:data-level (or (:level config) 0)
+      :ref *wrap-ref}
      (cond
        virtualized?
        (ui/virtualized-list virtual-opts)
