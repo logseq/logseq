@@ -883,7 +883,10 @@
 
 (defn get-elem-idx
   [nodes node]
-  (first (filter number? (map-indexed (fn [idx b] (when (= node b) idx)) nodes))))
+  (let [equal? (fn [^js a ^js b]
+                 (or (some-> b (= a))
+                   (and a b (= (.-id a) (.-id b)))))]
+    (first (filter number? (map-indexed (fn [idx b] (when (equal? b node) idx)) nodes)))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed
