@@ -1,5 +1,6 @@
 (ns const
-  "Consts for rtc e2e tests")
+  "Consts for rtc e2e tests"
+  (:require [logseq.db.frontend.order :as db-order]))
 
 (assert (exists? js/__karma__))
 (def seed js/__karma__.config.seed)
@@ -17,6 +18,7 @@
 
 ;;; tests data
 (def page1-uuid #uuid "c051d36f-98b3-4afb-b52a-d5a06bd8591d")
+(def page2-uuid #uuid "91d3e320-d2a6-47ae-96a7-8a366ab96cbb")
 
 (def block1-uuid #uuid "aa6d5e60-5d3a-4468-812f-bd60dc9639fb")
 
@@ -37,4 +39,23 @@
      :block/title "block1"
      :block/parent "page"
      :block/order "a0"
-     :block/page "page"}]})
+     :block/page "page"}]
+   :insert-300-blocks
+   (cons {:db/id "page"
+          :block/uuid page2-uuid
+          :block/name "insert-400-blocks"
+          :block/title "insert-400-blocks"
+          :block/created-at 1725024677501
+          :block/updated-at 1725024677501
+          :block/type "page"
+          :block/format :markdown}
+         (map (fn [i order]
+                {:block/uuid (random-uuid)
+                 :block/created-at 1725024677501
+                 :block/updated-at 1725024677501
+                 :block/format :markdown
+                 :block/title (str "x" i)
+                 :block/parent "page"
+                 :block/order order
+                 :block/page "page"})
+              (range 300) (db-order/gen-n-keys 300 "a0" "a1")))})

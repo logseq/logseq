@@ -34,13 +34,28 @@
     (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
       (is (nil? r)))))
 
-(def step3--task-wait-page1-synced
+(def step3--task-wait-page1-to-remote
   (m/sp
     (let [r (m/? (m/timeout
                   (m/reduce (fn [_ v]
                               (when (and (= :rtc.log/push-local-update (:type v))
                                          (empty? (client-op/get-all-ops const/downloaded-test-repo)))
+                                (is (nil? (:ex-data v)))
                                 (reduced v)))
                             rtc-log-and-state/rtc-log-flow)
                   6000 :timeout))]
       (is (not= :timeout r)))))
+
+(def step4--task-insert-300-blocks-to-remote
+  (m/sp
+    (let [conn (helper/get-downloaded-test-conn)]
+      (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
+        (d/transact! conn (const/tx-data-map :insert-300-blocks)))
+      (m/? (m/timeout
+            (m/reduce (fn [_ v]
+                        (when (and (= :rtc.log/push-local-update (:type v))
+                                   (empty? (client-op/get-all-ops const/downloaded-test-repo)))
+                          (is (nil? (:ex-data v)))
+                          (reduced v)))
+                      rtc-log-and-state/rtc-log-flow)
+            10000 :timeout)))))

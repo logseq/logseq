@@ -25,7 +25,9 @@
         (testing "start rtc for client1"
           (m/? client1-edits/step2--task-start-rtc))
         (testing "wait page1 synced"
-          (m/? client1-edits/step3--task-wait-page1-synced))
+          (m/? client1-edits/step3--task-wait-page1-to-remote))
+        (testing "insert 300 blocks"
+          (m/? client1-edits/step4--task-insert-300-blocks-to-remote))
         (done))
       (m/sp
         (testing "start rtc for client2"
