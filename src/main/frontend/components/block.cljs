@@ -2390,14 +2390,13 @@
                        (remove (fn [t] (= (:db/ident t) :logseq.class/Task)) tags')
                        tags')]
       (when (seq block-tags)
-        [:div.block-tags.flex.flex-row.flex-wrap.items-center.gap-1
+        [:div.block-tags
          (for [tag block-tags]
-           [:span.h-6
-            (rum/with-key
-              (page-cp (assoc config
+           [:div.block-tag
+            {:key (str "tag-" (:db/id tag))}
+            (page-cp (assoc config
                               :tag? true
-                              :disable-preview? true) tag)
-              (str "tag-" (:db/id tag)))])]))))
+                              :disable-preview? true) tag)])]))))
 
 (rum/defc block-positioned-properties
   [config block position]
