@@ -284,6 +284,15 @@
                                                (pr-str (->> res first (d/entity db) :block/tags first :block/title)))
                                  :type :warning}})))))
 
+(defn ^:api validate-built-in-pages
+  "Validates built-in pages shouldn't be modified"
+  [entity]
+  (when (ldb/built-in? entity)
+    (throw (ex-info "Rename built-in pages"
+                    {:type :notification
+                     :payload {:message "Built-in pages can't be edited"
+                               :type :warning}}))))
+
 (extend-type Entity
   otree/INode
   (-save [this txs-state conn repo _date-formatter {:keys [retract-attributes? retract-attributes]
@@ -327,6 +336,7 @@
                        (and (or (ldb/page? block-entity) (seq (:block/tags block-entity)))
                             (:block/title m*)
                             (not= (:block/title m*) (:block/title block-entity))))
+              (validate-built-in-pages block-entity)
               (validate-unique-by-name-tag-and-block-type db (:block/title m*) block-entity))
           m (cond-> m*
               db-based?
