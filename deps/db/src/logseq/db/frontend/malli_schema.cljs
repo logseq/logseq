@@ -114,6 +114,9 @@
    (fn [ent]
      (reduce (fn [m [k v]]
                (if-let [property (and (db-property/property? k)
+                                      ;; This allows block types like property-value-block to require properties in
+                                      ;; their schema that they depend on
+                                      (not= :logseq.property/created-from-property k)
                                       (d/entity db k))]
                  (update m :block/properties (fnil conj [])
                          ;; use explicit call to be nbb compatible
@@ -331,6 +334,7 @@
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
+   [:logseq.property/created-from-property {:optional true} :int]
     ;; other
    [:block/collapsed? {:optional true} :boolean]])
 
@@ -351,8 +355,9 @@
   (vec
    (concat
     [:map]
-    [[:property.value/content [:or :string :double :boolean]]]
-    (remove #(#{:block/title} (first %)) block-attrs)
+    [[:property.value/content [:or :string :double :boolean]]
+     [:logseq.property/created-from-property :int]]
+    (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def closed-value-block*
@@ -364,8 +369,9 @@
      [:db/ident {:optional true} logseq-property-ident]
      [:block/title {:optional true} :string]
      [:property.value/content {:optional true} [:or :string :double]]
-     [:block/closed-value-property {:optional true} [:set :int]] ]
-    (remove #(#{:block/title} (first %)) block-attrs)
+     [:logseq.property/created-from-property :int]
+     [:block/closed-value-property {:optional true} [:set :int]]]
+    (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def closed-value-block
