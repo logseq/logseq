@@ -881,12 +881,13 @@
          (when section
            (gdom/getElement section "id"))))))
 
-(defn get-elem-idx
-  [nodes node]
-  (let [equal? (fn [^js a ^js b]
-                 (or (some-> b (= a))
-                   (and a b (= (.-id a) (.-id b)))))]
-    (first (filter number? (map-indexed (fn [idx b] (when (equal? b node) idx)) nodes)))))
+#?(:cljs
+   (defn get-elem-idx
+     [nodes node]
+     (let [equal? (fn [^js a ^js b]
+                    (or (some-> b (= a))
+                        (and a b (= (.-id a) (.-id b)))))]
+       (first (filter number? (map-indexed (fn [idx b] (when (equal? b node) idx)) nodes))))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed
