@@ -326,8 +326,13 @@
                                    (sort-remote-ops
                                     block-uuid->remote-ops))]
           (let [local-tx (client-op/get-local-tx repo)
-                r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
-                                                              :ops ops-for-remote :t-before (or local-tx 1)}))]
+                r (try
+                    (m/? (ws-util/send&recv get-ws-create-task
+                                            {:action "apply-ops" :graph-uuid graph-uuid
+                                             :ops ops-for-remote :t-before (or local-tx 1)}))
+                    (catch :default e
+                      (rollback repo block-ops-map-coll)
+                      (throw e)))]
             (if-let [remote-ex (:ex-data r)]
               (do (add-log-fn :rtc.log/push-local-update remote-ex)
                   (case (:type remote-ex)
