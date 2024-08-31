@@ -43,8 +43,8 @@
    :insert-300-blocks
    (cons {:db/id "page"
           :block/uuid page2-uuid
-          :block/name "insert-400-blocks"
-          :block/title "insert-400-blocks"
+          :block/name "insert-300-blocks"
+          :block/title "insert-300-blocks"
           :block/created-at 1725024677501
           :block/updated-at 1725024677501
           :block/type "page"
