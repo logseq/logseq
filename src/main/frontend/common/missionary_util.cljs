@@ -60,6 +60,10 @@
   [task key & {:keys [succ fail]}]
   (task (or succ #(prn key :succ %)) (or fail #(js/console.log key %))))
 
+(defn run-task-throw
+  [task key & {:keys [succ]}]
+  (task (or succ #(prn key :succ %)) #(throw (ex-info "task failed" {:key key :e %}))))
+
 (comment
   (defn >!
     "Return a task that
