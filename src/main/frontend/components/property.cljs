@@ -377,14 +377,15 @@
 
 (rum/defcs new-property < rum/reactive
   [state block opts]
-  (when (and (:page-configure? opts) (not config/publishing?))
-    [:div.ls-new-property
-     [:a.fade-link.flex.add-property
-      {:on-click (fn []
+  (when (and (not config/publishing?) (:page-configure? opts))
+    [:div.ls-new-property {:style {:margin-left 6 :margin-top 1}}
+     [:a.fade-link.flex
+      {:tab-index 0
+       :on-click (fn []
                    (state/pub-event! [:editor/new-property (merge opts {:block block})]))}
       [:div.flex.flex-row.items-center
-       (ui/icon "plus" {:size 15})
-       [:div.ml-1.text-sm "Add property"]]]]))
+       (ui/icon "plus" {:size 16})
+       [:div.ml-1 "Add property"]]]]))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
@@ -432,7 +433,7 @@
 
          (when-not (:class-schema? opts)
            [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
-            (when-not block?
+            (when-not (or block? (= (:db/ident property) :logseq.property.class/properties))
               [:div.opacity-30 {:style {:margin-left 5}}
                [:span.bullet-container.cursor [:span.bullet]]])
             [:div.flex.flex-1
