@@ -5,6 +5,9 @@
             [malli.transform :as mt]
             [malli.util :as mu]))
 
+(goog-define RTC-E2E-TEST* false)
+(def RTC-E2E-TEST RTC-E2E-TEST*)
+
 (def block-pos-schema
   [:catn
    [:parent-uuid [:maybe :uuid]]
@@ -256,4 +259,7 @@
 (def data-to-ws-encoder (m/encoder data-to-ws-schema (mt/transformer
                                                       mt/string-transformer
                                                       (mt/key-transformer {:encode m/-keyword->string}))))
-(def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer nil #(m/-fail! ::data-to-ws-schema %)))
+(def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer nil
+                                   #(do
+                                      (prn ::data-to-ws-schema %)
+                                      (m/-fail! ::data-to-ws-schema %))))

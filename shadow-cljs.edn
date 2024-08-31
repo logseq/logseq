@@ -3,7 +3,8 @@
  :nrepl {:port 8701}
 
  ;; "." for /static
- :dev-http {3001 ["static" "."]}
+ :dev-http {3001 ["static" "."]
+            8021 "static/rtc-e2e-test"}
 
  :js-options {:js-package-dirs ["node_modules" "packages/tldraw/apps"]}
 
@@ -87,6 +88,14 @@
          ;; disable :static-fns to allow for with-redefs and repl development
          :compiler-options {:static-fns false}
          :main frontend.test.frontend-node-test-runner/main}
+
+  :rtc-e2e-test {:target :karma
+                 :closure-defines {frontend.worker.rtc.const/RTC-E2E-TEST* true}
+                 :output-to "static/rtc-e2e-test/main.js"
+                 :devtools {:enabled true}
+                 :compiler-options {:source-map true
+                                    :warnings {:fn-deprecated false
+                                               :redef false}}}
 
   :gen-malli-kondo-config {:target :node-script
                            :closure-defines {frontend.util/NODETEST true}
