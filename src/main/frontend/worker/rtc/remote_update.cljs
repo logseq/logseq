@@ -551,9 +551,13 @@
               update-ops (vals update-ops-map)
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
-
+          (when rtc-const/RTC-E2E-TEST
+            (prn :debug-remote-update-data remote-update-data))
           (js/console.groupCollapsed "rtc/apply-remote-ops-log")
-          (batch-tx/with-batch-tx-mode conn {:rtc-tx? true :persist-op? false :gen-undo-ops? false}
+          (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
+                                             :persist-op? false
+                                             :gen-undo-ops? false
+                                             :skip-store-conn rtc-const/RTC-E2E-TEST}
             (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo conn refed-blocks))
             (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
             (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))

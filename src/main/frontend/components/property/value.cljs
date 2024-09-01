@@ -28,7 +28,8 @@
             [dommy.core :as d]
             [frontend.search :as search]
             [goog.functions :refer [debounce]]
-            [frontend.handler.route :as route-handler]))
+            [frontend.handler.route :as route-handler]
+            [frontend.components.title :as title]))
 
 (rum/defc property-empty-btn-value
   [& {:as opts}]
@@ -404,7 +405,7 @@
         options (map (fn [node]
                        (let [id (or (:value node) (:db/id node))
                              label (if (integer? id)
-                                     (let [title (subs (:block/title node) 0 256)
+                                     (let [title (subs (title/block-unique-title node) 0 256)
                                            node (or (db/entity id) node)
                                            icon (get-node-icon node)]
                                        [:div.flex.flex-row.items-center.gap-1
@@ -675,22 +676,23 @@
                             (shui/button {:variant :ghost
                                           :size :sm
                                           :class "px-0 py-0 h-4"}
-                              (ui/icon "edit" {:size 14})))])]
+                                         (ui/icon "edit" {:size 14})))])]
     [:div.select-item.cursor-pointer
      (cond
        (= value :logseq.property/empty-placeholder)
        (property-empty-btn-value)
 
        (or (ldb/page? value)
-         (and (seq (:block/tags value))
-           ;; FIXME: page-cp should be renamed to node-cp and
-           ;; support this case and maybe other complex cases.
-           (not (string/includes? (:block/title value) "[["))))
+           (and (seq (:block/tags value))
+                ;; FIXME: page-cp should be renamed to node-cp and
+                ;; support this case and maybe other complex cases.
+                (not (string/includes? (:block/title value) "[["))))
        (when value
          (rum/with-key
            (page-cp {:disable-preview? true
                      :tag? tag?
                      :hide-close-button? true
+                     :show-unique-title? true
                      :meta-click? other-position?} value)
            (:db/id value)))
 

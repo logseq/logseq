@@ -39,7 +39,8 @@
   logseq/shui                           {:local/root "deps/shui"}
   metosin/malli                         {:mvn/version "0.16.1"}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
-  missionary/missionary                 {:mvn/version "b.39"}}
+  missionary/missionary                 {:mvn/version "b.39"}
+  meander/epsilon                       {:mvn/version "0.0.650"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.132"}
@@ -57,6 +58,11 @@
                                 tortue/spy                       {:mvn/version "2.14.0"}
                                 cider/cider-nrepl                {:mvn/version "0.47.0"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
+
+           :rtc-e2e-test {:extra-paths ["src/rtc_e2e_test"]
+                          :extra-deps {org.clojure/clojurescript        {:mvn/version "1.11.132"}
+                                       cider/cider-nrepl                {:mvn/version "0.47.0"}}
+                          :main-opts ["-m" "shadow.cljs.devtools.cli"]}
 
            :bench {:extra-paths ["src/bench/"]
                    :extra-deps {olical/cljs-test-runner {:mvn/version "3.8.0"}

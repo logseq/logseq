@@ -64,6 +64,7 @@
              frontend.components.query.result query-result
              frontend.components.class class-component
              frontend.components.property property-component
+             frontend.components.title title
              frontend.common.date common-date
              frontend.common.file.core common-file
              frontend.common.file.util wfu
