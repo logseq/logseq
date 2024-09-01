@@ -3070,74 +3070,75 @@
      (when (and top? (not table?))
        (dnd-separator-wrapper block children block-id slide? true false))
 
-     [:div.block-main-container.flex.flex-row.pr-2.gap-1
-      {:data-has-heading (some-> block :block/properties (pu/lookup :logseq.property/heading))
-       :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
-       :on-touch-move (fn [event]
-                        (block-handler/on-touch-move event block uuid editing? *show-left-menu? *show-right-menu?))
-       :on-touch-end (fn [event]
-                       (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
-       :on-touch-cancel (fn [_e]
-                          (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
-       :on-mouse-enter (fn [e]
-                         (block-mouse-over e *control-show? block-id doc-mode?))
-       :on-mouse-leave (fn [e]
-                         (block-mouse-leave e *control-show? block-id doc-mode?))}
+     (when-not (:hide-title? config)
+       [:div.block-main-container.flex.flex-row.pr-2.gap-1
+        {:data-has-heading (some-> block :block/properties (pu/lookup :logseq.property/heading))
+         :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
+         :on-touch-move (fn [event]
+                          (block-handler/on-touch-move event block uuid editing? *show-left-menu? *show-right-menu?))
+         :on-touch-end (fn [event]
+                         (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
+         :on-touch-cancel (fn [_e]
+                            (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
+         :on-mouse-enter (fn [e]
+                           (block-mouse-over e *control-show? block-id doc-mode?))
+         :on-mouse-leave (fn [e]
+                           (block-mouse-leave e *control-show? block-id doc-mode?))}
 
-      (when (and (not slide?) (not in-whiteboard?) (not table?)
-                 (not (:page-title? config)))
-        (let [edit? (or editing?
-                        (= uuid (:block/uuid (state/get-edit-block))))]
-          (block-control config block
-                         {:uuid uuid
-                          :block-id block-id
-                          :collapsed? collapsed?
-                          :*control-show? *control-show?
-                          :edit? edit?})))
+        (when (and (not slide?) (not in-whiteboard?) (not table?)
+                   (not (:page-title? config)))
+          (let [edit? (or editing?
+                          (= uuid (:block/uuid (state/get-edit-block))))]
+            (block-control config block
+                           {:uuid uuid
+                            :block-id block-id
+                            :collapsed? collapsed?
+                            :*control-show? *control-show?
+                            :edit? edit?})))
 
-      (when (and @*show-left-menu? (not in-whiteboard?) (not table?))
-        (block-left-menu config block))
+        (when (and @*show-left-menu? (not in-whiteboard?) (not table?))
+          (block-left-menu config block))
 
-      (let [icon' (get block (pu/get-pid :logseq.property/icon))]
-        (when-let [icon (and (ldb/page? block)
-                          (or icon'
-                            (or (when (ldb/class? block)
-                                  {:type :tabler-icon
-                                   :id "hash"})
-                              (when (ldb/property? block)
-                                {:type :tabler-icon
-                                 :id "letter-p"}))))]
-          [:div.flex.items-center.page-icon
-           (icon-component/icon-picker icon
-             {:on-chosen (fn [_e icon]
-                           (if icon
-                             (db-property-handler/set-block-property!
-                               (:db/id block)
-                               (pu/get-pid :logseq.property/icon)
-                               (select-keys icon [:id :type :color]))
+        (let [icon' (get block (pu/get-pid :logseq.property/icon))]
+          (when-let [icon (and (ldb/page? block)
+                               (or icon'
+                                   (or (when (ldb/class? block)
+                                         {:type :tabler-icon
+                                          :id "hash"})
+                                       (when (ldb/property? block)
+                                         {:type :tabler-icon
+                                          :id "letter-p"}))))]
+            [:div.flex.items-center.page-icon
+             (icon-component/icon-picker icon
+                                         {:on-chosen (fn [_e icon]
+                                                       (if icon
+                                                         (db-property-handler/set-block-property!
+                                                          (:db/id block)
+                                                          (pu/get-pid :logseq.property/icon)
+                                                          (select-keys icon [:id :type :color]))
                              ;; del
-                             (db-property-handler/remove-block-property!
-                               (:db/id block)
-                               (pu/get-pid :logseq.property/icon))))
-              :del-btn? (boolean icon')
-              :icon-props {:size (if (:page-title? config) 38 18)}})]))
+                                                         (db-property-handler/remove-block-property!
+                                                          (:db/id block)
+                                                          (pu/get-pid :logseq.property/icon))))
+                                          :del-btn? (boolean icon')
+                                          :icon-props {:size (if (:page-title? config) 38 18)}})]))
 
-      (if whiteboard-block?
-        (block-reference {} (str uuid) nil)
+        (if whiteboard-block?
+          (block-reference {} (str uuid) nil)
         ;; Not embed self
-        [:div.flex.flex-col.w-full
-         (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? title))
-               hide-block-refs-count? (or (and (:embed? config)
-                                               (= (:block/uuid block) (:embed-id config)))
-                                          table?)]
-           (block-content-or-editor config block
-                                    {:edit-input-id edit-input-id
-                                     :block-id block-id
-                                     :edit? editing?
-                                     :hide-block-refs-count? hide-block-refs-count?}))])
+          [:div.flex.flex-col.w-full
+           (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? title))
+                 hide-block-refs-count? (or (and (:embed? config)
+                                                 (= (:block/uuid block) (:embed-id config)))
+                                            table?)]
+             (block-content-or-editor config block
+                                      {:edit-input-id edit-input-id
+                                       :block-id block-id
+                                       :edit? editing?
+                                       :hide-block-refs-count? hide-block-refs-count?}))])
 
-      (when (and @*show-right-menu? (not in-whiteboard?) (not table?))
-        (block-right-menu config block editing?))]
+        (when (and @*show-right-menu? (not in-whiteboard?) (not table?))
+          (block-right-menu config block editing?))])
 
      (when (and db-based? (not table?))
        (block-positioned-properties config block :block-below))
