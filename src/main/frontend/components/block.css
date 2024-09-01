@@ -873,3 +873,17 @@ html.is-mac {
     max-width: 160px;
     text-overflow: ellipsis;
 }
+
+.block-content-wrapper svg {
+    width: 20px;
+    height: 20px;
+}
+
+.ls-page-title .ls-page-icon svg, .ls-page-title .positioned-properties svg, .ls-page-title .ls-page-icon button {
+    width: 38px;
+    height: 38px;
+}
+
+.ls-page-title .ls-page-icon button {
+    margin-top: 8px;
+}

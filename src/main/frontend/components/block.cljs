@@ -2395,8 +2395,9 @@
            [:div.block-tag
             {:key (str "tag-" (:db/id tag))}
             (page-cp (assoc config
-                              :tag? true
-                              :disable-preview? true) tag)])]))))
+                            :hide-icon? true
+                            :tag? true
+                            :disable-preview? true) tag)])]))))
 
 (rum/defc block-positioned-properties
   [config block position]
@@ -2420,7 +2421,6 @@
                 [:div.select-none ":"]]
                (pv/property-value block property v opts)]))]
          [:div.positioned-properties.right-align.flex.flex-row.gap-1.select-none
-          {:class (if (:page-title? config) "items-center" "items-start")}
           (for [pid properties]
             (when-let [property (db/entity pid)]
               (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
@@ -3108,7 +3108,7 @@
                                        (when (ldb/property? block)
                                          {:type :tabler-icon
                                           :id "letter-p"}))))]
-            [:div.flex.items-center.page-icon
+            [:div.ls-page-icon.flex.self-start
              (icon-component/icon-picker icon
                                          {:on-chosen (fn [_e icon]
                                                        (if icon
@@ -3121,11 +3121,13 @@
                                                           (:db/id block)
                                                           (pu/get-pid :logseq.property/icon))))
                                           :del-btn? (boolean icon')
-                                          :icon-props {:size (if (:page-title? config) 38 18)}})]))
+                                          :icon-props {:style {:width "1lh"
+                                                               :height "1lh"
+                                                               :font-size (if (:page-title? config) 38 18)}}})]))
 
         (if whiteboard-block?
           (block-reference {} (str uuid) nil)
-        ;; Not embed self
+          ;; Not embed self
           [:div.flex.flex-col.w-full
            (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? title))
                  hide-block-refs-count? (or (and (:embed? config)
