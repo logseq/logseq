@@ -256,16 +256,18 @@
                       (shui/popup-hide!))}))))
 
 (defn- <create-page-if-not-exists!
-  [property classes page]
+  [block property classes page]
   (let [page* (string/trim page)
         ;; inline-class is only for input from :transform-fn
         [page inline-class] (if (and (seq classes) (not (contains? db-property/db-attribute-properties (:db/ident property))))
                               (or (seq (map string/trim (rest (re-find #"(.*)#(.*)$" page*))))
-                                [page* nil])
+                                  [page* nil])
                               [page* nil])
         page-entity (ldb/get-case-page (db/get-db) page)
         id (:db/id page-entity)
-        class? (= :block/tags (:db/ident property))
+        class? (or (= :block/tags (:db/ident property))
+                   (and (= :logseq.property/parent (:db/ident property))
+                        (ldb/class? block)))
         ;; Note: property and other types shouldn't be converted to class
         page? (= "page" (:block/type page-entity))]
     (cond
@@ -274,8 +276,8 @@
       (let [inline-class-uuid
             (when inline-class
               (or (:block/uuid (ldb/get-case-page (db/get-db) inline-class))
-                (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
-                  nil)))
+                  (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
+                      nil)))
             create-options {:redirect? false
                             :create-first-block? false
                             :tags (if inline-class-uuid
@@ -440,7 +442,7 @@
                               (p/let [[id new?] (if (integer? chosen)
                                                   [chosen false]
                                                   (when-not (string/blank? (string/trim chosen))
-                                                    (p/let [result (<create-page-if-not-exists! property classes' chosen)]
+                                                    (p/let [result (<create-page-if-not-exists! block property classes' chosen)]
                                                       [result true])))
                                       _ (when (and (integer? id) (not (ldb/page? (db/entity id))))
                                           (db-async/<get-block repo id))]

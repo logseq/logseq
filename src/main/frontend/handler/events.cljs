@@ -844,11 +844,10 @@
   (persist-db/export-current-graph! {:succ-notification? true}))
 
 (defmethod handle :class/configure [[_ page]]
-  ;; FIXME: show block container instead
   (shui/dialog-open!
    #(block/block-container {} page)
    {:label "page-configure"
-     :align :top}))
+    :align :top}))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
