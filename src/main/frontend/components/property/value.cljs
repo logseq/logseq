@@ -943,15 +943,16 @@
                                                                      (recur (conj parents parent))
                                                                      parents))]
                                               (->> (reverse ancestor-pages)
-                                                   (butlast)
-                                                   (remove (fn [e] (= :logseq.class/Root (:db/ident e)))))))]
+                                                   (remove (fn [e] (= (:db/id block) (:db/id e))))
+                                                   butlast)))]
                        (if (seq page-ancestors)
                          [:div.flex.flex-1.items-center.gap-1
                           (interpose [:span.opacity-50.text-sm " > "]
-                                     (map (fn [{title :block/title :as ancestor}]
-                                            [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} title])
-                                          page-ancestors))
-                          value-cp]
+                                     (concat
+                                      (map (fn [{title :block/title :as ancestor}]
+                                             [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} title])
+                                           page-ancestors)
+                                      [value-cp]))]
                          value-cp)))]]
      (if show-tooltip?
        (shui/tooltip-provider
