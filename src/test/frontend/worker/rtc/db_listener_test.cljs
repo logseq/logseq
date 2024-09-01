@@ -106,8 +106,8 @@
                        [:block/created-at "[\"~#'\",1720019497643]"]
                        [:block/title "[\"~#'\",\"zzz\"]"]
                        [:block/type "[\"~#'\",\"class\"]"]
-                       ;;1. no :class/parent, because db/id 4 block doesn't exist in empty-db
-                       ;;2. shouldn't have :db/ident, :db/ident is special, will be handled later
+                       [:logseq.property/parent "[\"~#'\",4]"]
+                       ;;1. shouldn't have :db/ident, :db/ident is special, will be handled later
                        ]}]]
            (map (fn [[op-type _t op-value]]
                   [op-type (cond-> op-value

@@ -399,7 +399,7 @@
 (defn get-classes-with-property
   "Get classes which have given property as a class property"
   [db property-id]
-  (:class/_schema.properties (d/entity db property-id)))
+  (:logseq.property.class/_properties (d/entity db property-id)))
 
 (defn get-alias-source-page
   "return the source page (page-name) of an alias"
