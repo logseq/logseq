@@ -1,7 +1,6 @@
 (ns basic-edits-test
-  (:require [client1-edits]
-            [client2-edits]
-            [cljs.test :as t :refer [deftest testing]]
+  (:require [client-steps]
+            [cljs.test :as t :refer [deftest]]
             [const]
             [fixture]
             [helper]
@@ -20,18 +19,10 @@
    (js/Promise.
     (if const/is-client1?
       (m/sp
-        (testing "create page first"
-          (client1-edits/step1--create-page))
-        (testing "start rtc for client1"
-          (m/? client1-edits/step2--task-start-rtc))
-        (testing "wait page1 synced"
-          (m/? client1-edits/step3--task-wait-page1-to-remote))
-        (testing "insert 300 blocks"
-          (m/? client1-edits/step4--task-insert-300-blocks-to-remote))
+        (doseq [task client-steps/client1-steps]
+          (m/? task))
         (done))
       (m/sp
-        (testing "start rtc for client2"
-          (m/? client2-edits/step1--task-start-rtc))
-        (testing "wait page1 synced from client1"
-          (m/? client2-edits/step2--task-wait-page1-synced))
+        (doseq [task client-steps/client2-steps]
+          (m/? task))
         (done))))))
