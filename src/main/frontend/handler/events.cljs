@@ -11,8 +11,8 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.components.class :as class-component]
             [frontend.components.cmdk.core :as cmdk]
+            [frontend.components.block :as block]
             [frontend.components.settings :as settings]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
@@ -846,11 +846,8 @@
 (defmethod handle :class/configure [[_ page]]
   ;; FIXME: show block container instead
   (shui/dialog-open!
-    #(vector :<>
-       ;; (class-component/configure page {})
-       (db-page/page-properties page {:configure? true
-                                      :mode :tag}))
-    {:label "page-configure"
+   #(block/block-container {} page)
+   {:label "page-configure"
      :align :top}))
 
 (defmethod handle :file/alter [[_ repo path content]]

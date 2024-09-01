@@ -44,10 +44,10 @@
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context.
    For pages, used to add both schema properties or properties for a page"
-  [entity property-uuid-or-name schema {:keys [class-schema? page-configure?]}]
+  [entity property-uuid-or-name schema {:keys [class-schema?]}]
   (p/let [repo (state/get-current-repo)
           ;; Both conditions necessary so that a class can add its own page properties
-          add-class-property? (and (ldb/class? entity) page-configure? class-schema?)
+          add-class-property? (and (ldb/class? entity) class-schema?)
           result (when (uuid? property-uuid-or-name)
                    (db-async/<get-block repo property-uuid-or-name {:children? false}))
           ;; In block context result is in :block
@@ -77,7 +77,7 @@
   [state property {:keys [*property *property-name *property-schema built-in? disabled?
                           show-type-change-hints? block *show-new-property-config?
                           *show-class-select?
-                          default-open? page-configure? class-schema?]
+                          default-open? class-schema?]
                    :as opts}]
   (let [property-name (or (and *property-name @*property-name) (:block/title property))
         property-schema (or (and *property-schema @*property-schema) (:block/schema property))
@@ -104,7 +104,7 @@
                 (reset! *show-new-property-config? :adding-property))
               (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
                       property (or property' property)
-                      add-class-property? (and (ldb/class? block) page-configure? class-schema?)]
+                      add-class-property? (and (ldb/class? block) class-schema?)]
                 (when *property (reset! *property property))
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
@@ -189,7 +189,7 @@
                    :size 15})))
 
 (defn- property-input-on-chosen
-  [block *property *property-key *show-new-property-config? {:keys [class-schema? page-configure?]}]
+  [block *property *property-key *show-new-property-config? {:keys [class-schema?]}]
   (fn [{:keys [value label]}]
     (reset! *property-key (if (uuid? value) label value))
     (let [property (when (uuid? value) (db/entity [:block/uuid value]))]
@@ -202,8 +202,7 @@
           (cond
             add-class-property?
             (p/do!
-             (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?
-                                                               :exit-edit? page-configure?})
+             (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?})
              (shui/dialog-close!))
 
             (= :checkbox type)
@@ -382,7 +381,7 @@
 
 (rum/defcs new-property < rum/reactive
   [state block opts]
-  (when (and (not config/publishing?) (:page-configure? opts))
+  (when (and (not config/publishing?) (:class-schema? opts))
     [:div.ls-new-property {:style {:margin-left 6 :margin-top 1}}
      [:a.fade-link.flex
       {:tab-index 0
@@ -509,7 +508,6 @@
       (db-async/<get-block repo (:db/id class) :children? false))
     classes))
 
-;; TODO: Remove :page-configure? as it only ever seems to be set to true
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [target-block (first (:rum/args state))
@@ -521,7 +519,7 @@
    :will-remount (fn [state]
                    (let [block (db/entity (:db/id (::block state)))]
                      (assoc state ::classes (async-load-classes! block))))}
-  [state _target-block {:keys [page-configure? class-schema?] :as opts}]
+  [state _target-block {:keys [class-schema?] :as opts}]
   (let [id (::id state)
         block (db/sub-block (:db/id (::block state)))
         _ (doseq [class (::classes state)]
@@ -530,7 +528,7 @@
         class? (ldb/class? block)
         block-properties (:block/properties block)
         properties (cond
-                     (and class-schema? page-configure?)
+                     class-schema?
                      (->> (db-property/get-class-ordered-properties block)
                           (map :db/ident)
                           distinct
@@ -566,7 +564,7 @@
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
                                 (cond
-                                  (or root-block? page-configure?)
+                                  root-block?
                                   false
                                   :else
                                   (boolean (:hide? (:block/schema (db/entity property-id))))))
@@ -604,26 +602,20 @@
                              result))
         full-properties (->> (concat block-own-properties' (map (fn [p] [p (get block p)]) class-properties))
                              remove-built-in-or-other-position-properties)]
-    (when-not (and (empty? full-properties)
-                   (not (:page-configure? opts)))
+    (when-not (and (empty? full-properties) (not (:class-schema? opts)))
       [:div.ls-properties-area
-       (cond-> {:id id}
-         class-schema?
-         (assoc :class "class-properties")
-         true (assoc :tab-index 0
-                     :on-key-up #(when-let [block (and (= "Escape" (.-key %))
-                                                       (.closest (.-target %) "[blockid]"))]
-                                   (let [target (.-target %)]
-                                     (when-not (d/has-class? target "ls-popup-closed")
-                                       (state/set-selection-blocks! [block])
-                                       (some-> js/document.activeElement (.blur)))
-                                     (d/remove-class! target "ls-popup-closed")))))
-       (let [properties' (if (and page? page-configure?)
-                           (concat [[:block/tags (:block/tags block)]
-                                    [:logseq.property/icon (:logseq.property/icon block)]]
-                                   (remove (fn [[k _v]] (contains? #{:block/tags :logseq.property/icon} k)) full-properties))
-
-                           (remove (fn [[k _v]] (contains? #{:logseq.property/icon} k)) full-properties))]
+       {:id id
+        :class (util/classnames [{:class-properties class-schema?
+                                  :ls-page-properties (and page? (not class-schema?))}])
+        :tab-index 0
+        :on-key-up #(when-let [block (and (= "Escape" (.-key %))
+                                          (.closest (.-target %) "[blockid]"))]
+                      (let [target (.-target %)]
+                        (when-not (d/has-class? target "ls-popup-closed")
+                          (state/set-selection-blocks! [block])
+                          (some-> js/document.activeElement (.blur)))
+                        (d/remove-class! target "ls-popup-closed")))}
+       (let [properties' (remove (fn [[k _v]] (contains? #{:logseq.property/icon} k)) full-properties)]
          (properties-section block (if class-schema? properties properties') opts))
 
        (rum/with-key (new-property block opts) (str id "-add-property"))])))

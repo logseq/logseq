@@ -80,7 +80,6 @@
                                :show-add-property? true
                                :add-property! (fn []
                                                 (state/pub-event! [:editor/new-property {:block class
-                                                                                         :page-configure? true
                                                                                          :class-schema? true}]))
                                :on-delete-rows (fn [table selected-rows]
                                                  (let [pages (filter ldb/page? selected-rows)

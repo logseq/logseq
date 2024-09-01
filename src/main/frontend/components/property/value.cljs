@@ -921,8 +921,7 @@
                    (cond
                      (= (:db/ident property) :logseq.property.class/properties)
                      (properties-cp {} block {:selected? false
-                                              :class-schema? true
-                                              :page-configure? true})
+                                              :class-schema? true})
 
                      (and multiple-values? (= type :default) (not closed-values?))
                      (property-normal-block-value block property v)

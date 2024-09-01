@@ -556,8 +556,8 @@
                                         :preview? preview?})))
                (lsp-pagebar-slot)])
 
-            (when db-based?
-              (db-page/page-info page))
+            (when (and db-based? (ldb/property? page))
+              (db-page/configure-property page))
 
             (when (and db-based? (ldb/class? page))
               (objects/class-objects page))

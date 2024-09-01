@@ -2591,7 +2591,7 @@
       :on-mouse-leave #(reset! *hover? false)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.flex.flex-1.flex-col
-      [:div.flex.flex-1.flex-row.gap-1.items-start
+      [:div.flex.flex-1.flex-row.gap-1.items-center
        (if (and edit? editor-box)
          [:div.editor-wrapper.flex.flex-1
           {:id editor-id}
@@ -3179,7 +3179,7 @@
               (assoc state
                      ::control-show? (atom false)
                      ::navigating-block (atom (:block/uuid block)))
-               linked-block?
+               (or linked-block? (nil? (:container-id config)))
                (assoc ::container-id (state/get-next-container-id)))))
    :will-unmount (fn [state]
                    ;; restore root block's collapsed state
