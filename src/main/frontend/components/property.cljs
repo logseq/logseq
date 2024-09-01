@@ -385,8 +385,9 @@
     [:div.ls-new-property {:style {:margin-left 6 :margin-top 1}}
      [:a.fade-link.flex
       {:tab-index 0
-       :on-click (fn []
-                   (state/pub-event! [:editor/new-property (merge opts {:block block})]))}
+       :on-click (fn [e]
+                   (state/pub-event! [:editor/new-property (merge opts {:block block
+                                                                        :target (.-target e)})]))}
       [:div.flex.flex-row.items-center
        (ui/icon "plus" {:size 16})
        [:div.ml-1 "Add property"]]]]))

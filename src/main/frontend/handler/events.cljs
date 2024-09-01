@@ -949,7 +949,7 @@
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
-(defmethod handle :editor/new-property [[_ {:keys [block] :as opts}]]
+(defmethod handle :editor/new-property [[_ {:keys [block target] :as opts}]]
   (p/do!
    (editor-handler/save-current-block!)
    (let [editing-block (state/get-edit-block)
@@ -992,10 +992,11 @@
                                                                 content'
                                                                 (assoc :custom-content content'))))))))))]
      (when (seq blocks)
-       (let [input (some-> (state/get-edit-input-id)
-                           (gdom/getElement))]
-         (if input
-           (shui/popup-show! input
+       (let [target' (or target
+                       (some-> (state/get-edit-input-id)
+                            (gdom/getElement)))]
+         (if target'
+           (shui/popup-show! target'
                              #(property-dialog/dialog blocks opts')
                              {:align "start"
                               :as-dropdown? true
