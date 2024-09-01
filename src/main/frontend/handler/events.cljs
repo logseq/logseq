@@ -23,7 +23,6 @@
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
             [frontend.components.repo :as repo]
-            [frontend.components.db-based.page :as db-page]
             [frontend.components.property.dialog :as property-dialog]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
