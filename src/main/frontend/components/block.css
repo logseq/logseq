@@ -865,11 +865,11 @@ html.is-mac {
 }
 
 .block-tags {
-    @apply flex flex-row flex-wrap items-center gap-1;
+    @apply flex flex-row flex-wrap self-start items-center gap-1;
     max-width: 256px;
 }
 .block-tag span {
-    @apply h-6 whitespace-nowrap overflow-hidden;
+    @apply whitespace-nowrap overflow-hidden;
     max-width: 160px;
     text-overflow: ellipsis;
 }
