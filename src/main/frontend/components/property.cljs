@@ -527,11 +527,19 @@
         _ (doseq [class (::classes state)]
             (db/sub-block (:db/id class)))
         page? (db/page? block)
+        class? (ldb/class? block)
         block-properties (:block/properties block)
-        properties (if (and class-schema? page-configure?)
+        properties (cond
+                     (and class-schema? page-configure?)
                      (->> (db-property/get-class-ordered-properties block)
                           (map :db/ident)
+                          distinct
                           (map #(vector % %)))
+
+                     (and class? (nil? (:logseq.property.class/properties block)))
+                     (assoc block-properties :logseq.property.class/properties nil)
+
+                     :else
                      block-properties)
         remove-built-in-or-other-position-properties
         (fn [properties]
