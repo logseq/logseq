@@ -313,7 +313,7 @@
                        (edit-original-block {:editing-default-property? editing-default-property?})))
                    (state/set-editor-action! nil)
                    state)}
-  [state block *property-key {:keys [class-schema? page?]
+  [state block *property-key {:keys [class-schema?]
                               :as opts}]
   (let [*ref (::ref state)
         *property (::property state)
@@ -324,11 +324,16 @@
                                 (map db-property/built-in-properties)
                                 (keep #(when (get block (:attribute %)) (:title %)))
                                 set)
+        block-type (keyword (get block :block/type :block))
+        page? (ldb/page? block)
         exclude-properties (fn [m]
-                             (or (and (not page?) (contains? existing-tag-alias (:block/title m)))
-                               ;; Filters out properties from being in wrong :view-context
-                                 (and (not page?) (= :page (get-in m [:block/schema :view-context])))
-                                 (and page? (= :block (get-in m [:block/schema :view-context])))))
+                             (let [view-context (get-in m [:block/schema :view-context] :all)
+                                   block-types (if (and page? (not= block-type :page))
+                                                 #{:page block-type}
+                                                 #{block-type})]
+                               (or (and (not page?) (contains? existing-tag-alias (:block/title m)))
+                                   ;; Filters out properties from being in wrong :view-context
+                                   (and (not= view-context :all) (not (contains? block-types view-context))))))
         property (rum/react *property)
         property-key (rum/react *property-key)]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
