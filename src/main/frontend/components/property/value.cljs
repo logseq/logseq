@@ -27,7 +27,8 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [dommy.core :as d]
             [frontend.search :as search]
-            [goog.functions :refer [debounce]]))
+            [goog.functions :refer [debounce]]
+            [frontend.handler.route :as route-handler]))
 
 (rum/defc property-empty-btn-value
   [& {:as opts}]
@@ -930,11 +931,28 @@
                      (multiple-values block property opts schema)
 
                      :else
-                     (property-scalar-value block property v
-                                            (merge
-                                             opts
-                                             {:editor-id editor-id
-                                              :dom-id dom-id})))]]
+                     (let [value-cp (property-scalar-value block property v
+                                                           (merge
+                                                            opts
+                                                            {:editor-id editor-id
+                                                             :dom-id dom-id}))
+                           parent? (= (:db/ident property) :logseq.property/parent)
+                           page-ancestors (when parent?
+                                            (let [ancestor-pages (loop [parents [block]]
+                                                                   (if-let [parent (:logseq.property/parent (last parents))]
+                                                                     (recur (conj parents parent))
+                                                                     parents))]
+                                              (->> (reverse ancestor-pages)
+                                                   (butlast)
+                                                   (remove (fn [e] (= :logseq.class/Root (:db/ident e)))))))]
+                       (if (seq page-ancestors)
+                         [:div.flex.flex-1.items-center.gap-1
+                          (interpose [:span.opacity-50.text-sm " > "]
+                                     (map (fn [{title :block/title :as ancestor}]
+                                            [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} title])
+                                          page-ancestors))
+                          value-cp]
+                         value-cp)))]]
      (if show-tooltip?
        (shui/tooltip-provider
         (shui/tooltip
