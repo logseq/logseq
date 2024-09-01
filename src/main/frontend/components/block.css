@@ -887,3 +887,8 @@ html.is-mac {
 .ls-page-title .ls-page-icon button {
     margin-top: 8px;
 }
+
+.ls-page-title .positioned-properties {
+    height: 54px;
+    overflow: hidden;
+}
