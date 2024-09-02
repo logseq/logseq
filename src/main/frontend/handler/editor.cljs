@@ -1160,7 +1160,7 @@
             (let [value (gobj/get input "value")]
               (extract-nearest-link-from-text value pos url-regex))))))))
 
-(defn- get-nearest-page
+(defn get-nearest-page
   "Return the nearest page-name (not dereferenced, may be an alias), block or tag"
   []
   (when-let [block (state/get-edit-block)]
@@ -1947,8 +1947,10 @@
 
       ;; Open "Search page or New page" auto-complete
       (and (= last-input-char commands/hashtag)
-           ;; Only trigger at beginning of a line or before whitespace
-           (or (re-find #"(?m)^#" (str (.-value input))) (start-of-new-word? input pos)))
+             ;; Only trigger at beginning of a line, before whitespace or after a reference
+             (or (re-find #"(?m)^#" (str (.-value input)))
+                 (start-of-new-word? input pos)
+                 (and db-based? (= page-ref/right-brackets (common-util/safe-subs (str (.-value input)) (- pos 3) (dec pos))))))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-last-pos! pos)
@@ -3397,7 +3399,7 @@
                     (not (db-pu/all-hidden-properties? property-keys)))
                (and db-based? (seq tags)
                     (some (fn [t]
-                            (let [properties (map :db/ident (:class/schema.properties (:block/schema t)))]
+                            (let [properties (map :db/ident (:logseq.property.class/properties (:block/schema t)))]
                               (and (seq properties)
                                    (not (db-pu/all-hidden-properties? properties))))) tags))
                (and

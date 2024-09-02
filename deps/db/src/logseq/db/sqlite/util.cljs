@@ -8,7 +8,6 @@
             [datascript.transit :as dt]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
-            [logseq.common.config :as common-config]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -117,7 +116,7 @@
                   {:block/type "class"
                    :block/format :markdown})
      (not= (:db/ident block) :logseq.class/Root)
-     (assoc :class/parent :logseq.class/Root))))
+     (assoc :logseq.property/parent :logseq.class/Root))))
 
 (defn build-new-page
   "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"
@@ -129,34 +128,10 @@
     :block/format :markdown
     :block/type "page"}))
 
-(defn page?
-  [block]
-  (contains? #{"page" "journal" "whiteboard" "class" "property" "hidden"}
-             (:block/type block)))
-
-(defn class?
-  [entity]
-  (= (:block/type entity) "class"))
-(defn property?
-  [entity]
-  (= (:block/type entity) "property"))
-(defn closed-value?
-  [entity]
-  (= (:block/type entity) "closed value"))
-(defn whiteboard?
-  "Given a page entity or map, check if it is a whiteboard page"
-  [page]
-  (= (:block/type page) "whiteboard"))
-
-(defn journal?
-  "Given a page entity or map, check if it is a journal page"
-  [page]
-  (= (:block/type page) "journal"))
-
-(defn hidden?
-  [page]
-  (when page
-    (if (string? page)
-      (or (string/starts-with? page "$$$")
-          (= common-config/favorites-page-name page))
-      (= (:block/type page) "hidden"))))
+(def page? db-property-type/page?)
+(def class? db-property-type/class?)
+(def property? db-property-type/property?)
+(def closed-value? db-property-type/closed-value?)
+(def whiteboard? db-property-type/whiteboard?)
+(def journal? db-property-type/journal?)
+(def hidden? db-property-type/hidden?)

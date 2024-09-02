@@ -11,12 +11,12 @@
       [?t :block/namespace ?p]
       (namespace ?t ?c)]]
 
-   :class-parent
-   '[[(class-parent ?p ?c)
-      [?c :class/parent ?p]]
-     [(class-parent ?p ?c)
-      [?t :class/parent ?p]
-      (class-parent ?t ?c)]]
+   :parent
+   '[[(parent ?p ?c)
+      [?c :logseq.property/parent ?p]]
+     [(parent ?p ?c)
+      [?t :logseq.property/parent ?p]
+      (parent ?t ?c)]]
 
    :alias
    '[[(alias ?e2 ?e1)

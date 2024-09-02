@@ -281,12 +281,8 @@ a.control-link {
   }
 }
 
-.ls-page-properties {
-  @apply min-h-[40px];
-
-  &.no-mode {
-    @apply hidden;
-  }
+.ls-page-title .ls-page-properties {
+  @apply mt-4;
 }
 
 .ls-property-add {

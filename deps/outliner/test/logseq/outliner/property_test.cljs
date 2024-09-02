@@ -280,14 +280,14 @@
         _ (outliner-property/class-add-property! conn :user.class/c1 :user.property/p1)
         _ (outliner-property/class-add-property! conn :user.class/c1 :user.property/p2)]
     (is (= [:user.property/p1 :user.property/p2]
-           (map :db/ident (:class/schema.properties (d/entity @conn :user.class/c1)))))))
+           (map :db/ident (:logseq.property.class/properties (d/entity @conn :user.class/c1)))))))
 
 (deftest class-remove-property!
   (let [conn (create-conn-with-blocks
               {:classes {:c1 {:build/schema-properties [:p1 :p2]}}})
         _ (outliner-property/class-remove-property! conn :user.class/c1 :user.property/p1)]
     (is (= [:user.property/p2]
-           (map :db/ident (:class/schema.properties (d/entity @conn :user.class/c1)))))))
+           (map :db/ident (:logseq.property.class/properties (d/entity @conn :user.class/c1)))))))
 
 (deftest get-block-classes-properties
   (let [conn (create-conn-with-blocks

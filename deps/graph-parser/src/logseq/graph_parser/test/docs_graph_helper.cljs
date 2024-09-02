@@ -106,7 +106,7 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 7325 :org 500} (get-block-format-counts db))
+    (is (= {:markdown 7322 :org 500} (get-block-format-counts db))
         "Block format counts")
 
     (is (= {:rangeincludes 13, :description 137, :updated-at 46, :tags 5,

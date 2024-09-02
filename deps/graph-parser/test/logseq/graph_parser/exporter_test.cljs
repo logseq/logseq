@@ -450,7 +450,7 @@
 
     (is (= #{:user.property/url :user.property/sameas :user.property/rangeincludes}
            (->> (d/entity @conn :user.class/Property)
-                :class/schema.properties
+                :logseq.property.class/properties
                 (map :db/ident)
                 set))
         "Properties are correctly inferred for a class")
@@ -502,7 +502,7 @@
                 set))
         "All classes are correctly defined by :type")
 
-    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:class/parent :block/title]))
+    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:logseq.property/parent :block/title]))
         "Existing page correctly set as class parent")
-    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:class/parent :block/title]))
+    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:logseq.property/parent :block/title]))
         "New page correctly set as class parent")))

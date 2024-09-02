@@ -360,7 +360,8 @@
                              (if (= \# (first q))
                                (subs q 1)
                                q))
-              last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
+              last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)
+              tag-in-page-auto-complete? (= page-ref/right-brackets (common-util/safe-subs edit-content current-pos (+ current-pos 2)))]
           (p/do!
            (editor-handler/insert-command! id
                                            (if (and class? (not inline-tag?)) "" (str "#" wrapped-tag))
@@ -368,49 +369,57 @@
                                            {:last-pattern last-pattern
                                             :end-pattern (when wrapped? page-ref/right-brackets)
                                             :command :page-ref})
-           (when db-based?
+           (when (and db-based? (not tag-in-page-auto-complete?))
              (let [tag (string/trim chosen)
-                   edit-block (state/get-edit-block)]
+                   edit-block (state/get-edit-block)
+                   create-opts {:redirect? false
+                                :create-first-block? false}]
                (when (:block/uuid edit-block)
                  (p/let [result (when-not (de/entity? chosen-result) ; page not exists yet
                                   (if class?
-                                    (<create-class! tag {:redirect? false
-                                                         :create-first-block? false})
-                                    (<create! tag {:redirect? false
-                                                   :create-first-block? false})))]
+                                    (<create-class! tag create-opts)
+                                    (<create! tag create-opts)))]
                    (when class?
-                     (let [tag-entity (or (when (de/entity? chosen-result) chosen-result) result)]
-                       (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity)))))))
+                     (let [tag-entity (or (when (de/entity? chosen-result) chosen-result) result)
+                           hash-idx (string/last-index-of (subs edit-content 0 current-pos) last-pattern)
+                           add-tag-to-nearest-node? (= page-ref/right-brackets (common-util/safe-subs edit-content (- hash-idx 2) hash-idx))
+                           nearest-node (some-> (editor-handler/get-nearest-page) string/trim)]
+                       (if (and add-tag-to-nearest-node? (not (string/blank? nearest-node)))
+                         (when-let [e (db/get-page nearest-node)]
+                           (add-tag (state/get-current-repo) (:block/uuid e) tag-entity))
+                         (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity))))))))
 
            (when input (.focus input)))))
       (fn [chosen-result e]
         (util/stop e)
         (state/clear-editor-action!)
-        (let [chosen-result (if (:block/uuid chosen-result)
-                              (db/entity [:block/uuid (:block/uuid chosen-result)])
-                              chosen-result)
-              chosen (:block/title chosen-result)
-              chosen' (string/replace-first chosen (str (t :new-page) " ") "")
-              ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
-                         (cond
-                           db-based?
-                           (page-ref/->page-ref (:block/uuid chosen-result))
-                           :else
-                           (block-ref/->block-ref (:block/uuid chosen-result)))
-                         (get-page-ref-text chosen'))]
+        (p/let [chosen-result (if (:block/uuid chosen-result)
+                                (db/entity [:block/uuid (:block/uuid chosen-result)])
+                                chosen-result)
+                chosen (:block/title chosen-result)
+                chosen' (string/replace-first chosen (str (t :new-page) " ") "")
+                ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
+                           (cond
+                             db-based?
+                             (page-ref/->page-ref (:block/uuid chosen-result))
+                             :else
+                             (block-ref/->block-ref (:block/uuid chosen-result)))
+                           (get-page-ref-text chosen'))
+                result (when db-based?
+                         (when-not (de/entity? chosen-result)
+                           (<create! chosen'
+                                     {:redirect? false
+                                      :create-first-block? false})))
+                ref-text' (if result (page-ref/->page-ref (:block/title result)) ref-text)]
           (p/do!
            (editor-handler/insert-command! id
-                                           ref-text
+                                           ref-text'
                                            format
                                            {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
                                             :end-pattern page-ref/right-brackets
                                             :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
                                             :command :page-ref})
-           (p/let [result (when-not (de/entity? chosen-result)
-                            (<create! chosen'
-                                      {:redirect? false
-                                       :create-first-block? false}))
-                   chosen-result (or result chosen-result)]
+           (p/let [chosen-result (or result chosen-result)]
              (when (de/entity? chosen-result)
                (state/conj-block-ref! chosen-result)))))))))
 

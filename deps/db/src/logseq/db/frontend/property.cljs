@@ -38,8 +38,16 @@
                                    :cardinality :many
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
+   :logseq.property/parent {:title "Parent"
+                            :schema {:type :node
+                                     :public? true}}
+   :logseq.property.class/properties {:title "Tag properties"
+                                      :schema {:type :property
+                                               :cardinality :many
+                                               :public? true
+                                               :view-context :class}}
    :logseq.property/page-tags {:title "pageTags"
-                               :schema {:type :node
+                               :schema {:type :page
                                         :public? true
                                         :view-context :page
                                         :cardinality :many}}
@@ -223,7 +231,7 @@
 (def logseq-property-namespaces
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"
     "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table"
-    "logseq.property.journal"})
+    "logseq.property.journal" "logseq.property.class"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
@@ -314,7 +322,7 @@
 
 (defn get-class-ordered-properties
   [class-entity]
-  (->> (:class/schema.properties class-entity)
+  (->> (:logseq.property.class/properties class-entity)
        (sort-by :block/order)))
 
 (defn property-created-block?

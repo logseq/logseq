@@ -779,23 +779,23 @@ independent of format as format specific heading characters are stripped"
       (keep (fn [e] (when-not (= :logseq.class/Root (:db/ident e)) e)) classes)
       classes)))
 
-(defn get-class-children
+(defn get-structured-children
   [repo eid]
   (->>
    (d/q '[:find [?children ...]
           :in $ ?parent %
           :where
-          (class-parent ?parent ?children)]
+          (parent ?parent ?children)]
         (conn/get-db repo)
         eid
-        (:class-parent rules/rules))
+     (:parent rules/rules))
    distinct))
 
 (defn get-class-objects
   [repo class-id]
   (when-let [class (db-utils/entity repo class-id)]
-    (if (first (:class/_parent class))        ; has children classes
-      (let [all-classes (conj (->> (get-class-children repo class-id)
+    (if (first (:logseq.property/_parent class))        ; has children classes
+      (let [all-classes (conj (->> (get-structured-children repo class-id)
                                    (map #(db-utils/entity repo %)))
                               class)]
         (->> (mapcat :block/_tags all-classes)

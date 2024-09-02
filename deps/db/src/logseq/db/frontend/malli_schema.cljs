@@ -245,8 +245,8 @@
 
 (def class-attrs
   [[:db/ident class-ident]
-   [:class/parent {:optional true} :int]
-   [:class/schema.properties {:optional true} [:set :int]]])
+   [:logseq.property/parent {:optional true} :int]
+   [:logseq.property.class/properties {:optional true} [:set :int]]])
 
 (def class-page
   (vec
@@ -278,7 +278,7 @@
          [:type (apply vector :enum (into db-property-type/internal-built-in-property-types
                                           db-property-type/user-built-in-property-types))]
          [:public? {:optional true} :boolean]
-         [:view-context {:optional true} [:enum :page :block]]
+         [:view-context {:optional true} [:enum :page :block :class]]
          [:shortcut {:optional true} :string]]
         property-common-schema-attrs))]]
     property-attrs

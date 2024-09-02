@@ -554,7 +554,7 @@
               (seq parent-classes-from-properties)
               (merge (find-or-create-class db (:block/title block) (:all-idents import-state)))
               (seq parent-classes-from-properties)
-              (assoc :class/parent
+              (assoc :logseq.property/parent
                      (let [new-class (first parent-classes-from-properties)
                            class-m (find-or-create-class db new-class (:all-idents import-state))]
                        (when (> (count parent-classes-from-properties) 1)
@@ -670,6 +670,14 @@
       (dissoc :block/whiteboard?)
       (update-page-tags db tag-classes page-names-to-uuids all-idents)))
 
+(defn- user-parent->built-in-property
+  [pages]
+  (map (fn [p]
+         (-> (if (set? (:user.property/parent p))
+               (assoc p :logseq.property/parent (first (:user.property/parent p)))
+               p)
+             (dissoc :user.property/parent))) pages))
+
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
   all non-whiteboard pages to be transacted, pages' properties and additional
@@ -702,41 +710,43 @@
                                    (into {} (map (juxt :block/name :block/uuid) new-pages)))
         all-pages-m (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
                           all-pages)
-        pages-tx (keep (fn [m]
-                         (if-let [page-uuid (existing-page-names-to-uuids (:block/name m))]
-                           (let [;; These attributes are not allowed to be transacted because they must not change across files
-                                 disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
-                                                        :block/created-at :block/updated-at]
-                                 allowed-attributes (into [:block/tags :block/alias :class/parent :block/type :db/ident]
-                                                          (keep #(when (db-malli-schema/user-property? (key %)) (key %))
-                                                                m))
-                                 block-changes (cond-> (select-keys m allowed-attributes)
+        pages-tx (->>
+                  (keep (fn [m]
+                          (if-let [page-uuid (existing-page-names-to-uuids (:block/name m))]
+                            (let [;; These attributes are not allowed to be transacted because they must not change across files
+                                  disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
+                                                         :block/created-at :block/updated-at]
+                                  allowed-attributes (into [:block/tags :block/alias :logseq.property/parent :block/type :db/ident]
+                                                           (keep #(when (db-malli-schema/user-property? (key %)) (key %))
+                                                                 m))
+                                  block-changes (cond-> (select-keys m allowed-attributes)
                                                  ;; disallow any type -> "page" but do allow any conversion to a non-page type
-                                                 (= (:block/type m) "page")
-                                                 (dissoc :block/type))]
-                             (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
-                               (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
-                                                       ignored-attrs)}))
-                             (when (seq block-changes)
-                               (cond-> (merge block-changes {:block/uuid page-uuid})
-                                 (seq (:block/alias m))
-                                 (update-page-alias page-names-to-uuids)
-                                 (:block/tags m)
-                                 (update-page-tags @conn tag-classes page-names-to-uuids (:all-idents import-state)))))
+                                                  (= (:block/type m) "page")
+                                                  (dissoc :block/type))]
+                              (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
+                                (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
+                                                        ignored-attrs)}))
+                              (when (seq block-changes)
+                                (cond-> (merge block-changes {:block/uuid page-uuid})
+                                  (seq (:block/alias m))
+                                  (update-page-alias page-names-to-uuids)
+                                  (:block/tags m)
+                                  (update-page-tags @conn tag-classes page-names-to-uuids (:all-idents import-state)))))
 
-                           (when (or (= "class" (:block/type m))
+                            (when (or (= "class" (:block/type m))
                                      ;; Don't build a new page if it overwrites an existing class
-                                     (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
-                                                  db-malli-schema/class?)))
-                             (let [m' (if (contains? all-built-in-names (keyword (:block/name m)))
+                                      (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
+                                                   db-malli-schema/class?)))
+                              (let [m' (if (contains? all-built-in-names (keyword (:block/name m)))
                                         ;; Use fixed uuid from above
-                                        (cond-> (assoc m :block/uuid (get page-names-to-uuids (:block/name m)))
+                                         (cond-> (assoc m :block/uuid (get page-names-to-uuids (:block/name m)))
                                           ;; only happens for few file built-ins like tags and alias
-                                          (not (:block/type m))
-                                          (assoc :block/type "page"))
-                                        m)]
-                               (build-new-page-or-class m' @conn tag-classes page-names-to-uuids (:all-idents import-state))))))
-                       (map :block all-pages-m))]
+                                           (not (:block/type m))
+                                           (assoc :block/type "page"))
+                                         m)]
+                                (build-new-page-or-class m' @conn tag-classes page-names-to-uuids (:all-idents import-state))))))
+                        (map :block all-pages-m))
+                  user-parent->built-in-property)]
     {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
      :existing-pages existing-page-names-to-uuids
@@ -935,7 +945,6 @@
                        (mapcat #(build-block-tx @conn % pre-blocks page-names-to-uuids
                                                 (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))))
                        vec)
-
         {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
         (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
@@ -1076,7 +1085,7 @@
                      {}))
         tx (mapv (fn [[class-id prop-ids]]
                    {:db/id class-id
-                    :class/schema.properties (vec prop-ids)})
+                    :logseq.property.class/properties (vec prop-ids)})
                  class-to-prop-uuids)]
     (ldb/transact! repo-or-conn tx)))
 
