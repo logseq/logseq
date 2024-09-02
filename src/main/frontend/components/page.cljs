@@ -218,7 +218,7 @@
           db-based? (config/db-based-graph? repo)]
       [:<>
        (when (and db-based? (or (ldb/class? block) (ldb/property? block)))
-         [:div.font-medium.mt-8.ml-1.opacity-50
+         [:div.font-medium.mt-8.ml-1.pb-3.opacity-50
           "Notes"])
 
        (cond
@@ -529,6 +529,7 @@
           page (get-page-entity page-name)
           block-id (:block/uuid page)
           block? (some? (:block/page page))
+          class-page? (ldb/class? page)
           journal? (db/journal-page? page-name)
           db-based? (config/db-based-graph? repo)
           fmt-journal? (boolean (date/journal-title->int page-name))
@@ -546,7 +547,7 @@
           block-or-whiteboard? (or block? whiteboard?)
           home? (= :home (state/get-current-route))]
       (when (or page-name block-or-whiteboard?)
-        [:div.flex-1.page.relative
+        [:div.flex-1.page.relative.cp__page-inner-wrap
          (merge (if (seq (:block/tags page))
                   (let [page-names (map :block/title (:block/tags page))]
                     (when (seq page-names)
@@ -554,7 +555,8 @@
                   {})
 
                 {:key path-page-name
-                 :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
+                 :class (util/classnames [{:is-journals (or journal? fmt-journal?)
+                                           :is-class class-page?}])})
 
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
@@ -580,7 +582,7 @@
             (when db-based?
               (db-page/page-info page))
 
-            (when (and db-based? (ldb/class? page))
+            (when (and db-based? class-page?)
               (objects/class-objects page))
 
             (when (and db-based? (ldb/property? page))
@@ -592,12 +594,13 @@
                 [:div.mb-4
                  (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-            (page-blocks-cp repo page (merge option {:sidebar? sidebar?
-                                                     :container-id (:container-id state)
-                                                     :whiteboard? whiteboard?}))])
+            [:div.ls-page-blocks
+             (page-blocks-cp repo page (merge option {:sidebar? sidebar?
+                                                      :container-id (:container-id state)
+                                                      :whiteboard? whiteboard?}))]])
 
          (when (and (not preview?) @(::main-ready? state))
-           [:div {:style {:padding-left 9}}
+           [:div.ls-page-appendix-els {:style {:padding-left 9}}
             (when today?
               (today-queries repo today? sidebar?))
 

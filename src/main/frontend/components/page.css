@@ -1,4 +1,13 @@
 .cp__page {
+  &-inner-wrap {
+    &.is-class:not([data-ready]) {
+      .ls-page-blocks,
+      .ls-page-appendix-els {
+        @apply invisible;
+      }
+    }
+  }
+
   &-publish-actions {
     background-color: var(--ls-primary-background-color);
     padding: 50px 0;
@@ -245,13 +254,15 @@ html.is-native-ios {
 .ls-dummy-block {
   @apply mb-[20px] pt-[5px] pb-[3px];
 
-  &.selected {}
+  &.selected {
+  }
 
   .bullet {
     @apply relative top-[1px] left-[-2px];
   }
 
-  .text {}
+  .text {
+  }
 }
 
 .ls-preview-popup {
