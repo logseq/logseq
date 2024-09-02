@@ -879,9 +879,14 @@ html.is-mac {
     height: 20px;
 }
 
-.ls-page-title .ls-page-icon svg, .ls-page-title .positioned-properties svg, .ls-page-title .ls-page-icon button {
+.ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
     width: 38px;
     height: 38px;
+}
+
+.ls-page-title .positioned-properties svg {
+    width: 24px;
+    height: 24px;
 }
 
 .ls-page-title .ls-page-icon button {
