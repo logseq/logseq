@@ -19,8 +19,10 @@
                                              (:block/type page) (:block/type page)
                                              :else "page"))
           page' (merge page
-                       (when tags {:block/tags (mapv #(hash-map :db/id
-                                                                (:db/id (d/entity @conn [:block/uuid %])))
+                       (when tags {:block/tags (mapv (fn [tag]
+                                                       (if (uuid? tag)
+                                                         (d/entity @conn [:block/uuid tag])
+                                                         tag))
                                                      tags)}))
           property-vals-tx-m
           ;; Builds property values for built-in properties like logseq.property.pdf/file
