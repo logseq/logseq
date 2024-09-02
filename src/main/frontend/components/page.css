@@ -86,7 +86,7 @@
     @apply font-[48px] leading-none;
 
     .ui__button {
-      @apply !h-auto mb-[-3px];
+      @apply !h-auto pb-[1.5px];
     }
   }
 }
