@@ -32,7 +32,7 @@
     @apply relative;
 
     .ls-icon-search {
-      @apply absolute left-2.5 top-[9px] opacity-50;
+      @apply absolute left-2.5 top-[8px] opacity-50;
     }
 
     > .x {
@@ -164,4 +164,3 @@
 .ls-icon-picker {
   @apply w-auto overflow-hidden;
 }
-

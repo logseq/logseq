@@ -84,66 +84,6 @@
   [items]
   [:div.its.icons-row items])
 
-(rum/defc pane-section
-  [label items & {:keys [virtual-list? searching?]}]
-  (let [[ready?, set-ready!] (rum/use-state false)
-        *el-ref (rum/use-ref nil)
-        virtual-list? (and (not searching?) virtual-list?)]
-
-    (rum/use-effect!
-      (fn []
-        (set-ready! true))
-      [])
-
-    [:div.pane-section
-     {:ref *el-ref
-      :class (util/classnames
-               [{:has-virtual-list virtual-list?
-                 :searching-result searching?}])}
-     [:div.hd.px-1.pb-1.leading-none
-      [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]
-     (if (and virtual-list? ready?)
-       (let [total (count items)
-             step 9 rows (quot total step)
-             mods (mod total step)
-             rows (if (zero? mods) rows (inc rows))
-             items (vec items)]
-         (ui/virtualized-list
-           (cond-> {:total-count rows
-                    :item-content (fn [idx]
-                                    (icons-row
-                                      (let [last? (= (dec rows) idx)
-                                            start (* idx step)
-                                            end (* (inc idx) (if (and last? (not (zero? mods))) mods step))]
-                                        (try (subvec items start end)
-                                          (catch js/Error _e nil)))))}
-
-             searching?
-             (assoc :custom-scroll-parent (some-> (rum/deref *el-ref) (.closest ".bd-scroll"))))))
-       [:div.its items])]))
-
-(rum/defc emoji-cp < rum/static
-  [{:keys [id name] :as emoji} {:keys [on-chosen hover]}]
-  [:button.text-2xl.w-9.h-9.transition-opacity
-   (cond->
-     {:tabIndex "0"
-      :title name
-      :on-click (fn [e]
-                  (on-chosen e (assoc emoji :type :emoji)))}
-     (not (nil? hover))
-     (assoc :on-mouse-over #(reset! hover emoji)
-            :on-mouse-out #()))
-   [:em-emoji {:id id}]])
-
-(rum/defc emojis-cp < rum/static
-  [emojis' {:keys [searching?] :as opts}]
-  (pane-section
-    (util/format "Emojis (%s)" (count emojis'))
-    (for [emoji emojis']
-      (rum/with-key (emoji-cp emoji opts) (:id emoji)))
-    {:virtual-list? true
-     :searching? searching?}))
-
 (rum/defc icon-cp < rum/static
   [icon' {:keys [on-chosen hover]}]
   [:button.w-9.h-9.transition-opacity
@@ -162,14 +102,77 @@
       :on-mouse-out #()})
    (ui/icon icon' {:size 24})])
 
-(rum/defc icons-cp < rum/static
-  [icons {:keys [searching?] :as opts}]
+(rum/defc emoji-cp < rum/static
+  [{:keys [id name] :as emoji} {:keys [on-chosen hover]}]
+  [:button.text-2xl.w-9.h-9.transition-opacity
+   (cond->
+     {:tabIndex "0"
+      :title name
+      :on-click (fn [e]
+                  (on-chosen e (assoc emoji :type :emoji)))}
+     (not (nil? hover))
+     (assoc :on-mouse-over #(reset! hover emoji)
+            :on-mouse-out #()))
+   [:em-emoji {:id id}]])
+
+(defn item-render
+  [item opts]
+  (if (or (string? item)
+          (= :tabler-icon (:type item)))
+    (icon-cp (if (string? item) item (:id item)) opts)
+    (emoji-cp item opts)))
+
+(rum/defc pane-section
+  [label items & {:keys [searching? virtual-list?]
+                  :or {virtual-list? true}
+                  :as opts}]
+  (let [*el-ref (rum/use-ref nil)]
+    [:div.pane-section
+     {:ref *el-ref
+      :class (util/classnames
+              [{:has-virtual-list virtual-list?
+                :searching-result searching?}])}
+     [:div.hd.px-1.pb-1.leading-none
+      [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]
+     (if virtual-list?
+       (let [total (count items)
+             step 9
+             rows (quot total step)
+             mods (mod total step)
+             rows (if (zero? mods) rows (inc rows))
+             items (vec items)]
+         (prn :debug :rows rows)
+         (ui/virtualized-list
+          (cond-> {:total-count rows
+                   :item-content (fn [idx]
+                                   (icons-row
+                                    (let [last? (= (dec rows) idx)
+                                          start (* idx step)
+                                          end (* (inc idx) (if (and last? (not (zero? mods))) mods step))
+                                          icons (try (subvec items start end)
+                                                     (catch js/Error e
+                                                       (js/console.error e)
+                                                       nil))]
+                                      (mapv #(item-render % opts) icons))))}
+
+            searching?
+            (assoc :custom-scroll-parent (some-> (rum/deref *el-ref) (.closest ".bd-scroll"))))))
+       [:div.its
+        (map #(item-render % opts) items)])]))
+
+(rum/defc emojis-cp < rum/static
+  [emojis* opts]
   (pane-section
-    (util/format "Icons (%s)" (count icons))
-    (for [icon' icons]
-      (icon-cp icon' opts))
-    {:virtual-list? true
-     :searching? searching?}))
+   (util/format "Emojis (%s)" (count emojis*))
+   emojis*
+   opts))
+
+(rum/defc icons-cp < rum/static
+  [icons opts]
+  (pane-section
+   (util/format "Icons (%s)" (count icons))
+   icons
+   opts))
 
 (defn get-used-items
   []
@@ -188,19 +191,16 @@
   (let [used-items (get-used-items)
         emoji-items (take 32 emojis)
         icon-items (take 48 (get-tabler-icons))
-        item-cp (fn [d]
-                  (if (or (string? d)
-                        (= :tabler-icon (:type d)))
-                    (icon-cp (if (string? d) d (:id d)) opts)
-                    (emoji-cp d opts)))]
+        opts (assoc opts :virtual-list? false)]
     [:div.all-pane.pb-10
      (when (count used-items)
-       (pane-section "Frequently used"
-         (->> used-items (map item-cp))))
+       (pane-section "Frequently used" used-items opts))
      (pane-section (util/format "Emojis (%s)" (count emojis))
-       (->> emoji-items (map item-cp)))
+                   emoji-items
+                   opts)
      (pane-section (util/format "Icons (%s)" (count (get-tabler-icons)))
-       (->> icon-items (map item-cp)))]))
+                   icon-items
+                   opts)]))
 
 (rum/defc tab-observer
   [tab {:keys [reset-q!]}]
@@ -327,10 +327,10 @@
                     (reset! *result {})
                     (reset! *select-mode? false)
                     (set! (. input -value) "")
-                    (js/setTimeout
-                     (fn [] (.focus input)
-                       (util/scroll-to (rum/deref *result-ref) 0 false))
-                     64))]
+                    (util/schedule
+                     (fn []
+                       (.focus input)
+                       (util/scroll-to (rum/deref *result-ref) 0 false))))]
     [:div.cp__emoji-icon-picker
      ;; header
      [:div.hd.bg-popover
@@ -340,33 +340,33 @@
       [:div.search-input
        (shui/tabler-icon "search" {:size 16})
        [(shui/input
-          {:auto-focus true
-           :ref *input-ref
-           :placeholder (util/format "Search %s items" (string/lower-case (name @*tab)))
-           :default-value ""
-           :on-focus #(reset! *select-mode? false)
-           :on-key-down (fn [^js e]
-                          (case (.-keyCode e)
+         {:auto-focus true
+          :ref *input-ref
+          :placeholder (util/format "Search %s items" (string/lower-case (name @*tab)))
+          :default-value ""
+          :on-focus #(reset! *select-mode? false)
+          :on-key-down (fn [^js e]
+                         (case (.-keyCode e)
                             ;; esc
-                            27 (do (util/stop e)
-                                 (if (string/blank? @*q)
+                           27 (do (util/stop e)
+                                  (if (string/blank? @*q)
                                    ;(some-> (rum/deref *input-ref) (.blur))
-                                   (shui/popup-hide!)
-                                   (reset-q!)))
-                            38 (do (util/stop e))
-                            (9 40) (do
-                                     (reset! *select-mode? true)
-                                     (util/stop e))
-                            :dune))
-           :on-change (debounce
-                        (fn [e]
-                          (reset! *q (util/evalue e))
-                          (reset! *select-mode? false)
-                          (if (string/blank? @*q)
-                            (reset! *result {})
-                            (p/let [result (search @*q @*tab)]
-                              (reset! *result result))))
-                        200)})]
+                                    (shui/popup-hide!)
+                                    (reset-q!)))
+                           38 (do (util/stop e))
+                           (9 40) (do
+                                    (reset! *select-mode? true)
+                                    (util/stop e))
+                           :dune))
+          :on-change (debounce
+                      (fn [e]
+                        (reset! *q (util/evalue e))
+                        (reset! *select-mode? false)
+                        (if (string/blank? @*q)
+                          (reset! *result {})
+                          (p/let [result (search @*q @*tab)]
+                            (reset! *result result))))
+                      200)})]
        (when-not (string/blank? @*q)
          [:a.x {:on-click reset-q!} (shui/tabler-icon "x" {:size 14})])]]
      ;; body
@@ -377,10 +377,12 @@
       [:div.content-pane
        (if (seq result)
          [:div.flex.flex-1.flex-col.gap-1.search-result
-          (when (seq (:emojis result))
-            (emojis-cp (:emojis result) (assoc opts :searching? true)))
-          (when (seq (:icons result))
-            (icons-cp (:icons result) (assoc opts :searching? true)))]
+          (let [matched (concat (:emojis result) (:icons result))]
+            (when (seq matched)
+             (pane-section
+              (util/format "Matched (%s)" (count matched))
+              matched
+              opts)))]
          [:div.flex.flex-1.flex-col.gap-1
           (case @*tab
             :emoji (emojis-cp emojis opts)
@@ -397,11 +399,11 @@
             (for [[id label] tabs
                   :let [active? (= @*tab id)]]
               (shui/button
-                {:variant :ghost
-                 :size :sm
-                 :class (util/classnames [{:active active?} "tab-item"])
-                 :on-click #(reset! *tab id)}
-                label)))]
+               {:variant :ghost
+                :size :sm
+                :class (util/classnames [{:active active?} "tab-item"])
+                :on-click #(reset! *tab id)}
+               label)))]
 
          (when (not= :emoji @*tab)
            (color-picker *color))
@@ -410,7 +412,7 @@
          (when del-btn?
            (shui/button {:variant :outline :size :sm :data-action "del"
                          :on-click #(on-chosen nil)}
-             (shui/tabler-icon "trash" {:size 17})))]
+                        (shui/tabler-icon "trash" {:size 17})))]
 
         ;; preview
         [:div.hover-preview
