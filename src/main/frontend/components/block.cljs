@@ -2397,7 +2397,7 @@
       (when (seq block-tags)
         [:div.block-tags
          (for [tag block-tags]
-           [:div.block-tag
+           [:div.block-tag.text-sm
             {:key (str "tag-" (:db/id tag))}
             (page-cp (assoc config
                               :tag? true
