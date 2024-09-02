@@ -2396,7 +2396,7 @@
       (when (seq block-tags)
         [:div.block-tags
          (for [tag block-tags]
-           [:div.block-tag
+           [:div.block-tag.text-sm
             {:key (str "tag-" (:db/id tag))}
             (page-cp (assoc config
                             :hide-icon? true
@@ -3659,7 +3659,8 @@
                           set-wrap-h! (debounce set-wrap-h! 16)
                           ob (js/ResizeObserver.
                                (fn []
-                                 (when-let [h (.-height (.-style target))]
+                                 (when-let [h (and (rum/deref *wrap-ref)
+                                                (.-height (.-style target)))]
                                    ;(prn "==>> debug: " h)
                                    (set-wrap-h! h))))]
                       (.observe ob target)

@@ -62,7 +62,8 @@
      (shui/dropdown-menu-item
       {:key "delete"
        :on-click #(do (editor-handler/delete-selection %)
-                      (state/hide-custom-context-menu!))}
+                      (state/hide-custom-context-menu!)
+                    (shui/popup-hide!))}
 
       (t :editor/delete-selection)
       (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/delete)))
