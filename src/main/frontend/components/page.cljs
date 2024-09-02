@@ -46,7 +46,8 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.rum :as frontend-rum]))
 
 (defn- get-page-name
   [state]
@@ -110,44 +111,64 @@
 
   (rum/defc dummy-block
     [page]
-    (when page
-      (let [[hover set-hover!] (rum/use-state false)
-            click-handler-fn (fn []
-                               (p/let [result (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))
-                                       result (when (string? result) (:tx-data (ldb/read-transit-str result)))
-                                       first-child-id (first (map :block/uuid result))
-                                       first-child (when first-child-id (db/entity [:block/uuid first-child-id]))]
-                                 (when first-child
-                                   (editor-handler/edit-block! first-child :max {:container-id :unknown-container}))))
-            drop-handler-fn (fn [^js event]
-                              (util/stop event)
-                              (p/let [block-uuids (state/get-selection-block-ids)
-                                      lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-                                      selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
-                                      blocks (if (seq selected) selected [@component-block/*dragging-block])
-                                      _ (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))]
-                                (js/setTimeout #(let [target-block page]
-                                                  (dnd/move-blocks event blocks target-block nil :sibling))
-                                               0)))]
-        [:div.ls-dummy-block
-         {:style {:width "100%"
-                ;; The same as .dnd-separator
-                  :border-top (if hover
-                                "3px solid #ccc"
-                                nil)}}
-         [:div.flex.items-center
-          [:div.flex.items-center.mx-1 {:style {:height 24}}
-           [:span.bullet-container.cursor
-            [:span.bullet]]]
-          (shui/trigger-as :div.flex.flex-1
-                           {:tabIndex 0
-                            :on-click click-handler-fn
-                            :on-drag-enter #(set-hover! true)
-                            :on-drag-over #(util/stop %)
-                            :on-drop drop-handler-fn
-                            :on-drag-leave #(set-hover! false)}
-                           [:span.opacity-70.text
-                            "Click here to edit..."])]]))))
+    (let [[hover set-hover!] (rum/use-state false)
+          click-handler-fn (fn []
+                             (p/let [result (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))
+                                     result (when (string? result) (:tx-data (ldb/read-transit-str result)))
+                                     first-child-id (first (map :block/uuid result))
+                                     first-child (when first-child-id (db/entity [:block/uuid first-child-id]))]
+                               (when first-child
+                                 (editor-handler/edit-block! first-child :max {:container-id :unknown-container}))))
+          drop-handler-fn (fn [^js event]
+                            (util/stop event)
+                            (p/let [block-uuids (state/get-selection-block-ids)
+                                    lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
+                                    selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
+                                    blocks (if (seq selected) selected [@component-block/*dragging-block])
+                                    _ (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))]
+                              (js/setTimeout #(let [target-block page]
+                                                (dnd/move-blocks event blocks target-block nil :sibling))
+                                0)))
+          *dummy-block-uuid (rum/use-ref (random-uuid))
+          *el-ref (rum/use-ref nil)
+          _ (frontend-rum/use-atom (@state/state :selection/blocks))
+          selection-ids (state/get-selection-block-ids)
+          selected? (contains? (set selection-ids) (rum/deref *dummy-block-uuid))
+          idstr (str (rum/deref *dummy-block-uuid))
+          focus! (fn [] (js/setTimeout #(some-> (rum/deref *el-ref) (.focus)) 16))]
+
+      ;; mounted
+      ;(rum/use-effect! #(focus!) [])
+      (rum/use-effect! #(if selected? (focus!)
+                          (some-> (rum/deref *el-ref) (.blur))) [selected?])
+
+      (shui/trigger-as
+        :div.ls-dummy-block.ls-block
+
+        {:style {:width "100%"
+                 ;; The same as .dnd-separator
+                 :border-top (if hover
+                               "3px solid #ccc"
+                               nil)}
+         :ref *el-ref
+         :tabIndex 0
+         :on-click click-handler-fn
+         :id idstr
+         :blockid idstr
+         :class (when selected? "selected")}
+
+        [:div.flex.items-center
+         [:div.flex.items-center.mx-1 {:style {:height 24}}
+          [:span.bullet-container.cursor
+           [:span.bullet]]]
+
+         [:div.flex.flex-1
+          {:on-drag-enter #(set-hover! true)
+           :on-drag-over #(util/stop %)
+           :on-drop drop-handler-fn
+           :on-drag-leave #(set-hover! false)}
+          [:span.opacity-70.text
+           "Click here to edit..."]]]))))
 
 (rum/defc add-button
   [args]
@@ -207,7 +228,7 @@
          (and
           (not loading?)
           (not block?)
-          (empty? children))
+          (empty? children) page-e)
          (dummy-block page-e)
 
          :else
