@@ -362,6 +362,7 @@
         alias? (= :block/alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
         block (db/entity (:db/id block))
+        result (rum/react *result)
         selected-choices (when block
                            (when-let [v (get block (:db/ident property))]
                              (if (every? de/entity? v)
@@ -378,7 +379,12 @@
                  options (if (ldb/class? block) (model/get-all-classes repo)
                              (->> (model/get-all-pages repo)
                                   (remove (fn [e] (or (ldb/built-in? e) (ldb/property? e))))))
-                 excluded-options (remove (fn [e] (contains? exclude-ids (:block/uuid e))) options)]
+                 excluded-options (->>
+                                   (concat options result)
+                                   (util/distinct-by :db/id)
+                                   (remove (fn [e]
+                                             (or (contains? exclude-ids (:block/uuid e))
+                                                 (and (not (db/page? e)) (not (seq (:block/tags e))))))))]
              excluded-options)
 
            (seq classes)
@@ -390,18 +396,17 @@
             classes)
 
            :else
-           (let [result (rum/react *result)]
-             (if (empty? result)
-               (let [v (get block (:db/ident property))]
-                 (remove #(= :logseq.property/empty-placeholder (:db/ident %))
-                         (if (every? de/entity? v) v [v])))
-               (remove (fn [node]
-                         (or (= (:db/id block) (:db/id node))
+           (if (empty? result)
+             (let [v (get block (:db/ident property))]
+               (remove #(= :logseq.property/empty-placeholder (:db/ident %))
+                       (if (every? de/entity? v) v [v])))
+             (remove (fn [node]
+                       (or (= (:db/id block) (:db/id node))
                             ;; A page's alias can't be itself
-                             (and alias? (= (or (:db/id (:block/page block))
-                                                (:db/id block))
-                                            (:db/id node)))))
-                       result)))))
+                           (and alias? (= (or (:db/id (:block/page block))
+                                              (:db/id block))
+                                          (:db/id node)))))
+                     result))))
         options (map (fn [node]
                        (let [id (or (:value node) (:db/id node))
                              label (if (integer? id)
@@ -487,14 +492,14 @@
                           nil))})
 
         opts' (assoc opts
-                :block block
-                :input-opts input-opts
-                :on-input (fn [v]
-                            (if (string/blank? v)
-                              (reset! *result nil)
-                              (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
-                                                                                              :built-in? false})]
-                                (reset! *result result)))))]
+                     :block block
+                     :input-opts input-opts
+                     :on-input (fn [v]
+                                 (if (string/blank? v)
+                                   (reset! *result nil)
+                                   (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
+                                                                                                   :built-in? false})]
+                                     (reset! *result result)))))]
     (select-node property opts' *result)))
 
 (rum/defcs select < rum/reactive db-mixins/query
@@ -692,7 +697,6 @@
            (page-cp {:disable-preview? true
                      :tag? tag?
                      :hide-close-button? true
-                     :show-unique-title? true
                      :meta-click? other-position?} value)
            (:db/id value)))
 

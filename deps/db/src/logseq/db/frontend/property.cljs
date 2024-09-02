@@ -39,9 +39,8 @@
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
    :logseq.property/parent {:title "Parent"
-                            :schema {:type :page
-                                     :public? true
-                                     :view-context :page}}
+                            :schema {:type :node
+                                     :public? true}}
    :logseq.property.class/properties {:title "Tag properties"
                                       :schema {:type :property
                                                :cardinality :many

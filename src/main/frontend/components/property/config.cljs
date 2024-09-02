@@ -560,7 +560,10 @@
                                    (shui/popup-hide-all!)
                                    (route-handler/redirect-to-page! (:block/uuid property)))}}))
 
-     (when (and owner-block (not (contains? #{:logseq.property/parent} (:db/ident property))))
+     (when (and owner-block
+                (not (and
+                      (ldb/class? owner-block)
+                      (contains? #{:logseq.property/parent} (:db/ident property)))))
        (dropdown-editor-menuitem
         {:id :delete-property :icon :x :title "Delete property" :desc "" :disabled? false
          :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
