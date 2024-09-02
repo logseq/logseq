@@ -135,6 +135,7 @@
 (rum/defc page-search-aux
   [id format embed? db-tag? q current-pos input pos]
   (let [db? (config/db-based-graph? (state/get-current-repo))
+        q (string/trim q)
         [matched-pages set-matched-pages!] (rum/use-state nil)]
     (rum/use-effect! (fn []
                        (when-not (string/blank? q)
