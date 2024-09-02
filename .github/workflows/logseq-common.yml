@@ -9,7 +9,7 @@ on:
       - '.github/workflows/logseq-common.yml'
       - '!deps/common/**.md'
   pull_request:
-    branches: [master]
+    branches: [master, "feat/db"]
     paths:
       - 'deps/common/**'
       - '.github/workflows/logseq-common.yml'
