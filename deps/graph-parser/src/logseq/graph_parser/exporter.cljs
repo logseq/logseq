@@ -670,6 +670,14 @@
       (dissoc :block/whiteboard?)
       (update-page-tags db tag-classes page-names-to-uuids all-idents)))
 
+(defn- user-parent->built-in-property
+  [pages]
+  (map (fn [p]
+         (-> (if (set? (:user.property/parent p))
+               (assoc p :logseq.property/parent (first (:user.property/parent p)))
+               p)
+             (dissoc :user.property/parent))) pages))
+
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
   all non-whiteboard pages to be transacted, pages' properties and additional
@@ -702,47 +710,44 @@
                                    (into {} (map (juxt :block/name :block/uuid) new-pages)))
         all-pages-m (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
                           all-pages)
-        pages-tx (keep (fn [m]
-                         (if-let [page-uuid (existing-page-names-to-uuids (:block/name m))]
-                           (let [;; These attributes are not allowed to be transacted because they must not change across files
-                                 disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
-                                                        :block/created-at :block/updated-at]
-                                 allowed-attributes (into [:block/tags :block/alias :logseq.property/parent :block/type :db/ident]
-                                                          (keep #(when (db-malli-schema/user-property? (key %)) (key %))
-                                                                m))
-                                 block-changes (cond-> (select-keys m allowed-attributes)
+        pages-tx (->>
+                  (keep (fn [m]
+                          (if-let [page-uuid (existing-page-names-to-uuids (:block/name m))]
+                            (let [;; These attributes are not allowed to be transacted because they must not change across files
+                                  disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
+                                                         :block/created-at :block/updated-at]
+                                  allowed-attributes (into [:block/tags :block/alias :logseq.property/parent :block/type :db/ident]
+                                                           (keep #(when (db-malli-schema/user-property? (key %)) (key %))
+                                                                 m))
+                                  block-changes (cond-> (select-keys m allowed-attributes)
                                                  ;; disallow any type -> "page" but do allow any conversion to a non-page type
-                                                 (= (:block/type m) "page")
-                                                 (dissoc :block/type))]
-                             (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
-                               (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
-                                                       ignored-attrs)}))
-                             (when (seq block-changes)
-                               (cond-> (merge block-changes {:block/uuid page-uuid})
-                                 (seq (:block/alias m))
-                                 (update-page-alias page-names-to-uuids)
-                                 (:block/tags m)
-                                 (update-page-tags @conn tag-classes page-names-to-uuids (:all-idents import-state)))))
+                                                  (= (:block/type m) "page")
+                                                  (dissoc :block/type))]
+                              (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
+                                (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
+                                                        ignored-attrs)}))
+                              (when (seq block-changes)
+                                (cond-> (merge block-changes {:block/uuid page-uuid})
+                                  (seq (:block/alias m))
+                                  (update-page-alias page-names-to-uuids)
+                                  (:block/tags m)
+                                  (update-page-tags @conn tag-classes page-names-to-uuids (:all-idents import-state)))))
 
-                           (when (or (= "class" (:block/type m))
+                            (when (or (= "class" (:block/type m))
                                      ;; Don't build a new page if it overwrites an existing class
-                                     (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
-                                                  db-malli-schema/class?)))
-                             (let [m' (if (contains? all-built-in-names (keyword (:block/name m)))
+                                      (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
+                                                   db-malli-schema/class?)))
+                              (let [m' (if (contains? all-built-in-names (keyword (:block/name m)))
                                         ;; Use fixed uuid from above
-                                        (cond-> (assoc m :block/uuid (get page-names-to-uuids (:block/name m)))
+                                         (cond-> (assoc m :block/uuid (get page-names-to-uuids (:block/name m)))
                                           ;; only happens for few file built-ins like tags and alias
-                                          (not (:block/type m))
-                                          (assoc :block/type "page"))
-                                        m)]
-                               (build-new-page-or-class m' @conn tag-classes page-names-to-uuids (:all-idents import-state))))))
-                       (map :block all-pages-m))
-        pages-tx' (map (fn [p]
-                         (-> (if (set? (:user.property/parent p))
-                               (assoc p :logseq.property/parent (first (:user.property/parent p)))
-                               p)
-                             (dissoc :user.property/parent))) pages-tx)]
-    {:pages-tx pages-tx'
+                                           (not (:block/type m))
+                                           (assoc :block/type "page"))
+                                         m)]
+                                (build-new-page-or-class m' @conn tag-classes page-names-to-uuids (:all-idents import-state))))))
+                        (map :block all-pages-m))
+                  user-parent->built-in-property)]
+    {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
      :existing-pages existing-page-names-to-uuids
      :page-names-to-uuids page-names-to-uuids}))
