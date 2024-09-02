@@ -3657,7 +3657,8 @@
                           set-wrap-h! (debounce set-wrap-h! 16)
                           ob (js/ResizeObserver.
                                (fn []
-                                 (when-let [h (.-height (.-style target))]
+                                 (when-let [h (and (rum/deref *wrap-ref)
+                                                (.-height (.-style target)))]
                                    ;(prn "==>> debug: " h)
                                    (set-wrap-h! h))))]
                       (.observe ob target)
