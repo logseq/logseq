@@ -45,7 +45,7 @@
         node-icon (get node-entity (pu/get-pid :logseq.property/icon))]
     (or
      (when-not (string/blank? node-icon)
-       [:span (merge {:style {:color (or (:color node-icon) "inherit")}}
+       [:span.flex (merge {:style {:color (or (:color node-icon) "inherit")}}
                      (select-keys opts [:class]))
         (icon node-icon opts)])
      default-icon)))
