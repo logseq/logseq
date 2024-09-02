@@ -128,6 +128,32 @@
     (d/reset-schema! conn (update schema :block/type #(assoc % :db/cardinality :db.cardinality/one)))
     []))
 
+(defn- deprecate-class-parent
+  [conn _search-db]
+  (let [db @conn
+        datoms (d/datoms db :avet :class/parent)]
+    (->> (set (map :e datoms))
+         (mapcat
+          (fn [id]
+            (let [value (:db/id (:class/parent (d/entity db id)))]
+              [[:db/retract id :class/parent]
+               [:db/add id :logseq.property/parent value]]))))))
+
+(defn- deprecate-class-schema-properties
+  [conn _search-db]
+  (let [db @conn
+        datoms (d/datoms db :avet :class/schema.properties)]
+    (->> (set (map :e datoms))
+         (mapcat
+          (fn [id]
+            (let [values (map :db/id (:class/schema.properties (d/entity db id)))]
+              (concat
+               [[:db/retract id :class/schema.properties]]
+               (map
+                 (fn [value]
+                   [:db/add id :logseq.property.class/properties value])
+                 values))))))))
+
 (defn- add-addresses-in-kvs-table
   [^Object sqlite-db]
   (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
@@ -179,7 +205,11 @@
    [11 {:fix property-checkbox-type-non-ref}]
    [12 {:fix update-block-type-many->one}]
    [13 {:classes [:logseq.class/Journal]
-        :properties [:logseq.property.journal/title-format]}]])
+        :properties [:logseq.property.journal/title-format]}]
+   [14 {:properties [:logseq.property/parent]
+        :fix deprecate-class-parent}]
+   [15 {:properties [:logseq.property.class/properties]
+        :fix deprecate-class-schema-properties}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

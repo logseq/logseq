@@ -46,7 +46,7 @@
     ;; TODO: remove this in later releases
     :block/heading-level
     :block/file
-    :class/parent
+    :logseq.property/parent
     {:block/page [:db/id :block/name :block/title :block/journal-day]}
     {:block/_parent ...}])
 
@@ -399,7 +399,7 @@
 (defn get-classes-with-property
   "Get classes which have given property as a class property"
   [db property-id]
-  (:class/_schema.properties (d/entity db property-id)))
+  (:logseq.property.class/_properties (d/entity db property-id)))
 
 (defn get-alias-source-page
   "return the source page (page-name) of an alias"
@@ -572,14 +572,14 @@
 (defn get-class-parents
   [class]
   (let [*classes (atom #{})]
-    (when-let [parent (:class/parent class)]
+    (when-let [parent (:logseq.property/parent class)]
       (loop [current-parent parent]
         (when (and
                current-parent
                (class? parent)
                (not (contains? @*classes (:db/id parent))))
           (swap! *classes conj (:db/id current-parent))
-          (recur (:class/parent current-parent)))))
+          (recur (:logseq.property/parent current-parent)))))
     @*classes))
 
 (defn get-all-pages-views

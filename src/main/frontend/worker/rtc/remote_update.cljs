@@ -335,8 +335,6 @@
     :block/tags
     :block/link
     :block/journal-day
-    :class/parent
-    :class/schema.properties
     :property/schema.classes
     :property.value/content})
 

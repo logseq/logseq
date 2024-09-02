@@ -3,7 +3,9 @@
   fns and their allowed schema attributes"
   (:require [datascript.core :as d]
             [clojure.set :as set]
-            [logseq.common.util.macro :as macro-util]))
+            [logseq.common.util.macro :as macro-util]
+            [clojure.string :as string]
+            [logseq.common.config :as common-config]))
 
 ;; Config vars
 ;; ===========
@@ -12,7 +14,7 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any :entity :string :raw-number})
+  #{:keyword :map :coll :any :entity :class :page :property :string :raw-number})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -45,13 +47,13 @@
         original-value-ref-property-types))
 
 (def ref-property-types
-  "User facing ref types. Property values that users see are stored in either
+  "Ref types. Property values that users see are stored in either
   :property.value/content, :block/title.
   :block/title is for all the page related types"
-  (into #{:date :node} value-ref-property-types))
+  (into #{:date :node :entity :class :page :property} value-ref-property-types))
 
 (assert (set/subset? ref-property-types
-                     (set user-built-in-property-types))
+                     (set/union (set user-built-in-property-types) internal-built-in-property-types))
         "All ref types are valid property types")
 
 
@@ -86,6 +88,53 @@
 (defn- entity?
   [db id]
   (some? (d/entity db id)))
+
+(defn page?
+  [block]
+  (contains? #{"page" "journal" "whiteboard" "class" "property" "hidden"}
+             (:block/type block)))
+
+(defn class?
+  [entity]
+  (= (:block/type entity) "class"))
+
+(defn property?
+  [entity]
+  (= (:block/type entity) "property"))
+
+(defn closed-value?
+  [entity]
+  (= (:block/type entity) "closed value"))
+
+(defn whiteboard?
+  "Given a page entity or map, check if it is a whiteboard page"
+  [page]
+  (= (:block/type page) "whiteboard"))
+
+(defn journal?
+  "Given a page entity or map, check if it is a journal page"
+  [page]
+  (= (:block/type page) "journal"))
+
+(defn hidden?
+  [page]
+  (when page
+    (if (string? page)
+      (or (string/starts-with? page "$$$")
+          (= common-config/favorites-page-name page))
+      (= (:block/type page) "hidden"))))
+
+(defn- class-entity?
+  [db id]
+  (class? (d/entity db id)))
+
+(defn- property-entity?
+  [db id]
+  (property? (d/entity db id)))
+
+(defn- page-entity?
+  [db id]
+  (page? (d/entity db id)))
 
 (defn- number-entity?
   [db id-or-value {:keys [new-closed-value?]}]
@@ -138,6 +187,9 @@
    :string   string?
    :raw-number number?
    :entity   entity?
+   :class    class-entity?
+   :property property-entity?
+   :page     page-entity?
    :keyword  keyword?
    :map      map?
    ;; coll elements are ordered as it's saved as a vec
@@ -151,7 +203,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :url :number :date :node :entity})
+  #{:default :url :number :date :node :entity :class :property :page})
 
 ;; Helper fns
 ;; ==========

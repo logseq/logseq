@@ -421,7 +421,7 @@
                        :else title))])]])))))
 
 (rum/defc db-page-title
-  [state repo page whiteboard-page?]
+  [state repo page whiteboard-page? sidebar?]
   [:div.ls-page-title.flex.flex-1.w-full.content.items-start
      {:class (when-not whiteboard-page? "title")
       :on-pointer-down (fn [e]
@@ -442,6 +442,7 @@
 
      [:div.w-full
       (component-block/block-container {:page-title? true
+                                        :hide-title? sidebar?
                                         :hide-children? true
                                         :container-id (:container-id state)} page)]])
 
@@ -561,7 +562,8 @@
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
            [:div.relative.grid.gap-2.page-inner
-            (when (and (not sidebar?) (not block?))
+            (when (or (and db-based? (not block?))
+                      (and (not db-based?) (not sidebar?) (not block?)))
               [:div.flex.flex-row.space-between
                (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))
                  [:div.flex.flex-row.pr-2
@@ -573,14 +575,14 @@
                   (page-blocks-collapse-control title *control-show? *all-collapsed?)])
                (when (and (not whiteboard?) (ldb/page? page))
                  (if db-based?
-                   (db-page-title state repo page whiteboard-page?)
+                   (db-page-title state repo page whiteboard-page? sidebar?)
                    (page-title-cp page {:journal? journal?
                                         :fmt-journal? fmt-journal?
                                         :preview? preview?})))
                (lsp-pagebar-slot)])
 
-            (when db-based?
-              (db-page/page-info page))
+            (when (and db-based? (ldb/property? page))
+              (db-page/configure-property page))
 
             (when (and db-based? class-page?)
               (objects/class-objects page))
@@ -610,7 +612,7 @@
             (when (and (not block?) (not db-based?))
               (tagged-pages repo page page-title))
 
-            (when (ldb/class? page)
+            (when (and (ldb/page? page) (:logseq.property/_parent page))
               (class-component/class-children page))
 
             ;; referenced blocks

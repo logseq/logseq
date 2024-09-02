@@ -460,5 +460,5 @@
                                          popup-opts))))}
        (if has-icon?
          [:span {:style {:color (or (:color icon-value) "inherit")}}
-          (icon icon-value (merge {:size 18} icon-props))]
+          (icon icon-value icon-props)]
          (or empty-label "Empty"))))))

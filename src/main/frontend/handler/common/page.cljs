@@ -18,7 +18,9 @@
             [frontend.db.conn :as conn]
             [datascript.core :as d]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.modules.outliner.op :as outliner-op]))
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.handler.db-based.editor :as db-editor-handler]
+            [logseq.db.frontend.content :as db-content]))
 
 (defn <create!
   ([title]
@@ -28,13 +30,21 @@
            :as options}]
    (p/let [repo (state/get-current-repo)
            conn (db/get-db repo false)
+           db-based? (config/db-based-graph? repo)
+           parsed-result (when db-based? (db-editor-handler/wrap-parse-block {:block/title title}))
+           title' (if (and db-based? (seq (:block/tags parsed-result)))
+                    (string/trim (first (common-util/split-first (str "#" db-content/page-ref-special-chars) (:block/title parsed-result))))
+                    title)
+           options' (if db-based?
+                      (update options :tags concat (:block/tags parsed-result))
+                      options)
            result (ui-outliner-tx/transact!
                    {:outliner-op :create-page}
-                   (outliner-op/create-page! title options))
+                   (outliner-op/create-page! title' options'))
            [_page-name page-uuid] (ldb/read-transit-str result)]
      (when redirect?
        (route-handler/redirect-to-page! page-uuid))
-     (let [page (db/get-page (or page-uuid title))]
+     (let [page (db/get-page (or page-uuid title'))]
        (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
          (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
        page))))

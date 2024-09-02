@@ -38,10 +38,10 @@ but when eval `(:block/raw-title block-entity)`, return raw title of this block"
   "Used to store key-value, the value could be anything, e.g. {:db/ident :logseq.kv/xxx :kv/value value}"
   :any)
 
-(sr/defkeyword :class/parent
+(sr/defkeyword :logseq.property/parent
   "A class's parent class")
 
-(sr/defkeyword :class/schema.properties
+(sr/defkeyword :logseq.property.class/properties
   "Class properties that all of its objects can use, notice that it's different from this class's own properties.")
 
 (sr/defkeyword :block/closed-value-property

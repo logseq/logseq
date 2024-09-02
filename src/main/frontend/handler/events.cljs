@@ -11,8 +11,8 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.components.class :as class-component]
             [frontend.components.cmdk.core :as cmdk]
+            [frontend.components.block :as block]
             [frontend.components.settings :as settings]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
@@ -23,7 +23,6 @@
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
             [frontend.components.repo :as repo]
-            [frontend.components.db-based.page :as db-page]
             [frontend.components.property.dialog :as property-dialog]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -845,12 +844,9 @@
 
 (defmethod handle :class/configure [[_ page]]
   (shui/dialog-open!
-    #(vector :<>
-       (class-component/configure page {})
-       (db-page/page-properties page {:configure? true
-                                      :mode :tag}))
-    {:label "page-configure"
-     :align :top}))
+   #(block/block-container {} page)
+   {:label "page-configure"
+    :align :top}))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
@@ -951,7 +947,7 @@
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
-(defmethod handle :editor/new-property [[_ {:keys [block] :as opts}]]
+(defmethod handle :editor/new-property [[_ {:keys [block target] :as opts}]]
   (p/do!
    (editor-handler/save-current-block!)
    (let [editing-block (state/get-edit-block)
@@ -994,10 +990,11 @@
                                                                 content'
                                                                 (assoc :custom-content content'))))))))))]
      (when (seq blocks)
-       (let [input (some-> (state/get-edit-input-id)
-                           (gdom/getElement))]
-         (if input
-           (shui/popup-show! input
+       (let [target' (or target
+                       (some-> (state/get-edit-input-id)
+                            (gdom/getElement)))]
+         (if target'
+           (shui/popup-show! target'
                              #(property-dialog/dialog blocks opts')
                              {:align "start"
                               :as-dropdown? true
