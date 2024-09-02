@@ -736,8 +736,13 @@
                                           (assoc :block/type "page"))
                                         m)]
                                (build-new-page-or-class m' @conn tag-classes page-names-to-uuids (:all-idents import-state))))))
-                       (map :block all-pages-m))]
-    {:pages-tx pages-tx
+                       (map :block all-pages-m))
+        pages-tx' (map (fn [p]
+                         (-> (if (set? (:user.property/parent p))
+                               (assoc p :logseq.property/parent (first (:user.property/parent p)))
+                               p)
+                             (dissoc :user.property/parent))) pages-tx)]
+    {:pages-tx pages-tx'
      :page-properties-tx (mapcat :properties-tx all-pages-m)
      :existing-pages existing-page-names-to-uuids
      :page-names-to-uuids page-names-to-uuids}))
@@ -935,7 +940,6 @@
                        (mapcat #(build-block-tx @conn % pre-blocks page-names-to-uuids
                                                 (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))))
                        vec)
-
         {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
         (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
