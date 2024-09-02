@@ -960,7 +960,9 @@
                                              :set-ordered-columns! set-ordered-columns!
                                              :set-row-selection! set-row-selection!
                                              :add-new-object! add-new-object!}})
-        selected-rows (shui/table-get-selection-rows row-selection (:rows table))]
+        selected-rows (shui/table-get-selection-rows row-selection (:rows table))
+        [ready?, set-ready!] (rum/use-state false)
+        *view-ref (rum/use-ref nil)]
 
     (rum/use-effect!
      (fn [] (debounced-set-row-filter!
@@ -970,6 +972,7 @@
      [input filters])
 
     [:div.flex.flex-col.gap-2.grid
+     {:ref *view-ref}
      [:div.flex.items-center.justify-between
       [:div.flex.flex-row.items-center.gap-2
        [:div.font-medium.opacity-50
@@ -988,10 +991,18 @@
 
      (filters-row table)
 
+     (rum/use-effect! #(js/setTimeout (fn [] (set-ready! true)) 0) [])
+     (rum/use-effect!
+       (fn []
+         (when-let [^js cnt (and ready? (some-> (rum/deref *view-ref) (.closest ".is-class")))]
+           (.setAttribute cnt "data-ready" true)))
+       [ready?])
+
      (shui/table
       (let [columns' (:columns table)
             rows (:rows table)]
         [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
+         {:class (when (not ready?) "invisible")}
          [:div.relative
           (table-header table columns' option selected-rows)
 
