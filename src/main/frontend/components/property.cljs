@@ -412,7 +412,8 @@
   [block k v {:keys [inline-text page-cp sortable-opts] :as opts}]
   (when (keyword? k)
     (when-let [property (db/sub-block (:db/id (db/entity k)))]
-      (let [type (get-in property [:block/schema :type] :default)
+      (let [class-properties? (= (:db/ident property) :logseq.property.class/properties)
+            type (get-in property [:block/schema :type] :default)
             closed-values? (seq (:property/closed-values property))
             block? (and v
                         (not closed-values?)
@@ -428,8 +429,6 @@
                                                                     :inline-text inline-text
                                                                     :page-cp page-cp))]
         [:div {:class (cond
-                        (and (= (:db/ident property) :logseq.property.class/properties) (seq v))
-                        "property-pair !flex flex-col"
                         (or date? checkbox?)
                         "property-pair items-center"
                         :else
@@ -438,24 +437,18 @@
            (dnd/sortable-item (assoc sortable-opts :class "property-key col-span-2") property-key-cp')
            [:div.property-key.col-span-2 property-key-cp'])
 
-         (let [class-properties? (= (:db/ident property) :logseq.property.class/properties)
-               property-desc (when-not (= (:db/ident property) :logseq.property/description)
-                               (:logseq.property/description property))]
+         (when-not (:class-schema? opts)
            [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
             (cond-> {}
               class-properties? (assoc :class (if (:logsea.property.class/properties block)
                                                 "ml-2 -mt-1"
                                                 "-ml-1")))
-            (when-not (or block? class-properties? property-desc)
+            (when-not (or block? class-properties?)
               [:div.opacity-30 {:style {:margin-left 5}}
                [:span.bullet-container.cursor [:span.bullet]]])
             [:div.flex.flex-1
              [:div.property-value.flex.flex-1
-              (cond-> {}
-                class-properties? (assoc :class :opacity-90))
-              (if (:class-schema? opts)
-                (pv/property-value property (db/entity :logseq.property/description) property-desc opts)
-                (pv/property-value block property v opts))]]])]))))
+              (pv/property-value block property v opts)]]])]))))
 
 (rum/defcs ordered-properties < rum/reactive
   {:init (fn [state]
@@ -519,9 +512,6 @@
         classes (concat (:block/tags block) (outliner-property/get-class-parents db (:block/tags block)))]
     (doseq [class classes]
       (db-async/<get-block repo (:db/id class) :children? false))
-    (when (ldb/class? block)
-      (doseq [property (:logseq.property.class/properties block)]
-        (db-async/<get-block repo (:db/id property) :children? false)))
     classes))
 
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive db-mixins/query
