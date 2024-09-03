@@ -145,7 +145,7 @@
                [:a.text-sm (str "#" (:block/title class))])
              [:span.opacity-60.pl-1.top-1.relative.hover:opacity-80.active:opacity-60
               (shui/tabler-icon "edit")]]
-            (pv/property-empty-btn-value))])])))
+            (pv/property-empty-btn-value property))])])))
 
 (rum/defc name-edit-pane
   [property {:keys [set-sub-open! disabled?]}]
