@@ -6,7 +6,6 @@
             [datascript.core :as d]
             [clojure.string :as string]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.content :as db-content]))
 
 (defn- build-retracted-tx [retracted-blocks]
@@ -46,7 +45,7 @@
                                                     (contains? #{:db.fn/retractEntity :db/retractEntity} (first tx)))
                                            (second tx))) txs)
                                  (filter (fn [id]
-                                           (not (sqlite-util/page? (d/entity db id))))))]
+                                           (not (entity-util/page? (d/entity db id))))))]
     (when (seq retracted-block-ids)
       (let [retracted-blocks (map #(d/entity db %) retracted-block-ids)
             retracted-tx (build-retracted-tx retracted-blocks)

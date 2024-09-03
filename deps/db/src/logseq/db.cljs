@@ -88,13 +88,13 @@
              (prn :debug-tx-data tx-data)
              (throw e))))))))
 
-(def page? sqlite-util/page?)
-(def class? sqlite-util/class?)
-(def property? sqlite-util/property?)
-(def closed-value? sqlite-util/closed-value?)
-(def whiteboard? sqlite-util/whiteboard?)
-(def journal? sqlite-util/journal?)
-(def hidden? sqlite-util/hidden?)
+(def page? entity-util/page?)
+(def class? entity-util/class?)
+(def property? entity-util/property?)
+(def closed-value? entity-util/closed-value?)
+(def whiteboard? entity-util/whiteboard?)
+(def journal? entity-util/journal?)
+(def hidden? entity-util/hidden?)
 (def public-built-in-property? db-property/public-built-in-property?)
 
 (defn sort-by-order

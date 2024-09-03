@@ -4,8 +4,7 @@
   (:require [datascript.core :as d]
             [clojure.set :as set]
             [logseq.common.util.macro :as macro-util]
-            [clojure.string :as string]
-            [logseq.common.config :as common-config]))
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 ;; Config vars
 ;; ===========
@@ -89,52 +88,17 @@
   [db id]
   (some? (d/entity db id)))
 
-(defn page?
-  [block]
-  (contains? #{"page" "journal" "whiteboard" "class" "property" "hidden"}
-             (:block/type block)))
-
-(defn class?
-  [entity]
-  (= (:block/type entity) "class"))
-
-(defn property?
-  [entity]
-  (= (:block/type entity) "property"))
-
-(defn closed-value?
-  [entity]
-  (= (:block/type entity) "closed value"))
-
-(defn whiteboard?
-  "Given a page entity or map, check if it is a whiteboard page"
-  [page]
-  (= (:block/type page) "whiteboard"))
-
-(defn journal?
-  "Given a page entity or map, check if it is a journal page"
-  [page]
-  (= (:block/type page) "journal"))
-
-(defn hidden?
-  [page]
-  (when page
-    (if (string? page)
-      (or (string/starts-with? page "$$$")
-          (= common-config/favorites-page-name page))
-      (= (:block/type page) "hidden"))))
-
 (defn- class-entity?
   [db id]
-  (class? (d/entity db id)))
+  (entity-util/class? (d/entity db id)))
 
 (defn- property-entity?
   [db id]
-  (property? (d/entity db id)))
+  (entity-util/property? (d/entity db id)))
 
 (defn- page-entity?
   [db id]
-  (page? (d/entity db id)))
+  (entity-util/page? (d/entity db id)))
 
 (defn- number-entity?
   [db id-or-value {:keys [new-closed-value?]}]

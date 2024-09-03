@@ -28,7 +28,7 @@
   (->> (d/datoms db :avet :block/title page-name)
        (filter (fn [d]
                  (let [e (d/entity db (:e d))]
-                   (or (sqlite-util/page? e) (:block/tags e)))))
+                   (or (entity-util/page? e) (:block/tags e)))))
        (map :e)
        sort
        first))
@@ -92,7 +92,7 @@
                                      (map? (first property-values)))
                               property-values
                               #{property-values})
-                            (remove sqlite-util/page?))
+                            (remove entity-util/page?))
                     value-ids (when (every? map? values)
                                 (->> (map :db/id values)
                                      (filter (fn [id] (or (int? id) (keyword? id))))))
@@ -141,9 +141,9 @@
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
                              id))
-        page? (sqlite-util/page? block)
+        page? (entity-util/page? block)
         get-children (fn [block children]
-                       (let [long-page? (and (> (count children) 500) (not (sqlite-util/whiteboard? block)))]
+                       (let [long-page? (and (> (count children) 500) (not (entity-util/whiteboard? block)))]
                          (if long-page?
                            (->> (map (fn [e]
                                        (select-keys e [:db/id :block/uuid :block/page :block/order :block/parent :block/collapsed? :block/link]))

@@ -7,7 +7,7 @@
             [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.entity-plus :as entity-plus]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.order :as db-order]))
 
 ;; :db/ident malli schemas
@@ -421,15 +421,15 @@
   (into
    [:multi {:dispatch (fn [d]
                         (cond
-                          (sqlite-util/property? d)
+                          (entity-util/property? d)
                           :property
-                          (sqlite-util/class? d)
+                          (entity-util/class? d)
                           :class
-                          (sqlite-util/hidden? d)
+                          (entity-util/hidden? d)
                           :hidden
-                          (sqlite-util/whiteboard? d)
+                          (entity-util/whiteboard? d)
                           :normal-page
-                          (sqlite-util/page? d)
+                          (entity-util/page? d)
                           :normal-page
                           (:file/path d)
                           :file-block
