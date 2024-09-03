@@ -1132,15 +1132,48 @@
   (shui/button {:variant :outline :size :sm :class "del-date-btn" :on-click on-delete}
     (shui/tabler-icon "trash")))
 
+(defonce month-values
+  [:January :February :March :April :May
+   :June :July :August :September :October
+   :November :December])
+
+(defn get-month-label
+  [n]
+  (some->> n (nth month-values)
+    (name)))
+
+(rum/defc DateMonthsPicker
+  [value on-select]
+  [:div.ls-months-picker
+   (for [[idx m] (medley/indexed month-values)
+         :let [m' (cljs.core/name m)]]
+     (shui/button {:on-click (fn []
+                               (let [^js e (js/Event. "change")]
+                                 (js/Object.defineProperty e "target"
+                                   #js {:value #js {:value idx} :enumerable true})
+                                 (on-select e)
+                                 (shui/popup-hide!)))
+                   :variant :secondary
+                   :class (when (= idx value) "current")}
+       m'))])
+
 (rum/defc DateNavSelect
-  [{:keys [name value onChange children]}]
+  [{:keys [name value onChange _children]}]
   [:div.months-years-nav
    (if (= name "years")
      [:label [:input.py-0.px-1.w-auto
               {:type "number" :value value :on-change onChange :min 1 :max 9999}]]
 
      ;; months
-     [:select {:on-change onChange :value value :data-month value} children])])
+     ;[:select {:on-change onChange :value value :data-month value} children]
+     [:span.cursor-pointer.pr-1.pl-2.active:opacity-80.select-none
+      {:on-click (fn [^js e]
+                   (shui/popup-show! (.-target e)
+                     (fn []
+                       (DateMonthsPicker value onChange))
+                     {:align "start"
+                      :content-props {:class "w-[220px]"}}))}
+      (get-month-label value)])])
 
 (defn single-calendar
   [{:keys [del-btn? on-delete on-select] :as opts}]

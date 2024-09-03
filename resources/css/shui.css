@@ -165,6 +165,7 @@ html[data-theme=dark] {
     .ui__select-content {
       --accent: 190 100% 15%;
       --muted: 192 100% 13%;
+      --secondary-foreground: 0 0% 82%;
     }
 
     .ui__button {
