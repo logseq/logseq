@@ -130,29 +130,31 @@
 
 (defn- deprecate-class-parent
   [conn _search-db]
-  (let [db @conn
-        datoms (d/datoms db :avet :class/parent)]
-    (->> (set (map :e datoms))
-         (mapcat
-          (fn [id]
-            (let [value (:db/id (:class/parent (d/entity db id)))]
-              [[:db/retract id :class/parent]
-               [:db/add id :logseq.property/parent value]]))))))
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [datoms (d/datoms db :avet :class/parent)]
+       (->> (set (map :e datoms))
+            (mapcat
+             (fn [id]
+               (let [value (:db/id (:class/parent (d/entity db id)))]
+                 [[:db/retract id :class/parent]
+                  [:db/add id :logseq.property/parent value]]))))))))
 
 (defn- deprecate-class-schema-properties
   [conn _search-db]
-  (let [db @conn
-        datoms (d/datoms db :avet :class/schema.properties)]
-    (->> (set (map :e datoms))
-         (mapcat
-          (fn [id]
-            (let [values (map :db/id (:class/schema.properties (d/entity db id)))]
-              (concat
-               [[:db/retract id :class/schema.properties]]
-               (map
-                 (fn [value]
-                   [:db/add id :logseq.property.class/properties value])
-                 values))))))))
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [datoms (d/datoms db :avet :class/schema.properties)]
+        (->> (set (map :e datoms))
+             (mapcat
+              (fn [id]
+                (let [values (map :db/id (:class/schema.properties (d/entity db id)))]
+                  (concat
+                   [[:db/retract id :class/schema.properties]]
+                   (map
+                    (fn [value]
+                      [:db/add id :logseq.property.class/properties value])
+                    values))))))))))
 
 (defn- add-addresses-in-kvs-table
   [^Object sqlite-db]
