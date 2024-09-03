@@ -40,7 +40,8 @@
                                    :classes #{:logseq.class/Root}}}
    :logseq.property/parent {:title "Parent"
                             :schema {:type :node
-                                     :public? true}}
+                                     :public? true
+                                     :view-context :page}}
    :logseq.property.class/properties {:title "Tag properties"
                                       :schema {:type :property
                                                :cardinality :many

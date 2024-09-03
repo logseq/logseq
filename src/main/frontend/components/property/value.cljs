@@ -388,12 +388,7 @@
                  options (if (ldb/class? block) (model/get-all-classes repo)
                              (->> (model/get-all-pages repo)
                                   (remove (fn [e] (or (ldb/built-in? e) (ldb/property? e))))))
-                 excluded-options (->>
-                                   (concat options result)
-                                   (util/distinct-by :db/id)
-                                   (remove (fn [e]
-                                             (or (contains? exclude-ids (:block/uuid e))
-                                                 (and (not (db/page? e)) (not (seq (:block/tags e))))))))]
+                 excluded-options (remove (fn [e] (contains? exclude-ids (:block/uuid e))) options)]
              excluded-options)
 
            (seq classes)
