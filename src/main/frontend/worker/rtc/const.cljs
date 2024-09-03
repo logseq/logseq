@@ -173,12 +173,17 @@
       [:action :string]
       [:graph-uuid :string]]]
     ["apply-ops"
-     [:map
-      [:req-id :string]
-      [:action :string]
-      [:graph-uuid :string]
-      [:ops [:sequential to-ws-op-schema]]
-      [:t-before :int]]]
+     [:or
+      [:map
+       [:req-id :string]
+       [:action :string]
+       [:graph-uuid :string]
+       [:ops [:sequential to-ws-op-schema]]
+       [:t-before :int]]
+      [:map
+       [:req-id :string]
+       [:action :string]
+       [:s3-key :string]]]]
     ["presign-put-temp-s3-obj"
      [:map
       [:req-id :string]
