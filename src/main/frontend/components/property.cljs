@@ -331,7 +331,7 @@
                                                  #{:page block-type}
                                                  #{block-type})]
                                (or (and (not page?) (contains? existing-tag-alias (:block/title m)))
-                                   ;; Filters out properties from being in wrong :view-context
+                                   ;; Filters out properties from being in wrong :view-context and :never view-contexts
                                    (and (not= view-context :all) (not (contains? block-types view-context))))))
         property (rum/react *property)
         property-key (rum/react *property-key)]
