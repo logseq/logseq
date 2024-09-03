@@ -194,6 +194,7 @@ export interface BlockEntity {
   createdAt: number
   updatedAt: number
   properties?: Record<string, any>
+  'collapsed?': boolean
 
   // optional fields in dummy page
   left?: IEntityID
@@ -216,16 +217,19 @@ export interface PageEntity {
   id: EntityID
   uuid: BlockUUID
   name: string
-  originalName: string
+  format: 'markdown' | 'org'
+  type: 'page' | 'journal' | 'whiteboard' | 'class' | 'property' | 'hidden'
+  updatedAt: number
+  createdAt: number
   'journal?': boolean
 
+  title?: string
   file?: IEntityID
+  originalName?: string
   namespace?: IEntityID
   children?: Array<PageEntity>
   properties?: Record<string, any>
-  format?: 'markdown' | 'org'
   journalDay?: number
-  updatedAt?: number
 
   [key: string]: unknown
 }
