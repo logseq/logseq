@@ -32,8 +32,17 @@
             [frontend.components.title :as title]))
 
 (rum/defc property-empty-btn-value
-  [& {:as opts}]
-  (shui/button (merge {:class "empty-btn" :variant :text} opts) "Empty"))
+  [& {:keys [property] :as opts}]
+  (let [text (cond
+               (= (:db/ident property) :logseq.property/description)
+               "Add description"
+               :else
+               "Empty")]
+    (if (= text "Empty")
+      (shui/button (merge {:class "empty-btn" :variant :text} opts)
+                  text)
+      (shui/button (merge {:class "empty-btn !text-base" :variant :text} opts)
+                  text))))
 
 (rum/defc property-empty-text-value
   [& {:as opts}]
@@ -607,7 +616,7 @@
       [:div
        {:tabIndex 0
         :on-click (fn [] (<create-new-block! block property ""))}
-       (property-empty-btn-value)])))
+       (property-empty-btn-value {:property property})])))
 
 (rum/defcs property-block-value < rum/reactive db-mixins/query
                                   {:init (fn [state]
@@ -637,7 +646,7 @@
                 (:db/id v-block))
               :else
               invalid-warning)))
-        (property-empty-btn-value)))))
+        (property-empty-btn-value {:property property})))))
 
 (rum/defc closed-value-item < rum/reactive db-mixins/query
   [value {:keys [inline-text icon?]}]
@@ -680,7 +689,7 @@
     [:div.select-item.cursor-pointer
      (cond
        (= value :logseq.property/empty-placeholder)
-       (property-empty-btn-value)
+       (property-empty-btn-value {:property property})
 
        (or (ldb/page? value)
            (and (seq (:block/tags value))
@@ -776,7 +785,7 @@
                     (<create-new-block! block property "")))}
      (cond
        (and (= type :default) (nil? (:block/title value)))
-       [:div.jtrigger (property-empty-btn-value)]
+       [:div.jtrigger (property-empty-btn-value {:property property})]
 
        (= type :default)
        (property-block-value value block property page-cp)
