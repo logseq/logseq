@@ -24,7 +24,8 @@
   [icon' & [opts]]
   (cond
     (and (= :emoji (:type icon')) (:id icon'))
-    [:em-emoji (merge {:id (:id icon')}
+    [:em-emoji (merge {:id (:id icon')
+                       :style {:line-height 1}}
                       opts)]
 
     (and (= :tabler-icon (:type icon')) (:id icon'))
@@ -113,7 +114,8 @@
      (not (nil? hover))
      (assoc :on-mouse-over #(reset! hover emoji)
             :on-mouse-out #()))
-   [:em-emoji {:id id}]])
+   [:em-emoji {:id id
+               :style {:line-height 1}}]])
 
 (defn item-render
   [item opts]

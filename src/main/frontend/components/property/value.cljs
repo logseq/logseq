@@ -534,7 +534,7 @@
                             (let [icon (pu/get-block-property-value block :logseq.property/icon)
                                   value (db-property/closed-value-content block)]
                               {:label (if icon
-                                        [:div.flex.flex-row.gap-2
+                                        [:div.flex.flex-row.gap-1.items-center
                                          (icon-component/icon icon)
                                          value]
                                         value)
