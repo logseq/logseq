@@ -2396,7 +2396,7 @@
       (when (seq block-tags)
         [:div.block-tags
          (for [tag block-tags]
-           [:div.block-tag.text-sm
+           [:div.block-tag
             {:key (str "tag-" (:db/id tag))}
             (page-cp (assoc config
                             :hide-icon? true
