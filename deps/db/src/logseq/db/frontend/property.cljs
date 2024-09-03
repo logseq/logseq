@@ -18,7 +18,7 @@
      * :hide? - Boolean which hides property when set on a block or exported e.g. slides
      * :public? - Boolean which allows property to be used by user e.g. add and remove property to blocks/pages
      * :view-context - Keyword to indicate which view contexts a property can be
-       seen in when :public? is set. Valid values are :page and :block. Property can
+       seen in when :public? is set. Valid values are :page, :block and :class. Property can
        be viewed in any context if not set
    * :title - Property's :block/title
    * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident

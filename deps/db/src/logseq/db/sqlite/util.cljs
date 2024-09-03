@@ -127,11 +127,3 @@
     :block/uuid (d/squuid)
     :block/format :markdown
     :block/type "page"}))
-
-(def page? db-property-type/page?)
-(def class? db-property-type/class?)
-(def property? db-property-type/property?)
-(def closed-value? db-property-type/closed-value?)
-(def whiteboard? db-property-type/whiteboard?)
-(def journal? db-property-type/journal?)
-(def hidden? db-property-type/hidden?)
