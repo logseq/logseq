@@ -160,7 +160,7 @@
 (def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
-(def data-to-ws-schema
+(def ^:large-vars/data-var data-to-ws-schema
   (mu/closed-schema
    [:multi {:dispatch :action}
     ["list-graphs"
