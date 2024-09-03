@@ -547,7 +547,8 @@
      (when (and (not (contains? #{:logseq.property/parent} (:db/ident property)))
                 (not
                  (and (= :default (get-in property [:block/schema :type]))
-                      (empty? (:property/closed-values property)))))
+                      (empty? (:property/closed-values property))
+                      (contains? #{nil :properties} (:position property-schema)))))
        (let [position (:position property-schema)]
          (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
                                     :item-props {:class "ui__position-trigger-item"}
