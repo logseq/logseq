@@ -116,21 +116,21 @@
          checkbox? (= :checkbox (get-in property [:block/schema :type]))]
      (assert (qualified-keyword? property-id) "property to add must be a keyword")
      (p/do!
-       (if (and class? class-schema?)
-         (db-property-handler/class-add-property! (:db/id block) property-id)
-         (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))
-               (string? property-value'))
-           (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
-           (property-handler/set-block-property! repo (:block/uuid block) property-id property-value')))
-       (when exit-edit?
-         (ui/hide-popups-until-preview-popup!)
-         (shui/dialog-close!))
-       (when-not (or many? checkbox?)
-         (when-let [input (state/get-input)]
-           (.focus input)))
-       (when checkbox?
-         (state/set-editor-action-data! {:type :focus-property-value
-                                         :property property}))))))
+      (if (and class? class-schema?)
+        (db-property-handler/class-add-property! (:db/id block) property-id)
+        (if (and (db-property-type/user-ref-property-types (get-in property [:block/schema :type]))
+                 (string? property-value'))
+          (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
+          (property-handler/set-block-property! repo (:block/uuid block) property-id property-value')))
+      (when exit-edit?
+        (ui/hide-popups-until-preview-popup!)
+        (shui/dialog-close!))
+      (when-not (or many? checkbox?)
+        (when-let [input (state/get-input)]
+          (.focus input)))
+      (when checkbox?
+        (state/set-editor-action-data! {:type :focus-property-value
+                                        :property property}))))))
 
 (defn- add-or-remove-property-value
   [block property value selected? {:keys [refresh-result-f]}]
@@ -519,7 +519,7 @@
       (let [schema (:block/schema property)
             type (:type schema)
             closed-values? (seq (:property/closed-values property))
-            ref-type? (db-property-type/ref-property-types type)
+            ref-type? (db-property-type/user-ref-property-types type)
             items (if closed-values?
                     (keep (fn [block]
                             (let [icon (pu/get-block-property-value block :logseq.property/icon)

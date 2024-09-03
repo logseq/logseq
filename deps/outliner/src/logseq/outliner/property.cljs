@@ -75,8 +75,8 @@
   (let [ident (:db/ident property)
         cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
         old-type (get-in property [:block/schema :type])
-        old-ref-type? (db-property-type/ref-property-types old-type)
-        ref-type? (db-property-type/ref-property-types type')]
+        old-ref-type? (db-property-type/user-ref-property-types old-type)
+        ref-type? (db-property-type/user-ref-property-types type')]
     [(cond->
       {:db/ident ident
        :db/cardinality cardinality}
@@ -247,7 +247,7 @@
       (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
         (ldb/transact! conn [{:db/id (:db/id block) property-id v}]
                        {:outliner-op :save-block}))
-      (let [new-value (if (db-property-type/ref-property-types property-type)
+      (let [new-value (if (db-property-type/user-ref-property-types property-type)
                         (convert-ref-property-value conn property-id v property-type)
                         v)
             existing-value (get block property-id)]

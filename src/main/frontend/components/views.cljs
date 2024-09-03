@@ -95,11 +95,10 @@
   [block property]
   (let [type (get-in property [:block/schema :type])
         many? (= :db.cardinality/many (get property :db/cardinality))
-        ref-types (into db-property-type/ref-property-types #{:entity})
         number-type? (= :number type)
         v (get block (:db/ident property))
         v' (if many? v [v])
-        col (->> (if (ref-types type) (map db-property/property-value-content v') v')
+        col (->> (if (db-property-type/all-ref-property-types type) (map db-property/property-value-content v') v')
                  (remove nil?))]
     (if number-type?
       (reduce + (filter number? col))
@@ -375,7 +374,7 @@
    [property]
    (let [schema (:block/schema property)
          type (:type schema)]
-     (db-property-type/ref-property-types type))))
+     (db-property-type/all-ref-property-types type))))
 
 (defn- get-property-values
   [rows property]
