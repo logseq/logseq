@@ -440,7 +440,7 @@
          (when-not (:class-schema? opts)
            [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
             (cond-> {}
-              class-properties? (assoc :class (if (:logsea.property.class/properties block)
+              class-properties? (assoc :class (if (:logseq.property.class/properties block)
                                                 "ml-2 -mt-1"
                                                 "-ml-1")))
             (when-not (or block? class-properties?)
