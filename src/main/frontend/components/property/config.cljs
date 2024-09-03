@@ -256,48 +256,51 @@
 (rum/defc dropdown-editor-menuitem
   [{:keys [id icon title desc submenu-content item-props sub-content-props disabled? toggle-checked? on-toggle-checked-change]}]
   (let [submenu-content (when-not disabled? submenu-content)
+        item-props' (if (and disabled? (:on-select item-props))
+                     (assoc item-props :on-select (fn [] nil))
+                     item-props)
         [sub-open? set-sub-open!] (rum/use-state false)
         toggle? (boolean? toggle-checked?)
         id1 (str (or id icon (random-uuid)))
         id2 (str "d2-" id1)
         or-close-menu-sub! (fn []
                              (when (and (not (shui-popup/get-popup :ls-icon-picker))
-                                     (not (shui-popup/get-popup :ls-base-edit-form))
-                                     (not (shui-popup/get-popup :ls-node-tags-sub-pane)))
+                                        (not (shui-popup/get-popup :ls-base-edit-form))
+                                        (not (shui-popup/get-popup :ls-node-tags-sub-pane)))
                                (set-sub-open! false)
                                (restore-root-highlight-item! id1)))
         wrap-menuitem (if submenu-content
                         #(shui/dropdown-menu-sub
-                           {:open sub-open?
-                            :on-open-change (fn [v] (if v (set-sub-open! true) (or-close-menu-sub!)))}
-                           (shui/dropdown-menu-sub-trigger (merge {:id id1} item-props) %)
-                           (shui/dropdown-menu-portal
-                             (shui/dropdown-menu-sub-content
-                               (merge {:hideWhenDetached true
-                                       :onEscapeKeyDown or-close-menu-sub!} sub-content-props)
-                               (if (fn? submenu-content)
-                                 (submenu-content {:set-sub-open! set-sub-open! :id id1}) submenu-content))))
+                          {:open sub-open?
+                           :on-open-change (fn [v] (if v (set-sub-open! true) (or-close-menu-sub!)))}
+                          (shui/dropdown-menu-sub-trigger (merge {:id id1} item-props') %)
+                          (shui/dropdown-menu-portal
+                           (shui/dropdown-menu-sub-content
+                            (merge {:hideWhenDetached true
+                                    :onEscapeKeyDown or-close-menu-sub!} sub-content-props)
+                            (if (fn? submenu-content)
+                              (submenu-content {:set-sub-open! set-sub-open! :id id1}) submenu-content))))
                         #(shui/dropdown-menu-item
-                           (merge {:on-select (fn []
-                                                (when toggle?
-                                                  (some-> (gdom/getElement id2) (.click))))
-                                   :id id1}
-                             item-props) %))]
+                          (merge {:on-select (fn []
+                                               (when toggle?
+                                                 (some-> (gdom/getElement id2) (.click))))
+                                  :id id1}
+                                 item-props') %))]
     (wrap-menuitem
-      [:div.inner-wrap
-       {:class (util/classnames [{:disabled disabled?}])}
-       [:strong
-        (some-> icon (name) (shui/tabler-icon {:size 14
-                                               :style {:margin-top "-1"}}))
-        [:span title]]
-       (if (fn? desc) (desc)
-         (if (boolean? toggle-checked?)
-           [:span.scale-90.flex.items-center
-            (shui/switch {:id id2 :size "sm" :checked toggle-checked?
-                          :disabled disabled? :on-click #(util/stop-propagation %)
-                          :on-checked-change (or on-toggle-checked-change identity)})]
-           [:label [:span desc]
-            (when disabled? (shui/tabler-icon "forbid-2" {:size 15}))]))])))
+     [:div.inner-wrap
+      {:class (util/classnames [{:disabled disabled?}])}
+      [:strong
+       (some-> icon (name) (shui/tabler-icon {:size 14
+                                              :style {:margin-top "-1"}}))
+       [:span title]]
+      (if (fn? desc) (desc)
+          (if (boolean? toggle-checked?)
+            [:span.scale-90.flex.items-center
+             (shui/switch {:id id2 :size "sm" :checked toggle-checked?
+                           :disabled disabled? :on-click #(util/stop-propagation %)
+                           :on-checked-change (or on-toggle-checked-change identity)})]
+            [:label [:span desc]
+             (when disabled? (shui/tabler-icon "forbid-2" {:size 15}))]))])))
 
 (rum/defc choice-item-content
   [property block]
@@ -416,15 +419,17 @@
   (let [handle-select! (fn [^js e]
                          (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
                            (db-property-handler/upsert-property!
-                             (:db/ident property)
-                             (assoc (:block/schema property) :position (keyword v))
-                             {:property-name (:block/title property)})
+                            (:db/ident property)
+                            (assoc (:block/schema property) :position (keyword v))
+                            {:property-name (:block/title property)})
                            (set-sub-open! false)
                            (restore-root-highlight-item! id)))
         item-props {:on-select handle-select!}]
     [:div.ls-property-dropdown-editor.ls-property-ui-position-sub-pane
      (for [[k v] position-labels]
-       (dropdown-editor-menuitem (assoc v :item-props (assoc item-props :data-value k))))]))
+       (let [item-props (assoc item-props :data-value k)]
+         (dropdown-editor-menuitem
+          (assoc v :item-props item-props))))]))
 
 (defn- property-type-label
   [property-type]
@@ -539,7 +544,10 @@
                                         (update-cardinality-fn))))}))
 
      (shui/dropdown-menu-separator)
-     (when (not (contains? #{:logseq.property/parent} (:db/ident property)))
+     (when (and (not (contains? #{:logseq.property/parent} (:db/ident property)))
+                (not
+                 (and (= :default (get-in property [:block/schema :type]))
+                      (empty? (:property/closed-values property)))))
        (let [position (:position property-schema)]
          (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
                                     :item-props {:class "ui__position-trigger-item"}
