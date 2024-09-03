@@ -128,7 +128,7 @@
                 (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
                   (if (= :block/tags k)
                     (mapv #(:db/ident (d/entity db (:db/id %))) v)
-                    (if (db-property-type/ref-property-types built-in-type)
+                    (if (db-property-type/all-ref-property-types built-in-type)
                       (db-property/ref->property-value-contents db v)
                       v))
                   (db-property/ref->property-value-contents db v))])))

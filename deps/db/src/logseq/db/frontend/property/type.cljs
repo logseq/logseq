@@ -42,19 +42,24 @@
 (def value-ref-property-types
   "Property value ref types where the refed entities either store their value in
   :property.value/content or :block/title (for :default)"
-  (into #{:default}
-        original-value-ref-property-types))
+  (into #{:default} original-value-ref-property-types))
 
-(def ref-property-types
-  "Ref types. Property values that users see are stored in either
-  :property.value/content, :block/title.
-  :block/title is for all the page related types"
-  (into #{:date :node :entity :class :page :property} value-ref-property-types))
+(def user-ref-property-types
+  "User ref types. Property values that users see are stored in either
+  :property.value/content or :block/title. :block/title is for all the page related types"
+  (into #{:date :node} value-ref-property-types))
 
-(assert (set/subset? ref-property-types
-                     (set/union (set user-built-in-property-types) internal-built-in-property-types))
+(assert (set/subset? user-ref-property-types
+                     (set user-built-in-property-types))
         "All ref types are valid property types")
 
+(def all-ref-property-types
+  "All ref types - user and internal"
+  (into #{:entity :class :page :property} user-ref-property-types))
+
+(assert (set/subset? all-ref-property-types
+                     (set/union (set user-built-in-property-types) internal-built-in-property-types))
+        "All ref types are valid property types")
 
 ;; Property value validation
 ;; =========================

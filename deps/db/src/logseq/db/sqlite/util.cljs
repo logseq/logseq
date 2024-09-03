@@ -104,7 +104,7 @@
         :block/order (db-order/gen-key)}
         (seq classes)
         (assoc :property/schema.classes classes)
-        (or ref-type? (contains? (conj db-property-type/ref-property-types :entity) (:type prop-schema)))
+        (or ref-type? (contains? db-property-type/all-ref-property-types (:type prop-schema)))
         (assoc :db/valueType :db.type/ref))))))
 
 (defn build-new-class

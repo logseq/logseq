@@ -397,7 +397,7 @@
                         (shui/popup-show! (.-target e)
                                           (fn [{:keys [id]}]
                                             (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}
-                                                  values' (->> (if (contains? db-property-type/ref-property-types (get-in property [:block/schema :type]))
+                                                  values' (->> (if (contains? db-property-type/user-ref-property-types (get-in property [:block/schema :type]))
                                                                  (map #(:block/uuid (db/entity %)) values)
                                                                  values)
                                                                (remove string/blank?)
