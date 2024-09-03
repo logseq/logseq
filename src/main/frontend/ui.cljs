@@ -1172,7 +1172,8 @@
                      (fn []
                        (DateMonthsPicker value onChange))
                      {:align "start"
-                      :content-props {:class "w-[220px]"}}))}
+                      :content-props {:class "w-[220px]"
+                                      :onOpenAutoFocus #(.preventDefault %)}}))}
       (get-month-label value)])])
 
 (defn single-calendar
