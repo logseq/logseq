@@ -991,11 +991,12 @@
 
      (filters-row table)
 
-     (rum/use-effect! #(js/setTimeout (fn [] (set-ready! true)) 0) [])
+     (rum/use-effect! #(js/setTimeout (fn [] (set-ready! true)) 16) [])
      (rum/use-effect!
        (fn []
-         (when-let [^js cnt (and ready? (some-> (rum/deref *view-ref) (.closest ".is-class")))]
-           (.setAttribute cnt "data-ready" true)))
+         (when-let [^js cnt (and ready? (some-> (rum/deref *view-ref) (.closest ".is-node-page")))]
+           (.setAttribute cnt "data-ready" true)
+           #(.removeAttribute cnt "data-ready")))
        [ready?])
 
      (shui/table
