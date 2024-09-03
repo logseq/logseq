@@ -333,7 +333,7 @@ div[data-radix-popper-content-wrapper] {
 
 .ui__calendar {
   .rdp-caption_dropdowns {
-    @apply flex items-center justify-center relative border rounded opacity-80;
+    @apply flex items-center justify-center relative rounded opacity-80;
 
     .rdp-vhidden {
       @apply hidden;
@@ -373,27 +373,10 @@ div[data-radix-popper-content-wrapper] {
     }
 
     .months-years-nav {
-      @apply flex items-center relative left-0 pr-0 py-[1px] font-[500];
-
-      select {
-        @apply pl-2.5 pr-1 py-0 border-none bg-transparent bg-none text-center overflow-hidden w-auto;
-
-        &[data-month="0"], &[data-month="1"] {
-          @apply w-[86px];
-        }
-
-        &[data-month="2"], &[data-month="7"] {
-          @apply w-[74px];
-        }
-
-        &[data-month="3"], &[data-month="4"],
-        &[data-month="5"], &[data-month="6"] {
-          @apply px-0 w-[60px];
-        }
-      }
+      @apply flex items-center relative left-0 pr-0 py-[1px] font-[500] -left-1;
 
       input {
-        @apply border-none ml-0 mr-2 bg-transparent;
+        @apply border-none pl-1.5 ml-0 mr-2 bg-transparent;
       }
     }
   }
