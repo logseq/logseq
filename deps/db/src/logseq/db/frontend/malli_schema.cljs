@@ -211,7 +211,8 @@
    [:block/properties {:optional true} block-properties]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
-   [:block/tx-id {:optional true} :int]])
+   [:block/tx-id {:optional true} :int]
+   [:block/collapsed? {:optional true} :boolean]])
 
 (def page-attrs
   "Common attributes for pages"
@@ -236,8 +237,6 @@
   (vec
    (concat
     [:map
-     ;; Only for linked pages
-     [:block/collapsed? {:optional true} :boolean]
      ;; journal-day is only set for journal pages
      [:block/journal-day {:optional true} :int]]
     page-attrs
@@ -334,9 +333,7 @@
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
-   [:logseq.property/created-from-property {:optional true} :int]
-    ;; other
-   [:block/collapsed? {:optional true} :boolean]])
+   [:logseq.property/created-from-property {:optional true} :int]])
 
 (def whiteboard-block
   "A (shape) block for whiteboard"
