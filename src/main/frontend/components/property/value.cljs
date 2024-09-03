@@ -32,7 +32,7 @@
             [frontend.components.title :as title]))
 
 (rum/defc property-empty-btn-value
-  [& {:keys [property] :as opts}]
+  [property & opts]
   (let [text (cond
                (= (:db/ident property) :logseq.property/description)
                "Add description"
@@ -40,9 +40,9 @@
                "Empty")]
     (if (= text "Empty")
       (shui/button (merge {:class "empty-btn" :variant :text} opts)
-                  text)
+                   text)
       (shui/button (merge {:class "empty-btn !text-base" :variant :text} opts)
-                  text))))
+                   text))))
 
 (rum/defc property-empty-text-value
   [& {:as opts}]
@@ -246,7 +246,7 @@
                         :meta-click? other-position?} page)
               (:db/id page)))
           (when-not multiple-values?
-            (property-empty-btn-value)))))))
+            (property-empty-btn-value nil)))))))
 
 (rum/defc property-value-date-picker
   [block property value opts]
@@ -616,14 +616,14 @@
       [:div
        {:tabIndex 0
         :on-click (fn [] (<create-new-block! block property ""))}
-       (property-empty-btn-value {:property property})])))
+       (property-empty-btn-value property)])))
 
 (rum/defcs property-block-value < rum/reactive db-mixins/query
-                                  {:init (fn [state]
-                                           (let [block (first (:rum/args state))]
-                                             (when-let [block-id (or (:db/id block) (:block/uuid block))]
-                                               (db-async/<get-block (state/get-current-repo) block-id :children? true)))
-                                           state)}
+  {:init (fn [state]
+           (let [block (first (:rum/args state))]
+             (when-let [block-id (or (:db/id block) (:block/uuid block))]
+               (db-async/<get-block (state/get-current-repo) block-id :children? true)))
+           state)}
   [state value block property page-cp]
   (when value
     (if (state/sub-async-query-loading value)
@@ -646,7 +646,7 @@
                 (:db/id v-block))
               :else
               invalid-warning)))
-        (property-empty-btn-value {:property property})))))
+        (property-empty-btn-value property)))))
 
 (rum/defc closed-value-item < rum/reactive db-mixins/query
   [value {:keys [inline-text icon?]}]
@@ -689,7 +689,7 @@
     [:div.select-item.cursor-pointer
      (cond
        (= value :logseq.property/empty-placeholder)
-       (property-empty-btn-value {:property property})
+       (property-empty-btn-value property)
 
        (or (ldb/page? value)
            (and (seq (:block/tags value))
@@ -773,7 +773,7 @@
   (let [schema (:block/schema property)
         multiple-values? (db-property/many? property)
         class (str (when-not row? "flex flex-1 ")
-                (when multiple-values? "property-value-content"))
+                   (when multiple-values? "property-value-content"))
         type (:type schema)]
     [:div.cursor-text
      {:id (or dom-id (random-uuid))
@@ -785,7 +785,7 @@
                     (<create-new-block! block property "")))}
      (cond
        (and (= type :default) (nil? (:block/title value)))
-       [:div.jtrigger (property-empty-btn-value {:property property})]
+       [:div.jtrigger (property-empty-btn-value property)]
 
        (= type :default)
        (property-block-value value block property page-cp)
