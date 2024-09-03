@@ -531,6 +531,7 @@
           block-id (:block/uuid page)
           block? (some? (:block/page page))
           class-page? (ldb/class? page)
+          property-page? (ldb/property? page)
           journal? (db/journal-page? page-name)
           db-based? (config/db-based-graph? repo)
           fmt-journal? (boolean (date/journal-title->int page-name))
@@ -557,7 +558,7 @@
 
                 {:key path-page-name
                  :class (util/classnames [{:is-journals (or journal? fmt-journal?)
-                                           :is-class class-page?}])})
+                                           :is-node-page (or class-page? property-page?)}])})
 
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive

@@ -1,6 +1,6 @@
 .cp__page {
   &-inner-wrap {
-    &.is-class:not([data-ready]) {
+    &.is-node-page:not([data-ready]) {
       .ls-page-blocks,
       .ls-page-appendix-els {
         @apply invisible;
