@@ -872,6 +872,9 @@ html.is-mac {
     @apply flex flex-row flex-wrap self-start items-center gap-1;
     max-width: 256px;
 }
+.block-tag {
+    @apply flex text-sm h-6 items-center;
+}
 .block-tag span {
     @apply whitespace-nowrap overflow-hidden;
     max-width: 160px;
