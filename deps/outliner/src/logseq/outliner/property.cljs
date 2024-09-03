@@ -391,15 +391,6 @@
          (ldb/sort-by-order)
          (map :db/ident))))
 
-(defn block-has-viewable-properties?
-  [block-entity]
-  (let [properties (->> (keys (:block/properties block-entity))
-                        (remove #{:logseq.property/icon :logseq.property/built-in?}))]
-    (or
-     (seq (:block/alias block-entity))
-     (seq (:block/tags block-entity))
-     (seq properties))))
-
 (defn- build-closed-value-tx
   [db property resolved-value {:keys [id icon]}]
   (let [block (when id (d/entity db [:block/uuid id]))
