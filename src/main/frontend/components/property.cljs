@@ -443,7 +443,9 @@
                                (:logseq.property/description property))]
            [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
             (cond-> {}
-              class-properties? (assoc :class "ml-2 -mt-1"))
+              class-properties? (assoc :class (if (:logsea.property.class/properties block)
+                                                "ml-2 -mt-1"
+                                                "-ml-1")))
             (when-not (or block? class-properties? property-desc)
               [:div.opacity-30 {:style {:margin-left 5}}
                [:span.bullet-container.cursor [:span.bullet]]])
