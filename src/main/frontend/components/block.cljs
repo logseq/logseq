@@ -3725,21 +3725,24 @@
         ;; FIXME: parents need to be sorted
         parent-blocks (group-by :block/parent page-blocks)]
     [:div.my-2.references-blocks-item {:key (str "page-" (:db/id page))}
-      (ui/foldable
-       [:div
-        (page-cp config page)
-        (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-       (for [[parent blocks] parent-blocks]
-         (let [blocks' (map (fn [b]
-                              (if (e/entity? b)
-                                b
-                                (update b :block/children
-                                        (fn [col]
-                                          (tree/non-consecutive-blocks->vec-tree col))))) blocks)]
-           (rum/with-key
-             (breadcrumb-with-container blocks' config)
-             (:db/id parent))))
-       {:debug-id page})]))
+     (let [items (for [[parent blocks] parent-blocks]
+                     (let [blocks' (map (fn [b]
+                                          (if (e/entity? b)
+                                            b
+                                            (update b :block/children
+                                              (fn [col]
+                                                (tree/non-consecutive-blocks->vec-tree col))))) blocks)]
+                       (rum/with-key
+                         (breadcrumb-with-container blocks' config)
+                         (:db/id parent))))]
+       (if page
+         (ui/foldable
+           [:div
+            (page-cp config page)
+            (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+           items
+           {:debug-id page})
+         [:div.relative.-left-2 items]))]))
 
 ;; headers to hiccup
 (defn ->hiccup
