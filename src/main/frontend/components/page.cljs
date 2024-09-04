@@ -445,7 +445,6 @@
 
      [:div.w-full.relative {:on-mouse-over #(reset! *hover? true)
                             :on-mouse-leave (fn []
-                                              (prn :debug :on-mouse-leave)
                                               (reset! *hover? false))}
       (when hover?
         [:div.absolute.-top-3.left-0.fade-in
