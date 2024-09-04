@@ -3737,12 +3737,12 @@
                          (:db/id parent))))]
        (if page
          (ui/foldable
-           [:div
+           [:div.with-foldable-page
             (page-cp config page)
             (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
            items
            {:debug-id page})
-         [:div.relative.-left-2 items]))]))
+         [:div.only-page-blocks items]))]))
 
 ;; headers to hiccup
 (defn ->hiccup

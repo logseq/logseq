@@ -834,6 +834,18 @@ html.is-mac {
 
   &-item {
     @apply bg-gray-03 rounded p-4;
+
+    > .only-page-blocks {
+      @apply relative -left-[11px];
+    }
+
+    .with-foldable-page {
+      > .preview-ref-link {
+        .page-ref .ui__icon.ti {
+          @apply top-[2px] left-0;
+        }
+      }
+    }
   }
 
   .page-reference:hover {
