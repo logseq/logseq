@@ -118,6 +118,8 @@
                                                false
                                                true)
       :ui/scrolling?                         (atom false)
+      :ui/show-empty-and-hidden-properties?  (atom {:mode :global
+                                                    :show? false})
       :document/mode?                        document-mode?
 
       :config                                {}

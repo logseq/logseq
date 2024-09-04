@@ -543,7 +543,12 @@
                      (assoc state ::classes (async-load-classes! block))))}
   [state _target-block {:keys [class-schema?] :as opts}]
   (let [id (::id state)
-        block (db/sub-block (:db/id (::block state)))
+        db-id (:db/id (::block state))
+        block (db/sub-block db-id)
+        show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/sub :ui/show-empty-and-hidden-properties?)]
+                                            (and show?
+                                                 (or (= mode :global)
+                                                     (and (set? ids) (contains? ids (:block/uuid block))))))
         _ (doseq [class (::classes state)]
             (db/sub-block (:db/id class)))
         page? (db/page? block)
@@ -574,7 +579,8 @@
                                ;; TODO: Use ldb/built-in? when intermittent lazy loading issue fixed
                                (get db-property/built-in-properties (:db/ident ent)))
                           ;; other position
-                          (when-not (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
+                          (when-not (or (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
+                                        show-empty-and-hidden-properties?)
                             (outliner-property/property-with-other-position? ent)))))))
                   properties))
         {:keys [all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))
@@ -586,6 +592,8 @@
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
                                 (cond
+                                  show-empty-and-hidden-properties?
+                                  false
                                   root-block?
                                   false
                                   :else
