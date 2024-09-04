@@ -33,7 +33,7 @@
            (outliner-core/validate-unique-by-name-tag-and-block-type
             @conn
             "Apple"
-            (find-block-by-content conn "Apple")))
+            (assoc (find-block-by-content conn "Apple") :db/id 10000)))
           "Disallow duplicate page with tag")
       (is (nil?
            (outliner-core/validate-unique-by-name-tag-and-block-type
@@ -48,7 +48,7 @@
            (outliner-core/validate-unique-by-name-tag-and-block-type
             @conn
             "page1"
-            (find-block-by-content conn "page1")))
+            (assoc (find-block-by-content conn "page1") :db/id 10000)))
           "Disallow duplicate page without tag")))
 
   (testing "blocks"
@@ -71,7 +71,7 @@
            (outliner-core/validate-unique-by-name-tag-and-block-type
             @conn
             "Sing Sing"
-            (find-block-by-content conn "Sing Sing")))
+            (assoc (find-block-by-content conn "Sing Sing") :db/id 10000)))
           "Disallow duplicate page with tag")
       (is (nil?
            (outliner-core/validate-unique-by-name-tag-and-block-type
