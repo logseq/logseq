@@ -550,8 +550,6 @@
               update-ops (vals update-ops-map)
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
-          (when rtc-const/RTC-E2E-TEST
-            (prn :debug-remote-update-data remote-update-data))
           (js/console.groupCollapsed "rtc/apply-remote-ops-log")
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
                                              :persist-op? false
