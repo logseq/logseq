@@ -25,7 +25,7 @@
   (m/sp
     (let [decoded-message (rtc-const/data-to-ws-coercer (assoc message :req-id "temp-id"))
           message-str (js/JSON.stringify (clj->js (select-keys (rtc-const/data-to-ws-encoder decoded-message)
-                                                               [:graph-uuid :ops :t-before])))
+                                                               ["graph-uuid" "ops" "t-before"])))
           len (.-length (utf8/encode message-str))]
       (when (< 100000 len)
         (let [{:keys [url key]} (m/? (ws/send&recv ws {:action "presign-put-temp-s3-obj"}))
