@@ -66,7 +66,8 @@
                        (db-property-handler/remove-block-property!
                          (:db/id block)
                          :logseq.property/icon))
-                     (shui/popup-hide!))})]))
+                     (shui/popup-hide!)
+                     (shui/dialog-close!))})]))
 
 (defn- select-type?
   [property type]
@@ -78,6 +79,7 @@
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
   (shui/popup-hide!)
+  (shui/dialog-close!)
   (p/let [block
           (if (and (= :default (get-in property [:block/schema :type]))
                    (not (db-property/many? property)))
@@ -123,7 +125,8 @@
           (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
           (property-handler/set-block-property! repo (:block/uuid block) property-id property-value')))
       (when exit-edit?
-        (ui/hide-popups-until-preview-popup!))
+        (ui/hide-popups-until-preview-popup!)
+        (shui/dialog-close!))
       (when-not (or many? checkbox?)
         (when-let [input (state/get-input)]
           (.focus input)))
@@ -152,13 +155,14 @@
            state)
    :will-mount (fn [state]
                  (js/setTimeout
-                   #(some-> @(::identity state)
-                      (js/document.getElementById)
-                      (.querySelector "[aria-selected=true]")
-                      (.focus)) 16)
+                  #(some-> @(::identity state)
+                           (js/document.getElementById)
+                           (.querySelector "[aria-selected=true]")
+                           (.focus)) 16)
                  state)
    :will-unmount (fn [state]
                    (shui/popup-hide!)
+                   (shui/dialog-close!)
                    (state/set-editor-action! nil)
                    state)}
   [state id {:keys [on-change value _del-btn? _on-delete]}]
@@ -173,22 +177,22 @@
             (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
               (let [journal (date/js-date->journal-title gd)]
                 (p/do!
-                  (when-not (db/get-case-page journal)
-                    (page-handler/<create! journal {:redirect? false
-                                                    :create-first-block? false}))
-                  (when (fn? on-change)
-                    (on-change (db/get-case-page journal)))
-                  (shui/popup-hide! id)
-                  (ui/hide-popups-until-preview-popup!)
-                  (shui/popup-hide!))))))]
+                 (when-not (db/get-case-page journal)
+                   (page-handler/<create! journal {:redirect? false
+                                                   :create-first-block? false}))
+                 (when (fn? on-change)
+                   (on-change (db/get-case-page journal)))
+                 (shui/popup-hide! id)
+                 (ui/hide-popups-until-preview-popup!)
+                 (shui/dialog-close!))))))]
     (ui/single-calendar
-      (cond->
-        {:initial-focus true
-         :selected initial-day
-         :id @*ident
-         :on-select select-handler!}
-        initial-month
-        (assoc :default-month initial-month)))))
+     (cond->
+      {:initial-focus true
+       :selected initial-day
+       :id @*ident
+       :on-select select-handler!}
+       initial-month
+       (assoc :default-month initial-month)))))
 
 (rum/defc date-picker
   [value {:keys [on-change on-delete del-btn? editing? multiple-values? other-position?]}]
