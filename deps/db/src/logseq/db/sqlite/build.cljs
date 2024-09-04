@@ -107,7 +107,7 @@
     []
     (map second (re-seq page-ref/page-ref-re s))))
 
-(defn- ->block-tx [db {:keys [build/properties] :as m} properties-config page-uuids all-idents page-id]
+(defn- ->block-tx [{:keys [build/properties] :as m} properties-config page-uuids all-idents page-id]
   (let [new-block {:db/id (new-db-id)
                    :block/format :markdown
                    :block/page {:db/id page-id}
@@ -134,7 +134,7 @@
                                                            (throw (ex-info (str "No uuid for page ref name" (pr-str %)) {})))
                                                        :block/title %)
                                             ref-names)]
-                       {:block/title (db-content/refs->special-id-ref db (:block/title m) block-refs)
+                       {:block/title (db-content/refs->special-id-ref (:block/title m) block-refs {:replace-tag? false})
                         :block/refs block-refs})))))))
 
 (defn- build-properties-tx [properties page-uuids all-idents]
@@ -332,8 +332,8 @@
     all-idents))
 
 (defn- build-pages-and-blocks-tx
-  [db pages-and-blocks all-idents page-uuids {:keys [page-id-fn properties]
-                                              :or {page-id-fn :db/id}}]
+  [pages-and-blocks all-idents page-uuids {:keys [page-id-fn properties]
+                                           :or {page-id-fn :db/id}}]
   (vec
    (mapcat
     (fn [{:keys [page blocks]}]
@@ -366,7 +366,7 @@
          ;; blocks tx
          (reduce (fn [acc m]
                    (into acc
-                         (->block-tx db m properties page-uuids all-idents (page-id-fn new-page))))
+                         (->block-tx m properties page-uuids all-idents (page-id-fn new-page))))
                  []
                  blocks))))
     pages-and-blocks)))
@@ -515,8 +515,8 @@
     {:classes classes' :properties properties'}))
 
 (defn- build-blocks-tx*
-  [db {:keys [pages-and-blocks properties graph-namespace auto-create-ontology?]
-       :as options}]
+  [{:keys [pages-and-blocks properties graph-namespace auto-create-ontology?]
+    :as options}]
   (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks properties)
         page-uuids (create-page-uuids pages-and-blocks')
         {:keys [classes properties]} (if auto-create-ontology? (auto-create-ontology options) options)
@@ -534,7 +534,7 @@
                                                  cs)))
                                  m))
                              properties-tx)
-        pages-and-blocks-tx (build-pages-and-blocks-tx db pages-and-blocks' all-idents page-uuids
+        pages-and-blocks-tx (build-pages-and-blocks-tx pages-and-blocks' all-idents page-uuids
                                                        (assoc options :properties properties))]
     ;; Properties first b/c they have schema and are referenced by all. Then classes b/c they can be referenced by pages. Then pages
     (split-blocks-tx (concat properties-tx'
@@ -588,9 +588,9 @@
    supported: :default, :url, :checkbox, :number, :node and :date. :checkbox and
    :number values are written as booleans and integers/floats. :node references
    are written as vectors e.g. `[:page \"PAGE NAME\"]`"
-  [db options]
+  [options]
   (validate-options options)
-  (build-blocks-tx* db options))
+  (build-blocks-tx* options))
 
 (defn create-blocks
   "Builds txs with build-blocks-tx and transacts them. Also provides a shorthand
@@ -598,7 +598,7 @@
   [conn options]
   (let [options' (merge {:auto-create-ontology? true}
                         (if (vector? options) {:pages-and-blocks options} options))
-        {:keys [init-tx block-props-tx]} (build-blocks-tx @conn options')]
+        {:keys [init-tx block-props-tx]} (build-blocks-tx options')]
     (d/transact! conn init-tx)
     (when (seq block-props-tx)
       (d/transact! conn block-props-tx))))
