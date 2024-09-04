@@ -1958,12 +1958,15 @@
                                      " hide-inner-bullet")
                                    (when order-list? " as-order-list typed-list"))}
 
-                      (let [icon (get-block-icon block)]
+                      (let [icon (get-block-icon block)
+                            page? (db/page? block)]
                         (cond
                           link?
-                          (ui/icon "link" {:size 14})
+                          (ui/icon "link" {:size 15})
+                          page?
+                          (ui/icon "page" {:size 15})
                           icon
-                          (icon-component/icon icon)
+                          (icon-component/icon icon {:size 16})
                           :else
                           [:span.bullet (cond->
                                          {:blockid (str uuid)}
