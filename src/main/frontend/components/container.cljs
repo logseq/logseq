@@ -783,18 +783,18 @@
               (let [show!
                     (fn [content]
                       (shui/popup-show! e
-                        (fn [{:keys [id]}]
-                          [:div {:on-click #(shui/popup-hide! id)
-                                 :data-keep-selection true}
-                           content])
-                        {:on-before-hide state/dom-clear-selection!
-                         :on-after-hide state/state-clear-selection!
-                         :content-props {:class "w-[280px] ls-context-menu-content"}
-                         :as-dropdown? true}))
+                                        (fn [{:keys [id]}]
+                                          [:div {:on-click #(shui/popup-hide! id)
+                                                 :data-keep-selection true}
+                                           content])
+                                        {:on-before-hide state/dom-clear-selection!
+                                         :on-after-hide state/state-clear-selection!
+                                         :content-props {:class "w-[280px] ls-context-menu-content"}
+                                         :as-dropdown? true}))
 
                     handled
                     (cond
-                      page
+                      (and page (not block-id))
                       (do
                         (show! (cp-content/page-title-custom-context-menu-content page-entity))
                         (state/set-state! :page-title/context nil))
