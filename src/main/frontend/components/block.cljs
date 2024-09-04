@@ -2901,7 +2901,6 @@
 
 (defn- block-mouse-leave
   [e *control-show? block-id doc-mode?]
-  (util/stop e)
   (reset! *control-show? false)
   (when doc-mode?
     (when-let [parent (gdom/getElement block-id)]

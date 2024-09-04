@@ -420,9 +420,12 @@
                                                                                            (:block/format page))))
                        :else title))])]])))))
 
-(rum/defc db-page-title
-  [state repo page whiteboard-page? sidebar?]
-  [:div.ls-page-title.flex.flex-1.w-full.content.items-start
+(rum/defcs db-page-title < rum/reactive
+  (rum/local false ::hover?)
+  [state repo page whiteboard-page? sidebar? container-id]
+  (let [*hover? (::hover? state)
+        hover? (rum/react *hover?)]
+    [:div.ls-page-title.flex.flex-1.w-full.content.items-start
      {:class (when-not whiteboard-page? "title")
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
@@ -440,11 +443,36 @@
                         (.preventDefault e)
                         (state/sidebar-add-block! repo (:db/id page) :page)))))}
 
-     [:div.w-full
+     [:div.w-full.relative {:on-mouse-over #(reset! *hover? true)
+                            :on-mouse-leave (fn []
+                                              (prn :debug :on-mouse-leave)
+                                              (reset! *hover? false))}
+      (when hover?
+        [:div.absolute.-top-3.left-0.fade-in
+         [:div.flex.flex-row.items-center.gap-2
+          (when-not (:logseq.property/icon (db/entity (:db/id page)))
+            (shui/button
+             {:variant :outline
+              :size :sm
+              :class "px-2 py-0 h-4 text-xs text-muted-foreground"
+              :on-click (fn [e]
+                          (state/pub-event! [:editor/new-property {:property-key "Icon"
+                                                                   :block page
+                                                                   :target (.-target e)}]))}
+             "Add icon"))
+
+          (shui/button
+           {:variant :outline
+            :size :sm
+            :class "px-2 py-0 h-4 text-xs text-muted-foreground"
+            :on-click (fn [e]
+                        (state/pub-event! [:editor/new-property {:block page
+                                                                 :target (.-target e)}]))}
+           "Set property")]])
       (component-block/block-container {:page-title? true
                                         :hide-title? sidebar?
                                         :hide-children? true
-                                        :container-id (:container-id state)} page)]])
+                                        :container-id container-id} page)]]))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -576,7 +604,7 @@
                   (page-blocks-collapse-control title *control-show? *all-collapsed?)])
                (when (and (not whiteboard?) (ldb/page? page))
                  (if db-based?
-                   (db-page-title state repo page whiteboard-page? sidebar?)
+                   (db-page-title repo page whiteboard-page? sidebar? (:container-id state))
                    (page-title-cp page {:journal? journal?
                                         :fmt-journal? fmt-journal?
                                         :preview? preview?})))
