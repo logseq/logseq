@@ -345,9 +345,9 @@
    :editor/toggle-number-list               {:binding "t n"
                                              :fn      #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
-   :editor/add-property                     {:binding "mod+p"
+   :editor/add-property                     {:binding (if mac? "mod+p" "ctrl+alt+p")
                                              :fn      (fn [e]
-                                                        (when e (.preventDefault e))
+                                                        (when e (util/stop e))
                                                         (state/pub-event! [:editor/new-property {}]))}
 
    :editor/add-property-deadline            {:binding "p d"
