@@ -1368,7 +1368,8 @@ Similar to re-frame subscriptions"
   (clear-cursor-range!)
   (set-state! :editor/content {})
   (set-state! :ui/select-query-cache {})
-  (set-state! :editor/block-refs #{}))
+  (set-state! :editor/block-refs #{})
+  (set-state! :editor/action-data nil))
 
 (defn into-code-editor-mode!
   []

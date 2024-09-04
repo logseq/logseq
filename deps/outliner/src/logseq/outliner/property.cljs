@@ -369,9 +369,11 @@
 
 (defn- property-with-position?
   [db property-id block-properties position]
-  (and
-   (some? (get block-properties property-id))
-   (let [schema (:block/schema (d/entity db property-id))]
+  (let [property (d/entity db property-id)
+        schema (:block/schema property)]
+    (and
+     (or (some? (get block-properties property-id)) ; property value exists
+         (contains? #{:checkbox} (:type schema)))
      (= (:position schema) position))))
 
 (defn property-with-other-position?
