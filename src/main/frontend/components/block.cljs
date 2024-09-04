@@ -2565,8 +2565,9 @@
                  default-hide? (or (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))
                                    (= (str (:id config)) (str (:block/uuid block))))
                  *refs-count (atom nil)]
-             (p/let [count (db-async/<get-block-refs-count (state/get-current-repo) (:db/id block))]
-               (reset! *refs-count count))
+             (when-let [id (:db/id block)]
+               (p/let [count (db-async/<get-block-refs-count (state/get-current-repo) id)]
+                 (reset! *refs-count count)))
              (assoc state
                     ::hide-block-refs? (atom default-hide?)
                     ::refs-count *refs-count)))}
@@ -2642,7 +2643,7 @@
 
        (when-not (or (:block-ref? config) (:table? config))
          (when (and db-based? (seq (:block/tags block)))
-            (tags (assoc config :block/uuid (:block/uuid block)) block @*hover? edit?)))
+           (tags (assoc config :block/uuid (:block/uuid block)) block @*hover? edit?)))
 
        (when-not (or (:table? config) (:page-title? config))
          (block-refs-count block refs-count *hide-block-refs?))]
