@@ -97,33 +97,34 @@
   [content page-name id]
   (let [id' (str page-ref-special-chars id)
         [page wrapped-id] (map page-ref/->page-ref [page-name id'])]
-        (common-util/replace-ignore-case content page wrapped-id)))
+    (common-util/replace-ignore-case content page wrapped-id)))
 
 (defn- replace-page-ref-with-id
-  [content page-name id]
+  [content page-name id replace-tag?]
   (let [page-name (str page-name)
-        id (str id)]
-    (-> content
-       (replace-page-ref page-name id)
-       (replace-tag-ref page-name id))))
+        id (str id)
+        content' (replace-page-ref content page-name id)]
+    (if replace-tag?
+      (replace-tag-ref content' page-name id)
+      content')))
 
 (defn refs->special-id-ref
   "Convert ref to special id refs e.g. `[[page name]] -> [[~^...]]."
-  [db title refs]
+  [title refs & {:keys [replace-tag?]
+                 :or {replace-tag? true}}]
+  (assert (string? title))
   (let [refs' (map
                (fn [ref]
                  (if (and (vector? ref) (= :block/uuid (first ref)))
-                   (d/entity db ref)
+                   {:block/uuid (second ref)
+                    :block/title (str (first ref))}
                    ref))
                refs)]
-    (if (some :block/title refs')
-      (reduce
-       (fn [content {:block/keys [title uuid]}]
-         (-> (replace-page-ref-with-id content title uuid)
-             (replace-page-ref-with-id uuid uuid)))
-       title
-       (filter :block/title refs'))
-      title)))
+    (reduce
+     (fn [content {:block/keys [title uuid]}]
+       (replace-page-ref-with-id content title uuid replace-tag?))
+     title
+     (filter :block/title refs'))))
 
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"

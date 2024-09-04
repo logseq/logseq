@@ -61,9 +61,8 @@
                                 (use-cached-refs! block))))))
         result (-> block
                    (merge (if level {:block/level level} {}))
-                   (update :block/title
-                           (fn [title]
-                             (db-content/refs->special-id-ref (db/get-db) title (:block/refs block)))))]
+                   (assoc :block/title
+                          (db-content/refs->special-id-ref (:block/title block) (:block/refs block))))]
     result))
 
 (defn save-file!
