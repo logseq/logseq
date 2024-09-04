@@ -997,7 +997,6 @@
            (shui/popup-show! target'
                              #(property-dialog/dialog blocks opts')
                              {:align "start"
-                              :as-dropdown? true
                               :auto-focus? true})
            (shui/dialog-open! #(property-dialog/dialog blocks opts')
                               {:id :property-dialog

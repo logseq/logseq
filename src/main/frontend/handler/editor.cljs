@@ -2536,21 +2536,27 @@
   [el]
   (some? (dom/closest el ".single-block")))
 
-(defn keydown-new-block-handler [e]
+(defn- inside-of-editor-block
+  [el]
+  (some? (dom/closest el ".block-editor")))
+
+(defn keydown-new-block-handler [^js e]
   (let [state (get-state)]
-    (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (rum/dom-node state)))
-     (keydown-new-line)
-     (do
-       (.preventDefault e)
-       (keydown-new-block state)))))
+    (when (or (nil? (.-target e)) (inside-of-editor-block (.-target e)))
+      (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (rum/dom-node state)))
+        (keydown-new-line)
+        (do
+          (.preventDefault e)
+          (keydown-new-block state))))))
 
 (defn keydown-new-line-handler [e]
   (let [state (get-state)]
-    (if (and (state/doc-mode-enter-for-new-line?) (not (inside-of-single-block (rum/dom-node state))))
-     (keydown-new-block state)
-     (do
-       (.preventDefault e)
-       (keydown-new-line)))))
+    (when (or (nil? (.-target e)) (inside-of-editor-block (.-target e)))
+      (if (and (state/doc-mode-enter-for-new-line?) (not (inside-of-single-block (rum/dom-node state))))
+        (keydown-new-block state)
+        (do
+          (.preventDefault e)
+          (keydown-new-line))))))
 
 (defn- select-first-last
   "Select first or last block in viewpoint"
