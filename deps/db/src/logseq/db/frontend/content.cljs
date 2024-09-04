@@ -121,8 +121,8 @@
                    ref))
                refs)]
     (reduce
-     (fn [content {:block/keys [title uuid]}]
-       (replace-page-ref-with-id content title uuid replace-tag?))
+     (fn [content {uuid' :block/uuid :block/keys [title]}]
+       (replace-page-ref-with-id content title uuid' replace-tag?))
      title
      (filter :block/title refs'))))
 

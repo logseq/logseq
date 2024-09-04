@@ -26,7 +26,7 @@
 
  :tasks/config
  {:large-vars
-  {:max-lines-count 60
+  {:max-lines-count 55
    ;; TODO: Remove this once outliner.core-test is in dep and these
    ;; fns can be easily refactored
    :metadata-exceptions #{:large-vars/cleanup-todo}}}}
