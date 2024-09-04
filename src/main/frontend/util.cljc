@@ -667,12 +667,6 @@
          (str prefix new-value)))
      s)))
 
-#?(:cljs
-   (def escape-regex-chars common-util/escape-regex-chars))
-
-#?(:cljs
-   (def replace-ignore-case common-util/replace-ignore-case))
-
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs
    (defn re-pos [re s]

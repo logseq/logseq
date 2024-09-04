@@ -1,25 +1,24 @@
 (ns frontend.handler.db-based.editor
   "DB-based graph implementation"
   (:require [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.commands :as commands]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
-            [frontend.util :as util]
-            [frontend.state :as state]
-            [logseq.common.util.page-ref :as page-ref]
-            [frontend.handler.ui :as ui-handler]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.schema.handler.repo-config :as repo-config-schema]
-            [promesa.core :as p]
+            [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.db.frontend.content :as db-content]
-            [logseq.outliner.op]))
+            [logseq.outliner.op]
+            [promesa.core :as p]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -44,48 +43,6 @@
              x))
          refs)))
 
-(defn- replace-tag-ref
-  [content page-name id]
-  (let [id' (str db-content/page-ref-special-chars id)
-        [page wrapped-id] (if (string/includes? page-name " ")
-                            (map page-ref/->page-ref [page-name id'])
-                            [page-name id'])
-        page-name (util/format "#%s" page)
-        r (util/format "#%s" wrapped-id)]
-    ;; hash tag parsing rules https://github.com/logseq/mldoc/blob/701243eaf9b4157348f235670718f6ad19ebe7f8/test/test_markdown.ml#L631
-    ;; Safari doesn't support look behind, don't use
-    ;; TODO: parse via mldoc
-    (string/replace content
-                    (re-pattern (str "(?i)(^|\\s)(" (util/escape-regex-chars page-name) ")(?=[,\\.]*($|\\s))"))
-                    ;;    case_insense^    ^lhs   ^_grp2                       look_ahead^         ^_grp3
-                    (fn [[_match lhs _grp2 _grp3]]
-                      (str lhs r)))))
-
-(defn- replace-page-ref
-  [content page-name id]
-  (let [id' (str db-content/page-ref-special-chars id)
-        [page wrapped-id] (map page-ref/->page-ref [page-name id'])]
-        (util/replace-ignore-case content page wrapped-id)))
-
-(defn- replace-page-ref-with-id
-  [content page-name id]
-  (-> content
-      (replace-page-ref page-name id)
-      (replace-tag-ref page-name id)))
-
-
-(defn- replace-page-refs-with-ids
-  [block]
-  (let [content (:block/title block)
-        content' (if (some :block/title (:block/refs block))
-                   (reduce
-                    (fn [content {:block/keys [title uuid]}]
-                      (replace-page-ref-with-id content title uuid))
-                    content
-                    (filter :block/title (:block/refs block)))
-                   content)]
-    (assoc block :block/title content')))
-
 (defn wrap-parse-block
   [{:block/keys [title level] :as block}]
   (let [block (or (and (:db/id block) (db/entity (:db/id block))) block)
@@ -104,7 +61,9 @@
                                 (use-cached-refs! block))))))
         result (-> block
                    (merge (if level {:block/level level} {}))
-                   (replace-page-refs-with-ids))]
+                   (update :block/title
+                           (fn [title]
+                             (db-content/refs->special-id-ref (db/get-db) title (:block/refs block)))))]
     result))
 
 (defn save-file!

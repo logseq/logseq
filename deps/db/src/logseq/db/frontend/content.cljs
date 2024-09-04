@@ -76,17 +76,54 @@
        (map second)
        (map uuid)))
 
-(defn page-ref->special-id-ref
-  "Convert page ref to special id refs e.g. `[[page name]] -> [[~^...]].
-   TODO: Merge with db-editor-handler/replace-page-refs-with-ids when possible"
-  [content refs]
-  (reduce
-   (fn [content ref]
-     (-> content
-         (string/replace (str page-ref/left-brackets (:block/title ref) page-ref/right-brackets)
-                         (str page-ref/left-brackets page-ref-special-chars (:block/uuid ref) page-ref/right-brackets))))
-   content
-   refs))
+(defn- replace-tag-ref
+  [content page-name id]
+  (let [id' (str page-ref-special-chars id)
+        [page wrapped-id] (if (string/includes? page-name " ")
+                            (map page-ref/->page-ref [page-name id'])
+                            [page-name id'])
+        page-name (common-util/format "#%s" page)
+        r (common-util/format "#%s" wrapped-id)]
+    ;; hash tag parsing rules https://github.com/logseq/mldoc/blob/701243eaf9b4157348f235670718f6ad19ebe7f8/test/test_markdown.ml#L631
+    ;; Safari doesn't support look behind, don't use
+    ;; TODO: parse via mldoc
+    (string/replace content
+                    (re-pattern (str "(?i)(^|\\s)(" (common-util/escape-regex-chars page-name) ")(?=[,\\.]*($|\\s))"))
+                    ;;    case_insense^    ^lhs   ^_grp2                       look_ahead^         ^_grp3
+                    (fn [[_match lhs _grp2 _grp3]]
+                      (str lhs r)))))
+
+(defn- replace-page-ref
+  [content page-name id]
+  (let [id' (str page-ref-special-chars id)
+        [page wrapped-id] (map page-ref/->page-ref [page-name id'])]
+        (common-util/replace-ignore-case content page wrapped-id)))
+
+(defn- replace-page-ref-with-id
+  [content page-name id]
+  (let [page-name (str page-name)
+        id (str id)]
+    (-> content
+       (replace-page-ref page-name id)
+       (replace-tag-ref page-name id))))
+
+(defn refs->special-id-ref
+  "Convert ref to special id refs e.g. `[[page name]] -> [[~^...]]."
+  [db title refs]
+  (let [refs' (map
+               (fn [ref]
+                 (if (and (vector? ref) (= :block/uuid (first ref)))
+                   (d/entity db ref)
+                   ref))
+               refs)]
+    (if (some :block/title refs')
+      (reduce
+       (fn [content {:block/keys [title uuid]}]
+         (-> (replace-page-ref-with-id content title uuid)
+             (replace-page-ref-with-id uuid uuid)))
+       title
+       (filter :block/title refs'))
+      title)))
 
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"
