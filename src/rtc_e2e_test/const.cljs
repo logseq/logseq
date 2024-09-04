@@ -58,4 +58,19 @@
                  :block/parent "page"
                  :block/order order
                  :block/page "page"})
-              (range 500) (db-order/gen-n-keys 500 "a0" "a1")))})
+              (range 500) (db-order/gen-n-keys 500 "a0" "a1")))
+   :add-task-properties-to-block1
+   [{:db/id "id-0907"
+     :block/uuid #uuid "00000001-2024-0907-0000-000000000000"
+     :block/updated-at 1725455235108
+     :block/created-at 1725455235108
+     :block/journal-day 20240907
+     :block/format :markdown
+     :block/title "Sep 7th, 2024"
+     :block/name "sep 7th, 2024"
+     :block/type "journal"}
+    {:block/uuid block1-uuid
+     :block/updated-at 1725454876718
+     :block/tags :logseq.class/Task
+     :logseq.task/status :logseq.task/status.done
+     :logseq.task/deadline "id-0907"}]})
