@@ -367,10 +367,11 @@
                              (if (every? de/entity? v)
                                (map :db/id v)
                                [(:db/id v)])))
+        parent-property? (= (:db/ident property) :logseq.property/parent)
         nodes
         (->>
          (cond
-           (= (:db/ident property) :logseq.property/parent)
+           parent-property?
            (let [children-pages (model/get-structured-children repo (:db/id block))
                  ;; Disallows cyclic hierarchies
                  exclude-ids (-> (set (map (fn [id] (:block/uuid (db/entity id))) children-pages))
@@ -433,7 +434,7 @@
                                               "Choose nodes"
                                               :else
                                               "Choose node")
-                 :show-new-when-not-exact-match? true
+                 :show-new-when-not-exact-match? (if parent-property? false true)
                  :extract-chosen-fn :value
                  :extract-fn (fn [x] (or (:label-value x) (:label x)))
                  :input-opts input-opts
