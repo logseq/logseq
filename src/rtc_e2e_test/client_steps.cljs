@@ -51,27 +51,27 @@
          (is (not= :timeout r)))))
    :client2
    (m/sp
-    (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
-      (is (nil? r)))
-    (m/?
-     (c.m/backoff
-      (take 4 c.m/delays)
-      (m/sp
-       (let [conn (helper/get-downloaded-test-conn)
-             page1 (d/pull @conn '[*] [:block/uuid const/page1-uuid])
-             block1 (d/pull @conn '[*] [:block/uuid const/block1-uuid])]
-         (when-not (:block/uuid page1)
-           (throw (ex-info "wait page1 synced" {:missionary/retry true})))
-         (is
-          (= {:block/title "basic-edits-test"
-              :block/name "basic-edits-test"
-              :block/type "page"}
-             (select-keys page1 [:block/title :block/name :block/type])))
-         (is
-          (= {:block/title "block1"
-              :block/order "a0"
-              :block/parent {:db/id (:db/id page1)}}
-             (select-keys block1 [:block/title :block/order :block/parent]))))))))})
+     (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
+       (is (nil? r)))
+     (m/?
+      (c.m/backoff
+       (take 4 c.m/delays)
+       (m/sp
+         (let [conn (helper/get-downloaded-test-conn)
+               page1 (d/pull @conn '[*] [:block/uuid const/page1-uuid])
+               block1 (d/pull @conn '[*] [:block/uuid const/block1-uuid])]
+           (when-not (:block/uuid page1)
+             (throw (ex-info "wait page1 synced" {:missionary/retry true})))
+           (is
+            (= {:block/title "basic-edits-test"
+                :block/name "basic-edits-test"
+                :block/type "page"}
+               (select-keys page1 [:block/title :block/name :block/type])))
+           (is
+            (= {:block/title "block1"
+                :block/order "a0"
+                :block/parent {:db/id (:db/id page1)}}
+               (select-keys block1 [:block/title :block/order :block/parent]))))))))})
 
 (def ^:private step2
   "client1: insert 500 blocks, wait for changes to sync to remote
@@ -138,15 +138,39 @@
                :logseq.task/status {:db/ident :logseq.task/status.done}
                :logseq.task/deadline {:block/journal-day 20240907}}
               block1))))})
+;;; TODO
+(def ^:private step4
+  "client1:
+  - insert some blocks in page2
+  - wait to be synced
+  - wait a signal from client2
+  - send a signal to client2
+  - stop rtc
+  - move some blocks
+  - start rtc
+  - wait to be synced
+  - wait client2's message, which contains the result of client2's block tree,
+    and compare them with blocks in client1
+  client2:
+  - wait inserted blocks synced
+  - send a signal to client1
+  - wait a signal from client1
+  - stop rtc
+  - move some blocks
+  - start rtc
+  - wait to be synced
+  - send a message to client1 contains client2's block tree to client1"
+  {:client1 nil
+   :client2 nil})
 
 (defn- wrap-print-step-info
   [steps client]
   (map-indexed
    (fn [idx step]
      (m/sp
-      (println (str "[" client "]") "start step" idx)
-      (some-> (get step client) m/?)
-      (println (str "[" client "]") "end step" idx)))
+       (println (str "[" client "]") "start step" idx)
+       (some-> (get step client) m/?)
+       (println (str "[" client "]") "end step" idx)))
    steps))
 
 (def ^:private all-steps [step0 step1 step2 step3])
