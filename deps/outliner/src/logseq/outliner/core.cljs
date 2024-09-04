@@ -235,7 +235,7 @@
 (defn ^:api validate-unique-by-name-tag-and-block-type
   "Validates uniqueness of blocks and pages for the following cases:
    - Page names are unique by tag e.g. their can be Apple #Company and Apple #Fruit
-   - Page names are unique when they have no tag
+   - Page names are unique by type e.g. their can be #Journal and Journal (normal page)
    - Block names are unique by tag"
   [db new-title {:block/keys [tags] :as entity}]
   (cond
@@ -245,11 +245,10 @@
                                :where
                                [?b :block/title ?title]
                                [?b :block/tags ?tag-id]
-                               [?b :block/type "page"]
                                [(not= ?b ?eid)]]
                              db
                              (:db/id entity)
-                             new-title
+                          new-title
                              (map :db/id tags)))]
       (throw (ex-info "Duplicate page by tag"
                       {:type :notification
@@ -259,13 +258,14 @@
 
     (ldb/page? entity)
     (when-let [_res (seq (d/q '[:find [?b ...]
-                                :in $ ?eid ?title
+                                :in $ ?eid ?type ?title
                                 :where
                                 [?b :block/title ?title]
-                                [?b :block/type "page"]
+                                [?b :block/type ?type]
                                 [(not= ?b ?eid)]]
                               db
                               (:db/id entity)
+                              (:block/type entity)
                               new-title))]
       (throw (ex-info "Duplicate page without tag"
                       {:type :notification
