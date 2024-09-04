@@ -580,7 +580,7 @@
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
    updates block content effected by refs"
-  [block page-names-to-uuids {:keys [whiteboard?]}]
+  [db block page-names-to-uuids {:keys [whiteboard?]}]
   (let [ref-to-ignore? (if whiteboard?
                          #(and (map? %) (:block/uuid %))
                          #(and (vector? %) (= :block/uuid (first %))))]
@@ -601,13 +601,14 @@
                  refs)))
         (:block/title block)
         (update :block/title
-                db-content/page-ref->special-id-ref
-                ;; TODO: Handle refs for whiteboard block which has none
-                (->> (:block/refs block)
-                     (remove #(or (ref-to-ignore? %)
+                (fn [title]
+                  ;; TODO: Handle refs for whiteboard block which has none
+                  (let [refs (->> (:block/refs block)
+                                  (remove #(or (ref-to-ignore? %)
                                   ;; ignore deadline related refs that don't affect content
-                                  (and (keyword? %) (db-malli-schema/internal-ident? %))))
-                     (map #(add-uuid-to-page-map % page-names-to-uuids)))))
+                                               (and (keyword? %) (db-malli-schema/internal-ident? %))))
+                                  (map #(add-uuid-to-page-map % page-names-to-uuids)))]
+                    (db-content/refs->special-id-ref db title refs)))))
       block)))
 
 (defn- fix-pre-block-references
@@ -637,7 +638,7 @@
         block' (-> block-after-built-in-props
                    (fix-pre-block-references pre-blocks page-names-to-uuids)
                    (fix-block-name-lookup-ref page-names-to-uuids)
-                   (update-block-refs page-names-to-uuids options)
+                   (update-block-refs db page-names-to-uuids options)
                    (update-block-tags db tag-classes page-names-to-uuids (:all-idents import-state))
                    (update-block-marker options)
                    (update-block-priority options)

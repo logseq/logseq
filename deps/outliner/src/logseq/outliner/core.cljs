@@ -241,12 +241,14 @@
   (cond
     (and (ldb/page? entity) (seq tags))
     (when-let [res (seq (d/q '[:find [?b ...]
-                               :in $ ?title [?tag-id ...]
+                               :in $ ?eid ?title [?tag-id ...]
                                :where
                                [?b :block/title ?title]
                                [?b :block/tags ?tag-id]
-                               [?b :block/type "page"]]
+                               [?b :block/type "page"]
+                               [(not= ?b ?eid)]]
                              db
+                             (:db/id entity)
                              new-title
                              (map :db/id tags)))]
       (throw (ex-info "Duplicate page by tag"
@@ -257,11 +259,13 @@
 
     (ldb/page? entity)
     (when-let [_res (seq (d/q '[:find [?b ...]
-                                :in $ ?title
+                                :in $ ?eid ?title
                                 :where
                                 [?b :block/title ?title]
-                                [?b :block/type "page"]]
+                                [?b :block/type "page"]
+                                [(not= ?b ?eid)]]
                               db
+                              (:db/id entity)
                               new-title))]
       (throw (ex-info "Duplicate page without tag"
                       {:type :notification
@@ -270,12 +274,14 @@
 
     (and (not (:block/type entity)) (seq tags))
     (when-let [res (seq (d/q '[:find [?b ...]
-                               :in $ ?title [?tag-id ...]
+                               :in $ ?eid ?title [?tag-id ...]
                                :where
                                [?b :block/title ?title]
                                [?b :block/tags ?tag-id]
+                               [(not= ?b ?eid)]
                                [(missing? $ ?b :block/type)]]
                              db
+                             (:db/id entity)
                              new-title
                              (map :db/id tags)))]
       (throw (ex-info "Duplicate block by tag"

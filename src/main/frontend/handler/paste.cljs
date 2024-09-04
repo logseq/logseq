@@ -37,8 +37,9 @@
                              (-> block
                                  (dissoc :block/tags)
                                  (update :block/title (fn [title]
-                                                        (-> (db-content/replace-tags-with-page-refs title refs)
-                                                            (db-content/page-ref->special-id-ref refs)))))))))]
+                                                        (let [title' (db-content/replace-tags-with-page-refs title refs)]
+                                                          (db-content/refs->special-id-ref (db/get-db) title' refs))
+                                                        )))))))]
       (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
 
 (defn- paste-segmented-text
