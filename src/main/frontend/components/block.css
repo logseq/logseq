@@ -355,7 +355,7 @@
   }
 
   .ui__icon.ti {
-    @apply relative left-[1px] top-[3px];
+    @apply relative left-[2px] top-[5px];
   }
 }
 

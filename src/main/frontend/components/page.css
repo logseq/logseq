@@ -202,7 +202,11 @@ html.is-native-ios {
 }
 
 .references {
-  user-select: none;
+  @apply select-none;
+
+  .ls-page-icon {
+    @apply hidden;
+  }
 }
 
 .no-ring {
