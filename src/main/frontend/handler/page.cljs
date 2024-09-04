@@ -342,6 +342,8 @@
         (let [chosen-result (if (:block/uuid chosen-result)
                               (db/entity [:block/uuid (:block/uuid chosen-result)])
                               chosen-result)
+              target (first (:block/_alias chosen-result))
+              chosen-result (if (and target (not (ldb/class? chosen-result)) (ldb/class? target)) target chosen-result)
               chosen (:block/title chosen-result)
               class? (and db-based? hashtag?
                           (or (string/includes? chosen (str (t :new-tag) " "))

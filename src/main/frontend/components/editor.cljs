@@ -148,7 +148,8 @@
                           ;; reorder, shortest and starts-with first.
                           (let [matched-pages-with-new-page
                                 (fn [partial-matched-pages]
-                                  (if (db/page-exists? q (if db-tag? "class" "page"))
+                                  (if (or (db/page-exists? q (if db-tag? "class" "page"))
+                                          (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
                                     partial-matched-pages
                                     (if db-tag?
                                       (concat [{:block/title (str (t :new-tag) " " q)}]
@@ -167,27 +168,33 @@
          :on-enter    (fn []
                         (page-handler/page-not-exists-handler input id q current-pos))
          :item-render (fn [block _chosen?]
-                        [:div.flex.flex-row.items-center.gap-1
-                         (when-not db-tag?
-                           (cond
-                             (ldb/class? block)
-                             [:div (ui/icon "hash" {:size 14})]
-                             (ldb/property? block)
-                             [:div (ui/icon "letter-p" {:size 14})]
-                             (db-model/whiteboard-page? block)
-                             [:div (ui/icon "whiteboard" {:extension? true})]
-                             (db/page? block)
-                             [:div (ui/icon "page" {:extension? true})]
-                             (or (string/starts-with? (str (:block/title block)) (t :new-tag))
-                                 (string/starts-with? (str (:block/title block)) (t :new-page)))
-                             nil
-                             :else
-                             [:div (ui/icon "letter-n" {:size 14})]))
+                        (let [block (if (:block/uuid block)
+                                      (db/entity [:block/uuid (:block/uuid block)])
+                                      block)]
+                          [:div.flex.flex-row.items-center.gap-1
+                           (when-not db-tag?
+                             (cond
+                               (ldb/class? block)
+                               [:div (ui/icon "hash" {:size 14})]
+                               (ldb/property? block)
+                               [:div (ui/icon "letter-p" {:size 14})]
+                               (db-model/whiteboard-page? block)
+                               [:div (ui/icon "whiteboard" {:extension? true})]
+                               (db/page? block)
+                               [:div (ui/icon "page" {:extension? true})]
+                               (or (string/starts-with? (str (:block/title block)) (t :new-tag))
+                                   (string/starts-with? (str (:block/title block)) (t :new-page)))
+                               nil
+                               :else
+                               [:div (ui/icon "letter-n" {:size 14})]))
 
-                         (let [title (if db-tag?
-                                       (:block/title block)
-                                       (title/block-unique-title block))]
-                           (search-handler/highlight-exact-query title q))])
+                           (let [title (if db-tag?
+                                         (let [target (first (:block/_alias block))]
+                                           (if (ldb/class? target)
+                                             (str (:block/title block) " -> alias: " (:block/title target))
+                                             (:block/title block)))
+                                         (title/block-unique-title block))]
+                             (search-handler/highlight-exact-query title q))]))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                     "Search for a tag"
                                                                     "Search for a node")]
