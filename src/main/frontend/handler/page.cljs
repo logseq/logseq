@@ -322,77 +322,68 @@
       (editor-handler/save-current-block!)
       (db/transact! repo tx-data {:outliner-op :save-block}))))
 
-(defn on-chosen-handler
-  [input id _q pos format]
-  (let [current-pos (cursor/pos input)
-        edit-content (state/get-edit-content)
-        action (state/get-editor-action)
-        hashtag? (= action :page-search-hashtag)
-        q (or
-           (editor-handler/get-selected-text)
-           (when hashtag?
-             (common-util/safe-subs edit-content pos current-pos))
-           (when (> (count edit-content) current-pos)
-             (common-util/safe-subs edit-content pos current-pos)))
-        db-based? (config/db-based-graph? (state/get-current-repo))]
-    (if hashtag?
-      (fn [chosen-result ^js e]
-        (util/stop e)
-        (state/clear-editor-action!)
-        (let [chosen-result (if (:block/uuid chosen-result)
-                              (db/entity [:block/uuid (:block/uuid chosen-result)])
-                              chosen-result)
-              target (first (:block/_alias chosen-result))
-              chosen-result (if (and target (not (ldb/class? chosen-result)) (ldb/class? target)) target chosen-result)
-              chosen (:block/title chosen-result)
-              class? (and db-based? hashtag?
-                          (or (string/includes? chosen (str (t :new-tag) " "))
-                              (ldb/class? chosen-result)))
-              inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete"))
-              chosen (-> chosen
-                         (string/replace-first (str (t :new-tag) " ") "")
-                         (string/replace-first (str (t :new-page) " ") ""))
-              wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
-              wrapped-tag (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
-                            (page-ref/->page-ref chosen)
-                            chosen)
-              q (if (editor-handler/get-selected-text) "" q)
-              last-pattern (if wrapped?
-                             q
-                             (if (= \# (first q))
-                               (subs q 1)
-                               q))
-              last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)
-              tag-in-page-auto-complete? (= page-ref/right-brackets (common-util/safe-subs edit-content current-pos (+ current-pos 2)))]
-          (p/do!
-           (editor-handler/insert-command! id
-                                           (if (and class? (not inline-tag?)) "" (str "#" wrapped-tag))
-                                           format
-                                           {:last-pattern last-pattern
-                                            :end-pattern (when wrapped? page-ref/right-brackets)
-                                            :command :page-ref})
-           (when (and db-based? (not tag-in-page-auto-complete?))
-             (let [tag (string/trim chosen)
-                   edit-block (state/get-edit-block)
-                   create-opts {:redirect? false
-                                :create-first-block? false}]
-               (when (:block/uuid edit-block)
-                 (p/let [result (when-not (de/entity? chosen-result) ; page not exists yet
-                                  (if class?
-                                    (<create-class! tag create-opts)
-                                    (<create! tag create-opts)))]
-                   (when class?
-                     (let [tag-entity (or (when (de/entity? chosen-result) chosen-result) result)
-                           hash-idx (string/last-index-of (subs edit-content 0 current-pos) last-pattern)
-                           add-tag-to-nearest-node? (= page-ref/right-brackets (common-util/safe-subs edit-content (- hash-idx 2) hash-idx))
-                           nearest-node (some-> (editor-handler/get-nearest-page) string/trim)]
-                       (if (and add-tag-to-nearest-node? (not (string/blank? nearest-node)))
-                         (when-let [e (db/get-page nearest-node)]
-                           (add-tag (state/get-current-repo) (:block/uuid e) tag-entity))
-                         (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity))))))))
+(defn- tag-on-chosen-handler
+  [input id pos format current-pos edit-content q db-based?]
+  (fn [chosen-result ^js e]
+    (util/stop e)
+    (state/clear-editor-action!)
+    (let [chosen-result (if (:block/uuid chosen-result)
+                          (db/entity [:block/uuid (:block/uuid chosen-result)])
+                          chosen-result)
+          target (first (:block/_alias chosen-result))
+          chosen-result (if (and target (not (ldb/class? chosen-result)) (ldb/class? target)) target chosen-result)
+          chosen (:block/title chosen-result)
+          class? (and db-based?
+                      (or (string/includes? chosen (str (t :new-tag) " "))
+                          (ldb/class? chosen-result)))
+          inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete"))
+          chosen (-> chosen
+                     (string/replace-first (str (t :new-tag) " ") "")
+                     (string/replace-first (str (t :new-page) " ") ""))
+          wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
+          wrapped-tag (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
+                        (page-ref/->page-ref chosen)
+                        chosen)
+          q (if (editor-handler/get-selected-text) "" q)
+          last-pattern (if wrapped?
+                         q
+                         (if (= \# (first q))
+                           (subs q 1)
+                           q))
+          last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)
+          tag-in-page-auto-complete? (= page-ref/right-brackets (common-util/safe-subs edit-content current-pos (+ current-pos 2)))]
+      (p/do!
+       (editor-handler/insert-command! id
+                                       (if (and class? (not inline-tag?)) "" (str "#" wrapped-tag))
+                                       format
+                                       {:last-pattern last-pattern
+                                        :end-pattern (when wrapped? page-ref/right-brackets)
+                                        :command :page-ref})
+       (when (and db-based? (not tag-in-page-auto-complete?))
+         (let [tag (string/trim chosen)
+               edit-block (state/get-edit-block)
+               create-opts {:redirect? false
+                            :create-first-block? false}]
+           (when (:block/uuid edit-block)
+             (p/let [result (when-not (de/entity? chosen-result) ; page not exists yet
+                              (if class?
+                                (<create-class! tag create-opts)
+                                (<create! tag create-opts)))]
+               (when class?
+                 (let [tag-entity (or (when (de/entity? chosen-result) chosen-result) result)
+                       hash-idx (string/last-index-of (subs edit-content 0 current-pos) last-pattern)
+                       add-tag-to-nearest-node? (= page-ref/right-brackets (common-util/safe-subs edit-content (- hash-idx 2) hash-idx))
+                       nearest-node (some-> (editor-handler/get-nearest-page) string/trim)]
+                   (if (and add-tag-to-nearest-node? (not (string/blank? nearest-node)))
+                     (when-let [e (db/get-page nearest-node)]
+                       (add-tag (state/get-current-repo) (:block/uuid e) tag-entity))
+                     (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity))))))))
 
-           (when input (.focus input)))))
-      (fn [chosen-result e]
+       (when input (.focus input))))))
+
+(defn- page-on-chosen-handler
+  [id format q db-based?]
+  (fn [chosen-result e]
         (util/stop e)
         (state/clear-editor-action!)
         (p/let [chosen-result (if (:block/uuid chosen-result)
@@ -423,7 +414,24 @@
                                             :command :page-ref})
            (p/let [chosen-result (or result chosen-result)]
              (when (de/entity? chosen-result)
-               (state/conj-block-ref! chosen-result)))))))))
+               (state/conj-block-ref! chosen-result)))))))
+
+(defn on-chosen-handler
+  [input id pos format]
+  (let [current-pos (cursor/pos input)
+        edit-content (state/get-edit-content)
+        action (state/get-editor-action)
+        hashtag? (= action :page-search-hashtag)
+        q (or
+           (editor-handler/get-selected-text)
+           (when hashtag?
+             (common-util/safe-subs edit-content pos current-pos))
+           (when (> (count edit-content) current-pos)
+             (common-util/safe-subs edit-content pos current-pos)))
+        db-based? (config/db-based-graph? (state/get-current-repo))]
+    (if hashtag?
+      (tag-on-chosen-handler input id pos format current-pos edit-content q db-based?)
+      (page-on-chosen-handler id format q db-based?))))
 
 (defn create-today-journal!
   []
