@@ -2387,15 +2387,14 @@
                    (str uuid "-" idx)))))]))))
 
 (rum/defc tags
-  "Tags without inline tags"
-  [config block hover? edit?]
+  "Tags without inline or hidden tags"
+  [config block]
   (when (:block/raw-title block)
-    (let [tags' (->>
-                 (:block/tags block)
-                 (remove (fn [t] (ldb/inline-tag? (:block/raw-title block) t))))
-          block-tags (if (and (not hover?) (not edit?) (= [:logseq.class/Task] (map :db/ident tags')))
-                       (remove (fn [t] (= (:db/ident t) :logseq.class/Task)) tags')
-                       tags')]
+    (let [block-tags (->>
+                      (:block/tags block)
+                      (remove (fn [t]
+                                (or (ldb/inline-tag? (:block/raw-title block) t)
+                                    (:logseq.property.class/hide-from-node t)))))]
       (when (seq block-tags)
         [:div.block-tags
          (for [tag block-tags]
@@ -2575,8 +2574,7 @@
                     ::hide-block-refs? (atom default-hide?)
                     ::refs-count *refs-count)))}
   [state config {:block/keys [uuid format] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count?]}]
-  (let [*hover? (::hover? state)
-        *hide-block-refs? (get state ::hide-block-refs?)
+  (let [*hide-block-refs? (get state ::hide-block-refs?)
         *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
         editor-box (state/get-component :editor/box)
@@ -2594,9 +2592,7 @@
                      (rum/react *refs-count))
         table? (:table? config)]
     [:div.block-content-or-editor-wrap
-     {:class (when (:page-title? config) "ls-page-title-container")
-      :on-mouse-over #(reset! *hover? true)
-      :on-mouse-leave #(reset! *hover? false)}
+     {:class (when (:page-title? config) "ls-page-title-container")}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.flex.flex-1.flex-col
       [:div.flex.flex-1.flex-row.gap-1.items-center
@@ -2646,7 +2642,7 @@
 
        (when-not (or (:block-ref? config) (:table? config))
          (when (and db-based? (seq (:block/tags block)))
-           (tags (assoc config :block/uuid (:block/uuid block)) block @*hover? edit?)))
+           (tags (assoc config :block/uuid (:block/uuid block)) block)))
 
        (when-not (or (:table? config) (:page-title? config))
          (block-refs-count block refs-count *hide-block-refs?))]

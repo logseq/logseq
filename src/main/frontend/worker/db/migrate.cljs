@@ -211,7 +211,8 @@
    [14 {:properties [:logseq.property/parent]
         :fix deprecate-class-parent}]
    [15 {:properties [:logseq.property.class/properties]
-        :fix deprecate-class-schema-properties}]])
+        :fix deprecate-class-schema-properties}]
+   [16 {:properties [:logseq.property.class/hide-from-node]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
