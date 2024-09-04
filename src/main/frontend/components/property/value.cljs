@@ -63,7 +63,7 @@
                          :logseq.property/icon
                          (select-keys icon [:type :id :color]))
                        (shui/popup-hide!)
-                       (shui/dialog-close!)))})
+                       (shui/popup-hide!)))})
      (when (and icon-value (not config/publishing?))
        [:a.fade-link.flex {:on-click (fn [_e]
                                        (p/do!
@@ -71,7 +71,7 @@
                                            (:db/id block)
                                            :logseq.property/icon)
                                          (shui/popup-hide!)
-                                         (shui/dialog-close!)))
+                                         (shui/popup-hide!)))
                            :title "Delete this icon"}
         (ui/icon "X")])]))
 
@@ -84,32 +84,30 @@
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
+  (shui/popup-hide!)
   (p/let [block
           (if (and (= :default (get-in property [:block/schema :type]))
-                (not (db-property/many? property)))
+                   (not (db-property/many? property)))
             (p/let [existing-value (get block (:db/ident property))
                     existing-value? (and (some? existing-value)
-                                      (not= (:db/ident existing-value) :logseq.property/empty-placeholder))
+                                         (not= (:db/ident existing-value) :logseq.property/empty-placeholder))
                     new-block-id (when-not existing-value? (db/new-block-id))
                     _ (when-not existing-value?
                         (db-property-handler/create-property-text-block!
-                          (:db/id block)
-                          (:db/id property)
-                          value
-                          {:new-block-id new-block-id}))]
+                         (:db/id block)
+                         (:db/id property)
+                         value
+                         {:new-block-id new-block-id}))]
               (if existing-value? existing-value (db/entity [:block/uuid new-block-id])))
             (p/let [new-block-id (db/new-block-id)
                     _ (db-property-handler/create-property-text-block!
-                        (:db/id block)
-                        (:db/id property)
-                        value
-                        {:new-block-id new-block-id})]
+                       (:db/id block)
+                       (:db/id property)
+                       value
+                       {:new-block-id new-block-id})]
               (db/entity [:block/uuid new-block-id])))]
     (when edit-block?
-      (p/do!
-        (editor-handler/edit-block! block :max {:container-id :unknown-container})
-        (shui/popup-hide!)
-        (shui/dialog-close!)))
+      (editor-handler/edit-block! block :max {:container-id :unknown-container}))
     block))
 
 (defn <add-property!
@@ -132,8 +130,7 @@
           (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
           (property-handler/set-block-property! repo (:block/uuid block) property-id property-value')))
       (when exit-edit?
-        (ui/hide-popups-until-preview-popup!)
-        (shui/dialog-close!))
+        (ui/hide-popups-until-preview-popup!))
       (when-not (or many? checkbox?)
         (when-let [input (state/get-input)]
           (.focus input)))
@@ -168,7 +165,7 @@
                       (.focus)) 16)
                  state)
    :will-unmount (fn [state]
-                   (shui/dialog-close!)
+                   (shui/popup-hide!)
                    (state/set-editor-action! nil)
                    state)}
   [state id {:keys [on-change value _del-btn? _on-delete]}]
@@ -190,7 +187,7 @@
                     (on-change (db/get-case-page journal)))
                   (shui/popup-hide! id)
                   (ui/hide-popups-until-preview-popup!)
-                  (shui/dialog-close!))))))]
+                  (shui/popup-hide!))))))]
     (ui/single-calendar
       (cond->
         {:initial-focus true

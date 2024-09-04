@@ -114,7 +114,7 @@
                    (and *show-class-select? @*show-class-select?)
                    nil
                    add-class-property?
-                   (shui/dialog-close!)
+                   (shui/popup-hide!)
                    (and block (= type :checkbox))
                    (p/do!
                     (ui/hide-popups-until-preview-popup!)
@@ -203,19 +203,19 @@
             add-class-property?
             (p/do!
              (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?})
-             (shui/dialog-close!))
+             (shui/popup-hide!))
 
             (= :checkbox type)
             (p/do!
              (ui/hide-popups-until-preview-popup!)
-             (shui/dialog-close!)
+             (shui/popup-hide!)
              (pv/<add-property! block (:db/ident property) false {:exit-edit? true}))
 
             (and (= :default type)
                  (not (seq (:property/closed-values property))))
             (p/do!
              (pv/<create-new-block! block property "")
-             (shui/dialog-close!))
+             (shui/popup-hide!))
 
             (or (not= :default type)
                 (and (= :default type) (seq (:property/closed-values property))))
@@ -292,9 +292,9 @@
      (mixins/hide-when-esc-or-outside
       state
       :on-hide (fn [_state _e type]
-                 (when (= type :esc)
+                 (when (contains? #{:esc} type)
                    (shui/popup-hide!)
-                   (shui/dialog-close!)
+                   (shui/popup-hide!)
                    (when-let [^js input (state/get-input)]
                      (.focus input)))))))
   {:init (fn [state]
