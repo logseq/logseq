@@ -73,7 +73,8 @@
                                      :db-ident-blocks db-ident-blocks
                                      :schema-version (get-schema-version db)}))]
       (if-let [remote-ex (:ex-data r)]
-        (throw (ex-info "Unavailable2" {:remote-ex remote-ex}))
+        (do (prn {:remote-ex remote-ex})
+            (throw (ex-info "Unavailable2" {:remote-ex remote-ex})))
         (let [server-only-db-ident-blocks (some-> (:server-only-db-ident-blocks r)
                                                   ldb/read-transit-str)]
           (when (seq server-only-db-ident-blocks)
