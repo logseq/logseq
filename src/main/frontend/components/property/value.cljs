@@ -948,7 +948,8 @@
                            page-ancestors (when parent?
                                             (let [ancestor-pages (loop [parents [block]]
                                                                    (if-let [parent (:logseq.property/parent (last parents))]
-                                                                     (recur (conj parents parent))
+                                                                     (when-not (contains? (set parents) parent)
+                                                                       (recur (conj parents parent)))
                                                                      parents))]
                                               (->> (reverse ancestor-pages)
                                                    (remove (fn [e] (= (:db/id block) (:db/id e))))
