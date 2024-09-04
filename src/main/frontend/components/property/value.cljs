@@ -56,24 +56,17 @@
      (icon-component/icon-picker icon-value
        {:disabled? config/publishing?
         :initial-open? editing?
+        :del-btn? (some? icon-value)
         :on-chosen (fn [_e icon]
-                     (p/do!
+                     (if icon
                        (db-property-handler/set-block-property!
                          (:db/id block)
                          :logseq.property/icon
                          (select-keys icon [:type :id :color]))
-                       (shui/popup-hide!)
-                       (shui/popup-hide!)))})
-     (when (and icon-value (not config/publishing?))
-       [:a.fade-link.flex {:on-click (fn [_e]
-                                       (p/do!
-                                         (db-property-handler/remove-block-property!
-                                           (:db/id block)
-                                           :logseq.property/icon)
-                                         (shui/popup-hide!)
-                                         (shui/popup-hide!)))
-                           :title "Delete this icon"}
-        (ui/icon "X")])]))
+                       (db-property-handler/remove-block-property!
+                         (:db/id block)
+                         :logseq.property/icon))
+                     (shui/popup-hide!))})]))
 
 (defn- select-type?
   [property type]
