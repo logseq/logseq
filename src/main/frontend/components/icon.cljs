@@ -143,7 +143,6 @@
              mods (mod total step)
              rows (if (zero? mods) rows (inc rows))
              items (vec items)]
-         (prn :debug :rows rows)
          (ui/virtualized-list
           (cond-> {:total-count rows
                    :item-content (fn [idx]
