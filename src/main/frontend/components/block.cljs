@@ -2421,12 +2421,12 @@
           (for [pid properties]
             (let [property (db/entity pid)
                   v (get block pid)]
-              [:div.flex.flex-row.items-center.gap-1.px-1.hover:bg-secondary.rounded
+              [:div.flex.flex-row.items-center.gap-2.px-1.hover:bg-secondary.rounded
                [:div.flex.flex-row.opacity-50.hover:opacity-100
                 (property-component/property-key-cp block property opts)
                 [:div.select-none ":"]]
                (pv/property-value block property v opts)]))]
-         [:div.positioned-properties.right-align.flex.flex-row.gap-1.select-none
+         [:div.positioned-properties.right-align.flex.flex-row.gap-2.select-none
           (for [pid properties]
             (when-let [property (db/entity pid)]
               (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
