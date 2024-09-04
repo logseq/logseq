@@ -47,6 +47,10 @@
                                                :cardinality :many
                                                :public? true
                                                :view-context :never}}
+   :logseq.property.class/hide-from-node {:title "Hide from node"
+                                          :schema {:type :checkbox
+                                                   :public? true
+                                                   :view-context :class}}
    :logseq.property/page-tags {:title "pageTags"
                                :schema {:type :page
                                         :public? true
