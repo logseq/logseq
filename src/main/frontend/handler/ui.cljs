@@ -254,12 +254,21 @@
                     (conj selected-ids (:block/uuid editing-block))
                     selected-ids)
         *state (:ui/show-empty-and-hidden-properties? @state/state)
-        show? (:show? @*state)]
+        {:keys [ids mode show?]} @*state]
     (if (seq block-ids)
-      (reset! *state
-              {:mode :block
-               :ids (set block-ids)
-               :show? (not show?)})
+      (let [block-ids' (set block-ids)]
+        (reset! *state
+               {:mode :block
+                :ids block-ids'
+                :show? (cond
+                         (= mode :global)
+                         true
+                         (not= ids block-ids')
+                         true
+                         :else
+                         (not show?))}))
       (reset! *state
               {:mode :global
-               :show? (not show?)}))))
+               :show? (if (= mode :block)
+                        true
+                        (not show?))}))))
