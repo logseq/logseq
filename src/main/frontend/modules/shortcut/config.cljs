@@ -365,6 +365,11 @@
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Priority"}]))}
 
+   :editor/add-property-icon                {:binding "p i"
+                                             :selection? true
+                                             :fn      (fn []
+                                                        (state/pub-event! [:editor/new-property {:property-key "Icon"}]))}
+
    :ui/toggle-brackets                      {:binding "t b"
                                              :fn      config-handler/toggle-ui-show-brackets!}
 
@@ -771,6 +776,7 @@
             :editor/add-property-deadline
             :editor/add-property-status
             :editor/add-property-priority
+            :editor/add-property-icon
             :ui/toggle-wide-mode
             :ui/select-theme-color
             :ui/goto-plugins
@@ -890,7 +896,8 @@
       :editor/add-property
       :editor/add-property-deadline
       :editor/add-property-status
-      :editor/add-property-priority]
+      :editor/add-property-priority
+      :editor/add-property-icon]
 
      :shortcut.category/toggle
      [:ui/toggle-help

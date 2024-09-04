@@ -696,6 +696,7 @@
   :editor/add-property-deadline   "Add task deadline to selected block"
   :editor/add-property-status     "Add task status to selected block"
   :editor/add-property-priority   "Add task priority to selected block"
+  :editor/add-property-icon       "Add icon"
   :editor/jump                    "Jump to a property key or value"
   :whiteboard/select              "Select tool"
   :whiteboard/pan                 "Pan tool"
