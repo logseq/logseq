@@ -26,28 +26,33 @@
   (m/sp
     (let [graphs (m/? (rtc.core/new-task--get-graphs const/test-token))
           test-graphs (filter (fn [graph]
-                                (and (= const/test-repo (:graph-name graph))
-                                     (not= "deleting" (:graph-status graph))))
+                                (not= "deleting" (:graph-status graph)))
                               graphs)]
       (doseq [graph test-graphs]
-        (m/? (rtc.core/new-task--delete-graph const/test-token (:graph-uuid graph)))))))
+        (m/? (rtc.core/new-task--delete-graph const/test-token (:graph-uuid graph)))
+        (println :deleted-graph (:graph-name graph) (:graph-uuid graph))))))
 
 (def new-task--get-remote-example-graph-uuid
   (c.m/backoff
    (take 5 c.m/delays)
    (m/sp
-    (let [graphs (m/? (rtc.core/new-task--get-graphs const/test-token))
-          graph
-          (some (fn [graph]
-                  (when (and (= const/test-graph-name (:graph-name graph))
-                             (not= "deleting" (:graph-status graph)))
-                    graph))
-                graphs)]
-      (when-not graph
-        (throw (ex-info "wait remote-example-graph" {:missionary/retry true})))
-      (when (= "creating" (:graph-status graph))
-        (throw (ex-info "wait remote-example-graph (creating)" {:missionary/retry true})))
-      (:graph-uuid graph)))))
+     (let [graphs (m/? (rtc.core/new-task--get-graphs const/test-token))
+           graph
+           (some (fn [graph]
+                   (when (= const/test-graph-name (:graph-name graph))
+                     graph))
+                 graphs)]
+       (when (= "deleting" (:graph-status graph))
+         (throw (ex-info "example graph status is \"deleting\", check server's background-upload-graph log"
+                         {:graph-name (:graph-name graph)
+                          :graph-uuid (:graph-uuid graph)})))
+       (when-not graph
+         (throw (ex-info "wait remote-example-graph" {:missionary/retry true
+                                                      :graphs graphs})))
+       (when (= "creating" (:graph-status graph))
+         (throw (ex-info "wait remote-example-graph (creating)" {:missionary/retry true
+                                                                 :graphs graphs})))
+       (:graph-uuid graph)))))
 
 (defn new-task--download-graph
   [graph-uuid graph-name]

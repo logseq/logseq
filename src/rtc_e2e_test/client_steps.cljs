@@ -74,13 +74,13 @@
              (select-keys block1 [:block/title :block/order :block/parent]))))))))})
 
 (def step2
-  "client1: insert 300 blocks, wait for changes to sync to remote
+  "client1: insert 500 blocks, wait for changes to sync to remote
   client2: wait for blocks to sync from remote"
   {:client1
    (m/sp
      (let [conn (helper/get-downloaded-test-conn)]
        (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
-         (d/transact! conn (const/tx-data-map :insert-300-blocks)))
+         (d/transact! conn (const/tx-data-map :insert-500-blocks)))
        (let [r (m/? (m/timeout
                      (m/reduce (fn [_ v]
                                  (when (and (= :rtc.log/push-local-update (:type v))
@@ -99,8 +99,8 @@
         (when-not (:block/uuid page)
           (throw (ex-info "wait for page to be synced" {:missionary/retry true})))
         (let [blocks (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id page)))]
-          (is (= 300 (count blocks)))
-          (is (= (map #(str "x" %) (range 300))
+          (is (= 500 (count blocks)))
+          (is (= (map #(str "x" %) (range 500))
                  (map :block/title blocks)))))))})
 
 (defn- wrap-print-step-info
