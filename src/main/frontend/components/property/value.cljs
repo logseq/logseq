@@ -66,7 +66,9 @@
                        (db-property-handler/remove-block-property!
                          (:db/id block)
                          :logseq.property/icon))
-                     (shui/popup-hide!)
+                     ;; close icon picker & select
+                     (shui/popup-hide-all!)
+                     ;; close page property select modal
                      (shui/dialog-close!))})]))
 
 (defn- select-type?

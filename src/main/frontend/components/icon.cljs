@@ -305,10 +305,7 @@
   (rum/local :all ::tab)
   (rum/local nil ::hover)
   {:init (fn [s]
-           (assoc s ::color (atom (storage/get :ls-icon-color-preset))))
-   :will-unmount (fn [state]
-                   (shui/popup-hide!)
-                   state)}
+           (assoc s ::color (atom (storage/get :ls-icon-color-preset))))}
   [state {:keys [on-chosen del-btn?] :as opts}]
   (let [*q (::q state)
         *result (::result state)
