@@ -23,7 +23,7 @@
 (rum/defc class-children
   [class]
   (when (seq (:logseq.property/_parent class))
-    (let [children-pages (model/get-structured-children (state/get-current-repo) (:db/id class))
+    (let [children-pages (set (model/get-structured-children (state/get-current-repo) (:db/id class)))
           ;; Expand children if there are about a pageful of total blocks to display
           default-collapsed? (> (count children-pages) 30)]
       [:div.mt-4
