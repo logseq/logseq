@@ -7,7 +7,7 @@
 
 (defn class-children-aux
   [class children-pages {:keys [default-collapsed?] :as opts}]
-  (when (contains? children-pages (:db/id class))
+  (when-not (contains? children-pages (:db/id class))
     (let [children (:logseq.property/_parent class)]
      (when (seq children)
        [:ul
