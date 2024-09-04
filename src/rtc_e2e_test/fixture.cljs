@@ -50,7 +50,8 @@
                  const/downloaded-test-repo (d/create-conn client-op/schema-in-db))
           (let [{:keys [graph-uuid]} (m/? helper/new-task--upload-example-graph)]
             (assert (some? graph-uuid))
-            (m/? (helper/new-task--wait-creating-graph graph-uuid)))
+            (m/? (helper/new-task--wait-creating-graph graph-uuid))
+            (println :uploaded-graph graph-uuid))
           (done))
         :upload-example-graph-fixture)))})
 
