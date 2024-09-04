@@ -230,10 +230,12 @@
                (ldb/whiteboard? entity)
                "whiteboard"
                :else
-               "page")]
+               "page")
+        title (title/block-unique-title page)
+        title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
     (hash-map :icon icon
               :icon-theme :gray
-              :text (title/block-unique-title page)
+              :text title'
               :source-page (or source-page page))))
 
 (defn- block-item

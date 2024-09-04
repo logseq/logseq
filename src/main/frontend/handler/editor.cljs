@@ -1668,6 +1668,9 @@
   "Return matched classes except the root tag"
   [q]
   (let [classes (->> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                     (mapcat (fn [class]
+                               (conj (:block/alias class) class)))
+                     (common-util/distinct-by :db/id)
                      (map (fn [e] (select-keys e [:block/uuid :block/title]))))]
     (search/fuzzy-search classes q {:extract-fn :block/title})))
 
