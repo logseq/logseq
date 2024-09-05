@@ -53,6 +53,9 @@
 (rum/defc icon-row
   [block editing?]
   (let [icon-value (:logseq.property/icon block)
+        clear-overlay! (fn []
+                         (shui/dialog-close!)
+                         (shui/popup-hide-all!))
         on-chosen! (fn [_e icon]
                      (if icon
                        (db-property-handler/set-block-property!
@@ -62,15 +65,12 @@
                        (db-property-handler/remove-block-property!
                          (:db/id block)
                          :logseq.property/icon))
-                     ;; close icon picker & select
-                     (shui/popup-hide-all!)
-                     ;; close page property select modal
-                     (shui/dialog-close!))]
+                     (clear-overlay!))]
 
     (rum/use-effect!
       (fn []
         (when editing?
-          (shui/popup-hide-all!)
+          (clear-overlay!)
           (let [^js container (or (some-> js/document.activeElement (.closest ".page"))
                                 (gdom/getElement "main-content-container"))
                 icon (get block (pu/get-pid :logseq.property/icon))]
