@@ -14,6 +14,10 @@
             [meander.epsilon :as me]
             [missionary.core :as m]))
 
+(defn log
+  [& objs]
+  (apply println (if const/is-client1? "[client1]" "[client2]") objs))
+
 (def new-task--upload-example-graph
   (rtc.core/new-task--upload-graph const/test-token const/test-repo const/test-graph-name))
 
@@ -26,7 +30,7 @@
            graph (some (fn [graph] (when (= graph-uuid (:graph-uuid graph)) graph)) graphs)]
        (when-not graph
          (throw (ex-info "graph not exist" {:graph-uuid graph-uuid})))
-       (println "waiting for graph " graph-uuid " finish creating")
+       (log "waiting for graph " graph-uuid " finish creating")
        (when (= "creating" (:graph-status graph))
          (throw (ex-info "wait creating-graph" {:missionary/retry true})))))))
 
@@ -38,7 +42,7 @@
                               graphs)]
       (doseq [graph test-graphs]
         (m/? (rtc.core/new-task--delete-graph const/test-token (:graph-uuid graph)))
-        (println :deleted-graph (:graph-name graph) (:graph-uuid graph))))))
+        (log :deleted-graph (:graph-name graph) (:graph-uuid graph))))))
 
 (def new-task--get-remote-example-graph-uuid
   (c.m/backoff
@@ -79,6 +83,7 @@
 
 (defn get-downloaded-test-conn
   []
+  {:post [(some? %)]}
   (worker-state/get-datascript-conn const/downloaded-test-repo))
 
 (defn simplify-client-op
@@ -109,22 +114,30 @@
   [message]
   (m/sp
     (let [conn (get-downloaded-test-conn)
-          _ (assert (some? conn))
-          content-page-id (:db/id (ldb/get-page @conn "contents"))
-          _ (assert content-page-id)
-          sorted-blocks (ldb/sort-by-order (ldb/get-page-blocks @conn content-page-id))
+          message-page-id (:db/id (ldb/get-page @conn const/message-page-uuid))
+          sorted-blocks (when message-page-id
+                          (ldb/sort-by-order (ldb/get-page-blocks @conn message-page-id)))
           min-order (db-order/gen-key nil (:block/order (first sorted-blocks)))
-          tx-data [{:block/uuid (random-uuid)
-                    :block/parent content-page-id
+          tx-data [{:db/id "page"
+                    :block/uuid const/message-page-uuid
+                    :block/name "message-page"
+                    :block/title "message-page"
+                    :block/created-at 1725024677501
+                    :block/updated-at 1725024677501
+                    :block/type "page"
+                    :block/format :markdown}
+                   {:block/uuid (random-uuid)
+                    :block/parent "page"
                     :block/order min-order
                     :block/title (transit/write (transit/writer :json) message)
-                    :block/page content-page-id
+                    :block/page "page"
                     :block/format :markdown
                     :block/updated-at 1724836490810
                     :block/created-at 1724836490810}]]
       (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
         (d/transact! conn tx-data))
-      (m/? (new-task--wait-all-client-ops-sent)))))
+      (m/? (new-task--wait-all-client-ops-sent))
+      (log :sent-message message))))
 
 (defn new-task--wait-message-from-other-client
   "Return a task that return message from other client"
@@ -133,12 +146,17 @@
    (take retry-count c.m/delays)
    (m/sp
      (let [conn (get-downloaded-test-conn)
-           _ (assert (some? conn))
-           content-page-id (:db/id (ldb/get-page @conn "contents"))
-           _ (assert content-page-id)
-           first-block (first (ldb/sort-by-order (ldb/get-page-blocks @conn content-page-id)))
+           message-page-id (:db/id (ldb/get-page @conn const/message-page-uuid))
+           first-block (when message-page-id
+                         (first (ldb/sort-by-order (ldb/get-page-blocks @conn message-page-id))))
            first-block-title (some->> (:block/title first-block) (transit/read (transit/reader :json)))]
        (when-not (and (some? first-block-title)
                       (block-title-pred-fn first-block-title))
          (throw (ex-info (str "wait message from other client " retry-message) {:missionary/retry true})))
        first-block-title))))
+
+(defn transact!
+  [conn tx-data]
+  {:pre [(seq tx-data)]}
+  (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
+    (d/transact! conn tx-data)))
