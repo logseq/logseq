@@ -20,7 +20,21 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.db-based.editor :as db-editor-handler]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.common.util.page-ref :as page-ref]))
+
+(defn- wrap-tags
+  "Tags might have multiple words"
+  [title]
+  (let [parts (string/split title #" #")]
+    (->>
+     (cons (first parts)
+           (map (fn [s]
+                  (if (and (string/includes? s " ") (not (page-ref/page-ref? s)))
+                    (page-ref/->page-ref s)
+                    s))
+                (rest parts)))
+     (string/join " #"))))
 
 (defn <create!
   ([title]
@@ -31,9 +45,14 @@
    (p/let [repo (state/get-current-repo)
            conn (db/get-db repo false)
            db-based? (config/db-based-graph? repo)
+           title (if (and db-based? (string/includes? title " #")) ; tagged page
+                   (wrap-tags title)
+                   title)
            parsed-result (when db-based? (db-editor-handler/wrap-parse-block {:block/title title}))
            title' (if (and db-based? (seq (:block/tags parsed-result)))
-                    (string/trim (first (common-util/split-first (str "#" db-content/page-ref-special-chars) (:block/title parsed-result))))
+                    (string/trim (first
+                                  (or (common-util/split-first (str "#" db-content/page-ref-special-chars) (:block/title parsed-result))
+                                      (common-util/split-first (str "#" page-ref/left-brackets db-content/page-ref-special-chars) (:block/title parsed-result)))))
                     title)
            options' (if db-based?
                       (update options :tags concat (:block/tags parsed-result))
