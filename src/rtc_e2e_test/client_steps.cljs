@@ -40,15 +40,7 @@
    (m/sp
      (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
        (is (nil? r))
-       (let [r (m/? (m/timeout
-                     (m/reduce (fn [_ v]
-                                 (when (and (= :rtc.log/push-local-update (:type v))
-                                            (empty? (client-op/get-all-ops const/downloaded-test-repo)))
-                                   (is (nil? (:ex-data v)))
-                                   (reduced v)))
-                               rtc-log-and-state/rtc-log-flow)
-                     6000 :timeout))]
-         (is (not= :timeout r)))))
+       (m/? (helper/new-task--wait-all-client-ops-sent))))
    :client2
    (m/sp
      (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
@@ -81,15 +73,7 @@
      (let [conn (helper/get-downloaded-test-conn)]
        (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
          (d/transact! conn (const/tx-data-map :insert-500-blocks)))
-       (let [r (m/? (m/timeout
-                     (m/reduce (fn [_ v]
-                                 (when (and (= :rtc.log/push-local-update (:type v))
-                                            (empty? (client-op/get-all-ops const/downloaded-test-repo)))
-                                   (is (nil? (:ex-data v)))
-                                   (reduced v)))
-                               rtc-log-and-state/rtc-log-flow)
-                     10000 :timeout))]
-         (is (not= :timeout r)))))
+       (m/? (helper/new-task--wait-all-client-ops-sent))))
    :client2
    (c.m/backoff
     (take 4 c.m/delays)
@@ -115,15 +99,7 @@
            tx-data (const/tx-data-map :add-task-properties-to-block1)]
        (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
          (d/transact! conn tx-data))
-       (let [r (m/? (m/timeout
-                     (m/reduce (fn [_ v]
-                                 (when (and (= :rtc.log/push-local-update (:type v))
-                                            (empty? (client-op/get-all-ops const/downloaded-test-repo)))
-                                   (is (nil? (:ex-data v)))
-                                   (reduced v)))
-                               rtc-log-and-state/rtc-log-flow)
-                     10000 :timeout))]
-         (is (not= :timeout r)))))
+       (m/? (helper/new-task--wait-all-client-ops-sent))))
    :client2
    (m/sp
      (let [conn (helper/get-downloaded-test-conn)
