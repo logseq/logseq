@@ -28,13 +28,13 @@
   (ordered-map
    :block/alias           {:title "Alias"
                            :attribute :block/alias
-                           :schema {:type :node
+                           :schema {:type :page
                                     :cardinality :many
                                     :view-context :page
                                     :public? true}}
    :block/tags           {:title "Tags"
                           :attribute :block/tags
-                          :schema {:type :node
+                          :schema {:type :class
                                    :cardinality :many
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
