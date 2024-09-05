@@ -322,8 +322,9 @@
 (defn create-user-property-ident-from-name
   "Creates a property :db/ident for a default user namespace.
    NOTE: Only use this when creating a db-ident for a new property."
-  [property-name]
-  (db-ident/create-db-ident-from-name default-user-namespace property-name))
+  ([property-name] (create-user-property-ident-from-name property-name default-user-namespace))
+  ([property-name user-namespace]
+   (db-ident/create-db-ident-from-name user-namespace property-name)))
 
 (defn get-class-ordered-properties
   [class-entity]
