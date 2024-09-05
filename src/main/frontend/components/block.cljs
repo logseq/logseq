@@ -815,7 +815,7 @@
               inner))
           (block-reference config (:block/uuid entity) nil))
 
-        (util/uuid-string? (:block/name page))
+        (and (:block/name page) (util/uuid-string? (:block/name page)))
         (invalid-node-ref (:block/name page))
 
         :else
