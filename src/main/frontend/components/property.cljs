@@ -515,7 +515,9 @@
   (when (seq properties)
       ;; Sort properties by :block/order
     (let [properties' (sort-by (fn [[k _v]]
-                                 (:block/order (db/entity k))) properties)]
+                                 (if (= k :logseq.property.class/properties)
+                                   "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+                                   (:block/order (db/entity k)))) properties)]
       (ordered-properties block properties' opts))))
 
 (defn- async-load-classes!
@@ -561,9 +563,6 @@
                           distinct
                           (map #(vector % %)))
 
-                     (and class? (nil? (:logseq.property.class/properties block)))
-                     (assoc block-properties :logseq.property.class/properties nil)
-
                      :else
                      block-properties)
         remove-built-in-or-other-position-properties
@@ -589,16 +588,18 @@
                                   (remove (fn [[id _]] (classes-properties-set id)))
                                   remove-built-in-or-other-position-properties)
         root-block? (= (:id opts) (str (:block/uuid block)))
+        state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
-                                (when (not= property-id :logseq.property.class/properties)
-                                  (cond
-                                    show-empty-and-hidden-properties?
-                                    false
-                                    root-block?
-                                    false
-                                    :else
-                                    (boolean (:hide? (:block/schema (db/entity property-id)))))))
+                                (cond
+                                  show-empty-and-hidden-properties?
+                                  false
+                                  root-block?
+                                  false
+                                  state-hide-empty-properties?
+                                  (nil? (get block property-id))
+                                  :else
+                                  (boolean (:hide? (:block/schema (db/entity property-id))))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
@@ -606,12 +607,12 @@
                           (fn [[property-id property-value]]
                             (or (nil? property-value)
                                 (hide-with-property-id property-id)))
-                          (:ui/hide-empty-properties? (state/get-config))
+                          state-hide-empty-properties?
                           (fn [[property-id property-value]]
                             ;; User's selection takes precedence over config
                             (if (contains? (:block/schema (db/entity property-id)) :hide?)
                               (hide-with-property-id property-id)
-                              (and (not= property-id :logseq.property.class/properties)  (nil? property-value))))
+                              (nil? property-value)))
                           :else
                           (comp hide-with-property-id first))
         {_block-hidden-properties true
@@ -631,7 +632,10 @@
                                         (into result cur-properties)
                                         result)))
                              result))
-        full-properties (->> (concat block-own-properties' (map (fn [p] [p (get block p)]) class-properties))
+        full-properties (->> (concat block-own-properties'
+                                     (map (fn [p] [p (get block p)]) class-properties)
+                                     (when (and class? (nil? (:logseq.property.class/properties block)))
+                                       [[:logseq.property.class/properties nil]]))
                              remove-built-in-or-other-position-properties)]
     (when-not (and (empty? full-properties) (not (:class-schema? opts)))
       [:div.ls-properties-area
