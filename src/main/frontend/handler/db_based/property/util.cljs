@@ -33,12 +33,13 @@
   "Given a DB graph's properties, returns a readable properties map with keys as
   property names and property values dereferenced where possible. Has some
   overlap with db-property/properties-by-name"
-  ([properties] (readable-properties properties true))
-  ([properties original-key?]
+  ([properties] (readable-properties properties {:original-key? true}))
+  ([properties {:keys [original-key? key-fn]
+                :or {key-fn identity}}]
    (->> properties
      (map (fn [[k v]]
             (let [prop-ent (db-utils/entity k)]
-              [(if original-key? k (-> prop-ent :block/title keyword))
+              [(key-fn (if original-key? k (-> prop-ent :block/title keyword)))
                (cond
                  (set? v)
                  (set (map db-property/property-value-content v))

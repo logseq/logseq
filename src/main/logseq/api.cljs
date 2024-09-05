@@ -80,6 +80,14 @@
 (defn- get-caller-plugin-id
   [] (gobj/get js/window "$$callerPluginID"))
 
+(defn- sanitize-user-property-key
+  [k]
+  (if (string? k)
+    (-> k (string/trim)
+      (string/replace #"^\:+" "")
+      (string/lower-case))
+    k))
+
 ;; helpers
 (defn ^:export install-plugin-hook
   [pid hook ^js opts]
@@ -861,7 +869,7 @@
 ;; properties (db only)
 (defn ^:export get_property
   [k]
-  (when-let [k' (and (string? k) (keyword k))]
+  (when-let [k' (and (string? k) (some-> k (sanitize-user-property-key) (keyword)))]
     (p/let [k (if (qualified-keyword? k') k' (get-db-ident-for-property-name k))
             p (db-utils/pull k)]
       (bean/->js (sdk-utils/normalize-keyword-for-json p)))))
@@ -896,7 +904,8 @@
 
 (def ^:export remove_block_property
   (fn [block-uuid key]
-    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+    (p/let [key (sanitize-user-property-key key)
+            block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)
             db? (config/db-based-graph? (state/get-current-repo))
             key-ns? (and (keyword? key) (namespace key))
@@ -912,6 +921,7 @@
             _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
       (when-let [block (db-model/get-block-by-uuid block-uuid)]
         (let [properties (:block/properties block)
+              key (sanitize-user-property-key key)
               property-name (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
               property-value (or (get properties key)
                                  (get properties property-name)
@@ -925,7 +935,7 @@
             _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
       (when-let [block (db-model/get-block-by-uuid block-uuid)]
         (let [properties (if (config/db-based-graph? (state/get-current-repo))
-                           (db-pu/readable-properties (:block/properties block))
+                           (api-block/into-readable-db-properties (:block/properties block))
                            (:block/properties block))]
           (bean/->js (sdk-utils/normalize-keyword-for-json properties)))))))
 
