@@ -60,6 +60,11 @@
     }
 
     .property-k {
+        .jtrigger {
+            &-id {
+                @apply left-[16px];
+            }
+        }
       @apply inline-block overflow-hidden text-ellipsis whitespace-nowrap;
     }
 
