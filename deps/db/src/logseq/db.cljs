@@ -16,7 +16,8 @@
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property])
+  (:refer-clojure :exclude [object?]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -95,6 +96,7 @@
 (def whiteboard? entity-util/whiteboard?)
 (def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
+(def object? entity-util/object?)
 (def public-built-in-property? db-property/public-built-in-property?)
 
 (defn sort-by-order

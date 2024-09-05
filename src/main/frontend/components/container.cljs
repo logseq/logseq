@@ -56,7 +56,8 @@
             [logseq.common.path :as path]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.db :as ldb]))
 
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class count]} child]
@@ -132,7 +133,7 @@
                                              :content-props {:on-click (fn [] (shui/popup-hide!))
                                                              :class "w-60"}})
                           (util/stop e))}
-       (db/page? page)
+       (ldb/object? page)
        (assoc :title (title/block-unique-title page)))
      [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
      [:span.page-title {:class (when untitled? "opacity-50")
