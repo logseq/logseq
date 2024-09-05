@@ -34,7 +34,7 @@
 (def block7-uuid #uuid "83f99937-fe0a-4d33-81ce-7fe5837baad3")
 ;;; -----------------------------------------
 
-(def tx-data-map
+(def ^:large-vars/data-var tx-data-map
   {:create-page
    [{:db/id "page"
      :block/name "basic-edits-test"
