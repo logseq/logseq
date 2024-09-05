@@ -5,5 +5,8 @@
                   frontend.db
                   ;; Used for debugging
                   frontend.db.debug
-                  frontend.worker.debug]
+                  frontend.worker.debug
+                  ;; Ignore because of dev work
+                  helper
+                  logseq.api]
  :report {:format :ignore}}

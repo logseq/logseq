@@ -139,7 +139,7 @@
                :logseq.task/deadline {:block/journal-day 20240907}}
               block1))))})
 ;;; TODO
-(def ^:private step4
+#_(def ^:private step4
   "client1:
   - insert some blocks in page2
   - wait to be synced

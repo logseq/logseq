@@ -33,7 +33,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.db-based.property :as db-property-handler]
             [logseq.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as outliner-tree]
@@ -77,7 +76,7 @@
   (some-> (state/get-current-repo)
     (config/db-based-graph?)))
 
-(defn- get-caller-plugin-id
+(defn get-caller-plugin-id
   [] (gobj/get js/window "$$callerPluginID"))
 
 (defn- sanitize-user-property-name
