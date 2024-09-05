@@ -122,8 +122,7 @@
 (defn- node-entity?
   [db val]
   (when-let [ent (d/entity db val)]
-    ;; (seq (:block/tags ent))
-    (some? ent)))
+    (some? (:block/title ent))))
 
 (defn- date?
   [db val]
