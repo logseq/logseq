@@ -42,7 +42,7 @@
 
             ;; @FIXME compatible layer for classic APIs
             (and (map? a) (:block/uuid a))
-            (some->> (:block/title a) (assoc a :block/content))
+            (or (some->> (:block/title a) (assoc a :block/content)) a)
 
             :else a)) input)))))
 

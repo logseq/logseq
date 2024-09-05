@@ -810,7 +810,7 @@ export interface IEditorProxy extends Record<string, any> {
   upsertProperty: (
     key: string,
     schema?: Partial<{
-      type: 'default' | 'map' | 'keyword' | 'date' | 'checkbox' | string,
+      type: 'default' | 'map' | 'number' | 'keyword' | 'node' | 'date' | 'checkbox' | string,
       cardinality: 'many' | 'one',
       hide: boolean
       public: boolean
