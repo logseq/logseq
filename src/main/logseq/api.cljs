@@ -875,11 +875,20 @@
       (bean/->js (sdk-utils/normalize-keyword-for-json p)))))
 
 (defn ^:export upsert_property
+  "schema:
+    {:type :default | :keyword | :map | :date | :checkbox
+     :cardinality :many | :one
+     :hide? true
+     :view-context :page
+     :public? false}
+  "
   [k ^js schema ^js opts]
   (when-let [k' (and (string? k) (keyword k))]
     (p/let [k (if (qualified-keyword? k') k'
-                  (get-db-ident-for-property-name k))
-            schema (or (and schema (bean/->clj schema)) {})
+                (get-db-ident-for-property-name k))
+            schema (or (some-> schema (bean/->clj)
+                         (update-keys #(if (contains? #{:hide :public} %)
+                                         (keyword (str (name %) "?")) %))) {})
             schema (cond-> schema
                      (string? (:cardinality schema))
                      (update :cardinality keyword)
