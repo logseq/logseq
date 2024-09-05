@@ -93,14 +93,14 @@
                                    (some-> (:block-parent-id (first (state/get-editor-args)))
                                            js/document.getElementById)
                                    ;; current page
-                                   (d/sel1 js/document "#main-content-container .ls-page-properties"))]
+                                   (d/sel1 js/document "#main-content-container .ls-properties-area"))]
     (cond
       selected-block-or-page
       (when (empty? (d/sel js/document ".jtrigger-id"))
         (let [triggers (d/sel selected-block-or-page ".jtrigger")]
           (when (seq triggers)
             (reset! *jump-data {:mode :property
-                                :triggers (d/sel selected-block-or-page ".jtrigger")})
+                                :triggers triggers})
             (let [keys (generate-keys (count triggers))
                   key-down-handler (fn [e]
                                      (let [k (util/ekey e)]
