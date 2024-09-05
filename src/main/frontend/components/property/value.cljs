@@ -408,9 +408,10 @@
                              (and alias? (= (or (:db/id (:block/page block))
                                                 (:db/id block))
                                             (:db/id node)))
-                             (and property-type
-                                  (not= property-type :node)
-                                  (not= property-type (some-> (:block/type node) keyword)))))
+                             (when (and property-type (not= property-type :node))
+                               (if (= property-type :page)
+                                 (not (db/page? node))
+                                 (not= property-type (some-> (:block/type node) keyword))))))
                        result)))))
 
         options (map (fn [node]
