@@ -75,6 +75,14 @@
         @apply left-[-34px] top-[2px];
       }
 
+      .property-k {
+          .jtrigger {
+              &-id {
+                  @apply left-[16px];
+              }
+          }
+      }
+
       &-inner[data-type=checkbox] {
         .jtrigger-id {
           @apply left-[-44px] top-[-2px];

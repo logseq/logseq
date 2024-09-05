@@ -389,7 +389,7 @@
   [state block opts]
   (when (and (not config/publishing?) (:class-schema? opts))
     [:div.ls-new-property {:style {:margin-left 6 :margin-top 1}}
-     [:a.fade-link.flex
+     [:a.fade-link.flex.jtrigger
       {:tab-index 0
        :on-click (fn [e]
                    (state/pub-event! [:editor/new-property (merge opts {:block block
