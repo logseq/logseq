@@ -798,6 +798,26 @@ export interface IEditorProxy extends Record<string, any> {
 
   saveFocusedCodeEditorContent: () => Promise<void>
 
+  // property entity related APIs (DB only)
+  getProperty: (key: string) => Promise<BlockEntity | null>
+
+  /**
+   * insert or update property entity
+   * @param key
+   * @param schema
+   * @param opts
+   */
+  upsertProperty: (
+    key: string,
+    schema?: Partial<{
+      type: 'default' | 'map' | 'keyword' | 'date' | 'checkbox' | string,
+      cardinality: 'many' | 'one',
+      hide: boolean
+      public: boolean
+    }>,
+    opts?: {}) => Promise<IEntityID>
+
+  // block property related APIs
   upsertBlockProperty: (
     block: BlockIdentity,
     key: string,
@@ -806,7 +826,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>
 
-  getBlockProperty: (block: BlockIdentity, key: string) => Promise<BlockEntity | string| null>
+  getBlockProperty: (block: BlockIdentity, key: string) => Promise<BlockEntity | string | null>
 
   getBlockProperties: (block: BlockIdentity) => Promise<Record<string, any> | null>
 
