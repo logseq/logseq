@@ -2426,7 +2426,7 @@
                 (property-component/property-key-cp block property opts)
                 [:div.select-none ":"]]
                (pv/property-value block property v opts)]))]
-         [:div.positioned-properties.right-align.flex.flex-row.gap-2.select-none
+         [:div.positioned-properties.right-align.flex.flex-row.gap-2.select-none.h-6
           (for [pid properties]
             (when-let [property (db/entity pid)]
               (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
