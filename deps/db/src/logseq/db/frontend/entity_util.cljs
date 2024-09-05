@@ -2,7 +2,8 @@
   "Lower level entity util fns used across db namespaces"
   (:require [datascript.core :as d]
             [clojure.string :as string]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config])
+  (:refer-clojure :exclude [object?]))
 
 (defn db-based-graph?
   "Whether the current graph is db-only"
@@ -44,3 +45,7 @@
       (or (string/starts-with? page "$$$")
           (= common-config/favorites-page-name page))
       (= (:block/type page) "hidden"))))
+
+(defn object?
+  [node]
+  (seq (:block/tags node)))

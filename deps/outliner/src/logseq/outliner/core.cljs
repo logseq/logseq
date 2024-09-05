@@ -342,7 +342,7 @@
                m*)
           _ (when (and db-based?
                       ;; page or object changed?
-                       (and (or (ldb/page? block-entity) (seq (:block/tags block-entity)))
+                       (and (or (ldb/page? block-entity) (ldb/object? block-entity))
                             (:block/title m*)
                             (not= (:block/title m*) (:block/title block-entity))))
               (validate-built-in-pages block-entity)

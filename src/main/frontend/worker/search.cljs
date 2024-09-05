@@ -177,7 +177,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn- page-or-object?
   [entity]
-  (and (or (ldb/page? entity) (seq (:block/tags entity)))
+  (and (or (ldb/page? entity) (ldb/object? entity))
        (not (ldb/hidden? entity))))
 
 (defn get-all-fuzzy-supported-blocks
