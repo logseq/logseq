@@ -20,6 +20,12 @@
             [logseq.db :as ldb]
             [logseq.sdk.utils :as sdk-utils]))
 
+(defn into-readable-db-properties
+  [properties]
+  (some-> properties
+    (db-pu/readable-properties
+      {:original-key? true :key-fn str})))
+
 (defn into-properties
   ([block] (into-properties (state/get-current-repo) block))
   ([repo block]
@@ -27,7 +33,7 @@
      (let [props (some->> block
                    (filter (fn [[k _]] (db-property/property? k)))
                    (into {})
-                   (db-pu/readable-properties))
+                   (into-readable-db-properties))
            block (update block :block/properties merge props)
            block (apply dissoc (concat [block] (keys props)))]
        block)
