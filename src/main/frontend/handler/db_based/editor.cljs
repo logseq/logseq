@@ -26,6 +26,10 @@
                    (and (vector? x)
                         (= :block/uuid (first x))
                         (nil? (db/entity x)))
+                   (and (map? x)
+                        (util/uuid-string? (:block/title x))
+                        (:block/uuid x)
+                        (nil? (db/entity [:block/uuid (:block/uuid x)])))
                    (nil? x))) refs))
 
 (defn- use-cached-refs!

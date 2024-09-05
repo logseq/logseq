@@ -768,6 +768,13 @@
 (declare block-reference)
 (declare block-reference-preview)
 
+(rum/defc invalid-node-ref
+  [id]
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))
+        ->ref (if db-based? page-ref/->page-ref block-ref/->block-ref)]
+    [:span.warning.mr-1 {:title "Node ref invalid"}
+   (->ref id)]))
+
 (rum/defcs page-cp < db-mixins/query rum/reactive
   {:init (fn [state]
            (let [page (last (:rum/args state))]
@@ -785,26 +792,34 @@
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [state {:keys [label children preview? disable-preview?] :as config} _page]
+  [state {:keys [label children preview? disable-preview?] :as config} page]
   (let [entity (::entity state)]
-    (when-let [entity (when entity (db/sub-block (:db/id entity)))]
-      (if (or (ldb/page? entity) (:block/tags entity))
-        (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
-              whiteboard-page? (model/whiteboard-page? entity)
-              inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) entity children label)
-              modal? (shui-dialog/has-modal?)]
-          (if (and (not (util/mobile?))
-                   (not= page-name (:id config))
-                   (not (false? preview?))
-                   (not disable-preview?)
-                   (not modal?))
-            (if (ldb/page? entity)
-              (page-preview-trigger (assoc config :children inner) entity)
-              (block-reference-preview inner {:repo (state/get-current-repo)
-                                              :config config
-                                              :id (:block/uuid entity)}))
-            inner))
-        (block-reference config (:block/uuid entity) nil)))))
+    (let [entity (when entity (db/sub-block (:db/id entity)))]
+      (cond
+        entity
+        (if (or (ldb/page? entity) (:block/tags entity))
+          (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
+                whiteboard-page? (model/whiteboard-page? entity)
+                inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) entity children label)
+                modal? (shui-dialog/has-modal?)]
+            (if (and (not (util/mobile?))
+                     (not= page-name (:id config))
+                     (not (false? preview?))
+                     (not disable-preview?)
+                     (not modal?))
+              (if (ldb/page? entity)
+                (page-preview-trigger (assoc config :children inner) entity)
+                (block-reference-preview inner {:repo (state/get-current-repo)
+                                                :config config
+                                                :id (:block/uuid entity)}))
+              inner))
+          (block-reference config (:block/uuid entity) nil))
+
+        (util/uuid-string? (:block/name page))
+        (invalid-node-ref (:block/name page))
+
+        :else
+        nil))))
 
 (rum/defc asset-reference
   [config title path]
@@ -1083,11 +1098,8 @@
                  (block-reference-preview inner
                                           {:repo repo :config config :id block-id})
                  inner)])
-            [:span.warning.mr-1 {:title "Block ref invalid"}
-             (block-ref/->block-ref id)])))
-
-      [:span.warning.mr-1 {:title "Block ref invalid"}
-       (block-ref/->block-ref id)])))
+            (invalid-node-ref id))))
+      (invalid-node-ref id))))
 
 (defn inline-text
   ([format v]
