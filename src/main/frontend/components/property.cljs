@@ -591,13 +591,14 @@
         root-block? (= (:id opts) (str (:block/uuid block)))
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
-                                (cond
-                                  show-empty-and-hidden-properties?
-                                  false
-                                  root-block?
-                                  false
-                                  :else
-                                  (boolean (:hide? (:block/schema (db/entity property-id))))))
+                                (when (not= property-id :logseq.property.class/properties)
+                                  (cond
+                                    show-empty-and-hidden-properties?
+                                    false
+                                    root-block?
+                                    false
+                                    :else
+                                    (boolean (:hide? (:block/schema (db/entity property-id)))))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
@@ -610,7 +611,7 @@
                             ;; User's selection takes precedence over config
                             (if (contains? (:block/schema (db/entity property-id)) :hide?)
                               (hide-with-property-id property-id)
-                              (nil? property-value)))
+                              (and (not= property-id :logseq.property.class/properties)  (nil? property-value))))
                           :else
                           (comp hide-with-property-id first))
         {_block-hidden-properties true
