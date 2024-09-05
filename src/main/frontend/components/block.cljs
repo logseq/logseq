@@ -3105,12 +3105,13 @@
         (let [icon' (get block (pu/get-pid :logseq.property/icon))]
           (when-let [icon (and (ldb/page? block)
                                (or icon'
-                                   (or (when (ldb/class? block)
+                                   (some :logseq.property/icon (:block/tags block))
+                                   (when (ldb/class? block)
                                          {:type :tabler-icon
                                           :id "hash"})
-                                       (when (ldb/property? block)
+                                   (when (ldb/property? block)
                                          {:type :tabler-icon
-                                          :id "letter-p"}))))]
+                                          :id "letter-p"})))]
             [:div.ls-page-icon.flex.self-start
              (icon-component/icon-picker icon
                                          {:on-chosen (fn [_e icon]
