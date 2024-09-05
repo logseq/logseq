@@ -334,20 +334,26 @@
 
 (rum/defc add-existing-values
   [property values {:keys [toggle-fn]}]
-  [:div.flex.flex-col.gap-1.w-64.p-4.overflow-y-auto
-   {:class "max-h-[50dvh]"}
-   [:div "Existing values:"]
-   [:ol
-    (for [value values]
-      [:li (if (uuid? value)
-             (let [result (db/entity [:block/uuid value])]
-               (db-property/closed-value-content result))
-             (str value))])]
-   (shui/button
-    {:on-click (fn []
-                 (p/let [_ (db-property-handler/add-existing-values-to-closed-values! (:db/id property) values)]
-                   (toggle-fn)))}
-    "Add choices")])
+  (let [uuid-values? (every? uuid? values)
+        values' (if uuid-values?
+                  (let [values' (map #(db/entity [:block/uuid %]) values)]
+                    (->> (util/distinct-by db-property/closed-value-content values')
+                        (map :block/uuid)))
+                  values)]
+    [:div.flex.flex-col.gap-1.w-64.p-4.overflow-y-auto
+     {:class "max-h-[50dvh]"}
+     [:div "Existing values:"]
+     [:ol
+      (for [value values']
+        [:li (if (uuid? value)
+               (let [result (db/entity [:block/uuid value])]
+                 (db-property/closed-value-content result))
+               (str value))])]
+     (shui/button
+      {:on-click (fn []
+                   (p/let [_ (db-property-handler/add-existing-values-to-closed-values! (:db/id property) values')]
+                     (toggle-fn)))}
+      "Add choices")]))
 
 (rum/defc choices-sub-pane < rum/reactive db-mixins/query
   [property]
