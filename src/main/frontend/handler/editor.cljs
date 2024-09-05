@@ -848,7 +848,8 @@
                           delete-prev-block? (and db-based?
                                                   (empty? (:block/tags block))
                                                   (seq (:block/properties block))
-                                                  (empty? (:block/properties prev-block)))]
+                                                  (empty? (:block/properties prev-block))
+                                                  (not (:logseq.property/created-from-property block)))]
                       (if delete-prev-block?
                         (p/do!
                          (ui-outliner-tx/transact!
