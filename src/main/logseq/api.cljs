@@ -1,6 +1,7 @@
 (ns ^:no-doc logseq.api
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
+            [goog.object :as gobj]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
             [logseq.common.util :as common-util]
@@ -75,6 +76,9 @@
   []
   (some-> (state/get-current-repo)
     (config/db-based-graph?)))
+
+(defn- get-caller-plugin-id
+  [] (gobj/get js/window "$$callerPluginID"))
 
 ;; helpers
 (defn ^:export install-plugin-hook
