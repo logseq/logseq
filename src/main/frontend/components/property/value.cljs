@@ -397,17 +397,22 @@
             classes)
 
            :else
-           (if (empty? result)
-             (let [v (get block (:db/ident property))]
-               (remove #(= :logseq.property/empty-placeholder (:db/ident %))
-                       (if (every? de/entity? v) v [v])))
-             (remove (fn [node]
-                       (or (= (:db/id block) (:db/id node))
-                            ;; A page's alias can't be itself
-                           (and alias? (= (or (:db/id (:block/page block))
-                                              (:db/id block))
-                                          (:db/id node)))))
-                     result))))
+           (let [property-type (get-in property [:block/schema :type])]
+             (if (empty? result)
+               (let [v (get block (:db/ident property))]
+                 (remove #(= :logseq.property/empty-placeholder (:db/ident %))
+                         (if (every? de/entity? v) v [v])))
+               (remove (fn [node]
+                         (or (= (:db/id block) (:db/id node))
+                             ;; A page's alias can't be itself
+                             (and alias? (= (or (:db/id (:block/page block))
+                                                (:db/id block))
+                                            (:db/id node)))
+                             (and property-type
+                                  (not= property-type :node)
+                                  (not= property-type (some-> (:block/type node) keyword)))))
+                       result)))))
+
         options (map (fn [node]
                        (let [id (or (:value node) (:db/id node))
                              label (if (integer? id)
@@ -493,7 +498,6 @@
                           "Escape"
                           (when-let [f (:on-chosen opts)] (f))
                           nil))})
-
         opts' (assoc opts
                      :block block
                      :input-opts input-opts

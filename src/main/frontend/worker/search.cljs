@@ -256,7 +256,7 @@ DROP TRIGGER IF EXISTS blocks_au;
    * :limit - Number of result to limit search results. Defaults to 100
    * :dev? - Allow all nodes to be seen for development. Defaults to false
    * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
-  [repo conn search-db q {:keys [limit page enable-snippet?  built-in? dev?]
+  [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev?]
                           :as option
                           :or {enable-snippet? true}}]
   (when-not (string/blank? q)

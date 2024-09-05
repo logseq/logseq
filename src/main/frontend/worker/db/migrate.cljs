@@ -156,6 +156,21 @@
                       [:db/add id :logseq.property.class/properties value])
                     values))))))))))
 
+(defn- update-db-attrs-type
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [alias (d/entity db :block/alias)
+            tags (d/entity db :block/tags)]
+        [[:db/add (:db/id alias) :block/schema {:type :page
+                                                :cardinality :many
+                                                :view-context :page
+                                                :public? true}]
+         [:db/add (:db/id tags) :block/schema {:type :class
+                                               :cardinality :many
+                                               :public? true
+                                               :classes #{:logseq.class/Root}}]]))))
+
 (defn- add-addresses-in-kvs-table
   [^Object sqlite-db]
   (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
@@ -212,7 +227,8 @@
         :fix deprecate-class-parent}]
    [15 {:properties [:logseq.property.class/properties]
         :fix deprecate-class-schema-properties}]
-   [16 {:properties [:logseq.property.class/hide-from-node]}]])
+   [16 {:properties [:logseq.property.class/hide-from-node]}]
+   [17 {:fix update-db-attrs-type}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
