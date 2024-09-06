@@ -430,26 +430,16 @@ p.warning {
 
 a.error,
 span.error {
-  background: var(--ls-error-background-color);
-  padding: 0.1em 0.4em;
-  border-radius: var(--ls-border-radius-low);
-  color: var(--ls-error-text-color);
+  @apply bg-red-rx-04-alpha text-red-rx-09 dark:bg-red-rx-06-alpha
+  dark:text-red-rx-10 rounded px-1.5 py-[2px] leading-none;
 }
 
 .text-error {
-  color: var(--ls-error-text-color);
+  @apply text-red-rx-09;
 }
 
 .bg-error {
-  background: var(--ls-error-background-color);
-}
-
-.text-success {
-  color: var(--ls-success-text-color);
-}
-
-.bg-success {
-  background: var(--ls-success-background-color);
+  @apply bg-red-rx-04-alpha;
 }
 
 img.small {

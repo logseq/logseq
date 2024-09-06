@@ -90,12 +90,6 @@ html[data-theme=light][data-color=logseq] {
   --ls-pie-bg-color: #e1e1e1;
   --ls-pie-fg-color: #0a4a5d;
 
-  --ls-error-text-color: var(--color-red-700);
-  --ls-error-background-color: var(--color-red-100);
-  --ls-warning-text-color: var(--color-yellow-700);
-  --ls-warning-background-color: var(--color-yellow-100);
-  --ls-success-text-color: var(--color-green-800);
-  --ls-success-background-color: var(--color-green-100);
   --ls-focus-ring-color: rgba(66, 133, 244, 0.5);
   --ls-header-button-background: rgba(15, 20, 25, 1);
   --ls-left-sidebar-text-color: var(--lx-gray-12);
@@ -154,12 +148,6 @@ html[data-theme=dark][data-color=logseq] {
   --ls-pie-bg-color: #01303b;
   --ls-pie-fg-color: #0b5869;
 
-  --ls-error-text-color: var(--color-red-400);
-  --ls-error-background-color: var(--color-red-900);
-  --ls-warning-text-color: var(--color-yellow-400);
-  --ls-warning-background-color: var(--color-yellow-900);
-  --ls-success-text-color: var(--color-green-100);
-  --ls-success-background-color: var(--color-green-900);
   --ls-focus-ring-color: rgba(18, 98, 119, 0.5);
   --ls-header-button-background: #dee4ea;
   --ls-left-sidebar-text-color: var(--lx-gray-11);
