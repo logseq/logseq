@@ -13,7 +13,8 @@
             [logseq.common.util.page-ref :as page-ref]
             [frontend.util :as util]
             [frontend.date :as date]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]))
 
 (defn resolve-input
   "Wrapper around db-inputs/resolve-input which provides editor-specific state"
@@ -23,7 +24,10 @@
    (db-inputs/resolve-input db
                             input
                             (merge {:current-page-fn (fn []
-                                                       (or (state/get-current-page)
+                                                       (or (when-let [name-or-uuid (state/get-current-page)]
+                                                             (if (ldb/db-based-graph? db)
+                                                               (:block/title (model/get-block-by-uuid name-or-uuid))
+                                                               name-or-uuid))
                                                            (:page (state/get-default-home))
                                                            (date/today)))}
                                    opts))))
@@ -102,7 +106,7 @@
           resolve-with (select-keys query-opts [:current-page-fn :current-block-uuid])
           resolved-inputs (mapv #(resolve-input db % resolve-with) inputs)
           inputs (cond-> resolved-inputs
-                         rules
+                   rules
                    (conj rules))
           k [:custom (or (:query-string query') query') inputs]]
       (pprint "inputs (post-resolution):" resolved-inputs)
