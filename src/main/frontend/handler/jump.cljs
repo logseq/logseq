@@ -117,10 +117,11 @@
                 (fn [id dom]
                   (let [class (if (d/has-class? dom "ui__checkbox")
                                 "jtrigger-id text-sm border rounded ml-4 px-1 shadow-xs"
-                                "jtrigger-id text-sm border rounded ml-2 px-1 shadow-xs")]
-                    (d/append! dom (-> (d/create-element :div)
-                                       (d/set-attr! :class class)
-                                       (d/set-text! (nth keys id))))))
+                                "jtrigger-id text-sm border rounded ml-2 px-1 shadow-xs")
+                        ^js view (or (.closest dom ".jtrigger-view") dom)]
+                    (d/append! view (-> (d/create-element :div)
+                                      (d/set-attr! :class class)
+                                      (d/set-text! (nth keys id))))))
                 (take (count keys) triggers)))
               (.addEventListener js/window "keydown" key-down-handler)))))
 
