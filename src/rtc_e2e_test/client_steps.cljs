@@ -155,16 +155,18 @@
              #(= "move-blocks-concurrently-signal-from-client2" %)
              :retry-message "move-blocks-concurrently-signal-from-client2"))
        (m/? (helper/new-task--send-message-to-other-client "move-blocks-concurrently-signal-from-client1"))
-       (rtc-core/rtc-stop)
+       (m/? helper/new-task--stop-rtc)
        (helper/transact! conn tx-data2)
        (is (nil? (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))))
        (m/? (helper/new-task--wait-all-client-ops-sent))
        (let [message (m/? (helper/new-task--wait-message-from-other-client
-                           (fn [message] (= "move-blocks-concurrently-page-blocks" (:id message)))))
+                           (fn [message] (= "move-blocks-concurrently-page-blocks" (:id message)))
+                           :retry-message "move-blocks-concurrently-page-blocks"))
              client2-page-blocks (:page-blocks message)
-             client1-page-blocks (ldb/get-page-blocks @conn (d/entity @conn [:block/uuid const/page3-uuid]))]
-         (helper/log :client1-page-blocks client1-page-blocks)
-         (helper/log :client2-page-blocks client2-page-blocks))))
+             client1-page-blocks (ldb/get-page-blocks @conn (:db/id (d/entity @conn [:block/uuid const/page3-uuid]))
+                                                      :pull-keys '[:block/uuid :block/title :block/order
+                                                                   {:block/parent [:block/uuid]}])]
+         (is (= (set client1-page-blocks) (set client2-page-blocks))))))
    :client2
    (m/sp
      (let [conn (helper/get-downloaded-test-conn)]
@@ -183,14 +185,16 @@
        (m/? (helper/new-task--wait-message-from-other-client
              #(= "move-blocks-concurrently-signal-from-client1" %)
              :retry-message "move-blocks-concurrently-signal-from-client1"))
-       (rtc-core/rtc-stop)
+       (m/? helper/new-task--stop-rtc)
        (helper/transact! conn (const/tx-data-map :move-blocks-concurrently-client2))
        (is (nil? (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))))
        (m/? (helper/new-task--wait-all-client-ops-sent))
        (m/? (m/sleep 5000))
        (m/? (helper/new-task--send-message-to-other-client
              {:id "move-blocks-concurrently-page-blocks"
-              :page-blocks (ldb/get-page-blocks @conn (:db/id (d/entity @conn [:block/uuid const/page3-uuid])))}))))})
+              :page-blocks (ldb/get-page-blocks @conn (:db/id (d/entity @conn [:block/uuid const/page3-uuid]))
+                                                :pull-keys '[:block/uuid :block/title :block/order
+                                                             {:block/parent [:block/uuid]}])}))))})
 
 (defn- wrap-print-step-info
   [steps client]
@@ -202,7 +206,7 @@
        (helper/log "end step" idx)))
    steps))
 
-(def ^:private all-steps [step0 step1 step2 step3 step4])
+(def ^:private all-steps [step0 step1 step2 step3 step4 step5])
 
 (def client1-steps
   (wrap-print-step-info all-steps :client1))
