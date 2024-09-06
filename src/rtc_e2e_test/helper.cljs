@@ -1,6 +1,6 @@
 (ns helper
   (:require [cljs.test :as t :refer [is]]
-            [cognitect.transit :as transit]
+            [datascript.transit :as dt]
             [const]
             [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
@@ -129,7 +129,7 @@
                    {:block/uuid (random-uuid)
                     :block/parent "page"
                     :block/order min-order
-                    :block/title (transit/write (transit/writer :json) message)
+                    :block/title (dt/write-transit-str message)
                     :block/page "page"
                     :block/format :markdown
                     :block/updated-at 1724836490810
@@ -149,7 +149,7 @@
            message-page-id (:db/id (ldb/get-page @conn const/message-page-uuid))
            first-block (when message-page-id
                          (first (ldb/sort-by-order (ldb/get-page-blocks @conn message-page-id))))
-           first-block-title (some->> (:block/title first-block) (transit/read (transit/reader :json)))]
+           first-block-title (some->> (:block/title first-block) dt/read-transit-str)]
        (when-not (and (some? first-block-title)
                       (block-title-pred-fn first-block-title))
          (throw (ex-info (str "wait message from other client " retry-message) {:missionary/retry true})))
@@ -160,3 +160,20 @@
   {:pre [(seq tx-data)]}
   (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
     (d/transact! conn tx-data)))
+
+(def new-task--stop-rtc
+  (m/sp
+    (rtc.core/rtc-stop)
+    (let [r (m/?
+             (m/timeout
+              (m/reduce
+               (fn [_ v]
+                 (when (= :rtc.log/cancelled (:type v))
+                   (log :debug-stop-rtc v)
+                   (reduced v)))
+               rtc-log-and-state/rtc-log-flow)
+              3000
+              :timeout))]
+      (is (not= :timeout r))
+      ;; sleep 0.1s to ensure *rtc-lock released
+      (m/? (m/sleep 100)))))

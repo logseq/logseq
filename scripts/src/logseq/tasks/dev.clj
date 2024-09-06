@@ -27,10 +27,13 @@
 
 (defn rtc-e2e-test
   "Run karma rtc-e2e-test"
-  []
+  [& [skip-compile?]]
   (let [seed (hash (rand))
+        r0 (when-not skip-compile? (shell (str "clj -M:rtc-e2e-test compile rtc-e2e-test")))
         c1 (async/go (shell (str "npx karma start --testvar=client1 --single-run --seed=" seed)))
         c2 (async/go (shell (str "npx karma start --testvar=client2 --single-run --seed=" seed)))]
+    (when (and r0 (not= 0 (:exit r0)))
+      (throw (ex-info "compile failed" {:r r0})))
     (prn :exit-code :client1 (:exit (async/<!! c1)) :client2 (:exit (async/<!! c2)))))
 
 (defn gen-malli-kondo-config
