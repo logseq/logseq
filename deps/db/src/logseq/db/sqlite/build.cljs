@@ -465,7 +465,8 @@
                                                    :block/title page-name
                                                    :block/uuid
                                                    (common-uuid/gen-uuid :journal-page-uuid date-int)
-                                                   :block/type "journal"})))))
+                                                   :block/type "journal"
+                                                   :block/tags :logseq.class/Journal})))))
                            m))]
     ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
     (->> pages-and-blocks
