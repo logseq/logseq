@@ -151,6 +151,7 @@ body {
     color: var(--ls-primary-text-color);
   }
 }
+
 /* endregion */
 
 /** region App utilities **/
@@ -415,18 +416,16 @@ a.warning,
 span.warning,
 div.warning:not(.admonitionblock),
 p.warning {
-  background: var(--ls-warning-background-color);
-  padding: 0.1em 0.4em;
-  border-radius: var(--ls-border-radius-low);
-  color: var(--ls-warning-text-color);
+  @apply bg-yellow-rx-05-alpha text-yellow-rx-08 dark:bg-yellow-rx-07-alpha
+  dark:text-yellow-rx-10 rounded px-1.5 py-[2px] leading-none;
 }
 
 .text-warning {
-  color: var(--ls-warning-text-color);
+  @apply text-yellow-500 dark:text-yellow-500/70;
 }
 
 .bg-warning {
-  background: var(--ls-warning-background-color);
+  @apply bg-yellow-300 dark:bg-yellow-500/50;
 }
 
 a.error,
@@ -685,9 +684,9 @@ html.is-mobile {
 }
 
 button[role="checkbox"][data-state=unchecked] {
-    border-color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))));
+  border-color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))));
 }
 
 .dark-theme button[role="checkbox"][data-state=unchecked] {
-    border-color: var(--lx-gray-11, var(--ls-primary-text-color, hsl(var(--foreground))));
+  border-color: var(--lx-gray-11, var(--ls-primary-text-color, hsl(var(--foreground))));
 }
