@@ -53,18 +53,31 @@
       @apply relative;
 
       &-id {
-        @apply absolute left-[-26px] top-[3px] rounded-full leading-none
+        @apply absolute left-[-22px] top-[2px] rounded-full leading-none
         flex items-center justify-center bg-primary text-primary-foreground border-none
-        text-xs min-w-[20px] min-h-[20px];
+        text-xs min-w-[20px] min-h-[20px] scale-95;
+      }
+    }
+
+    .jtrigger-view {
+      > .jtrigger-id {
+        @apply left-[-14px];
+      }
+
+      &:has(> .jtrigger-id) {
+        .property-m {
+          @apply invisible;
+        }
       }
     }
 
     .property-k {
-        .jtrigger {
-            &-id {
-                @apply left-[16px];
-            }
+      .jtrigger {
+        &-id {
+          @apply left-[16px];
         }
+      }
+
       @apply inline-block overflow-hidden text-ellipsis whitespace-nowrap;
     }
 
@@ -73,14 +86,6 @@
 
       .jtrigger-id {
         @apply left-[-34px] top-[2px];
-      }
-
-      .property-k {
-          .jtrigger {
-              &-id {
-                  @apply left-[16px];
-              }
-          }
       }
 
       &-inner[data-type=checkbox] {
@@ -282,6 +287,10 @@ a.control-link {
   }
 }
 
+.property-key-inner {
+  @apply flex flex-row items-center gap-1 relative;
+}
+
 .property-select {
   .menu-link:hover, a.menu-link.chosen {
     .iconTablerExtBacklog {
@@ -400,6 +409,7 @@ a.control-link {
       &:hover a.del {
         @apply flex;
       }
+
       &:hover .ls-icon-grip-vertical {
         @apply opacity-80;
       }

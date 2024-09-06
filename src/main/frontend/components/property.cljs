@@ -232,7 +232,7 @@
   [state block property {:keys [other-position? class-schema?]}]
   (let [*hover? (::hover? state)
         icon (:logseq.property/icon property)]
-    [:div.flex.flex-row.items-center.gap-1
+    [:div.property-key-inner.jtrigger-view
      {:on-mouse-over   #(reset! *hover? true)
       :on-mouse-leave  #(reset! *hover? false)}
      ;; icon picker
@@ -251,7 +251,7 @@
                             :del-btn? (boolean icon)}))]
 
          (shui/trigger-as
-          :button
+          :button.property-m
           (-> (when-not config/publishing?
                 {:on-click (fn [^js e]
                              (shui/popup-show! (.-target e) content-fn
@@ -269,23 +269,23 @@
         (:block/title property)]
 
        (shui/trigger-as :a
-                        {:tabIndex 0
-                         :title (:block/title property)
-                         :class "property-k flex select-none jtrigger w-full"
-                         :on-pointer-down (fn [^js e]
-                                            (when (util/meta-key? e)
-                                              (route-handler/redirect-to-page! (:block/uuid property))
-                                              (.preventDefault e)))
-                         :on-click (fn [^js/MouseEvent e]
-                                     (shui/popup-show! (.-target e)
-                                                       (fn []
-                                                         (property-config/dropdown-editor property block {:debug? (.-altKey e)
-                                                                                                          :class-schema? class-schema?}))
-                                                       {:content-props
-                                                        {:class "ls-property-dropdown-editor as-root"}
-                                                        :align "start"
-                                                        :as-dropdown? true}))}
-                        (:block/title property)))]))
+         {:tabIndex 0
+          :title (:block/title property)
+          :class "property-k flex select-none jtrigger w-full"
+          :on-pointer-down (fn [^js e]
+                             (when (util/meta-key? e)
+                               (route-handler/redirect-to-page! (:block/uuid property))
+                               (.preventDefault e)))
+          :on-click (fn [^js/MouseEvent e]
+                      (shui/popup-show! (.-target e)
+                        (fn []
+                          (property-config/dropdown-editor property block {:debug? (.-altKey e)
+                                                                           :class-schema? class-schema?}))
+                        {:content-props
+                         {:class "ls-property-dropdown-editor as-root"}
+                         :align "start"
+                         :as-dropdown? true}))}
+         (:block/title property)))]))
 
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)
