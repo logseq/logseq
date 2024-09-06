@@ -49,7 +49,7 @@ async function main () {
     dbChangedDid = true
   })
 
-  logseq.DB.onBlockChanged('65a0babb-4a8b-4cfc-8179-6ece0375a5b6',
+  logseq.DB.onBlockChanged('65a0beee-7e01-4e72-8d38-089d923a63de',
     (e) => {
       if (blockChangedDid) return
       logPane(`[DB] hook: block changed`)
