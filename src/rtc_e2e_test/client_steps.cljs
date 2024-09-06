@@ -123,7 +123,7 @@
    :client2
    (helper/new-task--wait-message-from-other-client #(= "test-send-message-to-other-client" %))})
 
-#_(def ^:private step5
+(def ^:private step5
   "client1:
   - insert some blocks in page2
   - wait to be synced
