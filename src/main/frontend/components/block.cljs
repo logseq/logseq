@@ -1691,7 +1691,9 @@
             (ui/tweet-embed id))))
 
       (= name "embed")
-      (macro-embed-cp config arguments)
+      (if (config/db-based-graph? (state/get-current-repo))
+        [:div.warning "embed has been deprecated. Use / command 'Node embed' instead."]
+        (macro-embed-cp config arguments))
 
       (= name "renderer")
       (when config/lsp-enabled?
