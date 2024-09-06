@@ -27,7 +27,8 @@
 (defn- get-current-journal
   []
   (let [current-page (state/get-current-page)]
-    (or (date/journal-title->long current-page)
+    (or (when current-page
+          (date/journal-title->long (:block/title (db-model/get-block-by-uuid current-page))))
         (util/time-ms))))
 
 (defn go-to-prev-journal!
