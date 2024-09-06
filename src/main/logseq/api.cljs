@@ -927,17 +927,17 @@
   (fn [block-uuid key]
     (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
-      (when-let [block (db-model/get-block-by-uuid block-uuid)]
-        (let [properties (:block/properties block)
-              key (sanitize-user-property-name key)
-              property-name (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
-              property-value (or (get properties key)
-                                 (get properties property-name)
+      (when-let [properties (some-> block-uuid (db-model/get-block-by-uuid) (:block/properties))]
+        (when (seq properties)
+          (let [key (sanitize-user-property-name key)
+                property-name (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
+                property-value (or (get properties key)
+                                 (get properties (keyword property-name))
                                  (get properties (get-db-ident-for-property-name property-name)))
-              property-value (if-let [property-id (:db/id property-value)]
-                               (db/pull property-id) property-value)
-              ret (sdk-utils/normalize-keyword-for-json property-value)]
-          (bean/->js ret))))))
+                property-value (if-let [property-id (:db/id property-value)]
+                                 (db/pull property-id) property-value)
+                ret (sdk-utils/normalize-keyword-for-json property-value)]
+            (bean/->js ret)))))))
 
 (def ^:export get_block_properties
   (fn [block-uuid]

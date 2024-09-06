@@ -8,8 +8,8 @@ test('block related apis',
 
     const bPageName = 'block-test-page'
     await callAPI('create_page', bPageName, null, { createFirstBlock: false })
-
-    await page.waitForSelector(`span[data-ref="${bPageName}"]`)
+    await callAPI('create_page', bPageName, null, { createFirstBlock: false })
+    await page.waitForSelector(`body[data-page="${bPageName}"]`)
 
     let p = await callAPI('get_current_page')
     const bp = await callAPI('append_block_in_page', bPageName, 'tests')
