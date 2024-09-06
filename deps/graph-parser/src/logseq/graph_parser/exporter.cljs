@@ -83,7 +83,10 @@
   [block db tag-classes page-names-to-uuids all-idents]
   (if (seq (:block/tags block))
     (let [page-tags (->> (:block/tags block)
-                         (remove #(or (:block.temp/new-class %) (contains? tag-classes (:block/name %))))
+                         (remove #(or (:block.temp/new-class %)
+                                      (contains? tag-classes (:block/name %))
+                                      ;; Ignore new class tags from extract
+                                      (= % :logseq.class/Journal)))
                          (map #(vector :block/uuid (get-page-uuid page-names-to-uuids (:block/name %))))
                          set)]
       (cond-> block
@@ -190,15 +193,17 @@
                                                :in $ ?journal-day
                                                :where [?b :block/journal-day ?journal-day]]
                                              db date-int))
-          deadline-page (or existing-journal-page
+          deadline-page (->
+                         (or existing-journal-page
                             ;; FIXME: Register new pages so that two different refs to same new page
                             ;; don't create different uuids and thus an invalid page
-                            (let [page-m (sqlite-util/build-new-page
-                                          (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config)))]
-                              (assoc page-m
-                                     :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
-                                     :block/type "journal"
-                                     :block/journal-day date-int)))]
+                             (let [page-m (sqlite-util/build-new-page
+                                           (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config)))]
+                               (assoc page-m
+                                      :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
+                                      :block/type "journal"
+                                      :block/journal-day date-int)))
+                         (assoc :block/tags :logseq.class/Journal))]
       {:block
        (-> block
            (assoc :logseq.task/deadline [:block/uuid (:block/uuid deadline-page)])

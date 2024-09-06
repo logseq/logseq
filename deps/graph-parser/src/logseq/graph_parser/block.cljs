@@ -350,8 +350,10 @@
                                                {:block/created-at current-ms
                                                 :block/updated-at current-ms}))
                                            (if journal-day
-                                             {:block/type "journal"
-                                              :block/journal-day journal-day}
+                                             (cond-> {:block/type "journal"
+                                                      :block/journal-day journal-day}
+                                               db-based?
+                                               (assoc :block/tags [:logseq.class/Journal]))
                                              {}))]
                                  [page page-entity])
 
