@@ -122,13 +122,13 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
       nil)))
 
 
-(defn parse-timestamp [timestamp]
+(defn parse-timestamp [timestamp']
   (let [reg #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$"
         reg-number #"^\d+$"
-        timestamp (str timestamp)
-        total-seconds (some-> (re-matches reg-number timestamp)
+        timestamp'' (str timestamp')
+        total-seconds (some-> (re-matches reg-number timestamp'')
                               util/safe-parse-int)
-        [_ hours minutes seconds] (re-matches reg timestamp)
+        [_ hours minutes seconds] (re-matches reg timestamp'')
         [hours minutes seconds] (map #(if (nil? %) 0 (util/safe-parse-int %)) [hours minutes seconds])]
     (cond
       total-seconds

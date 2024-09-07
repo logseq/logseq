@@ -436,8 +436,8 @@
 
 (deftest test-batch-transact
   (testing "add 4, 5 after 2 and delete 3"
-    (let [tree [[10 [[2] [3]]]]]
-      (transact-tree! tree)
+    (let [tree' [[10 [[2] [3]]]]]
+      (transact-tree! tree')
       (let [new-blocks (build-blocks [[4 [5]]])
             target-block (get-block 2)]
         (outliner-tx/transact!
@@ -585,9 +585,9 @@ tags:: tag1, tag2
 
 (defn gen-blocks
   []
-  (let [tree (gen-safe-tree)]
-    (if (seq tree)
-      (let [result (build-blocks tree)]
+  (let [tree' (gen-safe-tree)]
+    (if (seq tree')
+      (let [result (build-blocks tree')]
         (if (seq result)
           result
           (gen-blocks)))
@@ -606,9 +606,9 @@ tags:: tag1, tag2
 
 (defn transact-random-tree!
   []
-  (let [tree (gen-safe-tree)]
-    (if (seq tree)
-      (transact-tree! tree)
+  (let [tree' (gen-safe-tree)]
+    (if (seq tree')
+      (transact-tree! tree')
       (transact-random-tree!))))
 
 (defn get-datoms

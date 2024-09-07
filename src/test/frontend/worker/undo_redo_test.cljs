@@ -141,10 +141,10 @@
     nil))
 
 (defn- undo-all
-  [conn page-uuid]
+  [conn page-uuid']
   (binding [undo-redo/*undo-redo-info-for-test* (atom nil)]
     (loop [i 0]
-      (let [r (undo-redo/undo test-helper/test-db-name-db-version page-uuid conn)
+      (let [r (undo-redo/undo test-helper/test-db-name-db-version page-uuid' conn)
             current-db @conn]
         (check-block-count @undo-redo/*undo-redo-info-for-test* current-db)
         (if (not= :frontend.worker.undo-redo/empty-undo-stack r)
@@ -152,10 +152,10 @@
           (prn :undo-count i))))))
 
 (defn- redo-all
-  [conn page-uuid]
+  [conn page-uuid']
   (binding [undo-redo/*undo-redo-info-for-test* (atom nil)]
     (loop [i 0]
-      (let [r (undo-redo/redo test-helper/test-db-name-db-version page-uuid conn)
+      (let [r (undo-redo/redo test-helper/test-db-name-db-version page-uuid' conn)
             current-db @conn]
         (check-block-count @undo-redo/*undo-redo-info-for-test* current-db)
         (if (not= :frontend.worker.undo-redo/empty-redo-stack r)
@@ -203,19 +203,19 @@
         (is (= origin-graph-block-set (get-db-block-set @conn)))))))
 
 (defn- print-page-stat
-  [db page-uuid]
-  (let [page (d/entity db [:block/uuid page-uuid])
+  [db page-uuid']
+  (let [page (d/entity db [:block/uuid page-uuid'])
         blocks (ldb/get-page-blocks db (:db/id page))]
     (pp/pprint
      {:block-count (count blocks)
       :undo-op-count (count (get-in @(:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
-                                    [test-helper/test-db-name-db-version page-uuid]))
+                                    [test-helper/test-db-name-db-version page-uuid']))
       :redo-op-count (count (get-in @(:undo/repo->page-block-uuid->redo-ops @worker-state/*state)
-                                    [test-helper/test-db-name-db-version page-uuid]))})))
+                                    [test-helper/test-db-name-db-version page-uuid']))})))
 
 (defn- print-page-blocks-tree
-  [db page-uuid]
-  (let [page (d/entity db [:block/uuid page-uuid])
+  [db page-uuid']
+  (let [page (d/entity db [:block/uuid page-uuid'])
         blocks (ldb/get-page-blocks db (:db/id page))]
     (prn ::page-block-tree)
     (pp/pprint
@@ -227,7 +227,7 @@
             (assoc :block/children (:block/children x)))
           x))
       (otree/blocks->vec-tree test-helper/test-db-name-db-version db
-                              blocks page-uuid)))))
+                              blocks page-uuid')))))
 
 (deftest ^:long ^:wip undo-redo-outliner-op-gen-test
   (try

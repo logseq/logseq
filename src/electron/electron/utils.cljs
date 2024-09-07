@@ -209,10 +209,10 @@
 
 (defn save-proxy-settings
   "Save proxy settings to configs.edn"
-  [{:keys [type host port test] :or {type "system"}}]
+  [{test' :test :keys [type host port] :or {type "system"}}]
   (if (or (= type "system") (= type "direct"))
-    (cfgs/set-item! :settings/agent {:type type :test test})
-    (cfgs/set-item! :settings/agent {:type type :protocol type :host host :port port :test test})))
+    (cfgs/set-item! :settings/agent {:type type :test test'})
+    (cfgs/set-item! :settings/agent {:type type :protocol type :host host :port port :test test'})))
 
 (defn should-read-content?
   "Skip reading content of file while using file-watcher"

@@ -203,13 +203,13 @@
   (state/pub-event! [:user/fetch-info-and-graphs]))
 
 (defn ^:export login-with-username-password-e2e
-  [username password client-id client-secret]
+  [username' password client-id client-secret]
   (let [text-encoder (new js/TextEncoder)
         key          (.encode text-encoder client-secret)
         hasher       (new crypt/Sha256)
         hmacer       (new crypt/Hmac hasher key)
-        secret-hash  (.encodeByteArray ^js crypt/base64 (.getHmac hmacer (str username client-id)))
-        payload      {"AuthParameters" {"USERNAME"    username,
+        secret-hash  (.encodeByteArray ^js crypt/base64 (.getHmac hmacer (str username' client-id)))
+        payload      {"AuthParameters" {"USERNAME"    username',
                                         "PASSWORD"    password,
                                         "SECRET_HASH" secret-hash}
                       "AuthFlow"       "USER_PASSWORD_AUTH",
@@ -235,9 +235,9 @@
 
 (defn upgrade []
   (let [base-upgrade-url "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"
-        user-uuid (user-uuid)
+        user-uuid' (user-uuid)
         url (cond-> base-upgrade-url
-              user-uuid (str "?checkout[custom][user_uuid]=" (name user-uuid)))]
+              user-uuid' (str "?checkout[custom][user_uuid]=" (name user-uuid')))]
     (println " ~~~ LEMON: " url " ~~~ ")
     (js/window.open url)))
   ; (js/window.open

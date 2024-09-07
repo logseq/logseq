@@ -276,8 +276,8 @@
                              (#(sqlite-create-graph/build-initial-classes* % {}))
                              (map (fn [b] (assoc b :logseq.property/built-in? true))))
             fixes (mapcat
-                   (fn [update]
-                     (when-let [fix (:fix update)]
+                   (fn [update']
+                     (when-let [fix (:fix update')]
                        (when (fn? fix)
                          (fix conn search-db)))) updates)
             tx-data' (if db-based? (concat new-properties new-classes fixes) fixes)]

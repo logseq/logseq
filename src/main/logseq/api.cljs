@@ -1174,8 +1174,8 @@
 
 ;; search
 (defn ^:export search
-  [q]
-  (-> (search-handler/search q)
+  [q']
+  (-> (search-handler/search q')
       (p/then #(bean/->js %))))
 
 ;; helpers

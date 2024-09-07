@@ -12,7 +12,7 @@
             [promesa.core :as p]
             [logseq.common.path :as path]))
 
-(defn- contents-matched?
+(defn- <contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
     (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
@@ -38,7 +38,7 @@
                                             nil))))
               disk-content (or disk-content "")
               db-content (or old-content (db/get-file repo rpath) "")
-              contents-matched? (contents-matched? disk-content db-content)]
+              contents-matched? (<contents-matched? disk-content db-content)]
         (->
          (p/let [result (ipc/ipc "writeFile" repo file-fpath content)
                  mtime (gobj/get result "mtime")]

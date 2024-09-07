@@ -542,11 +542,11 @@
    (partition-filetxns n)))
 
 (defn- filepath+checksum->diff
-  [index {:keys [relative-path checksum user-uuid graph-uuid]}]
+  [index {relative-path' :relative-path :keys [checksum user-uuid graph-uuid]}]
   {:post [(s/valid? ::diff %)]}
   {:TXId (inc index)
    :TXType "update_files"
-   :TXContent [[(util/string-join-path [user-uuid graph-uuid relative-path]) nil checksum]]})
+   :TXContent [[(util/string-join-path [user-uuid graph-uuid relative-path']) nil checksum]]})
 
 (defn filepath+checksum-coll->partitioned-filetxns
   "transducer.
@@ -1451,14 +1451,14 @@
          (= #{:value :expired-at} (set (keys v)))]}
   (swap! *get-graph-salt-memoize-cache conj [graph-uuid v]))
 
-(defn <get-graph-salt-memoize [remoteapi graph-uuid]
+(defn <get-graph-salt-memoize [remoteapi' graph-uuid]
   (go
     (let [r          (get @*get-graph-salt-memoize-cache graph-uuid)
           expired-at (:expired-at r)
           now        (tc/to-long (t/now))]
       (if (< now expired-at)
         r
-        (let [r (<! (<get-graph-salt remoteapi graph-uuid))]
+        (let [r (<! (<get-graph-salt remoteapi' graph-uuid))]
           (or (guard-ex r)
               (do (swap! *get-graph-salt-memoize-cache conj [graph-uuid r])
                   r)))))))
@@ -1469,11 +1469,11 @@
          (= #{:public-key :encrypted-private-key} (set (keys v)))]}
   (swap! *get-graph-encrypt-keys-memoize-cache conj [graph-uuid v]))
 
-(defn <get-graph-encrypt-keys-memoize [remoteapi graph-uuid]
+(defn <get-graph-encrypt-keys-memoize [remoteapi' graph-uuid]
   (go
     (or (get @*get-graph-encrypt-keys-memoize-cache graph-uuid)
         (let [{:keys [public-key encrypted-private-key] :as r}
-              (<! (<get-graph-encrypt-keys remoteapi graph-uuid))]
+              (<! (<get-graph-encrypt-keys remoteapi' graph-uuid))]
           (when (and public-key encrypted-private-key)
             (swap! *get-graph-encrypt-keys-memoize-cache conj [graph-uuid r]))
           r))))
@@ -1514,12 +1514,12 @@
   (go-loop []
     (if @*paused
       {:pause true}
-      (let [{:keys [timeout val]}
+      (let [{timeout' :timeout :keys [val]}
             (async/alt! ch ([v] {:val v})
                         (timeout 1000) {:timeout true})]
         (cond
           val val
-          timeout (recur))))))
+          timeout' (recur))))))
 
 
 
@@ -1943,14 +1943,14 @@
 
 (defn local-changes-revised-chan-builder
   "return chan"
-  [local-changes-chan rename-page-event-chan]
+  [local-changes-chan' rename-page-event-chan]
   (let [*rename-events (atom #{})
         ch (chan 1000)]
     (go-loop []
       (let [{:keys [rename-event local-change]}
             (async/alt!
              rename-page-event-chan ([v] {:rename-event v}) ;; {:repo X :old-path X :new-path}
-             local-changes-chan ([v] {:local-change v}))]
+             local-changes-chan' ([v] {:local-change v}))]
         (cond
           rename-event
           (let [repo-dir (config/get-repo-dir (:repo rename-event))
@@ -2197,13 +2197,13 @@
 (defn- <ensure-set-env&keys
   [graph-uuid *stopped?]
   (go-loop []
-    (let [{:keys [change timeout]}
+    (let [{timeout' :timeout :keys [change]}
           (async/alt! (get-graph-pwd-changed-chan graph-uuid) {:change true}
                       (timeout 10000) {:timeout true})]
       (cond
         @*stopped? nil
         change (<! (<set-env&keys config/FILE-SYNC-PROD? graph-uuid))
-        timeout (recur)))))
+        timeout' (recur)))))
 
 ;;; ### chans to control sync process
 (def full-sync-chan
@@ -2268,7 +2268,7 @@
   [graph-uuid]
   (swap! *resume-state dissoc graph-uuid))
 
-(defn sync-state
+(defn new-sync-state
   "create a new sync-state"
   []
   {:post [(s/valid? ::sync-state %)]}
@@ -2403,7 +2403,7 @@
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
 (defrecord ^:large-vars/cleanup-todo
- Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *txid-for-get-deletion-log *sync-state remoteapi
+ Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *txid-for-get-deletion-log *sync-state remoteapi'
                       ^:mutable local->remote-syncer *stopped *paused]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
@@ -2442,7 +2442,7 @@
   (<sync-remote->local! [_]
     (go
       (let [r
-            (let [diff-r (<! (<get-diff remoteapi graph-uuid @*txid))]
+            (let [diff-r (<! (<get-diff remoteapi' graph-uuid @*txid))]
               (or (guard-ex diff-r)
                   (let [[diff-txns latest-txid min-txid] diff-r]
                     (if (> (dec min-txid) @*txid) ;; min-txid-1 > @*txid, need to remote->local-full-sync
@@ -2479,7 +2479,7 @@
 
   (<sync-remote->local-all-files! [this]
     (go
-      (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi graph-uuid)
+      (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi' graph-uuid)
             local-all-files-meta-c       (<get-local-all-files-meta rsapi graph-uuid base-path)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
         (if (or (storage-exceed-limit? remote-all-files-meta-or-exp)
@@ -2500,7 +2500,7 @@
                 sorted-diff-remote-files
                 (sort-by
                  (sort-file-metadata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
-                remote-txid-or-ex       (<! (<get-remote-txid remoteapi graph-uuid))
+                remote-txid-or-ex       (<! (<get-remote-txid remoteapi' graph-uuid))
                 latest-txid             (:TXId remote-txid-or-ex)]
             (if (or (instance? ExceptionInfo remote-txid-or-ex) (nil? latest-txid))
               (do (put-sync-event! {:event :get-remote-graph-failed
@@ -2641,7 +2641,7 @@
          local-files-meta-map))))
 
 (defrecord ^:large-vars/cleanup-todo
-  Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
+  Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi'
                        ^:mutable rate *txid *txid-for-get-deletion-log
                        ^:mutable remote->local-syncer stop-chan *stopped *paused
                        ;; control chans
@@ -2739,7 +2739,7 @@
 
               (need-reset-local-txid? r*) ;; TODO: this cond shouldn't be true,
               ;; but some potential bugs cause local-txid > remote-txid
-              (let [remote-txid-or-ex (<! (<get-remote-txid remoteapi graph-uuid))
+              (let [remote-txid-or-ex (<! (<get-remote-txid remoteapi' graph-uuid))
                     remote-txid             (:TXId remote-txid-or-ex)]
                 (if (or (instance? ExceptionInfo remote-txid-or-ex) (nil? remote-txid))
                   (do (put-sync-event! {:event :get-remote-graph-failed
@@ -2778,9 +2778,9 @@
 
   (<sync-local->remote-all-files! [this]
     (go
-      (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi graph-uuid)
+      (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi' graph-uuid)
             local-all-files-meta-c       (<get-local-all-files-meta rsapi graph-uuid base-path)
-            deletion-logs-c              (<get-deletion-logs remoteapi graph-uuid @*txid-for-get-deletion-log)
+            deletion-logs-c              (<get-deletion-logs remoteapi' graph-uuid @*txid-for-get-deletion-log)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)
             deletion-logs-or-exp         (<! deletion-logs-c)]
         (cond
@@ -2873,7 +2873,7 @@
 
 (defrecord ^:large-vars/cleanup-todo
     SyncManager [user-uuid graph-uuid base-path *sync-state
-              ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
+              ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi'
               ^:mutable ratelimit-local-changes-chan
               *txid *txid-for-get-deletion-log
               ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
@@ -2949,7 +2949,7 @@
           remote->local
           (let [txid
                 (if (true? remote->local)
-                  (let [r (<! (<get-remote-txid remoteapi graph-uuid))]
+                  (let [r (<! (<get-remote-txid remoteapi' graph-uuid))]
                     (when-not (guard-ex r) {:txid (:TXId r)}))
                   remote->local)]
             (when (some? txid)
@@ -3399,7 +3399,7 @@
                    (<! (<connectivity-testing)))
         (reset! *sync-starting false)
         (try
-          (let [*sync-state                 (atom (sync-state))
+          (let [*sync-state                 (atom (new-sync-state))
                 current-user-uuid           (<! (user/<user-uuid))
               ;; put @graph-uuid & get-current-repo together,
               ;; prevent to get older repo dir and current graph-uuid.

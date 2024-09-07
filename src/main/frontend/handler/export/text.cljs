@@ -66,10 +66,10 @@
                        "[X]" "[ ]")
                      ""))
         current-level (get *state* :current-level 1)
-        indent (when (> current-level 1)
+        indent' (when (> current-level 1)
                  (indent (dec current-level) 0))
         items* (block-list items :in-list? true)]
-    (concatv [indent number* checkbox* space]
+    (concatv [indent' number* checkbox* space]
              content*
              [(newline* 1)]
              items*
@@ -87,10 +87,10 @@
   [properties]
   (when-not (get-in *state* [:export-options :remove-properties?])
     (let [level (dec (get *state* :current-level 1))
-          indent (indent-with-2-spaces level)]
+          indent' (indent-with-2-spaces level)]
       (reduce
        (fn [r [k v]]
-         (conj r indent (raw-text k "::") space (raw-text v) (newline* 1)))
+         (conj r indent' (raw-text k "::") space (raw-text v) (newline* 1)))
        [] properties))))
 
 (defn- block-example

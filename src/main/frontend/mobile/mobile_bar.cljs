@@ -91,7 +91,7 @@
              (or (state/sub :mobile/show-toolbar?)
                  (mobile-util/native-ipad?)))
     (let [parent-id (state/get-edit-input-id)
-          commands (commands parent-id)]
+          commands' (commands parent-id)]
       [:div#mobile-editor-toolbar.bg-base-2
        [:div.toolbar-commands
         (indent-outdent false "indent-decrease")
@@ -112,7 +112,7 @@
         (command history/undo! {:icon "rotate" :class "rotate-180"} true)
         (command history/redo! {:icon "rotate-clockwise" :class "rotate-180"} true)
         (timestamp-submenu parent-id)
-        (for [command commands]
-          command)]
+        (for [command' commands']
+          command')]
        [:div.toolbar-hide-keyboard
         (command #(state/clear-edit!) {:icon "keyboard-show"})]])))

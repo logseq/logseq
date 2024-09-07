@@ -60,8 +60,8 @@
 
 (defn init []
   (when (and (not config/dev?) (not-empty SENTRY-DSN))
-    (let [config (clj->js config)]
-      (Sentry/init config))))
+    (let [config' (clj->js config)]
+      (Sentry/init config'))))
 
 (defn set-user!
   [id]

@@ -167,8 +167,8 @@ DROP TRIGGER IF EXISTS blocks_au;
   (when (and (string? q) (string? match))
     (boolean
      (reduce
-      (fn [coll char]
-        (let [coll' (drop-while #(not= char %) coll)]
+      (fn [coll char']
+        (let [coll' (drop-while #(not= char' %) coll)]
           (if (seq coll')
             (rest coll')
             (reduced false))))

@@ -249,11 +249,11 @@
           (p/let [local-file (.getFile file-handle)
                   disk-content (.text local-file)
                   db-content (db/get-file repo path)
-                  contents-matched? (contents-matched? disk-content db-content)]
+                  contents-matched?' (contents-matched? disk-content db-content)]
             (if (and
                  (not (string/blank? db-content))
                  (not (:skip-compare? opts))
-                 (not contents-matched?)
+                 (not contents-matched?')
                  (not (contains? #{"excalidraw" "edn" "css"} ext))
                  (not (string/includes? path "/.recycle/")))
               (state/pub-event! [:file/not-matched-from-disk path disk-content content])
