@@ -839,8 +839,8 @@
   (prn "No handler for step: " type))
 
 (defn handle-steps
-  [vector format]
-  (doseq [step vector]
+  [vector' format]
+  (doseq [step vector']
     (handle-step step format)))
 
 (defn exec-plugin-simple-command!

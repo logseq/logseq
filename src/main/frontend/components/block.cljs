@@ -3267,10 +3267,10 @@
   [config {:keys [name content checkbox items number] :as _list}]
   (let [content (when-not (empty? content)
                   (match content
-                    [["Paragraph" i] & rest]
+                    [["Paragraph" i] & rest']
                     (vec-cat
                      (map-inline config i)
-                     (markup-elements-cp config rest))
+                     (markup-elements-cp config rest'))
                     :else
                     (markup-elements-cp config content)))
         checked? (some? checkbox)

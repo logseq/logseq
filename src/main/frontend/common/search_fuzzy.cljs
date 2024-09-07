@@ -31,9 +31,9 @@
 (defn score
   [oquery ostr]
   (let [query (clean-str oquery)
-        str (clean-str ostr)]
+        s (clean-str ostr)]
     (loop [q (seq (char-array query))
-           s (seq (char-array str))
+           s (seq (char-array s))
            mult 1
            idx MAX-STRING-LENGTH
            score' 0]
@@ -41,7 +41,7 @@
         ;; add str-len-distance to score, so strings with matches in same position get sorted by length
         ;; boost score if we have an exact match including punctuation
         (empty? q) (+ score'
-                      (str-len-distance query str)
+                      (str-len-distance query s)
                       (if (<= 0 (.indexOf ostr oquery)) MAX-STRING-LENGTH 0))
         (empty? s) 0
         :else (if (= (first q) (first s))

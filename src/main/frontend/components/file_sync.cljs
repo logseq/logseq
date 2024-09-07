@@ -645,7 +645,7 @@
               (js/setTimeout (fn [] (set-content-ready? true)) 100))
 
             ;; without cache
-            (let [load-file (fn [repo-url file]
+            (let [load-file' (fn [repo-url file]
                               (-> (fs-util/read-repo-file repo-url file)
                                   (p/then
                                    (fn [content]
@@ -657,11 +657,11 @@
                 (async/go
                   (let [downloaded-path (async/<! (file-sync-handler/download-version-file graph-uuid file-uuid version-uuid true))]
                     (when downloaded-path
-                      (load-file repo-url downloaded-path))))
+                      (load-file' repo-url downloaded-path))))
 
                 ;; read local content
                 (when-let [relative-path (:relative-path selected-page)]
-                  (load-file repo-url relative-path)))))))
+                  (load-file' repo-url relative-path)))))))
      [selected-page])
 
     (rum/use-effect!

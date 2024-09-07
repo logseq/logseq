@@ -70,7 +70,7 @@
   "any number between 0 and 1 (the greater it is the faster the changes of the OF matrix)"
   0.5)
 
-(defn- learning-fraction []
+(defn- get-learning-fraction []
   (if-let [learning-fraction (:srs/learning-fraction (state/get-config))]
     (if (and (number? learning-fraction)
              (< learning-fraction 1)
@@ -79,11 +79,11 @@
       learning-fraction-default)
     learning-fraction-default))
 
-(def of-matrix (persist-var/persist-var nil "srs-of-matrix"))
+(def srs-of-matrix (persist-var/persist-var nil "srs-of-matrix"))
 
 (def initial-interval-default 4)
 
-(defn- initial-interval []
+(defn- get-initial-interval []
   (if-let [initial-interval (:srs/initial-interval (state/get-config))]
     (if (and (number? initial-interval)
              (> initial-interval 0))
@@ -147,7 +147,7 @@
 (defn- get-of [of-matrix n ef]
   (or (get-in of-matrix [n ef])
       (if (<= n 1)
-        (initial-interval)
+        (get-initial-interval)
         ef)))
 
 (defn- set-of [of-matrix n ef of]
@@ -162,25 +162,25 @@
     (* (get-of of-matrix n ef)
        (interval (- n 1) ef of-matrix))))
 
-(defn- next-ef
+(defn- get-next-ef
   [ef quality]
   (let [ef* (+ ef (- 0.1 (* (- 5 quality) (+ 0.08 (* 0.02 (- 5 quality))))))]
     (if (< ef* 1.3) 1.3 ef*)))
 
-(defn- next-of-matrix
+(defn- get-next-of-matrix
   [of-matrix n quality fraction ef]
   (let [of (get-of of-matrix n ef)
         of* (* of (+ 0.72 (* quality 0.07)))
         of** (+ (* (- 1 fraction) of) (* of* fraction))]
     (set-of of-matrix n ef of**)))
 
-(defn next-interval
+(defn calc-next-interval
   "return [next-interval repeats next-ef of-matrix]"
   [_last-interval repeats ef quality of-matrix]
   (assert (and (<= quality 5) (>= quality 0)))
   (let [ef (or ef 2.5)
-        next-ef (next-ef ef quality)
-        next-of-matrix (next-of-matrix of-matrix repeats quality (learning-fraction) ef)
+        next-ef (get-next-ef ef quality)
+        next-of-matrix (get-next-of-matrix of-matrix repeats quality (get-learning-fraction) ef)
         next-interval (interval repeats next-ef next-of-matrix)]
 
     (if (< quality 3)
@@ -272,15 +272,15 @@
                                                    (string/starts-with? query-string "["))
                                          (page-ref/->page-ref (string/trim query-string))
                                          query-string)
-                          {:keys [query sort-by rules]} (query-dsl/parse query-string {:db-graph? (config/db-based-graph? repo)})
-                          query* (util/concat-without-nil
+                          {query* :query :keys [sort-by rules]} (query-dsl/parse query-string {:db-graph? (config/db-based-graph? repo)})
+                          query** (util/concat-without-nil
                                   [['?b :block/refs '?br] ['?br :block/name card-hash-tag]]
-                                  (if (coll? (first query)) query [query]))]
-                      (when-let [query (query-dsl/query-wrapper query*
-                                                                {:blocks? true
-                                                                 :block-attrs [:db/id :block/properties]})]
+                                  (if (coll? (first query*)) query* [query*]))]
+                      (when-let [query' (query-dsl/query-wrapper query**
+                                                                 {:blocks? true
+                                                                  :block-attrs [:db/id :block/properties]})]
                         (let [result (query-react/react-query repo
-                                                              {:query (with-meta query {:cards-query? true})
+                                                              {:query (with-meta query' {:cards-query? true})
                                                                :rules (or rules [])}
                                                               (merge
                                                                {:use-cache? use-cache?}
@@ -330,7 +330,7 @@
         last-ef (or (when-let [v (get props card-last-easiness-factor-property)]
                       (util/safe-parse-float v)) 2.5)
         [next-interval next-repeats next-ef of-matrix*]
-        (next-interval last-interval repeats last-ef score @of-matrix)
+        (calc-next-interval last-interval repeats last-ef score @srs-of-matrix)
         next-interval* (if (< next-interval 0) 0 next-interval)
         next-schedule (tc/to-string (t/plus (tl/local-now) (t/hours (* 24 next-interval*))))
         now (tc/to-string (tl/local-now))]
@@ -349,7 +349,7 @@
   (let [block (.-block card)
         result (get-next-interval card score)
         next-of-matrix (:next-of-matrix result)]
-    (reset! of-matrix next-of-matrix)
+    (reset! srs-of-matrix next-of-matrix)
     (save-block-card-properties! (db/pull (:db/id block))
                                  (select-keys result
                                               [card-last-interval-property
@@ -617,7 +617,7 @@
                           (when-not @*preview-mode?
                             (operation-card-info-summary!
                              review-records review-cards card-query-block)
-                            (persist-var/persist-save of-matrix)))]
+                            (persist-var/persist-save srs-of-matrix)))]
         [:div.flex-1.cards-review {:style (when modal? {:height "100%"})}
          [:div.flex.flex-row.items-center.justify-between.cards-title
           [:div.flex.flex-row.items-center
@@ -632,9 +632,9 @@
                 [:span {:style {:margin-top 2}}
                  (svg/caret-down)]]])
             (fn [{:keys [toggle-fn]}]
-              (cards-select {:on-chosen (fn [query]
-                                          (let [query' (if (= query (t :flashcards/modal-select-all)) "" query)]
-                                            (reset! query-atom query')
+              (cards-select {:on-chosen (fn [query']
+                                          (let [query'' (if (= query' (t :flashcards/modal-select-all)) "" query')]
+                                            (reset! query-atom query'')
                                             (toggle-fn)))}))
             {:modal-class (util/hiccup->class
                            "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg")})]
@@ -822,5 +822,5 @@
       (js/setTimeout f 1000)
       (when (nil? @*due-cards-interval)
         ;; refresh every hour
-        (let [interval (js/setInterval f (* 3600 1000))]
-          (reset! *due-cards-interval interval))))))
+        (let [interval' (js/setInterval f (* 3600 1000))]
+          (reset! *due-cards-interval interval'))))))

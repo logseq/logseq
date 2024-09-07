@@ -282,10 +282,10 @@
 
         (db-listener/listen-db-changes! repo conn)))))
 
-(defn- iter->vec [iter]
-  (when iter
+(defn- iter->vec [iter']
+  (when iter'
     (p/loop [acc []]
-      (p/let [elem (.next iter)]
+      (p/let [elem (.next iter')]
         (if (.-done elem)
           acc
           (p/recur (conj acc (.-value elem))))))))

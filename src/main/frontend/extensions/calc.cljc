@@ -1,5 +1,5 @@
 (ns frontend.extensions.calc
-  (:refer-clojure :exclude [eval])
+  (:refer-clojure :exclude [eval numerator denominator])
   (:require [clojure.string :as str]
             [frontend.util :as util]
 
@@ -135,9 +135,9 @@
 (defn can-fix?
   "Check that number can render without loss of all significant digits,
    and that the absolute value is less than 1e21."
-  [num places]
-  (or (.isZero num )
-    (let [mag (.abs num)
+  [num' places]
+  (or (.isZero num' )
+    (let [mag (.abs num')
           lower-bound (-> (bn/BigNumber 0.5) (.shiftedBy (- places)))
           upper-bound (bn/BigNumber 1e21)]
       (and (-> mag (.isGreaterThanOrEqualTo lower-bound))
@@ -146,9 +146,9 @@
 (defn can-fit?
   "Check that number can render normally within the given number of digits.
    Tolerance allows for leading zeros in a decimal fraction."
-  [num digits tolerance]
-  (and (< (.-e num) digits)
-       (.isInteger (.shiftedBy num (+ tolerance digits)))))
+  [num' digits tolerance]
+  (and (< (.-e num') digits)
+       (.isInteger (.shiftedBy num' (+ tolerance digits)))))
 
 (defn format-base [val base]
   (let [sign (.-s val)

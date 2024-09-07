@@ -384,7 +384,7 @@
       :on-click
       (fn []
         (p/let [_ (setting/remove-profile @profile*)]
-          (reset! profile* (setting/profile)))))]])
+          (reset! profile* (setting/get-profile)))))]])
 
 (rum/defcs add-all-items <
   (rum/local nil ::progress)
@@ -447,7 +447,7 @@
 (rum/defcs settings
   <
   (rum/local (setting/all-profiles) ::all-profiles)
-  (rum/local (setting/profile) ::profile)
+  (rum/local (setting/get-profile) ::profile)
   rum/reactive
   {:should-update
    (fn [old-state _new-state]

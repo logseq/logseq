@@ -262,8 +262,8 @@
 
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
-  [class]
-  (some->> (string/split class #"\.")
+  [class']
+  (some->> (string/split class' #"\.")
            (string/join " ")
            (string/trim)))
 
@@ -345,7 +345,7 @@
    (when-not node-test?
      (extend-type js/NodeList
        ISeqable
-       (-seq [array] (array-seq array 0)))))
+       (-seq [arr] (array-seq arr 0)))))
 
 ;; Caret
 #?(:cljs
@@ -545,9 +545,9 @@
    (defn bottom-reached?
      [node threshold]
      (let [full-height (gobj/get node "scrollHeight")
-           scroll-top (gobj/get node "scrollTop")
+           scroll-top' (gobj/get node "scrollTop")
            client-height (gobj/get node "clientHeight")]
-       (<= (- full-height scroll-top client-height) threshold))))
+       (<= (- full-height scroll-top' client-height) threshold))))
 
 #?(:cljs
    (defn link?
@@ -1256,7 +1256,7 @@
                                .-clientHeight)
 
              main-node   (app-scroll-container-node el)
-             scroll-top  (.-scrollTop main-node)
+             scroll-top'  (.-scrollTop main-node)
 
              current-pos (get-selection-start el)
              grapheme-pos (get-graphemes-pos (.-value (.textContent el)) current-pos)
@@ -1274,7 +1274,7 @@
              scroll      (- cursor-y (- vw-height (+ @keyboard-height (+ 40 4))))]
          (cond
            (and to-vw-one-quarter? (> cursor-y (* vw-height 0.4)))
-           (set! (.-scrollTop main-node) (+ scroll-top (- cursor-y (/ vw-height 4))))
+           (set! (.-scrollTop main-node) (+ scroll-top' (- cursor-y (/ vw-height 4))))
 
            (and (< cursor-y (+ header-height offset-height 4)) ;; 4 is top+bottom padding for per line
                 (>= cursor-y header-height))
@@ -1283,11 +1283,11 @@
            (< cursor-y header-height)
            (let [_ (.scrollIntoView el true)
                  main-node (app-scroll-container-node el)
-                 scroll-top (.-scrollTop main-node)]
-             (set! (.-scrollTop main-node) (- scroll-top (/ vw-height 4))))
+                 scroll-top' (.-scrollTop main-node)]
+             (set! (.-scrollTop main-node) (- scroll-top' (/ vw-height 4))))
 
            (> scroll 0)
-           (set! (.-scrollTop main-node) (+ scroll-top scroll))
+           (set! (.-scrollTop main-node) (+ scroll-top' scroll))
 
            :else
            nil)))))

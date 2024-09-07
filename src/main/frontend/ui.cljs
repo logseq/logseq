@@ -240,7 +240,7 @@
      (let [links-children
            (let [links (if (fn? links) (links) links)
                  links (remove nil? links)]
-             (for [{:keys [options title icon key hr hover-detail item _as-link?]} links]
+             (for [{icon' :icon :keys [options title key hr hover-detail item _as-link?]} links]
                (let [new-options
                            (merge options
                                   (cond->
@@ -255,7 +255,7 @@
                              nil
                              (or item
                                  [:div.flex.items-center
-                                  (when icon icon)
+                                  (when icon' icon')
                                   [:div.title-wrap {:style {:margin-right "8px"
                                                             :margin-left  "4px"}} title]]))]
                  (if hr
@@ -587,7 +587,7 @@
     :on-click #(when close-backdrop? (close-fn))}
    [:div.absolute.inset-0.opacity-75]])
 
-(rum/defc modal-panel-content <
+(rum/defc modal-panel-content-cp <
   mixins/component-editing-mode
   [panel-content close-fn]
   (panel-content close-fn))
@@ -620,7 +620,7 @@
      [:div (cond-> {:class (if fullscreen? "" "panel-content")}
              (seq style)
              (assoc :style style))
-      (modal-panel-content panel-content close-fn)])])
+      (modal-panel-content-cp panel-content close-fn)])])
 
 (rum/defc modal < rum/reactive
   (mixins/event-mixin
@@ -670,15 +670,15 @@
 (rum/defc sub-modal < rum/reactive
   []
   (when-let [modals (seq (state/sub :modal/subsets))]
-    (for [[idx modal] (medley/indexed modals)]
-      (let [id (:modal/id modal)
-            modal-panel-content (:modal/panel-content modal)
-            close-btn? (:modal/close-btn? modal)
-            close-backdrop? (:modal/close-backdrop? modal)
-            show? (:modal/show? modal)
-            label (:modal/label modal)
-            style (:modal/style modal)
-            class (:modal/class modal)
+    (for [[idx modal'] (medley/indexed modals)]
+      (let [id (:modal/id modal')
+            modal-panel-content (:modal/panel-content modal')
+            close-btn? (:modal/close-btn? modal')
+            close-backdrop? (:modal/close-backdrop? modal')
+            show? (:modal/show? modal')
+            label (:modal/label modal')
+            style (:modal/style modal')
+            class (:modal/class modal')
             close-fn (fn []
                        (state/close-sub-modal! id))
             modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
@@ -770,17 +770,17 @@
 (rum/defc admonition
   [type content]
   (let [type (name type)]
-    (when-let [icon (case (string/lower-case type)
-                      "note" svg/note
-                      "tip" svg/tip
-                      "important" svg/important
-                      "caution" svg/caution
-                      "warning" svg/warning
-                      "pinned" svg/pinned
-                      nil)]
+    (when-let [icon' (case (string/lower-case type)
+                       "note" svg/note
+                       "tip" svg/tip
+                       "important" svg/important
+                       "caution" svg/caution
+                       "warning" svg/warning
+                       "pinned" svg/pinned
+                       nil)]
       [:div.flex.flex-row.admonitionblock.align-items {:class type}
        [:div.pr-4.admonition-icon.flex.flex-col.justify-center
-        {:title (string/capitalize type)} (icon)]
+        {:title (string/capitalize type)} (icon')]
        [:div.ml-4.text-lg
         content]])))
 
@@ -933,7 +933,7 @@
 (rum/defcs slider < rum/reactive
   {:init (fn [state]
            (assoc state ::value (atom (first (:rum/args state)))))}
-  [state _default-value {:keys [min max on-change]}]
+  [state _default-value {max' :max :keys [min on-change]}]
   (let [*value (::value state)
         value (rum/react *value)
         value' (int value)]
@@ -942,7 +942,7 @@
      {:type      "range"
       :value     value'
       :min       min
-      :max       max
+      :max       max'
       :style     {:width "100%"}
       :on-change #(let [value (util/evalue %)]
                     (reset! *value value))
@@ -962,7 +962,7 @@
 (def icon shui.icon.v2/root)
 
 (rum/defc button-inner
-  [text & {:keys [theme background variant href size class intent small? icon icon-props disabled? button-props]
+  [text & {icon' :icon :keys [theme background variant href size class intent small? icon-props disabled? button-props]
            :or   {small? false}
            :as   opts}]
   (let [button-props (merge
@@ -977,20 +977,20 @@
                                  :else (or variant :default))
                       :href    href
                       :size    (if small? :xs (or size :sm))
-                      :icon    icon
+                      :icon    icon'
                       :class   (if (and (string? background)
                                      (not (contains? #{"gray" "red"} background)))
                                  (str class " primary-" background) class)
                       :muted   disabled?}
                 button-props)
 
-        icon (when icon (shui/tabler-icon icon icon-props))
+        icon'' (when icon' (shui/tabler-icon icon' icon-props))
         href? (not (string/blank? href))
         text (cond
                href? [:a {:href href :target "_blank"
                           :style {:color "inherit"}} text]
                :else text)
-        children [icon text]]
+        children [icon'' text]]
 
     (shui/button props children)))
 

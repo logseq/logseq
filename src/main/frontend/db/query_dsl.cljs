@@ -707,8 +707,8 @@ Some bindings in this fn:
                                        #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))})))))))
 
 (defn query-contains-filter?
-  [query filter-name]
-  (string/includes? query (str "(" filter-name)))
+  [query' filter-name]
+  (string/includes? query' (str "(" filter-name)))
 
 (comment
   ;; {{query (and (page-property foo bar) [[hello]])}}

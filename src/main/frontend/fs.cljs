@@ -234,12 +234,12 @@
   ([fpath]
    (util/p-handle
     (stat fpath)
-    (fn [stat] (not (nil? stat)))
+    (fn [stat'] (not (nil? stat')))
     (fn [_e] false)))
   ([dir path]
    (util/p-handle
     (stat dir path)
-    (fn [stat] (not (nil? stat)))
+    (fn [stat'] (not (nil? stat')))
     (fn [_e] false))))
 
 (defn asset-href-exists?

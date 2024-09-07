@@ -58,13 +58,13 @@
         nil))))
 
 (defn on-enter
-  [state & {:keys [on-enter node]}]
+  [state & {on-enter-fn :on-enter :keys [node]}]
   (let [node (or node (rum/dom-node state))]
     (listen state node "keyup"
             (fn [e]
               (case (.-keyCode e)
                 ;; Enter
-                13 (on-enter e)
+                13 (on-enter-fn e)
                 nil)))))
 
 (defn on-key-up

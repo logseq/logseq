@@ -93,7 +93,7 @@
       content)))
 
 (defn clock-summary
-  [body string?]
+  [body string?']
   (when-let [logbook (drawer/get-logbook body)]
     (when-let [logbook-lines (last logbook)]
       (when-let [clock-lines (seq (filter #(string/starts-with? % "CLOCK:") logbook-lines))]
@@ -105,7 +105,7 @@
                                  :seconds seconds)
               duration-in-minutes (t/in-minutes duration)
               zero-minutes? (zero? duration-in-minutes)]
-          (if string?
+          (if string?'
             (if zero-minutes?
               (str seconds "s")
               (-> (tf/unparse-duration duration)

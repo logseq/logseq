@@ -129,10 +129,9 @@
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
   (when-let [page-name (state/get-current-page)]
-    (let [favorited? (favorited? page-name)]
-      (if favorited?
-        (<unfavorite-page! page-name)
-        (<favorite-page! page-name)))))
+    (if (favorited? page-name)
+      (<unfavorite-page! page-name)
+      (<favorite-page! page-name))))
 
 (defn rename!
   [page-uuid-or-old-name new-name & {:as _opts}]

@@ -29,16 +29,16 @@
 (defn start-test-db!
   [& {:as opts}]
   (let [db-graph? (or (:db-graph? opts) (and node? (some? js/process.env.DB_GRAPH)))
-        test-db (if db-graph? test-db-name-db-version test-db-name)]
-    (state/set-current-repo! test-db)
-    (conn/start! test-db opts)
-    (let [conn (conn/get-db test-db false)]
+        test-db' (if db-graph? test-db-name-db-version test-db-name)]
+    (state/set-current-repo! test-db')
+    (conn/start! test-db' opts)
+    (let [conn (conn/get-db test-db' false)]
       (when db-graph?
         (db-pipeline/add-listener conn)
         (d/transact! conn (sqlite-create-graph/build-db-initial-data "")))
       (d/listen! conn ::listen-db-changes!
                  (fn [tx-report]
-                   (worker-pipeline/invoke-hooks test-db conn tx-report {}))))))
+                   (worker-pipeline/invoke-hooks test-db' conn tx-report {}))))))
 
 (defn destroy-test-db!
   []
