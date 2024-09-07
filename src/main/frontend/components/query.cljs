@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.query-table :as query-table]
             [frontend.components.query.result :as query-result]
+            [frontend.components.query.view :as query-view]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -14,7 +15,8 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [frontend.config :as config]))
 
 (defn built-in-custom-query?
   [title]
@@ -77,11 +79,10 @@
                            (str error)]))]
            (util/hiccup-keywordize result))
 
-         page-list?
-         (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
-
-         table?
-         (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
+         (or page-list? table?)
+         (if (config/db-based-graph? (state/get-current-repo))
+           (query-view/query-result config current-block result)
+           (query-table/result-table config current-block result {:page? page-list?} map-inline page-cp ->elem inline-text))
 
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
          (->hiccup result

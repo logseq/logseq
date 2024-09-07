@@ -151,7 +151,28 @@
                                   db-ident
                                   (keyword value)))))))
 
-(rum/defc property-value-select < rum/reactive db-mixins/query
+(rum/defc property-value-select-inner
+  < rum/reactive db-mixins/query
+  [repo *property *find *tree opts loc db-graph? values]
+  (let [;; FIXME: lazy load property values consistently on first call
+        _ (when db-graph?
+            (doseq [id values] (db/sub-block id)))
+        values' (if db-graph?
+                  (map #(db-property/property-value-content (db/entity repo %)) values)
+                  values)
+        values'' (map #(hash-map :value (str %)
+                                   ;; Preserve original-value as some values like boolean do not display in select
+                                 :original-value %)
+                      (cons "Select all" values'))]
+    (select values''
+            (fn [{:keys [original-value]}]
+              (let [x (if (= original-value "Select all")
+                        [(if (= @*find :page) :page-property :property) @*property]
+                        [(if (= @*find :page) :page-property :property) @*property original-value])]
+                (reset! *property nil)
+                (append-tree! *tree opts loc x))))))
+
+(rum/defc property-value-select
   [repo *property *find *tree opts loc]
   (let [db-graph? (sqlite-util/db-based-graph? repo)
         [values set-values!] (rum/use-state nil)]
@@ -165,23 +186,7 @@
              (db-async/<get-block repo db-id :children? false)))
          (set-values! result)))
      [@*property])
-    (let [;; FIXME: lazy load property values consistently on first call
-          _ (when db-graph?
-              (doseq [id values] (db/sub-block id)))
-          values' (if db-graph?
-                    (map #(db-property/property-value-content (db/entity repo %)) values)
-                    values)
-          values'' (map #(hash-map :value (str %)
-                                   ;; Preserve original-value as some values like boolean do not display in select
-                                   :original-value %)
-                        (cons "Select all" values'))]
-      (select values''
-              (fn [{:keys [original-value]}]
-                (let [x (if (= original-value "Select all")
-                          [(if (= @*find :page) :page-property :property) @*property]
-                          [(if (= @*find :page) :page-property :property) @*property original-value])]
-                  (reset! *property nil)
-                  (append-tree! *tree opts loc x)))))))
+    (property-value-select-inner repo *property *find *tree opts loc db-graph? values)))
 
 (rum/defc tags
   [repo *tree opts loc]

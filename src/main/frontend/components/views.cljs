@@ -5,7 +5,6 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
-            [frontend.components.block :as component-block]
             [frontend.components.dnd :as dnd]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
@@ -106,11 +105,12 @@
 
 (rum/defc block-title < rum/static
   [config row]
-  (let [[show-open? set-show-open!] (rum/use-state false)]
+  (let [[show-open? set-show-open!] (rum/use-state false)
+        block-container (state/get-component :block/container)]
     [:div.relative.w-full
      {:on-mouse-over #(set-show-open! true)
       :on-mouse-out #(set-show-open! false)}
-     (component-block/block-container (assoc config :table? true) row)
+     (block-container (assoc config :table? true) row)
      [:div.absolute.-top-1.right-0.transition-opacity
       {:class (if show-open? "opacity-100" "opacity-0")}
       (shui/button
@@ -921,7 +921,8 @@
            (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids))))}))
 
 (rum/defc view-inner < rum/static
-  [view-entity {:keys [data set-data! columns add-new-object! create-view! title-key] :as option}]
+  [view-entity {:keys [data set-data! columns add-new-object! create-view! title-key render-empty-title?] :as option
+                :or {render-empty-title? false}}]
   (let [[input set-input!] (rum/use-state "")
         sorting (:logseq.property.table/sorting view-entity)
         [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
@@ -973,10 +974,11 @@
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
      [:div.flex.items-center.justify-between
-      [:div.flex.flex-row.items-center.gap-2
-       [:div.font-medium.opacity-50
-        (t (or title-key :views.table/default-title)
-           (count (:rows table)))]]
+      (when-not render-empty-title?
+        [:div.flex.flex-row.items-center.gap-2
+         [:div.font-medium.opacity-50
+          (t (or title-key :views.table/default-title)
+             (count (:rows table)))]])
       [:div.flex.items-center.gap-1
 
        (filter-properties columns table)
@@ -992,11 +994,11 @@
 
      (rum/use-effect! #(js/setTimeout (fn [] (set-ready! true)) 16) [])
      (rum/use-effect!
-       (fn []
-         (when-let [^js cnt (and ready? (some-> (rum/deref *view-ref) (.closest ".is-node-page")))]
-           (.setAttribute cnt "data-ready" true)
-           #(.removeAttribute cnt "data-ready")))
-       [ready?])
+      (fn []
+        (when-let [^js cnt (and ready? (some-> (rum/deref *view-ref) (.closest ".is-node-page")))]
+          (.setAttribute cnt "data-ready" true)
+          #(.removeAttribute cnt "data-ready")))
+      [ready?])
 
      (shui/table
       (let [columns' (:columns table)
