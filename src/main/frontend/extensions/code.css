@@ -1,7 +1,8 @@
 .extensions__code {
   @apply relative z-0 flex flex-row flex-nowrap justify-between;
 
-  &-lang {
+  &-lang,
+  &-copy-button {
     @apply p-1 text-sm;
     background: var(--ls-secondary-background-color);
     word-break: keep-all;
@@ -22,6 +23,10 @@
       opacity: 1;
       user-select: none;
     }
+  }
+
+  &-copy-button {
+    top: 1.2em;
   }
 
   &-calc {

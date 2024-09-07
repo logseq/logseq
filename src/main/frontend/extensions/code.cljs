@@ -129,9 +129,12 @@
             ["codemirror/mode/z80/z80"]
             [frontend.commands :as commands]
             [frontend.db :as db]
+            [frontend.ui :as ui]
             [frontend.extensions.calc :as calc]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.code :as code-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.context.i18n :refer [t]]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.config :as config]
@@ -535,8 +538,21 @@
   [:div.extensions__code
    (when-let [mode (:data-lang attr)]
      (when-not (= mode "calc")
-       [:div.extensions__code-lang
-        (string/lower-case mode)]))
+       [[:div.extensions__code-lang
+         (string/lower-case mode)]
+        [:div.extensions__code-copy-button
+         (when code
+           [:button
+            {:title (str "Shift-Click " (t :editor/copy))
+             :on-mouse-down (fn [e]
+                              [(util/stop e)
+                               (.focus e)])
+             :on-click (fn [e]
+                         (util/stop e)
+                         [(util/copy-to-clipboard! code)
+                          (notification/show! (t :editor/copy) :success)])}
+            [(ui/icon "copy" {:size 16
+                              :class "ml-2"})]])]]))
    [:div.code-editor.flex.flex-1.flex-row.w-full
     [:textarea (merge {:id id
                        ;; Expose the textarea associated with the CodeMirror instance via
