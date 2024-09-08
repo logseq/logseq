@@ -846,7 +846,7 @@
                (not (and (not closed-values?) (= type :date))))
         (let [value (if (and (nil? value) (= :logseq.property.view/type (:db/ident property)))
                       ;; TODO: remove this hack once default value is supported
-                      (db/entity :logseq.propety.view/type.table)
+                      (db/entity :logseq.property.view/type.table)
                       value)]
           (single-value-select block property value
                                (fn [] (select-item property type value opts))
