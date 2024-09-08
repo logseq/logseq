@@ -896,9 +896,9 @@ html.is-mac {
     @apply text-sm;
 }
 
-.block-content-wrapper svg {
-    width: 20px;
-    height: 20px;
+.block-content-wrapper svg, .view-actions svg {
+    width: 18px;
+    height: 18px;
 }
 
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
@@ -909,11 +909,6 @@ html.is-mac {
 .ls-page-title .positioned-properties svg {
     width: 24px;
     height: 24px;
-}
-
-.view-actions svg {
-    width: 18px;
-    height: 18px;
 }
 
 .ls-page-title .ls-page-icon button {

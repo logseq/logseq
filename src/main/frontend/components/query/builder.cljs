@@ -330,7 +330,7 @@
 (rum/defc add-filter
   [*find *tree loc clause]
   (shui/button
-   {:class "!px-1 add-filter text-muted-foreground"
+   {:class "!px-1 h-6 add-filter text-muted-foreground"
     :size :sm
     :variant :ghost
     :title "Add clause"
@@ -339,8 +339,8 @@
                 (shui/popup-show! (.-target e)
                                   (fn [{:keys [id]}]
                                     (picker *find *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
-                                  {}))}
-   (ui/icon "plus")))
+                                  {:align :start}))}
+   (ui/icon "plus" {:size 12})))
 
 (declare clauses-group)
 
@@ -409,7 +409,7 @@
        [:a.flex.text-sm.query-clause {:on-click toggle-fn}
         clause]
 
-       [:div.flex.flex-row.items-center.gap-2.p-1.rounded.border.query-clause-btn
+       [:div.flex.flex-row.items-center.gap-2.px-1.rounded.border.query-clause-btn
         [:a.flex.query-clause {:on-click toggle-fn}
          (dsl-human-output clause)]]))
    (fn [{:keys [toggle-fn]}]
