@@ -79,7 +79,6 @@
         db-based? (config/db-based-graph? repo)
         page (or (db/get-alias-source-page repo (:db/id page)) page)
         title (:block/title page)
-        whiteboard-page? (db-model/whiteboard-page? page)
         untitled? (db-model/untitled-page? title)
         name (:block/name page)
         file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
@@ -135,7 +134,7 @@
                           (util/stop e))}
        (ldb/object? page)
        (assoc :title (title/block-unique-title page)))
-     [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
+     [:span.page-icon.ml-3.justify-center icon]
      [:span.page-title {:class (when untitled? "opacity-50")
                         :style {:display "ruby"}}
       (cond
