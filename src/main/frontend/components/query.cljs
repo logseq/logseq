@@ -44,7 +44,7 @@
     (ui/icon "refresh" {:style {:font-size 20}})]))
 
 (rum/defcs custom-query-inner < rum/reactive
-  [state config {:keys [query children? breadcrumb-show?]}
+  [state config {:keys [query breadcrumb-show?]}
    {:keys [query-error-atom
            current-block
            table?
@@ -79,25 +79,24 @@
                            (str error)]))]
            (util/hiccup-keywordize result))
 
+         (and (config/db-based-graph? (state/get-current-repo)) (or page-list? only-blocks? blocks-grouped-by-page? table?))
+         (query-view/query-result config current-block result)
+
          (or page-list? table?)
-         (if (config/db-based-graph? (state/get-current-repo))
-           (query-view/query-result config current-block result)
-           (query-table/result-table config current-block result {:page? page-list?} map-inline page-cp ->elem inline-text))
+         (query-table/result-table config current-block result {:page? page-list?} map-inline page-cp ->elem inline-text)
 
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
          (->hiccup result
-                   (cond-> (assoc config
-                                  :custom-query? true
-                                  :current-block (:db/id current-block)
-                                  :dsl-query? dsl-query?
-                                  :query query
-                                  :breadcrumb-show? (if (some? breadcrumb-show?)
-                                                      breadcrumb-show?
-                                                      true)
-                                  :group-by-page? blocks-grouped-by-page?
-                                  :ref? true)
-                     children?
-                     (assoc :ref? true))
+                   (assoc config
+                          :custom-query? true
+                          :current-block (:db/id current-block)
+                          :dsl-query? dsl-query?
+                          :query query
+                          :breadcrumb-show? (if (some? breadcrumb-show?)
+                                              breadcrumb-show?
+                                              true)
+                          :group-by-page? blocks-grouped-by-page?
+                          :ref? true)
                    {:style {:margin-top "0.25rem"
                             :margin-left "0.25rem"}})
 
@@ -184,14 +183,15 @@
               :view-f view-f
               :page-list? page-list?
               :result result
-              :group-by-page? (query-result/get-group-by-page q {:table? table?})}]
+              :group-by-page? (query-result/get-group-by-page q {:table? table?})}
+        db-based? (config/db-based-graph? (state/get-current-repo))]
     (if (:custom-query? config)
       [:code (if dsl-query?
                (util/format "{{query %s}}" query)
                "{{query hidden}}")]
       (when-not (and built-in? (empty? result))
         [:div.custom-query (get config :attr {})
-         (when-not built-in?
+         (when-not (or built-in? db-based?)
            [:div.th
             {:title (str "Query: " query)}
             (if dsl-query?

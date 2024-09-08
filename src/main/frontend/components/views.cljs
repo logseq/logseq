@@ -920,6 +920,48 @@
          (p/let [entity (or entity (create-view!))]
            (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids))))}))
 
+(rum/defc table-view < rum/static
+  [table option row-selection add-new-object! ready?]
+  (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))]
+    (shui/table
+    (let [columns' (:columns table)
+          rows (:rows table)]
+      [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
+       {:class (when (not ready?) "invisible")}
+       [:div.relative
+        (table-header table columns' option selected-rows)
+
+        (ui/virtualized-list
+         {:custom-scroll-parent (gdom/getElement "main-content-container")
+          :increase-viewport-by 128
+          :overscan 128
+          :compute-item-key (fn [idx]
+                              (let [block (nth rows idx)]
+                                (str "table-row-" (:db/id block))))
+          :total-count (count rows)
+          :item-content (fn [idx]
+                          (let [row (nth rows idx)]
+                            (table-row table row columns' {} option)))})
+
+        (when add-new-object!
+          (shui/table-footer (add-new-row table)))]]))))
+
+(rum/defc list-view < rum/static
+  [view-entity result config]
+  (when-let [->hiccup (state/get-component :block/->hiccup)]
+    (let [group-by-page? (not (every? db/page? result))
+          result (if group-by-page?
+                   (group-by :block/page result)
+                   result)]
+      (->hiccup result
+                (assoc config
+                       :custom-query? true
+                       :current-block (:db/id view-entity)
+                       :query (:block/title view-entity)
+                       :breadcrumb-show? (if group-by-page? true false)
+                       :group-by-page? group-by-page?
+                       :ref? true)))))
+
 (rum/defc view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! create-view! title-key render-empty-title?] :as option
                 :or {render-empty-title? false}}]
@@ -960,9 +1002,10 @@
                                              :set-ordered-columns! set-ordered-columns!
                                              :set-row-selection! set-row-selection!
                                              :add-new-object! add-new-object!}})
-        selected-rows (shui/table-get-selection-rows row-selection (:rows table))
+
         [ready?, set-ready!] (rum/use-state false)
-        *view-ref (rum/use-ref nil)]
+        *view-ref (rum/use-ref nil)
+        display-type (keyword (:block/title (get view-entity :logseq.property.view/type "table")))]
 
     (rum/use-effect!
      (fn [] (debounced-set-row-filter!
@@ -976,15 +1019,19 @@
      [:div.flex.items-center.justify-between
       (when-not render-empty-title?
         [:div.flex.flex-row.items-center.gap-2
-         [:div.font-medium.opacity-50
+         [:div.font-medium.opacity-50.text-sm
           (t (or title-key :views.table/default-title)
              (count (:rows table)))]])
-      [:div.flex.items-center.gap-1
+      [:div.view-actions.flex.items-center.gap-1
 
        (filter-properties columns table)
 
        (search input {:on-change set-input!
                       :set-input! set-input!})
+
+       [:div.text-muted-foreground.text-sm
+        (pv/property-value view-entity (db/entity :logseq.property.view/type)
+                           (get view-entity :logseq.property.view/type) {})]
 
        (more-actions columns table)
 
@@ -1000,28 +1047,11 @@
           #(.removeAttribute cnt "data-ready")))
       [ready?])
 
-     (shui/table
-      (let [columns' (:columns table)
-            rows (:rows table)]
-        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
-         {:class (when (not ready?) "invisible")}
-         [:div.relative
-          (table-header table columns' option selected-rows)
+     (case display-type
+       :list
+       (list-view view-entity (:rows table) (:config option))
 
-          (ui/virtualized-list
-           {:custom-scroll-parent (gdom/getElement "main-content-container")
-            :increase-viewport-by 128
-            :overscan 128
-            :compute-item-key (fn [idx]
-                                (let [block (nth rows idx)]
-                                  (str "table-row-" (:db/id block))))
-            :total-count (count rows)
-            :item-content (fn [idx]
-                            (let [row (nth rows idx)]
-                              (table-row table row columns' {} option)))})
-
-          (when add-new-object!
-            (shui/table-footer (add-new-row table)))]]))]))
+       (table-view table option row-selection add-new-object! ready?))]))
 
 (rum/defc view < rum/reactive
   [view-entity option]

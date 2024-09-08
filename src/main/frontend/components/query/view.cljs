@@ -19,21 +19,26 @@
   (map (fn [b]
          (assoc (db/entity (:db/id b)) :id (:db/id b))) result))
 
+(defn- init-result
+  [result]
+  (let [result' (if (map? result)
+                  (mapcat second result)
+                  result)]
+    (result->entities result')))
+
 (rum/defc query-result < rum/static
-  [config current-block result]
-  (let [result' (result->entities result)
+  [config view-entity result]
+  (let [result' (init-result result)
         [data set-data!] (rum/use-state result')
-        columns' (columns config result')
-        view-entity current-block]
+        columns' (columns config result')]
     (rum/use-effect!
      (fn []
-       (set-data! (result->entities result)))
+       (set-data! (init-result result)))
      [result])
-    [:div.query-result.w-full.mt-2
-     {:on-pointer-down (fn [e]
-                         (util/stop e))}
+    [:div.query-result.w-full.mt-1
+     {:on-pointer-down util/stop-propagation}
      (views/view view-entity
-                 {:data data
+                 {:title-key :views.table/live-query-title
+                  :data data
                   :set-data! set-data!
-                  :render-empty-title? true
                   :columns columns'})]))

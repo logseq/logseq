@@ -184,6 +184,20 @@
                                  {:type :default
                                   :public? true}}
 
+   :logseq.property.view/type
+   {:title "View type"
+    :schema
+    {:type :default
+     :public? false
+     :hide? true}
+    :closed-values
+    (mapv (fn [[db-ident value]]
+            {:db-ident db-ident
+             :value value
+             :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
+          [[:logseq.propety.view/type.table "table"]
+           [:logseq.propety.view/type.list "list"]])}
+
    :logseq.property.table/sorting {:schema
                                    {:type :coll
                                     :hide? true

@@ -329,14 +329,18 @@
 
 (rum/defc add-filter
   [*find *tree loc clause]
-  [:a.flex.add-filter
-   {:title "Add clause"
+  (shui/button
+   {:class "!px-1 add-filter text-muted-foreground"
+    :size :sm
+    :variant :ghost
+    :title "Add clause"
+    :on-pointer-down util/stop-propagation
     :on-click (fn [^js e]
                 (shui/popup-show! (.-target e)
-                  (fn [{:keys [id]}]
-                    (picker *find *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
-                  {}))}
-   (ui/icon "plus" {:style {:font-size 20}})])
+                                  (fn [{:keys [id]}]
+                                    (picker *find *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
+                                  {}))}
+   (ui/icon "plus")))
 
 (declare clauses-group)
 
