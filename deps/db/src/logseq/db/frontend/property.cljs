@@ -184,6 +184,20 @@
                                  {:type :default
                                   :public? true}}
 
+   :logseq.property.view/type
+   {:title "View type"
+    :schema
+    {:type :default
+     :public? false
+     :hide? true}
+    :closed-values
+    (mapv (fn [[db-ident value]]
+            {:db-ident db-ident
+             :value value
+             :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
+          [[:logseq.property.view/type.table "table"]
+           [:logseq.property.view/type.list "list"]])}
+
    :logseq.property.table/sorting {:schema
                                    {:type :coll
                                     :hide? true
@@ -236,7 +250,7 @@
 (def logseq-property-namespaces
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"
     "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table"
-    "logseq.property.journal" "logseq.property.class"})
+    "logseq.property.journal" "logseq.property.class" "logseq.property.view"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"

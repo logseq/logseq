@@ -116,7 +116,8 @@
    "(t prompt-key" [:select/default-prompt :select/default-select-multiple :select.graph/prompt]
    ;; All args to ui/make-confirm-modal are not keywords
    "(t title" []
-   "(t (or title-key" [:views.table/default-title :all-pages/table-title :views.table/tagged-nodes
+   "(t (or title-key" [:views.table/live-query-title
+                       :views.table/default-title :all-pages/table-title :views.table/tagged-nodes
                        :views.table/property-nodes]
    "(t subtitle" [:asset/physical-delete]})
 
