@@ -892,6 +892,10 @@ html.is-mac {
     text-overflow: ellipsis;
 }
 
+.ls-table a.tag {
+    @apply text-sm;
+}
+
 .block-content-wrapper svg {
     width: 20px;
     height: 20px;
