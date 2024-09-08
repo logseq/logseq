@@ -684,6 +684,10 @@
 .bullet-link-wrap {
   color: var(--ls-primary-text-color);
 
+  .ui__icon {
+      @apply opacity-80;
+  }
+
   &:hover > .bullet-container:not(.typed-list) {
     background-color: var(--lx-gray-04-alpha, var(--ls-block-bullet-border-color, var(--rx-gray-04-alpha)));
 
@@ -860,13 +864,8 @@ html.is-mac {
 }
 
 .block-title-wrap a.tag, .block-body a.tag {
-  position: relative;
   font-size: initial;
   opacity: 1;
-
-  &:has(.ui__icon) {
-    top: 4px;
-  }
 }
 
 .positioned-properties.right-align  {
@@ -884,8 +883,8 @@ html.is-mac {
     @apply flex flex-row flex-wrap self-start items-center gap-1;
     max-width: 256px;
 }
-.block-tag {
-    @apply flex text-sm h-6 items-center;
+.block-tag a.tag {
+    @apply flex text-sm items-center opacity-70;
 }
 .block-tag span {
     @apply whitespace-nowrap overflow-hidden;
@@ -893,9 +892,13 @@ html.is-mac {
     text-overflow: ellipsis;
 }
 
-.block-content-wrapper svg {
-    width: 20px;
-    height: 20px;
+.ls-table a.tag {
+    @apply text-sm;
+}
+
+.block-content-wrapper svg, .view-actions svg {
+    width: 18px;
+    height: 18px;
 }
 
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {

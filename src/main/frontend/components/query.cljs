@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.query-table :as query-table]
             [frontend.components.query.result :as query-result]
+            [frontend.components.query.view :as query-view]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -14,7 +15,8 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [frontend.config :as config]))
 
 (defn built-in-custom-query?
   [title]
@@ -42,7 +44,7 @@
     (ui/icon "refresh" {:style {:font-size 20}})]))
 
 (rum/defcs custom-query-inner < rum/reactive
-  [state config {:keys [query children? breadcrumb-show?]}
+  [state config {:keys [query breadcrumb-show?]}
    {:keys [query-error-atom
            current-block
            table?
@@ -77,26 +79,24 @@
                            (str error)]))]
            (util/hiccup-keywordize result))
 
-         page-list?
-         (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
+         (and (config/db-based-graph? (state/get-current-repo)) (or page-list? only-blocks? blocks-grouped-by-page? table?))
+         (query-view/query-result config current-block result)
 
-         table?
-         (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
+         (or page-list? table?)
+         (query-table/result-table config current-block result {:page? page-list?} map-inline page-cp ->elem inline-text)
 
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
          (->hiccup result
-                   (cond-> (assoc config
-                                  :custom-query? true
-                                  :current-block (:db/id current-block)
-                                  :dsl-query? dsl-query?
-                                  :query query
-                                  :breadcrumb-show? (if (some? breadcrumb-show?)
-                                                      breadcrumb-show?
-                                                      true)
-                                  :group-by-page? blocks-grouped-by-page?
-                                  :ref? true)
-                     children?
-                     (assoc :ref? true))
+                   (assoc config
+                          :custom-query? true
+                          :current-block (:db/id current-block)
+                          :dsl-query? dsl-query?
+                          :query query
+                          :breadcrumb-show? (if (some? breadcrumb-show?)
+                                              breadcrumb-show?
+                                              true)
+                          :group-by-page? blocks-grouped-by-page?
+                          :ref? true)
                    {:style {:margin-top "0.25rem"
                             :margin-left "0.25rem"}})
 
@@ -183,14 +183,15 @@
               :view-f view-f
               :page-list? page-list?
               :result result
-              :group-by-page? (query-result/get-group-by-page q {:table? table?})}]
+              :group-by-page? (query-result/get-group-by-page q {:table? table?})}
+        db-based? (config/db-based-graph? (state/get-current-repo))]
     (if (:custom-query? config)
       [:code (if dsl-query?
                (util/format "{{query %s}}" query)
                "{{query hidden}}")]
       (when-not (and built-in? (empty? result))
         [:div.custom-query (get config :attr {})
-         (when-not built-in?
+         (when-not (or built-in? db-based?)
            [:div.th
             {:title (str "Query: " query)}
             (if dsl-query?
@@ -246,9 +247,10 @@
                (custom-query-inner config q opts))
              {:default-collapsed? collapsed?
               :title-trigger? true})]
-           [:div.bd
-            (when-not collapsed?'
-              (custom-query-inner config q opts))])]))))
+           (when-not (:table? config)
+             [:div.bd
+              (when-not collapsed?'
+                (custom-query-inner config q opts))]))]))))
 
 (rum/defcs custom-query < rum/static
   [state config q]

@@ -18,7 +18,6 @@
             [logseq.graph-parser.text :as text]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.property.util :as pu]
-            [logseq.db.frontend.content :as db-content]
             [frontend.handler.db-based.property.util :as db-pu]))
 
 ;; Util fns
@@ -282,17 +281,7 @@
   [config current-block result {:keys [page?] :as options} map-inline page-cp ->elem inline-text]
   (when current-block
     (let [db-graph? (config/db-based-graph? (state/get-current-repo))
-          result' (cond-> (if page? result (attach-clock-property result))
-                    db-graph?
-                    ((fn [res]
-                       (map #(if (:block/title %)
-                               (update % :block/title
-                                 db-content/special-id-ref->page-ref
-                                 ;; Lookup here instead of initial query as advanced queries
-                                 ;; won't usually have a ref's name
-                                 (map (fn [m] (db/entity (:db/id m))) (:block/refs %)))
-                               %)
-                         res))))
+          result' (if page? result (attach-clock-property result))
           columns (get-columns current-block result' {:page? page?})
           ;; Sort state needs to be in sync between final result and sortable title
           ;; as user needs to know if there result is sorted

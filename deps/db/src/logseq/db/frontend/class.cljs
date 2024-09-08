@@ -7,6 +7,10 @@
   "Map of built-in classes for db graphs with their :db/ident as keys"
   {:logseq.class/Root {:title "Root tag"}
 
+   :logseq.class/Query
+   {:title "Query"
+    :properties {:logseq.property/icon {:type :tabler-icon :id "search"}}}
+
    :logseq.class/Task
    {:title "Task"
     :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}
