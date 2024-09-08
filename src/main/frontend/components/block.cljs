@@ -557,8 +557,7 @@
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (when page-name (model/untitled-page? (:block/title page-entity)))
         display-close-button? (and (not (:hide-close-button? config))
-                                   (not config/publishing?))
-        hide-icon? (:hide-icon? config)]
+                                   (not config/publishing?))]
     [:a.relative
      {:tabIndex "0"
       :class (cond->
@@ -597,11 +596,6 @@
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not meta-click?))
                            (state/clear-edit!)
                            (open-page-ref config page-entity e page-name contents-page?)))}
-     (when-not hide-icon?
-       (when-let [icon (get page-entity (pu/get-pid :logseq.property/icon))]
-         [:span.mr-1.inline-flex.items-center
-          {:style {:color (or (:color icon) "inherit")}}
-          (icon-component/icon icon)]))
      [:span
       (if (and (coll? children) (seq children))
         (for [child children]
@@ -2415,7 +2409,6 @@
            [:div.block-tag
             {:key (str "tag-" (:db/id tag))}
             (page-cp (assoc config
-                            :hide-icon? true
                             :tag? true
                             :disable-preview? true) tag)])]))))
 

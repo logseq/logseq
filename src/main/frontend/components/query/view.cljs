@@ -1,11 +1,10 @@
 (ns frontend.components.query.view
   "DB query result view"
   (:require [frontend.components.views :as views]
-            [frontend.state :as state]
+            [frontend.db :as db]
             [logseq.db :as ldb]
-            [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.db :as db]))
+            [frontend.util :as util]))
 
 (defn- columns
   [config result]
@@ -15,23 +14,24 @@
        (ldb/sort-by-order)
        (views/build-columns config)))
 
+(defn- result->entities
+  [result]
+  (map (fn [b]
+         (assoc (db/entity (:db/id b)) :id (:db/id b))) result))
+
 (rum/defc query-result < rum/static
   [config current-block result]
-  (let [result' (map (fn [b]
-                       (assoc (db/entity (:db/id b)) :id (:db/id b))) result)
+  (let [result' (result->entities result)
         [data set-data!] (rum/use-state result')
         columns' (columns config result')
-        _ (prn :debug :columns columns')
         view-entity current-block]
     (rum/use-effect!
      (fn []
-       (when-let [^js worker @state/*db-worker]
-         (p/let [result-str (.get-page-refs-count worker (state/get-current-repo))
-                 result (ldb/read-transit-str result-str)
-                 data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
-           (set-data! data))))
-     [])
+       (set-data! (result->entities result)))
+     [result])
     [:div.query-result.w-full.mt-2
+     {:on-pointer-down (fn [e]
+                         (util/stop e))}
      (views/view view-entity
                  {:data data
                   :set-data! set-data!
