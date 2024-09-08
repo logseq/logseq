@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.skeleton
   "Validate skeleton data between server and client"
   (:require [datascript.core :as d]
+            [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.ws-util :as ws-util]
             [logseq.db :as ldb]
             [missionary.core :as m]))
@@ -63,22 +64,28 @@
 
 (defn new-task--calibrate-graph-skeleton
   [get-ws-create-task graph-uuid conn t]
-  (m/sp
-    (let [db @conn
-          db-ident-blocks (get-builtin-db-ident-blocks db)
-          r (m/? (ws-util/send&recv get-ws-create-task
-                                    {:action "calibrate-graph-skeleton"
-                                     :graph-uuid graph-uuid
-                                     :t t
-                                     :db-ident-blocks db-ident-blocks
-                                     :schema-version (get-schema-version db)}))]
-      (if-let [remote-ex (:ex-data r)]
-        (do (prn {:remote-ex remote-ex})
-            (throw (ex-info "Unavailable2" {:remote-ex remote-ex})))
-        (let [server-only-db-ident-blocks (some-> (:server-only-db-ident-blocks r)
-                                                  ldb/read-transit-str)]
-          (when (seq server-only-db-ident-blocks)
-            (throw (ex-info "different graph skeleton between server and client"
-                            {:type :rtc.exception/different-graph-skeleton
-                             :server-schema-version (:server-schema-version r)
-                             :server-only-db-ident-blocks server-only-db-ident-blocks}))))))))
+  (c.m/backoff
+   (take 4 c.m/delays)
+   (m/sp
+     (let [db @conn
+           db-ident-blocks (get-builtin-db-ident-blocks db)
+           r (m/? (ws-util/send&recv get-ws-create-task
+                                     {:action "calibrate-graph-skeleton"
+                                      :graph-uuid graph-uuid
+                                      :t t
+                                      :db-ident-blocks db-ident-blocks
+                                      :schema-version (get-schema-version db)}))]
+       (if-let [remote-ex (:ex-data r)]
+         (case (:type remote-ex)
+           :graph-lock-failed
+           (throw (ex-info "retry calibrate-graph-skeleton" {:missionary/retry true}))
+          ;; else
+           (do (prn {:remote-ex remote-ex})
+               (throw (ex-info "Unavailable2" {:remote-ex remote-ex}))))
+         (let [server-only-db-ident-blocks (some-> (:server-only-db-ident-blocks r)
+                                                   ldb/read-transit-str)]
+           (when (seq server-only-db-ident-blocks)
+             (throw (ex-info "different graph skeleton between server and client"
+                             {:type :rtc.exception/different-graph-skeleton
+                              :server-schema-version (:server-schema-version r)
+                              :server-only-db-ident-blocks server-only-db-ident-blocks})))))))))
