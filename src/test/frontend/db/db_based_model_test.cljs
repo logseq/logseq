@@ -24,7 +24,7 @@
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (test-helper/create-page! "class1" opts)
         _ (test-helper/create-page! "class2" opts)]
-    (is (= ["Card" "Journal" "Root tag" "Task" "class1" "class2"] (sort (map :block/title (model/get-all-classes repo)))))))
+    (is (= ["Card" "Journal" "Query" "Root tag" "Task" "class1" "class2"] (sort (map :block/title (model/get-all-classes repo)))))))
 
 (deftest ^:fix-me get-class-objects-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
