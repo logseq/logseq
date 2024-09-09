@@ -3118,13 +3118,15 @@
 
 (defn shortcut-cut-selection
   [e]
-  (util/stop e)
-  (cut-blocks-and-clear-selections! true))
+  (when-not (util/input? (.-target e))
+    (util/stop e)
+    (cut-blocks-and-clear-selections! true)))
 
 (defn shortcut-delete-selection
   [e]
-  (util/stop e)
-  (cut-blocks-and-clear-selections! false))
+  (when-not (util/input? (.-target e))
+    (util/stop e)
+    (cut-blocks-and-clear-selections! false)))
 
 (defn- copy-current-block-ref
   [format]
