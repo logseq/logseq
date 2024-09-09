@@ -1005,7 +1005,8 @@
 
         [ready?, set-ready!] (rum/use-state false)
         *view-ref (rum/use-ref nil)
-        display-type (keyword (:block/title (get view-entity :logseq.property.view/type "table")))]
+        display-type (or (:db/ident (get view-entity :logseq.property.view/type))
+                         :logseq.property.view/type.table)]
 
     (rum/use-effect!
      (fn [] (debounced-set-row-filter!
@@ -1048,7 +1049,7 @@
       [ready?])
 
      (case display-type
-       :list
+       :logseq.property.view/type.list
        (list-view view-entity (:rows table) (:config option))
 
        (table-view table option row-selection add-new-object! ready?))]))
