@@ -1,6 +1,6 @@
 (ns frontend.components.query
   (:require [clojure.string :as string]
-            [frontend.components.query-table :as query-table]
+            [frontend.components.file-based.query-table :as query-table]
             [frontend.components.query.result :as query-result]
             [frontend.components.query.view :as query-view]
             [frontend.context.i18n :refer [t]]
@@ -85,7 +85,8 @@
          (query-view/query-result (assoc config :id (:db/id current-block))
                                   current-block result)
 
-         (or page-list? table?)
+         (and (not (config/db-based-graph? (state/get-current-repo)))
+              (or page-list? table?))
          (query-table/result-table config current-block result {:page? page-list?} map-inline page-cp ->elem inline-text)
 
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
