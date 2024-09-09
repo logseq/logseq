@@ -490,7 +490,8 @@
         payload (assoc payload
                   :user-id user-uuid
                   :graph-id graph-uuid
-                  :tx-id tx-id)]
+                  :tx-id tx-id
+                  :db-based (config/db-based-graph? (state/get-current-repo)))]
     (Sentry/captureException error
       (bean/->js {:tags payload}))))
 
