@@ -2391,7 +2391,7 @@
                                 (or (ldb/inline-tag? (:block/raw-title block) t)
                                     (:logseq.property.class/hide-from-node t)))))
           popup-opts {:align :end
-                      :content-props {:on-click shui/popup-hide!
+                      :content-props {:on-click (fn [] (shui/popup-hide!))
                                       :class "w-60"}}
           tags-count (count block-tags)]
       (when (seq block-tags)
