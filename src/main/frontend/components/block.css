@@ -880,10 +880,15 @@ html.is-mac {
 }
 
 .block-tags {
-    @apply flex flex-row flex-wrap self-start items-center gap-2;
+    @apply flex flex-row flex-wrap self-start items-center;
     min-height: 24px;
     max-width: 256px;
+    margin-right: -28px;
 }
+.block-tag {
+    @apply pr-1 flex flex-row items-center gap-1;
+}
+
 .block-tag a.tag {
     @apply flex text-sm items-center opacity-70;
 }

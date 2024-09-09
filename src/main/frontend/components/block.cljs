@@ -2381,7 +2381,49 @@
                  (rum/with-key (block-child block)
                    (str uuid "-" idx)))))]))))
 
-(rum/defc tags
+(rum/defcs block-tag <
+  (rum/local false ::hover?)
+  [state block tag config popup-opts]
+  (let [*hover? (::hover? state)]
+    [:div.block-tag
+     {:key (str "tag-" (:db/id tag))
+      :on-mouse-over #(reset! *hover? true)
+      :on-mouse-out #(reset! *hover? false)
+      :on-context-menu
+      (fn [e]
+        (util/stop e)
+        (shui/popup-show! e
+                          (fn []
+                            [:<>
+                             (shui/dropdown-menu-item
+                              {:key "Go to tag"
+                               :on-click #(route-handler/redirect-to-page! (:block/uuid tag))}
+                              (str "Go to #" (:block/title tag))
+                              (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "mod+click")))
+                             (shui/dropdown-menu-item
+                              {:key "Open tag in sidebar"
+                               :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
+                              "Open tag in sidebar"
+                              (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))
+                             (shui/dropdown-menu-item
+                              {:key "Remove tag"
+                               :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
+                              "Remove tag")])
+                          popup-opts))}
+     (page-cp (assoc config
+                     :tag? true
+                     :disable-preview? true)
+              tag)
+     [:a.close.flex.transition-opacity.duration-300.ease-in
+      {:class (if @*hover? "!opacity-100" "!opacity-0")
+       :title "Remove this tag"
+       :on-pointer-down
+       (fn [e]
+         (util/stop e)
+         (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
+      (ui/icon "x" {:size 15})]]))
+
+(rum/defc tags-cp
   "Tags without inline or hidden tags"
   [config block]
   (when (:block/raw-title block)
@@ -2398,31 +2440,9 @@
         (if (< tags-count 3)
           [:div.block-tags
            (for [tag block-tags]
-             [:div.block-tag
-              {:key (str "tag-" (:db/id tag))}
-              (page-cp (assoc config
-                              :tag? true
-                              :disable-preview? true
-                              :on-pointer-down
-                              (fn [e]
-                                (shui/popup-show! e
-                                                  (fn []
-                                                    [:<>
-                                                     (shui/dropdown-menu-item
-                                                      {:key "Go to tag"
-                                                       :on-click #(route-handler/redirect-to-page! (:block/uuid tag))}
-                                                      (str "Go to #" (:block/title tag))
-                                                      (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "mod+click")))
-                                                     (shui/dropdown-menu-item
-                                                      {:key "Open tag in sidebar"
-                                                       :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
-                                                      "Open tag in sidebar"
-                                                      (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))
-                                                     (shui/dropdown-menu-item
-                                                      {:key "Remove tag"
-                                                       :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
-                                                      "Remove tag")])
-                                                  popup-opts))) tag)])]
+             (rum/with-key
+               (block-tag block tag config popup-opts)
+               (str "tag-" (:db/id tag))))]
           [:div.block-tags.cursor-pointer
            {:on-pointer-down (fn [e]
                                (shui/popup-show! e
@@ -2442,7 +2462,7 @@
                                                                       :stop-click-event? false) tag)]))
                                                  popup-opts))}
            (for [tag (take 2 block-tags)]
-             [:div.block-tag
+             [:div.block-tag.pl-2
               {:key (str "tag-" (:db/id tag))}
               (page-cp (assoc config
                               :tag? true
@@ -2686,12 +2706,12 @@
                                     (editor-handler/edit-block! block :max))}
                 svg/edit])])])
 
+       (when-not (or (:table? config) (:page-title? config))
+         (block-refs-count block refs-count *hide-block-refs?))
+
        (when-not (or (:block-ref? config) (:table? config))
          (when (and db-based? (seq (:block/tags block)))
-           (tags (assoc config :block/uuid (:block/uuid block)) block)))
-
-       (when-not (or (:table? config) (:page-title? config))
-         (block-refs-count block refs-count *hide-block-refs?))]
+           (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))]
 
       (when (and (not (:table? config))
                  (not hide-block-refs?)
