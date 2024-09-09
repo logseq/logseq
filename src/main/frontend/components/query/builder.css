@@ -2,7 +2,7 @@
     @apply grid auto-rows-max gap-2;
 
     &-filter {
-        @apply flex flex-row items-center gap-1;
+        @apply flex flex-row flex-wrap items-center gap-1;
     }
 
     .cp__select-main {
@@ -35,7 +35,7 @@
     }
 
     .clauses-group {
-        @apply flex flex-row gap-2 flex-wrap items-center text-sm;
+        @apply flex flex-row gap-1 flex-wrap items-center text-sm;
     }
 
     a.query-clause, a.add-filter {
@@ -51,7 +51,7 @@
     }
 
     .clause-bracket {
-        @apply text-4xl ml-1 font-thin opacity-30;
+        @apply text-2xl font-thin opacity-30;
         font-family: "Inter";
     }
 
