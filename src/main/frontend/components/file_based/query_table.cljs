@@ -8,7 +8,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.clock :as clock]
+            [frontend.util.file-based.clock :as clock]
             [frontend.handler.file-based.property :as file-property-handler]
             [medley.core :as medley]
             [rum.core :as rum]

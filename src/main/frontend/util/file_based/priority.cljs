@@ -1,4 +1,4 @@
-(ns frontend.util.priority
+(ns frontend.util.file-based.priority
   "Util fns for task priorities e.g. A, B, C.
    File graph only"
   (:require [clojure.string :as string]
