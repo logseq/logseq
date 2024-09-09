@@ -529,13 +529,6 @@
                                      (reset! *result result)))))]
     (select-node property opts' *result)))
 
-(defn- get-closed-value-content
-  [block property]
-  (let [value (db-property/closed-value-content block)]
-    (if (= :logseq.property.view/type (:db/ident property))
-      (str (string/capitalize value) " View")
-      value)))
-
 (rum/defcs select < rum/reactive db-mixins/query
                     {:init (fn [state]
                              (let [*values (atom :loading)
@@ -562,7 +555,7 @@
             items (if closed-values?
                     (keep (fn [block]
                             (let [icon (pu/get-block-property-value block :logseq.property/icon)
-                                  value (get-closed-value-content block property)]
+                                  value (db-property/closed-value-content block)]
                               {:label (if icon
                                         [:div.flex.flex-row.gap-1.items-center
                                          (icon-component/icon icon)
@@ -678,12 +671,12 @@
         (property-empty-btn-value property)))))
 
 (rum/defc closed-value-item < rum/reactive db-mixins/query
-  [property value {:keys [inline-text icon?]}]
+  [value {:keys [inline-text icon?]}]
   (when value
     (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])]
       (when-let [block (db/sub-block (:db/id (db/entity eid)))]
         (let [property-block? (db-property/property-created-block? block)
-              value' (get-closed-value-content block property)
+              value' (db-property/closed-value-content block)
               icon (pu/get-block-property-value block :logseq.property/icon)]
           (cond
             icon
@@ -737,7 +730,7 @@
          (reference {} (:block/uuid value)))
 
        closed-values?
-       (closed-value-item property value opts)
+       (closed-value-item value opts)
 
        (de/entity? value)
        (when-some [content (if (some? (:property.value/content value))

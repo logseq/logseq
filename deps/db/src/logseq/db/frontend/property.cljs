@@ -195,8 +195,8 @@
             {:db-ident db-ident
              :value value
              :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
-          [[:logseq.property.view/type.table "table"]
-           [:logseq.property.view/type.list "list"]])}
+          [[:logseq.property.view/type.table "Table View"]
+           [:logseq.property.view/type.list "List View"]])}
 
    :logseq.property.table/sorting {:schema
                                    {:type :coll
