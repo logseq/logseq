@@ -1016,7 +1016,7 @@
 
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
-     [:div.flex.items-center.justify-between
+     [:div.flex.flex-wrap.items-center.justify-between.gap-1
       (when-not render-empty-title?
         [:div.flex.flex-row.items-center.gap-2
          [:div.font-medium.opacity-50.text-sm
