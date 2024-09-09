@@ -99,9 +99,7 @@
           (if sort-desc? (svg/caret-down) (svg/caret-up))])]]]))
 
 (defn get-all-columns-for-result
-  "Gets all possible columns for a given result. For a db graph, this is a mix
-  of property db-idents and special keywords like :page. For a file graph, these are
-  all property names as keywords"
+  "Gets all possible columns for a given result. Property names are keywords"
   [result page?]
   (let [hidden-properties (conj (file-property-handler/built-in-properties) :template)
         prop-keys* (->> (distinct (mapcat keys (map :block/properties result)))
