@@ -82,7 +82,8 @@
          (and (config/db-based-graph? (state/get-current-repo))
               (not (:built-in? config))
               (or page-list? only-blocks? blocks-grouped-by-page? table?))
-         (query-view/query-result config current-block result)
+         (query-view/query-result (assoc config :id (:db/id current-block))
+                                  current-block result)
 
          (or page-list? table?)
          (query-table/result-table config current-block result {:page? page-list?} map-inline page-cp ->elem inline-text)

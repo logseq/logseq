@@ -4,7 +4,8 @@
             [frontend.db :as db]
             [logseq.db :as ldb]
             [rum.core :as rum]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.mixins :as mixins]))
 
 (defn- columns
   [config result]
@@ -26,19 +27,16 @@
                   result)]
     (result->entities result')))
 
-(rum/defc query-result < rum/static
-  [config view-entity result]
-  (let [result' (init-result result)
-        [data set-data!] (rum/use-state result')
-        columns' (columns config result')]
-    (rum/use-effect!
-     (fn []
-       (set-data! (init-result result)))
-     [result])
+(rum/defcs query-result < rum/static mixins/container-id
+  (rum/local nil ::result)
+  [state config view-entity result]
+  (let [*result (::result state)
+        result' (or @*result (init-result result))
+        columns' (columns (assoc config :container-id (::container-id state)) result')]
     [:div.query-result.w-full.mt-1
      {:on-pointer-down util/stop-propagation}
      (views/view view-entity
                  {:title-key :views.table/live-query-title
-                  :data data
-                  :set-data! set-data!
+                  :data result'
+                  :set-data! #(reset! *result %)
                   :columns columns'})]))
