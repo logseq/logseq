@@ -1,8 +1,8 @@
-(ns frontend.components.query-table-test
+(ns frontend.components.file-based.query-table-test
   (:require [clojure.test :refer [deftest testing are use-fixtures is]]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.state :as state]
-            [frontend.components.query-table :as query-table]
+            [frontend.components.file-based.query-table :as query-table]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db :as db]
             [frontend.util :as util]))
@@ -150,12 +150,12 @@ prop:: b"}])
   (testing "for :page"
     (is (= ["page1" "page1"]
            (->> (dsl-query "(property prop)")
-                (map #(#'query-table/build-column-value nil % :page {:page? false}))
+                (map #(#'query-table/build-column-value % :page {:page? false}))
                 (map second)))
         "Page columns have valid value for blocks")
 
     (is (= ["page1"]
            (->> (dsl-query "(page-property prop)")
-                (map #(#'query-table/build-column-value nil % :page {:page? true}))
+                (map #(#'query-table/build-column-value % :page {:page? true}))
                 (map second)))
         "Page columns have valid value for pages")))

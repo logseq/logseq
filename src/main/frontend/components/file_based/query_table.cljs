@@ -1,10 +1,8 @@
-(ns frontend.components.query-table
+(ns frontend.components.file-based.query-table
   (:require [frontend.components.svg :as svg]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.utils :as db-utils]
             [frontend.format.block :as block]
             [frontend.handler.common :as common-handler]
             [frontend.handler.property :as property-handler]
@@ -15,10 +13,7 @@
             [medley.core :as medley]
             [rum.core :as rum]
             [promesa.core :as p]
-            [logseq.graph-parser.text :as text]
-            [logseq.db.frontend.property :as db-property]
-            [frontend.handler.property.util :as pu]
-            [frontend.handler.db-based.property.util :as db-pu]))
+            [logseq.graph-parser.text :as text]))
 
 ;; Util fns
 ;; ========
@@ -34,7 +29,7 @@
       (map #(medley/dissoc-in % ks) result)
       result)))
 
-(defn- sort-by-fn [sort-by-column item {:keys [page? db-graph?]}]
+(defn- sort-by-fn [sort-by-column item {:keys [page?]}]
   (case sort-by-column
     :created-at
     (:block/created-at item)
@@ -44,9 +39,7 @@
     (:block/title item)
     :page
     (if page? (:block/name item) (get-in item [:block/page :block/name]))
-    (if db-graph?
-      (get-in item [:block/properties-by-name sort-by-column])
-      (get-in item [:block/properties sort-by-column]))))
+    (get-in item [:block/properties sort-by-column])))
 
 (defn- locale-compare
   "Use locale specific comparison for strings and general comparison for others."
@@ -55,37 +48,28 @@
     (< x y)
     (.localeCompare (str x) (str y) (state/sub :preferred-language) #js {:numeric true})))
 
-(defn- sort-result [result {:keys [sort-by-column sort-desc? sort-nlp-date? page? db-graph?]}]
+(defn- sort-result [result {:keys [sort-by-column sort-desc? sort-nlp-date? page?]}]
   (if (some? sort-by-column)
-    (let [comp-fn (if sort-desc? #(locale-compare %2 %1) locale-compare)
-          repo (state/get-current-repo)
-          result' (if db-graph?
-                    (mapv (fn [block]
-                            (assoc block :block/properties-by-name (db-pu/properties-by-name repo block)))
-                          result)
-                    result)
-          sort-by-column' (if (and db-graph? (qualified-keyword? sort-by-column))
-                            (:block/title (db-utils/entity repo sort-by-column))
-                            sort-by-column)]
+    (let [comp-fn (if sort-desc? #(locale-compare %2 %1) locale-compare)]
       (sort-by (fn [item]
-                 (block/normalize-block (sort-by-fn sort-by-column' item {:page? page? :db-graph? db-graph?})
+                 (block/normalize-block (sort-by-fn sort-by-column item {:page? page?})
                                         sort-nlp-date?))
                comp-fn
-               result'))
+               result))
     result))
 
 (defn- get-sort-state
   "Return current sort direction and column being sorted, respectively
   :sort-desc? and :sort-by-column. :sort-by-column is nil if no sorting is to be
   done"
-  [current-block {:keys [db-graph?]}]
+  [current-block]
   (let [properties (:block/properties current-block)
-        p-desc? (pu/lookup properties :logseq.property/query-sort-desc)
+        p-desc? (:query-sort-desc properties)
         desc? (if (some? p-desc?) p-desc? true)
         properties (:block/properties current-block)
-        query-sort-by (pu/lookup properties :logseq.property/query-sort-by)
+        query-sort-by (:query-sort-by properties)
         ;; Starting with #6105, we started putting properties under namespaces.
-        nlp-date? (and (not db-graph?) (:logseq.query/nlp-date properties))
+        nlp-date? (:logseq.query/nlp-date properties)
         sort-by-column (or (keyword query-sort-by)
                            (if (query-dsl/query-contains-filter? (:block/title current-block) "sort-by")
                              nil
@@ -97,16 +81,16 @@
 ;; Components
 ;; ==========
 (rum/defc sortable-title
-  [title column {:keys [sort-by-column sort-desc?]} block-id {:keys [db-graph?]}]
+  [title column {:keys [sort-by-column sort-desc?]} block-id]
   (let [repo (state/get-current-repo)]
     [:th.whitespace-nowrap
      [:a {:on-click (fn []
                       (p/do!
                        (property-handler/set-block-property! repo block-id
-                                                             (pu/get-pid :logseq.property/query-sort-by)
-                                                             (if db-graph? column (name column)))
+                                                             :query-sort-by
+                                                             (name column))
                        (property-handler/set-block-property! repo block-id
-                                                             (pu/get-pid :logseq.property/query-sort-desc)
+                                                             :query-sort-desc
                                                              (not sort-desc?))))}
       [:div.flex.items-center
        [:span.mr-1 title]
@@ -119,30 +103,18 @@
   of property db-idents and special keywords like :page. For a file graph, these are
   all property names as keywords"
   [result page?]
-  (let [repo (state/get-current-repo)
-        db-graph? (config/db-based-graph? repo)
-        hidden-properties (if db-graph?
-                            (->> db-property/built-in-properties
-                                 (keep (fn [[k v]]
-                                         (when-not (get-in v [:schema :public?])
-                                           k)))
-                                 set)
-                            (conj (file-property-handler/built-in-properties) :template))
-        properties-fn (if db-graph? db-property/properties :block/properties)
-        prop-keys* (->> (distinct (mapcat keys (map properties-fn result)))
+  (let [hidden-properties (conj (file-property-handler/built-in-properties) :template)
+        prop-keys* (->> (distinct (mapcat keys (map :block/properties result)))
                         (remove hidden-properties))
         prop-keys (cond-> (if page? (cons :page prop-keys*) (concat '(:block :page) prop-keys*))
-                    (or db-graph? page?)
+                    page?
                     (concat [:created-at :updated-at]))]
     prop-keys))
 
 (defn get-columns [current-block result {:keys [page?]}]
   (let [properties (:block/properties current-block)
-        query-properties (pu/lookup properties :logseq.property/query-properties)
-        query-properties (if (config/db-based-graph? (state/get-current-repo))
-                           query-properties
-                           (some-> query-properties
-                                   (common-handler/safe-read-string "Parsing query properties failed")))
+        query-properties (some-> (:query-properties properties)
+                                 (common-handler/safe-read-string "Parsing query properties failed"))
         query-properties (if page? (remove #{:block} query-properties) query-properties)
         columns (if (seq query-properties)
                   query-properties
@@ -152,7 +124,7 @@
 (defn- build-column-value
   "Builds a column's tuple value for a query table given a row, column and
   options"
-  [db row column {:keys [db-graph? page? ->elem map-inline comma-separated-property?]}]
+  [row column {:keys [page? ->elem map-inline comma-separated-property?]}]
   (case column
     :page
     [:string (if page?
@@ -182,29 +154,21 @@
                (date/int->local-time-2 updated-at))]
 
     [:string
-     (if db-graph?
-       (db-property/ref->property-value-contents db (get row column))
-       (if comma-separated-property?
+     (if comma-separated-property?
          ;; Return original properties since comma properties need to
          ;; return collections for display purposes
-         (get-in row [:block/properties column])
-         (or (get-in row [:block/properties-text-values column])
+       (get-in row [:block/properties column])
+       (or (get-in row [:block/properties-text-values column])
              ;; Fallback to original properties for page blocks
-             (get-in row [:block/properties column]))))]))
+           (get-in row [:block/properties column])))]))
 
 (defn- render-column-value
-  [{:keys [row-block row-format cell-format value]} page-cp inline-text {:keys [db-graph?]}]
+  [{:keys [row-block row-format cell-format value]} page-cp inline-text]
   (cond
     ;; elements should be rendered as they are provided
     (= :element cell-format) value
-    (coll? value) (if db-graph?
-                    (->> value
-                         (map #(if-let [page (and (string? %) (db/get-page %))]
-                                 (page-cp {} page)
-                                 (inline-text row-block row-format (str %))))
-                         (interpose [:span ", "]))
-                    (->> (map #(page-cp {} {:block/name %}) value)
-                         (interpose [:span ", "])))
+    (coll? value) (->> (map #(page-cp {} {:block/name %}) value)
+                       (interpose [:span ", "]))
     ;; boolean values need to first be stringified
     (boolean? value) (str value)
     ;; string values will attempt to be rendered as pages, falling back to
@@ -224,9 +188,7 @@
         clock-time-total (when-not page?
                            (->> (map #(get-in % [:block/properties :clock-time] 0) sort-result')
                                 (apply +)))
-        property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))
-        db-graph? (config/db-based-graph? (state/get-current-repo))
-        db (db/get-db (state/get-current-repo))]
+        property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))]
     [:div.overflow-x-auto {:on-pointer-down (fn [e] (.stopPropagation e))
                            :style {:width "100%"}
                            :class (when-not page? "query-table")}
@@ -234,26 +196,22 @@
       [:thead
        [:tr.cursor
         (for [column columns]
-          (let [title (if db-graph?
-                        (if (qualified-keyword? column) (db-pu/get-property-name column) (name column))
-                        (if (and (= column :clock-time) (integer? clock-time-total))
-                          (util/format "clock-time(total: %s)" (clock/seconds->days:hours:minutes:seconds
-                                                                clock-time-total))
-                          (name column)))]
-            (sortable-title title column sort-state (:block/uuid current-block) {:db-graph? db-graph?})))]]
+          (let [title (if (and (= column :clock-time) (integer? clock-time-total))
+                        (util/format "clock-time(total: %s)" (clock/seconds->days:hours:minutes:seconds
+                                                              clock-time-total))
+                        (name column))]
+            (sortable-title title column sort-state (:block/uuid current-block))))]]
       [:tbody
        (for [row sort-result']
          (let [format (:block/format row)]
            [:tr.cursor
             (for [column columns]
-              (let [[cell-format value] (build-column-value db
-                                                            row
+              (let [[cell-format value] (build-column-value row
                                                             column
                                                             {:page? page?
                                                              :->elem ->elem
                                                              :map-inline map-inline
                                                              :config config
-                                                             :db-graph? db-graph?
                                                              :comma-separated-property? (property-separated-by-commas? column)})]
                 [:td.whitespace-nowrap
                  {:data-key (pr-str column)
@@ -273,18 +231,16 @@
                                          :row-format format
                                          :cell-format cell-format
                                          :value value}
-                     page-cp
-                     inline-text
-                     {:db-graph? db-graph?}))]))]))]]]))
+                                        page-cp
+                                        inline-text))]))]))]]]))
 
 (rum/defc result-table < rum/reactive
   [config current-block result {:keys [page?] :as options} map-inline page-cp ->elem inline-text]
   (when current-block
-    (let [db-graph? (config/db-based-graph? (state/get-current-repo))
-          result' (if page? result (attach-clock-property result))
+    (let [result' (if page? result (attach-clock-property result))
           columns (get-columns current-block result' {:page? page?})
           ;; Sort state needs to be in sync between final result and sortable title
           ;; as user needs to know if there result is sorted
-          sort-state (get-sort-state current-block {:db-graph? db-graph?})
-          sort-result' (sort-result result' (assoc sort-state :page? page? :db-graph? db-graph?))]
+          sort-state (get-sort-state current-block)
+          sort-result' (sort-result result' (assoc sort-state :page? page?))]
       (result-table-v1 config current-block sort-result' sort-state columns options map-inline page-cp ->elem inline-text))))
