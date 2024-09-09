@@ -3,8 +3,8 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.clock :as clock]
-            [frontend.util.drawer :as drawer]
+            [frontend.util.file-based.clock :as clock]
+            [frontend.util.file-based.drawer :as drawer]
             [frontend.state :as state]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))

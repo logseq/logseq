@@ -1,6 +1,6 @@
-(ns frontend.util.priority-test
+(ns frontend.util.file-based.priority-test
   (:require [cljs.test :refer [are deftest]]
-            [frontend.util.priority :as priority]))
+            [frontend.util.file-based.priority :as priority]))
 
 (deftest add-or-update-priority-markdown
   (are [content priority expect] (= expect (priority/add-or-update-priority content :markdown priority))

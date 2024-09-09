@@ -25,7 +25,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.format.mldoc :as mldoc]
-            [frontend.util.drawer :as drawer]
+            [frontend.util.file-based.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [logseq.graph-parser.property :as gp-property]
             [logseq.common.util.page-ref :as page-ref]

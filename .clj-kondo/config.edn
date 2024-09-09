@@ -134,8 +134,8 @@
              frontend.test.helper test-helper
              frontend.ui ui
              frontend.util util
-             frontend.util.clock clock
-             frontend.util.drawer drawer
+             frontend.util.file-based.clock clock
+             frontend.util.file-based.drawer drawer
              frontend.util.page page-util
              frontend.util.property property
              frontend.util.persist-var persist-var

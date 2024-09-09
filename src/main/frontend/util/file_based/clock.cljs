@@ -1,7 +1,7 @@
-(ns frontend.util.clock
+(ns frontend.util.file-based.clock
   "Provides clock related functionality used by tasks"
   (:require [frontend.state :as state]
-            [frontend.util.drawer :as drawer]
+            [frontend.util.file-based.drawer :as drawer]
             [frontend.util :as util]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]

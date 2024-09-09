@@ -1,4 +1,4 @@
-(ns ^:no-doc frontend.util.drawer
+(ns ^:no-doc frontend.util.file-based.drawer
   (:require [clojure.string :as string]
             [frontend.util :as util]
             [frontend.format.mldoc :as mldoc]

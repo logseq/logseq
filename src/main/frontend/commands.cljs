@@ -12,7 +12,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.util.priority :as priority]
+            [frontend.util.file-based.priority :as priority]
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.property.file :as property-file]

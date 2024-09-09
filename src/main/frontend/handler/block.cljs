@@ -13,7 +13,7 @@
    [logseq.outliner.op]
    [frontend.state :as state]
    [frontend.util :as util]
-   [frontend.util.drawer :as drawer]
+   [frontend.util.file-based.drawer :as drawer]
    [goog.dom :as gdom]
    [logseq.graph-parser.block :as gp-block]
    [logseq.db.sqlite.util :as sqlite-util]
