@@ -456,8 +456,7 @@ a.tag {
   color: var(--lx-accent-11, var(--ls-tag-text-color, hsl(var(--primary))));
 
   &:hover {
-    opacity: var(--ls-tag-text-hover-opacity, 1);
-    text-decoration: underline;
+    opacity: var(--ls-tag-text-hover-opasxcity, 1);
   }
 
   &[data-ref] + &[data-ref] {

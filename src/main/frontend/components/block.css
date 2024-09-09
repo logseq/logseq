@@ -880,11 +880,16 @@ html.is-mac {
 }
 
 .block-tags {
-    @apply flex flex-row flex-wrap self-start items-center gap-1;
+    @apply flex flex-row flex-wrap self-start items-center gap-2;
+    min-height: 24px;
     max-width: 256px;
 }
 .block-tag a.tag {
     @apply flex text-sm items-center opacity-70;
+}
+
+.block-tag a.tag:hover {
+    @apply opacity-100;
 }
 .block-tag span {
     @apply whitespace-nowrap overflow-hidden;

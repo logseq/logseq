@@ -91,7 +91,8 @@
             [frontend.db.async :as db-async]
             [logseq.db.frontend.content :as db-content]
             [logseq.db :as ldb]
-            [frontend.components.title :as title]))
+            [frontend.components.title :as title]
+            [frontend.modules.shortcut.utils :as shortcut-utils]))
 
 ;; local state
 (defonce *dragging?
@@ -512,7 +513,6 @@
 
 (defn open-page-ref
   [config page-entity e page-name contents-page?]
-  (util/stop e)
   (when (not (util/right-click? e))
     (let [page (or (first (:block/_alias page-entity)) page-entity)]
       (cond
@@ -531,9 +531,13 @@
         (nil? page)
         (state/pub-event! [:page/create page-name])
 
+        (and (fn? (:on-pointer-down config))
+             (not (or (= (.-button e) 1) (.-metaKey e) (.-ctrlKey e))))
+        ((:on-pointer-down config) e)
+
         :else
         (-> (or (:on-redirect-to-page config) route-handler/redirect-to-page!)
-          (apply [(:block/uuid page)])))))
+            (apply [(:block/uuid page)])))))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
@@ -547,7 +551,11 @@
    page-name-in-block is the overridable name of the page (legacy)
 
    All page-names are sanitized except page-name-in-block"
-  [state {:keys [contents-page? whiteboard-page? html-export? meta-click? show-unique-title?] :as config} page-entity children label]
+  [state
+   {:keys [contents-page? whiteboard-page? html-export? meta-click? show-unique-title? stop-click-event?]
+    :or {stop-click-event? true}
+    :as config}
+   page-entity children label]
   (let [*hover? (::hover? state)
         *mouse-down? (::mouse-down? state)
         tag? (:tag? config)
@@ -555,24 +563,20 @@
                     (util/page-name-sanity-lc (:block/title page-entity)))
         breadcrumb? (:breadcrumb? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
-        untitled? (when page-name (model/untitled-page? (:block/title page-entity)))
-        display-close-button? (and (not (:hide-close-button? config))
-                                   (not config/publishing?))]
+        untitled? (when page-name (model/untitled-page? (:block/title page-entity)))]
     [:a.relative
      {:tabIndex "0"
       :class (cond->
               (if tag? "tag" "page-ref")
                (:property? config) (str " page-property-key block-property")
-               untitled? (str " opacity-50")
-               (not display-close-button?) (str " pl-0")
-               (and tag? display-close-button?) (str " pl-4"))
+               untitled? (str " opacity-50"))
       :data-ref page-name
       :draggable true
       :on-drag-start (fn [e]
                        (editor-handler/block->data-transfer! page-name e true))
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-leave #(reset! *hover? false)
-      :on-click (fn [e] (when-not meta-click? (util/stop e)))
+      :on-click (fn [e] (when stop-click-event? (util/stop e)))
       :on-pointer-down (fn [e]
                          (cond
                            (and meta-click? (util/meta-key? e))
@@ -586,12 +590,13 @@
 
                            :else
                            (do
-                             (util/stop e)
+                             (.preventDefault e)
                              (reset! *mouse-down? true))))
       :on-pointer-up (fn [e]
                        (when @*mouse-down?
                          (state/clear-edit!)
-                         (open-page-ref config page-entity e page-name contents-page?)
+                         (when-not (:disable-click? config)
+                           (open-page-ref config page-entity e page-name contents-page?))
                          (reset! *mouse-down? false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not meta-click?))
                            (state/clear-edit!)
@@ -642,23 +647,7 @@
               s
               (let [inline-list (gp-mldoc/inline->edn (first (string/split-lines s))
                                                       (mldoc/get-default-config (get page-entity :block/format :markdown)))]
-                (->elem :span (map-inline config inline-list)))))))]
-     (let [repo (state/get-current-repo)
-           block-id (:block/uuid config)
-           block (when block-id (db/entity [:block/uuid block-id]))]
-       (when (and block tag? @*hover? (config/db-based-graph? repo)
-                  display-close-button?)
-         [:a.close.fade-in
-          {:class "absolute left-0"
-           :style {:top "0.15rem"}
-           :title "Remove this tag"
-           :on-pointer-down
-           (fn [e]
-             (util/stop e)
-             (db-property-handler/delete-property-value! (:db/id block)
-                                                         :block/tags
-                                                         (:db/id page-entity)))}
-          (ui/icon "x" {:size 15})]))]))
+                (->elem :span (map-inline config inline-list)))))))]]))
 
 (rum/defc popup-preview-impl
   [children {:keys [*timer *timer1 visible? set-visible! render *el-popup]}]
@@ -1734,9 +1723,7 @@
     ["Tag" _]
     (when-let [s (gp-block/get-tag item)]
       (let [s (text/page-ref-un-brackets! s)]
-        (page-cp (assoc config
-                        :tag? true
-                        :hide-close-button? true) {:block/name s})))
+        (page-cp (assoc config :tag? true) {:block/name s})))
 
     ["Emphasis" [[kind] data]]
     (emphasis-cp config kind data)
@@ -2402,15 +2389,67 @@
                       (:block/tags block)
                       (remove (fn [t]
                                 (or (ldb/inline-tag? (:block/raw-title block) t)
-                                    (:logseq.property.class/hide-from-node t)))))]
+                                    (:logseq.property.class/hide-from-node t)))))
+          popup-opts {:align :end
+                      :content-props {:on-click shui/popup-hide!
+                                      :class "w-60"}}
+          tags-count (count block-tags)]
       (when (seq block-tags)
-        [:div.block-tags
-         (for [tag block-tags]
-           [:div.block-tag
-            {:key (str "tag-" (:db/id tag))}
-            (page-cp (assoc config
-                            :tag? true
-                            :disable-preview? true) tag)])]))))
+        (if (< tags-count 3)
+          [:div.block-tags
+           (for [tag block-tags]
+             [:div.block-tag
+              {:key (str "tag-" (:db/id tag))}
+              (page-cp (assoc config
+                              :tag? true
+                              :disable-preview? true
+                              :on-pointer-down
+                              (fn [e]
+                                (shui/popup-show! e
+                                                  (fn []
+                                                    [:<>
+                                                     (shui/dropdown-menu-item
+                                                      {:key "Go to tag"
+                                                       :on-click #(route-handler/redirect-to-page! (:block/uuid tag))}
+                                                      (str "Go to #" (:block/title tag))
+                                                      (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "mod+click")))
+                                                     (shui/dropdown-menu-item
+                                                      {:key "Open tag in sidebar"
+                                                       :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
+                                                      "Open tag in sidebar"
+                                                      (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))
+                                                     (shui/dropdown-menu-item
+                                                      {:key "Remove tag"
+                                                       :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
+                                                      "Remove tag")])
+                                                  popup-opts))) tag)])]
+          [:div.block-tags.cursor-pointer
+           {:on-pointer-down (fn [e]
+                               (shui/popup-show! e
+                                                 (fn []
+                                                   (for [tag block-tags]
+                                                     [:div.flex.flex-row.items-center.gap-1
+                                                      (shui/button
+                                                       {:title "Remove tag"
+                                                        :variant :ghost
+                                                        :class "!p-1 text-muted-foreground"
+                                                        :size :sm
+                                                        :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
+                                                       (ui/icon "X" {:size 14}))
+                                                      (page-cp (assoc config
+                                                                      :tag? true
+                                                                      :disable-preview? true
+                                                                      :stop-click-event? false) tag)]))
+                                                 popup-opts))}
+           (for [tag (take 2 block-tags)]
+             [:div.block-tag
+              {:key (str "tag-" (:db/id tag))}
+              (page-cp (assoc config
+                              :tag? true
+                              :disable-preview? true
+                              :disable-click? true) tag)])
+           [:div.text-sm.opacity-50
+            (str "+" (- tags-count 2))]])))))
 
 (rum/defc block-positioned-properties
   [config block position]
