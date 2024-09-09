@@ -79,7 +79,9 @@
                            (str error)]))]
            (util/hiccup-keywordize result))
 
-         (and (config/db-based-graph? (state/get-current-repo)) (or page-list? only-blocks? blocks-grouped-by-page? table?))
+         (and (config/db-based-graph? (state/get-current-repo))
+              (not (:built-in? config))
+              (or page-list? only-blocks? blocks-grouped-by-page? table?))
          (query-view/query-result config current-block result)
 
          (or page-list? table?)
@@ -149,6 +151,7 @@
   (let [*query-error (:query-error state)
         *fulltext-query-result (:fulltext-query-result state)
         built-in? (built-in-custom-query? title)
+        config (assoc config :built-in? built-in?)
         dsl-query? (:dsl-query? config)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
