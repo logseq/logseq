@@ -41,7 +41,7 @@
 (rum/defc class-objects-inner < rum/static
   [config class objects properties]
   (let [[loading? set-loading?] (rum/use-state nil)
-        [view-entity set-view-entity!] (rum/use-state nil)
+        [view-entity set-view-entity!] (rum/use-state class)
         [data set-data!] (rum/use-state objects)
         columns (views/build-columns config properties)]
 
@@ -126,7 +126,7 @@
 
 (rum/defc property-related-objects-inner < rum/static
   [config property objects properties]
-  (let [[loading? set-loading?] (rum/use-state nil)
+  (let [[loading? set-loading?] (rum/use-state property)
         [view-entity set-view-entity!] (rum/use-state nil)
         [data set-data!] (rum/use-state objects)
         columns (views/build-columns config properties)]
