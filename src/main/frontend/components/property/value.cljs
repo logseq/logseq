@@ -257,7 +257,6 @@
           (when-let [page-cp (state/get-component :block/page-cp)]
             (rum/with-key
               (page-cp {:disable-preview? true
-                        :hide-close-button? true
                         :meta-click? other-position?} page)
               (:db/id page)))
           (when-not multiple-values?
@@ -672,7 +671,6 @@
               (ldb/page? v-block)
               (rum/with-key
                 (page-cp {:disable-preview? true
-                          :hide-close-button? true
                           :tag? class?} v-block)
                 (:db/id v-block))
               :else
@@ -731,7 +729,6 @@
          (rum/with-key
            (page-cp {:disable-preview? true
                      :tag? tag?
-                     :hide-close-button? true
                      :meta-click? other-position?} value)
            (:db/id value)))
 
