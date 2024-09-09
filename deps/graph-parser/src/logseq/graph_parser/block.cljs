@@ -419,7 +419,7 @@
                                (when-not macro?
                                  (let [m (page-name->map item db true date-formatter {:class? tag?})
                                        result (cond->> m
-                                                (and tag? (not (:db/ident m)))
+                                                (and db-based? tag? (not (:db/ident m)))
                                                 (db-class/build-new-class db))
                                        page-name (:block/name result)
                                        id (get @*name->id page-name)]
