@@ -45,7 +45,8 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.property.util :as pu]
             [datascript.impl.entity :as de]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.outliner.core :as outliner-core]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
@@ -144,7 +145,7 @@
                         :else
                         (:block/uuid (db/get-page page-uuid-or-old-name)))
             result (ui-outliner-tx/transact!
-                       {:outliner-op :rename-page}
+                    {:outliner-op :rename-page}
                     (outliner-op/rename-page! page-uuid new-name))
             result' (ldb/read-transit-str result)]
       (case (if (string? result') (keyword result') result')
@@ -313,13 +314,31 @@
     (let [current-selected (util/get-selected-text)]
       (cursor/move-cursor-forward input (+ 2 (count current-selected))))))
 
-(defn add-tag [repo block-id tag-entity]
-  (let [tx-data [[:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
+(defn- valid-tag?
+  "Returns a boolean indicating whether the new tag passes all valid checks.
+   When returning false, this fn also displays appropriate notifications to the user"
+  [repo block tag-entity]
+  (try
+    (outliner-core/validate-unique-by-name-tag-and-block-type
+     (db/get-db repo)
+     (:block/title block)
+     (update block :block/tags (fnil conj #{}) tag-entity))
+    true
+    (catch :default e
+      (if (= :notification (:type (ex-data e)))
+        (let [payload (:payload (ex-data e))]
+          (notification/show! (:message payload) (:type payload))
+          false)
+        (throw e)))))
+
+(defn add-tag [repo {block-id :block/uuid :as block} tag-entity]
+  (when (valid-tag? repo block tag-entity)
+   (let [tx-data [[:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
                  ;; TODO: Move this to outliner.core to consistently add refs for tags
-                 [:db/add [:block/uuid block-id] :block/refs (:db/id tag-entity)]]]
-    (ui-outliner-tx/transact! {:outliner-op :save-block}
-      (editor-handler/save-current-block!)
-      (db/transact! repo tx-data {:outliner-op :save-block}))))
+                  [:db/add [:block/uuid block-id] :block/refs (:db/id tag-entity)]]]
+     (ui-outliner-tx/transact! {:outliner-op :save-block}
+                               (editor-handler/save-current-block!)
+                               (db/transact! repo tx-data {:outliner-op :save-block})))))
 
 (defn- tag-on-chosen-handler
   [input id pos format current-pos edit-content q db-based?]
@@ -375,8 +394,8 @@
                        nearest-node (some-> (editor-handler/get-nearest-page) string/trim)]
                    (if (and add-tag-to-nearest-node? (not (string/blank? nearest-node)))
                      (when-let [e (db/get-page nearest-node)]
-                       (add-tag (state/get-current-repo) (:block/uuid e) tag-entity))
-                     (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity))))))))
+                       (add-tag (state/get-current-repo) e tag-entity))
+                     (add-tag (state/get-current-repo) edit-block tag-entity))))))))
 
        (when input (.focus input))))))
 
