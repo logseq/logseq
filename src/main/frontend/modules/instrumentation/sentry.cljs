@@ -8,6 +8,8 @@
 
 (goog-define SENTRY-DSN "")
 
+(prn :debug :dsn SENTRY-DSN)
+
 (def config
   {:dsn SENTRY-DSN
    :release (util/format "logseq%s@%s" (cond
