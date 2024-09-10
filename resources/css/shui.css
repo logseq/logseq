@@ -365,18 +365,18 @@ div[data-radix-popper-content-wrapper] {
 
       button[name=previous-month] {
         @apply relative;
+        svg {
+          width: 14px;
+          height: 14px;
+        }
       }
 
       button[name=next-month] {
         @apply relative;
-      }
-    }
-
-    .months-years-nav {
-      @apply flex items-center relative left-0 pr-0 py-[1px] font-[500] -left-1;
-
-      input {
-        @apply border-none pl-1.5 ml-0 mr-2 bg-transparent;
+        svg {
+            width: 14px;
+            height: 14px;
+        }
       }
     }
   }

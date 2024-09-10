@@ -1142,39 +1142,32 @@
   (some->> n (nth month-values)
     (name)))
 
-(rum/defc DateMonthsPicker
-  [value on-select]
-  [:div.ls-months-picker
-   (for [[idx m] (medley/indexed month-values)
-         :let [m' (cljs.core/name m)]]
-     (shui/button {:on-click (fn []
-                               (let [^js e (js/Event. "change")]
-                                 (js/Object.defineProperty e "target"
-                                   #js {:value #js {:value idx} :enumerable true})
-                                 (on-select e)
-                                 (shui/popup-hide!)))
-                   :variant :secondary
-                   :class (when (= idx value) "current")}
-       m'))])
-
-(rum/defc DateNavSelect
+(rum/defc date-year-month-select
   [{:keys [name value onChange _children]}]
   [:div.months-years-nav
    (if (= name "years")
-     [:label [:input.py-0.px-1.w-auto
-              {:type "number" :value value :on-change onChange :min 1 :max 9999}]]
+     (shui/input
+      {:on-change (fn [v] (when v (onChange v)))
+       :class "h-6 ml-2"
+       :value value
+       :type "number"
+       :min 1
+       :max 9999})
 
-     ;; months
-     ;[:select {:on-change onChange :value value :data-month value} children]
-     [:span.cursor-pointer.pr-1.pl-2.active:opacity-80.select-none
-      {:on-click (fn [^js e]
-                   (shui/popup-show! (.-target e)
-                     (fn []
-                       (DateMonthsPicker value onChange))
-                     {:align "start"
-                      :content-props {:class "w-[220px]"
-                                      :onOpenAutoFocus #(.preventDefault %)}}))}
-      (get-month-label value)])])
+     (shui/select
+      {:on-value-change (fn [v] (when v (onChange v)))}
+      (shui/select-trigger
+       {:as-child true}
+       (shui/button {:variant :ghost
+                     :class "!px-2 !py-0 h-6"
+                     :size :sm}
+         (get-month-label value)))
+      (shui/select-content
+       (shui/select-group
+        (for [month month-values]
+          (shui/select-item
+           {:value month}
+           (clojure.core/name month)))))))])
 
 (defn single-calendar
   [{:keys [del-btn? on-delete on-select on-day-click] :as opts}]
@@ -1184,7 +1177,7 @@
      :caption-layout "dropdown-buttons"
      :fromYear 1899
      :toYear 2099
-     :components (cond-> {:Dropdown #(DateNavSelect (bean/bean %))}
+     :components (cond-> {:Dropdown #(date-year-month-select (bean/bean %))}
                    del-btn? (assoc :Head #(DelDateButton on-delete)))
      :class-names {:months "" :root (when del-btn? "has-del-btn")}
      :on-day-key-down (fn [^js d _ ^js e]
