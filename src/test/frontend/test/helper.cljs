@@ -7,7 +7,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.page :as page-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
             [datascript.core :as d]
             [logseq.graph-parser.text :as text]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -236,7 +236,7 @@ This can be called in synchronous contexts as no async fns should be invoked"
   [repo block-uuid content {:keys [tags]}]
   (editor-handler/save-block! repo block-uuid content)
   (doseq [tag tags]
-    (page-handler/add-tag repo block-uuid (db/get-page tag))))
+    (db-page-handler/add-tag repo block-uuid (db/get-page tag))))
 
 (defn create-page!
   [title & {:as opts}]
