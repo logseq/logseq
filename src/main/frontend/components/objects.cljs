@@ -42,7 +42,7 @@
 
 (defn- create-view!
   [class view-title views set-view-entity! set-views!]
-  (when-let [page (db/get-page common-config/views-page-name)]
+  (when-let [page (db/get-case-page common-config/views-page-name)]
     (p/let [result (editor-handler/api-insert-new-block! view-title {:page (:block/uuid page)
                                                                      :properties {:logseq.property/view-for (:db/id class)}})
             view (db/entity [:block/uuid (:block/uuid result)])]
