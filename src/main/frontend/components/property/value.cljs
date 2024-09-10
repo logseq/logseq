@@ -11,6 +11,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
@@ -309,12 +310,12 @@
                                     ;; one of and not all these classes
                                     (mapv :block/uuid (take 1 classes)))}]
         (p/let [page (if class?
-                       (page-handler/<create-class! page create-options)
+                       (db-page-handler/<create-class! page create-options)
                        (page-handler/<create! page create-options))]
           (:db/id page)))
 
       (and class? page? id)
-      (p/let [_ (page-handler/convert-to-tag! page-entity)]
+      (p/let [_ (db-page-handler/convert-to-tag! page-entity)]
         id)
 
       :else

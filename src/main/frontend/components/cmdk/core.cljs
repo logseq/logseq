@@ -16,6 +16,7 @@
    [frontend.handler.whiteboard :as whiteboard-handler]
    [frontend.handler.notification :as notification]
    [frontend.modules.shortcut.core :as shortcut]
+   [frontend.handler.db-based.page :as db-page-handler]
    [frontend.search :as search]
    [frontend.state :as state]
    [frontend.ui :as ui]
@@ -491,9 +492,9 @@
     (p/do!
       (cond
         create-class?
-        (page-handler/<create-class! class
-                                     {:redirect? false
-                                      :create-first-block? false})
+        (db-page-handler/<create-class! class
+                                        {:redirect? false
+                                         :create-first-block? false})
         create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
         create-page? (page-handler/<create! @!input {:redirect? true}))
       (state/close-modal!)
