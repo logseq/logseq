@@ -438,10 +438,15 @@
                                      (let [title (subs (title/block-unique-title node) 0 256)
                                            node (or (db/entity id) node)
                                            icon (get-node-icon node)]
-                                       [:div.flex.flex-row.items-center.gap-1
-                                        (when-not (:property/schema.classes property)
-                                          (ui/icon icon {:size 14}))
-                                        [:div title]])
+                                       [:div.flex.flex-col
+                                        (when-not (db/page? node)
+                                          (when-let [breadcrumb (state/get-component :block/breadcrumb)]
+                                            [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
+                                             (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
+                                        [:div.flex.flex-row.items-center.gap-1
+                                         (when-not (:property/schema.classes property)
+                                           (ui/icon icon {:size 14}))
+                                         [:div title]]])
                                      (or (:label node) (:block/title node)))]
                          (assoc node
                                 :label-value (:block/title node)

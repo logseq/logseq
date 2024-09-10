@@ -171,30 +171,35 @@
                         (let [block (if (:block/uuid block)
                                       (db/entity [:block/uuid (:block/uuid block)])
                                       block)]
-                          [:div.flex.flex-row.items-center.gap-1
-                           (when-not db-tag?
-                             (cond
-                               (ldb/class? block)
-                               [:div (ui/icon "hash" {:size 14})]
-                               (ldb/property? block)
-                               [:div (ui/icon "letter-p" {:size 14})]
-                               (db-model/whiteboard-page? block)
-                               [:div (ui/icon "whiteboard" {:extension? true})]
-                               (db/page? block)
-                               [:div (ui/icon "page" {:extension? true})]
-                               (or (string/starts-with? (str (:block/title block)) (t :new-tag))
-                                   (string/starts-with? (str (:block/title block)) (t :new-page)))
-                               nil
-                               :else
-                               [:div (ui/icon "letter-n" {:size 14})]))
+                          [:div.flex.flex-col
+                           (when-not (db/page? block)
+                             (when-let [breadcrumb (state/get-component :block/breadcrumb)]
+                               [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
+                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
+                           [:div.flex.flex-row.items-center.gap-1
+                            (when-not db-tag?
+                              (cond
+                                (ldb/class? block)
+                                [:div (ui/icon "hash" {:size 14})]
+                                (ldb/property? block)
+                                [:div (ui/icon "letter-p" {:size 14})]
+                                (db-model/whiteboard-page? block)
+                                [:div (ui/icon "whiteboard" {:extension? true})]
+                                (db/page? block)
+                                [:div (ui/icon "page" {:extension? true})]
+                                (or (string/starts-with? (str (:block/title block)) (t :new-tag))
+                                    (string/starts-with? (str (:block/title block)) (t :new-page)))
+                                nil
+                                :else
+                                [:div (ui/icon "letter-n" {:size 14})]))
 
-                           (let [title (if db-tag?
-                                         (let [target (first (:block/_alias block))]
-                                           (if (ldb/class? target)
-                                             (str (:block/title block) " -> alias: " (:block/title target))
-                                             (:block/title block)))
-                                         (title/block-unique-title block))]
-                             (search-handler/highlight-exact-query title q))]))
+                            (let [title (if db-tag?
+                                          (let [target (first (:block/_alias block))]
+                                            (if (ldb/class? target)
+                                              (str (:block/title block) " -> alias: " (:block/title target))
+                                              (:block/title block)))
+                                          (title/block-unique-title block))]
+                              (search-handler/highlight-exact-query title q))]]))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                     "Search for a tag"
                                                                     "Search for a node")]
