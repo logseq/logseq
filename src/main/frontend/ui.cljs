@@ -1149,33 +1149,37 @@
    (if (= name "years")
      (shui/input
       {:on-change (fn [v] (when v (onChange v)))
-       :class "h-6 ml-2"
+       :class "h-6 ml-2 !w-auto !px-2"
        :value value
        :type "number"
        :min 1
        :max 9999})
 
-     (shui/select
-      {:on-value-change (fn [v] (when v (onChange v)))}
-      (shui/select-trigger
+     (shui/dropdown-menu
+      (shui/dropdown-menu-trigger
        {:as-child true}
        (shui/button {:variant :ghost
-                     :class "!px-2 !py-0 h-6"
+                     :class "!px-2 !py-0 h-6 border border-input rounded-md"
                      :size :sm}
          (get-month-label value)))
-      (shui/select-content
-       (shui/select-group
-        (for [month month-values]
-          (shui/select-item
-           {:value month}
-           (clojure.core/name month)))))))])
+      (shui/dropdown-menu-content
+        (for [[idx month] (medley/indexed month-values)
+              :let [label (clojure.core/name month)]]
+          (shui/dropdown-menu-checkbox-item
+            {:checked (= value idx)
+             :on-select (fn []
+                          (let [^js e (js/Event. "change")]
+                            (js/Object.defineProperty e "target"
+                              #js {:value #js {:value idx} :enumerable true})
+                            (onChange e)))}
+            label)))))])
 
 (defn single-calendar
   [{:keys [del-btn? on-delete on-select on-day-click] :as opts}]
   (shui/calendar
-   (merge
-    {:mode "single"
-     :caption-layout "dropdown-buttons"
+    (merge
+      {:mode "single"
+       :caption-layout "dropdown-buttons"
      :fromYear 1899
      :toYear 2099
      :components (cond-> {:Dropdown #(date-year-month-select (bean/bean %))}

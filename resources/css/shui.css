@@ -403,6 +403,12 @@ div[data-radix-popper-content-wrapper] {
   input[type=number] {
     appearance: initial;
   }
+
+  .rdp-button {
+    &[name=previous-month], &[name=next-month] {
+      @apply !h-6 !w-6;
+    }
+  }
 }
 
 .popper-arrow {
