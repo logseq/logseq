@@ -36,7 +36,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [frontend.date :as date]))
 
 (declare icon)
 
@@ -1185,6 +1186,26 @@
                           (let [on-select' (or on-select on-day-click)]
                             (on-select' d))))}
     opts)))
+
+(defn nlp-calendar
+  [opts]
+  [:div.flex.flex-col.gap-2
+   (single-calendar opts)
+   (shui/input
+    {:type "text"
+     :placeholder "e.g. Next week"
+     :class "mx-3 mb-3"
+     :style {:width "initial"
+             :tab-index -1}
+     :auto-complete (if (util/chrome?) "chrome-off" "off")
+     :on-key-down (fn [e]
+                    (when (= "Enter" (util/ekey e))
+                      (let [value (util/evalue e)]
+                        (when-not (string/blank? value)
+                          (when-let [result (date/nld-parse value)]
+                            (when-let [date (doto (goog.date.DateTime.) (.setTime (.getTime result)))]
+                              (let [on-select' (or (:on-select opts) (:on-day-click opts))]
+                                (on-select' date))))))))})])
 
 (comment
   (rum/defc emoji-picker
