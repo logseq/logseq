@@ -206,7 +206,7 @@
                  (shui/popup-hide! id)
                  (ui/hide-popups-until-preview-popup!)
                  (shui/dialog-close!))))))]
-    (ui/single-calendar
+    (ui/nlp-calendar
      (cond->
       {:initial-focus true
        :selected initial-day

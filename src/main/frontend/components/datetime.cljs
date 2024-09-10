@@ -166,7 +166,7 @@
     [:div#date-time-picker.flex.flex-col.sm:flex-row
      ;; inline container
      [:div.border-red-500
-      (ui/single-calendar
+      (ui/nlp-calendar
         {:mode "single"
          :initial-focus true
          :show-week-number false
