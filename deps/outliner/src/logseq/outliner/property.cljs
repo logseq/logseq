@@ -14,6 +14,7 @@
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.validate :as outliner-validate]
             [malli.error :as me]
             [malli.util :as mu]
             [clojure.set :as set]))
@@ -87,6 +88,9 @@
 
 (defn- update-property
   [conn db-ident property schema {:keys [property-name properties]}]
+  (when (and (some? property-name) (not= property-name (:block/title property)))
+    (outliner-validate/validate-block-title @conn property-name property))
+
   (let [changed-property-attrs
         ;; Only update property if something has changed as we are updating a timestamp
         (cond-> {}

@@ -7,7 +7,7 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.validate :as outliner-validate]
             [logseq.db.frontend.class :as db-class]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -19,7 +19,7 @@
    When returning false, this fn also displays appropriate notifications to the user"
   [repo block tag-entity]
   (try
-    (outliner-core/validate-unique-by-name-tag-and-block-type
+    (outliner-validate/validate-unique-by-name-tag-and-block-type
      (db/get-db repo)
      (:block/title block)
      (update block :block/tags (fnil conj #{}) tag-entity))
