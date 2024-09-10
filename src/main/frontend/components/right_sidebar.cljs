@@ -101,7 +101,7 @@
           page (db/entity repo lookup)]
       (if (ldb/page? page)
         [[:.flex.items-center.page-title
-          (icon/get-node-icon page {:class "text-md mr-2"})
+          (icon/get-node-icon-cp page {:class "text-md mr-2"})
           [:span.overflow-hidden.text-ellipsis (:block/title page)]]
          (page-cp repo (str (:block/uuid page)))]
         (block-with-breadcrumb repo page idx [repo db-id block-type] false)))

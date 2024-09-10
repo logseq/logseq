@@ -38,8 +38,8 @@
       item)))
 
 (defn get-node-icon
-  [node-entity opts]
-  (let [first-tag-icon (some :logseq.property/icon (:block/tags node-entity))
+  [node-entity]
+  (let [first-tag-icon (some :logseq.property/icon (sort-by :db/id (:block/tags node-entity)))
         default-icon-id (cond
                           (some? first-tag-icon)
                           first-tag-icon
@@ -52,13 +52,17 @@
                           (ldb/page? node-entity)
                           "page"
                           :else
-                          "letter-n")
-        opts' (assoc opts :size 14)
-        node-icon (or (get node-entity (pu/get-pid :logseq.property/icon))
-                    default-icon-id)]
+                          "letter-n")]
+    (or (get node-entity (pu/get-pid :logseq.property/icon))
+        default-icon-id)))
+
+(defn get-node-icon-cp
+  [node-entity opts]
+  (let [opts' (assoc opts :size 14)
+        node-icon (get-node-icon node-entity)]
     (when-not (string/blank? node-icon)
       [:span.flex (merge {:style {:color (or (:color node-icon) "inherit")}}
-                    (select-keys opts [:class]))
+                         (select-keys opts [:class]))
        (icon node-icon opts')])))
 
 (defn- search-emojis
@@ -455,7 +459,7 @@
      [initial-open?])
 
     ;; trigger
-    (let [has-icon? (not (nil? icon-value))]
+    (let [has-icon? (some? icon-value)]
       (shui/button
        {:ref *trigger-ref
         :variant (if has-icon? :ghost :text)
@@ -470,6 +474,8 @@
                                           :content-props {:class "ls-icon-picker"
                                                           :onEscapeKeyDown #(.preventDefault %)}}
                                          popup-opts))))}
-       (if has-icon?
-         (icon icon-value (merge {:color? true} icon-props))
+        (if has-icon?
+         (if (vector? icon-value)       ; hiccup
+           icon-value
+           (icon icon-value (merge {:color? true} icon-props)))
          (or empty-label "Empty"))))))
