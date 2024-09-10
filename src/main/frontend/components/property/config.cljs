@@ -25,7 +25,7 @@
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
             [frontend.db.model :as model]
-            [frontend.handler.page :as page-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
             [frontend.ui :as ui]))
 
 (defn- re-init-commands!
@@ -74,8 +74,8 @@
   (when (string? value)
     (let [page-name (string/trim value)]
       (when-not (string/blank? page-name)
-        (p/let [page (page-handler/<create-class! page-name {:redirect? false
-                                                             :create-first-block? false})]
+        (p/let [page (db-page-handler/<create-class! page-name {:redirect? false
+                                                                :create-first-block? false})]
           (:block/uuid page))))))
 
 (rum/defc class-select

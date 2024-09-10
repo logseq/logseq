@@ -8,6 +8,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
             [frontend.state :as state]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -164,7 +165,7 @@
           (when (and db-based? (= (:block/type page) "page"))
             {:title (t :page/convert-to-tag)
              :options {:on-click (fn []
-                                   (page-handler/convert-to-tag! page))}})
+                                   (db-page-handler/convert-to-tag! page))}})
 
           (when developer-mode?
             {:title   (t :dev/show-page-data)

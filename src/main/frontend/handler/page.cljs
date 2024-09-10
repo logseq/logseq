@@ -45,22 +45,10 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.property.util :as pu]
             [datascript.impl.entity :as de]
-            [logseq.db.frontend.class :as db-class]
             [frontend.handler.db-based.page :as db-page-handler]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
-
-(defn <create-class!
-  "Creates a class page and provides class-specific error handling"
-  [title options]
-  (-> (page-common-handler/<create! title (assoc options :class? true))
-      (p/catch (fn [e]
-                 (when (= :notification (:type (ex-data e)))
-                   (notification/show! (get-in (ex-data e) [:payload :message])
-                                       (get-in (ex-data e) [:payload :type])))
-                 ;; Re-throw as we don't want to proceed with a nonexistent class
-                 (throw e)))))
 
 (defn <unfavorite-page!
   [page-name]
@@ -352,25 +340,7 @@
                                         :end-pattern (when wrapped? page-ref/right-brackets)
                                         :command :page-ref})
        (when (and db-based? (not tag-in-page-auto-complete?))
-         (let [tag (string/trim chosen)
-               edit-block (state/get-edit-block)
-               create-opts {:redirect? false
-                            :create-first-block? false}]
-           (when (:block/uuid edit-block)
-             (p/let [result (when-not (de/entity? chosen-result) ; page not exists yet
-                              (if class?
-                                (<create-class! tag create-opts)
-                                (<create! tag create-opts)))]
-               (when class?
-                 (let [tag-entity (or (when (de/entity? chosen-result) chosen-result) result)
-                       hash-idx (string/last-index-of (subs edit-content 0 current-pos) last-pattern)
-                       add-tag-to-nearest-node? (= page-ref/right-brackets (common-util/safe-subs edit-content (- hash-idx 2) hash-idx))
-                       nearest-node (some-> (editor-handler/get-nearest-page) string/trim)]
-                   (if (and add-tag-to-nearest-node? (not (string/blank? nearest-node)))
-                     (when-let [e (db/get-page nearest-node)]
-                       (db-page-handler/add-tag (state/get-current-repo) (:block/uuid e) tag-entity))
-                     (db-page-handler/add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity))))))))
-
+         (db-page-handler/tag-on-chosen-handler chosen chosen-result class? edit-content current-pos last-pattern))
        (when input (.focus input))))))
 
 (defn- page-on-chosen-handler
@@ -510,12 +480,3 @@
      (util/copy-to-clipboard!
       (url-util/get-logseq-graph-page-url nil (state/get-current-repo) (str page-uuid)))
      (notification/show! "No page found to copy" :warning))))
-
-(defn convert-to-tag!
-  [page-entity]
-  (let [class (db-class/build-new-class (db/get-db)
-                                        {:db/id (:db/id page-entity)
-                                         :block/title (:block/title page-entity)
-                                         :block/created-at (:block/created-at page-entity)})]
-
-    (db/transact! (state/get-current-repo) [class] {:outliner-op :save-block})))
