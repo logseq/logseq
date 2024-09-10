@@ -22,14 +22,16 @@
 
 (defn icon
   [icon' & [opts]]
-  (when-let [item (cond
-                    (and (= :emoji (:type icon')) (:id icon'))
-                    [:em-emoji (merge {:id (:id icon')
-                                       :style {:line-height 1}}
-                                 opts)]
+  (let [icon' (if (or (string? icon') (keyword? icon'))
+                {:type :tabler-icon :id (name icon')} icon')
+        item (cond
+               (and (= :emoji (:type icon')) (:id icon'))
+               [:em-emoji (merge {:id (:id icon')
+                                  :style {:line-height 1}}
+                            opts)]
 
-                    (and (= :tabler-icon (:type icon')) (:id icon'))
-                    (ui/icon (:id icon') opts))]
+               (and (= :tabler-icon (:type icon')) (:id icon'))
+               (ui/icon (:id icon') opts))]
     (if (:color? opts)
       [:span.flex.items-center.ls-icon-color-wrap
        {:style {:color (or (some-> icon' :color) "inherit")}} item]
@@ -70,11 +72,11 @@
   (if @*tabler-icons
     @*tabler-icons
     (let [result (->> (keys (bean/->clj js/tablerIcons))
-                      (map (fn [k]
-                             (-> (string/replace (csk/->Camel_Snake_Case (name k)) "_" " ")
-                                 (string/replace-first "Icon " ""))))
-                      ;; FIXME: somehow those icons don't work
-                      (remove #{"Ab" "Ab 2" "Ab Off"}))]
+                   (map (fn [k]
+                          (-> (string/replace (csk/->Camel_Snake_Case (name k)) "_" " ")
+                            (string/replace-first "Icon " ""))))
+                   ;; FIXME: somehow those icons don't work
+                   (remove #{"Ab" "Ab 2" "Ab Off"}))]
       (reset! *tabler-icons result)
       result)))
 
