@@ -519,7 +519,7 @@
         :block/format :markdown})
       (sqlite-util/block-with-timestamps
        {:block/uuid (common-uuid/gen-uuid)
-        :block/title ""
+        :block/title "All Pages Default View"
         :block/format :markdown
         :block/parent [:block/uuid page-id]
         :block/order (db-order/gen-key nil)
