@@ -302,18 +302,6 @@ html.is-mobile {
   background: var(--lx-gray-08, rgb(212, 212, 212));
 }
 
-.ls-months-picker {
-  @apply grid grid-cols-3;
-
-  > .ui__button {
-    @apply text-xs bg-transparent;
-
-    &.current {
-      @apply bg-secondary;
-    }
-  }
-}
-
 input[type='range'] {
   accent-color: var(--lx-accent-10, var(--rx-blue-10));
 }
