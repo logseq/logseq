@@ -892,33 +892,29 @@
    filters))
 
 (defn- db-set-table-state!
-  [entity {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns! create-view!]}]
+  [entity {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns!]}]
   (let [repo (state/get-current-repo)]
     {:set-sorting!
      (fn [sorting]
        (set-sorting! sorting)
-       (p/let [entity (or entity (create-view!))]
-         (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sorting sorting)))
+       (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sorting sorting))
      :set-filters!
      (fn [filters]
        (let [filters (table-filters->persist-state filters)]
          (set-filters! filters)
-         (p/let [entity (or entity (create-view!))]
-           (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/filters filters))))
+         (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/filters filters)))
      :set-visible-columns!
      (fn [columns]
        (let [hidden-columns (vec (keep (fn [[column visible?]]
                                          (when (false? visible?)
                                            column)) columns))]
          (set-visible-columns! columns)
-         (p/let [entity (or entity (create-view!))]
-           (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/hidden-columns hidden-columns))))
+         (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/hidden-columns hidden-columns)))
      :set-ordered-columns!
      (fn [ordered-columns]
        (let [ids (vec (remove #{:select} ordered-columns))]
          (set-ordered-columns! ordered-columns)
-         (p/let [entity (or entity (create-view!))]
-           (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids))))}))
+         (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids)))}))
 
 (rum/defc table-view < rum/static
   [table option row-selection add-new-object! ready?]
@@ -963,7 +959,7 @@
                        :ref? true)))))
 
 (rum/defc view-inner < rum/static
-  [view-entity {:keys [data set-data! columns add-new-object! create-view! title-key render-empty-title?] :as option
+  [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
                 :or {render-empty-title? false}}]
   (let [[input set-input!] (rum/use-state "")
         sorting (:logseq.property.table/sorting view-entity)
@@ -978,8 +974,7 @@
         (db-set-table-state! view-entity {:set-sorting! set-sorting!
                                           :set-filters! set-filters!
                                           :set-visible-columns! set-visible-columns!
-                                          :set-ordered-columns! set-ordered-columns!
-                                          :create-view! create-view!})
+                                          :set-ordered-columns! set-ordered-columns!})
         row-filter-fn (fn []
                         (fn [row]
                           (row-matched? row input filters)))
@@ -1020,9 +1015,11 @@
      [:div.flex.flex-wrap.items-center.justify-between.gap-1
       (when-not render-empty-title?
         [:div.flex.flex-row.items-center.gap-2
-         [:div.font-medium.opacity-50.text-sm
-          (t (or title-key :views.table/default-title)
-             (count (:rows table)))]])
+         (or
+          views-title
+          [:div.font-medium.opacity-50.text-sm
+           (t (or title-key :views.table/default-title)
+              (count (:rows table)))])])
       [:div.view-actions.flex.items-center.gap-1
 
        (filter-properties columns table)

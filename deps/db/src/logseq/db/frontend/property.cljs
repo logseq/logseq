@@ -219,7 +219,7 @@
                                             :hide? true
                                             :public? false}}
    :logseq.property/view-for {:schema
-                              {:type :keyword
+                              {:type :node
                                :hide? true
                                :public? false}}
    :logseq.property.asset/remote-metadata {:schema
