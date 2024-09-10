@@ -1896,10 +1896,6 @@
 
      (every? #(= % ["Horizontal_Rule"]) ast-body))))
 
-(defn- get-block-icon
-  [block]
-  (some :logseq.property/icon (cons block (:block/tags block))))
-
 (rum/defcs block-control < rum/reactive
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected?]}]
   (let [doc-mode?          (state/sub :document/mode?)
@@ -1953,15 +1949,14 @@
                                      " hide-inner-bullet")
                                    (when order-list? " as-order-list typed-list"))}
 
-                      (let [icon (get-block-icon block)
-                            page? (db/page? block)]
+                      (let [icon (icon-component/get-node-icon-cp block {:size 16 :color? true})]
                         (cond
-                          link?
-                          (ui/icon "link" {:size 15})
-                          page?
-                          (ui/icon "page" {:size 15})
+                          (and (some? icon)
+                               (or (db/page? block)
+                                   (:logseq.property/icon block)
+                                   link?))
                           icon
-                          (icon-component/icon icon {:size 16 :color? true})
+
                           :else
                           [:span.bullet (cond->
                                          {:blockid (str uuid)}
@@ -3170,8 +3165,9 @@
         (when (and @*show-left-menu? (not in-whiteboard?) (not table?))
           (block-left-menu config block))
 
-        (let [icon' (get block (pu/get-pid :logseq.property/icon))]
-          (when-let [icon (and (ldb/page? block)
+        (when (:page-title? config)
+          (let [icon' (get block (pu/get-pid :logseq.property/icon))]
+            (when-let [icon (and (ldb/page? block)
                                (or icon'
                                    (some :logseq.property/icon (:block/tags block))
                                    (when (ldb/class? block)
@@ -3180,7 +3176,7 @@
                                    (when (ldb/property? block)
                                          {:type :tabler-icon
                                           :id "letter-p"})))]
-            [:div.ls-page-icon.flex.self-start
+            [:div.ls-page-icon.flex.self-start3
              (icon-component/icon-picker icon
                                          {:on-chosen (fn [_e icon]
                                                        (if icon
@@ -3195,7 +3191,7 @@
                                           :del-btn? (boolean icon')
                                           :icon-props {:style {:width "1lh"
                                                                :height "1lh"
-                                                               :font-size (if (:page-title? config) 38 18)}}})]))
+                                                               :font-size (if (:page-title? config) 38 18)}}})])))
 
         (if whiteboard-block?
           (block-reference {} (str uuid) nil)
