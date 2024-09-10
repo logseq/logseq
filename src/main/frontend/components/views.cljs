@@ -1054,4 +1054,5 @@
 (rum/defc view < rum/reactive
   [view-entity option]
   (let [view-entity' (db/sub-block (:db/id view-entity))]
-    (view-inner view-entity' option)))
+    (rum/with-key (view-inner view-entity' option)
+      (str "view-" (:db/id view-entity')))))
