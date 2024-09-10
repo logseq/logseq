@@ -1177,20 +1177,21 @@
       (get-month-label value)])])
 
 (defn single-calendar
-  [{:keys [del-btn? on-delete on-select] :as opts}]
+  [{:keys [del-btn? on-delete on-select on-day-click] :as opts}]
   (shui/calendar
-    (merge
-      {:mode "single"
-       :caption-layout "dropdown-buttons"
-       :fromYear 1899
-       :toYear 2099
-       :components (cond-> {:Dropdown #(DateNavSelect (bean/bean %))}
-                     del-btn? (assoc :Head #(DelDateButton on-delete)))
-       :class-names {:months "" :root (when del-btn? "has-del-btn")}
-       :on-day-key-down (fn [^js d _ ^js e]
-                          (when (= "Enter" (.-key e))
-                            (on-select d)))}
-      opts)))
+   (merge
+    {:mode "single"
+     :caption-layout "dropdown-buttons"
+     :fromYear 1899
+     :toYear 2099
+     :components (cond-> {:Dropdown #(DateNavSelect (bean/bean %))}
+                   del-btn? (assoc :Head #(DelDateButton on-delete)))
+     :class-names {:months "" :root (when del-btn? "has-del-btn")}
+     :on-day-key-down (fn [^js d _ ^js e]
+                        (when (= "Enter" (.-key e))
+                          (let [on-select' (or on-select on-day-click)]
+                            (on-select' d))))}
+    opts)))
 
 (comment
   (rum/defc emoji-picker
