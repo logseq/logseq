@@ -577,13 +577,13 @@
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-leave #(reset! *hover? false)
       :on-click (fn [e] (when stop-click-event? (util/stop e)))
-      :on-pointer-down (fn [e]
+      :on-pointer-down (fn [^js e]
                          (cond
                            (and meta-click? (util/meta-key? e))
                            (reset! *mouse-down? true)
 
                            (and meta-click? (not (util/shift-key? e)))
-                           nil
+                           (some-> (.-target e) (.closest ".jtrigger") (.click))
 
                            breadcrumb?
                            (.preventDefault e)

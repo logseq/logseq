@@ -259,8 +259,7 @@
               (page-cp {:disable-preview? true
                         :meta-click? other-position?} page)
               (:db/id page)))
-          (when-not multiple-values?
-            (property-empty-btn-value nil)))))))
+          (property-empty-btn-value nil))))))
 
 (rum/defc property-value-date-picker
   [block property value opts]
@@ -273,7 +272,7 @@
                       (property-handler/set-block-property! repo (:block/uuid block)
                         (:db/ident property)
                         (:db/id page)))
-         :del-btn? true
+         :del-btn? (not value)
          :on-delete (fn []
                       (property-handler/set-block-property! repo (:block/uuid block)
                         (:db/ident property) nil)
@@ -859,8 +858,7 @@
                                               (add-property!)))})])
           ;; :others
           [:div.flex.flex-1
-           (property-value-inner block property value opts)]
-          )))))
+           (property-value-inner block property value opts)])))))
 
 (rum/defc multiple-values-inner
   [block property v {:keys [on-chosen editing?] :as opts} schema]
@@ -969,10 +967,10 @@
 
                      :else
                      (let [value-cp (property-scalar-value block property v
-                                                           (merge
-                                                            opts
-                                                            {:editor-id editor-id
-                                                             :dom-id dom-id}))
+                                      (merge
+                                        opts
+                                        {:editor-id editor-id
+                                         :dom-id dom-id}))
                            parent? (= (:db/ident property) :logseq.property/parent)
                            page-ancestors (when parent?
                                             (let [ancestor-pages (loop [parents [block]]
