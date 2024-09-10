@@ -1,4 +1,5 @@
 (ns frontend.handler.db-based.page
+  "DB graph only page util fns"
   (:require [clojure.string :as string]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
