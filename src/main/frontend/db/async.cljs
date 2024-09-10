@@ -280,8 +280,7 @@
       '[:find [(pull ?b [*]) ...]
         :in $ ?class-id
         :where
-        [?class-id :db/ident ?ident]
-        [?b :logseq.property/view-for ?ident]]
+        [?b :logseq.property/view-for ?class-id]]
       class-id))
 
 (defn <get-tags

@@ -8,7 +8,8 @@
             [logseq.db.frontend.schema :as db-schema]
             [frontend.worker.search :as search]
             [cljs-bean.core :as bean]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.config :as common-config]))
 
 ;; TODO: fixes/rollback
 
@@ -171,6 +172,24 @@
                                                :public? true
                                                :classes #{:logseq.class/Root}}]]))))
 
+(defn- fix-view-for
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [datoms (d/datoms db :avet :logseq.property/view-for)
+            e (d/entity db :logseq.property/view-for)
+            fix-schema [:db/add (:db/id e) :block/schema {:type :node
+                                                          :hide? true
+                                                          :public? false}]
+            fix-data (map
+                      (fn [d]
+                        (let [id (if (= :all-pages (:v d))
+                                   (:db/id (ldb/get-case-page db common-config/views-page-name))
+                                   (:db/id (d/entity db (:v d))))]
+                          [:db/add (:e d) :logseq.property/view-for id]))
+                      datoms)]
+        (cons fix-schema fix-data)))))
+
 (defn- add-addresses-in-kvs-table
   [^Object sqlite-db]
   (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
@@ -230,7 +249,8 @@
    [16 {:properties [:logseq.property.class/hide-from-node]}]
    [17 {:fix update-db-attrs-type}]
    [18 {:properties [:logseq.property.view/type]}]
-   [19 {:classes [:logseq.class/Query]}]])
+   [19 {:classes [:logseq.class/Query]}]
+   [20 {:fix fix-view-for}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

@@ -524,7 +524,7 @@
         :block/parent [:block/uuid page-id]
         :block/order (db-order/gen-key nil)
         :block/page [:block/uuid page-id]
-        :logseq.property/view-for :all-pages})])))
+        :logseq.property/view-for [:block/uuid page-id]})])))
 
 ;; TODO: why not generate a UUID for all local graphs?
 ;; And prefer this local graph UUID when picking an ID for new rtc graph?
@@ -588,8 +588,7 @@
   [db]
   (when (db-based-graph? db)
     (when-let [page (get-page db common-config/views-page-name)]
-      (->> (:block/_parent page)
-           (filter (fn [b] (= :all-pages (:logseq.property/view-for b))))))))
+      (:logseq.property/_view-for page))))
 
 (defn inline-tag?
   [block-raw-title tag]
