@@ -211,7 +211,7 @@
       {:initial-focus true
        :selected initial-day
        :id @*ident
-       :on-select select-handler!}
+       :on-day-click select-handler!}
        initial-month
        (assoc :default-month initial-month)))))
 
@@ -719,10 +719,10 @@
                 ;; support this case and maybe other complex cases.
                 (not (string/includes? (:block/title value) "[["))))
        (when value
-         (rum/with-key
-           (page-cp {:disable-preview? true
-                     :tag? tag?
-                     :meta-click? other-position?} value)
+          (rum/with-key
+            (page-cp {:disable-preview? true
+                      :tag? tag?
+                      :meta-click? other-position?} value)
            (:db/id value)))
 
        (contains? #{:node :class :property :page} type)
@@ -859,7 +859,8 @@
                                               (add-property!)))})])
           ;; :others
           [:div.flex.flex-1
-           (property-value-inner block property value opts)])))))
+           (property-value-inner block property value opts)]
+          )))))
 
 (rum/defc multiple-values-inner
   [block property v {:keys [on-chosen editing?] :as opts} schema]
