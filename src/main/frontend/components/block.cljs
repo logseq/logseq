@@ -1961,7 +1961,7 @@
                           page?
                           (ui/icon "page" {:size 15})
                           icon
-                          (icon-component/icon icon {:size 16})
+                          (icon-component/icon icon {:size 16 :color? true})
                           :else
                           [:span.bullet (cond->
                                          {:blockid (str uuid)}

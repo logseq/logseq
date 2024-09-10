@@ -22,14 +22,18 @@
 
 (defn icon
   [icon' & [opts]]
-  (cond
-    (and (= :emoji (:type icon')) (:id icon'))
-    [:em-emoji (merge {:id (:id icon')
-                       :style {:line-height 1}}
-                      opts)]
+  (when-let [item (cond
+                    (and (= :emoji (:type icon')) (:id icon'))
+                    [:em-emoji (merge {:id (:id icon')
+                                       :style {:line-height 1}}
+                                 opts)]
 
-    (and (= :tabler-icon (:type icon')) (:id icon'))
-    (ui/icon (:id icon') opts)))
+                    (and (= :tabler-icon (:type icon')) (:id icon'))
+                    (ui/icon (:id icon') opts))]
+    (if (:color? opts)
+      [:span.flex.items-center.ls-icon-color-wrap
+       {:style {:color (or (some-> icon' :color) "inherit")}} item]
+      item)))
 
 (defn get-node-icon
   [node-entity opts]
@@ -465,6 +469,5 @@
                                                           :onEscapeKeyDown #(.preventDefault %)}}
                                          popup-opts))))}
        (if has-icon?
-         [:span {:style {:color (or (:color icon-value) "inherit")}}
-          (icon icon-value icon-props)]
+         (icon icon-value (merge {:color? true} icon-props))
          (or empty-label "Empty"))))))
