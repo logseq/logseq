@@ -259,8 +259,7 @@
                                                 :content-props {:onEscapeKeyDown #(.preventDefault %)}}))})
               (assoc :class "flex items-center"))
           (if icon
-            [:span.flex.items-center {:style {:color (or (some-> icon :color) "inherit")}}
-             (icon-component/icon icon {:size 15})]
+            (icon-component/icon icon {:size 15 :color? true})
             (property-icon property nil)))))
 
      (if config/publishing?
