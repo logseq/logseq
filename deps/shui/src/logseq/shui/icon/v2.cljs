@@ -14,7 +14,8 @@
 (rum/defc root
   ([name] (root name nil))
   ([name {:keys [extension? font? class] :as opts}]
-   (when-not (string/blank? name)
+   (when (and (string? name)
+           (not (string/blank? name)))
      (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
        (if (or extension? font? (not jsTablerIcons))
          [:span.ui__icon (merge {:class
