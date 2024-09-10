@@ -2786,7 +2786,9 @@
            (let [args (:rum/args state)
                  block-id (nth args 2)
                  depth (:level-limit (last args))]
-             (p/let [id (:db/id (db/entity [:block/uuid block-id]))]
+             (p/let [id (:db/id (db/entity [:block/uuid block-id]))
+                     _block (db-async/<get-block (state/get-current-repo) block-id
+                                                 {:children? false})]
                (when id (db-async/<get-block-parents (state/get-current-repo) id depth)))
              state))}
   [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]

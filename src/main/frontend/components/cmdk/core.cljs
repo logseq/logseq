@@ -246,7 +246,7 @@
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text @!input)
-     :header (when-not (ldb/object? block) (block/breadcrumb {:search? true} repo id {}))
+     :header (when-not (db/page? block) (block/breadcrumb {:search? true} repo id {}))
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id (:block/uuid current-page)))
      :source-block block}))
