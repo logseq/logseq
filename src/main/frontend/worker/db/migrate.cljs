@@ -181,9 +181,9 @@
             fix-schema [:db/add (:db/id e) :block/schema {:type :node
                                                           :hide? true
                                                           :public? false}]
-            fix-data (map
+            fix-data (keep
                       (fn [d]
-                        (let [id (if (= :all-pages (:v d))
+                        (when-let [id (if (= :all-pages (:v d))
                                    (:db/id (ldb/get-case-page db common-config/views-page-name))
                                    (:db/id (d/entity db (:v d))))]
                           [:db/add (:e d) :logseq.property/view-for id]))
@@ -274,36 +274,40 @@
       nil
 
       (> db-schema/version version-in-db)
-      (let [db-based? (ldb/db-based-graph? @conn)
-            updates (keep (fn [[v updates]]
-                            (when (and (< version-in-db v) (<= v db-schema/version))
-                              updates))
-                          schema-version->updates)
-            properties (mapcat :properties updates)
-            new-properties (->> (select-keys db-property/built-in-properties properties)
+      (try
+        (let [db-based? (ldb/db-based-graph? @conn)
+              updates (keep (fn [[v updates]]
+                              (when (and (< version-in-db v) (<= v db-schema/version))
+                                updates))
+                            schema-version->updates)
+              properties (mapcat :properties updates)
+              new-properties (->> (select-keys db-property/built-in-properties properties)
                                 ;; property already exists, this should never happen
-                                (remove (fn [[k _]]
-                                          (when (d/entity db k)
-                                            (assert (str "DB migration: property already exists " k)))))
-                                (into {})
-                                sqlite-create-graph/build-initial-properties*
-                                (map (fn [b] (assoc b :logseq.property/built-in? true))))
-            classes (mapcat :classes updates)
-            new-classes (->> (select-keys db-class/built-in-classes classes)
+                                  (remove (fn [[k _]]
+                                            (when (d/entity db k)
+                                              (assert (str "DB migration: property already exists " k)))))
+                                  (into {})
+                                  sqlite-create-graph/build-initial-properties*
+                                  (map (fn [b] (assoc b :logseq.property/built-in? true))))
+              classes (mapcat :classes updates)
+              new-classes (->> (select-keys db-class/built-in-classes classes)
                              ;; class already exists, this should never happen
-                             (remove (fn [[k _]]
-                                       (when (d/entity db k)
-                                         (assert (str "DB migration: class already exists " k)))))
-                             (into {})
-                             (#(sqlite-create-graph/build-initial-classes* % {}))
-                             (map (fn [b] (assoc b :logseq.property/built-in? true))))
-            fixes (mapcat
-                   (fn [update']
-                     (when-let [fix (:fix update')]
-                       (when (fn? fix)
-                         (fix conn search-db)))) updates)
-            tx-data' (if db-based? (concat new-properties new-classes fixes) fixes)]
-        (when (seq tx-data')
-          (let [tx-data' (concat tx-data' [(sqlite-create-graph/kv :logseq.kv/schema-version db-schema/version)])]
-            (ldb/transact! conn tx-data' {:db-migrate? true}))
-          (println "DB schema migrated to " db-schema/version " from " version-in-db "."))))))
+                               (remove (fn [[k _]]
+                                         (when (d/entity db k)
+                                           (assert (str "DB migration: class already exists " k)))))
+                               (into {})
+                               (#(sqlite-create-graph/build-initial-classes* % {}))
+                               (map (fn [b] (assoc b :logseq.property/built-in? true))))
+              fixes (mapcat
+                     (fn [update']
+                       (when-let [fix (:fix update')]
+                         (when (fn? fix)
+                           (fix conn search-db)))) updates)
+              tx-data' (if db-based? (concat new-properties new-classes fixes) fixes)]
+          (when (seq tx-data')
+            (let [tx-data' (concat tx-data' [(sqlite-create-graph/kv :logseq.kv/schema-version db-schema/version)])]
+              (ldb/transact! conn tx-data' {:db-migrate? true}))
+            (println "DB schema migrated to " db-schema/version " from " version-in-db ".")))
+        (catch :default e
+          (prn :error "DB migration failed:")
+          (js/console.error e))))))
