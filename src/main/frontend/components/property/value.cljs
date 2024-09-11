@@ -187,7 +187,7 @@
                    (shui/dialog-close!)
                    (state/set-editor-action! nil)
                    state)}
-  [state id {:keys [on-change value _del-btn? _on-delete]}]
+  [state id {:keys [on-change value del-btn? on-delete]}]
   (let [*ident (::identity state)
         initial-day (or (some-> value (.getTime) (js/Date.)) (js/Date.))
         initial-month (when value
@@ -212,6 +212,8 @@
       {:initial-focus true
        :selected initial-day
        :id @*ident
+       :del-btn? del-btn?
+       :on-delete on-delete
        :on-day-click select-handler!}
        initial-month
        (assoc :default-month initial-month)))))
@@ -273,7 +275,7 @@
                       (property-handler/set-block-property! repo (:block/uuid block)
                         (:db/ident property)
                         (:db/id page)))
-         :del-btn? (not value)
+         :del-btn? (some-> value (:block/title) (boolean))
          :on-delete (fn []
                       (property-handler/set-block-property! repo (:block/uuid block)
                         (:db/ident property) nil)

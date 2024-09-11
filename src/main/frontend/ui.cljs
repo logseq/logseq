@@ -1131,7 +1131,7 @@
 (rum/defc DelDateButton
   [on-delete]
   (shui/button {:variant :outline :size :sm :class "del-date-btn" :on-click on-delete}
-    (shui/tabler-icon "trash")))
+    (shui/tabler-icon "trash" {:size 15})))
 
 (defonce month-values
   [:January :February :March :April :May
