@@ -58,14 +58,6 @@
     {:tx tx
      :properties (filter #(= (:block/type %) "property") properties)}))
 
-(defn kv
-  "Creates a key-value pair tx with the key and value respectively stored under
-  :db/ident and :kv/value.  The key must be under the namespace :logseq.kv"
-  [k value]
-  {:pre [(= "logseq.kv" (namespace k))]}
-  {:db/ident k
-   :kv/value value})
-
 (def built-in-pages-names
   #{"Contents"})
 
@@ -112,8 +104,8 @@
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
   [config-content]
-  (let [initial-data [(kv :logseq.kv/db-type "db")
-                      (kv :logseq.kv/schema-version db-schema/version)
+  (let [initial-data [(sqlite-util/kv :logseq.kv/db-type "db")
+                      (sqlite-util/kv :logseq.kv/schema-version db-schema/version)
                       ;; Empty property value used by db.type/ref properties
                       {:db/ident :logseq.property/empty-placeholder}
                       {:db/ident :logseq.class/Root}]

@@ -4,6 +4,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [logseq.db :as ldb]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.opml :as export-opml]
@@ -13,7 +14,59 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [frontend.idb :as idb]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [frontend.persist-db :as persist-db]
+            [frontend.handler.notification :as notification]))
+
+(rum/defcs auto-backup < rum/reactive
+  {:init (fn [state]
+           (assoc state ::folder (atom (ldb/get-key-value (db/get-db) :logseq.kv/graph-backup-folder))))}
+  [state]
+  (let [*backup-folder (::folder state)
+        backup-folder (rum/react *backup-folder)
+        repo (state/get-current-repo)]
+    [:div.flex.flex-col.gap-4
+     [:div.font-medium.opacity-50
+      "Schedule backup"]
+     (if backup-folder
+       [:div.flex.flex-row.items-center.gap-1.text-sm
+        [:div.opacity-50 (str "Backup folder:")]
+        backup-folder
+        ;; TODO: support changing folder
+        ;; (shui/button
+        ;;  {:variant :ghost
+        ;;   :class "!px-1 !py-1"
+        ;;   :title "Change backup folder"
+        ;;   :size :sm}
+        ;;  (ui/icon "edit"))
+        ]
+       (shui/button
+        {:variant :default
+         :on-click (fn []
+                     (p/let [result (utils/openDirectory #js {:mode "readwrite"})
+                             handle (first result)
+                             folder-name (.-name handle)]
+                       (idb/set-item! (str "file-handle/" folder-name) handle)
+                       (db/transact! [(ldb/kv :logseq.kv/graph-backup-folder folder-name)])
+                       (reset! *backup-folder folder-name)))}
+        "Set backup folder first"))
+     (when backup-folder
+       (shui/button
+        {:variant :default
+         :on-click (fn []
+                     (p/let [handle (idb/get-item (str "file-handle/" backup-folder))]
+                       (when handle
+                         (p/let [graph-dir-handle (.getDirectoryHandle handle (sqlite-common-db/sanitize-db-name repo) #js {:create true})
+                                 backup-handle (.getFileHandle graph-dir-handle "backup.db" #js {:create true})
+                                 data (persist-db/<export-db repo {:return-data? true})
+                                 _ (utils/writeFile backup-handle data)]
+                           (notification/show! "Backup successfully!" :success)))))}
+        "Backup now"))]))
+
 
 (rum/defc export
   []
@@ -40,6 +93,7 @@
            [:a.font-medium {:on-click #(export/export-repo-as-debug-json! current-repo)}
             "Export debug JSON"]
            [:p.text-sm.opacity-70 "Any sensitive data will be removed in the exported json file, you can send it to us for debugging."]])
+
         (when-not db-based?
           (when (util/electron?)
             [:div
@@ -56,7 +110,12 @@
         (when-not (or (mobile-util/native-platform?) db-based?)
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
-            (t :export-roam-json)]])]
+            (t :export-roam-json)]])
+
+        (when (and db-based? util/web-platform? (utils/nfsSupported))
+          [:div
+           [:hr]
+           (auto-backup)])]
 
        [:a#download-as-edn-v2.hidden]
        [:a#download-as-json-v2.hidden]

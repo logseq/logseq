@@ -306,7 +306,7 @@
                            (fix conn search-db)))) updates)
               tx-data' (if db-based? (concat new-properties new-classes fixes) fixes)]
           (when (seq tx-data')
-            (let [tx-data' (concat tx-data' [(sqlite-create-graph/kv :logseq.kv/schema-version db-schema/version)])]
+            (let [tx-data' (concat tx-data' [(sqlite-util/kv :logseq.kv/schema-version db-schema/version)])]
               (ldb/transact! conn tx-data' {:db-migrate? true}))
             (println "DB schema migrated to " db-schema/version " from " version-in-db ".")))
         (catch :default e
