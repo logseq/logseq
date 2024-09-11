@@ -2528,7 +2528,7 @@
                 (assoc :data-hl-color
                        (pu/lookup properties :logseq.property/hl-color))
 
-                (not block-ref?)
+                (and (not block-ref?) (not (:from-journals? config)))
                 (assoc mouse-down-key (fn [e]
                                         (block-content-on-pointer-down e block block-id content edit-input-id config))))]
     [:div.block-content.inline

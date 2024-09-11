@@ -434,14 +434,14 @@
       :on-click (fn [e]
                   (when-not (= (.-nodeName (.-target e)) "INPUT")
                     (cond
-                      (util/meta-key? e)
-                      (do
-                        (.preventDefault e)
-                        (route-handler/redirect-to-page! (:block/uuid page)))
                       (gobj/get e "shiftKey")
                       (do
                         (.preventDefault e)
-                        (state/sidebar-add-block! repo (:db/id page) :page)))))}
+                        (state/sidebar-add-block! repo (:db/id page) :page))
+                      :else
+                      (do
+                        (.preventDefault e)
+                        (route-handler/redirect-to-page! (:block/uuid page))))))}
 
      [:div.w-full.relative {:on-mouse-over #(reset! *hover? true)
                             :on-mouse-leave (fn []
@@ -471,7 +471,8 @@
       (component-block/block-container {:page-title? true
                                         :hide-title? sidebar?
                                         :hide-children? true
-                                        :container-id container-id} page)]]))
+                                        :container-id container-id
+                                        :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))} page)]]))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
