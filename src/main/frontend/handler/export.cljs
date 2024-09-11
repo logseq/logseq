@@ -19,7 +19,11 @@
    [promesa.core :as p]
    [frontend.persist-db :as persist-db]
    [cljs-bean.core :as bean]
-   [frontend.handler.export.common :as export-common-handler])
+   [frontend.handler.export.common :as export-common-handler]
+   [logseq.db.sqlite.common-db :as sqlite-common-db]
+   [logseq.db :as ldb]
+   [frontend.idb :as idb]
+   ["/frontend/utils" :as utils])
   (:import
    [goog.string StringBuffer]))
 
@@ -219,3 +223,40 @@
       (.setAttribute anchor "href" data-str)
       (.setAttribute anchor "download" (file-name (str repo "_roam") :json))
       (.click anchor))))
+
+(defn backup-db-graph
+  [repo]
+  (when (and repo (= repo (state/get-current-repo)))
+    (when-let [backup-folder (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder)]
+      (p/let [handle (idb/get-item (str "file-handle/" backup-folder))
+              repo-name (sqlite-common-db/sanitize-db-name repo)]
+        (if handle
+          (p/let [graph-dir-handle (.getDirectoryHandle handle repo-name #js {:create true})
+                  backup-handle (.getFileHandle graph-dir-handle "backup.db" #js {:create true})
+                  data (persist-db/<export-db repo {:return-data? true})
+                  _ (utils/writeFile backup-handle data)]
+            (println "Successfully created a backup for" repo-name "at" (str (js/Date.)) ".")
+            true)
+          (p/do!
+            ;; handle cleared
+           (notification/show! "DB backup failed, please go to Export and specify a backup folder." :error)
+           false))))))
+
+(defonce *backup-interval (atom nil))
+(defn cancel-db-backup!
+  []
+  (when-let [i @*backup-interval]
+    (js/clearInterval i)))
+
+(defn auto-db-backup!
+  [repo {:keys [backup-now?]
+         :or {backup-now? true}}]
+  (when (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder)
+    (when (and (config/db-based-graph? repo) util/web-platform? (utils/nfsSupported))
+      (cancel-db-backup!)
+
+      (when backup-now? (backup-db-graph repo))
+
+    ;; run backup every hour
+      (let [interval (js/setInterval #(backup-db-graph repo) (* 1 60 60 1000))]
+        (reset! *backup-interval interval)))))

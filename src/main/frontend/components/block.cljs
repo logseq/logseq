@@ -70,7 +70,6 @@
             [frontend.handler.property.file :as property-file]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.util.text :as text-util]
-            [frontend.handler.db-based.property.util :as db-pu]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]

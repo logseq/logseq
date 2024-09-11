@@ -18,8 +18,6 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [frontend.idb :as idb]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [frontend.persist-db :as persist-db]
             [frontend.handler.notification :as notification]))
 
 (rum/defcs auto-backup < rum/reactive
@@ -36,14 +34,16 @@
        [:div.flex.flex-row.items-center.gap-1.text-sm
         [:div.opacity-50 (str "Backup folder:")]
         backup-folder
-        ;; TODO: support changing folder
-        ;; (shui/button
-        ;;  {:variant :ghost
-        ;;   :class "!px-1 !py-1"
-        ;;   :title "Change backup folder"
-        ;;   :size :sm}
-        ;;  (ui/icon "edit"))
-        ]
+        (shui/button
+         {:variant :ghost
+          :class "!px-1 !py-1"
+          :title "Change backup folder"
+          :on-click (fn []
+                      (p/do!
+                        (db/transact! [[:db/retractEntity :logseq.kv/graph-backup-folder]])
+                        (reset! *backup-folder nil)))
+          :size :sm}
+         (ui/icon "edit"))]
        (shui/button
         {:variant :default
          :on-click (fn []
@@ -54,17 +54,17 @@
                        (db/transact! [(ldb/kv :logseq.kv/graph-backup-folder folder-name)])
                        (reset! *backup-folder folder-name)))}
         "Set backup folder first"))
+     [:div.opacity-50.text-sm
+      "Backup will be created every hour."]
+
      (when backup-folder
        (shui/button
         {:variant :default
          :on-click (fn []
-                     (p/let [handle (idb/get-item (str "file-handle/" backup-folder))]
-                       (when handle
-                         (p/let [graph-dir-handle (.getDirectoryHandle handle (sqlite-common-db/sanitize-db-name repo) #js {:create true})
-                                 backup-handle (.getFileHandle graph-dir-handle "backup.db" #js {:create true})
-                                 data (persist-db/<export-db repo {:return-data? true})
-                                 _ (utils/writeFile backup-handle data)]
-                           (notification/show! "Backup successfully!" :success)))))}
+                     (p/let [result (export/backup-db-graph repo)]
+                       (when result
+                         (notification/show! "Backup successfully!" :success))
+                       (export/auto-db-backup! repo {:backup-now? false})))}
         "Backup now"))]))
 
 
