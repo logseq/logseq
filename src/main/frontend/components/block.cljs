@@ -3215,7 +3215,7 @@
                                          :edit? editing?
                                          :hide-block-refs-count? hide-block-refs-count?}))])]
 
-         (when (and db-based? (not table?))
+         (when (and db-based? (not collapsed?) (not table?))
            (block-positioned-properties config block :block-below))]
 
         (when (and @*show-right-menu? (not in-whiteboard?) (not table?))
