@@ -98,4 +98,11 @@
           @conn
           "page1"
           (assoc (find-block-by-content conn "page1") :db/id 10000)))
-        "Disallow duplicate page without tag")))
+        "Disallow duplicate page without tag")
+
+    (is (nil?
+         (outliner-validate/validate-unique-by-name-tag-and-block-type
+          @conn
+          "Apple"
+          (find-block-by-content conn "Fruit")))
+        "Allow class to have same name as a page")))
