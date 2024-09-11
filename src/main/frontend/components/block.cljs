@@ -2528,9 +2528,13 @@
                 (assoc :data-hl-color
                        (pu/lookup properties :logseq.property/hl-color))
 
-                (and (not block-ref?) (not (:from-journals? config)))
+                (not block-ref?)
                 (assoc mouse-down-key (fn [e]
-                                        (block-content-on-pointer-down e block block-id content edit-input-id config))))]
+                                        (if (:from-journals? config)
+                                          (do
+                                            (.preventDefault e)
+                                            (route-handler/redirect-to-page! (:block/uuid block)))
+                                          (block-content-on-pointer-down e block block-id content edit-input-id config)))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-pointer-up (fn [e]
