@@ -106,6 +106,8 @@
   [config-content]
   (let [initial-data [(sqlite-util/kv :logseq.kv/db-type "db")
                       (sqlite-util/kv :logseq.kv/schema-version db-schema/version)
+                      (sqlite-util/kv :logseq.kv/graph-initial-schema-version db-schema/version)
+                      (sqlite-util/kv :logseq.kv/graph-created-at (common-util/time-ms))
                       ;; Empty property value used by db.type/ref properties
                       {:db/ident :logseq.property/empty-placeholder}
                       {:db/ident :logseq.class/Root}]
