@@ -21,6 +21,7 @@
             [rum.core :as rum]
             [frontend.rum :as r]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.shui.ui :as shui]
             [clojure.set :as set]
             [frontend.db.conn-state :as db-conn-state]
             [datascript.core :as d]))
@@ -402,11 +403,11 @@
 (def db-default-config
   "Default repo config for DB graphs"
   (merge common-default-config
-         ;; The "NOW" query returns tasks with "Doing" status for recent past days
-         ;; The "NEXT" query returns tasks with "Todo" status for upcoming future days
+         ;; The "DOING" query returns tasks with "Doing" status for recent past days
+         ;; The "TODO" query returns tasks with "Todo" status for upcoming future days
          {:default-queries
           {:journals
-           [{:title "🔨 NOW"
+           [{:title [:span (shui/tabler-icon "InProgress50" {:class "align-middle pr-1"}) [:span.align-middle "DOING"]]
              :query '[:find (pull ?b [*])
                       :in $ ?start ?today
                       :where
@@ -417,7 +418,7 @@
                       [(<= ?d ?today)]]
              :inputs [:14d :today]
              :collapsed? false}
-            {:title "📅 NEXT"
+            {:title [:span (shui/tabler-icon "Todo" {:class "align-middle pr-1"}) [:span.align-middle "TODO"]]
              :query '[:find (pull ?b [*])
                       :in $ ?start ?next
                       :where
