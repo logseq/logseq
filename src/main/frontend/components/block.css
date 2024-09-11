@@ -184,7 +184,7 @@
 }
 
 .block-control-wrap {
-  @apply h-[24px] mt-[1px];
+  height: initial;
 
   &.is-order-list {
     @apply mr-0 pr-0;

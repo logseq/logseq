@@ -70,6 +70,7 @@
             [frontend.handler.property.file :as property-file]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.util.text :as text-util]
+            [frontend.handler.db-based.property.util :as db-pu]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -1906,7 +1907,8 @@
         own-number-list?   (:own-order-number-list? config)
         order-list?        (boolean own-number-list?)
         order-list-idx     (:own-order-list-index config)
-        collapsable?       (editor-handler/collapsable? uuid {:semantic? true})
+        collapsable?       (editor-handler/collapsable? uuid {:semantic? true
+                                                              :ignore-children? (:page-title? config)})
         link?              (boolean (:original-block config))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
      {:class (util/classnames [{:is-order-list order-list?
@@ -1926,9 +1928,7 @@
                      ;; debug config context
                      (when (and (state/developer-mode?) (.-metaKey event))
                        (js/console.debug "[block config]==" config)))}
-        [:span {:class (if (or (and control-show?
-                                    (or collapsed?
-                                        (editor-handler/collapsable? uuid {:semantic? true})))
+        [:span {:class (if (or (and control-show? (or collapsed? collapsable?))
                                (and collapsed? (or order-list? config/publishing?)))
                          "control-show cursor-pointer"
                          "control-hide")}
@@ -3138,7 +3138,9 @@
 
      (when-not (:hide-title? config)
        [:div.block-main-container.flex.flex-row.pr-2.gap-1
-        {:data-has-heading (some-> block :block/properties (pu/lookup :logseq.property/heading))
+        {:style (when (and db-based? (:page-title? config))
+                  {:margin-left -30})
+         :data-has-heading (some-> block :block/properties (pu/lookup :logseq.property/heading))
          :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
          :on-touch-move (fn [event]
                           (block-handler/on-touch-move event block uuid editing? *show-left-menu? *show-right-menu?))
@@ -3151,11 +3153,11 @@
          :on-mouse-leave (fn [e]
                            (block-mouse-leave e *control-show? block-id doc-mode?))}
 
-        (when (and (not slide?) (not in-whiteboard?) (not table?)
-                   (not (:page-title? config)))
+        (when (and (not slide?) (not in-whiteboard?) (not table?))
           (let [edit? (or editing?
                           (= uuid (:block/uuid (state/get-edit-block))))]
-            (block-control config block
+            (block-control (assoc config :hide-bullet? (:page-title? config))
+                           block
                            {:uuid uuid
                             :block-id block-id
                             :collapsed? collapsed?

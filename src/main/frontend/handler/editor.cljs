@@ -3393,8 +3393,9 @@
 (defn collapsable?
   ([block-id]
    (collapsable? block-id {}))
-  ([block-id {:keys [semantic?]
-              :or {semantic? false}}]
+  ([block-id {:keys [semantic? ignore-children?]
+              :or {semantic? false
+                   ignore-children? false}}]
    (when block-id
      (let [repo (state/get-current-repo)]
        (if-let [block (db/entity [:block/uuid block-id])]
@@ -3403,7 +3404,7 @@
                property-keys (->> (keys (:block/properties block))
                                   (remove db-property/db-attribute-properties)
                                   (remove #(outliner-property/property-with-other-position? (db/entity %))))]
-           (or (db-model/has-children? block-id)
+           (or (if ignore-children? false (db-model/has-children? block-id))
                (valid-dsl-query-block? block repo)
                (valid-custom-query-block? block)
                (and db-based?
