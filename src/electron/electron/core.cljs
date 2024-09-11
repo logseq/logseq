@@ -14,7 +14,7 @@
             [electron.fs-watcher :as fs-watcher]
             ["path" :as node-path]
             ["os" :as os]
-            ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell session] :as electron]
+            ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["electron-deeplink" :refer [Deeplink]]
             [electron.git :as git]
             [electron.window :as win]

@@ -70,7 +70,6 @@
             [frontend.handler.property.file :as property-file]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.util.text :as text-util]
-            [frontend.handler.db-based.property.util :as db-pu]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -2530,11 +2529,14 @@
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
-                                        (if (:from-journals? config)
-                                          (do
-                                            (.preventDefault e)
-                                            (route-handler/redirect-to-page! (:block/uuid block)))
-                                          (block-content-on-pointer-down e block block-id content edit-input-id config)))))]
+                                        (cond (:from-journals? config)
+                                              (do
+                                                (.preventDefault e)
+                                                (route-handler/redirect-to-page! (:block/uuid block)))
+                                              (ldb/journal? block)
+                                              (.preventDefault e)
+                                              :else
+                                              (block-content-on-pointer-down e block block-id content edit-input-id config)))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-pointer-up (fn [e]
