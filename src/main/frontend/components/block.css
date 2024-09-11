@@ -294,15 +294,13 @@
 }
 
 .block-ref {
-  border-bottom: 0.5px solid;
-  border-bottom-color: var(--ls-block-ref-link-text-color);
-  cursor: alias;
-  padding: 2px 0;
+  @apply border-b-[0.5px] border-b-[--ls-block-ref-link-text-color] cursor-alias;
+
   display: inherit;
+  margin-bottom: -1px;
 
   .block-ref {
-    padding: 6px 5px;
-    border: none;
+    @apply mx-1;
   }
 
   &:hover {
