@@ -183,8 +183,8 @@
   border-left: 0;
 }
 
-.block-control-wrap {
-  height: initial;
+.block-control-wrap, .ls-page-title .property-value .block-control-wrap {
+  @apply h-[24px];
 
   &.is-order-list {
     @apply mr-0 pr-0;
@@ -197,6 +197,10 @@
   &.bullet-hidden {
     padding-right: 2px;
   }
+}
+
+.ls-page-title .block-control-wrap {
+  height: initial;
 }
 
 .block-title-wrap {
