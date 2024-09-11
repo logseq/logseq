@@ -628,8 +628,7 @@
            (case type
              :notification
              (worker-util/post-message type [[:div [:p (:message payload)]] (:type payload)])
-             nil))
-         (throw e)))))
+             (throw e)))))))
 
   (file-writes-finished?
    [this repo]
