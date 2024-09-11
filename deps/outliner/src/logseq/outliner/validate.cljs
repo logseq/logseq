@@ -15,7 +15,7 @@
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (cond
-    (seq tags)
+    (and (seq tags) (= "page" (:block/type entity)))
     (when-let [res (seq (d/q '[:find [?b ...]
                                :in $ ?eid ?title [?tag-id ...]
                                :where
@@ -67,8 +67,9 @@
 
 (defn ^:api validate-unique-by-name-tag-and-block-type
   "Validates uniqueness of blocks and pages for the following cases:
-   - Page names are unique by tag e.g. their can be Apple #Company and Apple #Fruit
-   - Page names are unique by type e.g. their can be #Journal and Journal (normal page)
+   - Page names of type 'page' are unique by tag e.g. their can be Apple #Company and Apple #Fruit
+   - Page names of other types are unique for their type e.g. their can be #Journal ('class') and Journal ('page')
+   - Property names are unique and don't consider built-in property names
    - Block names are unique by tag"
   [db new-title {:block/keys [tags] :as entity}]
   (cond
