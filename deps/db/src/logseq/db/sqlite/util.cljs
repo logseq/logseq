@@ -127,3 +127,11 @@
     :block/uuid (d/squuid)
     :block/format :markdown
     :block/type "page"}))
+
+(defn kv
+  "Creates a key-value pair tx with the key and value respectively stored under
+  :db/ident and :kv/value.  The key must be under the namespace :logseq.kv"
+  [k value]
+  {:pre [(= "logseq.kv" (namespace k))]}
+  {:db/ident k
+   :kv/value value})
