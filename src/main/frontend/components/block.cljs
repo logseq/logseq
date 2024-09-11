@@ -2478,11 +2478,11 @@
     (when (seq properties)
       (case position
          :block-below
-         [:div.positioned-properties.flex.flex-row.gap-1.item-center.ml-2.pl-8.flex-wrap.text-sm.overflow-x-hidden.max-h-6
+         [:div.positioned-properties.flex.flex-row.gap-1.item-center.flex-wrap.text-sm.overflow-x-hidden.max-h-6
           (for [pid properties]
             (let [property (db/entity pid)
                   v (get block pid)]
-              [:div.flex.flex-row.items-center.gap-2.px-1.hover:bg-secondary.rounded
+              [:div.flex.flex-row.items-center.gap-2.hover:bg-secondary.rounded
                [:div.flex.flex-row.opacity-50.hover:opacity-100
                 (property-component/property-key-cp block property opts)
                 [:div.select-none ":"]]
@@ -3171,53 +3171,55 @@
         (when (and @*show-left-menu? (not in-whiteboard?) (not table?))
           (block-left-menu config block))
 
-        (when (:page-title? config)
-          (let [icon' (get block (pu/get-pid :logseq.property/icon))]
-            (when-let [icon (and (ldb/page? block)
-                               (or icon'
-                                   (some :logseq.property/icon (:block/tags block))
-                                   (when (ldb/class? block)
+        [:div.flex.flex-col.w-full
+         [:div.flex.flex-row.gap-2
+          (when (:page-title? config)
+            (let [icon' (get block (pu/get-pid :logseq.property/icon))]
+              (when-let [icon (and (ldb/page? block)
+                                   (or icon'
+                                       (some :logseq.property/icon (:block/tags block))
+                                       (when (ldb/class? block)
                                          {:type :tabler-icon
                                           :id "hash"})
-                                   (when (ldb/property? block)
+                                       (when (ldb/property? block)
                                          {:type :tabler-icon
                                           :id "letter-p"})))]
-            [:div.ls-page-icon.flex.self-start3
-             (icon-component/icon-picker icon
-                                         {:on-chosen (fn [_e icon]
-                                                       (if icon
-                                                         (db-property-handler/set-block-property!
-                                                          (:db/id block)
-                                                          (pu/get-pid :logseq.property/icon)
-                                                          (select-keys icon [:id :type :color]))
+                [:div.ls-page-icon.flex.self-start3
+                 (icon-component/icon-picker icon
+                                             {:on-chosen (fn [_e icon]
+                                                           (if icon
+                                                             (db-property-handler/set-block-property!
+                                                              (:db/id block)
+                                                              (pu/get-pid :logseq.property/icon)
+                                                              (select-keys icon [:id :type :color]))
                              ;; del
-                                                         (db-property-handler/remove-block-property!
-                                                          (:db/id block)
-                                                          (pu/get-pid :logseq.property/icon))))
-                                          :del-btn? (boolean icon')
-                                          :icon-props {:style {:width "1lh"
-                                                               :height "1lh"
-                                                               :font-size (if (:page-title? config) 38 18)}}})])))
+                                                             (db-property-handler/remove-block-property!
+                                                              (:db/id block)
+                                                              (pu/get-pid :logseq.property/icon))))
+                                              :del-btn? (boolean icon')
+                                              :icon-props {:style {:width "1lh"
+                                                                   :height "1lh"
+                                                                   :font-size (if (:page-title? config) 38 18)}}})])))
 
-        (if whiteboard-block?
-          (block-reference {} (str uuid) nil)
+          (if whiteboard-block?
+            (block-reference {} (str uuid) nil)
           ;; Not embed self
-          [:div.flex.flex-col.w-full
-           (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? title))
-                 hide-block-refs-count? (or (and (:embed? config)
-                                                 (= (:block/uuid block) (:embed-id config)))
-                                            table?)]
-             (block-content-or-editor config block
-                                      {:edit-input-id edit-input-id
-                                       :block-id block-id
-                                       :edit? editing?
-                                       :hide-block-refs-count? hide-block-refs-count?}))])
+            [:div.flex.flex-col.w-full
+             (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? title))
+                   hide-block-refs-count? (or (and (:embed? config)
+                                                   (= (:block/uuid block) (:embed-id config)))
+                                              table?)]
+               (block-content-or-editor config block
+                                        {:edit-input-id edit-input-id
+                                         :block-id block-id
+                                         :edit? editing?
+                                         :hide-block-refs-count? hide-block-refs-count?}))])]
+
+         (when (and db-based? (not table?))
+           (block-positioned-properties config block :block-below))]
 
         (when (and @*show-right-menu? (not in-whiteboard?) (not table?))
           (block-right-menu config block editing?))])
-
-     (when (and db-based? (not table?))
-       (block-positioned-properties config block :block-below))
 
      (when (and db-based? (not collapsed?) (not table?))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
