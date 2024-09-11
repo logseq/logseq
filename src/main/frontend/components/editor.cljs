@@ -178,20 +178,26 @@
                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
                            [:div.flex.flex-row.items-center.gap-1
                             (when-not db-tag?
-                              (cond
-                                (ldb/class? block)
-                                [:div (ui/icon "hash" {:size 14})]
-                                (ldb/property? block)
-                                [:div (ui/icon "letter-p" {:size 14})]
-                                (db-model/whiteboard-page? block)
-                                [:div (ui/icon "whiteboard" {:extension? true})]
-                                (db/page? block)
-                                [:div (ui/icon "page" {:extension? true})]
-                                (or (string/starts-with? (str (:block/title block)) (t :new-tag))
-                                    (string/starts-with? (str (:block/title block)) (t :new-page)))
-                                nil
-                                :else
-                                [:div (ui/icon "letter-n" {:size 14})]))
+                              [:div.flex.items-center
+                               (cond
+                                 (ldb/class? block)
+                                 (ui/icon "hash" {:size 14})
+
+                                 (ldb/property? block)
+                                 (ui/icon "letter-p" {:size 14})
+
+                                 (db-model/whiteboard-page? block)
+                                 (ui/icon "whiteboard" {:extension? true})
+
+                                 (db/page? block)
+                                 (ui/icon "page" {:extension? true})
+
+                                 (or (string/starts-with? (str (:block/title block)) (t :new-tag))
+                                   (string/starts-with? (str (:block/title block)) (t :new-page)))
+                                 (ui/icon "plus" {:size 14})
+
+                                 :else
+                                 (ui/icon "letter-n" {:size 14}))])
 
                             (let [title (if db-tag?
                                           (let [target (first (:block/_alias block))]
@@ -203,7 +209,7 @@
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                     "Search for a tag"
                                                                     "Search for a node")]
-         :class       "black"})
+         :class "black"})
 
        (when (and db? db-tag? (not (string/blank? q)))
          [:p.px-1.opacity-50.text-sm
@@ -211,10 +217,10 @@
           [:span " to display this tag inline instead of at the end of this node."]])])))
 
 (rum/defc page-search < rum/reactive
-  {:will-unmount (fn [state]
-                   (reset! commands/*current-command nil)
-                   state)}
-  "Page or tag searching popup"
+                        {:will-unmount (fn [state]
+                                         (reset! commands/*current-command nil)
+                                         state)}
+                        "Page or tag searching popup"
   [id format]
   (let [action (state/sub :editor/action)
         db? (config/db-based-graph? (state/get-current-repo))
