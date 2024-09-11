@@ -63,7 +63,7 @@
          :on-click (fn []
                      (p/let [result (export/backup-db-graph repo)]
                        (when result
-                         (notification/show! "Backup successfully!" :success))
+                         (notification/show! "Backup successful!" :success))
                        (export/auto-db-backup! repo {:backup-now? false})))}
         "Backup now"))]))
 

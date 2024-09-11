@@ -232,7 +232,7 @@
               repo-name (sqlite-common-db/sanitize-db-name repo)]
         (if handle
           (p/let [graph-dir-handle (.getDirectoryHandle handle repo-name #js {:create true})
-                  backup-handle (.getFileHandle graph-dir-handle "backup.db" #js {:create true})
+                  backup-handle (.getFileHandle graph-dir-handle "db.sqlite" #js {:create true})
                   data (persist-db/<export-db repo {:return-data? true})
                   _ (utils/writeFile backup-handle data)]
             (println "Successfully created a backup for" repo-name "at" (str (js/Date.)) ".")
