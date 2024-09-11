@@ -433,15 +433,9 @@
                                                                   :page-entity page})))
       :on-click (fn [e]
                   (when-not (= (.-nodeName (.-target e)) "INPUT")
-                    (cond
-                      (gobj/get e "shiftKey")
-                      (do
-                        (.preventDefault e)
-                        (state/sidebar-add-block! repo (:db/id page) :page))
-                      :else
-                      (do
-                        (.preventDefault e)
-                        (route-handler/redirect-to-page! (:block/uuid page))))))}
+                    (when (gobj/get e "shiftKey")
+                      (.preventDefault e)
+                      (state/sidebar-add-block! repo (:db/id page) :page))))}
 
      [:div.w-full.relative {:on-mouse-over #(reset! *hover? true)
                             :on-mouse-leave (fn []
