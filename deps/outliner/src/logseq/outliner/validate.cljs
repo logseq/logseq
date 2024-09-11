@@ -14,7 +14,8 @@
 
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
-  (if (seq tags)
+  (cond
+    (seq tags)
     (when-let [res (seq (d/q '[:find [?b ...]
                                :in $ ?eid ?title [?tag-id ...]
                                :where
@@ -30,6 +31,25 @@
                        :payload {:message (str "Another page named " (pr-str new-title) " already exists for tag "
                                                (pr-str (->> res first (d/entity db) :block/tags first :block/title)))
                                  :type :warning}})))
+
+    (ldb/property? entity)
+    (when-let [_res (seq (d/q '[:find [?b ...]
+                                :in $ ?eid ?type ?title
+                                :where
+                                [?b :block/title ?title]
+                                [?b :block/type ?type]
+                                [(missing? $ ?b :logseq.property/built-in?)]
+                                [(not= ?b ?eid)]]
+                              db
+                              (:db/id entity)
+                              (:block/type entity)
+                              new-title))]
+      (throw (ex-info "Duplicate property"
+                      {:type :notification
+                       :payload {:message (str "Another property named " (pr-str new-title) " already exists")
+                                 :type :warning}})))
+
+    :else
     (when-let [_res (seq (d/q '[:find [?b ...]
                                 :in $ ?eid ?type ?title
                                 :where
