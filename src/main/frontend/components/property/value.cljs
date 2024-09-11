@@ -563,7 +563,7 @@
                                   value (db-property/closed-value-content block)]
                               {:label (if icon
                                         [:div.flex.flex-row.gap-1.items-center
-                                         (icon-component/icon icon)
+                                         (icon-component/icon icon {:color? true})
                                          value]
                                         value)
                                :value (:db/id block)
@@ -686,9 +686,9 @@
           (cond
             icon
             (if icon?
-              (icon-component/icon icon)
+              (icon-component/icon icon {:color? true})
               [:div.flex.flex-row.items-center.gap-2.h-6
-               (icon-component/icon icon)
+               (icon-component/icon icon {:color? true})
                (when value'
                  [:span value'])])
 
