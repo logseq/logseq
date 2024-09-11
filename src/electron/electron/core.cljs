@@ -14,7 +14,7 @@
             [electron.fs-watcher :as fs-watcher]
             ["path" :as node-path]
             ["os" :as os]
-            ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
+            ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell session] :as electron]
             ["electron-deeplink" :refer [Deeplink]]
             [electron.git :as git]
             [electron.window :as win]
@@ -245,10 +245,16 @@
   [^js app']
   (.on app' "ready"
        (fn []
+         (logger/info (str "Logseq App(" (.getVersion app') ") Starting... "))
+
+         ;; Add React developer tool
+         (when-let [^js devtoolsInstaller (and dev? (js/require "electron-devtools-installer"))]
+           (-> (.default devtoolsInstaller (.-REACT_DEVELOPER_TOOLS devtoolsInstaller))
+             (.then #(js/console.log "Added Extension:" (.-REACT_DEVELOPER_TOOLS devtoolsInstaller)))))
+
          (let [t0 (setup-interceptor! app')
                ^js win (win/create-main-window!)
                _ (reset! *win win)]
-           (logger/info (str "Logseq App(" (.getVersion app') ") Starting... "))
 
            (utils/<restore-proxy-settings)
 
