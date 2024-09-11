@@ -83,7 +83,8 @@
             [frontend.modules.outliner.pipeline :as pipeline]
             [frontend.date :as date]
             [logseq.db :as ldb]
-            [frontend.persist-db :as persist-db]))
+            [frontend.persist-db :as persist-db]
+            [frontend.handler.export :as export]))
 
 ;; TODO: should we move all events here?
 
@@ -196,6 +197,7 @@
      (repo-handler/refresh-repos!))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
+  (export/cancel-db-backup!)
   (persist-db/export-current-graph!)
   (state/set-state! :db/async-query-loading #{})
   (state/set-state! :db/async-queries {})
@@ -432,15 +434,17 @@
       (when (and (not dir-exists?)
                  (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
-  (p/do!
-   (state/pub-event! [:graph/sync-context])
+  (let [db-based? (config/db-based-graph? repo)]
+    (p/do!
+     (state/pub-event! [:graph/sync-context])
     ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
-   (when (mobile-util/native-ios?)
-     (js/setTimeout #(mobile/mobile-postinit) 1000))
+     (when (mobile-util/native-ios?)
+       (js/setTimeout #(mobile/mobile-postinit) 1000))
     ;; FIXME: an ugly implementation for redirecting to page on new window is restored
-   (repo-handler/graph-ready! repo)
-   (when-not (config/db-based-graph? repo)
-     (fs-watcher/load-graph-files! repo))))
+     (repo-handler/graph-ready! repo)
+     (if db-based?
+       (export/auto-db-backup! repo {:backup-now? true})
+       (fs-watcher/load-graph-files! repo)))))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
