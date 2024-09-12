@@ -215,7 +215,7 @@
   }
 
   &.as-heading {
-    @apply flex flex-1 items-center;
+    @apply flex flex-1 items-center flex-wrap;
 
     > .ui__checkbox {
       @apply top-0;
