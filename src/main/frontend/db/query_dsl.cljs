@@ -20,8 +20,7 @@
             [frontend.util :as util]
             [frontend.config :as config]
             [logseq.db.frontend.property :as db-property]
-            [frontend.state :as state]
-            [frontend.handler.db-based.property.util :as db-pu]))
+            [frontend.state :as state]))
 
 
 ;; Query fields:
@@ -625,20 +624,6 @@ Some bindings in this fn:
   (let [q' (template/resolve-dynamic-template! q)]
     (pre-transform q')))
 
-(defn- sort-by-prep
-  "For a db graph, adds a block attribute :block/properties-by-name to be used
-  for sorting with its keys being property names"
-  [col]
-  ;; Only modify result shapes that we know of
-  (if (map? (ffirst col))
-    (let [repo (state/get-current-repo)]
-      (map (fn [blocks]
-             (mapv (fn [block]
-                     (assoc block :block/properties-by-name (db-pu/properties-by-name repo block)))
-                   blocks))
-           col))
-    col))
-
 (defn get-db-property-value
   "Fetch a property's value given a block map and property name. Similar to
   query-table/sort-by-fn. We should standardize this soon"
@@ -669,10 +654,8 @@ Some bindings in this fn:
                                 (fn [col]
                                   (take @sample (shuffle col)))
                                 identity)
-               sort-by' (if sort-by
-                          (if (config/db-based-graph? repo)
-                            (comp (fn [col] (sort-by col get-db-property-value)) sort-by-prep)
-                            #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))
+               sort-by' (if (and sort-by (not (config/db-based-graph? repo)))
+                          #(sort-by % (fn [m prop] (get-in m [:block/properties prop])))
                           identity)
                transform-fn (comp sort-by' random-samples)]
            (query-react/react-query repo
@@ -703,7 +686,7 @@ Some bindings in this fn:
                                   (when sort-by
                                     {:transform-fn
                                      (if db-graph?
-                                       (comp (fn [col] (sort-by col get-db-property-value)) sort-by-prep)
+                                       identity
                                        #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))})))))))
 
 (defn query-contains-filter?
