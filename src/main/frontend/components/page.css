@@ -145,6 +145,8 @@ html.is-native-iphone-without-notch {
   opacity: 0;
   color: var(--ls-primary-text-color);
   transform: scale(.8);
+  margin-left: -1px;
+
 
   &:hover {
     color: var(--ls-primary-text-color);
