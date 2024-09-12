@@ -870,14 +870,13 @@ html.is-mac {
   opacity: 1;
 }
 
-.positioned-properties.right-align  {
+.positioned-properties.block-right  {
   button {
-    white-space: nowrap;
+    @apply whitespace-nowrap mr-0.5;
   }
+
   .block-title-wrap {
-    @apply overflow-hidden h-6;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    @apply overflow-hidden h-6 whitespace-nowrap text-ellipsis;
   }
 }
 
@@ -919,8 +918,8 @@ html.is-mac {
 }
 
 .ls-page-title .positioned-properties svg {
-    width: 24px;
-    height: 24px;
+    width: 16px;
+    height: 16px;
 }
 
 .ls-page-title .ls-page-icon button {
@@ -929,5 +928,8 @@ html.is-mac {
 
 .ls-page-title .positioned-properties {
     height: 54px;
-    overflow: hidden;
+}
+
+.ls-page-title .block-tags {
+  @apply relative -right-1 min-h-full;
 }

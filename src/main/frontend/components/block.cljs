@@ -2477,7 +2477,7 @@
     (when (seq properties)
       (case position
          :block-below
-         [:div.positioned-properties.flex.flex-row.gap-1.item-center.flex-wrap.text-sm.overflow-x-hidden.max-h-6
+         [:div.positioned-properties.block-below.flex.flex-row.gap-1.item-center.flex-wrap.text-sm.overflow-x-hidden.max-h-6
           (for [pid properties]
             (let [property (db/entity pid)
                   v (get block pid)]
@@ -2486,7 +2486,8 @@
                 (property-component/property-key-cp block property opts)
                 [:div.select-none ":"]]
                (pv/property-value block property v opts)]))]
-         [:div.positioned-properties.right-align.flex.flex-row.gap-1.select-none.h-6
+         [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6
+          {:class (name position)}
           (for [pid properties]
             (when-let [property (db/entity pid)]
               (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
