@@ -30,6 +30,7 @@
 (def alphabet
   (mapv str "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"))
 
+#_:clj-kondo/ignore
 (defn- random-bytes
   [size]
   #?(:org.babashka/nbb
@@ -63,7 +64,13 @@
    this in read-only contexts like querying can result in db-ident conflicts"
   [user-namespace name-string]
   {:pre [(or (keyword? user-namespace) (string? user-namespace)) (string? name-string)]}
-  (if (exists? js/process)
+  (if #?(:org.babashka/nbb (some? js/process)
+         :cljs (exists? js/process)
+         :default false)
     ;; So that we don't have to change :user.{property|class} in our tests
     (keyword user-namespace name-string)
-    (keyword user-namespace (str (rand-nth non-int-char-range) (nano-id 20)))))
+    (keyword user-namespace
+             (str (rand-nth non-int-char-range)
+                  (nano-id 20)
+                  "-"
+                  (->> (filter #(re-find #"[0-9a-zA-Z-]{1}" %) (seq name-string)) (apply str))))))
