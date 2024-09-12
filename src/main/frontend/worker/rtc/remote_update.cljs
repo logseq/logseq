@@ -166,16 +166,13 @@
           (apply-remote-remove-ops-helper conn other-ops)]
       ;; move to page-block's first child
       (doseq [block-uuid block-uuids-need-move]
-        (transact-db! :move-blocks&persist-op
-                      repo conn
-                      [(d/entity @conn [:block/uuid block-uuid])]
-                      (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))
-                      false))
+        (when-let [b (d/entity @conn [:block/uuid block-uuid])]
+          (when-let [target-b
+                     (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))]
+            (transact-db! :move-blocks&persist-op repo conn [b] target-b false))))
       (doseq [block-uuid block-uuids-to-remove]
-        (transact-db! :delete-blocks
-                      repo conn date-formatter
-                      [(d/entity @conn [:block/uuid block-uuid])]
-                      {})))))
+        (when-let [b (d/entity @conn [:block/uuid block-uuid])]
+          (transact-db! :delete-blocks repo conn date-formatter [b] {}))))))
 
 (defn- insert-or-move-block
   [repo conn block-uuid remote-parents remote-block-order move? op-value]
@@ -536,7 +533,8 @@
 
         (< local-tx remote-t-before)
         (do (add-log-fn :rtc.log/apply-remote-update {:sub-type :need-pull-remote-data
-                                                      :remote-t remote-t :local-t local-tx})
+                                                      :remote-t remote-t :local-t local-tx
+                                                      :remote-t-before remote-t-before})
             (throw (ex-info "need pull earlier remote-data"
                             {:type ::need-pull-remote-data
                              :local-tx local-tx})))
