@@ -50,7 +50,8 @@
                      (p/let [result (utils/openDirectory #js {:mode "readwrite"})
                              handle (first result)
                              folder-name (.-name handle)]
-                       (idb/set-item! (str "file-handle/" folder-name) handle)
+                       (idb/set-item!
+                        (str "handle/" (js/btoa repo) "/" folder-name) handle)
                        (db/transact! [(ldb/kv :logseq.kv/graph-backup-folder folder-name)])
                        (reset! *backup-folder folder-name)))}
         "Set backup folder first"))

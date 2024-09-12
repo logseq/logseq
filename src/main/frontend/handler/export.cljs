@@ -238,7 +238,7 @@
   [repo]
   (when (and repo (= repo (state/get-current-repo)))
     (when-let [backup-folder (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder)]
-      (p/let [handle (idb/get-item (str "file-handle/" backup-folder))
+      (p/let [handle (idb/get-item (str "handle/" (js/btoa repo) "/" backup-folder))
               repo-name (sqlite-common-db/sanitize-db-name repo)]
         (if handle
           (->
