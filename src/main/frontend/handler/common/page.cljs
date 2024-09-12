@@ -55,7 +55,10 @@
                                       (common-util/split-first (str "#" page-ref/left-brackets db-content/page-ref-special-chars) (:block/title parsed-result)))))
                     title)
            options' (if db-based?
-                      (update options :tags concat (:block/tags parsed-result))
+                      (cond->
+                        (update options :tags concat (:block/tags parsed-result))
+                        (nil? (:split-namespace? options))
+                        (assoc :split-namespace? true))
                       options)
            result (ui-outliner-tx/transact!
                    {:outliner-op :create-page}

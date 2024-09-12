@@ -10,7 +10,9 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.graph-parser.text :as text]))
 
 (defn- build-page-tx [conn properties page {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)
@@ -69,13 +71,14 @@
 
 (defn create!
   [conn title*
-   {:keys [create-first-block? properties uuid persist-op? whiteboard? class? today-journal?]
+   {:keys [create-first-block? properties uuid persist-op? whiteboard? class? today-journal? split-namespace?]
     :or   {create-first-block?      true
            properties               nil
            uuid                     nil
            persist-op?              true}
     :as options}]
-  (let [date-formatter (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal))
+  (let [db @conn
+        date-formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
         title (sanitize-title title*)
         type (cond class?
                    "class"
@@ -85,13 +88,17 @@
                    "journal"
                    :else
                    "page")]
-    (when-not (ldb/page-exists? @conn title type)
+    (when-not (ldb/page-exists? db title type)
       (let [format    :markdown
             page      (-> (gp-block/page-name->map title @conn true date-formatter
                                                    {:class? class?
                                                     :page-uuid (when (uuid? uuid) uuid)
                                                     :skip-existing-page-check? true})
                           (assoc :block/format format))
+            [page parents] (if (and (text/namespace-page? title) split-namespace?)
+                             (let [pages (outliner-core/split-namespace-pages db page date-formatter)]
+                               [(last pages) (butlast pages)])
+                             [page nil])
             page-uuid (:block/uuid page)
             page-txs  (build-page-tx conn properties page (select-keys options [:whiteboard? :class? :tags]))
             first-block-tx (when (and
@@ -101,6 +108,7 @@
                                   page-txs)
                              (build-first-block-tx (:block/uuid (first page-txs)) format))
             txs      (concat
+                      parents
                       page-txs
                       first-block-tx)]
         (when (seq txs)

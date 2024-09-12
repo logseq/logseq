@@ -364,7 +364,8 @@
                          (when-not (de/entity? chosen-result)
                            (<create! chosen'
                                      {:redirect? false
-                                      :create-first-block? false})))
+                                      :create-first-block? false
+                                      :split-namespace? true})))
                 ref-text' (if result (page-ref/->page-ref (:block/title result)) ref-text)]
           (p/do!
            (editor-handler/insert-command! id
