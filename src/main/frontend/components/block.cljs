@@ -639,8 +639,18 @@
                         :else
                         (util/trim-safe page-name))
                 _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name))
-                s (if (re-find db-content/special-id-ref-pattern s)
+                s (cond
+                    (not (string? s))
+                    (do
+                      (prn :debug :unknown-title-error :title s
+                           :data (db/pull (:db/id page-entity)))
+                      (db/transact! [{:db/id (:db/id page-entity)
+                                      :block/title "FIX unknown page"
+                                      :block/name "fix unknown page"}])
+                      "Unknown title")
+                    (re-find db-content/special-id-ref-pattern s)
                     (db-content/special-id-ref->page s (:block/refs page-entity))
+                    :else
                     s)
                 s (if tag? (str "#" s) s)]
             (if (ldb/page? page-entity)
