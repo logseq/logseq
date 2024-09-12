@@ -155,6 +155,34 @@
          (throw (ex-info (str "wait message from other client " retry-message) {:missionary/retry true})))
        first-block-title))))
 
+(defn new-task--client1-sync-barrier-1->2
+  [message]
+  (m/sp
+    (m/? (new-task--send-message-to-other-client (str message "-client1")))
+    (m/? (new-task--wait-message-from-other-client #(= (str message "-client2") %)))
+    (log "sync-barrier-1->2" message)))
+
+(defn new-task--client2-sync-barrier-1->2
+  [message]
+  (m/sp
+    (m/? (new-task--wait-message-from-other-client #(= (str message "-client1") %)))
+    (m/? (new-task--send-message-to-other-client (str message "-client2")))
+    (log "sync-barrier-1->2" message)))
+
+(defn new-task--client1-sync-barrier-2->1
+  [message]
+  (m/sp
+    (m/? (new-task--wait-message-from-other-client #(= (str message "-client2") %)))
+    (m/? (new-task--send-message-to-other-client (str message "-client1")))
+    (log "sync-barrier-2->1" message)))
+
+(defn new-task--client2-sync-barrier-2->1
+  [message]
+  (m/sp
+    (m/? (new-task--send-message-to-other-client (str message "-client2")))
+    (m/? (new-task--wait-message-from-other-client #(= (str message "-client1") %)))
+    (log "sync-barrier-2->1" message)))
+
 (defn transact!
   [conn tx-data]
   {:pre [(seq tx-data)]}
