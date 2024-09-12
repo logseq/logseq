@@ -20,7 +20,9 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.db.frontend.order :as db-order]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.graph-parser.text :as text]
+            [logseq.db.frontend.class :as db-class]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -233,9 +235,89 @@
          (map (fn [tag]
                 [:db/retract (:db/id block) :block/tags (:db/id tag)])))))
 
+(defn split-namespace-pages
+  [db page-or-pages date-formatter & {:keys [*changed-uuids]}]
+  (let [pages (if (map? page-or-pages) [page-or-pages] page-or-pages)]
+    (->>
+     (mapcat
+      (fn [{:block/keys [title uuid type] :as page}]
+        (if (and (contains? #{"page" "class"} type) (text/namespace-page? title))
+          (let [class? (= type "class")
+                parts (->> (string/split title #"/")
+                           (map string/trim)
+                           (remove string/blank?))
+                pages (doall
+                       (map-indexed
+                        (fn [idx part]
+                          (let [last-part? (= idx (dec (count parts)))
+                                page (if (zero? idx)
+                                       (ldb/get-page db part)
+                                       (some->>
+                                        (d/q
+                                         '[:find [?b ...]
+                                           :in $ ?parent-name ?child-name
+                                           :where
+                                           [?b :logseq.property/parent ?p]
+                                           [?b :block/name ?child-name]
+                                           [?p :block/name ?parent-name]]
+                                         db
+                                         (common-util/page-name-sanity-lc (nth parts (dec idx)))
+                                         (common-util/page-name-sanity-lc part))
+                                        first
+                                        (d/entity db)))
+                                result (or page
+                                           (when last-part? (ldb/get-page db part))
+                                           (-> (gp-block/page-name->map part db true date-formatter
+                                                                        {:page-uuid (when last-part? uuid)})
+                                               (assoc :block/format :markdown)))]
+                            (when (and last-part? (not= (:block/uuid result) uuid)
+                                       *changed-uuids)
+                              (swap! *changed-uuids assoc uuid (:block/uuid result)))
+                            result))
+                        parts))]
+            (map-indexed
+             (fn [idx page]
+               (if class?
+                 (cond
+                   (de/entity? page)
+                   (when-not (ldb/class? page)
+                     (db-class/build-new-class db {:db/id (:db/id page)
+                                                   :block/title (:block/title page)}))
+                   (zero? idx)
+                   (db-class/build-new-class db page)
+                   :else
+                   (db-class/build-new-class db
+                                             (assoc page :logseq.property/parent [:block/uuid (:block/uuid (nth pages (dec idx)))])))
+                 (cond
+                   (de/entity? page)
+                   nil
+                   (zero? idx)
+                   page
+                   :else
+                   (assoc page :logseq.property/parent [:block/uuid (:block/uuid (nth pages (dec idx)))]))))
+             pages))
+          [page]))
+      pages)
+     (remove nil?))))
+
+(defn- build-page-parents
+  [db refs date-formatter raw-title]
+  (let [*changed-uuids (atom {})
+        refs' (split-namespace-pages db refs date-formatter
+                                     {:*changed-uuids *changed-uuids})
+        raw-title' (if (seq @*changed-uuids)
+                     (reduce
+                      (fn [raw-content [old-id new-id]]
+                        (string/replace raw-content (str old-id) (str new-id)))
+                      raw-title
+                      @*changed-uuids)
+                     raw-title)]
+    {:refs refs'
+     :raw-title raw-title'}))
+
 (extend-type Entity
   otree/INode
-  (-save [this txs-state conn repo _date-formatter {:keys [retract-attributes? retract-attributes]
+  (-save [this txs-state conn repo date-formatter {:keys [retract-attributes? retract-attributes]
                                                     :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
@@ -272,14 +354,18 @@
                  (assoc m* :block/name page-name))
                m*)
           _ (when (and db-based?
-                      ;; page or object changed?
+                      ;; page or object changed?m
                        (and (or (ldb/page? block-entity) (ldb/object? block-entity))
                             (:block/title m*)
                             (not= (:block/title m*) (:block/title block-entity))))
               (outliner-validate/validate-block-title db (:block/title m*) block-entity))
           m (cond-> m*
               db-based?
-              (dissoc :block/pre-block? :block/priority :block/marker :block/properties-order))]
+              (dissoc :block/pre-block? :block/priority :block/marker :block/properties-order))
+          m (if db-based?
+              (let [{:keys [refs raw-title]} (build-page-parents db (:block/refs m) date-formatter (:block/title m))]
+                (assoc m :block/refs refs :block/title raw-title))
+              m)]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)
