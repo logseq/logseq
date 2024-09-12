@@ -282,7 +282,5 @@
 
     ;; run backup every hour
       (let [interval (js/setInterval #(backup-db-graph repo)
-                                     ;; (* 1 60 60 1000)
-                                     (* 1 10 1000)
-                                     )]
+                                     (* 1 60 60 1000))]
         (reset! *backup-interval interval)))))
