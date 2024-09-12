@@ -96,7 +96,8 @@
   (let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge options default-export-options))
         files' (mapv #(hash-map :path %)
                      (into [file] (map resolve-path files)))]
-    (gp-exporter/export-doc-files conn files' <read-file doc-options)))
+    (p/let [_ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
+      {:import-state (:import-state doc-options)})))
 
 (def spec
   "Options spec"
@@ -134,12 +135,15 @@
         directory? (.isDirectory (fs/statSync file-graph'))
         ;; coerce option collection into strings
         options' (if (:tag-classes options) (update options :tag-classes (partial mapv str)) options)]
-    (p/do!
-     (if directory?
-       (import-file-graph-to-db file-graph' (node-path/join dir db-name) conn (merge options' {:graph-name db-name}))
-       (import-files-to-db file-graph' conn (merge options' {:graph-name db-name})))
-     (when (:verbose options') (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
-     (println "Created graph" (str db-name "!")))))
+    (p/let [{:keys [import-state]}
+            (if directory?
+              (import-file-graph-to-db file-graph' (node-path/join dir db-name) conn (merge options' {:graph-name db-name}))
+              (import-files-to-db file-graph' conn (merge options' {:graph-name db-name})))]
+
+      (when-let [ignored-props (seq @(:ignored-properties import-state))]
+        (println "Ignored properties:" (pr-str ignored-props)))
+      (when (:verbose options') (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
+      (println "Created graph" (str db-name "!")))))
 
 (when (= nbb/*file* (:file (meta #'-main)))
   (-main *command-line-args*))
