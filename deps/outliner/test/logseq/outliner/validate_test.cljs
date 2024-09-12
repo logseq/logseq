@@ -41,35 +41,6 @@
           (assoc (find-block-by-content conn "background-image") :db/id 10000)))
         "Disallow duplicate user property")))
 
-(deftest validate-block-title-unique-for-blocks
-  (let [conn (create-conn-with-blocks
-              [{:page {:block/title "page"}
-                :blocks [{:block/title "yahoo"}
-                         {:block/title "Sing Sing" :build/tags [:Movie]}
-                         {:block/title "Chicago" :build/tags [:Musical]}]}])]
-
-    (is (nil?
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
-          @conn
-          "yahoo"
-          (find-block-by-content conn "yahoo")))
-        "Blocks without tags have no limits")
-
-    (is (thrown-with-msg?
-         js/Error
-         #"Duplicate block by tag"
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
-          @conn
-          "Sing Sing"
-          (assoc (find-block-by-content conn "Sing Sing") :db/id 10000)))
-        "Disallow duplicate page with tag")
-    (is (nil?
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
-          @conn
-          "Sing Sing"
-          (find-block-by-content conn "Chicago")))
-        "Allow block with same name for different tag")))
-
 (deftest validate-block-title-unique-for-pages
   (let [conn (create-conn-with-blocks
               [{:page {:block/title "page1"}}

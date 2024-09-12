@@ -66,33 +66,13 @@
                                  :type :warning}})))))
 
 (defn ^:api validate-unique-by-name-tag-and-block-type
-  "Validates uniqueness of blocks and pages for the following cases:
+  "Validates uniqueness of nodes for the following cases:
    - Page names of type 'page' are unique by tag e.g. their can be Apple #Company and Apple #Fruit
    - Page names of other types are unique for their type e.g. their can be #Journal ('class') and Journal ('page')
-   - Property names are unique and don't consider built-in property names
-   - Block names are unique by tag"
-  [db new-title {:block/keys [tags] :as entity}]
-  (cond
-    (ldb/page? entity)
-    (validate-unique-for-page db new-title entity)
-
-    (and (not (:block/type entity)) (seq tags))
-    (when-let [res (seq (d/q '[:find [?b ...]
-                               :in $ ?eid ?title [?tag-id ...]
-                               :where
-                               [?b :block/title ?title]
-                               [?b :block/tags ?tag-id]
-                               [(not= ?b ?eid)]
-                               [(missing? $ ?b :block/type)]]
-                             db
-                             (:db/id entity)
-                             new-title
-                             (map :db/id tags)))]
-      (throw (ex-info "Duplicate block by tag"
-                      {:type :notification
-                       :payload {:message (str "Another block named " (pr-str new-title) " already exists for tag "
-                                               (pr-str (->> res first (d/entity db) :block/tags first :block/title)))
-                                 :type :warning}})))))
+   - Property names are unique and don't consider built-in property names"
+  [db new-title entity]
+  (when (ldb/page? entity)
+    (validate-unique-for-page db new-title entity)))
 
 (defn validate-block-title
   "Validates a block title when it has changed"
