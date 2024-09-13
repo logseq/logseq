@@ -11,8 +11,7 @@
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.class :as db-class]
-            [logseq.outliner.core :as outliner-core]
-            [logseq.graph-parser.text :as text]))
+            [logseq.outliner.core :as outliner-core]))
 
 (defn- build-page-tx [conn properties page {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)

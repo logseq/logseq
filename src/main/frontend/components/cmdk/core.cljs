@@ -232,7 +232,10 @@
                "whiteboard"
                :else
                "page")
-        title (title/block-unique-title page)
+        parent (:logseq.property/parent entity)
+        title (if (and parent (not (ldb/class? parent)))
+                (str (:block/title parent) "/" (title/block-unique-title page))
+                (title/block-unique-title page))
         title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
     (hash-map :icon icon
               :icon-theme :gray
