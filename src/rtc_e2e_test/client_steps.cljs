@@ -151,10 +151,7 @@
            tx-data2 (const/tx-data-map :move-blocks-concurrently-client1)]
        (helper/transact! conn tx-data1)
        (m/? (helper/new-task--wait-all-client-ops-sent))
-       (m/? (helper/new-task--wait-message-from-other-client
-             #(= "move-blocks-concurrently-signal-from-client2" %)
-             :retry-message "move-blocks-concurrently-signal-from-client2"))
-       (m/? (helper/new-task--send-message-to-other-client "move-blocks-concurrently-signal-from-client1"))
+       (m/? (helper/new-task--client1-sync-barrier-2->1 "move-blocks-concurrently-signal"))
        (m/? helper/new-task--stop-rtc)
        (helper/transact! conn tx-data2)
        (is (nil? (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))))
@@ -181,11 +178,7 @@
              (when-not (:block/uuid page3)
                (throw (ex-info "wait page3 synced" {:missionary/retry true})))
              (is (= 6 (count page3-blocks)))))))
-
-       (m/? (helper/new-task--send-message-to-other-client "move-blocks-concurrently-signal-from-client2"))
-       (m/? (helper/new-task--wait-message-from-other-client
-             #(= "move-blocks-concurrently-signal-from-client1" %)
-             :retry-message "move-blocks-concurrently-signal-from-client1"))
+       (m/? (helper/new-task--client2-sync-barrier-2->1 "move-blocks-concurrently-signal"))
        (m/? helper/new-task--stop-rtc)
        (helper/transact! conn (const/tx-data-map :move-blocks-concurrently-client2))
        (is (nil? (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))))
