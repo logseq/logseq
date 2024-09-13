@@ -295,8 +295,8 @@
 (def all-built-in-property-names
   "All built-in property names as a set of keywords"
   (-> built-in-property-name-to-idents keys set
-      ;; :filters is not in built-in-properties because it maps to 2 new properties
-      (conj :filters)))
+      ;; built-in-properties that map to new properties
+      (set/union #{:filters :query-table :query-properties :query-sort-by :query-sort-desc})))
 
 (def all-built-in-names
   "All built-in properties and classes as a set of keywords"
@@ -321,7 +321,7 @@
   (->> props
        (keep (fn [[prop val]]
                ;; FIXME: Migrate :filters to :logseq.property.linked-references/* properties
-               (if (#{:icon :filters} prop)
+               (if (#{:icon :filters :query-sort-by :query-sort-desc :query-properties :query-table} prop)
                  (do (swap! ignored-properties
                             conj
                             {:property prop :value val :location (if name {:page name} {:block title})})
