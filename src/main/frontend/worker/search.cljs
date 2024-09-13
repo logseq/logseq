@@ -209,10 +209,14 @@ DROP TRIGGER IF EXISTS blocks_au;
       ;; (let [content (if (and db-based? (seq (:block/properties block)))
       ;;                 (str content (when (not= content "") "\n") (get-db-properties-str db properties))
       ;;                 content)])
-    (when uuid
-      {:id (str uuid)
-       :page (str (or (:block/uuid page) uuid))
-       :title (if (page-or-object? block) title (sanitize title))})))
+    (let [parent (:logseq.property/parent block)
+          title (if (and parent (= "page" (:block/type block)))
+                  (str (:block/title parent) "/" title)
+                  title)]
+      (when uuid
+        {:id (str uuid)
+         :page (str (or (:block/uuid page) uuid))
+         :title (if (page-or-object? block) title (sanitize title))}))))
 
 (defn build-fuzzy-search-indice
   "Build a block title indice from scratch.
