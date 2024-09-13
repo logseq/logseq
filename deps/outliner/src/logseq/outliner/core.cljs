@@ -354,7 +354,7 @@
                  (assoc m* :block/name page-name))
                m*)
           _ (when (and db-based?
-                      ;; page or object changed?m
+                       ;; page or object changed?
                        (and (or (ldb/page? block-entity) (ldb/object? block-entity))
                             (:block/title m*)
                             (not= (:block/title m*) (:block/title block-entity))))
