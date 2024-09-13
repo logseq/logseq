@@ -430,11 +430,12 @@
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
     (t :settings-page/custom-date-format)
-    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
-               :class       "tippy-hover ml-2"
-               :interactive true
-               :disabled    false}
-              (svg/info))]
+    (when-not (config/db-based-graph? (state/get-current-repo))
+     (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
+                :class       "tippy-hover ml-2"
+                :interactive true
+                :disabled    false}
+               (svg/info)))]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
