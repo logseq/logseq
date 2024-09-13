@@ -235,6 +235,22 @@
          (map (fn [tag]
                 [:db/retract (:db/id block) :block/tags (:db/id tag)])))))
 
+(defn- get-page-by-parent-name
+  [db parent-title child-title]
+  (some->>
+   (d/q
+    '[:find [?b ...]
+      :in $ ?parent-name ?child-name
+      :where
+      [?b :logseq.property/parent ?p]
+      [?b :block/name ?child-name]
+      [?p :block/name ?parent-name]]
+    db
+     (common-util/page-name-sanity-lc parent-title)
+     (common-util/page-name-sanity-lc child-title))
+   first
+   (d/entity db)))
+
 (defn split-namespace-pages
   [db page-or-pages date-formatter & {:keys [*changed-uuids]}]
   (let [pages (if (map? page-or-pages) [page-or-pages] page-or-pages)]
@@ -254,19 +270,7 @@
                             (let [last-part? (= idx (dec (count parts)))
                                   page (if (zero? idx)
                                          (ldb/get-page db part)
-                                         (some->>
-                                          (d/q
-                                           '[:find [?b ...]
-                                             :in $ ?parent-name ?child-name
-                                             :where
-                                             [?b :logseq.property/parent ?p]
-                                             [?b :block/name ?child-name]
-                                             [?p :block/name ?parent-name]]
-                                           db
-                                           (common-util/page-name-sanity-lc (nth parts (dec idx)))
-                                           (common-util/page-name-sanity-lc part))
-                                          first
-                                          (d/entity db)))
+                                         (get-page-by-parent-name db (nth parts (dec idx)) part))
                                   result (or page
                                              (when last-part? (ldb/get-page db part))
                                              (-> (gp-block/page-name->map part db true date-formatter
