@@ -58,12 +58,16 @@
 .query-table, .classic-table {
   @apply my-2 rounded overflow-hidden;
 
+  &.force-visible-scrollbar {
+    @apply !overflow-x-auto pb-1;
+  }
+
   table {
     @apply w-full border-none;
   }
 
   th {
-    @apply bg-gray-03;
+    @apply bg-gray-03 whitespace-nowrap;
   }
 
   tr {
@@ -81,4 +85,8 @@
       @apply whitespace-normal;
     }
   }
+}
+
+.markdown-table {
+  width: 98%;
 }
