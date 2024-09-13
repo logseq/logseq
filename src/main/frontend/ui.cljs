@@ -637,10 +637,10 @@
       state
       {;; enter
        13 (fn [state e]
-            (.preventDefault e)
-            (some->
-             (.querySelector (rum/dom-node state) "button.ui__modal-enter")
-             (.click)))})))
+            (when-let [^js enter-el (some-> (rum/dom-node state)
+                                      (.querySelector "button.ui__modal-enter"))]
+              (.preventDefault e)
+              (.click enter-el)))})))
   []
   (let [modal-panel-content (state/sub :modal/panel-content)
         fullscreen? (state/sub :modal/fullscreen?)
