@@ -126,10 +126,14 @@
 .block-body ul,
 .block-body ol,
 .block-body dl {
-  margin-bottom: 0;
+  @apply mb-0;
 
   > li {
-    margin: 0;
+    @apply py-[1px] m-0;
+
+    .ui__checkbox {
+      @apply mr-1.5 overflow-hidden relative top-0.5;
+    }
   }
 }
 
@@ -687,7 +691,7 @@
   color: var(--ls-primary-text-color);
 
   .ui__icon {
-      @apply opacity-80;
+    @apply opacity-80;
   }
 
   &:hover > .bullet-container:not(.typed-list) {
@@ -870,7 +874,7 @@ html.is-mac {
   opacity: 1;
 }
 
-.positioned-properties.block-right  {
+.positioned-properties.block-right {
   button {
     @apply whitespace-nowrap mr-0.5;
   }
@@ -881,53 +885,55 @@ html.is-mac {
 }
 
 .block-tags {
-    @apply flex flex-row flex-wrap self-start items-center;
-    min-height: 24px;
-    max-width: 256px;
-    margin-right: -28px;
+  @apply flex flex-row flex-wrap self-start items-center;
+  min-height: 24px;
+  max-width: 256px;
+  margin-right: -28px;
 }
+
 .block-tag {
-    @apply pr-1 flex flex-row items-center gap-1;
+  @apply pr-1 flex flex-row items-center gap-1;
 }
 
 .block-tag a.tag {
-    @apply flex text-sm items-center opacity-70;
+  @apply flex text-sm items-center opacity-70;
 }
 
 .block-tag a.tag:hover {
-    @apply opacity-100;
+  @apply opacity-100;
 }
+
 .block-tag span {
-    @apply whitespace-nowrap overflow-hidden;
-    max-width: 160px;
-    text-overflow: ellipsis;
+  @apply whitespace-nowrap overflow-hidden;
+  max-width: 160px;
+  text-overflow: ellipsis;
 }
 
 .ls-table a.tag {
-    @apply text-sm;
+  @apply text-sm;
 }
 
 .block-content-wrapper svg, .view-actions svg {
-    width: 18px;
-    height: 18px;
+  width: 18px;
+  height: 18px;
 }
 
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
-    width: 38px;
-    height: 38px;
+  width: 38px;
+  height: 38px;
 }
 
 .ls-page-title .positioned-properties svg {
-    width: 16px;
-    height: 16px;
+  width: 16px;
+  height: 16px;
 }
 
 .ls-page-title .ls-page-icon button {
-    margin-top: 8px;
+  margin-top: 8px;
 }
 
 .ls-page-title .positioned-properties {
-    height: 54px;
+  height: 54px;
 }
 
 .ls-page-title .block-tags {

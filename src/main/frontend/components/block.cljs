@@ -2013,6 +2013,7 @@
   (ui/checkbox
    {:style {:margin-right 6}
     :value checked?
+    :checked checked?
     :on-change (fn [event]
                  (let [target (.-target event)
                        block (:block config)
