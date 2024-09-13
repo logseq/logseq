@@ -283,24 +283,22 @@
                           parts))]
               (map-indexed
                (fn [idx page]
-                 (if class?
-                   (cond
-                     (de/entity? page)
-                     (when-not (ldb/class? page)
-                       (db-class/build-new-class db {:db/id (:db/id page)
-                                                     :block/title (:block/title page)}))
-                     (zero? idx)
-                     (db-class/build-new-class db page)
-                     :else
-                     (db-class/build-new-class db
-                                               (assoc page :logseq.property/parent [:block/uuid (:block/uuid (nth pages (dec idx)))])))
-                   (cond
-                     (de/entity? page)
-                     nil
-                     (zero? idx)
-                     page
-                     :else
-                     (assoc page :logseq.property/parent [:block/uuid (:block/uuid (nth pages (dec idx)))]))))
+                 (let [parent-eid (when (> idx 0)
+                                    (when-let [id (:block/uuid (nth pages (dec idx)))]
+                                      [:block/uuid id]))]
+                   (if class?
+                     (cond
+                       (and (de/entity? page) (ldb/class? page))
+                       page
+                       (de/entity? page) ; page exists but not a class, avoid converting here becuase this could be troublesome.
+                       nil
+                       (zero? idx)
+                       (db-class/build-new-class db page)
+                       :else
+                       (db-class/build-new-class db (assoc page :logseq.property/parent parent-eid)))
+                     (if (or (de/entity? page) (zero? idx))
+                       page
+                       (assoc page :logseq.property/parent parent-eid)))))
                pages))
             [page])))
       pages)
