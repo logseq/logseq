@@ -489,17 +489,16 @@
         create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
-    (p/do!
-      (cond
-        create-class?
-        (db-page-handler/<create-class! class
-                                        {:redirect? false
-                                         :create-first-block? false})
-        create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
-        create-page? (page-handler/<create! @!input {:redirect? true}))
+    (p/let [result (cond
+                     create-class?
+                     (db-page-handler/<create-class! class
+                                                     {:redirect? false
+                                                      :create-first-block? false})
+                     create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
+                     create-page? (page-handler/<create! @!input {:redirect? true}))]
       (state/close-modal!)
-      (when create-class?
-        (state/pub-event! [:class/configure (db/get-case-page class)])))))
+      (when (and create-class? result)
+        (state/pub-event! [:class/configure result])))))
 
 (defn- get-filter-user-input
   [input]
