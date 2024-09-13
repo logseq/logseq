@@ -251,7 +251,7 @@
    first
    (d/entity db)))
 
-(defn split-namespace-pages
+(defn ^:api split-namespace-pages
   [db page-or-pages date-formatter & {:keys [*changed-uuids]}]
   (let [pages (if (map? page-or-pages) [page-or-pages] page-or-pages)]
     (->>
