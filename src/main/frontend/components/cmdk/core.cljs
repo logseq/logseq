@@ -220,7 +220,7 @@
                 new-result)))]))
 
 (defn- page-item
-  [repo page]
+  [repo page q]
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
         source-page (model/get-alias-source-page repo (:db/id entity))
         icon (cond
@@ -232,7 +232,7 @@
                "whiteboard"
                :else
                "page")
-        title (title/block-unique-title page)
+        title (highlight-content-query (title/block-unique-title page) q)
         title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
     (hash-map :icon icon
               :icon-theme :gray
@@ -266,7 +266,7 @@
             blocks (remove nil? blocks)
             items (keep (fn [block]
                           (if (:page? block)
-                            (page-item repo block)
+                            (page-item repo block !input)
                             (block-item repo block current-page !input))) blocks)]
       (if (= group :current-page)
         (let [items-on-current-page (filter :current-page? items)]
