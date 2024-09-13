@@ -364,7 +364,10 @@
         (str "#" (second (second clause))))
 
       (contains? #{:property :page-property} (keyword f))
-      (str (name (second clause)) ": "
+      (str (if (config/db-based-graph? (state/get-current-repo))
+             (:block/title (db/entity (second clause)))
+             (name (second clause)))
+           ": "
            (cond
              (and (vector? (last clause)) (= :page-ref (first (last clause))))
              (second (last clause))
