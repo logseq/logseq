@@ -148,7 +148,7 @@
 
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
-    (is (= 16 (count @(:ignored-properties import-state))) "No ignored properties")))
+    (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")))
 
 (deftest-async export-basic-graph
   ;; This graph will contain basic examples of different features to import
@@ -176,7 +176,7 @@
                          (filter #(= "page" (:block/type %))))))
           "Correct number of pages with block content")
       (is (= 4 (count (d/datoms @conn :avet :block/type "whiteboard"))))
-      (is (= 6 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
+      (is (= 1 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
       (is (= 1 (count @assets))))
 
     (testing "logseq files"
@@ -285,12 +285,11 @@
       (is (= #{"gpt"}
              (:block/alias (readable-properties @conn (find-page-by-name @conn "chat-gpt")))))
 
-      ;; FIXME: Enable when new properties are imported
-      #_(is (= {:logseq.property/query-sort-by :user.property/prop-num
-                :logseq.property/query-properties [:block :page :user.property/prop-string :user.property/prop-num]
-                :logseq.property/query-table true}
-               (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
-            "query block has correct query properties"))
+      (is (= {:logseq.property.table/sorting [{:id :user.property/prop-num, :asc? false}]
+              :logseq.property.view/type "Table View"
+              :logseq.property.table/ordered-columns [:block/title :user.property/prop-string :user.property/prop-num]}
+             (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
+          "query block has correct query properties"))
 
     (testing "db attributes"
       (is (= true

@@ -247,7 +247,7 @@
 
 (defn- get-property-schema [property-schemas kw]
   (or (get property-schemas kw)
-        (throw (ex-info (str "No property schema found for " (pr-str kw)) {}))))
+      (throw (ex-info (str "No property schema found for " (pr-str kw)) {}))))
 
 (defn- infer-property-schema-and-get-property-change
   "Infers a property's schema from the given _user_ property value and adds new ones to
@@ -316,38 +316,66 @@
 (assert (set/subset? file-built-in-property-names all-built-in-property-names)
         "All file-built-in properties are used in db graph")
 
+(def query-table-special-keys
+  "Special keywords in previous query table"
+  {:page :block/title
+   :block :block/title
+   :created-at :block/created-at
+   :updated-at :block/updated-at})
+
+(defn- translate-query-properties [prop-value all-idents options]
+  (let [property-classes (set (map keyword (:property-classes options)))]
+    (try
+      (->> (edn/read-string prop-value)
+           (keep #(cond (get query-table-special-keys %)
+                        (get query-table-special-keys %)
+                        (property-classes %)
+                        :block/tags
+                        (= :tags %)
+                         ;; This could also be :logseq.property/page-tags
+                        :block/tags
+                        :else
+                        (get-ident @all-idents %)))
+           distinct
+           vec)
+      (catch :default e
+        (js/console.error "Translating query properties failed with:" e)
+        []))))
+
 (defn- update-built-in-property-values
   [props {:keys [ignored-properties all-idents]} {:block/keys [title name]} options]
-  (->> props
-       (keep (fn [[prop val]]
-               ;; FIXME: Migrate :filters to :logseq.property.linked-references/* properties
-               (if (#{:icon :filters :query-sort-by :query-sort-desc :query-properties :query-table} prop)
-                 (do (swap! ignored-properties
-                            conj
-                            {:property prop :value val :location (if name {:page name} {:block title})})
-                     nil)
-                 [(built-in-property-name-to-idents prop)
-                  (case prop
-                    :query-properties
-                    (let [property-classes (set (map keyword (:property-classes options)))]
-                      (try
-                        (mapv #(cond (#{:page :block :created-at :updated-at} %)
-                                     %
-                                     (property-classes %)
-                                     :block/tags
-                                     (= :tags %)
-                                     ;; This could also be :logseq.property/page-tags
-                                     :block/tags
-                                     :else
-                                     (get-ident @all-idents %))
-                              (edn/read-string val))
-                        (catch :default e
-                          (js/console.error "Translating query properties failed with:" e)
-                          [])))
-                    :query-sort-by
-                    (if (#{:page :block :created-at :updated-at} (keyword val)) (keyword val) (get-ident @all-idents (keyword val)))
-                    val)])))
-       (into {})))
+  (let [m
+        (->> props
+             (keep (fn [[prop prop-value]]
+                     ;; FIXME: Migrate :filters to :logseq.property.linked-references/* properties
+                     (if (#{:icon :filters} prop)
+                       (do (swap! ignored-properties
+                                  conj
+                                  {:property prop :value prop-value :location (if name {:page name} {:block title})})
+                           nil)
+                       (case prop
+                         :query-properties
+                         (when-let [cols (not-empty (translate-query-properties prop-value all-idents options))]
+                           [:logseq.property.table/ordered-columns cols])
+                         :query-table
+                         [:logseq.property.view/type
+                          (if prop-value :logseq.property.view/type.table :logseq.property.view/type.list)]
+                         :query-sort-by
+                         [:logseq.property.table/sorting
+                          [{:id (or (query-table-special-keys (keyword prop-value))
+                                    (get-ident @all-idents (keyword prop-value)))
+                            :asc? true}]]
+                         ;; ignore to handle below
+                         :query-sort-desc
+                         nil
+                         ;; else
+                         [(built-in-property-name-to-idents prop) prop-value]))))
+             (into {}))]
+             (cond-> m
+               (and (contains? props :query-sort-desc) (:query-sort-by props))
+               (update :logseq.property.table/sorting
+                       (fn [v]
+                         (assoc-in v [0 :asc?] (not (:query-sort-desc props))))))))
 
 (defn- update-page-or-date-values
   "Converts :node or :date names to entity values"
