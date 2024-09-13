@@ -103,7 +103,7 @@
                             (take 5 items))))
         node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
                        (when-not (string/blank? input)
-                         (or (db/get-page (string/trim input))
+                         (or (db/get-page (string/trim (last (string/split input "/"))))
                              (some (fn [block]
                                      (and
                                       (:block/tags block)
