@@ -168,7 +168,7 @@
      (when (seq favorite-entities)
        (let [favorites (map
                         (fn [e]
-                          (let [icon (icon/get-node-icon e {})]
+                          (let [icon (icon/get-node-icon e)]
                             {:id (str (:db/id e))
                              :value (:block/uuid e)
                              :content [:li.favorite-item (page-name e icon false)]}))
@@ -198,7 +198,7 @@
           :draggable true
           :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
           :data-ref name}
-         (page-name page (icon/get-node-icon page {}) true)])])))
+         (page-name page (icon/get-node-icon page) true)])])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
@@ -255,7 +255,7 @@
      [:button#create-button
       {:on-click toggle-fn}
       [:<>
-       (ui/icon "plus" {:font? "true"})
+       (ui/icon "plus")
        [:span.mx-1 (t :left-side-bar/create)]]])
    (->>
     [{:title (t :left-side-bar/new-page)

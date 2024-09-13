@@ -917,14 +917,6 @@
   dependencies:
     defer-to-connect "^2.0.0"
 
-"@tabler/icons-react@^2.47.0":
-  version "2.47.0"
-  resolved "https://registry.yarnpkg.com/@tabler/icons-react/-/icons-react-2.47.0.tgz#b704e7ae98f95be8bd6e938b4b2e84cd20b0cf31"
-  integrity sha512-iqly2FvCF/qUbgmvS8E40rVeYY7laltc5GUjRxQj59DuX0x/6CpKHTXt86YlI2whg4czvd/c8Ce8YR08uEku0g==
-  dependencies:
-    "@tabler/icons" "2.47.0"
-    prop-types "^15.7.2"
-
 "@tabler/icons-webfont@^2.47.0":
   version "2.47.0"
   resolved "https://registry.yarnpkg.com/@tabler/icons-webfont/-/icons-webfont-2.47.0.tgz#4b4303170d1ed616140044848d6ef99cc993abf9"
@@ -6342,7 +6334,7 @@ prompts@^2.4.2:
     kleur "^3.0.3"
     sisteransi "^1.0.5"
 
-prop-types@15.x, prop-types@^15.6.0, prop-types@^15.6.2, prop-types@^15.7.2, prop-types@^15.8.1:
+prop-types@15.x, prop-types@^15.6.0, prop-types@^15.6.2, prop-types@^15.8.1:
   version "15.8.1"
   resolved "https://registry.yarnpkg.com/prop-types/-/prop-types-15.8.1.tgz#67d87bf1a694f48435cf332c24af10214a3140b5"
   integrity sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==
