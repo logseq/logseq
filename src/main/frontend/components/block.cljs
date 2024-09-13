@@ -663,8 +663,7 @@
           (let [parent (:logseq.property/parent page-entity)]
             (if (and display-parent? parent (not (ldb/class? page-entity)))
               [:span
-               (:block/title parent)
-               "/"
+               (str (:block/title parent) "/")
                page-component]
               page-component))))]]))
 
@@ -2335,7 +2334,7 @@
                                                   util/caret-range)
                              {:block/keys [title format]} block
                              content (if (config/db-based-graph? (state/get-current-repo))
-                                       (or (:block/title block) title)
+                                       (:block/title-with-refs-parent block)
                                        (->> title
                                             (property-file/remove-built-in-properties-when-file-based
                                              (state/get-current-repo) format)

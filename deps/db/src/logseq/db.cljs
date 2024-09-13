@@ -64,7 +64,7 @@
    (let [tx-data (map (fn [m]
                         (if (map? m)
                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                  :block.temp/ast-title :block.temp/ast-body :block/level :block/container :db/other-tx
+                                  :block.temp/ast-title :block.temp/ast-body :block/level :block/container :db/other-tx :block.temp/parent-title?
                                   :block/unordered)
                           m)) tx-data)
          tx-data (->> (common-util/fast-remove-nils tx-data)
