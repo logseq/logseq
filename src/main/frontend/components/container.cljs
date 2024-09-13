@@ -141,7 +141,11 @@
         (not (db/page? page))
         (block/inline-text :markdown (:block/title page))
         untitled? (t :untitled)
-        :else (pdf-utils/fix-local-asset-pagename title))]
+        :else (let [title' (pdf-utils/fix-local-asset-pagename title)
+                    parent (:logseq.property/parent page)]
+                (if (and parent (not (ldb/class? page)))
+                  (str (:block/title parent) "/" title')
+                  title')))]
 
      ;; dots trigger
      (shui/button
