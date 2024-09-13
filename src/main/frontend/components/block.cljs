@@ -2262,6 +2262,7 @@
    (dom/has-class? target "forbid-edit")
    (dom/has-class? target "bullet")
    (dom/has-class? target "logbook")
+   (dom/has-class? target "markdown-table")
    (util/link? target)
    (util/time? target)
    (util/input? target)
@@ -2673,7 +2674,7 @@
     [:div.block-content-or-editor-wrap
      {:class (when (:page-title? config) "ls-page-title-container")}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
-     [:div.flex.flex-1.flex-col
+     [:div.block-content-or-editor-inner
       [:div.flex.flex-1.flex-row.gap-1.items-center
        (if (and edit? editor-box)
          [:div.editor-wrapper.flex.flex-1
@@ -3410,7 +3411,7 @@
                          :tbody
                          (mapv #(tr :td %) group)))
                  groups)]
-    [:div.table-wrapper
+    [:div.table-wrapper.classic-table.force-visible-scrollbar.markdown-table
      (->elem
        :table
        {:class "table-auto"

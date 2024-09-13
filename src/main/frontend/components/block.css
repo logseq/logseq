@@ -72,6 +72,10 @@
   @apply flex flex-1 flex-row flex-wrap gap-1;
 }
 
+.block-content-or-editor-inner {
+  @apply flex flex-1 flex-col w-full;
+}
+
 .block-head-wrap {
   @apply flex flex-1 w-full flex-row flex-wrap;
   @apply justify-between items-center;
