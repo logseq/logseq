@@ -893,31 +893,6 @@
                                                           "")]
            (when edit-block-f (edit-block-f))))))))
 
-(defn set-block-query-properties!
-  [block-id all-properties key add?]
-  (when-let [block (db/entity [:block/uuid block-id])]
-    (let [query-properties (get block (pu/get-pid :logseq.property/query-properties))
-          repo (state/get-current-repo)
-          db-based? (config/db-based-graph? repo)
-          query-properties (if db-based?
-                             query-properties
-                             (some-> query-properties
-                                     (common-handler/safe-read-string "Parsing query properties failed")))
-          query-properties (if (seq query-properties)
-                             query-properties
-                             all-properties)
-          query-properties (if add?
-                             (distinct (conj query-properties key))
-                             (remove #{key} query-properties))
-          query-properties (vec query-properties)]
-      (if (seq query-properties)
-        (property-handler/set-block-property! repo block-id
-                                              (pu/get-pid :logseq.property/query-properties)
-                                              (if db-based?
-                                                query-properties
-                                                (str query-properties)))
-        (property-handler/remove-block-property! repo block-id (pu/get-pid :logseq.property/query-properties))))))
-
 (defn set-block-timestamp!
   [block-id key value]
   (let [key (string/lower-case (str key))
