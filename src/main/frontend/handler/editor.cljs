@@ -290,9 +290,9 @@
          block-id (when (and (not (config/db-based-graph? repo)) (map? properties))
                     (get properties :id))
          content (if (config/db-based-graph? repo)
-                   title
+                   (:block/title-with-refs-parent (db/entity (:db/id block)))
                    (-> (property-file/remove-built-in-properties-when-file-based repo format title)
-                     (drawer/remove-logbook)))]
+                       (drawer/remove-logbook)))]
      (cond
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!

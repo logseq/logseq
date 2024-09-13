@@ -318,7 +318,7 @@
 (extend-type Entity
   otree/INode
   (-save [this txs-state conn repo date-formatter {:keys [retract-attributes? retract-attributes]
-                                                    :or {retract-attributes? true}}]
+                                                   :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [data this
@@ -330,7 +330,7 @@
                   db-based?
                   (dissoc :block/properties))
           m* (-> data'
-                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
+                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered :block.temp/parent-title?
                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?)
                  common-util/remove-nils
                  block-with-updated-at

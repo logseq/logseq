@@ -98,7 +98,8 @@
                               ;; anything org mode
                               "org"
                               "pre-block"
-                              "namespace"
+                              ;; TODO: rename split-namespace?
+                              ;; "namespace"
                               "db/get-page"
                               "/page-name-sanity-lc"]))
         res (apply shell {:out :string :continue true}
