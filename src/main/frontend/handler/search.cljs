@@ -83,10 +83,12 @@
 
 (defn loop-find-in-page!
   [backward?]
-  (when (and (get-in @state/state [:ui/find-in-page :active?])
+  (if (and (get-in @state/state [:ui/find-in-page :active?])
              (not (state/editing?)))
-    (state/set-state! [:ui/find-in-page :backward?] backward?)
-    (debounced-search)))
+    (do (state/set-state! [:ui/find-in-page :backward?] backward?)
+      (debounced-search))
+    ;; return false to skip prevent default event behavior (Enter key)
+    false))
 
 (defn electron-exit-find-in-page!
   [& {:keys [clear-state?]
