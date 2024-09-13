@@ -240,63 +240,65 @@
   (let [pages (if (map? page-or-pages) [page-or-pages] page-or-pages)]
     (->>
      (mapcat
-      (fn [{:block/keys [title uuid type] :as page}]
-        (if (and (contains? #{"page" "class"} type) (text/namespace-page? title))
-          (let [class? (= type "class")
-                parts (->> (string/split title #"/")
-                           (map string/trim)
-                           (remove string/blank?))
-                pages (doall
-                       (map-indexed
-                        (fn [idx part]
-                          (let [last-part? (= idx (dec (count parts)))
-                                page (if (zero? idx)
-                                       (ldb/get-page db part)
-                                       (some->>
-                                        (d/q
-                                         '[:find [?b ...]
-                                           :in $ ?parent-name ?child-name
-                                           :where
-                                           [?b :logseq.property/parent ?p]
-                                           [?b :block/name ?child-name]
-                                           [?p :block/name ?parent-name]]
-                                         db
-                                         (common-util/page-name-sanity-lc (nth parts (dec idx)))
-                                         (common-util/page-name-sanity-lc part))
-                                        first
-                                        (d/entity db)))
-                                result (or page
-                                           (when last-part? (ldb/get-page db part))
-                                           (-> (gp-block/page-name->map part db true date-formatter
-                                                                        {:page-uuid (when last-part? uuid)})
-                                               (assoc :block/format :markdown)))]
-                            (when (and last-part? (not= (:block/uuid result) uuid)
-                                       *changed-uuids)
-                              (swap! *changed-uuids assoc uuid (:block/uuid result)))
-                            result))
-                        parts))]
-            (map-indexed
-             (fn [idx page]
-               (if class?
-                 (cond
-                   (de/entity? page)
-                   (when-not (ldb/class? page)
-                     (db-class/build-new-class db {:db/id (:db/id page)
-                                                   :block/title (:block/title page)}))
-                   (zero? idx)
-                   (db-class/build-new-class db page)
-                   :else
-                   (db-class/build-new-class db
-                                             (assoc page :logseq.property/parent [:block/uuid (:block/uuid (nth pages (dec idx)))])))
-                 (cond
-                   (de/entity? page)
-                   nil
-                   (zero? idx)
-                   page
-                   :else
-                   (assoc page :logseq.property/parent [:block/uuid (:block/uuid (nth pages (dec idx)))]))))
-             pages))
-          [page]))
+      (fn [{:block/keys [title] :as page}]
+        (let [block-uuid (:block/uuid page)
+              block-type (:block/type page)]
+          (if (and (contains? #{"page" "class"} block-type) (text/namespace-page? title))
+            (let [class? (= block-type "class")
+                  parts (->> (string/split title #"/")
+                             (map string/trim)
+                             (remove string/blank?))
+                  pages (doall
+                         (map-indexed
+                          (fn [idx part]
+                            (let [last-part? (= idx (dec (count parts)))
+                                  page (if (zero? idx)
+                                         (ldb/get-page db part)
+                                         (some->>
+                                          (d/q
+                                           '[:find [?b ...]
+                                             :in $ ?parent-name ?child-name
+                                             :where
+                                             [?b :logseq.property/parent ?p]
+                                             [?b :block/name ?child-name]
+                                             [?p :block/name ?parent-name]]
+                                           db
+                                           (common-util/page-name-sanity-lc (nth parts (dec idx)))
+                                           (common-util/page-name-sanity-lc part))
+                                          first
+                                          (d/entity db)))
+                                  result (or page
+                                             (when last-part? (ldb/get-page db part))
+                                             (-> (gp-block/page-name->map part db true date-formatter
+                                                                          {:page-uuid (when last-part? block-uuid)})
+                                                 (assoc :block/format :markdown)))]
+                              (when (and last-part? (not= (:block/uuid result) block-uuid)
+                                         *changed-uuids)
+                                (swap! *changed-uuids assoc block-uuid (:block/uuid result)))
+                              result))
+                          parts))]
+              (map-indexed
+               (fn [idx page]
+                 (if class?
+                   (cond
+                     (de/entity? page)
+                     (when-not (ldb/class? page)
+                       (db-class/build-new-class db {:db/id (:db/id page)
+                                                     :block/title (:block/title page)}))
+                     (zero? idx)
+                     (db-class/build-new-class db page)
+                     :else
+                     (db-class/build-new-class db
+                                               (assoc page :logseq.property/parent [:block/uuid (:block/uuid (nth pages (dec idx)))])))
+                   (cond
+                     (de/entity? page)
+                     nil
+                     (zero? idx)
+                     page
+                     :else
+                     (assoc page :logseq.property/parent [:block/uuid (:block/uuid (nth pages (dec idx)))]))))
+               pages))
+            [page])))
       pages)
      (remove nil?))))
 
