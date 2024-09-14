@@ -267,7 +267,7 @@
  :help-shortcut-title "Клацніть, щоб перевірити комбінації і інші підказки"
  :parsing-files "Розбір файлів"
  :loading-files "Загрузка файлів"
- :login "Увіти"
+ :login "Увійти"
  :logout "Вийти"
  :download "Завантажити"
  :language "Мова"
