@@ -403,6 +403,7 @@
                               (get-in config [:block :block/uuid])))
         _ (state/set-state! :editor/code-mode? false)
         original-mode (get attr :data-lang)
+        *editor-ref (get attr :editor-ref)
         mode (if (:file? config)
                (text->cm-mode original-mode :ext) ;; ref: src/main/frontend/components/file.cljs
                (text->cm-mode original-mode :name))
@@ -435,7 +436,9 @@
                             {:hintOptions {}})
                           user-options)
         editor (when textarea
-                 (from-textarea textarea (clj->js cm-options)))]
+                 (from-textarea textarea (clj->js cm-options)))
+        _ (when (and editor *editor-ref)
+            (reset! *editor-ref editor))]
     (when editor
       (let [textarea-ref (rum/ref-node state textarea-ref-name)
             element (.getWrapperElement editor)]
