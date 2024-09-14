@@ -178,6 +178,8 @@
         icon (cond
                (= ident :block/tags)
                "hash"
+               (string/starts-with? (str ident) ":plugin.")
+               "puzzle"
                :else
                (case type
                  :number "number"
