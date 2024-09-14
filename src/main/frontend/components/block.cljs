@@ -328,11 +328,12 @@
                         (let [*local-selected? (atom local?)]
                           (-> (shui/dialog-confirm!
                                 [:div.text-xs.opacity-60.-my-2
-                                 [:label.flex.gap-1.items-center
-                                  (shui/checkbox
-                                    {:default-checked @*local-selected?
-                                     :on-checked-change #(reset! *local-selected? %)})
-                                  (t (if local? :asset/physical-delete ""))]]
+                                 (when local?
+                                   [:label.flex.gap-1.items-center
+                                    (shui/checkbox
+                                      {:default-checked @*local-selected?
+                                       :on-checked-change #(reset! *local-selected? %)})
+                                    (t :asset/physical-delete)])]
                                 {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
                                  :outside-cancel? true})
                             (p/then (fn []
