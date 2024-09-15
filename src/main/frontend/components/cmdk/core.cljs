@@ -48,14 +48,17 @@
 
 (def GROUP-LIMIT 5)
 
-(def search-actions
-  [{:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"}
-   {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "letter-n"}
-   {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
-   {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
-   {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}])
-
-(def filters search-actions)
+(defn filters
+  []
+  (let [current-page (state/get-current-page)]
+    (->>
+     [(when current-page
+        {:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"})
+      {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "letter-n"}
+      {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
+      {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
+      {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}]
+     (remove nil?))))
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
 (def default-results
@@ -328,8 +331,8 @@
         input @!input
         q (or (get-filter-q input) "")
         matched-items (if (string/blank? q)
-                        filters
-                        (search/fuzzy-search filters q {:extract-fn :text}))]
+                        (filters)
+                        (search/fuzzy-search (filters) q {:extract-fn :text}))]
     (swap! !results update group merge {:status :success :items matched-items})))
 
 (defmethod load-results :current-page [group state]
