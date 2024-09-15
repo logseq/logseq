@@ -21,7 +21,8 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [logseq.db.frontend.content :as db-content]
-            [logseq.common.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]
+            [frontend.handler.notification :as notification]))
 
 (defn- wrap-tags
   "Tags might have multiple words"
@@ -152,15 +153,24 @@
     (when-let [page-uuid (or (and (uuid? page-uuid-or-name) page-uuid-or-name)
                              (:block/uuid (db/get-page page-uuid-or-name)))]
       (when @state/*db-worker
-        (-> (p/let [res (ui-outliner-tx/transact!
-                         {:outliner-op :delete-page}
-                         (outliner-op/delete-page! page-uuid))
-                    res' (ldb/read-transit-str res)]
-              (if res'
-                (when ok-handler (ok-handler))
-                (when error-handler (error-handler))))
-            (p/catch (fn [error]
-                       (js/console.error error))))))))
+        (let [page (db/entity [:block/uuid page-uuid])
+              default-home (state/get-default-home)
+              home-page? (= (:block/title page) (:page default-home))]
+          (p/do!
+           (when home-page?
+             (p/do!
+              (config-handler/set-config! :default-home (dissoc default-home :page))
+              (config-handler/set-config! :feature/enable-journals? true)
+              (notification/show! "Journals enabled" :success)))
+           (-> (p/let [res (ui-outliner-tx/transact!
+                            {:outliner-op :delete-page}
+                            (outliner-op/delete-page! page-uuid))
+                       res' (ldb/read-transit-str res)]
+                 (if res'
+                   (when ok-handler (ok-handler))
+                   (when error-handler (error-handler))))
+               (p/catch (fn [error]
+                          (js/console.error error))))))))))
 
 ;; other fns
 ;; =========
