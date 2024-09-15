@@ -543,7 +543,7 @@
 
 (def ^:export exit_editing_mode
   (fn [select?]
-    (editor-handler/escape-editing select?)
+    (editor-handler/escape-editing {:select? select?})
     nil))
 
 (def ^:export insert_at_editing_cursor

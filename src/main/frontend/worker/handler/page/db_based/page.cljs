@@ -95,7 +95,7 @@
                                                     :skip-existing-page-check? true})
                           (assoc :block/format format))
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
-                             (let [pages (outliner-core/split-namespace-pages db page date-formatter)]
+                             (let [pages (outliner-core/split-namespace-pages db page nil date-formatter)]
                                [(last pages) (butlast pages)])
                              [page nil])]
         (when page

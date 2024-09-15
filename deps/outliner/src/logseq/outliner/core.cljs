@@ -252,13 +252,16 @@
    (d/entity db)))
 
 (defn ^:api split-namespace-pages
-  [db page-or-pages date-formatter & {:keys [*changed-uuids]}]
-  (let [pages (if (map? page-or-pages) [page-or-pages] page-or-pages)]
+  [db page-or-pages tags date-formatter & {:keys [*changed-uuids]}]
+  (let [pages (if (map? page-or-pages) [page-or-pages] page-or-pages)
+        tags-set (set (map :block/uuid tags))]
     (->>
      (mapcat
       (fn [{:block/keys [title] :as page}]
         (let [block-uuid (:block/uuid page)
-              block-type (:block/type page)]
+              block-type (if (contains? tags-set (:block/uuid page))
+                           "class"
+                           (:block/type page))]
           (if (and (contains? #{"page" "class"} block-type) (text/namespace-page? title))
             (let [class? (= block-type "class")
                   parts (->> (string/split title #"/")
@@ -305,10 +308,15 @@
      (remove nil?))))
 
 (defn- build-page-parents
-  [db refs date-formatter raw-title]
-  (let [*changed-uuids (atom {})
-        refs' (split-namespace-pages db refs date-formatter
+  [db m date-formatter raw-title]
+  (let [refs (:block/refs m)
+        tags (:block/tags m)
+        *changed-uuids (atom {})
+        refs' (split-namespace-pages db refs tags date-formatter
                                      {:*changed-uuids *changed-uuids})
+        tags' (map (fn [tag]
+                     (or (first (filter (fn [ref] (= (:block/uuid ref) (:block/uuid tag))) refs')) tag))
+                   tags)
         raw-title' (if (seq @*changed-uuids)
                      (reduce
                       (fn [raw-content [old-id new-id]]
@@ -316,8 +324,10 @@
                       raw-title
                       @*changed-uuids)
                      raw-title)]
-    {:refs refs'
-     :raw-title raw-title'}))
+    (assoc m
+           :block/refs refs'
+           :block/title raw-title'
+           :block/tags tags')))
 
 (extend-type Entity
   otree/INode
@@ -367,8 +377,7 @@
               db-based?
               (dissoc :block/pre-block? :block/priority :block/marker :block/properties-order))
           m (if db-based?
-              (let [{:keys [refs raw-title]} (build-page-parents db (:block/refs m) date-formatter (:block/title m))]
-                (assoc m :block/refs refs :block/title raw-title))
+              (build-page-parents db m date-formatter (:block/title m))
               m)]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
