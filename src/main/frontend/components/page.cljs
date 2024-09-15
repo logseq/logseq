@@ -661,14 +661,15 @@
                  page-name' (get-sanity-page-name state page-name)
                  page-uuid? (util/uuid-string? page-name')
                  *loading? (atom true)]
-             (p/let [page-block (db-async/<get-block (state/get-current-repo) page-name')]
-               (reset! *loading? false)
-               (if (not page-block)
-                 (page-handler/<create! page-name' {:redirect? (when-not preview-or-sidebar? true)})
-                 (when-not preview-or-sidebar?
-                   (if-let [page-uuid (and (not page-uuid?) (:block/uuid page-block))]
-                     (route-handler/redirect-to-page! (str page-uuid) {:push false})
-                     (route-handler/update-page-title-and-label! (state/get-route-match))))))
+             (when page-name
+               (p/let [page-block (db-async/<get-block (state/get-current-repo) page-name')]
+                 (reset! *loading? false)
+                 (if (not page-block)
+                   (page-handler/<create! page-name' {:redirect? (when-not preview-or-sidebar? true)})
+                   (when-not preview-or-sidebar?
+                     (if-let [page-uuid (and (not page-uuid?) (:block/uuid page-block))]
+                       (route-handler/redirect-to-page! (str page-uuid) {:push false})
+                       (route-handler/update-page-title-and-label! (state/get-route-match)))))))
              (assoc state
                     ::page-name page-name'
                     ::loading? *loading?)))}
@@ -966,6 +967,7 @@
                          (and (= node last-node)
                            (<= (abs (- x last-x)) threshold)
                            (<= (abs (- y last-y)) threshold))))]
+        (js/console.dir event)
         (graph/on-click-handler graph node event focus-nodes n-hops drag? dark?))))
   (.on graph "nodeMousedown"
     (fn [event node]
