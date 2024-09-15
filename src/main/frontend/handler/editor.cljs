@@ -1654,26 +1654,13 @@
   "Return matched blocks that are not built-in"
   [q]
   (p/let [block (state/get-edit-block)
-          editing-page-id (and block
-                               (when-let [page-id (:db/id (:block/page block))]
-                                 (:block/uuid (db/entity page-id))))
-          block-parents (when block
-                          (set (->> (db/get-block-parents (state/get-current-repo)
-                                                          (:block/uuid block)
-                                                          {:depth 99})
-                                    (map :block/uuid))))
-          current-and-parents (set/union #{(:block/uuid block)} block-parents)
           pages (search/block-search (state/get-current-repo) q {:built-in? false
                                                                  :enable-snippet? false})]
-    (->> (if editing-page-id
-           ;; To prevent self references
-           (remove (fn [b]
-                     (or (= editing-page-id (:block/uuid b))
-                         (contains? current-and-parents (:block/uuid b)))) pages)
-           pages)
-         (keep (fn [b]
-                 (when-let [id (:block/uuid b)]
-                   (db/entity [:block/uuid id])))))))
+    (keep (fn [b]
+            (when-let [id (:block/uuid b)]
+              (when-not (= id (:block/uuid block)) ; avoid block self-reference
+                (db/entity [:block/uuid id]))))
+          pages)))
 
 (defn <get-matched-templates
   [q]
