@@ -324,12 +324,20 @@
 (defn remove-block-property!
   [conn eid property-id]
   (throw-error-if-read-only-property property-id)
-  (let [eid (->eid eid)]
-    (if (contains? db-property/db-attribute-properties property-id)
-      (when-let [block (d/entity @conn eid)]
+  (let [eid (->eid eid)
+        block (d/entity @conn eid)]
+    (cond
+      (and (ldb/class? block) (= property-id :logseq.property/parent))
+      (ldb/transact! conn
+                     [[:db/add (:db/id block) :logseq.property/parent :logseq.class/Root]]
+                     {:outliner-op :save-block})
+
+      (contains? db-property/db-attribute-properties property-id)
+      (when block
         (ldb/transact! conn
                        [[:db/retract (:db/id block) property-id]]
                        {:outliner-op :save-block}))
+      :else
       (batch-remove-property! conn [eid] property-id))))
 
 (defn delete-property-value!
