@@ -3,6 +3,7 @@
             [frontend.extensions.graph.pixi :as pixi]
             [frontend.handler.route :as route-handler]
             [frontend.colors :as colors]
+            [frontend.db :as db]
             [goog.object :as gobj]
             [rum.core :as rum]))
 
@@ -42,7 +43,9 @@
       (highlight-edges! graph node dark?))
     (when-not drag?
       (.unhoverNode ^js graph node)
-      (route-handler/redirect-to-page! node))))
+      (when-let [page (and (string? node)
+                           (some-> (js/parseInt node) db/entity))]
+        (route-handler/redirect-to-page! (:block/uuid page))))))
 
 (rum/defcs graph-2d <
   (rum/local nil :ref)
