@@ -343,7 +343,7 @@
   (let [tags' (filter ldb/class? tags)
         result (map
                 (fn [id] (d/entity db id))
-                (set (mapcat ldb/get-class-parents tags')))]
+                (mapcat ldb/get-class-parents tags'))]
     (set result)))
 
 (defn ^:api get-class-properties

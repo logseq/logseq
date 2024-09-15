@@ -584,8 +584,8 @@
       (loop [current-parent parent]
         (when (and
                current-parent
-               (class? parent)
-               (not (contains? @*classes (:db/id parent))))
+               (class? current-parent)
+               (not (contains? @*classes (:db/id current-parent))))
           (swap! *classes conj (:db/id current-parent))
           (recur (:logseq.property/parent current-parent)))))
     @*classes))
