@@ -713,18 +713,20 @@
   [:pre [(seq blocks)]]
   (let [top-level-blocks (filter-top-level-blocks @conn blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
-        top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)
+        top-level-blocks (->> (get-top-level-blocks top-level-blocks non-consecutive?)
+                              (remove ldb/page?))
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
         end-block (last top-level-blocks)]
-    (if (or
-         (= 1 (count top-level-blocks))
-         (= start-block end-block))
-      (delete-block conn txs-state start-block)
-      (doseq [id block-ids]
-        (let [node (d/entity @conn id)]
-          (otree/-del node txs-state conn))))
+    (when (seq top-level-blocks)
+      (if (or
+           (= 1 (count top-level-blocks))
+           (= start-block end-block))
+        (delete-block conn txs-state start-block)
+        (doseq [id block-ids]
+          (let [node (d/entity @conn id)]
+            (otree/-del node txs-state conn)))))
     {:tx-data @txs-state}))
 
 (defn- move-to-original-position?
