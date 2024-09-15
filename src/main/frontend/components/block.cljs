@@ -1014,7 +1014,7 @@
                                  [(breadcrumb config repo id {:indent? true})
                                   (blocks-container
                                     (assoc config :id (str id) :preview? true)
-                                    (db/get-block-and-children repo id))]])]
+                                    [(db/entity [:block/uuid id])])]])]
     (popup-preview-impl children
       {:visible? visible? :set-visible! set-visible!
        :*timer *timer :*timer1 *timer1
