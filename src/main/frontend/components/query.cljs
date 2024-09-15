@@ -23,7 +23,7 @@
       (boolean (some #(= % title) (map :title queries))))))
 
 ;; TODO: Split this into file and DB graph versions. DB graph needlessly coupled too file graph args
-(rum/defcs custom-query-inner < rum/reactive
+(rum/defcs custom-query-inner < rum/static
   [state config {:keys [query breadcrumb-show?]}
    {:keys [query-error-atom
            current-block
@@ -117,6 +117,7 @@
         (str result-count (if (> result-count 1) " results" " result"))])]))
 
 (rum/defcs custom-query* < rum/reactive rum/static db-mixins/query
+  (rum/local nil ::query-result-atom)
   {:init (fn [state]
            (let [[config {:keys [title collapsed?]}] (:rum/args state)
                  built-in? (built-in-custom-query? title)
@@ -129,7 +130,8 @@
            (assoc state :query-error (atom nil)
                   :fulltext-query-result (atom nil)))}
   [state config {:keys [title builder query view collapsed?] :as q}]
-  (let [*query-error (:query-error state)
+  (let [*query-result-atom (::query-result-atom state)
+        *query-error (:query-error state)
         *fulltext-query-result (:fulltext-query-result state)
         built-in? (built-in-custom-query? title)
         config (assoc config :built-in? built-in?)
@@ -151,7 +153,10 @@
         view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         result (when (or built-in-collapsed? (not collapsed?'))
-                 (query-result/get-query-result config q *query-error *fulltext-query-result current-block-uuid {:table? table?}))
+                 (or @*query-result-atom
+                     (let [result (query-result/get-query-result config q *query-error *fulltext-query-result current-block-uuid {:table? table?})]
+                       (reset! *query-result-atom result)
+                       result)))
         page-list? (and (seq result)
                         (some? (:block/name (first result))))
         opts {:query-error-atom *query-error
