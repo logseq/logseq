@@ -727,7 +727,8 @@
           (dom/remove-class! container "blocks-selection-mode"))
         (p/do!
          (editor-handler/save-block! repo (:block/uuid block) value)
-         (editor-handler/escape-editing select?)
+         (editor-handler/escape-editing {:select? select?
+                                         :save-block? false})
          (some-> config :on-escape-editing
                  (apply [(str uuid) (= type :esc)])))))))
 

@@ -2255,7 +2255,7 @@
        {:on-pointer-down (fn [e]
                            (util/stop e)
                            (state/clear-editor-action!)
-                           (editor-handler/escape-editing false)
+                           (editor-handler/escape-editing)
                            (reset! *show-datapicker? true)
                            (reset! commands/*current-command typ)
                            (state/set-timestamp-block! {:block block
