@@ -69,13 +69,7 @@
                                     (file-sync-handler/get-current-graph-uuid))]
       (when (not block?)
         (->>
-         [(when (not= (state/get-current-page) (str (:block/uuid page)))
-            {:title   (t :page/go-to-page)
-             :options {:on-click
-                       (fn []
-                         (route-handler/redirect-to-page! (:block/uuid page)))}})
-
-          (when-not config/publishing?
+         [(when-not config/publishing?
             {:title   (if favorited?
                         (t :page/unfavorite)
                         (t :page/add-to-favorites))
