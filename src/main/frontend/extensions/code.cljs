@@ -395,7 +395,7 @@
      (let [block (db/pull [:block/uuid block-id])]
        (editor-handler/edit-block! block :max)))))
 
-(defn render!
+(defn ^:large-vars/cleanup-todo render!
   [state]
   (let [[config id attr _code theme user-options] (:rum/args state)
         default-open? (and (:editor/code-mode? @state/state)

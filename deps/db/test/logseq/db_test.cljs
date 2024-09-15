@@ -3,8 +3,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.build :as sqlite-build]))
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 
 ;;; datoms
