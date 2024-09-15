@@ -88,8 +88,13 @@
                                  [[:db.fn/retractEntity [:file/path file-path]]])
                 delete-page-tx (concat (db-refs->page repo page)
                                        [[:db.fn/retractEntity (:db/id page)]])
-
+                restore-class-parent-tx (when db-based?
+                                          (->> (filter (fn [p] (ldb/class? p)) (:logseq.property/_parent page))
+                                               (map (fn [p]
+                                                      {:db/id (:db/id p)
+                                                       :logseq.property/parent :logseq.class/Root}))))
                 tx-data (concat truncate-blocks-tx-data
+                                restore-class-parent-tx
                                 delete-page-tx
                                 delete-file-tx)]
 
