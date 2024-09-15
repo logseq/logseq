@@ -234,7 +234,7 @@
   #{:block/alias :block/tags})
 
 (def read-only-properties
-  "Propery values that shouldn't be updated"
+  "Property values that shouldn't be updated"
   #{:logseq.property/built-in?})
 
 (assert (= db-attribute-properties

@@ -986,13 +986,7 @@
                     (seq focus-nodes)
                     (not (:orphan-pages? settings)))
                 (graph-handler/n-hops graph focus-nodes n-hops)
-                graph)
-        graph (update graph :links (fn [links]
-                                     (let [nodes (set (map :id (:nodes graph)))]
-                                       (remove (fn [link]
-                                                 (and (not (nodes (:source link)))
-                                                   (not (nodes (:target link)))))
-                                         links))))]
+                graph)]
     [:div.relative#global-graph
      (graph/graph-2d {:nodes (:nodes graph)
                       :links (:links graph)
@@ -1013,7 +1007,7 @@
   [nodes filters]
   (if (seq filters)
     (let [filter-patterns (map #(re-pattern (str "(?i)" (util/regex-escape %))) filters)]
-      (filter (fn [node] (some #(re-find % (:id node)) filter-patterns)) nodes))
+      (filter (fn [node] (some #(re-find % (:label node)) filter-patterns)) nodes))
     nodes))
 
 (rum/defcs global-graph < rum/reactive
