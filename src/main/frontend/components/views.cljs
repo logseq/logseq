@@ -130,68 +130,69 @@
   [config properties & {:keys [with-object-name?]
                         :or {with-object-name? true}}]
   (->> (concat
-          [{:id :select
-            :name "Select"
-            :header (fn [table _column] (header-checkbox table))
-            :cell (fn [table row column]
-                    (row-checkbox table row column))
-            :column-list? false}
-           (when with-object-name?
-             {:id :block/title
-              :name "Name"
-              :type :string
-              :header header-cp
-              :cell (fn [_table row _column]
-                      (block-title config row))
-              :disable-hide? true})]
-          (map
-           (fn [property]
-             (let [ident (or (:db/ident property) (:id property))
-                   property (if (de/entity? property)
-                              property
-                              (or (db/entity ident) property))
-                   get-value (or (:get-value property)
-                                 (when (de/entity? property)
-                                   (fn [row] (get-property-value-for-search row property))))
-                   closed-values (seq (:property/closed-values property))
-                   closed-value->sort-number (when closed-values
-                                               (->> (zipmap (map :db/id closed-values) (range 0 (count closed-values)))
-                                                    (into {})))
-                   get-value-for-sort (fn [row]
-                                        (cond
-                                          (= (:db/ident property) :logseq.task/deadline)
-                                          (:block/journal-day (get row :logseq.task/deadline))
-                                          closed-values
-                                          (closed-value->sort-number (:db/id (get row (:db/ident property))))
-                                          :else
-                                          (if (fn? get-value)
-                                            (get-value row)
-                                            (get row ident))))]
-               {:id ident
-                :name (or (:name property)
-                          (:block/title property))
-                :header (or (:header property)
-                            header-cp)
-                :cell (or (:cell property)
-                          (when (de/entity? property)
-                            (fn [_table row _column]
-                              (pv/property-value row property (get row (:db/ident property)) {}))))
-                :get-value get-value
-                :get-value-for-sort get-value-for-sort
-                :type (:type property)}))
-           properties)
+        [{:id :select
+          :name "Select"
+          :header (fn [table _column] (header-checkbox table))
+          :cell (fn [table row column]
+                  (row-checkbox table row column))
+          :column-list? false}
+         (when with-object-name?
+           {:id :block/title
+            :name "Name"
+            :type :string
+            :header header-cp
+            :cell (fn [_table row _column]
+                    (block-title config row))
+            :disable-hide? true})]
+        (keep
+         (fn [property]
+           (let [ident (or (:db/ident property) (:id property))]
+             (when-not (contains? #{:logseq.property/built-in?} ident)
+               (let [property (if (de/entity? property)
+                                property
+                                (or (db/entity ident) property))
+                     get-value (or (:get-value property)
+                                   (when (de/entity? property)
+                                     (fn [row] (get-property-value-for-search row property))))
+                     closed-values (seq (:property/closed-values property))
+                     closed-value->sort-number (when closed-values
+                                                 (->> (zipmap (map :db/id closed-values) (range 0 (count closed-values)))
+                                                      (into {})))
+                     get-value-for-sort (fn [row]
+                                          (cond
+                                            (= (:db/ident property) :logseq.task/deadline)
+                                            (:block/journal-day (get row :logseq.task/deadline))
+                                            closed-values
+                                            (closed-value->sort-number (:db/id (get row (:db/ident property))))
+                                            :else
+                                            (if (fn? get-value)
+                                              (get-value row)
+                                              (get row ident))))]
+                 {:id ident
+                  :name (or (:name property)
+                            (:block/title property))
+                  :header (or (:header property)
+                              header-cp)
+                  :cell (or (:cell property)
+                            (when (de/entity? property)
+                              (fn [_table row _column]
+                                (pv/property-value row property (get row (:db/ident property)) {}))))
+                  :get-value get-value
+                  :get-value-for-sort get-value-for-sort
+                  :type (:type property)}))))
+         properties)
 
-          [{:id :block/created-at
-            :name (t :page/created-at)
-            :type :date-time
-            :header header-cp
-            :cell timestamp-cell-cp}
-           {:id :block/updated-at
-            :name (t :page/updated-at)
-            :type :date-time
-            :header header-cp
-            :cell timestamp-cell-cp}])
-         (remove nil?)))
+        [{:id :block/created-at
+          :name (t :page/created-at)
+          :type :date-time
+          :header header-cp
+          :cell timestamp-cell-cp}
+         {:id :block/updated-at
+          :name (t :page/updated-at)
+          :type :date-time
+          :header header-cp
+          :cell timestamp-cell-cp}])
+       (remove nil?)))
 
 (defn- sort-columns
   [columns ordered-column-ids]

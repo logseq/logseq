@@ -233,6 +233,10 @@
   "Internal properties that are also db schema attributes"
   #{:block/alias :block/tags})
 
+(def read-only-properties
+  "Propery values that shouldn't be updated"
+  #{:logseq.property/built-in?})
+
 (assert (= db-attribute-properties
            (set (keep (fn [[k {:keys [attribute]}]] (when attribute k))
                       built-in-properties)))
