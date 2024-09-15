@@ -8,33 +8,45 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.content :as db-content]))
 
-(defn- build-retracted-tx [retracted-blocks]
-  (->> (for [block retracted-blocks]
-         (let [refs (:block/_refs block)]
-           (mapcat (fn [ref]
-                     (let [id (:db/id ref)
-                           block-content (:block/title block)
-                           new-content (some-> (:block/raw-title ref)
-                                               (string/replace (re-pattern (common-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
-                                                               block-content)
+(defn- replace-ref-with-deleted-block-title
+  [block ref-raw-title]
+  (let [block-content (:block/title block)]
+    (some-> ref-raw-title
+            (string/replace (re-pattern (common-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
+                            block-content)
 
-                                               (string/replace (block-ref/->block-ref (str (:block/uuid block)))
-                                                               block-content)
+            (string/replace (block-ref/->block-ref (str (:block/uuid block)))
+                            block-content)
 
                                                ;; Replace object
-                                               (string/replace (db-content/block-id->special-id-ref (:block/uuid block))
-                                                               block-content)
+            (string/replace (db-content/block-id->special-id-ref (:block/uuid block))
+                            block-content)
                                                ;; Replace non-object
-                                               (string/replace (page-ref/->page-ref (str (:block/uuid block)))
-                                                               block-content))
-                           tx (cond->
-                               [[:db/retract (:db/id ref) :block/refs (:db/id block)]
-                                [:db/retract (:db/id ref) :block/path-refs (:db/id block)]]
-                                new-content
-                                (conj [:db/add id :block/title new-content]))]
-                       tx))
-                   refs)))
-       (apply concat)))
+            (string/replace (page-ref/->page-ref (str (:block/uuid block)))
+                            block-content))))
+
+(defn- build-retracted-tx
+  [retracted-blocks]
+  (let [refs (->> (mapcat (fn [block] (:block/_refs block)) retracted-blocks)
+                  (common-util/distinct-by :db/id))]
+    (mapcat
+     (fn [ref]
+       (let [id (:db/id ref)
+             replaced-title (when-let [raw-title (:block/raw-title ref)]
+                              (reduce
+                               (fn [raw-title block]
+                                 (replace-ref-with-deleted-block-title block raw-title))
+                               raw-title
+                               retracted-blocks))
+             tx (cond->
+                 (mapcat
+                  (fn [block]
+                    [[:db/retract (:db/id ref) :block/refs (:db/id block)]
+                     [:db/retract (:db/id ref) :block/path-refs (:db/id block)]]) retracted-blocks)
+                  replaced-title
+                  (conj [:db/add id :block/title replaced-title]))]
+         tx))
+     refs)))
 
 (defn update-refs-and-macros
   "When a block is deleted, refs are updated. For file graphs, macros associated
