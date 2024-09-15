@@ -18,8 +18,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [frontend.config :as config]
-            [logseq.db :as ldb]
-            [logseq.graph-parser.text :as text]))
+            [logseq.db :as ldb]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
@@ -30,11 +29,9 @@
 
 (defn get-all-tagged-pages
   [repo]
-  (d/q '[:find ?page-name ?tag
+  (d/q '[:find ?page ?tag
          :where
-         [?page :block/tags ?e]
-         [?e :block/title ?tag]
-         [?page :block/name ?page-name]]
+         [?page :block/tags ?tag]]
        (conn/get-db repo)))
 
 (defn get-all-pages
@@ -46,18 +43,6 @@
   [repo]
   (->> (get-all-pages repo)
        (map :block/title)))
-
-(defn get-page-alias
-  [repo page-id]
-  (when-let [db (and repo (conn/get-db repo))]
-    (some->> (d/q '[:find ?alias
-                    :in $ ?page-id
-                    :where
-                    [?page-id :block/alias ?alias]]
-                  db
-                  page-id)
-             db-utils/seq-flatten
-             distinct)))
 
 (defn get-alias-source-page
   "return the source page of an alias"
@@ -553,43 +538,36 @@ independent of format as format specific heading characters are stripped"
   (when-let [db (conn/get-db repo)]
     (let [pages (page-alias-set repo page-id)
           ref-pages (d/q
-                     '[:find ?ref-page ?ref-page-name
+                     '[:find [?ref-page ...]
                        :in $ ?pages
                        :where
                        [(untuple ?pages) [?page ...]]
                        [?block :block/page ?page]
-                       [?block :block/refs ?ref-page]
-                       [?ref-page :block/name ?ref-page-name]]
+                       [?block :block/refs ?ref-page]]
                      db
                      pages)]
-      (mapv (fn [[ref-page ref-page-name]]
-              [ref-page-name (get-page-alias repo ref-page)])
-            ref-pages))))
+      ref-pages)))
 
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
   [repo page-id include-journals?]
   (when (conn/get-db repo)
     (let [pages (page-alias-set repo page-id)
-          mentioned-pages (->> (react/q repo [:frontend.worker.react/page<-pages page-id]
-                                        {:query-fn (fn [_]
-                                                     (->>
-                                                      (mapcat
-                                                       (fn [id]
-                                                         (let [page (db-utils/entity repo id)]
-                                                           (->> (:block/_refs page)
-                                                                (keep (fn [ref]
-                                                                        (:block/page ref)))
-                                                                (util/distinct-by :db/id))))
-                                                       pages)))}
-                                        {:use-cache? false})
-                               react)]
-      (->> mentioned-pages
-           (keep (fn [page]
-                   (when-not (and (not include-journals?) (ldb/journal? page))
-                     page)))
-           (mapv (fn [page]
-                   [(:block/name page) (get-page-alias-names repo (:db/id page))]))))))
+          mentioned-pages (->>
+                           (mapcat
+                            (fn [id]
+                              (let [page (db-utils/entity repo id)]
+                                (->> (:block/_refs page)
+                                     (keep (fn [ref]
+                                             (if (ldb/page? ref)
+                                               page
+                                               (:block/page ref)))))))
+                            pages)
+                           (util/distinct-by :db/id))]
+      (keep (fn [page]
+              (when-not (and (not include-journals?) (ldb/journal? page))
+                (:db/id page)))
+            mentioned-pages))))
 
 (defn get-page-referenced-blocks-full
   ([page-id]
@@ -822,87 +800,34 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-all-namespace-relation
   [repo]
-  (d/q '[:find ?page-name ?parent
+  (d/q '[:find ?page ?parent
          :where
-         [?page :block/name ?page-name]
-         [?page :block/namespace ?e]
-         [?e :block/title ?parent]]
+         [?page :block/namespace ?parent]]
     (conn/get-db repo)))
 
 (defn get-all-namespace-parents
   [repo]
-  (->> (get-all-namespace-relation repo)
-       (map second)))
-
-(def ns-char "/")
-(def ns-re #"/")
-
-(defn- get-parents-namespace-list
-  "Return list of parents namespace"
-  [page-namespace & nested-found]
-  (if (text/namespace-page? page-namespace)
-    (let [pre-nested-vec (drop-last (string/split page-namespace ns-re))
-          my-nested-found (if (nil? nested-found)
-                            []
-                            nested-found)]
-      (if (= (count pre-nested-vec) 1)
-        (conj my-nested-found (nth pre-nested-vec 0))
-        (let [pre-nested-str (string/join ns-char pre-nested-vec)]
-          (recur pre-nested-str (conj my-nested-found pre-nested-str)))))
-    []))
-
-(defn- get-unnecessary-namespaces-name
-  "Return unnecessary namespace from a list of page's name"
-  [pages-list]
-  (->> pages-list
-       (remove nil?)
-       (mapcat get-parents-namespace-list)
-       distinct))
-
-(defn- remove-nested-namespaces-link
-  "Remove relations between pages and their nested namespace"
-  [pages-relations]
-  (let [pages-relations-to-return (distinct (mapcat
-                                             identity
-                                             (for [item (for [a-link-from (mapv (fn [a-rel] (first a-rel)) pages-relations)]
-                                                          [a-link-from (mapv
-                                                                        (fn [a-rel] (second a-rel))
-                                                                        (filterv
-                                                                         (fn [link-target] (=  a-link-from (first link-target)))
-                                                                         pages-relations))])
-                                                   :let [list-to (get item 1)
-                                                         page (get item 0)
-                                                         namespaces-to-remove (get-unnecessary-namespaces-name list-to)
-                                                         list-to-without-nested-ns (filterv (fn [elem] (not (some #{elem} namespaces-to-remove))) list-to)
-                                                         node-links (for [item-ok list-to-without-nested-ns]
-                                                                      [page item-ok])]]
-                                               (seq node-links))))]
-    pages-relations-to-return))
+  (let [db (conn/get-db repo)]
+    (->> (get-all-namespace-relation repo)
+        (map (fn [[_ ?parent]]
+               (db-utils/entity db ?parent))))))
 
 ;; Ignore files with empty blocks for now
 (defn get-pages-relation
   [repo with-journal?]
   (when-let [db (conn/get-db repo)]
     (let [q (if with-journal?
-              '[:find ?page ?ref-page-name
+              '[:find ?p ?ref-page
                 :where
-                [?p :block/name ?page]
                 [?block :block/page ?p]
-                [?block :block/refs ?ref-page]
-                [?ref-page :block/name ?ref-page-name]]
-              '[:find ?page ?ref-page-name
+                [?block :block/refs ?ref-page]]
+              '[:find ?p ?ref-page
                 :where
-                [?p :block/name ?page]
+                [?block :block/page ?p]
                 [(get-else $ ?p :block/type "N/A") ?type]
                 [(not= ?type "journal")]
-                [?block :block/page ?p]
-                [?block :block/refs ?ref-page]
-                [?ref-page :block/name ?ref-page-name]])]
-      (->>
-       (d/q q db)
-       (map (fn [[page ref-page-name]]
-              [page ref-page-name]))
-       (remove-nested-namespaces-link)))))
+                [?block :block/refs ?ref-page]])]
+      (d/q q db))))
 
 (defn get-namespace-pages
   "Accepts both sanitized and unsanitized namespaces"

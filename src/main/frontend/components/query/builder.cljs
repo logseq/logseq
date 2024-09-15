@@ -211,7 +211,7 @@
     [:div
      (case @*mode
        "namespace"
-       (let [items (sort (db-model/get-all-namespace-parents repo))]
+       (let [items (sort (map :block/title (db-model/get-all-namespace-parents repo)))]
          (select items
                  (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:namespace value]))))
@@ -276,7 +276,7 @@
 
        "full text search"
        (search (fn [v] (append-tree! *tree opts loc v))
-               (:toggle-fn opts))
+         (:toggle-fn opts))
 
        "between"
        (between (merge opts
