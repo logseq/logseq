@@ -482,6 +482,19 @@
        (contains? (set (get-in (db-class/built-in-classes (:db/ident class-entity)) [:schema :properties]))
                   (:db/ident property-entity))))
 
+(defn private-built-in-page?
+  "Private built-in pages should not be navigable or searchable by users. Later it
+   could be useful to use this for the All Pages view"
+  [page]
+  (cond (property? page)
+        (not (public-built-in-property? page))
+        (or (class? page) (= "page" (:block/type page)))
+        false
+        ;; Default to true for closed value and future internal types.
+        ;; Other types like whiteboard are not considered because they aren't built-in
+        :else
+        true))
+
 (def write-transit-str sqlite-util/write-transit-str)
 (def read-transit-str sqlite-util/read-transit-str)
 
