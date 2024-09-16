@@ -2591,19 +2591,23 @@
 
        (file-block/clock-summary-cp block ast-body)]
 
-      (when deadline
+      (when (and deadline 
+                 (not page-outline?))
         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
           (timestamp-cp block "DEADLINE" deadline-ast)))
 
-      (when scheduled
+      (when (and scheduled 
+                 (not page-outline?))
         (when-let [scheduled-ast (block-handler/get-scheduled-ast block)]
           (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
-      (when-not (config/db-based-graph? repo)
+      (when (and (not (config/db-based-graph? repo)) 
+                 (not page-outline?))
         (when-let [invalid-properties (:block/invalid-properties block)]
           (invalid-properties-cp invalid-properties)))
 
-      (when (and (seq properties)
+      (when (and (not page-outline?)
+                 (seq properties)
                  (let [hidden? (property-file/properties-hidden? properties)]
                    (not hidden?))
                  (not (and block-ref? (or (seq ast-title) (seq ast-body))))
