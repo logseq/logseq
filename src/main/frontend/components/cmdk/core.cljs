@@ -53,11 +53,11 @@
   (let [current-page (state/get-current-page)]
     (->>
      [(when current-page
-        {:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"})
-      {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "letter-n"}
-      {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
-      {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
-      {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}]
+        {:filter {:group :current-page} :text (t :search/filter-current-page) :info (t :search/filter-info) :icon-theme :gray :icon "page"})
+      {:filter {:group :nodes} :text (t :search/filter-nodes) :info (t :search/filter-info) :icon-theme :gray :icon "letter-n"}
+      {:filter {:group :commands} :text (t :search/filter-commands) :info (t :search/filter-info) :icon-theme :gray :icon "command"}
+      {:filter {:group :files} :text (t :search/filter-files) :info (t :search/filter-info) :icon-theme :gray :icon "file"}
+      {:filter {:group :themes} :text (t :search/filter-themes) :info (t :search/filter-info) :icon-theme :gray :icon "palette"}]
      (remove nil?))))
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
@@ -77,11 +77,10 @@
 (defn create-items [q]
   (when-not (string/blank? q)
     (let [class? (string/starts-with? q "#")]
-      (->> [{:text (if class? "Create tag" "Create page")       :icon "new-page"
+      (->> [{:text (if class? (t :search/create-class) (t :search/create-page))
+             :icon (if class? "tag" "new-page")
              :icon-theme :gray
-             :info (if class?
-                     (str "Create class called '" (get-class-from-input q) "'")
-                     (str "Create page called '" q "'"))
+             :info (if class? (str "#" (get-class-from-input q)) q)
              :source-create :page}]
         (remove nil?)))))
 
@@ -119,31 +118,31 @@
 
                  include-slash?
                  [(when-not node-exists?
-                    ["Create"         :create         (create-items input)])
+                    [(t :search/mode-create)         :create         (create-items input)])
 
-                  ["Current page"   :current-page   (visible-items :current-page)]
-                  ["Nodes"         :nodes         (visible-items :nodes)]
-                  ["Files"          :files          (visible-items :files)]
-                  ["Filters" :filters (visible-items :filters)]]
+                  [(t :search/mode-current-page)   :current-page   (visible-items :current-page)]
+                  [(t :search/mode-nodes)         :nodes         (visible-items :nodes)]
+                  [(t :search/mode-files)          :files          (visible-items :files)]
+                  [(t :search/mode-filters) :filters (visible-items :filters)]]
 
                  filter-group
                  [(when (= filter-group :nodes)
-                    ["Current page"   :current-page   (visible-items :current-page)])
-                  [(if (= filter-group :current-page) "Current page" (name filter-group))
+                    [(t :search/mode-current-page)   :current-page   (visible-items :current-page)])
+                  [(if (= filter-group :current-page) (t :search/mode-current-page) (name filter-group))
                    filter-group
                    (visible-items filter-group)]
                   (when-not node-exists?
-                    ["Create"         :create         (create-items input)])]
+                    [(t :search/mode-create)         :create         (create-items input)])]
 
                  :else
                  (->>
                   [(when-not node-exists?
-                     ["Create"         :create       (create-items input)])
-                   ["Current page"   :current-page   (visible-items :current-page)]
-                   ["Nodes"         :nodes         (visible-items :nodes)]
-                   ["Commands"       :commands       (visible-items :commands)]
-                   ["Files"          :files          (visible-items :files)]
-                   ["Filters"        :filters        (visible-items :filters)]]
+                     [(t :search/mode-create)         :create       (create-items input)])
+                   [(t :search/mode-current-page)   :current-page   (visible-items :current-page)]
+                   [(t :search/mode-nodes)         :nodes         (visible-items :nodes)]
+                   [(t :search/mode-commands)       :commands       (visible-items :commands)]
+                   [(t :search/mode-files)          :files          (visible-items :files)]
+                   [(t :search/mode-filters)        :filters        (visible-items :filters)]]
                   (remove nil?)))
         order (remove nil? order*)]
     (for [[group-name group-key group-items] order]
@@ -568,11 +567,11 @@
         show-more #(swap! (::results state) assoc-in [group :show] :more)]
     [:<>
      (mouse-active-effect! *mouse-active? [highlighted-item])
-     [:div {:class         (if (= title "Create")
+     [:div {:class         (if (= title (t :search/mode-create))
                              "border-b border-gray-06 last:border-b-0"
                              "border-b border-gray-06 pb-1 last:border-b-0")
             :on-mouse-move #(reset! *mouse-active? true)}
-      (when-not (= title "Create")
+      (when-not (= title (t :search/mode-create))
         [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
          [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
                 :on-click (fn [_e]
@@ -597,10 +596,10 @@
             {:on-click (if (= show :more) show-less show-more)}
             (if (= show :more)
               [:div.flex.flex-row.gap-1.items-center
-               "Show less"
+               (t :search/show-less)
                (shui/shortcut "mod up" nil)]
               [:div.flex.flex-row.gap-1.items-center
-               "Show more"
+               (t :search/show-more)
                (shui/shortcut "mod down" nil)])])])
 
       [:div.search-results
@@ -698,7 +697,7 @@
                      (some #(re-find editor-handler/url-regex (val %)) (:block/properties page')))]
         (if link
           (js/window.open link)
-          (notification/show! "No link found in this page's properties." :warning)))
+          (notification/show! (t :search/warning-no-link-propeties) :warning)))
 
       (:source-block item)
       (p/let [block-id (:block/uuid (:source-block item))
@@ -707,9 +706,9 @@
               link (re-find editor-handler/url-regex (:block/title block))]
         (if link
           (js/window.open link)
-          (notification/show! "No link found in this block's content." :warning)))
+          (notification/show! (t :search/warning-no-link-content) :warning)))
       :else
-      (notification/show! "No link for this search item." :warning))))
+      (notification/show! (t :search/warning-no-link) :warning))))
 
 (defn- keydown-handler
   [state e]
@@ -772,10 +771,10 @@
   (let [search-mode (:search/mode @state/state)]
     (cond
       (and (= search-mode :graph) (not sidebar?))
-      "Add graph filter"
+      (t :search/add-graph-filter)
 
       :else
-      "What are you looking for?")))
+      (t :search/start-typing-to-search))))
 
 (rum/defc input-row
   [state all-items opts]
@@ -827,12 +826,11 @@
   []
   (rand-nth
     [[:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-      [:div "Type"]
       (shui/shortcut "/")
-      [:div "to filter search results"]]
+      [:div (t :search/filter-result)]]
      [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
       (shui/shortcut ["mod" "enter"])
-      [:div "to open search in the sidebar"]]]))
+      [:div (t :search/in-sidebar)]]]))
 
 (rum/defcs tip <
   {:init (fn [state]
@@ -842,9 +840,8 @@
     (cond
       filter'
       [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-       [:div "Type"]
        (shui/shortcut "esc" {:tiled false})
-       [:div "to clear search filter"]]
+       [:div (t :search/clear-filter)]]
 
       :else
       (::rand-tip inner-state))))
@@ -888,32 +885,32 @@
         (case action
           :open
           [:<>
-           (button-fn "Open" ["return"])
-           (button-fn "Open in sidebar" ["shift" "return"] {:open-sidebar? true})
-           (when (:source-block @(::highlighted-item state)) (button-fn "Copy ref" ["⌘" "c"]))]
+           (button-fn (t :search/action-open) ["return"])
+           (button-fn (t :search/action-open-sidebar) ["shift" "return"] {:open-sidebar? true})
+           (when (:source-block @(::highlighted-item state)) (button-fn (t :search/action-copy-ref) ["⌘" "c"]))]
 
           :search
           [:<>
-           (button-fn "Search" ["return"])]
+           (button-fn (t :search/action-serach) ["return"])]
 
           :trigger
           [:<>
-           (button-fn "Trigger" ["return"])]
+           (button-fn (t :search/action-trigger) ["return"])]
 
           :create
           [:<>
-           (button-fn "Create" ["return"])]
+           (button-fn (t :search/action-create) ["return"])]
 
           :filter
           [:<>
-           (button-fn "Filter" ["return"])]
+           (button-fn (t :search/action-filter) ["return"])]
 
           nil)]])))
 
 (rum/defc search-only
   [state group-name]
   [:div.flex.flex-row.gap-1.items-center
-   [:div "Search only:"]
+   [:div (str (t :search/filter-info) ":")]
    [:div group-name]
    (shui/button
      {:variant  :ghost
@@ -1006,7 +1003,7 @@
               (result-group state title group-key group-items first-item sidebar?)))
           [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? @*input)
-             "No matched results")]))]
+             (t :search/no-result))]))]
      (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]
