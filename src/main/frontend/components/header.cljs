@@ -259,10 +259,13 @@
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
               {:title (t :header/search)
-               :on-click #(do (when (or (mobile-util/native-android?)
-                                        (mobile-util/native-iphone?))
-                                (state/set-left-sidebar-open! false))
-                              (state/pub-event! [:go/search]))}
+               :on-click (fn [e]
+                           (when (or (mobile-util/native-android?)
+                                     (mobile-util/native-iphone?))
+                             (state/set-left-sidebar-open! false))
+                           (if (util/shift-key? e)
+                             (state/sidebar-add-block! current-repo "" :search)
+                             (state/pub-event! [:go/search])))}
               (ui/icon "search" {:size ui/icon-size})])))]]
 
      [:div.r.flex.drag-region
