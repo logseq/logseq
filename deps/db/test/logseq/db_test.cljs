@@ -49,6 +49,7 @@
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)]
     (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
     (d/transact! conn class-parents-data)
-    (->> (ldb/get-class-parents (ldb/get-page @conn "z"))
-         (map #(:block/title (d/entity @conn %)))
-         (= #{"x" "y"}))))
+    (is (= #{"x" "y"}
+           (->> (ldb/get-class-parents (ldb/get-page @conn "z"))
+                (map #(:block/title (d/entity @conn %)))
+                set)))))
