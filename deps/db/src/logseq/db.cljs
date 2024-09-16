@@ -537,7 +537,8 @@
         :block/parent [:block/uuid page-id]
         :block/order (db-order/gen-key nil)
         :block/page [:block/uuid page-id]
-        :logseq.property/view-for [:block/uuid page-id]})])))
+        :logseq.property/view-for [:block/uuid page-id]
+        :logseq.property/built-in? true})])))
 
 (defn get-key-value
   [db key-ident]
