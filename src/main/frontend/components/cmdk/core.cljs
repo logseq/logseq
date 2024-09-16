@@ -625,9 +625,12 @@
                             :on-highlight-dep highlighted-item
                             :on-click (fn [e]
                                         (reset! (::highlighted-item state) item)
+                                        (when (util/shift-key? e)
+                                          (reset! (::shift? state) true))
                                         (handle-action :default state item)
-                                        (when-let [on-click (:on-click item)]
-                                          (on-click e)))
+                                        ;; (when-let [on-click (:on-click item)]
+                                        ;;   (on-click e))
+                                        )
                              ;; :on-mouse-enter (fn [e]
                              ;;                   (when (not highlighted?)
                              ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
