@@ -20,7 +20,8 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.db.frontend.order :as db-order]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.common.util.macro :as macro-util]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -328,6 +329,15 @@
         (let [tx-data (remove-tags-when-title-changed block-entity (:block/title m))]
           (when (seq tx-data)
             (swap! txs-state (fn [txs] (concat txs tx-data))))))
+
+      ;; Add Query class when a query macro is typed or pasted
+      (when (and db-based?
+                 (not= (:block/title m*) (:block/title block-entity))
+                 (macro-util/query-macro? (:block/title m*))
+                 (empty? (:block/tags block-entity)))
+        (swap! txs-state (fn [txs]
+                           (conj (vec txs)
+                                 [:db/add (:db/id block-entity) :block/tags :logseq.class/Query]))))
 
       this))
 

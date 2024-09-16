@@ -25,7 +25,8 @@
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
             [frontend.handler.file-based.status :as file-based-status]
-            [frontend.handler.db-based.property :as db-property-handler]))
+            [frontend.handler.db-based.property :as db-property-handler]
+            [logseq.common.util.macro :as macro-util]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -342,8 +343,7 @@
 
       ;; advanced
       [["Query"
-        [[:editor/input "{{query }}" {:backward-pos 2}]
-         [:editor/set-property :block/tags (:db/id (db/entity :logseq.class/Query))]
+        [[:editor/input (str macro-util/query-macro " }}") {:backward-pos 2}]
          [:editor/exit]]
         query-doc
         :icon/query
