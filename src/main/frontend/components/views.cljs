@@ -696,7 +696,7 @@
             (->> (map (fn [v] [:div (get-property-value-content v)]) value)
                  (interpose [:div "or"]))
             :else
-            "Empty")])))
+            "All")])))
      (shui/dropdown-menu-content
       {:align "start"}
       (select/select option)))))
