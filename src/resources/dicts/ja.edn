@@ -107,6 +107,7 @@
  :right-side-bar/help "ヘルプ"
  :right-side-bar/switch-theme "テーマ"
  :right-side-bar/contents "目次"
+ :right-side-bar/page-outline "ページのアウトライン"
  :right-side-bar/page-graph "ページグラフ"
  :right-side-bar/block-ref "ブロック参照"
  :right-side-bar/graph-view "グラフビュー"
