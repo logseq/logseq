@@ -792,6 +792,7 @@
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input.cp__cmdk-search-input
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
+       :title (t :search/clear-esc)
        :auto-focus true
        :autoComplete "off"
        :placeholder (input-placeholder false)

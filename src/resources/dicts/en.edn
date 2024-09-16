@@ -100,6 +100,7 @@
  :search/warning-no-link-propeties "No link found in this page's properties." 
  :search/no-result "No matched results"
  :search/sidebar-no-entry "No entry"
+ :search/clear-esc "Clear with Esc"
  :search/filter-current-page "Current page"
  :search/filter-nodes "Nodes"
  :search/filter-commands "Commands"

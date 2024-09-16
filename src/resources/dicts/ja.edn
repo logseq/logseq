@@ -99,6 +99,7 @@
  :search/warning-no-link-propeties "このページのプロパティにはリンクが見つかりませんでした。"
  :search/no-result "一致する結果がありません"
  :search/sidebar-no-entry "検索ワードを入力"
+ :search/clear-esc "Escでクリア"
  :search/filter-current-page "現在のページ"
  :search/filter-nodes "ノード"
  :search/filter-commands "コマンド"
