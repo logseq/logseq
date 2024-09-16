@@ -78,8 +78,8 @@
                                                                           :indent? false}))
             (page/handle-page-outline page-e page-name)])
          (page/handle-page-outline page-or-block-e page-name-or-uuid))
-       [:div.ml-6 "No found headers"])
-     [:div.ml-6 "No found headers"])])
+       [:div.ml-6.text-sm (t :right-side-bar/page-outline-no-found)])
+     [:div.ml-6.text-sm (t :right-side-bar/page-outline-no-found)])])
 
 (rum/defc shortcut-settings
   []
