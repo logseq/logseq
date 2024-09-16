@@ -46,3 +46,60 @@ html[data-theme=light] a.toggle:hover {
 .sidebar-panel-content {
   @apply pt-3;
 }
+
+.item-type-page-outline .block-main-container {
+  &:not([data-has-heading]) {
+    display: none;
+  }
+
+  &[data-has-heading] {
+
+    & h1,
+    & h2,
+    & h3,
+    & h4,
+    & h5,
+    & h6 {
+      &::before {
+        font-size: 12px;
+        padding: 1px;
+        opacity: 0.5;
+        color: var(--ls-active-secondary-color);
+        outline: 1px solid var(--ls-active-secondary-color);
+        margin-right: 0.9em;
+        z-index: auto;
+      }
+
+    }
+
+    & h1::before {
+      content: "h1";
+
+    }
+
+    & h2::before {
+      content: "h2";
+
+    }
+
+    & h3::before {
+      content: "h3";
+    }
+
+    & h4::before {
+      content: "h4";
+    }
+
+    & h5::before {
+      content: "h5";
+    }
+
+    & h6::before {
+      content: "h6";
+    }
+
+    &:hover {
+      background-color: var(--ls-block-highlight-color);
+    }
+  }
+}

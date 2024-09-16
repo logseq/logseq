@@ -37,22 +37,49 @@
 (rum/defc block-cp < rum/reactive
   [repo idx block]
   (let [id (:block/uuid block)]
-    (page/page-cp {:parameters  {:path {:name (str id)}}
+    (page/page-cp {:parameters  {:path {:name (str id)}}}
                 :sidebar?    true
                 :sidebar/idx idx
-                :repo        repo})))
+                :repo        repo)))
 
 (rum/defc page-cp < rum/reactive
   [repo page-name]
-  (page/page-cp {:parameters {:path {:name page-name}}
+  (page/page-cp {:parameters {:path {:name page-name}}}
               :sidebar?   true
-              :repo       repo}))
+              :repo       repo))
 
 (rum/defc contents < rum/reactive db-mixins/query
   []
   [:div.contents.flex-col.flex.ml-3
    (when-let [contents-page (db/get-page "contents")]
      (page/contents-page contents-page))])
+
+(rum/defc page-outline < rum/reactive db-mixins/query
+  [repo]
+  [:div.contents.flex-col.flex.ml-3
+   (if-let [page-name-or-uuid (state/get-current-page)]
+     (if-let [page-or-block-e (db/get-page page-name-or-uuid)]
+       (if-let [zoom-e (:block/page page-or-block-e)]
+         (let [page-name (:block/name zoom-e)
+               page-e (db/get-page page-name)]
+           [(let [uuid (:block/uuid page-or-block-e)]
+              [:style (str "
+                             .item-type-page-outline .block-content {
+                                       &:not([blockid='" uuid "']) {
+                                                 opacity: 0.6;
+                                       }
+
+                                       &[blockid='" uuid "'] .as-heading {
+                                                 background-color: var(--ls-block-highlight-color);
+                                       }
+                             }
+                     ")]
+              (block/breadcrumb {:block false} repo (:block/uuid page-e) {:show-page? true
+                                                                          :indent? false}))
+            (page/handle-page-outline page-e page-name)])
+         (page/handle-page-outline page-or-block-e page-name-or-uuid))
+       [:div.ml-6 "No found headers"])
+     [:div.ml-6 "No found headers"])])
 
 (rum/defc shortcut-settings
   []
@@ -72,6 +99,11 @@
 (defn build-sidebar-item
   [repo idx db-id block-type *db-id init-key]
   (case (keyword block-type)
+
+    :page-outline
+    [[:.flex.items-center.page-outline (shui/tabler-icon "line-height" {:class "text-md mr-2"}) (t :right-side-bar/page-outline)]
+     (page-outline repo)]
+
     :contents
     [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
      (contents)]
@@ -391,6 +423,11 @@
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                      (state/sidebar-add-block! repo "contents" :contents))}
           (t :right-side-bar/contents)]]
+
+        [:div.text-sm
+         [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                     (state/sidebar-add-block! repo "page-outline" :page-outline))}
+          (t :right-side-bar/page-outline)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn []

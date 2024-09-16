@@ -2036,7 +2036,7 @@
         ;; `heading-level` is for backward compatibility, will remove it in later releases
         heading-level (:block/heading-level t)
         heading (or
-                 (and heading-level
+                 (and 
                       (<= heading-level 6)
                       heading-level)
                  (pu/lookup properties :logseq.property/heading))
@@ -2276,8 +2276,13 @@
    (dom/closest target "a")
    (dom/closest target ".query-table")))
 
+(defn scroll-to-block [block-id]
+  (let [element (.querySelector js/document (str "#main-content-container #block-content-" block-id))]
+    (when element
+      (.scrollIntoView element))))
+
 (defn- block-content-on-pointer-down
-  [e block block-id content edit-input-id config]
+  [e block block-id content edit-input-id config page-outline?]
   (when-not (or
              (:closed-values? config)
              (> (count content) (state/block-content-max-length (state/get-current-repo))))
@@ -2290,7 +2295,16 @@
         (let [selection-blocks (state/get-selection-blocks)
               starting-block (state/get-selection-start-block-or-first)]
           (cond
-            (and meta? shift?)
+            ;; For page-outline
+            (and page-outline? (not shift?))
+            (do
+              (util/stop e)
+              (state/clear-selection!)
+              (route-handler/redirect-to-page! (get-in block [:block/uuid]) {:block-id uuid});; Zoom-in
+              (editor-handler/highlight-selection-area! block-id {:append? true})
+              (editor-handler/expand-all-selection!))
+
+            (and meta? shift? (not page-outline?))
             (when-not (empty? selection-blocks)
               (util/stop e)
               (editor-handler/highlight-selection-area! block-id {:append? true}))
@@ -2519,6 +2533,7 @@
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
         block-ref? (:block-ref? config)
         stop-events? (:stop-events? config)
+        page-outline? (:page-outline? config)
         block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq ast-title))
         block-type (or
                     (pu/lookup properties :logseq.property/ls-type)
@@ -2550,7 +2565,7 @@
                                               (ldb/journal? block)
                                               (.preventDefault e)
                                               :else
-                                              (block-content-on-pointer-down e block block-id content edit-input-id config)))))]
+                                              (block-content-on-pointer-down e block block-id content edit-input-id config page-outline?)))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-pointer-up (fn [e]
@@ -2654,7 +2669,7 @@
              (assoc state
                     ::hide-block-refs? (atom default-hide?)
                     ::refs-count *refs-count)))}
-  [state config {:block/keys [uuid format] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count?]}]
+  [state config {:block/keys [uuid format] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? page-outline?]}]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
         *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
@@ -2698,7 +2713,7 @@
                                           (editor-handler/clear-selection!)
                                           (editor-handler/unhighlight-blocks!)
                                           (state/set-editing! edit-input-id content block "" {:container-id (:container-id config)}))}})
-           (block-content config block edit-input-id block-id slide?))
+           (block-content config block edit-input-id block-id slide? page-outline?))
 
           (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
 
@@ -2865,6 +2880,7 @@
                               " my-2")
                             (when indent?
                               " ml-4")))}
+             [:span.zoomed-icon.mr-3 (shui/tabler-icon "zoom-in-area" {:size 20})]
              (when (and (false? (:top-level? config))
                         (seq parents))
                (breadcrumb-separator))
@@ -3837,7 +3853,7 @@
   [blocks config option]
   [:div.content
    (cond-> option
-     (:document/mode? config) (assoc :class "doc-mode"))
+     (:document/mode? config) (assoc :class "doc-mode")) 
    (cond
      (and (:custom-query? config) (:group-by-page? config))
      [:div.flex.flex-col
@@ -3906,3 +3922,11 @@
 
      :else
      (blocks-container config blocks))])
+
+(defn ->page-outline
+  [blocks config option]
+
+   [:div.content
+    (cond-> option
+      (:document/mode? config) (assoc :class "doc-mode"))
+    (blocks-container config blocks)])

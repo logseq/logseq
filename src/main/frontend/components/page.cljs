@@ -91,15 +91,18 @@
 
 (rum/defc page-blocks-inner <
   {:did-mount open-root-block!}
-  [page-e blocks config sidebar? whiteboard? _block-uuid]
+  [page-e blocks config sidebar? whiteboard? _block-uuid page-outline?]
   (when page-e
-    (let [hiccup (component-block/->hiccup blocks config {})]
+    (let [hiccup (if page-outline?
+                   (component-block/->page-outline blocks config {})
+                   (component-block/->hiccup blocks config {}))]
       [:div.page-blocks-inner {:style {:margin-left (if whiteboard? 0 -20)
                                        :min-height 29}}
        (rum/with-key
          (content/content (str (:block/uuid page-e))
                           {:hiccup   hiccup
-                           :sidebar? sidebar?})
+                           :sidebar? sidebar?
+                           :page-outline? page-outline?})
          (str (:block/uuid page-e) "-hiccup"))])))
 
 (declare page-cp)
@@ -196,7 +199,7 @@
                                   (date/journal-title->int (date/today))))
                      (state/pub-event! [:journal/insert-template page-name])))
                  state)}
-  [state repo page-e {:keys [sidebar? whiteboard?] :as config}]
+  [state repo page-e {:keys [sidebar? whiteboard? page-outline?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
@@ -243,8 +246,8 @@
                config (common-handler/config-with-document-mode hiccup-config)
                blocks (if block? [block] (db/sort-by-order children block))]
            [:div
-            (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
-            (when-not config/publishing?
+            (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id page-outline?)
+            (when-not (or config/publishing? page-outline?)
               (let [args (if block-id
                            {:block-uuid block-id}
                            {:page page-name})]
@@ -690,6 +693,15 @@
   (when-let [repo (state/get-current-repo)]
     (when-not (state/sub-async-query-loading "contents")
       (page-blocks-cp repo page {:sidebar? true}))))
+
+(rum/defc handle-page-outline < rum/reactive
+  {:init (fn [state]
+           (db-async/<get-block (state/get-current-repo) (state/get-current-page))
+           state)}
+  [page]
+  (when-let [repo (state/get-current-repo)]
+    (page-blocks-cp repo page {:sidebar? true
+                               :page-outline? true})))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 

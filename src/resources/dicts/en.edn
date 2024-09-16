@@ -108,6 +108,7 @@
  :right-side-bar/help "Help"
  :right-side-bar/switch-theme "Theme mode"
  :right-side-bar/contents "Contents"
+ :right-side-bar/page-outline "Page outline"
  :right-side-bar/page-graph "Page graph"
  :right-side-bar/block-ref "Block references"
  :right-side-bar/graph-view "Graph view"

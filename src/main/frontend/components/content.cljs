@@ -445,6 +445,13 @@
             (d/set-style! draw :height (str height "px")))
           (d/set-style! draw :margin-left (str (- (/ (- width 570) 2)) "px")))))))
 
+(rum/defc outline-content < rum/static
+  [id {:keys [hiccup]}]
+  [:div {:id id}
+   (if hiccup
+     hiccup
+     [:div.cursor (t :content/click-to-edit)])])
+
 (rum/defcs content < rum/reactive
   {:did-mount (fn [state]
                 (set-draw-iframe-style!)
@@ -456,11 +463,15 @@
                     config
                     hiccup
                     on-click
-                    on-hide]
+                    on-hide
+                    page-outline?]
              :as option}]
   (if hiccup
-    [:div
-     (hiccup-content id option)]
+    (if page-outline?
+      [:div
+       (outline-content id option)] ;; page-outline only
+      [:div
+       (hiccup-content id option)])
     ;; TODO: remove this
     (let [format (common-util/normalize-format format)]
       (non-hiccup-content id (:content option) on-click on-hide config format))))
