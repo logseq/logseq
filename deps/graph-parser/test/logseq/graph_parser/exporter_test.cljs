@@ -168,6 +168,7 @@
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
       (is (= 18 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 18 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 7

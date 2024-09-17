@@ -94,7 +94,9 @@
         (update :block/tags
                 (fn [tags]
                   ;; Don't lazy load as this needs to build before the page does
-                  (vec (keep #(convert-tag-to-class db % page-names-to-uuids tag-classes all-idents) tags))))
+                  (vec (keep #(if (= % :logseq.class/Journal)
+                                %
+                                (convert-tag-to-class db % page-names-to-uuids tag-classes all-idents)) tags))))
         (seq page-tags)
         (merge {:logseq.property/page-tags page-tags})))
     block))
