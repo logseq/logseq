@@ -170,6 +170,9 @@
       (is (= 18 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
       (is (= 18 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
+      (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
+      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
+
       ;; Don't count pages like url.md that have properties but no content
       (is (= 7
              (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
@@ -288,7 +291,8 @@
 
       (is (= {:logseq.property.table/sorting [{:id :user.property/prop-num, :asc? false}]
               :logseq.property.view/type "Table View"
-              :logseq.property.table/ordered-columns [:block/title :user.property/prop-string :user.property/prop-num]}
+              :logseq.property.table/ordered-columns [:block/title :user.property/prop-string :user.property/prop-num]
+              :block/tags [:logseq.class/Query]}
              (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
           "query block has correct query properties"))
 

@@ -119,23 +119,27 @@
 
 (defn- update-block-tags
   [block db tag-classes page-names-to-uuids all-idents]
-  (if (seq (:block/tags block))
-    (let [original-tags (remove :block.temp/new-class (:block/tags block))]
-      (-> block
-          (update :block/title
-                  content-without-tags-ignore-case
-                  (->> original-tags
-                       (filter #(tag-classes (:block/name %)))
-                       (map :block/title)))
-          (update :block/title
-                  db-content/replace-tags-with-page-refs
-                  (->> original-tags
-                       (remove #(tag-classes (:block/name %)))
-                       (map #(add-uuid-to-page-map % page-names-to-uuids))))
-          (update :block/tags
-                  (fn [tags]
-                    (vec (keep #(convert-tag-to-class db % page-names-to-uuids tag-classes all-idents) tags))))))
-    block))
+  (let [block'
+        (if (seq (:block/tags block))
+          (let [original-tags (remove :block.temp/new-class (:block/tags block))]
+            (-> block
+                (update :block/title
+                        content-without-tags-ignore-case
+                        (->> original-tags
+                             (filter #(tag-classes (:block/name %)))
+                             (map :block/title)))
+                (update :block/title
+                        db-content/replace-tags-with-page-refs
+                        (->> original-tags
+                             (remove #(tag-classes (:block/name %)))
+                             (map #(add-uuid-to-page-map % page-names-to-uuids))))
+                (update :block/tags
+                        (fn [tags]
+                          (vec (keep #(convert-tag-to-class db % page-names-to-uuids tag-classes all-idents) tags))))))
+          block)]
+    (cond-> block'
+      (macro-util/query-macro? (:block/title block))
+      (update :block/tags (fnil conj []) :logseq.class/Query))))
 
 (defn- update-block-marker
   "If a block has a marker, convert it to a task object"
