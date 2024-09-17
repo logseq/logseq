@@ -150,22 +150,30 @@ prop-d:: [[nada]]"}])
     (test-helper/with-config {}
       (block-property-queries-test))))
 
-
 (when js/process.env.DB_GRAPH
  (deftest db-only-block-property-queries
    (load-test-files-for-db-graph
-    [{:page {:block/title "page1"}
-      :blocks [{:block/title "b1"
-                :build/properties {:Foo "bar"}}
-               {:block/title "b2"
-                :build/properties {:foo "bar"}}]}])
+    {:properties
+       {:zzz {:block/schema {:type :default}
+              :block/title "zzz name!"}}
+       :pages-and-blocks
+       [{:page {:block/title "page1"}
+         :blocks [{:block/title "b1"
+                   :build/properties {:Foo "bar"}}
+                  {:block/title "b2"
+                   :build/properties {:foo "bar"}}
+                  {:block/title "b3"
+                   :build/properties {:zzz "bar"}}]}]})
 
    (is (= ["b1"]
           (map :block/title (dsl-query "(property Foo)")))
        "filter is case sensitive")
    (is (= ["b2"]
           (map :block/title (dsl-query "(property :user.property/foo)")))
-       "filter can handle qualified keyword properties")))
+       "filter can handle qualified keyword properties")
+   (is (= ["b3"]
+          (map :block/title (dsl-query "(property \"zzz name!\")")))
+       "filter can handle property name")))
 
 (deftest block-property-query-performance
   (let [pages (->> (repeat 10 {:tags ["tag1" "tag2"]})
