@@ -13,7 +13,9 @@
 
 (defn query-macro?
   [s]
-  (and (string? s) (string/includes? s query-macro)))
+  (and (string? s)
+       (string/includes? s (str query-macro " "))
+       (not (string/includes? s (str "`" query-macro)))))
 
 (defn macro-subs
   [macro-content arguments]
