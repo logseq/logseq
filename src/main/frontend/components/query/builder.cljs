@@ -364,7 +364,8 @@
         (str "#" (second (second clause))))
 
       (contains? #{:property :page-property} (keyword f))
-      (str (if (config/db-based-graph? (state/get-current-repo))
+      (str (if (and (config/db-based-graph? (state/get-current-repo))
+                    (qualified-keyword? (second clause)))
              (:block/title (db/entity (second clause)))
              (name (second clause)))
            ": "
