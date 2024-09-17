@@ -132,7 +132,7 @@
     (when (false? loading?)
       [:div.flex.flex-col.gap-2.mt-2
 
-       [:div.font-medium.opacity-50 "Tagged nodes"]
+       [:div.font-medium.opacity-50 "Tagged Nodes"]
 
        (views/view view-entity {:data data
                                 :set-data! set-data!

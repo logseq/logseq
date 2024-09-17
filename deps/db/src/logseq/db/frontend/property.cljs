@@ -42,16 +42,16 @@
                             :schema {:type :node
                                      :public? true
                                      :view-context :page}}
-   :logseq.property.class/properties {:title "Tag properties"
+   :logseq.property.class/properties {:title "Tag Properties"
                                       :schema {:type :property
                                                :cardinality :many
                                                :public? true
                                                :view-context :never}}
-   :logseq.property.class/hide-from-node {:title "Hide from node"
+   :logseq.property.class/hide-from-node {:title "Hide from Node"
                                           :schema {:type :checkbox
                                                    :public? true
                                                    :view-context :class}}
-   :logseq.property/page-tags {:title "pageTags"
+   :logseq.property/page-tags {:title "Page Tags"
                                :schema {:type :page
                                         :public? true
                                         :view-context :page
@@ -96,7 +96,7 @@
                                            :hide? true}}
 
    ;; Journal props
-   :logseq.property.journal/title-format {:title "Title format"
+   :logseq.property.journal/title-format {:title "Title Format"
                                           :schema
                                           {:type :string
                                            :public? false}}
@@ -176,7 +176,7 @@
                                   :public? true}}
 
    :logseq.property.view/type
-   {:title "View type"
+   {:title "View Type"
     :schema
     {:type :default
      :public? false
