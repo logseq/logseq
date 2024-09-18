@@ -42,7 +42,16 @@
         ;; boost score if we have an exact match including punctuation
         (empty? q) (+ score'
                       (str-len-distance query s)
-                      (if (<= 0 (.indexOf ostr oquery)) MAX-STRING-LENGTH 0))
+                      (cond
+                        (<= 0 (.indexOf ostr oquery))
+                        MAX-STRING-LENGTH
+
+                        (<= 0 (.indexOf (string/lower-case ostr) (string/lower-case oquery)))
+                        (- MAX-STRING-LENGTH 0.1)
+
+                        :else
+                        0)
+                      (if (empty? s) 1 0))
         (empty? s) 0
         :else (if (= (first q) (first s))
                 (recur (rest q)
