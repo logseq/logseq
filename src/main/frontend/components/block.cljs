@@ -2529,10 +2529,10 @@
         mouse-down-key (if (util/ios?)
                          :on-click
                          :on-pointer-down) ; TODO: it seems that Safari doesn't work well with on-pointer-down
-
         attrs (cond->
                {:blockid       (str uuid)
-                :class (when (:property-block? config) "jtrigger")
+                :class (util/classnames [{:jtrigger (:property-block? config)
+                                          :!cursor-pointer (:page-title? config)}])
                 :containerid (:container-id config)
                 :data-type (name block-type)
                 :style {:width "100%"
@@ -2545,14 +2545,17 @@
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
-                                        (cond (:from-journals? config)
-                                              (do
-                                                (.preventDefault e)
-                                                (route-handler/redirect-to-page! (:block/uuid block)))
-                                              (ldb/journal? block)
-                                              (.preventDefault e)
-                                              :else
-                                              (block-content-on-pointer-down e block block-id content edit-input-id config)))))]
+                                        (cond
+                                          (util/right-click? e)
+                                          nil
+                                          (:from-journals? config)
+                                          (do
+                                            (.preventDefault e)
+                                            (route-handler/redirect-to-page! (:block/uuid block)))
+                                          (ldb/journal? block)
+                                          (.preventDefault e)
+                                          :else
+                                          (block-content-on-pointer-down e block block-id content edit-input-id config)))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-pointer-up (fn [e]
@@ -2681,7 +2684,8 @@
       [:div.flex.flex-1.flex-row.gap-1.items-center
        (if (and edit? editor-box)
          [:div.editor-wrapper.flex.flex-1
-          {:id editor-id}
+          {:id editor-id
+           :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
           (ui/catch-error
            (ui/block-error "Something wrong in the editor" {})
            (editor-box {:block block
