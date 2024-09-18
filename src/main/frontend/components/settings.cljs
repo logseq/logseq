@@ -1122,7 +1122,7 @@
        (http-server-switcher-row))
      (when-not db-based? (flashcards-switcher-row enable-flashcards?))
      (when-not db-based? (zotero-settings-row))
-     (when (config/db-based-graph? current-repo)
+     (when (and config/dev? (config/db-based-graph? current-repo))
        ;; FIXME: Wire this up again to RTC init calls
        (rtc-switcher-row (state/enable-rtc? current-repo)))
      (when-not web-platform?
