@@ -679,17 +679,12 @@
   [state option]
   (rum/with-key
     (page-aux option)
-    (or (:page-name option)
-      (get-page-name state))))
+    (str
+     (state/get-current-repo)
+     "-"
+     (or (:page-name option)
+         (get-page-name state)))))
 
-(rum/defc contents-page < rum/reactive
-                          {:init (fn [state]
-                                   (db-async/<get-block (state/get-current-repo) "contents")
-                                   state)}
-  [page]
-  (when-let [repo (state/get-current-repo)]
-    (when-not (state/sub-async-query-loading "contents")
-      (page-blocks-cp repo page {:sidebar? true}))))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 

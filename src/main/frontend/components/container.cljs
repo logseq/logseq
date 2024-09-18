@@ -606,7 +606,7 @@
                  (doseq [page pages]
                    (let [page (util/safe-page-name-sanity-lc page)
                          [db-id block-type] (if (= page "contents")
-                                              ["contents" :contents]
+                                              [(or (:db/id (db/get-page page)) "contents") :contents]
                                               [(:db/id (db/get-page page)) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
