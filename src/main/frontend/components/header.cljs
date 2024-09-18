@@ -15,6 +15,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -256,17 +257,27 @@
               (ui/icon "chevron-left" {:size 26})]))
          ;; search button for non-mobile
          (when current-repo
-           (ui/with-shortcut :go/search "right"
-             [:button.button.icon#search-button
-              {:title (t :header/search)
-               :on-click (fn [e]
-                           (when (or (mobile-util/native-android?)
-                                     (mobile-util/native-iphone?))
-                             (state/set-left-sidebar-open! false))
-                           (if (util/shift-key? e)
-                             (state/sidebar-add-block! current-repo "" :search)
-                             (state/pub-event! [:go/search])))}
-              (ui/icon "search" {:size ui/icon-size})])))]]
+           [(ui/with-shortcut :go/search "right"
+              [:button.button.icon#search-button
+               {:title (t :header/search)
+                :on-click (fn [e]
+                            (when (or (mobile-util/native-android?)
+                                      (mobile-util/native-iphone?))
+                              (state/set-left-sidebar-open! false))
+                            (if (util/shift-key? e)
+                              (state/sidebar-add-block! current-repo "" :search)
+                              (state/pub-event! [:go/search])))}
+               (ui/icon "search" {:size ui/icon-size})])
+            (ui/with-shortcut :command/run "right"
+              [:button.button.icon#search-button
+               {:title (t :command.command-palette/toggle)
+                :on-click (fn []
+                            (when (or (mobile-util/native-android?)
+                                      (mobile-util/native-iphone?))
+                              (state/set-left-sidebar-open! false))
+                            (editor-handler/escape-editing true)
+                            (route-handler/go-to-search! :commands))}
+               (ui/icon "command" {:size ui/icon-size})])]))]]
 
      [:div.r.flex.drag-region
       (when (and current-repo
