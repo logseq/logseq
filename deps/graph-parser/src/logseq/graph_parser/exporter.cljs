@@ -719,12 +719,12 @@
   data for subsequent steps"
   [conn pages blocks {:keys [tag-classes property-classes property-parent-classes notify-user import-state]
                       :as options}]
-  (let [all-pages (->> (extract/with-ref-pages pages blocks)
-                       ;; remove unused property pages unless the page has content
-                       (remove #(and (contains? (into property-classes property-parent-classes) (keyword (:block/name %)))
-                                     (not (:block/file %))))
-                       ;; remove file path relative
-                       (map #(dissoc % :block/file)))
+  (let [all-pages* (->> (extract/with-ref-pages pages blocks)
+                        ;; remove unused property pages unless the page has content
+                        (remove #(and (contains? (into property-classes property-parent-classes) (keyword (:block/name %)))
+                                      (not (:block/file %))))
+                        ;; remove file path relative
+                        (map #(dissoc % :block/file)))
         existing-pages (keep #(first
                                ;; don't fetch built-in as that would give the wrong entity if a user used
                                ;; a db-only built-in property name e.g. description
@@ -733,14 +733,16 @@
                                       :where [?b :block/name ?name] [(missing? $ ?b :logseq.property/built-in?)]]
                                     @conn
                                     (:block/name %)))
-                             all-pages)
+                             all-pages*)
         existing-page-names-to-uuids (into {} (map (juxt :block/name :block/uuid) existing-pages))
-        new-pages (->> all-pages
-                       (remove #(contains? existing-page-names-to-uuids (:block/name %)))
-                       ;; fix extract incorrectly assigning user pages built-in uuids
-                       (map #(if (contains? all-built-in-names (keyword (:block/name %)))
-                               (assoc % :block/uuid (d/squuid))
-                               %)))
+        existing-page? #(contains? existing-page-names-to-uuids (:block/name %))
+        ;; fix extract incorrectly assigning new user pages built-in uuids
+        all-pages (map #(if (and (not (existing-page? %))
+                                 (contains? all-built-in-names (keyword (:block/name %))))
+                          (assoc % :block/uuid (d/squuid))
+                          %)
+                       all-pages*)
+        new-pages (remove existing-page? all-pages)
         page-names-to-uuids (merge existing-page-names-to-uuids
                                    (into {} (map (juxt :block/name :block/uuid) new-pages)))
         all-pages-m (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
