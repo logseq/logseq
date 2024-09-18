@@ -9,7 +9,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.extensions.slide :as slide]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
