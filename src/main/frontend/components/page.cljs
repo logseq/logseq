@@ -422,7 +422,7 @@
 
 (rum/defcs db-page-title < rum/reactive
   (rum/local false ::hover?)
-  [state repo page whiteboard-page? sidebar? container-id]
+  [state page whiteboard-page? sidebar? container-id]
   (let [*hover? (::hover? state)
         hover? (rum/react *hover?)]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start
@@ -430,12 +430,7 @@
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)
-                                                                  :page-entity page})))
-      :on-click (fn [e]
-                  (when-not (= (.-nodeName (.-target e)) "INPUT")
-                    (when (gobj/get e "shiftKey")
-                      (.preventDefault e)
-                      (state/sidebar-add-block! repo (:db/id page) :page))))}
+                                                                  :page-entity page})))}
 
      [:div.w-full.relative {:on-mouse-over #(reset! *hover? true)
                             :on-mouse-leave (fn []
@@ -598,7 +593,7 @@
                   (page-blocks-collapse-control title *control-show? *all-collapsed?)])
                (when (and (not whiteboard?) (ldb/page? page))
                  (if db-based?
-                   (db-page-title repo page whiteboard-page? sidebar? (:container-id state))
+                   (db-page-title page whiteboard-page? sidebar? (:container-id state))
                    (page-title-cp page {:journal? journal?
                                         :fmt-journal? fmt-journal?
                                         :preview? preview?})))
