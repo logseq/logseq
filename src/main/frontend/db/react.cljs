@@ -197,6 +197,7 @@
   "Re-compute corresponding queries (from tx) and refresh the related react components."
   [repo-url affected-keys]
   (when (and repo-url (seq affected-keys))
+    (prn :debug :affected-keys affected-keys)
     (refresh-affected-queries! repo-url affected-keys)))
 
 (defn run-custom-queries-when-idle!

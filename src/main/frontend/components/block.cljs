@@ -769,25 +769,21 @@
     [:span.warning.mr-1 {:title "Node ref invalid"}
    (->ref id)]))
 
-(rum/defcs page-cp < db-mixins/query rum/reactive
-  {:init (fn [state]
-           (let [page (last (:rum/args state))]
-             (assoc state ::entity
-                    (if (e/entity? page)
-                      page
-                      ;; Use uuid when available to uniquely identify case sensitive contexts
-                      (db/get-page (or (:block/uuid page)
-                                       (when-let [s (:block/name page)]
-                                         (let [s (string/trim s)
-                                               s (if (string/starts-with? s db-content/page-ref-special-chars)
-                                                   (common-util/safe-subs s 2)
-                                                   s)]
-                                           s))))))))}
+(rum/defcs page-cp-inner < db-mixins/query rum/reactive
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [state {:keys [label children preview? disable-preview?] :as config} page]
-  (let [entity (::entity state)]
+  (let [entity (if (e/entity? page)
+                 page
+                 ;; Use uuid when available to uniquely identify case sensitive contexts
+                 (db/get-page (or (:block/uuid page)
+                                  (when-let [s (:block/name page)]
+                                    (let [s (string/trim s)
+                                          s (if (string/starts-with? s db-content/page-ref-special-chars)
+                                              (common-util/safe-subs s 2)
+                                              s)]
+                                      s)))))]
     (let [entity (when entity (db/sub-block (:db/id entity)))]
       (cond
         entity
@@ -814,6 +810,11 @@
 
         :else
         nil))))
+
+(rum/defc page-cp
+  [config page]
+  (rum/with-key (page-cp-inner config page)
+    (or (str (:block/uuid page)) (:block/name page))))
 
 (rum/defc asset-reference
   [config title path]
