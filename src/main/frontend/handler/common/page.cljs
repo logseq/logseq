@@ -51,24 +51,29 @@
                      (wrap-tags title)
                      title)
              parsed-result (when db-based? (db-editor-handler/wrap-parse-block {:block/title title}))
-             title' (if (and db-based? (seq (:block/tags parsed-result)))
-                      (string/trim (first
-                                    (or (common-util/split-first (str "#" db-content/page-ref-special-chars) (:block/title parsed-result))
-                                        (common-util/split-first (str "#" page-ref/left-brackets db-content/page-ref-special-chars) (:block/title parsed-result)))))
-                      title)
-             options' (if db-based?
-                        (update options :tags concat (:block/tags parsed-result))
-                        options)
-             result (ui-outliner-tx/transact!
-                     {:outliner-op :create-page}
-                     (outliner-op/create-page! title' options'))
-             [_page-name page-uuid] (ldb/read-transit-str result)]
-       (when redirect?
-         (route-handler/redirect-to-page! page-uuid))
-       (let [page (db/get-page (or page-uuid title'))]
-         (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
-           (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
-         page)))))
+             has-tags? (and db-based? (seq (:block/tags parsed-result)))
+             title' (if has-tags?
+                      (some-> (first
+                               (or (common-util/split-first (str "#" db-content/page-ref-special-chars) (:block/title parsed-result))
+                                   (common-util/split-first (str "#" page-ref/left-brackets db-content/page-ref-special-chars) (:block/title parsed-result))))
+                              string/trim)
+                      title)]
+       (if (and has-tags? (nil? title'))
+         (notification/show! "Page name can't include \"#\"." :warning)
+         (when-not (string/blank? title')
+           (p/let [options' (if db-based?
+                              (update options :tags concat (:block/tags parsed-result))
+                              options)
+                   result (ui-outliner-tx/transact!
+                           {:outliner-op :create-page}
+                           (outliner-op/create-page! title' options'))
+                   [_page-name page-uuid] (ldb/read-transit-str result)]
+             (when redirect?
+               (route-handler/redirect-to-page! page-uuid))
+             (let [page (db/get-page (or page-uuid title'))]
+               (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
+                 (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
+               page))))))))
 
 ;; favorite fns
 ;; ============
