@@ -46,7 +46,8 @@
                                               ;; TODO: use https://github.com/open-spaced-repetition/cljc-fsrs
                                               ;; when PR merged
                                               ;; https://github.com/open-spaced-repetition/cljc-fsrs/pull/5
-                                              :git/url "https://github.com/rcmerci/cljc-fsrs"}}
+                                              :git/url "https://github.com/rcmerci/cljc-fsrs"}
+  tick/tick                             {:mvn/version "0.7.5"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.132"}
