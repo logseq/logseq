@@ -975,39 +975,53 @@
         results-ordered (state->results-ordered state search-mode)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
-    [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))
-                    :class (cond-> "w-full h-full relative flex flex-col justify-start"
-                             (not sidebar?) (str " rounded-lg"))}
-     (input-row state all-items opts)
-     [:div {:class (cond-> "w-full flex-1 overflow-y-auto min-h-[65dvh] max-h-[65dvh]"
-                     (not sidebar?) (str " pb-14"))
-            :ref #(let [*ref (::scroll-container-ref state)]
-                    (when-not @*ref (reset! *ref %)))
-            :style {:background "var(--lx-gray-02)"
-                    :scroll-padding-block 32}}
-
-      (when group-filter
-        [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
-         (search-only state (string/capitalize (name group-filter)))])
-
-      (let [items (filter
-                    (fn [[_group-name group-key group-count _group-items]]
-                      (and (not= 0 group-count)
-                        (if-not group-filter true
-                                             (or (= group-filter group-key)
-                                               (and (= group-filter :nodes)
-                                                 (= group-key :current-page))
-                                               (and (contains? #{:create} group-filter)
-                                                 (= group-key :create))))))
-                    results-ordered)]
-        (if (seq items)
-          (for [[group-name group-key _group-count group-items] items]
-            (let [title (string/capitalize group-name)]
-              (result-group state title group-key group-items first-item sidebar?)))
-          [:div.flex.flex-col.p-4.opacity-50
-           (when-not (string/blank? @*input)
-             (t :search/no-result))]))]
      (when-not sidebar? (hints state))]))
+     [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))
+                     :class (cond-> "w-full h-full relative flex flex-col justify-start"
+                              (not sidebar?) (str " rounded-lg"))}
+      (input-row state all-items opts)
+      [:div.flex
+       [[:div {:class (cond-> "w-full flex-1 overflow-y-auto min-h-[65dvh] max-h-[65dvh]"
+                        (not sidebar?) (str " pb-14"))
+               :ref #(let [*ref (::scroll-container-ref state)]
+                       (when-not @*ref (reset! *ref %)))
+               :style {:background "var(--lx-gray-02)"
+                       :scroll-padding-block 32}}
+
+         (when group-filter
+           (let [filter-name (cond
+                               (= (name group-filter) "commands")
+                               (t  :search/filter-commands)
+                               (= (name group-filter) "nodes")
+                               (t :search/filter-nodes)
+                               (= (name group-filter) "files")
+                               (t :search/filter-files)
+                               (= (name group-filter) "themes")
+                               (t :search/filter-themes)
+                               (= (name group-filter) "current-page")
+                               (t :search/filter-current-page)
+                               :else
+                               (string/capitalize (name group-filter)))]
+             [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
+              (search-only state filter-name)]))
+
+         (let [items (filter
+                      (fn [[_group-name group-key group-count _group-items]]
+                        (and (not= 0 group-count)
+                             (if-not group-filter true
+                                     (or (= group-filter group-key)
+                                         (and (= group-filter :nodes)
+                                              (= group-key :current-page))
+                                         (and (contains? #{:create} group-filter)
+                                              (= group-key :create))))))
+                      results-ordered)]
+           (if (seq items)
+             (for [[group-name group-key _group-count group-items] items]
+               (let [title (string/capitalize group-name)]
+                 (result-group state title group-key group-items first-item sidebar?)))
+             (when-not (string/blank? @*input)
+               [:div.flex.flex-col.p-4.opacity-50
+                (t :search/no-result)])))]
 
 (rum/defc cmdk-modal [props]
   [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl relative"}
