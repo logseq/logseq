@@ -706,12 +706,9 @@
     (shui-editor-popups id format action nil)))
 
 (defn- editor-on-hide
-  [state value* type e]
-  (let [repo (state/get-current-repo)
-        action (state/get-editor-action)
-        [opts _id config] (:rum/args state)
-        block (:block opts)
-        value (or value* "")]
+  [state type e]
+  (let [action (state/get-editor-action)
+        [_id config] (:rum/args state)]
     (cond
       (and (= type :esc) (exist-editor-commands-popup?))
       nil
@@ -734,7 +731,6 @@
         (when-let [container (gdom/getElement "app-container")]
           (dom/remove-class! container "blocks-selection-mode"))
         (p/do!
-         (editor-handler/save-block! repo (:block/uuid block) value)
          (editor-handler/escape-editing select?)
          (some-> config :on-escape-editing
                  (apply [(str uuid) (= type :esc)])))))))
@@ -754,7 +750,7 @@
       {:node @(::ref state)
        :on-hide (fn [_state e type]
                   (when-not (= type :esc)
-                    (editor-on-hide state (:value (editor-handler/get-state)) type e)))})))
+                    (editor-on-hide state type e)))})))
   (mixins/event-mixin setup-key-listener!)
   lifecycle/lifecycle
   [state {:keys [format block parent-block]} id config]
@@ -774,7 +770,7 @@
                                     (if-let [on-key-down (:on-key-down config)]
                                       (on-key-down e)
                                       (when (= (util/ekey e) "Escape")
-                                        (editor-on-hide state content :esc e))))
+                                        (editor-on-hide state :esc e))))
                :auto-focus true
                :class heading-class}
                (some? parent-block)

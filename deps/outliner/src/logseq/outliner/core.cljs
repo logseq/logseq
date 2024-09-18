@@ -260,14 +260,21 @@
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
           page? (ldb/page? block-entity)
-          page-title-changed? (and page? (:block/title m*)
-                                   (not= (:block/title m*) (:block/title block-entity)))
+          block-title (:block/title m*)
+          page-title-changed? (and page? block-title
+                                   (not= block-title (:block/title block-entity)))
+          _ (when (and db-based? page? block-title (string/includes? block-title "#"))
+              (throw (ex-info "Page name can't be blank"
+                                   {:type :notification
+                                    :payload {:message "Page name can't include \"#\"."
+                                              :type :warning}
+                                    :node m*})))
           m* (if (and db-based? page-title-changed?)
                (let [page-name (common-util/page-name-sanity-lc (:block/title m*))]
                  (when (string/blank? page-name)
-                   (throw (ex-info "Page title can't be blank"
+                   (throw (ex-info "Page name can't be blank"
                                    {:type :notification
-                                    :payload {:message "Page title can't be blank"
+                                    :payload {:message "Page title can't be blank."
                                               :type :error}
                                     :node m*})))
                  (assoc m* :block/name page-name))

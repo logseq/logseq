@@ -2845,6 +2845,11 @@
         (state/set-state! :editor/start-pos pos))
 
       (cond
+        (and (= :page-search (state/get-editor-action))
+             (= key commands/hashtag))
+        (do
+          (util/stop e)
+          (notification/show! "Page name can't include \"#\"." :warning))
         ;; stop accepting edits if the new block is not created yet
         (some? @(:editor/async-unsaved-chars @state/state))
         (do
@@ -3727,12 +3732,14 @@
   ([]
    (escape-editing true))
   ([select?]
-   (p/do!
-    (save-current-block!)
-    (if select?
-      (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-        (state/exit-editing-and-set-selected-blocks! [node]))
-      (state/clear-edit!)))))
+   (let [edit-block (state/get-edit-block)]
+     (p/do!
+      (save-current-block!)
+      (if select?
+        (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+          (state/exit-editing-and-set-selected-blocks! [node]))
+        (when (= (:db/id edit-block) (:db/id (state/get-edit-block)))
+          (state/clear-edit!)))))))
 
 (defn replace-block-reference-with-content-at-point
   []
