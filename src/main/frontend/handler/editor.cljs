@@ -1655,12 +1655,16 @@
   [q]
   (p/let [block (state/get-edit-block)
           nodes (search/block-search (state/get-current-repo) q {:built-in? false
-                                                                 :enable-snippet? false})]
-    (keep (fn [b]
-            (when-let [id (:block/uuid b)]
-              (when-not (= id (:block/uuid block)) ; avoid block self-reference
-                (db/entity [:block/uuid id]))))
-          nodes)))
+                                                                 :enable-snippet? false})
+          matched (keep (fn [b]
+                          (when-let [id (:block/uuid b)]
+                            (when-not (= id (:block/uuid block)) ; avoid block self-reference
+                              (db/entity [:block/uuid id]))))
+                        nodes)
+          matched-dates (map (fn [title] {:block/title title
+                                          :nlp-date? true}) date/nlp-pages)]
+    (-> (concat matched-dates matched)
+        (search/fuzzy-search q {:extract-fn :block/title :limit 50}))))
 
 (defn <get-matched-templates
   [q]

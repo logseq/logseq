@@ -33,7 +33,8 @@
             [promesa.core :as p]
             [react-draggable]
             [rum.core :as rum]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.date :as date]))
 
 (defn filter-commands
   [page? commands]
@@ -144,7 +145,11 @@
                                           (editor-handler/<get-matched-blocks q))]
                            (set-matched-pages! result))))
                      [q])
-    (let [matched-pages (when-not (string/blank? q)
+    (let [matched-pages (if (string/blank? q)
+                          (->> (map (fn [title] {:block/title title
+                                                 :nlp-date? true})
+                                    date/nlp-pages)
+                               (take 10))
                           ;; reorder, shortest and starts-with first.
                           (let [matched-pages-with-new-page
                                 (fn [partial-matched-pages]
@@ -180,6 +185,9 @@
                             (when-not db-tag?
                               [:div.flex.items-center
                                (cond
+                                 (:nlp-date? block)
+                                 (ui/icon "calendar" {:size 14})
+
                                  (ldb/class? block)
                                  (ui/icon "hash" {:size 14})
 
@@ -193,7 +201,7 @@
                                  (ui/icon "page" {:extension? true})
 
                                  (or (string/starts-with? (str (:block/title block)) (t :new-tag))
-                                   (string/starts-with? (str (:block/title block)) (t :new-page)))
+                                     (string/starts-with? (str (:block/title block)) (t :new-page)))
                                  (ui/icon "plus" {:size 14})
 
                                  :else

@@ -521,35 +521,34 @@
        [:div#ui__ac-inner.hide-scrollbar
         (when header header)
         (for [[idx item] (medley/indexed matched)]
-          [:<>
-           {:key idx}
-           (let [item-cp
-                 [:div.menu-link-wrap
-                  {:key            idx
+          (let [react-key (str idx)
+                item-cp
+                [:div.menu-link-wrap
+                 {:key react-key
                    ;; mouse-move event to indicate that cursor moved by user
-                   :on-mouse-move  #(reset! *current-idx idx)}
-                  (let [chosen? (= @*current-idx idx)]
-                    (menu-link
-                     {:id (str "ac-" idx)
-                      :tab-index "0"
-                      :class (when chosen? "chosen")
+                  :on-mouse-move  #(reset! *current-idx idx)}
+                 (let [chosen? (= @*current-idx idx)]
+                   (menu-link
+                    {:id (str "ac-" react-key)
+                     :tab-index "0"
+                     :class (when chosen? "chosen")
                        ;; TODO: should have more tests on touch devices
                        ;:on-pointer-down #(util/stop %)
-                      :on-click (fn [e]
-                                  (util/stop e)
-                                  (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                    (on-shift-chosen item)
-                                    (on-chosen item e)))}
-                     (if item-render (item-render item chosen?) item)))]]
+                     :on-click (fn [e]
+                                 (util/stop e)
+                                 (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                   (on-shift-chosen item)
+                                   (on-chosen item e)))}
+                    (if item-render (item-render item chosen?) item)))]]
 
-             (let [group-name (and (fn? get-group-name) (get-group-name item))]
-               (if (and group-name (not (contains? @*groups group-name)))
-                 (do
-                   (swap! *groups conj group-name)
-                   [:div
-                    [:div.ui__ac-group-name group-name]
-                    item-cp])
-                 item-cp)))])]
+            (let [group-name (and (fn? get-group-name) (get-group-name item))]
+              (if (and group-name (not (contains? @*groups group-name)))
+                (do
+                  (swap! *groups conj group-name)
+                  [:div
+                   [:div.ui__ac-group-name group-name]
+                   item-cp])
+                item-cp))))]
        (when empty-placeholder
          empty-placeholder))]))
 
