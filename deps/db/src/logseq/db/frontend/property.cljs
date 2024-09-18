@@ -222,7 +222,11 @@
    :logseq.property.asset/remote-metadata {:schema
                                            {:type :map
                                             :hide? true
-                                            :public? false}}))
+                                            :public? false}}
+   :logseq.property/fsrs-state {:schema
+                                {:type :map
+                                 :hide? true
+                                 :public? false}}))
 
 (def built-in-properties
   (->> built-in-properties*
