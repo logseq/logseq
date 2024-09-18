@@ -3482,11 +3482,13 @@
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
     (when-not (skip-collapsing-in-db?)
-      (set-blocks-collapsed! [block-id] true))))
+      (set-blocks-collapsed! [block-id] true))
+    (state/set-collapsed-block! block-id true)))
 
 (defn expand-block! [block-id]
   (when-not (skip-collapsing-in-db?)
-    (set-blocks-collapsed! [block-id] false)))
+    (set-blocks-collapsed! [block-id] false))
+  (state/set-collapsed-block! block-id false))
 
 (defn expand!
   ([e] (expand! e false))
