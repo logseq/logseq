@@ -2545,17 +2545,26 @@
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
-                                        (cond
-                                          (util/right-click? e)
-                                          nil
-                                          (:from-journals? config)
-                                          (do
+                                        (let [journal-title? (:from-journals? config)]
+                                          (cond
+                                            (util/right-click? e)
+                                            nil
+
+                                            (and journal-title? (gobj/get e "shiftKey"))
+                                            (do
+                                              (.preventDefault e)
+                                              (state/sidebar-add-block! repo (:db/id block) :page))
+
+                                            journal-title?
+                                            (do
+                                              (.preventDefault e)
+                                              (route-handler/redirect-to-page! (:block/uuid block)))
+
+                                            (ldb/journal? block)
                                             (.preventDefault e)
-                                            (route-handler/redirect-to-page! (:block/uuid block)))
-                                          (ldb/journal? block)
-                                          (.preventDefault e)
-                                          :else
-                                          (block-content-on-pointer-down e block block-id content edit-input-id config)))))]
+
+                                            :else
+                                            (block-content-on-pointer-down e block block-id content edit-input-id config))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-pointer-up (fn [e]
