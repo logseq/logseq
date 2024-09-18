@@ -923,6 +923,22 @@
                   (reset! (::filter state) nil))}
      (shui/tabler-icon "x"))])
 
+(defn group-filter-translate
+  [group-filter]
+  (cond
+    (= (name group-filter) "commands")
+    (t  :search/filter-commands)
+    (= (name group-filter) "nodes")
+    (t :search/filter-nodes)
+    (= (name group-filter) "files")
+    (t :search/filter-files)
+    (= (name group-filter) "themes")
+    (t :search/filter-themes)
+    (= (name group-filter) "current-page")
+    (t :search/filter-current-page)
+    :else
+    (string/capitalize (name group-filter))))
+
 (rum/defcs cmdk
   < rum/static
     rum/reactive
@@ -989,19 +1005,7 @@
                        :scroll-padding-block 32}}
 
          (when group-filter
-           (let [filter-name (cond
-                               (= (name group-filter) "commands")
-                               (t  :search/filter-commands)
-                               (= (name group-filter) "nodes")
-                               (t :search/filter-nodes)
-                               (= (name group-filter) "files")
-                               (t :search/filter-files)
-                               (= (name group-filter) "themes")
-                               (t :search/filter-themes)
-                               (= (name group-filter) "current-page")
-                               (t :search/filter-current-page)
-                               :else
-                               (string/capitalize (name group-filter)))]
+           (let [filter-name (group-filter-translate group-filter)]
              [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
               (search-only state filter-name)]))
 
@@ -1017,7 +1021,7 @@
                       results-ordered)]
            (if (seq items)
              (for [[group-name group-key _group-count group-items] items]
-               (let [title (string/capitalize group-name)]
+               (let [title (group-filter-translate group-name)]
                  (result-group state title group-key group-items first-item sidebar?)))
              (when-not (string/blank? @*input)
                [:div.flex.flex-col.p-4.opacity-50
