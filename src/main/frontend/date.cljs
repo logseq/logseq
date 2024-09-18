@@ -179,6 +179,33 @@
     (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
     :else d))
 
+(def nlp-pages
+  ["Today"
+   "Tomorrow"
+   "Yesterday"
+   "Next week"
+   "Last week"
+   "Next month"
+   "Last month"
+   "Next year"
+   "Last year"
+   "Last Monday"
+   "Last Tuesday"
+   "Last Wednesday"
+   "Last Thursday"
+   "Last Friday"
+   "Last Saturday"
+   "Last Sunday"
+   "Next Monday"
+   "Next Tuesday"
+   "Next Wednesday"
+   "Next Thursday"
+   "Next Friday"
+   "Next Saturday"
+   "Next Sunday"])
+
+
+
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))
   (def zh-formatter (tf/formatter "YYYY年MM月dd日"))

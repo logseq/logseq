@@ -1654,13 +1654,13 @@
   "Return matched blocks that are not built-in"
   [q]
   (p/let [block (state/get-edit-block)
-          pages (search/block-search (state/get-current-repo) q {:built-in? false
+          nodes (search/block-search (state/get-current-repo) q {:built-in? false
                                                                  :enable-snippet? false})]
     (keep (fn [b]
             (when-let [id (:block/uuid b)]
               (when-not (= id (:block/uuid block)) ; avoid block self-reference
                 (db/entity [:block/uuid id]))))
-          pages)))
+          nodes)))
 
 (defn <get-matched-templates
   [q]
