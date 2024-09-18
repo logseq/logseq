@@ -140,7 +140,7 @@
                      [(t :search/mode-create)         :create       (create-items input)])
                    [(t :search/mode-current-page)   :current-page   (visible-items :current-page)]
                    [(t :search/mode-nodes)         :nodes         (visible-items :nodes)]
-                   [(t :search/mode-commands)       :commands       (visible-items :commands)]
+                  ;;  [(t :search/mode-commands)       :commands       (visible-items :commands)]
                    [(t :search/mode-files)          :files          (visible-items :files)]
                    [(t :search/mode-filters)        :filters        (visible-items :filters)]]
                   (remove nil?)))
@@ -767,12 +767,14 @@
     (reset! (::meta? state) meta?)))
 
 (defn- input-placeholder
-  [sidebar?]
-  (let [search-mode (:search/mode @state/state)]
+  [state sidebar?]
+  (let [search-mode (:search/mode @state/state)
+        filter-group (:group @(::filter state))]
     (cond
       (and (= search-mode :graph) (not sidebar?))
       (t :search/add-graph-filter)
-
+      (or (= filter-group :initial) (= filter-group :nodes) (= filter-group nil))
+      (str (t :search/start-typing-to-search) " / " (t :search/new-page))
       :else
       (t :search/start-typing-to-search))))
 
@@ -795,7 +797,7 @@
        :title (t :search/clear-esc)
        :auto-focus true
        :autoComplete "off"
-       :placeholder (input-placeholder false)
+       :placeholder (input-placeholder state false)
        :ref #(when-not @input-ref (reset! input-ref %))
        :on-change (fn [e]
                     (let [new-value (.-value (.-target e))]
