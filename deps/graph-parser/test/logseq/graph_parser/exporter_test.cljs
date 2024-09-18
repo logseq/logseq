@@ -492,7 +492,7 @@
 
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md"])
+          files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"])
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
           _ (import-files-to-db files conn {:property-parent-classes ["parent"]})]
