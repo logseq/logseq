@@ -225,7 +225,7 @@
                                             :public? false}}
    :logseq.property/fsrs-state {:schema
                                 {:type :map
-                                 :hide? true
+                                 :hide? false ; show for debug now, hide it later
                                  :public? false}}))
 
 (def built-in-properties
