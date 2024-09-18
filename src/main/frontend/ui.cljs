@@ -1202,6 +1202,7 @@
      :style {:width "initial"
              :tab-index -1}
      :auto-complete (if (util/chrome?) "chrome-off" "off")
+     :on-mouse-down util/stop-propagation
      :on-key-down (fn [e]
                     (when (= "Enter" (util/ekey e))
                       (let [value (util/evalue e)]
