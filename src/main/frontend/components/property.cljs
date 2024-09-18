@@ -87,7 +87,7 @@
                           (map (fn [type]
                                  {:label (property-type-label type)
                                   :value type})))]
-    [:div {:class "flex items-center col-span-2"}
+    [:div {:class "flex items-center col-span-1"}
      (shui/select
       (cond->
        {:default-open (boolean default-open?)
@@ -345,8 +345,8 @@
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      {:ref #(reset! *ref %)}
      (if property-key
-       [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
-        [:div.flex.flex-row.items-center.col-span-2.property-key.gap-1
+       [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-1.flex-row.items-center
+        [:div.flex.flex-row.items-center.col-span-1.property-key.gap-1
          (when-not (:db/id property) (property-icon property (:type @*property-schema)))
          (if (:db/id property)                              ; property exists already
            (property-key-cp block property opts)
@@ -442,8 +442,8 @@
                         :else
                         "property-pair items-start")}
          (if (seq sortable-opts)
-           (dnd/sortable-item (assoc sortable-opts :class "property-key col-span-2") property-key-cp')
-           [:div.property-key.col-span-2 property-key-cp'])
+           (dnd/sortable-item (assoc sortable-opts :class "property-key col-span-1") property-key-cp')
+           [:div.property-key.col-span-1 property-key-cp'])
 
          (let [class-properties? (= (:db/ident property) :logseq.property.class/properties)
                property-desc (when-not (= (:db/ident property) :logseq.property/description)

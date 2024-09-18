@@ -900,7 +900,7 @@ html.is-mac {
 }
 
 .block-tag a.tag {
-  @apply flex text-sm items-center opacity-70;
+  @apply flex text-sm font-light items-center opacity-70;
 }
 
 .block-tag a.tag:hover {
