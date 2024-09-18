@@ -106,81 +106,82 @@
         login? (and (state/sub :auth/id-token) (user-handler/logged-in?))
         items (fn []
                 (->>
-                  [(when (state/enable-editing?)
-                     {:title (t :settings)
-                      :options {:on-click state/open-settings!}
-                      :icon (ui/icon "settings")})
+                 [(when (state/enable-editing?)
+                    {:title (t :settings)
+                     :options {:on-click state/open-settings!}
+                     :icon (ui/icon "settings")})
 
-                   (when config/lsp-enabled?
-                     {:title (t :plugins)
-                      :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
-                      :icon (ui/icon "apps")})
+                  (when config/lsp-enabled?
+                    {:title (t :plugins)
+                     :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
+                     :icon (ui/icon "apps")})
 
-                   {:title (t :appearance)
-                    :options {:on-click #(state/pub-event! [:modal/toggle-appearance-modal])}
-                    :icon (ui/icon "color-swatch")}
+                  {:title (t :appearance)
+                   :options {:on-click #(state/pub-event! [:modal/toggle-appearance-modal])}
+                   :icon (ui/icon "color-swatch")}
 
-                   (when current-repo
-                     {:title (t :export-graph)
-                      :options {:on-click #(shui/dialog-open! export/export)}
-                      :icon (ui/icon "database-export")})
+                  (when current-repo
+                    {:title (t :export-graph)
+                     :options {:on-click #(shui/dialog-open! export/export)}
+                     :icon (ui/icon "database-export")})
 
-                   (when (and current-repo (state/enable-editing?))
-                     {:title (t :import)
-                      :options {:href (rfe/href :import)}
-                      :icon (ui/icon "file-upload")})
+                  (when (and current-repo (state/enable-editing?))
+                    {:title (t :import)
+                     :options {:href (rfe/href :import)}
+                     :icon (ui/icon "file-upload")})
 
-                   (when config/publishing?
-                     {:title (t :toggle-theme)
-                      :options {:on-click #(state/toggle-theme!)}
-                      :icon (ui/icon "bulb")})
+                  (when config/publishing?
+                    {:title (t :toggle-theme)
+                     :options {:on-click #(state/toggle-theme!)}
+                     :icon (ui/icon "bulb")})
 
-                   (when (not login?)
-                     {:title (t :login)
-                      :options {:on-click #(state/pub-event! [:user/login])}
-                      :icon (ui/icon "user")})
+                  ;; Disable login on Web until RTC is ready
+                  (when (and (not login?) (not util/web-platform?))
+                    {:title (t :login)
+                     :options {:on-click #(state/pub-event! [:user/login])}
+                     :icon (ui/icon "user")})
 
-                   (when login? {:hr true})
-                   (when login?
-                     {:item [:span.flex.flex-col.relative.group.pt-1.w-full
-                             [:b.leading-none (user-handler/username)]
-                             [:small.opacity-70 (user-handler/email)]
-                             [:i.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
-                              {:class "right-1 top-3" :title (t :logout)}
-                              (ui/icon "logout")]]
-                      :options {:on-click #(user-handler/logout)
-                                :class "w-full"}})]
-                  (concat page-menu-and-hr)
-                  (remove nil?)))]
+                  (when login? {:hr true})
+                  (when login?
+                    {:item [:span.flex.flex-col.relative.group.pt-1.w-full
+                            [:b.leading-none (user-handler/username)]
+                            [:small.opacity-70 (user-handler/email)]
+                            [:i.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
+                             {:class "right-1 top-3" :title (t :logout)}
+                             (ui/icon "logout")]]
+                     :options {:on-click #(user-handler/logout)
+                               :class "w-full"}})]
+                 (concat page-menu-and-hr)
+                 (remove nil?)))]
     [:button.button.icon.toolbar-dots-btn
      {:title (t :header/more)
       :on-pointer-down (fn [^js e]
-                  (shui/popup-show! (.-target e)
-                    (fn [{:keys [id]}]
-                      (for [{:keys [hr item title options icon]} (items)]
-                        (let [on-click' (:on-click options)
-                              href (:href options)]
-                          (if hr
-                            (shui/dropdown-menu-separator)
-                            (shui/dropdown-menu-item
-                             (assoc options
-                                    :on-click (fn [^js e]
-                                                (when on-click'
-                                                  (when-not (false? (on-click' e))
-                                                    (shui/popup-hide! id)))))
-                             (or item
-                                 (if href
-                                   [:a.flex.items-center.w-full
-                                    {:href href :on-click #(shui/popup-hide! id)
-                                     :style {:color "inherit"}}
-                                    [:span.flex.items-center.gap-1.w-full
-                                     icon [:div title]]]
-                                   [:span.flex.items-center.gap-1.w-full
-                                    icon [:div title]])))))))
-                    {:align "end"
-                     :as-dropdown? true
-                     :content-props {:class "w-64"
-                                     :align-offset -32}}))}
+                         (shui/popup-show! (.-target e)
+                                           (fn [{:keys [id]}]
+                                             (for [{:keys [hr item title options icon]} (items)]
+                                               (let [on-click' (:on-click options)
+                                                     href (:href options)]
+                                                 (if hr
+                                                   (shui/dropdown-menu-separator)
+                                                   (shui/dropdown-menu-item
+                                                    (assoc options
+                                                           :on-click (fn [^js e]
+                                                                       (when on-click'
+                                                                         (when-not (false? (on-click' e))
+                                                                           (shui/popup-hide! id)))))
+                                                    (or item
+                                                        (if href
+                                                          [:a.flex.items-center.w-full
+                                                           {:href href :on-click #(shui/popup-hide! id)
+                                                            :style {:color "inherit"}}
+                                                           [:span.flex.items-center.gap-1.w-full
+                                                            icon [:div title]]]
+                                                          [:span.flex.items-center.gap-1.w-full
+                                                           icon [:div title]])))))))
+                                           {:align "end"
+                                            :as-dropdown? true
+                                            :content-props {:class "w-64"
+                                                            :align-offset -32}}))}
      (ui/icon "dots" {:size ui/icon-size})]))
 
 (rum/defc back-and-forward
