@@ -142,7 +142,7 @@
                        (when-not (string/blank? q)
                          (p/let [result (if db-tag?
                                           (editor-handler/get-matched-classes q)
-                                          (editor-handler/<get-matched-blocks q))]
+                                          (editor-handler/<get-matched-blocks q {:nlp-pages? true}))]
                            (set-matched-pages! result))))
                      [q])
     (let [matched-pages (if (string/blank? q)
