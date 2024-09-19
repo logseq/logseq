@@ -185,10 +185,6 @@
         (shui/button {:size "sm" :disabled (or saving? (not dirty?))
                       :variant (if dirty? :default :secondary)
                       :on-click (fn []
-                                  (when (string/blank? title)
-                                    (some-> (rum/deref *input-ref) (.focus))
-                                    (throw (js/Error. "property name is empty")))
-
                                   (set-saving! true)
                                   (-> [(db-property-handler/upsert-property!
                                          (:db/ident property)
