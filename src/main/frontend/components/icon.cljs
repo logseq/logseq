@@ -30,21 +30,22 @@
     (ui/icon (:id icon) opts)))
 
 (defn get-node-icon
-  [node-entity]
-  (let [default-icon (cond
-                       (ldb/class? node-entity)
-                       (ui/icon "hash")
-                       (ldb/property? node-entity)
-                       (ui/icon "letter-p")
-                       (ldb/page? node-entity)
-                       (ui/icon "page" {:extension? true})
-                       :else
-                       (ui/icon "letter-n"))
+  [node-entity opts]
+  (let [default-icon-id (cond
+                          (ldb/class? node-entity)
+                          "hash"
+                          (ldb/property? node-entity)
+                          "letter-p"
+                          (ldb/page? node-entity)
+                          "page"
+                          :else
+                          "letter-n")
+        default-icon (ui/icon default-icon-id (assoc opts :size 14))
         node-icon (get node-entity (pu/get-pid :logseq.property/icon))]
     (or
      (when-not (string/blank? node-icon)
        [:span {:style {:color (or (:color node-icon) "inherit")}}
-        (icon node-icon)])
+        (icon node-icon opts)])
      default-icon)))
 
 (defn- search-emojis
