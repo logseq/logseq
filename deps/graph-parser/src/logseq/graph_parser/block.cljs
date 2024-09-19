@@ -315,18 +315,20 @@
           [page _page-entity] (cond
                                 (and original-page-name (string? original-page-name))
                                 (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
-                                      [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
+                                      [original-page-name' page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
                                       namespace? (and (not db-based?)
-                                                      (not (boolean (text/get-nested-page-name original-page-name)))
-                                                      (text/namespace-page? original-page-name))
+                                                      (not (boolean (text/get-nested-page-name original-page-name')))
+                                                      (text/namespace-page? original-page-name'))
                                       page-entity (when (and db (not skip-existing-page-check?))
                                                     (if class?
-                                                      (ldb/get-case-page db original-page-name)
-                                                      (ldb/get-page db original-page-name)))
-                                      original-page-name (or from-page (:block/title page-entity) original-page-name)
+                                                      (ldb/get-case-page db original-page-name')
+                                                      (ldb/get-page db original-page-name')))
+                                      original-page-name' (or from-page (:block/title page-entity) original-page-name')
                                       page (merge
                                             {:block/name page-name
-                                             :block/title original-page-name}
+                                             :block/title original-page-name'}
+                                            (when-not (= original-page-name' original-page-name)
+                                              {:block.temp/original-page-name original-page-name})
                                             (if (and class? page-entity (:db/ident page-entity))
                                               {:block/uuid (:block/uuid page-entity)
                                                :db/ident (:db/ident page-entity)}
@@ -432,11 +434,14 @@
           refs (->> (ref->map-fn *refs false)
                     (remove nil?)
                     (map (fn [ref]
-                           (if-let [entity (ldb/get-case-page db (:block/title ref))]
-                             (if (= (:db/id parse-block) (:db/id entity))
-                               ref
-                               (select-keys entity [:block/uuid :block/title :block/name]))
-                             ref))))
+                           (let [ref' (if-let [entity (ldb/get-case-page db (:block/title ref))]
+                              (if (= (:db/id parse-block) (:db/id entity))
+                                ref
+                                (select-keys entity [:block/uuid :block/title :block/name]))
+                              ref)]
+                             (cond-> ref'
+                               (:block.temp/original-page-name ref)
+                               (assoc :block.temp/original-page-name (:block.temp/original-page-name ref)))))))
           tags (ref->map-fn *structured-tags true)]
       (assoc block
              :refs refs
