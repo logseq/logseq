@@ -642,7 +642,9 @@
                      :property-block? true}]
          (if (set? value-block)
            (blocks-container config (ldb/sort-by-order value-block))
-           (block-container config value-block)))]
+           (rum/with-key
+             (block-container config value-block)
+             (str (:db/id property) "-" (:block/uuid value-block)))))]
       [:div
        {:tabIndex 0
         :on-click (fn [] (<create-new-block! block property ""))}
