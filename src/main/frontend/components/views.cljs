@@ -1,6 +1,7 @@
 (ns frontend.components.views
   "Different views of blocks"
-  (:require [cljs-time.coerce :as tc]
+  (:require [cljs-bean.core :as bean]
+            [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.set :as set]
             [clojure.string :as string]
@@ -17,6 +18,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [dommy.core :as dom]
             [goog.functions :refer [debounce]]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -135,7 +137,8 @@
           :header (fn [table _column] (header-checkbox table))
           :cell (fn [table row column]
                   (row-checkbox table row column))
-          :column-list? false}
+          :column-list? false
+          :resizable? false}
          (when with-object-name?
            {:id :block/title
             :name "Name"
@@ -270,6 +273,44 @@
                    (on-delete-rows table selected-rows))}
       (ui/icon "trash")))))
 
+(rum/defc column-resizer
+  [_column]
+  (let [*el (rum/use-ref nil)
+        [dx set-dx!] (rum/use-state nil)
+        add-resizing-class #(dom/add-class! js/document.documentElement "is-resizing-buf")
+        remove-resizing-class #(dom/remove-class! js/document.documentElement "is-resizing-buf")]
+
+    (rum/use-effect!
+      (fn []
+        (when (number? dx)
+          (some-> (rum/deref *el)
+            (dom/set-style! :transform (str "translate3D(" dx "px , 0, 0)")))))
+      [dx])
+
+    (rum/use-effect!
+      (fn []
+        (when-let [el (and (fn? js/window.interact) (rum/deref *el))]
+          (-> (js/interact el)
+            (.draggable
+              (bean/->js
+                {:modifiers [(js/interact.modifiers.restrict
+                               (bean/->js {:restriction (.closest el ".ls-table-header")}))]
+                 :listeners
+                 {:move (fn [^js e]
+                          (let [dx (.-dx e)]
+                            (set-dx! (fn [dx'] (+ (or dx' 0) dx)))))
+                  :end #(set-dx! 0)}}))
+            (.styleCursor false)
+            (.on "dragstart" add-resizing-class)
+            (.on "dragend" remove-resizing-class)
+            (.on "mousedown" util/stop-propagation)
+            )))
+      [])
+
+    [:a.ls-table-resize-handle
+     {:data-no-dnd true
+      :ref *el}]))
+
 (defn- table-header
   [table columns {:keys [show-add-property? add-property!] :as option} selected-rows]
   (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
@@ -285,26 +326,29 @@
                                     :class (when select? "!border-0")}
                                    (if (fn? header-fn)
                                      (header-fn table column)
-                                     header-fn)])
+                                     header-fn)
+                                   ;; resize handle
+                                   (when-not (false? (:resizable? column))
+                                     (column-resizer column))])
                        :disabled? (= (:id column) :select)}) columns)
         items (if show-add-property?
                 (conj items
-                      {:id "add property"
-                       :prop {:style {:width "-webkit-fill-available"
-                                      :min-width 160}
-                              :on-click (fn [] (when (fn? add-property!) (add-property!)))}
-                       :value :add-new-property
-                       :content (add-property-button)
-                       :disabled? true})
+                  {:id "add property"
+                   :prop {:style {:width "-webkit-fill-available"
+                                  :min-width 160}
+                          :on-click (fn [] (when (fn? add-property!) (add-property!)))}
+                   :value :add-new-property
+                   :content (add-property-button)
+                   :disabled? true})
                 items)
         selection-rows-count (count selected-rows)]
     (shui/table-header
-     (dnd/items items {:vertical? false
-                       :on-drag-end (fn [ordered-columns _m]
-                                      (set-ordered-columns! ordered-columns))})
-     (when (pos? selection-rows-count)
-       [:div.absolute.top-0.left-8
-        (action-bar table selected-rows option)]))))
+      (dnd/items items {:vertical? false
+                        :on-drag-end (fn [ordered-columns _m]
+                                       (set-ordered-columns! ordered-columns))})
+      (when (pos? selection-rows-count)
+        [:div.absolute.top-0.left-8
+         (action-bar table selected-rows option)]))))
 
 (rum/defc table-row < rum/reactive
   [{:keys [row-selected?] :as table} row columns props {:keys [show-add-property?]}]
