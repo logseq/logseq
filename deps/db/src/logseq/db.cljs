@@ -16,7 +16,8 @@
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property])
+            [logseq.db.frontend.property :as db-property]
+            [clojure.walk :as walk])
   (:refer-clojure :exclude [object?]))
 
 ;; Use it as an input argument for datalog queries
@@ -56,6 +57,20 @@
   [f]
   (when f (reset! *transact-fn f)))
 
+(defn- remove-temp-block-data
+  [tx-data]
+  (let [remove-block-temp-f (fn [m]
+                             (->> (remove (fn [[k _v]] (= "block.temp" (namespace k))) m)
+                                 (into {})))]
+    (map (fn [m]
+           (if (map? m)
+             (cond->
+              (remove-block-temp-f m)
+               (every? map? (:block/refs m))
+               (update :block/refs (fn [refs] (map remove-block-temp-f refs))))
+             m))
+         tx-data)))
+
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
   ([repo-or-conn tx-data]
@@ -64,10 +79,11 @@
    (let [tx-data (map (fn [m]
                         (if (map? m)
                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                  :block.temp/ast-title :block.temp/ast-body :block/level :block/container :db/other-tx
+                                  :block/level :block/container :db/other-tx
                                   :block/unordered)
                           m)) tx-data)
          tx-data (->> (common-util/fast-remove-nils tx-data)
+                      (remove-temp-block-data)
                       (remove empty?))
          delete-blocks-tx (when-not (string? repo-or-conn)
                             (delete-blocks/update-refs-and-macros @repo-or-conn tx-data tx-meta))
