@@ -263,20 +263,11 @@
           block-title (:block/title m*)
           page-title-changed? (and page? block-title
                                    (not= block-title (:block/title block-entity)))
-          _ (when (and db-based? page? block-title (string/includes? block-title "#"))
-              (throw (ex-info "Page name can't be blank"
-                                   {:type :notification
-                                    :payload {:message "Page name can't include \"#\"."
-                                              :type :warning}
-                                    :node m*})))
+          _ (when (and db-based? page? block-title)
+              (outliner-validate/validate-page-title-characters block-title {:node m*}))
           m* (if (and db-based? page-title-changed?)
-               (let [page-name (common-util/page-name-sanity-lc (:block/title m*))]
-                 (when (string/blank? page-name)
-                   (throw (ex-info "Page name can't be blank"
-                                   {:type :notification
-                                    :payload {:message "Page title can't be blank."
-                                              :type :error}
-                                    :node m*})))
+               (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
+                     page-name (common-util/page-name-sanity-lc (:block/title m*))]
                  (assoc m* :block/name page-name))
                m*)
           _ (when (and db-based?
