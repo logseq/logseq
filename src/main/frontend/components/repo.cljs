@@ -396,7 +396,8 @@
   "Returns boolean indicating if DB graph name is invalid. Must be kept in sync with invalid-graph-name-warning"
   [graph-name]
   (or (fs-util/include-reserved-chars? graph-name)
-    (string/includes? graph-name "+")))
+    (string/includes? graph-name "+")
+    (string/includes? graph-name "/")))
 
 (rum/defcs new-db-graph < rum/reactive
                           (rum/local "" ::graph-name)
