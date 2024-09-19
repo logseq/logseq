@@ -7,6 +7,7 @@ const gulp = require('gulp')
 const cleanCSS = require('gulp-clean-css')
 const del = require('del')
 const ip = require('ip')
+const replace = require('gulp-replace');
 
 const outputPath = path.join(__dirname, 'static')
 const resourcesPath = path.join(__dirname, 'resources')
@@ -71,9 +72,11 @@ const common = {
         'node_modules/react/umd/react.development.js',
         'node_modules/react-dom/umd/react-dom.production.min.js',
         'node_modules/react-dom/umd/react-dom.development.js',
-        'node_modules/prop-types/prop-types.min.js',
-        'node_modules/@tabler/icons-react/dist/umd/tabler-icons-react.min.js'
+        'node_modules/prop-types/prop-types.min.js'
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
+      () => gulp.src([
+        'node_modules/@tabler/icons-react/dist/umd/tabler-icons-react.min.js'
+      ]).pipe(replace('"@tabler/icons-react"', '"tablerIcons"')).pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
         'node_modules/@glidejs/glide/dist/glide.min.js',
         'node_modules/@glidejs/glide/dist/css/glide.core.min.css',
