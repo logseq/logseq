@@ -1274,7 +1274,7 @@
     (show-link? config metadata s full_text)
     (media-link config url s label metadata full_text)
 
-    (util/electron?)
+    (or (util/electron?) (config/db-based-graph? (state/get-current-repo)))
     (let [path (cond
                  (string/starts-with? s "file://")
                  (string/replace s "file://" "")
