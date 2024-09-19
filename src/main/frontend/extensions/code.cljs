@@ -398,8 +398,10 @@
 (defn ^:large-vars/cleanup-todo render!
   [state]
   (let [[config id attr _code theme user-options] (:rum/args state)
+        config-file? (= (:file-path config) "logseq/config.edn")
+        edit-block (state/get-edit-block)
         default-open? (and (:editor/code-mode? @state/state)
-                           (= (:block/uuid (state/get-edit-block))
+                           (= (:block/uuid edit-block)
                               (get-in config [:block :block/uuid])))
         _ (state/set-state! :editor/code-mode? false)
         original-mode (get attr :data-lang)
@@ -419,7 +421,9 @@
                             :matchBrackets lisp-like?
                             :styleActiveLine true}
         cm-options (merge default-cm-options
-                          (extra-codemirror-options)
+                          (cond-> (extra-codemirror-options)
+                            config-file?
+                            (dissoc :readOnly))
                           {:mode mode
                            :tabIndex -1 ;; do not accept TAB-in, since TAB is bind globally
                            :extraKeys (merge {"Esc" (fn [cm]
