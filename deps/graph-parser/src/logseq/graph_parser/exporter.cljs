@@ -26,7 +26,8 @@
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.graph-parser.property :as gp-property]))
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.block :as gp-block]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -75,7 +76,9 @@
                     (select-keys tag-block [:block/created-at :block/updated-at]))))))))
 
 (defn- get-page-uuid [page-names-to-uuids page-name]
-  (or (get page-names-to-uuids page-name)
+  (or (get page-names-to-uuids (if (string/includes? (str page-name) "#")
+                                 (string/lower-case (gp-block/sanitize-hashtag-name page-name))
+                                 page-name))
       (throw (ex-info (str "No uuid found for page name " (pr-str page-name))
                       {:page-name page-name}))))
 
@@ -377,11 +380,11 @@
                          ;; else
                          [(built-in-property-name-to-idents prop) prop-value]))))
              (into {}))]
-             (cond-> m
-               (and (contains? props :query-sort-desc) (:query-sort-by props))
-               (update :logseq.property.table/sorting
-                       (fn [v]
-                         (assoc-in v [0 :asc?] (not (:query-sort-desc props))))))))
+    (cond-> m
+      (and (contains? props :query-sort-desc) (:query-sort-by props))
+      (update :logseq.property.table/sorting
+              (fn [v]
+                (assoc-in v [0 :asc?] (not (:query-sort-desc props))))))))
 
 (defn- update-page-or-date-values
   "Converts :node or :date names to entity values"
@@ -933,7 +936,9 @@
                                 extract-options
                                 {:db db})]
     (cond (contains? common-config/mldoc-support-formats format)
-          (extract/extract file content extract-options')
+          (-> (extract/extract file content extract-options')
+              (update :pages (fn [pages]
+                               (map #(dissoc % :block.temp/original-page-name) pages))))
 
           (common-config/whiteboard? file)
           (-> (extract/extract-whiteboard-edn file content extract-options')
