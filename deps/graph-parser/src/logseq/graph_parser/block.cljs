@@ -327,7 +327,10 @@
                                       page (merge
                                             {:block/name page-name
                                              :block/title original-page-name'}
-                                            (when-not (= original-page-name' original-page-name)
+                                            (when (and original-page-name
+                                                       (not= (string/lower-case original-page-name)
+                                                             (string/lower-case original-page-name')))
+
                                               {:block.temp/original-page-name original-page-name})
                                             (if (and class? page-entity (:db/ident page-entity))
                                               {:block/uuid (:block/uuid page-entity)
