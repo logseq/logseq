@@ -29,7 +29,7 @@ and handles unexpected failure."
                                              :db-graph-mode? (config/db-based-graph? repo)})]
         (if (config/db-based-graph? repo)
           (map (fn [block]
-                (cond-> (dissoc block :block/properties)
+                (cond-> (dissoc block :block/properties :block/macros :block/properties-order)
                   (:block/properties block)
                   (merge (update-keys (:block/properties block)
                                       (fn [k]
