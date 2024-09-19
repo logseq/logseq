@@ -42,8 +42,7 @@
     ((comp string/capitalize name) property-type)))
 
 (defn- <add-property-from-dropdown
-  "Adds an existing or new property from dropdown. Used from a block or page context.
-   For pages, used to add both schema properties or properties for a page"
+  "Adds an existing or new property from dropdown. Used from a block or page context."
   [entity property-uuid-or-name schema {:keys [class-schema?]}]
   (p/let [repo (state/get-current-repo)
           ;; Both conditions necessary so that a class can add its own page properties
