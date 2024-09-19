@@ -104,27 +104,9 @@
 
 (rum/defc block-title < rum/static
   [config row]
-  (let [[show-open? set-show-open!] (rum/use-state false)
-        block-container (state/get-component :block/container)]
+  (let [block-container (state/get-component :block/container)]
     [:div.relative.w-full
-     {:on-mouse-over #(set-show-open! true)
-      :on-mouse-out #(set-show-open! false)}
-     (block-container (assoc config :table? true) row)
-     [:div.absolute.-top-1.right-0.transition-opacity
-      {:class (if show-open? "opacity-100" "opacity-0")}
-      (shui/button
-       {:variant :ghost
-        :size :sm
-        :class "!px-2 !py-0 text-muted-foreground"
-        :on-click (fn [e]
-                    (util/stop e)
-                    (let [page? (db/page? row)]
-                      (state/sidebar-add-block!
-                       (state/get-current-repo)
-                       (:db/id row)
-                       (if page? :page :block))))}
-       [:span.text-xs "Open"]
-       (ui/icon "layout-sidebar-right" {:size 14}))]]))
+     (block-container (assoc config :table? true) row)]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name?]
