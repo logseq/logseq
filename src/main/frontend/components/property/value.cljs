@@ -882,21 +882,21 @@
         *el (rum/use-ref nil)
         items (if (de/entity? v) #{v} v)]
     (rum/use-effect!
-      (fn []
-        (when editing?
-          (.click (rum/deref *el))))
-      [editing?])
+     (fn []
+       (when editing?
+         (.click (rum/deref *el))))
+     [editing?])
     (let [select-cp (fn [select-opts]
                       (let [select-opts (merge {:multiple-choices? true
                                                 :on-chosen (fn []
                                                              (when on-chosen (on-chosen)))}
-                                          select-opts
-                                          {:dropdown? false})]
+                                               select-opts
+                                               {:dropdown? false})]
                         [:div.property-select
                          (if (contains? #{:node :page :class :property} type)
                            (property-value-select-node block property
-                             select-opts
-                             opts)
+                                                       select-opts
+                                                       opts)
                            (select block property select-opts opts))]))]
       (let [toggle-fn shui/popup-hide!
             content-fn (fn [{:keys [_id content-props]}]
@@ -908,22 +908,23 @@
                       (let [target (.-target e)]
                         (when-not (or (util/link? target) (.closest target "a") config/publishing?)
                           (shui/popup-show! (rum/deref *el) content-fn
-                            {:as-dropdown? true :as-content? false
-                             :align "start" :auto-focus? true}))))
+                                            {:as-dropdown? true :as-content? false
+                                             :align "start" :auto-focus? true}))))
           :on-key-down (fn [^js e]
                          (case (.-key e)
                            (" " "Enter")
                            (do (some-> (rum/deref *el) (.click))
-                             (util/stop e))
+                               (util/stop e))
                            :dune))
           :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
          (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
            (if (and (seq items) not-empty-value?)
              (concat
-               (for [item items]
-                 (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
-               (when date?
-                 [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
+              (->> (for [item items]
+                     (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
+                   (interpose [:span.opacity-50.-ml-2 ","]))
+              (when date?
+                [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
              (if date?
                (property-value-date-picker block property nil {:toggle-fn toggle-fn})
                (property-empty-text-value))))]))))
