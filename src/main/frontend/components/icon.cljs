@@ -110,10 +110,11 @@
                   (on-chosen e {:type :tabler-icon
                                 :id icon'
                                 :name icon'}))
-      :on-mouse-over #(reset! hover {:type :tabler-icon
-                                     :id icon'
-                                     :name icon'
-                                     :icon icon'})
+      :on-mouse-over #(some-> hover
+                        (reset! {:type :tabler-icon
+                                 :id icon'
+                                 :name icon'
+                                 :icon icon'}))
       :on-mouse-out #()})
    (ui/icon icon' {:size 24})])
 
@@ -282,7 +283,7 @@
     [:span.absolute.hidden {:ref *el-ref}]))
 
 (rum/defc color-picker
-  [*color]
+  [*color on-select!]
   (let [[color, set-color!] (rum/use-state @*color)
         *el (rum/use-ref nil)
         content-fn (fn []
@@ -291,7 +292,9 @@
                        [:div.color-picker-presets
                         (for [c colors]
                           (shui/button
-                            {:on-click (fn [] (set-color! c) (shui/popup-hide!))
+                            {:on-click (fn [] (set-color! c)
+                                         (some-> on-select! (apply [c]))
+                                         (shui/popup-hide!))
                              :size :sm :variant :outline
                              :class "it" :style {:background-color c}}
                             (if c "" (shui/tabler-icon "minus" {:class "scale-75 opacity-70"}))))]))]
@@ -317,25 +320,23 @@
   (rum/local nil ::result)
   (rum/local false ::select-mode?)
   (rum/local :all ::tab)
-  (rum/local nil ::hover)
   {:init (fn [s]
            (assoc s ::color (atom (storage/get :ls-icon-color-preset))))}
-  [state {:keys [on-chosen del-btn?] :as opts}]
+  [state {:keys [on-chosen del-btn? icon-value] :as opts}]
   (let [*q (::q state)
         *result (::result state)
         *tab (::tab state)
         *color (::color state)
-        *hover (::hover state)
         *input-ref (rum/create-ref)
         *result-ref (rum/create-ref)
         result @*result
-        opts (assoc opts :hover *hover
-                    :on-chosen (fn [e m]
-                                 (let [icon? (= (:type m) :tabler-icon)
-                                       m (if (and icon? (not (string/blank? @*color)))
-                                           (assoc m :color @*color) m)]
-                                   (and on-chosen (on-chosen e m))
-                                   (when (:type m) (add-used-item! m)))))
+        opts (assoc opts
+               :on-chosen (fn [e m]
+                            (let [icon? (= (:type m) :tabler-icon)
+                                  m (if (and icon? (not (string/blank? @*color)))
+                                      (assoc m :color @*color) m)]
+                              (and on-chosen (on-chosen e m))
+                              (when (:type m) (add-used-item! m)))))
         *select-mode? (::select-mode? state)
         reset-q! #(when-let [^js input (rum/deref *input-ref)]
                     (reset! *q "")
@@ -344,7 +345,8 @@
                     (set! (. input -value) "")
                     (util/schedule
                      (fn []
-                       (.focus input)
+                       (when (not= js/document.activeElement input)
+                         (.focus input))
                        (util/scroll-to (rum/deref *result-ref) 0 false))))]
     [:div.cp__emoji-icon-picker
      ;; header
@@ -387,8 +389,7 @@
      ;; body
      [:div.bd.bd-scroll
       {:ref *result-ref
-       :class (or (some-> @*tab (name)) "other")
-       :on-mouse-leave #(reset! *hover nil)}
+       :class (or (some-> @*tab (name)) "other")}
       [:div.content-pane
        (if (seq result)
          [:div.flex.flex-1.flex-col.gap-1.search-result
@@ -406,39 +407,31 @@
 
      ;; footer
      [:div.ft
-      (if-not @*hover
-        ;; tabs
-        [:<>
-         [:div.flex.flex-1.flex-row.items-center.gap-2
-          (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"]]]
-            (for [[id label] tabs
-                  :let [active? (= @*tab id)]]
-              (shui/button
-               {:variant :ghost
-                :size :sm
-                :class (util/classnames [{:active active?} "tab-item"])
-                :on-click #(reset! *tab id)}
-               label)))]
+      ;; tabs
+      [:<>
+       [:div.flex.flex-1.flex-row.items-center.gap-2
+        (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"]]]
+          (for [[id label] tabs
+                :let [active? (= @*tab id)]]
+            (shui/button
+              {:variant :ghost
+               :size :sm
+               :class (util/classnames [{:active active?} "tab-item"])
+               :on-mouse-down (fn [e]
+                                (util/stop e)
+                                (reset! *tab id))}
+              label)))]
 
-         (when (not= :emoji @*tab)
-           (color-picker *color))
+       (when (not= :emoji @*tab)
+         (color-picker *color (fn [c]
+                                (when (= :tabler-icon (some-> icon-value :type))
+                                  (on-chosen nil (assoc icon-value :color c) true)))))
 
-         ;; action buttons
-         (when del-btn?
-           (shui/button {:variant :outline :size :sm :data-action "del"
-                         :on-click #(on-chosen nil)}
-                        (shui/tabler-icon "trash" {:size 17})))]
-
-        ;; preview
-        [:div.hover-preview
-         [:strong (:name @*hover)]
-         [:button
-          {:style {:font-size 28}
-           :key   (:id @*hover)
-           :title (:name @*hover)}
-          (if (= :tabler-icon (:type @*hover))
-            (ui/icon (:icon @*hover) {:size 28})
-            (:native (first (:skins @*hover))))]])]]))
+       ;; action buttons
+       (when del-btn?
+         (shui/button {:variant :outline :size :sm :data-action "del"
+                       :on-click #(on-chosen nil)}
+           (shui/tabler-icon "trash" {:size 17})))]]]))
 
 (rum/defc icon-picker
   [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts]}]
@@ -448,14 +441,15 @@
           (constantly [])
           (fn [{:keys [id]}]
             (icon-search
-             {:on-chosen (fn [e icon-value]
+             {:on-chosen (fn [e icon-value keep-popup?]
                            (on-chosen e icon-value)
-                           (shui/popup-hide! id))
+                           (when-not (true? keep-popup?) (shui/popup-hide! id)))
+              :icon-value icon-value
               :del-btn? del-btn?})))]
     (rum/use-effect!
-     (fn []
-       (when initial-open?
-         (js/setTimeout #(some-> (rum/deref *trigger-ref) (.click)) 32)))
+      (fn []
+        (when initial-open?
+          (js/setTimeout #(some-> (rum/deref *trigger-ref) (.click)) 32)))
      [initial-open?])
 
     ;; trigger
