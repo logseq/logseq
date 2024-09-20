@@ -2532,7 +2532,7 @@
         attrs (cond->
                {:blockid       (str uuid)
                 :class (util/classnames [{:jtrigger (:property-block? config)
-                                          :!cursor-pointer (:page-title? config)}])
+                                          :!cursor-pointer (or (:property? config) (:page-title? config))}])
                 :containerid (:container-id config)
                 :data-type (name block-type)
                 :style {:width "100%"

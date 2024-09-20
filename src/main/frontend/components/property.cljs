@@ -246,21 +246,22 @@
                                       (property-config/dropdown-editor property block {:debug? (.-altKey e)
                                                                                        :class-schema? class-schema?}))
                                     {:content-props
-                                     {:class "ls-property-dropdown-editor as-root"}
+                                     {:class "ls-property-dropdown-editor as-root"
+                                      :onEscapeKeyDown (fn [e]
+                                                         (util/stop e)
+                                                         (shui/popup-hide!)
+                                                         (when-let [input (state/get-input)]
+                                                           (.focus input)))}
                                      :align "start"
                                      :as-dropdown? true}))}
      (block-container {:property? true} property)
      ;; (:block/title property)
      )))
 
-(rum/defcs property-key-cp <
-  (rum/local false ::hover?)
-  [state block property {:keys [other-position? class-schema?]}]
-  (let [*hover? (::hover? state)
-        icon (:logseq.property/icon property)]
+(rum/defc property-key-cp < rum/static
+  [block property {:keys [other-position? class-schema?]}]
+  (let [icon (:logseq.property/icon property)]
     [:div.property-key-inner.jtrigger-view
-     {:on-mouse-over   #(reset! *hover? true)
-      :on-mouse-leave  #(reset! *hover? false)}
      ;; icon picker
      (when-not other-position?
        (let [content-fn (fn [{:keys [id]}]
