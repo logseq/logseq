@@ -22,6 +22,7 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [logseq.graph-parser.text :as text]
+            [logseq.common.util.macro :as macro-util]
             [logseq.db.frontend.class :as db-class]))
 
 (def ^:private block-map
@@ -355,16 +356,14 @@
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
           page? (ldb/page? block-entity)
-          page-title-changed? (and page? (:block/title m*)
-                                   (not= (:block/title m*) (:block/title block-entity)))
+          block-title (:block/title m*)
+          page-title-changed? (and page? block-title
+                                   (not= block-title (:block/title block-entity)))
+          _ (when (and db-based? page? block-title)
+              (outliner-validate/validate-page-title-characters block-title {:node m*}))
           m* (if (and db-based? page-title-changed?)
-               (let [page-name (common-util/page-name-sanity-lc (:block/title m*))]
-                 (when (string/blank? page-name)
-                   (throw (ex-info "Page title can't be blank"
-                                   {:type :notification
-                                    :payload {:message "Page title can't be blank"
-                                              :type :error}
-                                    :node m*})))
+               (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
+                     page-name (common-util/page-name-sanity-lc (:block/title m*))]
                  (assoc m* :block/name page-name))
                m*)
           _ (when (and db-based?
@@ -427,6 +426,15 @@
         (let [tx-data (remove-tags-when-title-changed block-entity (:block/title m))]
           (when (seq tx-data)
             (swap! txs-state (fn [txs] (concat txs tx-data))))))
+
+      ;; Add Query class when a query macro is typed or pasted
+      (when (and db-based?
+                 (not= (:block/title m*) (:block/title block-entity))
+                 (macro-util/query-macro? (:block/title m*))
+                 (empty? (:block/tags block-entity)))
+        (swap! txs-state (fn [txs]
+                           (conj (vec txs)
+                                 [:db/add (:db/id block-entity) :block/tags :logseq.class/Query]))))
 
       this))
 
@@ -812,18 +820,20 @@
   [:pre [(seq blocks)]]
   (let [top-level-blocks (filter-top-level-blocks @conn blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
-        top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)
+        top-level-blocks (->> (get-top-level-blocks top-level-blocks non-consecutive?)
+                              (remove ldb/page?))
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
         end-block (last top-level-blocks)]
-    (if (or
-         (= 1 (count top-level-blocks))
-         (= start-block end-block))
-      (delete-block conn txs-state start-block)
-      (doseq [id block-ids]
-        (let [node (d/entity @conn id)]
-          (otree/-del node txs-state conn))))
+    (when (seq top-level-blocks)
+      (if (or
+           (= 1 (count top-level-blocks))
+           (= start-block end-block))
+        (delete-block conn txs-state start-block)
+        (doseq [id block-ids]
+          (let [node (d/entity @conn id)]
+            (otree/-del node txs-state conn)))))
     {:tx-data @txs-state}))
 
 (defn- move-to-original-position?

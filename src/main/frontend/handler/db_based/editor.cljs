@@ -43,7 +43,8 @@
         title->ref (zipmap (map :block/title cached-refs) cached-refs)]
     (map (fn [x]
            (if-let [ref (and (map? x) (title->ref (:block/title x)))]
-             ref
+             (assoc ref :block.temp/original-page-name
+                    (:block.temp/original-page-name x))
              x))
          refs)))
 

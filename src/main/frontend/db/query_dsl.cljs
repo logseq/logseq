@@ -19,7 +19,6 @@
             [frontend.util.text :as text-util]
             [frontend.util :as util]
             [frontend.config :as config]
-            [logseq.db.frontend.property :as db-property]
             [frontend.state :as state]))
 
 
@@ -284,7 +283,14 @@
   [property-name]
   (if (qualified-keyword? property-name)
     property-name
-    (keyword db-property/default-user-namespace (name property-name))))
+    (or (some->> (name property-name)
+                 (db-utils/q '[:find [(pull ?b [:db/ident]) ...]
+                               :in $ ?title
+                               :where [?b :block/type "property"] [?b :block/title ?title]])
+                 first
+                 :db/ident)
+        ;; Don't return nil as that incorrectly matches all properties
+        ::no-property-found)))
 
 (defn- build-property-two-arg
   [e {:keys [db-graph?]}]

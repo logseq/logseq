@@ -328,11 +328,12 @@
                         (let [*local-selected? (atom local?)]
                           (-> (shui/dialog-confirm!
                                 [:div.text-xs.opacity-60.-my-2
-                                 [:label.flex.gap-1.items-center
-                                  (shui/checkbox
-                                    {:default-checked @*local-selected?
-                                     :on-checked-change #(reset! *local-selected? %)})
-                                  (t (if local? :asset/physical-delete ""))]]
+                                 (when local?
+                                   [:label.flex.gap-1.items-center
+                                    (shui/checkbox
+                                      {:default-checked @*local-selected?
+                                       :on-checked-change #(reset! *local-selected? %)})
+                                    (t :asset/physical-delete)])]
                                 {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
                                  :outside-cancel? true})
                             (p/then (fn []
@@ -776,25 +777,21 @@
     [:span.warning.mr-1 {:title "Node ref invalid"}
    (->ref id)]))
 
-(rum/defcs page-cp < db-mixins/query rum/reactive
-  {:init (fn [state]
-           (let [page (last (:rum/args state))]
-             (assoc state ::entity
-                    (if (e/entity? page)
-                      page
-                      ;; Use uuid when available to uniquely identify case sensitive contexts
-                      (db/get-page (or (:block/uuid page)
-                                       (when-let [s (:block/name page)]
-                                         (let [s (string/trim s)
-                                               s (if (string/starts-with? s db-content/page-ref-special-chars)
-                                                   (common-util/safe-subs s 2)
-                                                   s)]
-                                           s))))))))}
+(rum/defcs page-cp-inner < db-mixins/query rum/reactive
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [state {:keys [label children preview? disable-preview?] :as config} page]
-  (let [entity (::entity state)]
+  (let [entity (if (e/entity? page)
+                 page
+                 ;; Use uuid when available to uniquely identify case sensitive contexts
+                 (db/get-page (or (:block/uuid page)
+                                  (when-let [s (:block/name page)]
+                                    (let [s (string/trim s)
+                                          s (if (string/starts-with? s db-content/page-ref-special-chars)
+                                              (common-util/safe-subs s 2)
+                                              s)]
+                                      s)))))]
     (let [entity (when entity (db/sub-block (:db/id entity)))]
       (cond
         entity
@@ -821,6 +818,11 @@
 
         :else
         nil))))
+
+(rum/defc page-cp
+  [config page]
+  (rum/with-key (page-cp-inner config page)
+    (or (str (:block/uuid page)) (:block/name page))))
 
 (rum/defc asset-reference
   [config title path]
@@ -1021,7 +1023,7 @@
                                  [(breadcrumb config repo id {:indent? true})
                                   (blocks-container
                                     (assoc config :id (str id) :preview? true)
-                                    (db/get-block-and-children repo id))]])]
+                                    [(db/entity [:block/uuid id])])]])]
     (popup-preview-impl children
       {:visible? visible? :set-visible! set-visible!
        :*timer *timer :*timer1 *timer1
@@ -1033,7 +1035,8 @@
              (db-async/<get-block (state/get-current-repo) block-id :children? false))
            state)}
   [config id label]
-  (when (not= (:block/uuid (:block config)) id)
+  (if (= (:block/uuid (:block config)) id)
+    [:span.warning.text-sm "Self reference"]
     (if-let [block-id (if (uuid? id) id (parse-uuid id))]
       (if (state/sub-async-query-loading (str block-id))
         [:span "Loading..."]
@@ -1279,7 +1282,7 @@
     (show-link? config metadata s full_text)
     (media-link config url s label metadata full_text)
 
-    (util/electron?)
+    (or (util/electron?) (config/db-based-graph? (state/get-current-repo)))
     (let [path (cond
                  (string/starts-with? s "file://")
                  (string/replace s "file://" "")
@@ -1931,7 +1934,7 @@
      {:class (util/classnames [{:is-order-list order-list?
                                 :bullet-closed collapsed?
                                 :bullet-hidden (:hide-bullet? config)}])}
-     (when (or (not fold-button-right?) collapsable?)
+     (when (and (or (not fold-button-right?) collapsable?) (not (:table? config)))
        [:a.block-control
         {:id       (str "control-" uuid)
          :on-click (fn [event]
@@ -2534,10 +2537,10 @@
         mouse-down-key (if (util/ios?)
                          :on-click
                          :on-pointer-down) ; TODO: it seems that Safari doesn't work well with on-pointer-down
-
         attrs (cond->
                {:blockid       (str uuid)
-                :class (when (:property-block? config) "jtrigger")
+                :class (util/classnames [{:jtrigger (:property-block? config)
+                                          :!cursor-pointer (or (:property? config) (:page-title? config))}])
                 :containerid (:container-id config)
                 :data-type (name block-type)
                 :style {:width "100%"
@@ -2550,14 +2553,26 @@
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
-                                        (cond (:from-journals? config)
-                                              (do
-                                                (.preventDefault e)
-                                                (route-handler/redirect-to-page! (:block/uuid block)))
-                                              (ldb/journal? block)
+                                        (let [journal-title? (:from-journals? config)]
+                                          (cond
+                                            (util/right-click? e)
+                                            nil
+
+                                            (and journal-title? (gobj/get e "shiftKey"))
+                                            (do
                                               (.preventDefault e)
-                                              :else
-                                              (block-content-on-pointer-down e block block-id content edit-input-id config)))))]
+                                              (state/sidebar-add-block! repo (:db/id block) :page))
+
+                                            journal-title?
+                                            (do
+                                              (.preventDefault e)
+                                              (route-handler/redirect-to-page! (:block/uuid block)))
+
+                                            (ldb/journal? block)
+                                            (.preventDefault e)
+
+                                            :else
+                                            (block-content-on-pointer-down e block block-id content edit-input-id config))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-pointer-up (fn [e]
@@ -2686,7 +2701,8 @@
       [:div.flex.flex-1.flex-row.gap-1.items-center
        (if (and edit? editor-box)
          [:div.editor-wrapper.flex.flex-1
-          {:id editor-id}
+          {:id editor-id
+           :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
           (ui/catch-error
            (ui/block-error "Something wrong in the editor" {})
            (editor-box {:block block
@@ -2728,14 +2744,14 @@
                                     (editor-handler/edit-block! block :max))}
                 svg/edit])])])
 
-       (when-not (or (:table? config) (:page-title? config))
+       (when-not (or (:table? config) (:property? config) (:page-title? config))
          (block-refs-count block refs-count *hide-block-refs?))
 
-       (when-not (or (:block-ref? config) (:table? config))
+       (when-not (or (:block-ref? config) (:table? config) (:property? config))
          (when (and db-based? (seq (:block/tags block)))
            (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))]
 
-      (when (and (not (:table? config))
+      (when (and (not (or (:table? config) (:property? config)))
                  (not hide-block-refs?)
                  (> refs-count 0)
                  (not (:page-title? config)))
@@ -3089,6 +3105,7 @@
         editing? (or (state/sub-editing? [container-id (:block/uuid block)])
                      (state/sub-editing? [:unknown-container (:block/uuid block)]))
         table? (:table? config*)
+        property? (:property? config*)
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
@@ -3123,9 +3140,12 @@
         db-based? (config/db-based-graph? repo)]
     [:div.ls-block
      (cond->
-      {:id (str "ls-block-" uuid)
+      {:id (str "ls-block-"
+                ;; container-id "-"
+                uuid)
        :blockid (str uuid)
        :containerid container-id
+       :data-is-property (ldb/property? block)
        :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? has-child?)
        :class (str "id" uuid " "
@@ -3154,13 +3174,13 @@
        custom-query?
        (assoc :data-query true))
 
-     (when (and ref? breadcrumb-show? (not table?))
+     (when (and ref? breadcrumb-show? (not (or table? property?)))
        (breadcrumb config repo uuid {:show-page? false
                                      :indent? true
                                      :navigating-block *navigating-block}))
 
      ;; only render this for the first block in each container
-     (when (and top? (not table?))
+     (when (and top? (not (or table? property?)))
        (dnd-separator-wrapper block children block-id slide? true false))
 
      (when-not (:hide-title? config)
@@ -3180,7 +3200,7 @@
          :on-mouse-leave (fn [e]
                            (block-mouse-leave e *control-show? block-id doc-mode?))}
 
-        (when (and (not slide?) (not in-whiteboard?) (not table?))
+        (when (and (not slide?) (not in-whiteboard?) (not property?))
           (let [edit? (or editing?
                           (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))
@@ -3191,7 +3211,7 @@
                             :*control-show? *control-show?
                             :edit? edit?})))
 
-        (when (and @*show-left-menu? (not in-whiteboard?) (not table?))
+        (when (and @*show-left-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-left-menu config block))
 
         [:div.flex.flex-col.w-full
@@ -3238,22 +3258,22 @@
                                          :edit? editing?
                                          :hide-block-refs-count? hide-block-refs-count?}))])]
 
-         (when (and db-based? (not collapsed?) (not table?))
+         (when (and db-based? (not collapsed?) (not (or table? property?)))
            (block-positioned-properties config block :block-below))]
 
-        (when (and @*show-right-menu? (not in-whiteboard?) (not table?))
+        (when (and @*show-right-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-right-menu config block editing?))])
 
-     (when (and db-based? (not collapsed?) (not table?))
+     (when (and db-based? (not collapsed?) (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])
 
-     (when-not (or (:hide-children? config) in-whiteboard? table?)
+     (when-not (or (:hide-children? config) in-whiteboard? (or table? property?))
        (let [config' (-> (update config :level inc)
                          (dissoc :original-block :data))]
          (block-children config' block children collapsed?)))
 
-     (when-not (or in-whiteboard? table?) (dnd-separator-wrapper block children block-id slide? false false))]))
+     (when-not (or in-whiteboard? table? property?) (dnd-separator-wrapper block children block-id slide? false false))]))
 
 (defn- block-changed?
   [old-block new-block]

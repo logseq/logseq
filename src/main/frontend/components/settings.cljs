@@ -550,8 +550,10 @@
       (string/blank? value)
       (let [home (get (state/get-config) :default-home {})
             new-home (dissoc home :page)]
-        (config-handler/set-config! :default-home new-home)
-        (notification/show! "Home default page updated successfully!" :success))
+        (p/do!
+         (config-handler/set-config! :default-home new-home)
+         (config-handler/set-config! :feature/enable-journals? true)
+         (notification/show! "Journals enabled" :success)))
 
       ;; FIXME: home page should be db id instead of page name
       (ldb/get-page (db/get-db) value)
@@ -1120,7 +1122,7 @@
        (http-server-switcher-row))
      (when-not db-based? (flashcards-switcher-row enable-flashcards?))
      (when-not db-based? (zotero-settings-row))
-     (when (config/db-based-graph? current-repo)
+     (when (and config/dev? (config/db-based-graph? current-repo))
        ;; FIXME: Wire this up again to RTC init calls
        (rtc-switcher-row (state/enable-rtc? current-repo)))
      (when-not web-platform?

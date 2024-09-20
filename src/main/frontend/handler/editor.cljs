@@ -893,31 +893,6 @@
                                                           "")]
            (when edit-block-f (edit-block-f))))))))
 
-(defn set-block-query-properties!
-  [block-id all-properties key add?]
-  (when-let [block (db/entity [:block/uuid block-id])]
-    (let [query-properties (get block (pu/get-pid :logseq.property/query-properties))
-          repo (state/get-current-repo)
-          db-based? (config/db-based-graph? repo)
-          query-properties (if db-based?
-                             query-properties
-                             (some-> query-properties
-                                     (common-handler/safe-read-string "Parsing query properties failed")))
-          query-properties (if (seq query-properties)
-                             query-properties
-                             all-properties)
-          query-properties (if add?
-                             (distinct (conj query-properties key))
-                             (remove #{key} query-properties))
-          query-properties (vec query-properties)]
-      (if (seq query-properties)
-        (property-handler/set-block-property! repo block-id
-                                              (pu/get-pid :logseq.property/query-properties)
-                                              (if db-based?
-                                                query-properties
-                                                (str query-properties)))
-        (property-handler/remove-block-property! repo block-id (pu/get-pid :logseq.property/query-properties))))))
-
 (defn set-block-timestamp!
   [block-id key value]
   (let [key (string/lower-case (str key))
@@ -1305,7 +1280,7 @@
     (and (state/selection?) (= direction (state/get-selection-direction)))
     (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
           first-last (if (= :up direction) first last)
-          element (f (first-last (state/get-selection-blocks)))]
+          element (f (first-last (state/get-selection-blocks)) {:up-down? true})]
       (when element
         (util/scroll-to-block element)
         (state/conj-selection-block! element direction)))
@@ -1314,7 +1289,7 @@
     (state/selection?)
     (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
           last-first (if (= :up direction) last first)
-          element (f (last-first (state/get-selection-blocks)))]
+          element (f (last-first (state/get-selection-blocks)) {:up-down? true})]
       (when element
         (util/scroll-to-block element)
         (state/drop-last-selection-block!))))
@@ -1328,7 +1303,7 @@
 (defn save-block-aux!
   [block value opts]
   (let [entity (db/entity [:block/uuid (:block/uuid block)])]
-    (when (and (:db/id entity) (not (ldb/property? entity)))
+    (when (and (:db/id entity) (not (ldb/built-in? entity)))
       (let [value (string/trim value)]
         ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
         ;; maybe we shouldn't save the block/file in "will-unmount" event?
@@ -1677,28 +1652,20 @@
 
 (defn <get-matched-blocks
   "Return matched blocks that are not built-in"
-  [q]
+  [q & [{:keys [nlp-pages?]}]]
   (p/let [block (state/get-edit-block)
-          editing-page-id (and block
-                               (when-let [page-id (:db/id (:block/page block))]
-                                 (:block/uuid (db/entity page-id))))
-          block-parents (when block
-                          (set (->> (db/get-block-parents (state/get-current-repo)
-                                                          (:block/uuid block)
-                                                          {:depth 99})
-                                    (map :block/uuid))))
-          current-and-parents (set/union #{(:block/uuid block)} block-parents)
-          pages (search/block-search (state/get-current-repo) q {:built-in? false
-                                                                 :enable-snippet? false})]
-    (->> (if editing-page-id
-           ;; To prevent self references
-           (remove (fn [b]
-                     (or (= editing-page-id (:block/uuid b))
-                         (contains? current-and-parents (:block/uuid b)))) pages)
-           pages)
-         (keep (fn [b]
-                 (when-let [id (:block/uuid b)]
-                   (db/entity [:block/uuid id])))))))
+          nodes (search/block-search (state/get-current-repo) q {:built-in? false
+                                                                 :enable-snippet? false})
+          matched (keep (fn [b]
+                          (when-let [id (:block/uuid b)]
+                            (when-not (= id (:block/uuid block)) ; avoid block self-reference
+                              (db/entity [:block/uuid id]))))
+                        nodes)]
+    (-> (concat matched
+                (when nlp-pages?
+                  (map (fn [title] {:block/title title :nlp-date? true})
+                       date/nlp-pages)))
+        (search/fuzzy-search q {:extract-fn :block/title :limit 50}))))
 
 (defn <get-matched-templates
   [q]
@@ -2583,7 +2550,7 @@
         f (case direction
             :up util/get-prev-block-non-collapsed
             :down util/get-next-block-non-collapsed)
-        sibling-block (f selected)]
+        sibling-block (f selected {:up-down? true})]
     (when (and sibling-block (dom/attr sibling-block "blockid"))
       (util/scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
@@ -2597,7 +2564,7 @@
               :up util/get-prev-block-non-collapsed
               :down util/get-next-block-non-collapsed)
           current-block (util/rec-get-node input "ls-block")
-          sibling-block (f current-block)
+          sibling-block (f current-block {:up-down? true})
           {:block/keys [uuid title format]} (state/get-edit-block)]
       (if sibling-block
         (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
@@ -2667,12 +2634,26 @@
         selected-start (util/get-selection-start input)
         selected-end (util/get-selection-end input)
         left? (= direction :left)
-        right? (= direction :right)]
-    (when (= input element)
+        right? (= direction :right)
+        block (some-> (state/get-edit-block) :db/id db/entity)
+        property? (ldb/property? block)]
+    (cond
+      (and input (not= input element))
+      (.focus input)
+
+      (= input element)
       (cond
+        (and property? right? (cursor/end? input) (not= (get-in block [:block/schema :type]) :default))
+        (let [pair (util/rec-get-node input "property-pair")
+              jtrigger (when pair (dom/sel1 pair ".property-value-container .jtrigger"))]
+          (when jtrigger
+            (.focus jtrigger)))
+
         (not= selected-start selected-end)
-        (if left?
+        (cond
+          left?
           (cursor/move-cursor-to input selected-start)
+          :else
           (cursor/move-cursor-to input selected-end))
 
         (or (and left? (cursor/start? input))
@@ -2682,7 +2663,10 @@
         :else
         (if left?
           (cursor/move-cursor-backward input)
-          (cursor/move-cursor-forward input))))))
+          (cursor/move-cursor-forward input)))
+
+      :else
+      nil)))
 
 (defn- delete-and-update [^js input start end]
   (util/safe-set-range-text! input "" start end)
@@ -2879,6 +2863,11 @@
         (state/set-state! :editor/start-pos pos))
 
       (cond
+        (and (= :page-search (state/get-editor-action))
+             (= key commands/hashtag))
+        (do
+          (util/stop e)
+          (notification/show! "Page name can't include \"#\"." :warning))
         ;; stop accepting edits if the new block is not created yet
         (some? @(:editor/async-unsaved-chars @state/state))
         (do
@@ -3516,11 +3505,13 @@
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
     (when-not (skip-collapsing-in-db?)
-      (set-blocks-collapsed! [block-id] true))))
+      (set-blocks-collapsed! [block-id] true))
+    (state/set-collapsed-block! block-id true)))
 
 (defn expand-block! [block-id]
   (when-not (skip-collapsing-in-db?)
-    (set-blocks-collapsed! [block-id] false)))
+    (set-blocks-collapsed! [block-id] false))
+  (state/set-collapsed-block! block-id false))
 
 (defn expand!
   ([e] (expand! e false))
@@ -3758,12 +3749,14 @@
 (defn escape-editing
   [& {:keys [select? save-block?]
       :or {save-block? true}}]
-  (p/do!
-   (when save-block? (save-current-block!))
-   (if select?
-     (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-       (state/exit-editing-and-set-selected-blocks! [node]))
-     (state/clear-edit!))))
+  (let [edit-block (state/get-edit-block)]
+    (p/do!
+     (when save-block? (save-current-block!))
+     (if select?
+       (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+         (state/exit-editing-and-set-selected-blocks! [node]))
+       (when (= (:db/id edit-block) (:db/id (state/get-edit-block)))
+         (state/clear-edit!))))))
 
 (defn replace-block-reference-with-content-at-point
   []

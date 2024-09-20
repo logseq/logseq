@@ -168,9 +168,13 @@
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
       (is (= 18 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 18 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+
+      (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
+      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 7
+      (is (= 8
              (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
                                 :where [?b :block/title] [_ :block/page ?b]] @conn)
                          (filter #(= "page" (:block/type %))))))
@@ -285,9 +289,10 @@
       (is (= #{"gpt"}
              (:block/alias (readable-properties @conn (find-page-by-name @conn "chat-gpt")))))
 
-      (is (= {:logseq.property/query-sort-by :user.property/prop-num
-              :logseq.property/query-properties [:block :page :user.property/prop-string :user.property/prop-num]
-              :logseq.property/query-table true}
+      (is (= {:logseq.property.table/sorting [{:id :user.property/prop-num, :asc? false}]
+              :logseq.property.view/type "Table View"
+              :logseq.property.table/ordered-columns [:block/title :user.property/prop-string :user.property/prop-num]
+              :block/tags [:logseq.class/Query]}
              (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
           "query block has correct query properties"))
 
@@ -487,7 +492,7 @@
 
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md"])
+          files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"])
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
           _ (import-files-to-db files conn {:property-parent-classes ["parent"]})]

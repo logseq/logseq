@@ -28,8 +28,8 @@
           (cond
             ;; save block content
             (:block/uuid config)
-            (let [block (db/pull [:block/uuid (:block/uuid config)])
-                  content (:block/title block)
+            (let [block (db/entity [:block/uuid (:block/uuid config)])
+                  content (:block/raw-title block)
                   {:keys [start_pos end_pos]} (:pos_meta @(:code-options state))
                   offset (if (:block/pre-block? block) 0 2)
                   raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position

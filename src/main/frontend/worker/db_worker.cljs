@@ -627,7 +627,7 @@
                {:keys [type payload]} (when (map? data) data)]
            (case type
              :notification
-             (worker-util/post-message type [[:div [:p (:message payload)]] (:type payload)])
+             (worker-util/post-message type [(:message payload) (:type payload)])
              (throw e)))))))
 
   (file-writes-finished?

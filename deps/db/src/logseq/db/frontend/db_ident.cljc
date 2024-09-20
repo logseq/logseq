@@ -68,7 +68,7 @@
          :cljs (exists? js/process)
          :default false)
     ;; So that we don't have to change :user.{property|class} in our tests
-    (keyword user-namespace name-string)
+    (keyword user-namespace (string/replace name-string "/" "-"))
     (keyword user-namespace
              (str (rand-nth non-int-char-range)
                   (nano-id 20)

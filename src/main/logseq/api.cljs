@@ -863,7 +863,7 @@
         property-name' (convert?to-built-in-property-name property-name')]
     (if (qualified-keyword? property-name')
       property-name'
-      (db-property/create-user-property-ident-from-name property-name))))
+      (db-property/create-user-property-ident-from-name property-name "plugin.property"))))
 
 ;; properties (db only)
 (defn ^:export get_property
@@ -883,7 +883,9 @@
   "
   [k ^js schema ^js opts]
   (when-let [k' (and (string? k) (keyword k))]
-    (p/let [k (if (qualified-keyword? k') k'
+    (p/let [opts (or (some-> opts (bean/->clj)) {})
+            name (or (:name opts) (some-> (str k) (string/trim)))
+            k (if (qualified-keyword? k') k'
                 (get-db-ident-for-property-name k))
             schema (or (some-> schema (bean/->clj)
                          (update-keys #(if (contains? #{:hide :public} %)
@@ -893,21 +895,23 @@
                      (update :cardinality keyword)
                      (string? (:type schema))
                      (update :type keyword))
-            opts (or (and opts (bean/->clj opts)) {})
-            p (db-property-handler/upsert-property! k schema opts)]
+            p (db-property-handler/upsert-property! k schema
+                (cond-> opts
+                  name
+                  (assoc :property-name name)))]
       (bean/->js (sdk-utils/normalize-keyword-for-json p)))))
 
 ;; block properties
 (def ^:export upsert_block_property
-  (fn [block-uuid key value]
+  (fn [block-uuid keyname value]
     (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             repo (state/get-current-repo)
             _ (db-async/<get-block repo block-uuid :children? false)
             db? (config/db-based-graph? repo)
-            key (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
+            key (-> (if (keyword? key) (name keyname) keyname) (util/safe-lower-case))
             key (if db? (get-db-ident-for-property-name key) key)
             _ (when (and db? (not (db-utils/entity key)))
-                (db-property-handler/upsert-property! key {} {}))]
+                (db-property-handler/upsert-property! key {} {:property-name keyname}))]
       (property-handler/set-block-property! repo block-uuid key value))))
 
 (def ^:export remove_block_property

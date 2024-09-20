@@ -185,10 +185,6 @@
         (shui/button {:size "sm" :disabled (or saving? (not dirty?))
                       :variant (if dirty? :default :secondary)
                       :on-click (fn []
-                                  (when (string/blank? title)
-                                    (some-> (rum/deref *input-ref) (.focus))
-                                    (throw (js/Error. "property name is empty")))
-
                                   (set-saving! true)
                                   (-> [(db-property-handler/upsert-property!
                                          (:db/ident property)
@@ -453,7 +449,7 @@
                      (property-handler/remove-block-property! repo (:block/uuid block) (:db/ident property))))]
     (if (and class? class-schema?)
       (-> (shui/dialog-confirm!
-           [:p (str "Are you sure you want to delete this property?")]
+           [:p (str "Are you sure you want to delete the property from this tag?")]
            {:id :delete-property-from-class
             :data-reminder :ok})
           (p/then remove!))
@@ -550,23 +546,26 @@
                                         (update-cardinality-fn))))}))
 
      (shui/dropdown-menu-separator)
-     (when (and (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
-                (not
-                 (and (= :default (get-in property [:block/schema :type]))
-                      (empty? (:property/closed-values property))
-                      (contains? #{nil :properties} (:position property-schema)))))
-       (let [position (:position property-schema)]
-         (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
-                                    :item-props {:class "ui__position-trigger-item"}
-                                    :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :position position)))})))
 
-     (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
-      (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
-                                 :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
-                                                                                                  (assoc property-schema :hide? %) {})}))
+     (let [group' (->> [:<>
+                        (when (and (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+                                (not
+                                  (and (= :default (get-in property [:block/schema :type]))
+                                    (empty? (:property/closed-values property))
+                                    (contains? #{nil :properties} (:position property-schema)))))
+                          (let [position (:position property-schema)]
+                            (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
+                                                       :item-props {:class "ui__position-trigger-item"}
+                                                       :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :position position)))})))
 
-     (when owner-block
-       (shui/dropdown-menu-separator))
+                        (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+                          (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
+                                                     :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
+                                                                                  (assoc property-schema :hide? %) {})}))]
+                    (remove nil?)
+                    (into []))]
+       (when (and owner-block (> (count group') 1))
+         (conj group' (shui/dropdown-menu-separator))))
 
      (when owner-block
        (dropdown-editor-menuitem
@@ -581,7 +580,9 @@
                       (ldb/class? owner-block)
                       (contains? #{:logseq.property/parent} (:db/ident property)))))
        (dropdown-editor-menuitem
-        {:id :delete-property :icon :x :title "Delete property" :desc "" :disabled? false
+        {:id :delete-property :icon :x
+         :title (if class-schema? "Delete property from tag" "Delete from from node")
+         :desc "" :disabled? false
          :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
                       :on-select (fn [^js e]
                                    (util/stop e)
