@@ -259,6 +259,7 @@
   [_column]
   (let [*el (rum/use-ref nil)
         [dx set-dx!] (rum/use-state nil)
+        [width set-width!] (rum/use-state nil)
         add-resizing-class #(dom/add-class! js/document.documentElement "is-resizing-buf")
         remove-resizing-class #(dom/remove-class! js/document.documentElement "is-resizing-buf")]
 
@@ -272,22 +273,66 @@
     (rum/use-effect!
       (fn []
         (when-let [el (and (fn? js/window.interact) (rum/deref *el))]
-          (-> (js/interact el)
-            (.draggable
-              (bean/->js
-                {:modifiers [(js/interact.modifiers.restrict
-                               (bean/->js {:restriction (.closest el ".ls-table-header")}))]
-                 :listeners
-                 {:move (fn [^js e]
-                          (let [dx (.-dx e)]
-                            (set-dx! (fn [dx'] (+ (or dx' 0) dx)))))
-                  :end #(set-dx! 0)}}))
-            (.styleCursor false)
-            (.on "dragstart" add-resizing-class)
-            (.on "dragend" remove-resizing-class)
-            (.on "mousedown" util/stop-propagation)
-            )))
+          (let [*field-rect (atom nil)
+                min-width 120
+                max-width 500]
+            (-> (js/interact el)
+              (.draggable
+                (bean/->js
+                  {:listeners
+                   {:start (fn []
+                             (let [{:keys [width right] :as rect} (bean/->clj (.toJSON (.getBoundingClientRect (.closest el ".ls-table-header-cell"))))
+                                   left-dx (if (>= width min-width) (- min-width width) 0)
+                                   right-dx (if (<= width max-width) (- max-width width) 0)]
+                               (reset! *field-rect rect)
+                               (swap! *field-rect assoc
+                                 ;; calculate left/right boundary
+                                 :left-dx left-dx
+                                 :right-dx right-dx
+                                 :left-b (inc (+ left-dx right))
+                                 :right-b (inc (+ right-dx right)))))
+                    :move (fn [^js e]
+                            (let [dx (.-dx e)
+                                  pointer-x (js/Math.floor (.-clientX e))
+                                  {:keys [left-b right-b]} @*field-rect
+                                  left-b (js/Math.floor left-b)
+                                  right-b (js/Math.floor right-b)]
+                              (when (and (> pointer-x left-b)
+                                      (< pointer-x right-b))
+                                (set-dx! (fn [dx']
+                                           (if (contains? #{min-width max-width} (abs dx'))
+                                             dx'
+                                             (let [to-dx (+ (or dx' 0) dx)
+                                                   {:keys [left-dx right-dx]} @*field-rect]
+                                               (cond
+                                                 ;; left
+                                                 (neg? to-dx) (if (> (abs left-dx) (abs to-dx)) to-dx left-dx)
+                                                 ;; right
+                                                 (pos? to-dx) (if (> right-dx to-dx) to-dx right-dx)
+                                                 ))))))))
+                    :end (fn []
+                           (set-dx!
+                             (fn [dx]
+                               (let [w (js/Math.round (+ dx (:width @*field-rect)))]
+                                 (set-width! (cond
+                                               (< w min-width) min-width
+                                               (> w max-width) max-width
+                                               :else w)))
+                               (reset! *field-rect nil)
+                               ;; TODO: reset
+                               0)))}}))
+              (.styleCursor false)
+              (.on "dragstart" add-resizing-class)
+              (.on "dragend" remove-resizing-class)
+              (.on "mousedown" util/stop-propagation)
+              ))))
       [])
+
+    (rum/use-effect!
+      (fn []
+        (when (number? width)
+          (shui/toast! (str "TODO: set column width: " width))))
+      [width])
 
     [:a.ls-table-resize-handle
      {:data-no-dnd true
