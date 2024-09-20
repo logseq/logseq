@@ -240,16 +240,17 @@
      (when-not other-position?
        (let [content-fn (fn [{:keys [id]}]
                           (icon-component/icon-search
-                           {:on-chosen
-                            (fn [_e icon]
-                              (if icon
-                                (db-property-handler/upsert-property! (:db/ident property)
-                                                                      (:block/schema property)
-                                                                      {:properties {:logseq.property/icon icon}})
-                                (db-property-handler/remove-block-property! (:db/id property)
-                                                                            (pu/get-pid :logseq.property/icon)))
-                              (shui/popup-hide! id))
-                            :del-btn? (boolean icon)}))]
+                            {:on-chosen
+                             (fn [_e icon]
+                               (if icon
+                                 (db-property-handler/upsert-property! (:db/ident property)
+                                   (:block/schema property)
+                                   {:properties {:logseq.property/icon icon}})
+                                 (db-property-handler/remove-block-property! (:db/id property)
+                                   (pu/get-pid :logseq.property/icon)))
+                               (shui/popup-hide! id))
+                             :icon-value icon
+                             :del-btn? (boolean icon)}))]
 
          (shui/trigger-as
           :button.property-m

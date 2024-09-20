@@ -80,7 +80,10 @@
                 (when-let [^js target (some-> (.querySelector container (str "#ls-block-" (str (:block/uuid block))))
                                         (.querySelector ".block-main-container"))]
                   (shui/popup-show! target
-                    #(icon-component/icon-search {:on-chosen on-chosen! :del-btn? (some? icon)})
+                    #(icon-component/icon-search
+                       {:on-chosen on-chosen!
+                        :icon-value icon
+                        :del-btn? (some? icon)})
                     {:id :ls-icon-picker
                      :align :start})))))))
       [editing?])
