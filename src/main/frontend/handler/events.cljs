@@ -79,7 +79,8 @@
             [frontend.date :as date]
             [logseq.db :as ldb]
             [frontend.persist-db :as persist-db]
-            [frontend.handler.export :as export]))
+            [frontend.handler.export :as export]
+            [frontend.extensions.fsrs]))
 
 ;; TODO: should we move all events here?
 
@@ -289,10 +290,11 @@
       (shui/dialog-open! {:align :top}))))
 
 (defmethod handle :modal/show-cards [_]
-  (shui/dialog-open!
-    srs/global-cards
-    {:id :srs
-     :label "flashcards__cp"}))
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))]
+    (shui/dialog-open!
+     (if db-based? frontend.extensions.fsrs/cards srs/global-cards)
+     {:id :srs
+      :label "flashcards__cp"})))
 
 (defmethod handle :modal/show-instruction [_]
   (shui/dialog-open!

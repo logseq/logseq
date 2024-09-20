@@ -17,7 +17,7 @@
 
    :logseq.class/Card
    {:title "Card"
-    :schema {:properties [:logseq.property/fsrs-state]}}
+    :schema {:properties [:logseq.property.fsrs/state :logseq.property.fsrs/due]}}
 
    :logseq.class/Journal {:title "Journal"
                           :properties {:logseq.property.journal/title-format "MMM do, yyyy"}}

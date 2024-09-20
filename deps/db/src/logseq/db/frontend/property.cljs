@@ -223,10 +223,14 @@
                                            {:type :map
                                             :hide? true
                                             :public? false}}
-   :logseq.property/fsrs-state {:schema
+   :logseq.property.fsrs/state {:schema
                                 {:type :map
-                                 :hide? false ; show for debug now, hide it later
-                                 :public? false}}))
+                                 :hide? false ; TODO: show for debug now, hide it later
+                                 :public? false}}
+   :logseq.property.fsrs/due {:schema
+                              {:type :number ;TODO: change to :datetime when supported
+                               :hide? false
+                               :public? false}}))
 
 (def built-in-properties
   (->> built-in-properties*
@@ -253,7 +257,7 @@
         "All db attribute properties are configured in built-in-properties")
 
 (def logseq-property-namespaces
-  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"
+  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs" "logseq.task"
     "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"})
 

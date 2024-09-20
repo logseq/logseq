@@ -26,8 +26,8 @@
     :db/index :db/valueType :db/cardinality})
 
 (def ^:private watched-attr-ns
-  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"
-    "logseq.property.linked-references"
+  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs"
+    "logseq.property.linked-references" "logseq.task"
     "logseq.class" "logseq.kv"})
 
 (defn- watched-attr?
