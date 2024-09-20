@@ -5,6 +5,7 @@
    [frontend.components.block :as block]
    [frontend.components.cmdk.list-item :as list-item]
    [frontend.components.title :as title]
+   [frontend.components.page :as page]
    [frontend.extensions.pdf.utils :as pdf-utils]
    [frontend.context.i18n :refer [t]]
    [frontend.db :as db]
@@ -390,9 +391,11 @@
 
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]
-    (let [page (db/get-page page-name)]
-      (route-handler/redirect-to-page! (:block/uuid page)))
-    (state/close-modal!)))
+    (if (= page-name (state/sub :search/preview)) ;; secondary click (or enter) go to page
+      (let [page (db/get-page page-name)]
+        [(route-handler/redirect-to-page! (:block/uuid page))
+         (state/close-modal!)])
+      (state/set-search-preview! page-name))))
 
 (defmethod handle-action :open-block [_ state _event]
   (when-let [block-id (some-> state state->highlighted-item :source-block :block/uuid)]
@@ -411,14 +414,18 @@
       (let [get-block-page (partial model/get-block-page repo)]
         (when block
           (when-let [page (some-> block-id get-block-page)]
-            (cond
-              (db/whiteboard-page? page)
-              (route-handler/redirect-to-page! (:block/uuid page) {:block-id block-id})
-              (model/parents-collapsed? (state/get-current-repo) block-id)
-              (route-handler/redirect-to-page! block-id)
-              :else
-              (route-handler/redirect-to-page! (:block/uuid page) {:anchor (str "ls-block-" block-id)}))
-            (state/close-modal!)))))))
+            [(cond
+               (db/whiteboard-page? page)
+               [(route-handler/redirect-to-page! (:block/uuid page) {:block-id block-id})
+                (state/close-modal!)]
+               (not (= block-id (state/sub :search/preview))) ;; secondary click (or enter) go to zoom-in block
+               (state/set-search-preview! block-id)
+               (model/parents-collapsed? (state/get-current-repo) block-id)
+               [(route-handler/redirect-to-page! block-id)
+                (state/close-modal!)]
+               :else
+               [(route-handler/redirect-to-page! (:block/uuid page) {:anchor (str "ls-block-" block-id)})
+                (state/close-modal!)])]))))))
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]
@@ -939,6 +946,23 @@
     :else
     (string/capitalize (name group-filter))))
 
+(rum/defc preview < rum/reactive
+  []
+  (let [block-id (state/sub :search/preview)
+        page-e (db/entity [:block/uuid block-id])]
+    [:div
+     {:style {:overflow "scroll"}}
+     [:div.pl-2.rounded-lg
+      {:style {:minWidth "500px"
+               :backgroundColor "var(--lx-gray-03, var(--ls-secondary-background-color))"}}
+      (when page-e
+        (when-let [repo (state/get-current-repo)]
+          [[:div.mb-4
+            {:on-click #(state/close-modal!)}
+            (block/breadcrumb {} repo block-id {:level-limit 3})]
+           [:div
+            (page/page-blocks-cp repo page-e {})]]))]]))
+
 (rum/defcs cmdk
   < rum/static
     rum/reactive
@@ -991,18 +1015,18 @@
         results-ordered (state->results-ordered state search-mode)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
-     (when-not sidebar? (hints state))]))
      [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))
                      :class (cond-> "w-full h-full relative flex flex-col justify-start"
                               (not sidebar?) (str " rounded-lg"))}
       (input-row state all-items opts)
-      [:div.flex
+      [:div.flex.p-1
        [[:div {:class (cond-> "w-full flex-1 overflow-y-auto min-h-[65dvh] max-h-[65dvh]"
                         (not sidebar?) (str " pb-14"))
                :ref #(let [*ref (::scroll-container-ref state)]
                        (when-not @*ref (reset! *ref %)))
                :style {:background "var(--lx-gray-02)"
-                       :scroll-padding-block 32}}
+                       :scroll-padding-block 32
+                       :minWidth "500px"}}
 
          (when group-filter
            (let [filter-name (group-filter-translate group-filter)]
@@ -1026,9 +1050,15 @@
              (when-not (string/blank? @*input)
                [:div.flex.flex-col.p-4.opacity-50
                 (t :search/no-result)])))]
+        (when-not (or (= group-filter :commands)
+                      (= group-filter :themes)
+                      (= group-filter :files))
+          (preview))]]
+      (when-not sidebar? (hints state))]
+))
 
 (rum/defc cmdk-modal [props]
-  [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl relative"}
+  [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-7xl relative"}
    (cmdk props)])
 
 (rum/defc cmdk-block [props]
