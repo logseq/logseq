@@ -876,14 +876,6 @@
            (gdom/getElement section "id"))))))
 
 #?(:cljs
-   (defn get-elem-idx
-     [nodes node]
-     (let [equal? (fn [^js a ^js b]
-                    (or (some-> b (= a))
-                        (and a b (= (.-id a) (.-id b)))))]
-       (first (filter number? (map-indexed (fn [idx b] (when (equal? b node) idx)) nodes))))))
-
-#?(:cljs
    (defn get-prev-block-non-collapsed
      "Gets previous non-collapsed block. If given a container
       looks up blocks in that container e.g. for embed"
@@ -892,7 +884,7 @@
       (when-let [blocks (if container
                           (get-blocks-noncollapse container)
                           (get-blocks-noncollapse))]
-        (when-let [index (get-elem-idx blocks block)]
+        (when-let [index (.indexOf blocks block)]
           (let [idx (dec index)]
             (when (>= idx 0)
               (nth-safe blocks idx))))))))
@@ -902,7 +894,7 @@
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
                             remove-embedded-blocks)]
-       (when-let [index (get-elem-idx blocks block)]
+       (when-let [index (.indexOf blocks block)]
            (let [idx (dec index)]
              (when (>= idx 0)
                (nth-safe blocks idx)))))))
@@ -911,7 +903,7 @@
    (defn get-next-block-non-collapsed
      [block]
      (when-let [blocks (and block (get-blocks-noncollapse))]
-       (when-let [index (get-elem-idx blocks block)]
+       (when-let [index (.indexOf blocks block)]
          (let [idx (inc index)]
            (when (>= (count blocks) idx)
              (nth-safe blocks idx)))))))
@@ -920,7 +912,7 @@
    (defn get-next-block-non-collapsed-skip
      [block]
      (when-let [blocks (get-blocks-noncollapse)]
-       (when-let [index (get-elem-idx blocks block)]
+       (when-let [index (.indexOf blocks block)]
          (loop [idx (inc index)]
            (when (>= (count blocks) idx)
              (let [block (nth-safe blocks idx)

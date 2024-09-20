@@ -2638,8 +2638,10 @@
     (when (= input element)
       (cond
         (not= selected-start selected-end)
-        (if left?
+        (cond
+          left?
           (cursor/move-cursor-to input selected-start)
+          :else
           (cursor/move-cursor-to input selected-end))
 
         (or (and left? (cursor/start? input))

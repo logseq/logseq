@@ -2736,14 +2736,14 @@
                                     (editor-handler/edit-block! block :max))}
                 svg/edit])])])
 
-       (when-not (or (:table? config) (:page-title? config))
+       (when-not (or (:table? config) (:property? config) (:page-title? config))
          (block-refs-count block refs-count *hide-block-refs?))
 
-       (when-not (or (:block-ref? config) (:table? config))
+       (when-not (or (:block-ref? config) (:table? config) (:property? config))
          (when (and db-based? (seq (:block/tags block)))
            (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))]
 
-      (when (and (not (:table? config))
+      (when (and (not (or (:table? config) (:property? config)))
                  (not hide-block-refs?)
                  (> refs-count 0)
                  (not (:page-title? config)))
@@ -3097,6 +3097,7 @@
         editing? (or (state/sub-editing? [container-id (:block/uuid block)])
                      (state/sub-editing? [:unknown-container (:block/uuid block)]))
         table? (:table? config*)
+        property? (:property? config*)
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
@@ -3131,7 +3132,9 @@
         db-based? (config/db-based-graph? repo)]
     [:div.ls-block
      (cond->
-      {:id (str "ls-block-" uuid)
+      {:id (str "ls-block-"
+                ;; container-id "-"
+                uuid)
        :blockid (str uuid)
        :containerid container-id
        :ref #(when (nil? @*ref) (reset! *ref %))
@@ -3162,13 +3165,13 @@
        custom-query?
        (assoc :data-query true))
 
-     (when (and ref? breadcrumb-show? (not table?))
+     (when (and ref? breadcrumb-show? (not (or table? property?)))
        (breadcrumb config repo uuid {:show-page? false
                                      :indent? true
                                      :navigating-block *navigating-block}))
 
      ;; only render this for the first block in each container
-     (when (and top? (not table?))
+     (when (and top? (not (or table? property?)))
        (dnd-separator-wrapper block children block-id slide? true false))
 
      (when-not (:hide-title? config)
@@ -3188,7 +3191,7 @@
          :on-mouse-leave (fn [e]
                            (block-mouse-leave e *control-show? block-id doc-mode?))}
 
-        (when (and (not slide?) (not in-whiteboard?))
+        (when (and (not slide?) (not in-whiteboard?) (not property?))
           (let [edit? (or editing?
                           (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))
@@ -3199,7 +3202,7 @@
                             :*control-show? *control-show?
                             :edit? edit?})))
 
-        (when (and @*show-left-menu? (not in-whiteboard?) (not table?))
+        (when (and @*show-left-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-left-menu config block))
 
         [:div.flex.flex-col.w-full
@@ -3246,22 +3249,22 @@
                                          :edit? editing?
                                          :hide-block-refs-count? hide-block-refs-count?}))])]
 
-         (when (and db-based? (not collapsed?) (not table?))
+         (when (and db-based? (not collapsed?) (not (or table? property?)))
            (block-positioned-properties config block :block-below))]
 
-        (when (and @*show-right-menu? (not in-whiteboard?) (not table?))
+        (when (and @*show-right-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-right-menu config block editing?))])
 
-     (when (and db-based? (not collapsed?) (not table?))
+     (when (and db-based? (not collapsed?) (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])
 
-     (when-not (or (:hide-children? config) in-whiteboard? table?)
+     (when-not (or (:hide-children? config) in-whiteboard? (or table? property?))
        (let [config' (-> (update config :level inc)
                          (dissoc :original-block :data))]
          (block-children config' block children collapsed?)))
 
-     (when-not (or in-whiteboard? table?) (dnd-separator-wrapper block children block-id slide? false false))]))
+     (when-not (or in-whiteboard? table? property?) (dnd-separator-wrapper block children block-id slide? false false))]))
 
 (defn- block-changed?
   [old-block new-block]
