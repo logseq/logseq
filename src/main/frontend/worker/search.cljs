@@ -10,7 +10,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [logseq.graph-parser.text :as text]))
 
 ;; TODO: use sqlite for fuzzy search
 ;; maybe https://github.com/nalgeon/sqlean/blob/main/docs/fuzzy.md?
@@ -126,16 +127,37 @@ DROP TRIGGER IF EXISTS blocks_au;
                   (snippet-by snippet max-snippet-length))]
     snippet))
 
+(defn- get-match-input
+  [q]
+  (let [match-input (-> q
+                        (string/replace " and " " AND ")
+                        (string/replace " & " " AND ")
+                        (string/replace " or " " OR ")
+                        (string/replace " | " " OR ")
+                        (string/replace " not " " NOT "))]
+    (if (not= q match-input)
+      (string/replace match-input "," "")
+      (str "\"" match-input "\"*"))))
+
 (defn- search-blocks-aux
-  [db sql input page limit enable-snippet?]
+  [db sql q input page limit enable-snippet?]
   (try
-    (p/let [result (if page
-                     (.exec db #js {:sql sql
-                                    :bind #js [page input limit]
-                                    :rowMode "array"})
-                     (.exec db #js {:sql sql
-                                    :bind #js [input limit]
-                                    :rowMode "array"}))
+    (p/let [namespace? (text/namespace-page? q)
+            last-part (when namespace?
+                        (get-match-input (last (string/split q "/"))))
+            bind (cond
+                   (and namespace? page)
+                   [page input last-part limit]
+                   page
+                   [page input limit]
+                   namespace?
+                   [input last-part limit]
+                   :else
+                   [input limit])
+            result (.exec db (bean/->js
+                              {:sql sql
+                               :bind bind
+                               :rowMode "array"}))
             blocks (bean/->clj result)]
       (map (fn [block]
              (let [[id page title snippet] (if enable-snippet?
@@ -148,18 +170,6 @@ DROP TRIGGER IF EXISTS blocks_au;
     (catch :default e
       (prn :debug "Search blocks failed: ")
       (js/console.error e))))
-
-(defn- get-match-input
-  [q]
-  (let [match-input (-> q
-                        (string/replace " and " " AND ")
-                        (string/replace " & " " AND ")
-                        (string/replace " or " " OR ")
-                        (string/replace " | " " OR ")
-                        (string/replace " not " " NOT "))]
-    (if (not= q match-input)
-      (string/replace match-input "," "")
-      (str "\"" match-input "\"*"))))
 
 (defn exact-matched?
   "Check if two strings points toward same search result"
@@ -209,10 +219,14 @@ DROP TRIGGER IF EXISTS blocks_au;
       ;; (let [content (if (and db-based? (seq (:block/properties block)))
       ;;                 (str content (when (not= content "") "\n") (get-db-properties-str db properties))
       ;;                 content)])
-    (when uuid
-      {:id (str uuid)
-       :page (str (or (:block/uuid page) uuid))
-       :title (if (page-or-object? block) title (sanitize title))})))
+    (let [parent (:logseq.property/parent block)
+          title (if (and parent (= "page" (:block/type block)))
+                  (str (:block/title parent) "/" title)
+                  title)]
+      (when uuid
+        {:id (str uuid)
+         :page (str (or (:block/uuid page) uuid))
+         :title (if (page-or-object? block) title (sanitize title))}))))
 
 (defn build-fuzzy-search-indice
   "Build a block title indice from scratch.
@@ -271,10 +285,10 @@ DROP TRIGGER IF EXISTS blocks_au;
                      (str "select id, page, title, " snippet-aux " from blocks_fts where ")
                      "select id, page, title from blocks_fts where ")
             pg-sql (if page "page = ? and" "")
-            match-sql (str select
-                           pg-sql
-                           " title match ? order by rank limit ?")
-            matched-result (search-blocks-aux search-db match-sql match-input page limit enable-snippet?)
+            match-sql (if (text/namespace-page? q)
+                        (str select pg-sql " title match ? or title match ? order by rank limit ?")
+                        (str select pg-sql " title match ? order by rank limit ?"))
+            matched-result (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?)
             fuzzy-result (when-not page (fuzzy-search repo @conn q option))]
       (let [result (->> (concat fuzzy-result matched-result)
                         (common-util/distinct-by :id)
@@ -286,8 +300,10 @@ DROP TRIGGER IF EXISTS blocks_au;
                                             true
                                             (if built-in?
                                               (or (not (ldb/built-in? block))
-                                                  (not (ldb/private-built-in-page? block)))
-                                              (not (ldb/built-in? block))))
+                                                  (not (ldb/private-built-in-page? block))
+                                                  (ldb/class? block))
+                                              (or (not (ldb/built-in? block))
+                                                  (ldb/class? block))))
                                       {:db/id (:db/id block)
                                        :block/uuid block-id
                                        :block/title (or snippet title)

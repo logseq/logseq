@@ -62,7 +62,10 @@
          (notification/show! "Page name can't include \"#\"." :warning)
          (when-not (string/blank? title')
            (p/let [options' (if db-based?
-                              (update options :tags concat (:block/tags parsed-result))
+                              (cond->
+                               (update options :tags concat (:block/tags parsed-result))
+                                (nil? (:split-namespace? options))
+                                (assoc :split-namespace? true))
                               options)
                    result (ui-outliner-tx/transact!
                            {:outliner-op :create-page}
@@ -74,6 +77,7 @@
                (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
                  (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
                page))))))))
+
 
 ;; favorite fns
 ;; ============

@@ -371,8 +371,14 @@
                      (when-not (de/entity? chosen-result)
                        (<create! chosen'
                                  {:redirect? false
-                                  :create-first-block? false})))
-            ref-text' (if result (page-ref/->page-ref (:block/title result)) ref-text)]
+                                  :create-first-block? false
+                                  :split-namespace? true})))
+            ref-text' (if result
+                        (let [title (if-let [parent (:logseq.property/parent result)]
+                                      (str (:block/title parent) "/" (:block/title result))
+                                      (:block/title result))]
+                          (page-ref/->page-ref title))
+                        ref-text)]
       (p/do!
        (editor-handler/insert-command! id
                                        ref-text'

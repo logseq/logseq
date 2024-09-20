@@ -290,9 +290,9 @@
          block-id (when (and (not (config/db-based-graph? repo)) (map? properties))
                     (get properties :id))
          content (if (config/db-based-graph? repo)
-                   title
+                   (:block/title-with-refs-parent (db/entity (:db/id block)))
                    (-> (property-file/remove-built-in-properties-when-file-based repo format title)
-                     (drawer/remove-logbook)))]
+                       (drawer/remove-logbook)))]
      (cond
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
@@ -3747,17 +3747,16 @@
             (select-all-blocks! {})))))))
 
 (defn escape-editing
-  ([]
-   (escape-editing true))
-  ([select?]
-   (let [edit-block (state/get-edit-block)]
-     (p/do!
-      (save-current-block!)
-      (if select?
-        (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-          (state/exit-editing-and-set-selected-blocks! [node]))
-        (when (= (:db/id edit-block) (:db/id (state/get-edit-block)))
-          (state/clear-edit!)))))))
+  [& {:keys [select? save-block?]
+      :or {save-block? true}}]
+  (let [edit-block (state/get-edit-block)]
+    (p/do!
+     (when save-block? (save-current-block!))
+     (if select?
+       (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+         (state/exit-editing-and-set-selected-blocks! [node]))
+       (when (= (:db/id edit-block) (:db/id (state/get-edit-block)))
+         (state/clear-edit!))))))
 
 (defn replace-block-reference-with-content-at-point
   []

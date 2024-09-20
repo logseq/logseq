@@ -13,7 +13,8 @@
     (when (seq children)
       [:ul
        (for [child (sort-by :block/title children)]
-         (let [title [:li.ml-2 (block/page-reference false (:block/title child) {:show-brackets? false} nil)]]
+         (let [title [:li.ml-2 (block/page-reference false (:block/title child) {:show-brackets? false
+                                                                                 :display-parent? false} nil)]]
            (if (seq (:logseq.property/_parent child))
              (ui/foldable
               title

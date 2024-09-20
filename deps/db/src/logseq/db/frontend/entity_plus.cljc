@@ -25,15 +25,40 @@
 
 (defn- get-block-title
   [^Entity e k default-value]
-  (let [db (.-db e)]
-    (if (and (db-based-graph? db) (= "journal" (:block/type e)))
+  (let [db (.-db e)
+        db-based? (db-based-graph? db)]
+    (if (and db-based? (= "journal" (:block/type e)))
       (get-journal-title db e)
       (or
        (get (.-kv e) k)
-       (let [result (lookup-entity e k default-value)]
+       (let [result (lookup-entity e k default-value)
+             parent-title? (:block.temp/parent-title? e)]
+         (or
+          (let [result' (if (string? result)
+                          (db-content/special-id-ref->page-ref result
+                                                               (:block/refs e))
+                          result)
+                parent (when (= (:block/type e) "page")
+                         (:logseq.property/parent e))]
+            (if (and db-based? parent parent-title?)
+              (str (:block/title parent) "/" result')
+              result'))
+          default-value))))))
+
+(defn- get-block-title-parent-refs
+  "Add parent to block ref titles"
+  [^Entity e k default-value]
+  (let [db (.-db e)
+        db-based? (db-based-graph? db)]
+    (if (and db-based? (= "journal" (:block/type e)))
+      (get-journal-title db e)
+      (or
+       (get (.-kv e) k)
+       (let [result (lookup-entity e :block/title default-value)]
          (or
           (if (string? result)
-            (db-content/special-id-ref->page-ref result (:block/refs e))
+            (db-content/special-id-ref->page-ref result
+                                                 (map (fn [e] (assoc e :block.temp/parent-title? true)) (:block/refs e)))
             result)
           default-value))))))
 
@@ -60,6 +85,9 @@
 
          :block/title
          (get-block-title e k default-value)
+
+         :block/title-with-refs-parent
+         (get-block-title-parent-refs e k default-value)
 
          :block/_parent
          (->> (lookup-entity e k default-value)

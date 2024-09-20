@@ -21,7 +21,9 @@
             [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.pipeline :as outliner-pipeline]
-            [logseq.common.util.macro :as macro-util]))
+            [logseq.graph-parser.text :as text]
+            [logseq.common.util.macro :as macro-util]
+            [logseq.db.frontend.class :as db-class]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -246,10 +248,104 @@
          (map (fn [tag]
                 [:db/retract (:db/id block) :block/tags (:db/id tag)])))))
 
+(defn- get-page-by-parent-name
+  [db parent-title child-title]
+  (some->>
+   (d/q
+    '[:find [?b ...]
+      :in $ ?parent-name ?child-name
+      :where
+      [?b :logseq.property/parent ?p]
+      [?b :block/name ?child-name]
+      [?p :block/name ?parent-name]]
+    db
+     (common-util/page-name-sanity-lc parent-title)
+     (common-util/page-name-sanity-lc child-title))
+   first
+   (d/entity db)))
+
+(defn ^:api split-namespace-pages
+  [db page-or-pages tags date-formatter & {:keys [*changed-uuids]}]
+  (let [pages (if (map? page-or-pages) [page-or-pages] page-or-pages)
+        tags-set (set (map :block/uuid tags))]
+    (->>
+     (mapcat
+      (fn [{:block/keys [title] :as page}]
+        (let [block-uuid (:block/uuid page)
+              block-type (if (contains? tags-set (:block/uuid page))
+                           "class"
+                           (:block/type page))]
+          (if (and (contains? #{"page" "class"} block-type) (text/namespace-page? title))
+            (let [class? (= block-type "class")
+                  parts (->> (string/split title #"/")
+                             (map string/trim)
+                             (remove string/blank?))
+                  pages (doall
+                         (map-indexed
+                          (fn [idx part]
+                            (let [last-part? (= idx (dec (count parts)))
+                                  page (if (zero? idx)
+                                         (ldb/get-page db part)
+                                         (get-page-by-parent-name db (nth parts (dec idx)) part))
+                                  result (or page
+                                             (when last-part? (ldb/get-page db part))
+                                             (-> (gp-block/page-name->map part db true date-formatter
+                                                                          {:page-uuid (when last-part? block-uuid)})
+                                                 (assoc :block/format :markdown)))]
+                              (when (and last-part? (not= (:block/uuid result) block-uuid)
+                                         *changed-uuids)
+                                (swap! *changed-uuids assoc block-uuid (:block/uuid result)))
+                              result))
+                          parts))]
+              (map-indexed
+               (fn [idx page]
+                 (let [parent-eid (when (> idx 0)
+                                    (when-let [id (:block/uuid (nth pages (dec idx)))]
+                                      [:block/uuid id]))]
+                   (if class?
+                     (cond
+                       (and (de/entity? page) (ldb/class? page))
+                       page
+                       (de/entity? page) ; page exists but not a class, avoid converting here becuase this could be troublesome.
+                       nil
+                       (zero? idx)
+                       (db-class/build-new-class db page)
+                       :else
+                       (db-class/build-new-class db (assoc page :logseq.property/parent parent-eid)))
+                     (if (or (de/entity? page) (zero? idx))
+                       page
+                       (assoc page :logseq.property/parent parent-eid)))))
+               pages))
+            [page])))
+      pages)
+     (remove nil?))))
+
+(defn- build-page-parents
+  [db m date-formatter raw-title]
+  (let [refs (:block/refs m)
+        tags (:block/tags m)
+        *changed-uuids (atom {})
+        refs' (split-namespace-pages db refs tags date-formatter
+                                     {:*changed-uuids *changed-uuids})
+        tags' (map (fn [tag]
+                     (or (first (filter (fn [ref] (= (:block/uuid ref) (:block/uuid tag))) refs')) tag))
+                   tags)
+        raw-title' (if (seq @*changed-uuids)
+                     (reduce
+                      (fn [raw-content [old-id new-id]]
+                        (string/replace raw-content (str old-id) (str new-id)))
+                      raw-title
+                      @*changed-uuids)
+                     raw-title)]
+    (assoc m
+           :block/refs refs'
+           :block/title raw-title'
+           :block/tags tags')))
+
 (extend-type Entity
   otree/INode
-  (-save [this txs-state conn repo _date-formatter {:keys [retract-attributes? retract-attributes]
-                                                    :or {retract-attributes? true}}]
+  (-save [this txs-state conn repo date-formatter {:keys [retract-attributes? retract-attributes]
+                                                   :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [data this
@@ -261,7 +357,7 @@
                   db-based?
                   (dissoc :block/properties))
           m* (-> data'
-                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
+                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered :block.temp/parent-title?
                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?)
                  common-util/remove-nils
                  block-with-updated-at
@@ -283,14 +379,17 @@
                  (assoc m* :block/name page-name))
                m*)
           _ (when (and db-based?
-                      ;; page or object changed?
+                       ;; page or object changed?
                        (and (or (ldb/page? block-entity) (ldb/object? block-entity))
                             (:block/title m*)
                             (not= (:block/title m*) (:block/title block-entity))))
               (outliner-validate/validate-block-title db (:block/title m*) block-entity))
           m (cond-> m*
               db-based?
-              (dissoc :block/pre-block? :block/priority :block/marker :block/properties-order))]
+              (dissoc :block/pre-block? :block/priority :block/marker :block/properties-order))
+          m (if db-based?
+              (build-page-parents db m date-formatter (:block/title m))
+              m)]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)
