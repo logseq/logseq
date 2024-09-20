@@ -317,7 +317,6 @@
   (rum/local nil ::result)
   (rum/local false ::select-mode?)
   (rum/local :all ::tab)
-  (rum/local nil ::hover)
   {:init (fn [s]
            (assoc s ::color (atom (storage/get :ls-icon-color-preset))))}
   [state {:keys [on-chosen del-btn?] :as opts}]
@@ -325,17 +324,16 @@
         *result (::result state)
         *tab (::tab state)
         *color (::color state)
-        *hover (::hover state)
         *input-ref (rum/create-ref)
         *result-ref (rum/create-ref)
         result @*result
-        opts (assoc opts :hover *hover
-                    :on-chosen (fn [e m]
-                                 (let [icon? (= (:type m) :tabler-icon)
-                                       m (if (and icon? (not (string/blank? @*color)))
-                                           (assoc m :color @*color) m)]
-                                   (and on-chosen (on-chosen e m))
-                                   (when (:type m) (add-used-item! m)))))
+        opts (assoc opts
+               :on-chosen (fn [e m]
+                            (let [icon? (= (:type m) :tabler-icon)
+                                  m (if (and icon? (not (string/blank? @*color)))
+                                      (assoc m :color @*color) m)]
+                              (and on-chosen (on-chosen e m))
+                              (when (:type m) (add-used-item! m)))))
         *select-mode? (::select-mode? state)
         reset-q! #(when-let [^js input (rum/deref *input-ref)]
                     (reset! *q "")
@@ -344,7 +342,8 @@
                     (set! (. input -value) "")
                     (util/schedule
                      (fn []
-                       (.focus input)
+                       (when (not= js/document.activeElement input)
+                         (.focus input))
                        (util/scroll-to (rum/deref *result-ref) 0 false))))]
     [:div.cp__emoji-icon-picker
      ;; header
@@ -387,8 +386,7 @@
      ;; body
      [:div.bd.bd-scroll
       {:ref *result-ref
-       :class (or (some-> @*tab (name)) "other")
-       :on-mouse-leave #(reset! *hover nil)}
+       :class (or (some-> @*tab (name)) "other")}
       [:div.content-pane
        (if (seq result)
          [:div.flex.flex-1.flex-col.gap-1.search-result
@@ -406,39 +404,29 @@
 
      ;; footer
      [:div.ft
-      (if-not @*hover
-        ;; tabs
-        [:<>
-         [:div.flex.flex-1.flex-row.items-center.gap-2
-          (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"]]]
-            (for [[id label] tabs
-                  :let [active? (= @*tab id)]]
-              (shui/button
-               {:variant :ghost
-                :size :sm
-                :class (util/classnames [{:active active?} "tab-item"])
-                :on-click #(reset! *tab id)}
-               label)))]
+      ;; tabs
+      [:<>
+       [:div.flex.flex-1.flex-row.items-center.gap-2
+        (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"]]]
+          (for [[id label] tabs
+                :let [active? (= @*tab id)]]
+            (shui/button
+              {:variant :ghost
+               :size :sm
+               :class (util/classnames [{:active active?} "tab-item"])
+               :on-mouse-down (fn [e]
+                                (util/stop e)
+                                (reset! *tab id))}
+              label)))]
 
-         (when (not= :emoji @*tab)
-           (color-picker *color))
+       (when (not= :emoji @*tab)
+         (color-picker *color))
 
-         ;; action buttons
-         (when del-btn?
-           (shui/button {:variant :outline :size :sm :data-action "del"
-                         :on-click #(on-chosen nil)}
-                        (shui/tabler-icon "trash" {:size 17})))]
-
-        ;; preview
-        [:div.hover-preview
-         [:strong (:name @*hover)]
-         [:button
-          {:style {:font-size 28}
-           :key   (:id @*hover)
-           :title (:name @*hover)}
-          (if (= :tabler-icon (:type @*hover))
-            (ui/icon (:icon @*hover) {:size 28})
-            (:native (first (:skins @*hover))))]])]]))
+       ;; action buttons
+       (when del-btn?
+         (shui/button {:variant :outline :size :sm :data-action "del"
+                       :on-click #(on-chosen nil)}
+           (shui/tabler-icon "trash" {:size 17})))]]]))
 
 (rum/defc icon-picker
   [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts]}]
