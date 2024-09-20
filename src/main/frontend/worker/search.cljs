@@ -300,9 +300,10 @@ DROP TRIGGER IF EXISTS blocks_au;
                                             true
                                             (if built-in?
                                               (or (not (ldb/built-in? block))
-                                                  ;; (ldb/class? block)
-                                                  (ldb/public-built-in-property? block))
-                                              (not (ldb/private-built-in-page? block))))
+                                                  (not (ldb/private-built-in-page? block))
+                                                  (ldb/class? block))
+                                              (or (not (ldb/built-in? block))
+                                                  (ldb/class? block))))
                                       {:db/id (:db/id block)
                                        :block/uuid block-id
                                        :block/title (or snippet title)
