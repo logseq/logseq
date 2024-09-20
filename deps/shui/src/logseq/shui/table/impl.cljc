@@ -11,9 +11,9 @@
   (not (false? (get visible-columns (column-id column)))))
 
 (defn visible-columns
-  [columns visible-columns]
-  (if (seq visible-columns)
-    (filter #(column-visible? % visible-columns) columns)
+  [columns visible-columns']
+  (if (seq visible-columns')
+    (filter #(column-visible? % visible-columns') columns)
     columns))
 
 (defn sort-rows
@@ -58,7 +58,9 @@
   (sort-rows rows sorting columns))
 
 (defn rows
-  [{:keys [rows columns sorting row-filter]}]
-  (let [rows' (if row-filter (filter row-filter rows) rows)]
+  [{:keys [columns sorting row-filter]
+    :as opts}]
+  (let [rows' (:rows opts)
+        rows' (if row-filter (filter row-filter rows') rows')]
     (cond-> rows'
       (seq sorting) (sort-rows sorting columns))))

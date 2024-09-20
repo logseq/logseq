@@ -1,27 +1,26 @@
 (ns frontend.components.page-menu
-  (:require [frontend.commands :as commands]
+  (:require [electron.ipc :as ipc]
+            [frontend.commands :as commands]
             [frontend.components.export :as export]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [logseq.db :as ldb]
+            [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.common.developer :as dev-common-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.property.util :as pu]
+            [frontend.handler.shell :as shell]
+            [frontend.handler.user :as user-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [logseq.shui.ui :as shui]
-            [promesa.core :as p]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
-            [frontend.handler.shell :as shell]
-            [frontend.mobile.util :as mobile-util]
-            [electron.ipc :as ipc]
-            [frontend.config :as config]
-            [frontend.handler.user :as user-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
             [logseq.common.path :as path]
-            [frontend.handler.property.util :as pu]))
+            [logseq.db :as ldb]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
 
 (defn- delete-page!
   [page]
@@ -69,13 +68,7 @@
                                     (file-sync-handler/get-current-graph-uuid))]
       (when (not block?)
         (->>
-         [(when (not= (state/get-current-page) (str (:block/uuid page)))
-            {:title   (t :page/go-to-page)
-             :options {:on-click
-                       (fn []
-                         (route-handler/redirect-to-page! (:block/uuid page)))}})
-
-          (when-not config/publishing?
+         [(when-not config/publishing?
             {:title   (if favorited?
                         (t :page/unfavorite)
                         (t :page/add-to-favorites))

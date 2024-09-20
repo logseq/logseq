@@ -353,6 +353,13 @@
                             chosen-result)
             chosen (:block/title chosen-result)
             chosen' (string/replace-first chosen (str (t :new-page) " ") "")
+            [chosen' chosen-result] (or (when (and (:nlp-date? chosen-result) (not (de/entity? chosen-result)))
+                                          (when-let [result (date/nld-parse chosen')]
+                                            (let [d (doto (goog.date.DateTime.) (.setTime (.getTime result)))
+                                                  gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
+                                                  page (date/js-date->journal-title gd)]
+                                              [page (db/get-page page)])))
+                                        [chosen' chosen-result])
             ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
                        (cond
                          db-based?

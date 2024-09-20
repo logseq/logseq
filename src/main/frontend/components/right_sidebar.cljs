@@ -9,7 +9,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.extensions.slide :as slide]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
@@ -45,14 +44,8 @@
 (rum/defc page-cp < rum/reactive
   [repo page-name]
   (page/page-cp {:parameters {:path {:name page-name}}
-              :sidebar?   true
-              :repo       repo}))
-
-(rum/defc contents < rum/reactive db-mixins/query
-  []
-  [:div.contents.flex-col.flex.ml-3
-   (when-let [contents-page (db/get-page "contents")]
-     (page/contents-page contents-page))])
+                 :sidebar?   true
+                 :repo       repo}))
 
 (rum/defc shortcut-settings
   []
@@ -74,7 +67,7 @@
   (case (keyword block-type)
     :contents
     [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
-     (contents)]
+     (page-cp repo "contents")]
 
     :help
     [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :right-side-bar/help)] (onboarding/help)]

@@ -212,7 +212,7 @@
 }
 
 .block-title-wrap {
-  @apply inline;
+  @apply w-full inline;
 
   > .ui__checkbox {
     @apply relative top-[2px];
@@ -900,7 +900,7 @@ html.is-mac {
 }
 
 .block-tag a.tag {
-  @apply flex text-sm items-center opacity-70;
+  @apply flex text-sm font-normal items-center opacity-70;
 }
 
 .block-tag a.tag:hover {

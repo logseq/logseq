@@ -8,7 +8,6 @@
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
-            [clojure.set :as set]
             [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.cmdk.core :as cmdk]
@@ -38,7 +37,6 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as fs-watcher]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.file-sync :as file-sync-handler]
@@ -53,9 +51,6 @@
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.property.util :as pu]
-            [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.handler.property :as property-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.db-based.rtc :as rtc-handler]
@@ -292,64 +287,6 @@
   (when-let [repo (get-local-repo)]
     (some-> (ask-permission repo)
       (shui/dialog-open! {:align :top}))))
-
-(defonce *query-properties (atom {}))
-(rum/defc query-properties-settings-inner < rum/reactive
-  {:will-unmount (fn [state]
-                   (reset! *query-properties {})
-                   state)}
-  [block shown-properties all-properties]
-  (let [query-properties (rum/react *query-properties)
-        db-graph? (config/db-based-graph? (state/get-current-repo))]
-    [:div
-     [:h1.font-semibold.-mt-2.mb-2.text-lg (t :query/config-property-settings)]
-     [:a.flex
-      {:title "Refresh list of columns"
-       :on-click
-       (fn []
-         (reset! *query-properties {})
-         (let [k (pu/get-pid :logseq.property/query-properties)]
-           (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block) k)))}
-      (ui/icon "refresh")]
-     (for [property all-properties]
-       (let [property-value (get query-properties property)
-             shown? (if (nil? property-value)
-                      (contains? shown-properties property)
-                      property-value)]
-         [:div.flex.flex-row.my-2.justify-between.align-items
-          [:div (if (and db-graph? (qualified-keyword? property))
-                  (db-pu/get-property-name property)
-                  (name property))]
-          [:div.mt-1 (ui/toggle shown?
-                                (fn []
-                                  (let [value (not shown?)]
-                                    (swap! *query-properties assoc property value)
-                                    (editor-handler/set-block-query-properties!
-                                     (:block/uuid block)
-                                     all-properties
-                                     property
-                                     value)))
-                                true)]]))]))
-
-(defn query-properties-settings
-  [block shown-properties all-properties]
-  (fn [_close-fn]
-    (query-properties-settings-inner block shown-properties all-properties)))
-
-(defmethod handle :modal/set-query-properties [[_ block all-properties]]
-  (let [properties (:block/properties block)
-        query-properties (pu/lookup properties :logseq.property/query-properties)
-        block-properties (if (config/db-based-graph? (state/get-current-repo))
-                           query-properties
-                           (some-> query-properties
-                             (common-handler/safe-read-string "Parsing query properties failed")))
-        shown-properties (if (seq block-properties)
-                           (set block-properties)
-                           (set all-properties))
-        shown-properties (set/intersection (set all-properties) shown-properties)]
-    (shui/dialog-open!
-      (query-properties-settings block shown-properties all-properties)
-      {})))
 
 (defmethod handle :modal/show-cards [_]
   (shui/dialog-open!

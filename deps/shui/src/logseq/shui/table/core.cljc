@@ -2,7 +2,6 @@
   "Table"
   (:require [logseq.shui.table.impl :as impl]
             [dommy.core :refer-macros [sel1]]
-            [cljs-bean.core :as bean]
             [rum.core :as rum]))
 
 (defn- get-head-container

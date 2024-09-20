@@ -101,7 +101,8 @@
 
 (defn- replace-page-ref-with-id
   [content page-name id replace-tag?]
-  (let [page-name (str page-name)
+  (let [page-name (-> (str page-name)
+                      (string/replace "HashTag-" "#"))
         id (str id)
         content' (replace-page-ref content page-name id)]
     (if replace-tag?
@@ -121,8 +122,9 @@
                    ref))
                refs)]
     (reduce
-     (fn [content {uuid' :block/uuid :block/keys [title]}]
-       (replace-page-ref-with-id content title uuid' replace-tag?))
+     (fn [content {uuid' :block/uuid :block/keys [title] :as block}]
+       (let [title' (or (:block.temp/original-page-name block) title)]
+         (replace-page-ref-with-id content title' uuid' replace-tag?)))
      title
      (filter :block/title refs'))))
 

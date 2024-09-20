@@ -147,7 +147,6 @@
  :page/make-private "Make it private"
  :page/delete "Delete page"
  :page/add-to-favorites "Add to Favorites"
- :page/go-to-page "Go to this page"
  :page/unfavorite "Unfavorite page"
  :block/name "Page name"
  :page/copy-page-url "Copy page URL"

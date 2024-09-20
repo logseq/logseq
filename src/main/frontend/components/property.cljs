@@ -42,8 +42,7 @@
     ((comp string/capitalize name) property-type)))
 
 (defn- <add-property-from-dropdown
-  "Adds an existing or new property from dropdown. Used from a block or page context.
-   For pages, used to add both schema properties or properties for a page"
+  "Adds an existing or new property from dropdown. Used from a block or page context."
   [entity property-uuid-or-name schema {:keys [class-schema?]}]
   (p/let [repo (state/get-current-repo)
           ;; Both conditions necessary so that a class can add its own page properties
@@ -87,7 +86,7 @@
                           (map (fn [type]
                                  {:label (property-type-label type)
                                   :value type})))]
-    [:div {:class "flex items-center col-span-2"}
+    [:div {:class "flex items-center col-span-1"}
      (shui/select
       (cond->
        {:default-open (boolean default-open?)
@@ -178,6 +177,8 @@
         icon (cond
                (= ident :block/tags)
                "hash"
+               (string/starts-with? (str ident) ":plugin.")
+               "puzzle"
                :else
                (case type
                  :number "number"
@@ -227,28 +228,53 @@
             (p/do!
              (reset! *show-new-property-config? false))))))))
 
-(rum/defcs property-key-cp <
-  (rum/local false ::hover?)
-  [state block property {:keys [other-position? class-schema?]}]
-  (let [*hover? (::hover? state)
-        icon (:logseq.property/icon property)]
+(rum/defc property-key-title
+  [block property class-schema?]
+  (let [block-container (state/get-component :block/container)]
+    (shui/trigger-as
+     :a
+     {:tabIndex 0
+      :title (:block/title property)
+      :class "property-k flex select-none jtrigger w-full"
+      :on-pointer-down (fn [^js e]
+                         (when (util/meta-key? e)
+                           (route-handler/redirect-to-page! (:block/uuid property))
+                           (.preventDefault e)))
+      :on-click (fn [^js/MouseEvent e]
+                  (shui/popup-show! (.-target e)
+                                    (fn []
+                                      (property-config/dropdown-editor property block {:debug? (.-altKey e)
+                                                                                       :class-schema? class-schema?}))
+                                    {:content-props
+                                     {:class "ls-property-dropdown-editor as-root"
+                                      :onEscapeKeyDown (fn [e]
+                                                         (util/stop e)
+                                                         (shui/popup-hide!)
+                                                         (when-let [input (state/get-input)]
+                                                           (.focus input)))}
+                                     :align "start"
+                                     :as-dropdown? true}))}
+     (block-container {:property? true} property))))
+
+(rum/defc property-key-cp < rum/static
+  [block property {:keys [other-position? class-schema?]}]
+  (let [icon (:logseq.property/icon property)]
     [:div.property-key-inner.jtrigger-view
-     {:on-mouse-over   #(reset! *hover? true)
-      :on-mouse-leave  #(reset! *hover? false)}
      ;; icon picker
      (when-not other-position?
        (let [content-fn (fn [{:keys [id]}]
                           (icon-component/icon-search
-                           {:on-chosen
-                            (fn [_e icon]
-                              (if icon
-                                (db-property-handler/upsert-property! (:db/ident property)
-                                                                      (:block/schema property)
-                                                                      {:properties {:logseq.property/icon icon}})
-                                (db-property-handler/remove-block-property! (:db/id property)
-                                                                            (pu/get-pid :logseq.property/icon)))
-                              (shui/popup-hide! id))
-                            :del-btn? (boolean icon)}))]
+                            {:on-chosen
+                             (fn [_e icon]
+                               (if icon
+                                 (db-property-handler/upsert-property! (:db/ident property)
+                                   (:block/schema property)
+                                   {:properties {:logseq.property/icon icon}})
+                                 (db-property-handler/remove-block-property! (:db/id property)
+                                   (pu/get-pid :logseq.property/icon)))
+                               (shui/popup-hide! id))
+                             :icon-value icon
+                             :del-btn? (boolean icon)}))]
 
          (shui/trigger-as
           :button.property-m
@@ -266,25 +292,7 @@
        [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
         (:block/title property)]
-
-       (shui/trigger-as :a
-         {:tabIndex 0
-          :title (:block/title property)
-          :class "property-k flex select-none jtrigger w-full"
-          :on-pointer-down (fn [^js e]
-                             (when (util/meta-key? e)
-                               (route-handler/redirect-to-page! (:block/uuid property))
-                               (.preventDefault e)))
-          :on-click (fn [^js/MouseEvent e]
-                      (shui/popup-show! (.-target e)
-                        (fn []
-                          (property-config/dropdown-editor property block {:debug? (.-altKey e)
-                                                                           :class-schema? class-schema?}))
-                        {:content-props
-                         {:class "ls-property-dropdown-editor as-root"}
-                         :align "start"
-                         :as-dropdown? true}))}
-         (:block/title property)))]))
+       (property-key-title block property class-schema?))]))
 
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)
@@ -343,8 +351,8 @@
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      {:ref #(reset! *ref %)}
      (if property-key
-       [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
-        [:div.flex.flex-row.items-center.col-span-2.property-key.gap-1
+       [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-1.flex-row.items-center
+        [:div.flex.flex-row.items-center.col-span-1.property-key.gap-1
          (when-not (:db/id property) (property-icon property (:type @*property-schema)))
          (if (:db/id property)                              ; property exists already
            (property-key-cp block property opts)
@@ -440,8 +448,8 @@
                         :else
                         "property-pair items-start")}
          (if (seq sortable-opts)
-           (dnd/sortable-item (assoc sortable-opts :class "property-key col-span-2") property-key-cp')
-           [:div.property-key.col-span-2 property-key-cp'])
+           (dnd/sortable-item (assoc sortable-opts :class "property-key col-span-1") property-key-cp')
+           [:div.property-key.col-span-1 property-key-cp'])
 
          (let [class-properties? (= (:db/ident property) :logseq.property.class/properties)
                property-desc (when-not (= (:db/ident property) :logseq.property/description)

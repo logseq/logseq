@@ -45,12 +45,14 @@
 
 (defn convert-to-tag!
   [page-entity]
-  (let [class (db-class/build-new-class (db/get-db)
-                                        {:db/id (:db/id page-entity)
-                                         :block/title (:block/title page-entity)
-                                         :block/created-at (:block/created-at page-entity)})]
+  (if (db/page-exists? (:block/title page-entity) "class")
+    (notification/show! (str "A tag with the name \"" (:block/title page-entity) "\" already exists.") :warning false)
+    (let [class (db-class/build-new-class (db/get-db)
+                                         {:db/id (:db/id page-entity)
+                                          :block/title (:block/title page-entity)
+                                          :block/created-at (:block/created-at page-entity)})]
 
-    (db/transact! (state/get-current-repo) [class] {:outliner-op :save-block})))
+     (db/transact! (state/get-current-repo) [class] {:outliner-op :save-block}))))
 
 (defn <create-class!
   "Creates a class page and provides class-specific error handling"

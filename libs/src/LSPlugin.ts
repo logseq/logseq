@@ -815,7 +815,7 @@ export interface IEditorProxy extends Record<string, any> {
       hide: boolean
       public: boolean
     }>,
-    opts?: {}) => Promise<IEntityID>
+    opts?: { name?: string }) => Promise<IEntityID>
 
   // block property related APIs
   upsertBlockProperty: (

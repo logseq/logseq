@@ -132,7 +132,7 @@
     (when (false? loading?)
       [:div.flex.flex-col.gap-2.mt-2
 
-       [:div.font-medium.opacity-50 "Tagged nodes"]
+       [:div.font-medium.opacity-50 "Tagged Nodes"]
 
        (views/view view-entity {:data data
                                 :set-data! set-data!
@@ -221,21 +221,23 @@
                                :add-new-object! #(add-new-property-object! property set-data!)
                                ;; TODO: Add support for adding column
                                :show-add-property? false
-                               :on-delete-rows (fn [table selected-rows]
-                                                 (let [pages (filter ldb/page? selected-rows)
-                                                       blocks (remove ldb/page? selected-rows)]
-                                                   (p/do!
-                                                    (ui-outliner-tx/transact!
-                                                     {:outliner-op :delete-blocks}
-                                                     (when (seq blocks)
-                                                       (outliner-op/delete-blocks! blocks nil))
-                                                     (let [page-ids (map :db/id pages)
-                                                           tx-data (map (fn [pid] [:db/retract pid (:db/ident property)]) page-ids)]
-                                                       (when (seq tx-data)
-                                                         (outliner-op/transact! tx-data {:outliner-op :save-block}))))
-                                                    (set-data! (get-property-related-objects (state/get-current-repo) property))
-                                                    (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                                      (f {})))))}))))
+                               :on-delete-rows (when-not (contains? #{:logseq.property/built-in? :logseq.property/parent}
+                                                                    (:db/ident property))
+                                                 (fn [table selected-rows]
+                                                   (let [pages (filter ldb/page? selected-rows)
+                                                         blocks (remove ldb/page? selected-rows)]
+                                                     (p/do!
+                                                      (ui-outliner-tx/transact!
+                                                       {:outliner-op :delete-blocks}
+                                                       (when (seq blocks)
+                                                         (outliner-op/delete-blocks! blocks nil))
+                                                       (let [page-ids (map :db/id pages)
+                                                             tx-data (map (fn [pid] [:db/retract pid (:db/ident property)]) page-ids)]
+                                                         (when (seq tx-data)
+                                                           (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+                                                      (set-data! (get-property-related-objects (state/get-current-repo) property))
+                                                      (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                                        (f {}))))))}))))
 
 ;; Show all nodes containing the given property
 (rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
