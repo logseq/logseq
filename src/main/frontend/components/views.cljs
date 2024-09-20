@@ -1033,7 +1033,7 @@
 
        (table-view table option row-selection add-new-object! ready?))]))
 
-(rum/defc view < rum/reactive
+(rum/defc view
   "Provides a view for data like query results and tagged objects, multiple
    layouts such as table and list are supported. Args:
    * view-entity: a db Entity
@@ -1045,8 +1045,8 @@
      * add-new-object!: `fn` to create a new object (or row)
      * show-add-property?: whether to show `Add property`
      * add-property!: `fn` to add a new property (or column)
-     * on-delete-rows: `fn` to trigger when deleting selected objects
-"
+     * on-delete-rows: `fn` to trigger when deleting selected objects"
+  < rum/reactive
   [view-entity option]
   (let [view-entity' (db/sub-block (:db/id view-entity))]
     (rum/with-key (view-inner view-entity' option)
