@@ -1652,7 +1652,7 @@
 
 (defn <get-matched-blocks
   "Return matched blocks that are not built-in"
-  [q]
+  [q & [{:keys [nlp-pages?]}]]
   (p/let [block (state/get-edit-block)
           nodes (search/block-search (state/get-current-repo) q {:built-in? false
                                                                  :enable-snippet? false})
@@ -1660,10 +1660,11 @@
                           (when-let [id (:block/uuid b)]
                             (when-not (= id (:block/uuid block)) ; avoid block self-reference
                               (db/entity [:block/uuid id]))))
-                        nodes)
-          matched-dates (map (fn [title] {:block/title title
-                                          :nlp-date? true}) date/nlp-pages)]
-    (-> (concat matched-dates matched)
+                        nodes)]
+    (-> (concat matched
+                (when nlp-pages?
+                  (map (fn [title] {:block/title title :nlp-date? true})
+                       date/nlp-pages)))
         (search/fuzzy-search q {:extract-fn :block/title :limit 50}))))
 
 (defn <get-matched-templates

@@ -1,7 +1,28 @@
 (ns logseq.outliner.validate
-  "Reusable validations from outliner level and above"
-  (:require [datascript.core :as d]
+  "Reusable validations from outliner level and above. Most validations throw
+  errors so the user action stops immediately to display a notification"
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.db :as ldb]))
+
+(defn ^:api validate-page-title-characters
+  "Validates characters that must not be in a page title"
+  [page-title meta-m]
+  (when (string/includes? page-title "#")
+    (throw (ex-info "Page name can't include \"#\"."
+                    (merge meta-m
+                           {:type :notification
+                            :payload {:message "Page name can't include \"#\"."
+                                      :type :warning}})))))
+
+(defn ^:api validate-page-title
+  [page-title meta-m]
+  (when (string/blank? page-title)
+    (throw (ex-info "Page name can't be blank"
+                    (merge meta-m
+                           {:type :notification
+                            :payload {:message "Page name can't be blank."
+                                      :type :error}})))))
 
 (defn ^:api validate-built-in-pages
   "Validates built-in pages shouldn't be modified"

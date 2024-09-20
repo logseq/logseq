@@ -92,6 +92,8 @@
 (defn- update-property
   [conn db-ident property schema {:keys [property-name properties]}]
   (when (and (some? property-name) (not= property-name (:block/title property)))
+    (outliner-validate/validate-page-title property-name {:node property})
+    (outliner-validate/validate-page-title-characters property-name {:node property})
     (outliner-validate/validate-block-title @conn property-name property))
 
   (let [changed-property-attrs

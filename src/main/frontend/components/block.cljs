@@ -1926,7 +1926,7 @@
      {:class (util/classnames [{:is-order-list order-list?
                                 :bullet-closed collapsed?
                                 :bullet-hidden (:hide-bullet? config)}])}
-     (when (or (not fold-button-right?) collapsable?)
+     (when (and (or (not fold-button-right?) collapsable?) (not (:table? config)))
        [:a.block-control
         {:id       (str "control-" uuid)
          :on-click (fn [event]
@@ -3188,7 +3188,7 @@
          :on-mouse-leave (fn [e]
                            (block-mouse-leave e *control-show? block-id doc-mode?))}
 
-        (when (and (not slide?) (not in-whiteboard?) (not table?))
+        (when (and (not slide?) (not in-whiteboard?))
           (let [edit? (or editing?
                           (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))
