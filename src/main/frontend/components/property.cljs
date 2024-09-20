@@ -228,14 +228,38 @@
             (p/do!
              (reset! *show-new-property-config? false))))))))
 
-(rum/defcs property-key-cp <
-  (rum/local false ::hover?)
-  [state block property {:keys [other-position? class-schema?]}]
-  (let [*hover? (::hover? state)
-        icon (:logseq.property/icon property)]
+(rum/defc property-key-title
+  [block property class-schema?]
+  (let [block-container (state/get-component :block/container)]
+    (shui/trigger-as
+     :a
+     {:tabIndex 0
+      :title (:block/title property)
+      :class "property-k flex select-none jtrigger w-full"
+      :on-pointer-down (fn [^js e]
+                         (when (util/meta-key? e)
+                           (route-handler/redirect-to-page! (:block/uuid property))
+                           (.preventDefault e)))
+      :on-click (fn [^js/MouseEvent e]
+                  (shui/popup-show! (.-target e)
+                                    (fn []
+                                      (property-config/dropdown-editor property block {:debug? (.-altKey e)
+                                                                                       :class-schema? class-schema?}))
+                                    {:content-props
+                                     {:class "ls-property-dropdown-editor as-root"
+                                      :onEscapeKeyDown (fn [e]
+                                                         (util/stop e)
+                                                         (shui/popup-hide!)
+                                                         (when-let [input (state/get-input)]
+                                                           (.focus input)))}
+                                     :align "start"
+                                     :as-dropdown? true}))}
+     (block-container {:property? true} property))))
+
+(rum/defc property-key-cp < rum/static
+  [block property {:keys [other-position? class-schema?]}]
+  (let [icon (:logseq.property/icon property)]
     [:div.property-key-inner.jtrigger-view
-     {:on-mouse-over   #(reset! *hover? true)
-      :on-mouse-leave  #(reset! *hover? false)}
      ;; icon picker
      (when-not other-position?
        (let [content-fn (fn [{:keys [id]}]
@@ -268,25 +292,7 @@
        [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
         (:block/title property)]
-
-       (shui/trigger-as :a
-         {:tabIndex 0
-          :title (:block/title property)
-          :class "property-k flex select-none jtrigger w-full"
-          :on-pointer-down (fn [^js e]
-                             (when (util/meta-key? e)
-                               (route-handler/redirect-to-page! (:block/uuid property))
-                               (.preventDefault e)))
-          :on-click (fn [^js/MouseEvent e]
-                      (shui/popup-show! (.-target e)
-                        (fn []
-                          (property-config/dropdown-editor property block {:debug? (.-altKey e)
-                                                                           :class-schema? class-schema?}))
-                        {:content-props
-                         {:class "ls-property-dropdown-editor as-root"}
-                         :align "start"
-                         :as-dropdown? true}))}
-         (:block/title property)))]))
+       (property-key-title block property class-schema?))]))
 
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)
