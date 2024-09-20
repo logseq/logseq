@@ -437,10 +437,12 @@
                                        result (cond->> m
                                                 (and db-based? tag? (not (:db/ident m)))
                                                 (db-class/build-new-class db))
-                                       page-name (:block/name result)
+                                       page-name (if db-based? (:block/title result) (:block/name result))
                                        id (get @*name->id page-name)]
                                    (when (nil? id)
                                      (swap! *name->id assoc page-name (:block/uuid result)))
+                                   ;; Changing a :block/uuid should be done cautiously here as it can break
+                                   ;; the identity of built-in concepts in db graphs
                                    (if id
                                      (assoc result :block/uuid id)
                                      result))))) col)))
