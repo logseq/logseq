@@ -878,10 +878,16 @@
 #?(:cljs
    (defn- skip-same-top-blocks
      [blocks block]
-     (remove (fn [b]
-               (and (not= b block)
-                    (= (when b (.-top (.getBoundingClientRect b)))
-                       (when block (.-top (.getBoundingClientRect block)))))) blocks)))
+     (let [property? (= (d/attr block "data-is-property") "true")
+           properties-area (rec-get-node block "ls-properties-area")]
+       (remove (fn [b]
+                 (and
+                  (not= b block)
+                  (or (= (when b (.-top (.getBoundingClientRect b)))
+                         (when block (.-top (.getBoundingClientRect block))))
+                      (when property?
+                        (and (not= (d/attr b "data-is-property") "true")
+                             (gdom/contains properties-area b)))))) blocks))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed

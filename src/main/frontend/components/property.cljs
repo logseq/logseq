@@ -254,9 +254,7 @@
                                                            (.focus input)))}
                                      :align "start"
                                      :as-dropdown? true}))}
-     (block-container {:property? true} property)
-     ;; (:block/title property)
-     )))
+     (block-container {:property? true} property))))
 
 (rum/defc property-key-cp < rum/static
   [block property {:keys [other-position? class-schema?]}]

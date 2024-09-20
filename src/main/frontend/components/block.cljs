@@ -3137,6 +3137,7 @@
                 uuid)
        :blockid (str uuid)
        :containerid container-id
+       :data-is-property (ldb/property? block)
        :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? has-child?)
        :class (str "id" uuid " "
