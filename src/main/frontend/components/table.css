@@ -55,12 +55,22 @@
 
   .ls-table-resize-handle {
     @apply absolute top-0 -right-0.5 w-1 h-full cursor-col-resize bg-accent-08 rounded
-    hover:opacity-80 active:opacity-100;
+    hover:opacity-70 active:opacity-100 opacity-0 delay-300 transition-opacity;
   }
 
   div[data-viewport-type="window"] {
     min-width: 100%;
     width: auto !important;
+  }
+}
+
+html.is-resizing-buf {
+  .ls-table-resize-handle:not(.is-active) {
+    @apply hidden;
+  }
+
+  .ls-table .ls-table-header-cell {
+    @apply pointer-events-none;
   }
 }
 

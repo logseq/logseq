@@ -294,7 +294,8 @@
                                  :left-dx left-dx
                                  :right-dx right-dx
                                  :left-b (inc (+ left-dx right))
-                                 :right-b (inc (+ right-dx right)))))
+                                 :right-b (inc (+ right-dx right)))
+                               (dom/add-class! el "is-active")))
                     :move (fn [^js e]
                             (let [dx (.-dx e)
                                   pointer-x (js/Math.floor (.-clientX e))
@@ -323,7 +324,7 @@
                                                (> w max-width) max-width
                                                :else w)))
                                (reset! *field-rect nil)
-                               ;; TODO: reset
+                               (dom/remove-class! el "is-active")
                                0)))}}))
               (.styleCursor false)
               (.on "dragstart" add-resizing-class)
