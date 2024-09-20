@@ -221,13 +221,17 @@
           (:name column)))))))))
 
 (defn- get-column-size
-  [column]
-  (case (:id column)
-    :select 32
-    :add-property 160
-    (:block/title :block/name) 360
-    (:block/created-at :block/updated-at) 160
-    180))
+  [column sized-columns]
+  (let [id (:id column)
+        size (get sized-columns id)]
+    (if (number? size)
+      size
+      (case id
+        :select 32
+        :add-property 160
+        (:block/title :block/name) 360
+        (:block/created-at :block/updated-at) 160
+        180))))
 
 (rum/defc add-property-button < rum/static
   []
@@ -256,7 +260,7 @@
       (ui/icon "trash")))))
 
 (rum/defc column-resizer
-  [_column]
+  [_column on-sized!]
   (let [*el (rum/use-ref nil)
         [dx set-dx!] (rum/use-state nil)
         [width set-width!] (rum/use-state nil)
@@ -331,7 +335,7 @@
     (rum/use-effect!
       (fn []
         (when (number? width)
-          (shui/toast! (str "TODO: set column width: " width))))
+          (on-sized! width)))
       [width])
 
     [:a.ls-table-resize-handle
@@ -341,11 +345,13 @@
 (defn- table-header
   [table columns {:keys [show-add-property? add-property!] :as option} selected-rows]
   (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
+        set-sized-columns! (get-in table [:data-fns :set-sized-columns!])
+        sized-columns (get-in table [:state :sized-columns])
         items (mapv (fn [column]
                       {:id (:name column)
                        :value (:id column)
                        :content (let [header-fn (:header column)
-                                      width (get-column-size column)
+                                      width (get-column-size column sized-columns)
                                       select? (= :select (:id column))]
                                   [:div.ls-table-header-cell
                                    {:style {:width width
@@ -356,7 +362,9 @@
                                      header-fn)
                                    ;; resize handle
                                    (when-not (false? (:resizable? column))
-                                     (column-resizer column))])
+                                     (column-resizer column
+                                       (fn [size]
+                                         (set-sized-columns! (assoc sized-columns (:id column) size)))))])
                        :disabled? (= (:id column) :select)}) columns)
         items (if show-add-property?
                 (conj items
@@ -386,7 +394,8 @@
                   (conj (vec columns)
                         {:id :add-property
                          :cell (fn [_table _row _column])})
-                  columns)]
+                  columns)
+        sized-columns (get-in table [:state :sized-columns])]
     (shui/table-row
      (merge
       props
@@ -395,7 +404,7 @@
      (for [column columns]
        (let [id (str (:id row) "-" (:id column))
              render (get column :cell)
-             width (get-column-size column)
+             width (get-column-size column sized-columns)
              select? (= (:id column) :select)
              add-property? (= (:id column) :add-property)]
          (when render
@@ -963,7 +972,8 @@
    filters))
 
 (defn- db-set-table-state!
-  [entity {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns!]}]
+  [entity {:keys [set-sorting! set-filters! set-visible-columns!
+                  set-ordered-columns! set-sized-columns!]}]
   (let [repo (state/get-current-repo)]
     {:set-sorting!
      (fn [sorting]
@@ -985,7 +995,11 @@
      (fn [ordered-columns]
        (let [ids (vec (remove #{:select} ordered-columns))]
          (set-ordered-columns! ordered-columns)
-         (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids)))}))
+         (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids)))
+     :set-sized-columns!
+     (fn [sized-columns]
+       (set-sized-columns! sized-columns)
+       (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc table-view < rum/static
   [table option row-selection add-new-object! ready?]
@@ -1040,11 +1054,14 @@
         hidden-columns (:logseq.property.table/hidden-columns view-entity)
         [visible-columns set-visible-columns!] (rum/use-state (zipmap hidden-columns (repeat false)))
         ordered-columns (vec (concat [:select] (:logseq.property.table/ordered-columns view-entity)))
+        sized-columns (:logseq.property.table/sized-columns view-entity)
         [ordered-columns set-ordered-columns!] (rum/use-state ordered-columns)
-        {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns!]}
+        [sized-columns set-sized-columns!] (rum/use-state sized-columns)
+        {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns! set-sized-columns!]}
         (db-set-table-state! view-entity {:set-sorting! set-sorting!
                                           :set-filters! set-filters!
                                           :set-visible-columns! set-visible-columns!
+                                          :set-sized-columns! set-sized-columns!
                                           :set-ordered-columns! set-ordered-columns!})
         row-filter-fn (fn []
                         (fn [row]
@@ -1060,12 +1077,14 @@
                                           :row-filter row-filter
                                           :row-selection row-selection
                                           :visible-columns visible-columns
+                                          :sized-columns sized-columns
                                           :ordered-columns ordered-columns}
                                   :data-fns {:set-data! set-data!
                                              :set-filters! set-filters!
                                              :set-sorting! set-sorting!
                                              :set-visible-columns! set-visible-columns!
                                              :set-ordered-columns! set-ordered-columns!
+                                             :set-sized-columns! set-sized-columns!
                                              :set-row-selection! set-row-selection!
                                              :add-new-object! add-new-object!}})
 
