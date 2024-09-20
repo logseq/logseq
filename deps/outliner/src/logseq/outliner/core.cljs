@@ -209,21 +209,33 @@
     (file-rebuild-block-refs repo db date-formatter block)))
 
 (defn- fix-tag-ids
-  "Updates :block/tags to reference ids from :block/refs"
-  [m]
+  "Fix or remove tags related when entered via `Escape`"
+  [m {:keys [db-graph?]}]
   (let [refs (set (map :block/name (seq (:block/refs m))))
         tags (seq (:block/tags m))]
     (if (and refs tags)
-      (update m :block/tags (fn [tags]
-                              (map (fn [tag]
-                                     (if (contains? refs (:block/name tag))
-                                       (assoc tag :block/uuid
-                                              (:block/uuid
-                                               (first (filter (fn [r] (= (:block/name tag)
-                                                                         (:block/name r)))
-                                                              (:block/refs m)))))
-                                       tag))
-                                   tags)))
+      (update m :block/tags
+              (fn [tags]
+                (cond->>
+                 ;; Update :block/tag to reference ids from :block/refs
+                 (map (fn [tag]
+                        (if (contains? refs (:block/name tag))
+                          (assoc tag :block/uuid
+                                 (:block/uuid
+                                  (first (filter (fn [r] (= (:block/name tag)
+                                                            (:block/name r)))
+                                                 (:block/refs m)))))
+                          tag))
+                      tags)
+
+                  db-graph?
+                  ;; Remove tags changing case with `Escape`
+                  ((fn [tags']
+                     (let [ref-titles (set (map :block/title (:block/refs m)))
+                           lc-ref-titles (set (map string/lower-case ref-titles))]
+                       (remove #(and (not (contains? ref-titles (:block/title %)))
+                                     (contains? lc-ref-titles (string/lower-case (:block/title %))))
+                               tags')))))))
       m)))
 
 (defn- remove-tags-when-title-changed
@@ -349,7 +361,7 @@
                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?)
                  common-util/remove-nils
                  block-with-updated-at
-                 fix-tag-ids)
+                 (fix-tag-ids {:db-graph? db-based?}))
           db @conn
           db-id (:db/id this)
           block-uuid (:block/uuid this)
