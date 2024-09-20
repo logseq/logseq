@@ -731,7 +731,7 @@
         (when-let [container (gdom/getElement "app-container")]
           (dom/remove-class! container "blocks-selection-mode"))
         (p/do!
-         (editor-handler/escape-editing select?)
+         (editor-handler/escape-editing {:select? select?})
          (some-> config :on-escape-editing
                  (apply [(str uuid) (= type :esc)])))))))
 

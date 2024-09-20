@@ -115,7 +115,8 @@
    (cond-> (merge block
                   {:block/type "class"
                    :block/format :markdown})
-     (not= (:db/ident block) :logseq.class/Root)
+     (and (not= (:db/ident block) :logseq.class/Root)
+          (nil? (:logseq.property/parent block)))
      (assoc :logseq.property/parent :logseq.class/Root))))
 
 (defn build-new-page

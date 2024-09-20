@@ -106,7 +106,7 @@
                             (take 5 items))))
         node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
                        (when-not (string/blank? input)
-                         (or (db/get-page (string/trim input))
+                         (or (db/get-page (string/trim (last (string/split input "/"))))
                              (some (fn [block]
                                      (and
                                       (:block/tags block)
@@ -223,7 +223,7 @@
                 new-result)))]))
 
 (defn- page-item
-  [repo page]
+  [repo page q]
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
         source-page (model/get-alias-source-page repo (:db/id entity))
         icon (cond
@@ -235,7 +235,7 @@
                "whiteboard"
                :else
                "page")
-        title (title/block-unique-title page)
+        title (highlight-content-query (title/block-unique-title page) q)
         title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
     (hash-map :icon icon
               :icon-theme :gray
@@ -269,7 +269,7 @@
             blocks (remove nil? blocks)
             items (keep (fn [block]
                           (if (:page? block)
-                            (page-item repo block)
+                            (page-item repo block !input)
                             (block-item repo block current-page !input))) blocks)]
       (if (= group :current-page)
         (let [items-on-current-page (filter :current-page? items)]
@@ -492,17 +492,16 @@
         create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
-    (p/do!
-      (cond
-        create-class?
-        (db-page-handler/<create-class! class
-                                        {:redirect? false
-                                         :create-first-block? false})
-        create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
-        create-page? (page-handler/<create! @!input {:redirect? true}))
+    (p/let [result (cond
+                     create-class?
+                     (db-page-handler/<create-class! class
+                                                     {:redirect? false
+                                                      :create-first-block? false})
+                     create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
+                     create-page? (page-handler/<create! @!input {:redirect? true}))]
       (state/close-modal!)
-      (when create-class?
-        (state/pub-event! [:class/configure (db/get-case-page class)])))))
+      (when (and create-class? result)
+        (state/pub-event! [:class/configure result])))))
 
 (defn- get-filter-user-input
   [input]
