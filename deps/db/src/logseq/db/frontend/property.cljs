@@ -209,6 +209,12 @@
                                            {:type :coll
                                             :hide? true
                                             :public? false}}
+
+    :logseq.property.table/sized-columns {:schema
+                                          {:type :map
+                                           :hide? true
+                                           :public? false}}
+
    :logseq.property/view-for {:schema
                               {:type :node
                                :hide? true
