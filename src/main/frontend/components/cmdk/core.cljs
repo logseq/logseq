@@ -987,7 +987,7 @@
                                 (not (:sidebar? opts)))
                             (atom {:group search-mode})
                             (atom nil))
-                 ::input (atom (or (:initial-input opts) "")))))
+                 ::input (atom (or (:initial-input opts) (state/sub :search/q) "")))))
      :will-unmount (fn [state]
                      (state/set-state! :search/mode nil)
                      state)}

@@ -261,6 +261,7 @@
               [:button.button.icon#search-button
                {:title (t :header/search)
                 :on-click (fn [e]
+                            (state/set-state! :search/q nil)
                             (when (or (mobile-util/native-android?)
                                       (mobile-util/native-iphone?))
                               (state/set-left-sidebar-open! false))
@@ -272,6 +273,7 @@
               [:button.button.icon#search-button
                {:title (t :command.command-palette/toggle)
                 :on-click (fn []
+                            (state/set-state! :search/q nil)
                             (when (or (mobile-util/native-android?)
                                       (mobile-util/native-iphone?))
                               (state/set-left-sidebar-open! false))

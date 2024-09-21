@@ -299,6 +299,20 @@
            :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
           (t :context-menu/toggle-number-list))
 
+         (shui/dropdown-menu-item
+          {:key "Search word"
+           :on-click (fn []
+                       (let [block-title (:block/title block)
+                             block-title (if (uuid? block-title)
+                                           [:block/title (db/entity [:block/page block])]
+                                           block-title)]
+                         (when (and block-title
+                                    (not (uuid? block-title)))
+                           (state/set-state! :search/q (if (> (count block-title) 50) (subs block-title 0 30) block-title))
+                           (state/set-state! :search/mode :nodes)
+                           (state/pub-event! [:go/search]))))}
+          (t :header/search))
+
          (shui/dropdown-menu-separator)
 
          (shui/dropdown-menu-item
@@ -317,12 +331,13 @@
 
          (when (state/sub [:plugin/simple-commands])
            (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
-             (for [[_ {:keys [key label] :as cmd} action pid] cmds]
-               (shui/dropdown-menu-item
-                {:key      key
-                 :on-click #(commands/exec-plugin-simple-command!
-                             pid (assoc cmd :uuid block-id) action)}
-                label))))
+             [(shui/dropdown-menu-separator)
+              (for [[_ {:keys [key label] :as cmd} action pid] cmds]
+                (shui/dropdown-menu-item
+                 {:key      key
+                  :on-click #(commands/exec-plugin-simple-command!
+                              pid (assoc cmd :uuid block-id) action)}
+                 label))]))
 
          (when (state/sub [:ui/developer-mode?])
            [:<>
