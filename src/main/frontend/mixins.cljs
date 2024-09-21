@@ -3,7 +3,8 @@
   (:require [rum.core :as rum]
             [goog.dom :as dom]
             [frontend.util :refer [profile] :as util]
-            [frontend.state :as state])
+            [frontend.state :as state]
+            [goog.functions :as gfun])
   (:import [goog.events EventHandler]))
 
 (defn detach
@@ -156,3 +157,11 @@
        (profile
         (str "Render " desc)
         (render-fn state))))})
+
+(defn use-debounce
+  "A rumext custom hook that debounces the value changes"
+  [ms value]
+  (let [[state update-fn] (rum/use-state value)
+        update-fn (rum/use-callback (gfun/debounce update-fn ms) [])]
+    (rum/use-effect! #(update-fn value) #js [value])
+    state))

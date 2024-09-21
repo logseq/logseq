@@ -137,14 +137,14 @@
   [id format embed? db-tag? q current-pos input pos]
   (let [db? (config/db-based-graph? (state/get-current-repo))
         q (string/trim q)
-        [matched-pages set-matched-pages!] (rum/use-state nil)]
-    (rum/use-effect! (fn []
-                       (when-not (string/blank? q)
-                         (p/let [result (if db-tag?
-                                          (editor-handler/get-matched-classes q)
-                                          (editor-handler/<get-matched-blocks q {:nlp-pages? true}))]
-                           (set-matched-pages! result))))
-                     [q])
+        [matched-pages set-matched-pages!] (rum/use-state nil)
+        search-f (fn []
+                   (when-not (string/blank? q)
+                     (p/let [result (if db-tag?
+                                      (editor-handler/get-matched-classes q)
+                                      (editor-handler/<get-matched-blocks q {:nlp-pages? true}))]
+                       (set-matched-pages! result))))]
+    (rum/use-effect! search-f [(mixins/use-debounce 50 q)])
     (let [matched-pages (if (string/blank? q)
                           (->> (map (fn [title] {:block/title title
                                                  :nlp-date? true})

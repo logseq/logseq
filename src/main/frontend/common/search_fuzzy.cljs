@@ -8,7 +8,7 @@
 
 (defn clean-str
   [s]
-  (string/replace (string/lower-case s) #"[\[ \\/_\]\(\)]+" ""))
+  (string/lower-case (string/replace (string/lower-case s) #"[\[ \\/_\]\(\)]+" "")))
 
 (defn char-array
   [s]
@@ -31,9 +31,9 @@
 (defn score
   [oquery ostr]
   (let [query (clean-str oquery)
-        s (clean-str ostr)]
+        original-s (clean-str ostr)]
     (loop [q (seq (char-array query))
-           s (seq (char-array s))
+           s (seq (char-array original-s))
            mult 1
            idx MAX-STRING-LENGTH
            score' 0]
@@ -41,12 +41,15 @@
         ;; add str-len-distance to score, so strings with matches in same position get sorted by length
         ;; boost score if we have an exact match including punctuation
         (empty? q) (+ score'
-                      (str-len-distance query s)
+                      (str-len-distance query original-s)
                       (cond
-                        (<= 0 (.indexOf ostr oquery))
+                        (string/starts-with? original-s query)
+                        (+ MAX-STRING-LENGTH 10)
+
+                        (<= 0 (.indexOf original-s query))
                         MAX-STRING-LENGTH
 
-                        (<= 0 (.indexOf (string/lower-case ostr) (string/lower-case oquery)))
+                        (<= 0 (.indexOf original-s query))
                         (- MAX-STRING-LENGTH 0.1)
 
                         :else
