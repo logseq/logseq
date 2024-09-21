@@ -783,7 +783,7 @@
                                   (handle-input-change state e)
                                   (when-let [on-change (:on-input-change opts)]
                                     (on-change new-value))))
-                              150)
+                              100)
                              [])]
     ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
     ;; if not then clear that puppy out!
@@ -804,7 +804,7 @@
        :on-blur (fn [_e]
                   (when-let [on-blur (:on-input-blur opts)]
                     (on-blur input)))
-       :on-composition-end (gfun/debounce (fn [e] (handle-input-change state e)) 150)
+       :on-composition-end (gfun/debounce (fn [e] (handle-input-change state e)) 100)
        :on-key-down (gfun/debounce
                      (fn [e]
                        (p/let [value (.-value @input-ref)
@@ -821,7 +821,7 @@
                                         (and backspace? (= input ""))))
                            (reset! (::filter state) nil)
                            (load-results :default state))))
-                     150)
+                     100)
        :default-value input}]]))
 
 (defn rand-tip
