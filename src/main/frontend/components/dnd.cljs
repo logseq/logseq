@@ -3,7 +3,7 @@
             [cljs-bean.core :as bean]
             ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy horizontalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
-            ["@dnd-kit/core" :refer [DndContext closestCenter PointerSensor MouseSensor useSensor useSensors]]
+            ["@dnd-kit/core" :refer [DndContext closestCenter MouseSensor useSensor useSensors]]
             [frontend.rum :as r]
             [frontend.state :as state]))
 
