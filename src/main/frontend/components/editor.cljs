@@ -33,7 +33,8 @@
             [promesa.core :as p]
             [react-draggable]
             [rum.core :as rum]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.date :as date]))
 
 (defn filter-commands
   [page? commands]
@@ -136,15 +137,19 @@
   [id format embed? db-tag? q current-pos input pos]
   (let [db? (config/db-based-graph? (state/get-current-repo))
         q (string/trim q)
-        [matched-pages set-matched-pages!] (rum/use-state nil)]
-    (rum/use-effect! (fn []
-                       (when-not (string/blank? q)
-                         (p/let [result (if db-tag?
-                                          (editor-handler/get-matched-classes q)
-                                          (editor-handler/<get-matched-blocks q))]
-                           (set-matched-pages! result))))
-                     [q])
-    (let [matched-pages (when-not (string/blank? q)
+        [matched-pages set-matched-pages!] (rum/use-state nil)
+        search-f (fn []
+                   (when-not (string/blank? q)
+                     (p/let [result (if db-tag?
+                                      (editor-handler/get-matched-classes q)
+                                      (editor-handler/<get-matched-blocks q {:nlp-pages? true}))]
+                       (set-matched-pages! result))))]
+    (rum/use-effect! search-f [(mixins/use-debounce 50 q)])
+    (let [matched-pages (if (string/blank? q)
+                          (->> (map (fn [title] {:block/title title
+                                                 :nlp-date? true})
+                                    date/nlp-pages)
+                               (take 10))
                           ;; reorder, shortest and starts-with first.
                           (let [matched-pages-with-new-page
                                 (fn [partial-matched-pages]
@@ -180,6 +185,9 @@
                             (when-not db-tag?
                               [:div.flex.items-center
                                (cond
+                                 (:nlp-date? block)
+                                 (ui/icon "calendar" {:size 14})
+
                                  (ldb/class? block)
                                  (ui/icon "hash" {:size 14})
 
@@ -193,7 +201,7 @@
                                  (ui/icon "page" {:extension? true})
 
                                  (or (string/starts-with? (str (:block/title block)) (t :new-tag))
-                                   (string/starts-with? (str (:block/title block)) (t :new-page)))
+                                     (string/starts-with? (str (:block/title block)) (t :new-page)))
                                  (ui/icon "plus" {:size 14})
 
                                  :else
@@ -698,12 +706,9 @@
     (shui-editor-popups id format action nil)))
 
 (defn- editor-on-hide
-  [state value* type e]
-  (let [repo (state/get-current-repo)
-        action (state/get-editor-action)
-        [opts _id config] (:rum/args state)
-        block (:block opts)
-        value (or value* "")]
+  [state type e]
+  (let [action (state/get-editor-action)
+        [_id config] (:rum/args state)]
     (cond
       (and (= type :esc) (exist-editor-commands-popup?))
       nil
@@ -726,8 +731,7 @@
         (when-let [container (gdom/getElement "app-container")]
           (dom/remove-class! container "blocks-selection-mode"))
         (p/do!
-         (editor-handler/save-block! repo (:block/uuid block) value)
-         (editor-handler/escape-editing select?)
+         (editor-handler/escape-editing {:select? select?})
          (some-> config :on-escape-editing
                  (apply [(str uuid) (= type :esc)])))))))
 
@@ -746,7 +750,7 @@
       {:node @(::ref state)
        :on-hide (fn [_state e type]
                   (when-not (= type :esc)
-                    (editor-on-hide state (:value (editor-handler/get-state)) type e)))})))
+                    (editor-on-hide state type e)))})))
   (mixins/event-mixin setup-key-listener!)
   lifecycle/lifecycle
   [state {:keys [format block parent-block]} id config]
@@ -766,7 +770,7 @@
                                     (if-let [on-key-down (:on-key-down config)]
                                       (on-key-down e)
                                       (when (= (util/ekey e) "Escape")
-                                        (editor-on-hide state content :esc e))))
+                                        (editor-on-hide state :esc e))))
                :auto-focus true
                :class heading-class}
                (some? parent-block)

@@ -17,6 +17,10 @@
            ~@body
            (let [r# (persistent! frontend.modules.outliner.op/*outliner-ops*)
                  worker# @state/*db-worker]
+            ;;  (js/console.groupCollapsed "ui/transact!")
+            ;;  (prn :ops r#)
+            ;;  (js/console.trace)
+            ;;  (js/console.groupEnd)
              (if test?#
                (when (seq r#)
                  (logseq.outliner.op/apply-ops! (state/get-current-repo)

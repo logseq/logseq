@@ -56,6 +56,21 @@
   [f]
   (when f (reset! *transact-fn f)))
 
+(defn- remove-temp-block-data
+  [tx-data]
+  (let [remove-block-temp-f (fn [m]
+                              (->> (remove (fn [[k _v]] (= "block.temp" (namespace k))) m)
+                                   (into {})))]
+    (map (fn [m]
+           (if (map? m)
+             (cond->
+              (remove-block-temp-f m)
+               (and (seq (:block/refs m))
+                    (every? map? (:block/refs m)))
+               (update :block/refs (fn [refs] (map remove-block-temp-f refs))))
+             m))
+         tx-data)))
+
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
   ([repo-or-conn tx-data]
@@ -64,10 +79,11 @@
    (let [tx-data (map (fn [m]
                         (if (map? m)
                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                  :block.temp/ast-title :block.temp/ast-body :block/level :block/container :db/other-tx
+                                  :block/level :block/container :db/other-tx
                                   :block/unordered)
                           m)) tx-data)
-         tx-data (->> (common-util/fast-remove-nils tx-data)
+         tx-data (->> (remove-temp-block-data tx-data)
+                      (common-util/fast-remove-nils)
                       (remove empty?))
          delete-blocks-tx (when-not (string? repo-or-conn)
                             (delete-blocks/update-refs-and-macros @repo-or-conn tx-data tx-meta))
@@ -482,6 +498,19 @@
        (contains? (set (get-in (db-class/built-in-classes (:db/ident class-entity)) [:schema :properties]))
                   (:db/ident property-entity))))
 
+(defn private-built-in-page?
+  "Private built-in pages should not be navigable or searchable by users. Later it
+   could be useful to use this for the All Pages view"
+  [page]
+  (cond (property? page)
+        (not (public-built-in-property? page))
+        (or (class? page) (= "page" (:block/type page)))
+        false
+        ;; Default to true for closed value and future internal types.
+        ;; Other types like whiteboard are not considered because they aren't built-in
+        :else
+        true))
+
 (def write-transit-str sqlite-util/write-transit-str)
 (def read-transit-str sqlite-util/read-transit-str)
 
@@ -524,7 +553,8 @@
         :block/parent [:block/uuid page-id]
         :block/order (db-order/gen-key nil)
         :block/page [:block/uuid page-id]
-        :logseq.property/view-for [:block/uuid page-id]})])))
+        :logseq.property/view-for [:block/uuid page-id]
+        :logseq.property/built-in? true})])))
 
 (defn get-key-value
   [db key-ident]

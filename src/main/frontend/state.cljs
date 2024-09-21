@@ -24,7 +24,8 @@
             [logseq.shui.ui :as shui]
             [clojure.set :as set]
             [frontend.db.conn-state :as db-conn-state]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.db :as ldb]))
 
 (defonce *profile-state
   (atom {}))
@@ -1286,19 +1287,6 @@ Similar to re-frame subscriptions"
   []
   (swap! state assoc :ui/sidebar-open? false))
 
-(defn sidebar-add-block!
-  [repo db-id block-type]
-  (when (not (util/sm-breakpoint?))
-    (when db-id
-      (update-state! :sidebar/blocks (fn [blocks]
-                                       (->> (remove #(= (second %) db-id) blocks)
-                                            (cons [repo db-id block-type])
-                                            (distinct))))
-      (set-state! [:ui/sidebar-collapsed-blocks db-id] false)
-      (open-right-sidebar!)
-      (when-let [elem (gdom/getElementByClass "sidebar-item-list")]
-        (util/scroll-to elem 0)))))
-
 (defn sidebar-move-block!
   [from to]
   (update-state! :sidebar/blocks (fn [blocks]
@@ -1946,6 +1934,28 @@ Similar to re-frame subscriptions"
         chan (get-events-chan)]
     (async/put! chan [payload d])
     d))
+
+(defn sidebar-add-block!
+  [repo db-id block-type]
+  (when (not (util/sm-breakpoint?))
+    (let [page (and (sqlite-util/db-based-graph? repo)
+                    (= :page block-type)
+                    (some-> (db-conn-state/get-conn repo) deref (d/entity db-id)))]
+      (if (and page
+               ;; TODO: Use config/dev? when it's not a circular dep
+               (not goog.DEBUG)
+               (or (ldb/hidden? page)
+                   (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
+        (pub-event! [:notification/show {:content "Cannot open an internal page." :status :warning}])
+        (when db-id
+          (update-state! :sidebar/blocks (fn [blocks]
+                                           (->> (remove #(= (second %) db-id) blocks)
+                                                (cons [repo db-id block-type])
+                                                (distinct))))
+          (set-state! [:ui/sidebar-collapsed-blocks db-id] false)
+          (open-right-sidebar!)
+          (when-let [elem (gdom/getElementByClass "sidebar-item-list")]
+            (util/scroll-to elem 0)))))))
 
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))

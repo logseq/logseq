@@ -141,7 +141,11 @@
         (not (db/page? page))
         (block/inline-text :markdown (:block/title page))
         untitled? (t :untitled)
-        :else (pdf-utils/fix-local-asset-pagename title))]
+        :else (let [title' (pdf-utils/fix-local-asset-pagename title)
+                    parent (:logseq.property/parent page)]
+                (if (and parent (not (ldb/class? page)))
+                  (str (:block/title parent) "/" title')
+                  title')))]
 
      ;; dots trigger
      (shui/button
@@ -606,7 +610,7 @@
                  (doseq [page pages]
                    (let [page (util/safe-page-name-sanity-lc page)
                          [db-id block-type] (if (= page "contents")
-                                              ["contents" :contents]
+                                              [(or (:db/id (db/get-page page)) "contents") :contents]
                                               [(:db/id (db/get-page page)) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))

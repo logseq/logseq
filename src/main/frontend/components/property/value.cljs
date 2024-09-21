@@ -80,7 +80,10 @@
                 (when-let [^js target (some-> (.querySelector container (str "#ls-block-" (str (:block/uuid block))))
                                         (.querySelector ".block-main-container"))]
                   (shui/popup-show! target
-                    #(icon-component/icon-search {:on-chosen on-chosen! :del-btn? (some? icon)})
+                    #(icon-component/icon-search
+                       {:on-chosen on-chosen!
+                        :icon-value icon
+                        :del-btn? (some? icon)})
                     {:id :ls-icon-picker
                      :align :start})))))))
       [editing?])
@@ -642,7 +645,9 @@
                      :property-block? true}]
          (if (set? value-block)
            (blocks-container config (ldb/sort-by-order value-block))
-           (block-container config value-block)))]
+           (rum/with-key
+             (block-container config value-block)
+             (str (:db/id property) "-" (:block/uuid value-block)))))]
       [:div
        {:tabIndex 0
         :on-click (fn [] (<create-new-block! block property ""))}
@@ -707,6 +712,7 @@
   [property type value {:keys [page-cp inline-text other-position? _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
+        parent? (= (:db/ident property) :logseq.property/parent)
         inline-text-cp (fn [content]
                          [:div.flex.flex-row.items-center
                           (inline-text {} :markdown (macro-util/expand-value-if-macro content (state/get-macros)))
@@ -726,10 +732,11 @@
                 ;; support this case and maybe other complex cases.
                 (not (string/includes? (:block/title value) "[["))))
        (when value
-          (rum/with-key
-            (page-cp {:disable-preview? true
-                      :tag? tag?
-                      :meta-click? other-position?} value)
+         (rum/with-key
+           (page-cp {:disable-preview? true
+                     :tag? tag?
+                     :meta-click? other-position?
+                     :display-parent? (not parent?)} value)
            (:db/id value)))
 
        (contains? #{:node :class :property :page} type)
@@ -875,21 +882,21 @@
         *el (rum/use-ref nil)
         items (if (de/entity? v) #{v} v)]
     (rum/use-effect!
-      (fn []
-        (when editing?
-          (.click (rum/deref *el))))
-      [editing?])
+     (fn []
+       (when editing?
+         (.click (rum/deref *el))))
+     [editing?])
     (let [select-cp (fn [select-opts]
                       (let [select-opts (merge {:multiple-choices? true
                                                 :on-chosen (fn []
                                                              (when on-chosen (on-chosen)))}
-                                          select-opts
-                                          {:dropdown? false})]
+                                               select-opts
+                                               {:dropdown? false})]
                         [:div.property-select
                          (if (contains? #{:node :page :class :property} type)
                            (property-value-select-node block property
-                             select-opts
-                             opts)
+                                                       select-opts
+                                                       opts)
                            (select block property select-opts opts))]))]
       (let [toggle-fn shui/popup-hide!
             content-fn (fn [{:keys [_id content-props]}]
@@ -901,22 +908,23 @@
                       (let [target (.-target e)]
                         (when-not (or (util/link? target) (.closest target "a") config/publishing?)
                           (shui/popup-show! (rum/deref *el) content-fn
-                            {:as-dropdown? true :as-content? false
-                             :align "start" :auto-focus? true}))))
+                                            {:as-dropdown? true :as-content? false
+                                             :align "start" :auto-focus? true}))))
           :on-key-down (fn [^js e]
                          (case (.-key e)
                            (" " "Enter")
                            (do (some-> (rum/deref *el) (.click))
-                             (util/stop e))
+                               (util/stop e))
                            :dune))
           :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
          (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
            (if (and (seq items) not-empty-value?)
              (concat
-               (for [item items]
-                 (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
-               (when date?
-                 [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
+              (->> (for [item items]
+                     (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
+                   (interpose [:span.opacity-50.-ml-2 ","]))
+              (when date?
+                [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
              (if date?
                (property-value-date-picker block property nil {:toggle-fn toggle-fn})
                (property-empty-text-value))))]))))
@@ -974,12 +982,12 @@
                      (multiple-values block property opts schema)
 
                      :else
-                     (let [value-cp (property-scalar-value block property v
+                     (let [parent? (= (:db/ident property) :logseq.property/parent)
+                           value-cp (property-scalar-value block property v
                                       (merge
                                         opts
                                         {:editor-id editor-id
                                          :dom-id dom-id}))
-                           parent? (= (:db/ident property) :logseq.property/parent)
                            page-ancestors (when parent?
                                             (let [ancestor-pages (loop [parents [block]]
                                                                    (if-let [parent (:logseq.property/parent (last parents))]

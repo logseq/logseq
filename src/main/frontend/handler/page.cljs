@@ -346,37 +346,50 @@
 (defn- page-on-chosen-handler
   [id format q db-based?]
   (fn [chosen-result e]
-        (util/stop e)
-        (state/clear-editor-action!)
-        (p/let [chosen-result (if (:block/uuid chosen-result)
-                                (db/entity [:block/uuid (:block/uuid chosen-result)])
-                                chosen-result)
-                chosen (:block/title chosen-result)
-                chosen' (string/replace-first chosen (str (t :new-page) " ") "")
-                ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
-                           (cond
-                             db-based?
-                             (page-ref/->page-ref (:block/uuid chosen-result))
-                             :else
-                             (block-ref/->block-ref (:block/uuid chosen-result)))
-                           (get-page-ref-text chosen'))
-                result (when db-based?
-                         (when-not (de/entity? chosen-result)
-                           (<create! chosen'
-                                     {:redirect? false
-                                      :create-first-block? false})))
-                ref-text' (if result (page-ref/->page-ref (:block/title result)) ref-text)]
-          (p/do!
-           (editor-handler/insert-command! id
-                                           ref-text'
-                                           format
-                                           {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
-                                            :end-pattern page-ref/right-brackets
-                                            :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
-                                            :command :page-ref})
-           (p/let [chosen-result (or result chosen-result)]
-             (when (de/entity? chosen-result)
-               (state/conj-block-ref! chosen-result)))))))
+    (util/stop e)
+    (state/clear-editor-action!)
+    (p/let [chosen-result (if (:block/uuid chosen-result)
+                            (db/entity [:block/uuid (:block/uuid chosen-result)])
+                            chosen-result)
+            chosen (:block/title chosen-result)
+            chosen' (string/replace-first chosen (str (t :new-page) " ") "")
+            [chosen' chosen-result] (or (when (and (:nlp-date? chosen-result) (not (de/entity? chosen-result)))
+                                          (when-let [result (date/nld-parse chosen')]
+                                            (let [d (doto (goog.date.DateTime.) (.setTime (.getTime result)))
+                                                  gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
+                                                  page (date/js-date->journal-title gd)]
+                                              [page (db/get-page page)])))
+                                        [chosen' chosen-result])
+            ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
+                       (cond
+                         db-based?
+                         (page-ref/->page-ref (:block/uuid chosen-result))
+                         :else
+                         (block-ref/->block-ref (:block/uuid chosen-result)))
+                       (get-page-ref-text chosen'))
+            result (when db-based?
+                     (when-not (de/entity? chosen-result)
+                       (<create! chosen'
+                                 {:redirect? false
+                                  :create-first-block? false
+                                  :split-namespace? true})))
+            ref-text' (if result
+                        (let [title (if-let [parent (:logseq.property/parent result)]
+                                      (str (:block/title parent) "/" (:block/title result))
+                                      (:block/title result))]
+                          (page-ref/->page-ref title))
+                        ref-text)]
+      (p/do!
+       (editor-handler/insert-command! id
+                                       ref-text'
+                                       format
+                                       {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
+                                        :end-pattern page-ref/right-brackets
+                                        :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
+                                        :command :page-ref})
+       (p/let [chosen-result (or result chosen-result)]
+         (when (de/entity? chosen-result)
+           (state/conj-block-ref! chosen-result)))))))
 
 (defn on-chosen-handler
   [input id pos format]

@@ -876,51 +876,63 @@
            (gdom/getElement section "id"))))))
 
 #?(:cljs
-   (defn get-elem-idx
-     [nodes node]
-     (let [equal? (fn [^js a ^js b]
-                    (or (some-> b (= a))
-                        (and a b (= (.-id a) (.-id b)))))]
-       (first (filter number? (map-indexed (fn [idx b] (when (equal? b node) idx)) nodes))))))
+   (defn- skip-same-top-blocks
+     [blocks block]
+     (let [property? (= (d/attr block "data-is-property") "true")
+           properties-area (rec-get-node block "ls-properties-area")]
+       (remove (fn [b]
+                 (and
+                  (not= b block)
+                  (or (= (when b (.-top (.getBoundingClientRect b)))
+                         (when block (.-top (.getBoundingClientRect block))))
+                      (when property?
+                        (and (not= (d/attr b "data-is-property") "true")
+                             (gdom/contains properties-area b)))))) blocks))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed
      "Gets previous non-collapsed block. If given a container
       looks up blocks in that container e.g. for embed"
      ([block] (get-prev-block-non-collapsed block {}))
-     ([block {:keys [container]}]
+     ([block {:keys [container up-down?]}]
       (when-let [blocks (if container
                           (get-blocks-noncollapse container)
                           (get-blocks-noncollapse))]
-        (when-let [index (get-elem-idx blocks block)]
-          (let [idx (dec index)]
-            (when (>= idx 0)
-              (nth-safe blocks idx))))))))
+        (let [blocks (if up-down?
+                       (skip-same-top-blocks blocks block)
+                       blocks)]
+          (when-let [index (.indexOf blocks block)]
+            (let [idx (dec index)]
+              (when (>= idx 0)
+                (nth-safe blocks idx)))))))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed-non-embed
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
                             remove-embedded-blocks)]
-       (when-let [index (get-elem-idx blocks block)]
+       (when-let [index (.indexOf blocks block)]
            (let [idx (dec index)]
              (when (>= idx 0)
                (nth-safe blocks idx)))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed
-     [block]
+     [block {:keys [up-down?]}]
      (when-let [blocks (and block (get-blocks-noncollapse))]
-       (when-let [index (get-elem-idx blocks block)]
-         (let [idx (inc index)]
-           (when (>= (count blocks) idx)
-             (nth-safe blocks idx)))))))
+       (let [blocks (if up-down?
+                      (skip-same-top-blocks blocks block)
+                      blocks)]
+         (when-let [index (.indexOf blocks block)]
+           (let [idx (inc index)]
+             (when (>= (count blocks) idx)
+               (nth-safe blocks idx))))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed-skip
      [block]
      (when-let [blocks (get-blocks-noncollapse)]
-       (when-let [index (get-elem-idx blocks block)]
+       (when-let [index (.indexOf blocks block)]
          (loop [idx (inc index)]
            (when (>= (count blocks) idx)
              (let [block (nth-safe blocks idx)
