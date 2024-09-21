@@ -251,7 +251,8 @@
    [17 {:fix update-db-attrs-type}]
    [18 {:properties [:logseq.property.view/type]}]
    [19 {:classes [:logseq.class/Query]}]
-   [20 {:fix fix-view-for}]])
+   [20 {:fix fix-view-for}]
+   [21 {:properties [:logseq.property.table/sized-columns]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
