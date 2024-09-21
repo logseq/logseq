@@ -58,6 +58,7 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [logseq.db :as ldb]
+            [frontend.extensions.fsrs :as fsrs]
             [logseq.common.util.namespace :as ns-util]))
 
 (rum/defc nav-content-item < rum/reactive
@@ -215,14 +216,14 @@
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
-                (srs/update-cards-due-count!)
+                (fsrs/update-due-cards-count)
                 state)}
   [_state srs-open?]
   (let [num (state/sub :srs/cards-due-count)]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
      {:class (util/classnames [{:active srs-open?}])
       :on-click #(do
-                   (srs/update-cards-due-count!)
+                   (fsrs/update-due-cards-count)
                    (state/pub-event! [:modal/show-cards]))}
      (ui/icon "infinity")
      [:span.flex-1 (t :right-side-bar/flashcards)]

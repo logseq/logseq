@@ -1,4 +1,6 @@
 (ns frontend.extensions.srs
+  "SRS fns, will be depreated in db-based version.
+  see also `frontend.extensions.fsrs`"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.local :as tl]
