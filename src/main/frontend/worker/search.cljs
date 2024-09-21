@@ -144,7 +144,8 @@ DROP TRIGGER IF EXISTS blocks_au;
   (try
     (p/let [namespace? (text/namespace-page? q)
             last-part (when namespace?
-                        (get-match-input (last (string/split q "/"))))
+                        (some-> (last (string/split q "/"))
+                                get-match-input))
             bind (cond
                    (and namespace? page)
                    [page input last-part limit]

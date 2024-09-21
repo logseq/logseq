@@ -153,6 +153,7 @@
   [page-name]
   (and (string? page-name)
        (string/includes? page-name "/")
+       (not= (string/trim page-name) "/")
        (not (string/starts-with? page-name "../"))
        (not (string/starts-with? page-name "./"))
        (not (common-util/url? page-name))))
