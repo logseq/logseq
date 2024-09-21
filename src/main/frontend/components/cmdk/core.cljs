@@ -820,8 +820,7 @@
                                         (and backspace? (= last-char "/"))
                                         (and backspace? (= input ""))))
                            (reset! (::filter state) nil)
-                           ;; (load-results :default state)
-                           )))
+                           (load-results :default state))))
                      150)
        :default-value input}]]))
 
