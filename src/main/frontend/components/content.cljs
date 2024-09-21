@@ -203,7 +203,9 @@
     (when-let [block (db/entity [:block/uuid block-id])]
       (let [properties (:block/properties block)
             heading (or (pu/lookup properties :logseq.property/heading)
-                        false)]
+                        false)
+            block-title (:block/title block)
+            favorited? (page-handler/favorited? block-id)]
         [:<>
          (ui/menu-background-color #(property-handler/set-block-property! repo block-id
                                                                           (pu/get-pid :logseq.property/background-color)
@@ -302,16 +304,23 @@
          (shui/dropdown-menu-item
           {:key "Search word"
            :on-click (fn []
-                       (let [block-title (:block/title block)
-                             block-title (if (uuid? block-title)
-                                           [:block/title (db/entity [:block/page block])]
-                                           block-title)]
-                         (when (and block-title
-                                    (not (uuid? block-title)))
-                           (state/set-state! :search/q (if (> (count block-title) 50) (subs block-title 0 30) block-title))
-                           (state/set-state! :search/mode :nodes)
-                           (state/pub-event! [:go/search]))))}
+                       (when (and block-title
+                                  (not (uuid? block-title)))
+                         (state/set-state! :search/q (if (> (count block-title) 50) (subs block-title 0 30) block-title))
+                         (state/set-state! :search/mode :nodes)
+                         (state/pub-event! [:go/search])))}
           (t :header/search))
+
+         (when-not config/publishing?
+           (shui/dropdown-menu-item
+            {:key "Block favorite"
+             :on-click (fn []
+                           (if favorited?
+                             (page-handler/<unfavorite-page! block-id)
+                             (page-handler/<favorite-page! block-id)))}
+            (if favorited?
+              (t :page/unfavorite)
+              (t :page/add-to-favorites))))
 
          (shui/dropdown-menu-separator)
 
