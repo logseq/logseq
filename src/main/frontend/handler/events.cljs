@@ -80,7 +80,7 @@
             [logseq.db :as ldb]
             [frontend.persist-db :as persist-db]
             [frontend.handler.export :as export]
-            [frontend.extensions.fsrs]))
+            [frontend.extensions.fsrs :as fsrs]))
 
 ;; TODO: should we move all events here?
 
@@ -171,7 +171,7 @@
          (repo-config-handler/restore-repo-config! graph)
          (when-not (= :draw (state/get-current-route))
            (route-handler/redirect-to-home!))
-         (srs/update-cards-due-count!)
+         (fsrs/update-due-cards-count)
          (state/pub-event! [:graph/ready graph])
          (if db-based?
            (rtc-handler/<rtc-start! graph)
@@ -292,7 +292,7 @@
 (defmethod handle :modal/show-cards [_]
   (let [db-based? (config/db-based-graph? (state/get-current-repo))]
     (shui/dialog-open!
-     (if db-based? frontend.extensions.fsrs/cards srs/global-cards)
+     (if db-based? fsrs/cards srs/global-cards)
      {:id :srs
       :label "flashcards__cp"})))
 
