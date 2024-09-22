@@ -55,15 +55,15 @@
   (let [current-page (state/get-current-page)]
     (->>
      [{:filter {:group :nodes} :text (t :search/filter-nodes) :info (t :search/filter-info) :icon-theme :gray :icon "letter-n"}
-      {:filter {:group :commands} :text (t :search/filter-commands) :info (t :search/filter-info) :icon-theme :gray :icon "command"}
       (when current-page
         {:filter {:group :current-page} :text (t :search/filter-current-page) :info (t :search/filter-info) :icon-theme :gray :icon "page"})
       {:filter {:group :favorites} :text (t :search/filter-favorites) :info (t :search/filter-info) :icon-theme :gray :icon "star"}
       {:filter {:group :recents} :text (t :search/filter-recents) :info (t :search/filter-info) :icon-theme :gray :icon "history"}
-      {:filter {:group :all-class} :text (t :search/filter-all-class) :info (t :search/filter-info) :icon-theme :gray :icon "tag"}
-      {:filter {:group :all-journal} :text (t :search/filter-all-journal) :info (t :search/filter-info) :icon-theme :gray :icon "calendar"}
-      {:filter {:group :all-pages} :text (t :search/filter-all-pages) :info (t :search/filter-info) :icon-theme :gray :icon "page"}
       {:filter {:group :created-pages} :text (t :search/filter-created-pages) :info (t :search/filter-info) :icon-theme :gray :icon "page"}
+      {:filter {:group :all-class} :text (t :search/filter-all-class) :info (t :search/filter-info) :icon-theme :gray :icon "tag"}
+      {:filter {:group :all-pages} :text (t :search/filter-all-pages) :info (t :search/filter-info) :icon-theme :gray :icon "page"}
+      {:filter {:group :all-journal} :text (t :search/filter-all-journal) :info (t :search/filter-info) :icon-theme :gray :icon "calendar"}
+      {:filter {:group :commands} :text (t :search/filter-commands) :info (t :search/filter-info) :icon-theme :gray :icon "command"}
       {:filter {:group :themes} :text (t :search/filter-themes) :info (t :search/filter-info) :icon-theme :gray :icon "palette"}
       {:filter {:group :files} :text (t :search/filter-files) :info (t :search/filter-info) :icon-theme :gray :icon "file"}]
      (remove nil?))))
@@ -151,6 +151,7 @@
                  (and (not (= input "")) (not node-exists?))
                  [[(t :search/create)                :create         (create-items input)]
                   [(t :search/filter-current-page)   :current-page   (visible-items :current-page)]
+                  [(t :search/filter-files)           :files          (visible-items :files)]
                   [(t :search/filter-nodes)          :nodes          (visible-items :nodes)]]
 
                  :else ;; initial or no-input
