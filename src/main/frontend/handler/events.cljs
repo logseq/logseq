@@ -392,7 +392,7 @@
 
 (defmethod handle :go/search [_]
   (state/set-modal! cmdk/cmdk-modal
-    {:fullscreen? true
+    {:fullscreen? false
      :close-btn?  false
      :panel?      false
      :label "ls-modal-search"}))

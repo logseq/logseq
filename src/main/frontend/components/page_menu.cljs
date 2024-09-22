@@ -160,6 +160,15 @@
              :options {:on-click (fn []
                                    (db-page-handler/convert-to-tag! page))}})
 
+          (when (and page
+                     (or (= (:block/type page) "page")
+                         (= (:block/type page) "journal")))
+            {:title (t :header/search)
+             :options {:on-click (fn []
+                                   (state/set-state! :search/q (if db-based? (:block/title page) page-title))
+                                   (state/set-state! :search/mode :nodes)
+                                   (state/pub-event! [:go/search]))}})
+
           (when developer-mode?
             {:title   (t :dev/show-page-data)
              :options {:on-click (fn []

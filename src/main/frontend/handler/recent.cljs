@@ -8,5 +8,8 @@
     (db-based/add-page-to-recent! db-id click-from-recent?)))
 
 (defn get-recent-pages
-  []
-  (db-based/get-recent-pages))
+  ([]
+   (db-based/get-recent-pages true))
+  ([enable-blocks]
+   (when (true? enable-blocks)
+    (db-based/get-recent-pages false))))

@@ -66,6 +66,7 @@
       :search/result                         nil
       :search/graph-filters                  []
       :search/engines                        {}
+      :search/preview                        nil
 
       ;; modals
       :modal/dropdowns                       {}
@@ -1076,6 +1077,10 @@ Similar to re-frame subscriptions"
 (defn set-search-mode!
   [value]
   (set-state! :search/mode value))
+
+(defn set-search-preview!
+  [value]
+  (set-state! :search/preview value))
 
 (defn set-editor-action!
   [value]
