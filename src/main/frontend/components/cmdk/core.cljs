@@ -15,6 +15,7 @@
    [frontend.handler.page :as page-handler]
    [frontend.handler.route :as route-handler]
    [frontend.handler.whiteboard :as whiteboard-handler]
+   [frontend.handler.recent :as recent-handler]
    [frontend.handler.notification :as notification]
    [frontend.modules.shortcut.core :as shortcut]
    [frontend.handler.db-based.page :as db-page-handler]
@@ -47,26 +48,29 @@
         desc
         desc-i18n))))
 
-(def GROUP-LIMIT 5)
+(def GROUP-LIMIT 10)
 
 (defn filters
   []
   (let [current-page (state/get-current-page)]
     (->>
-     [(when current-page
-        {:filter {:group :current-page} :text (t :search/filter-current-page) :info (t :search/filter-info) :icon-theme :gray :icon "page"})
-      {:filter {:group :nodes} :text (t :search/filter-nodes) :info (t :search/filter-info) :icon-theme :gray :icon "letter-n"}
+     [{:filter {:group :nodes} :text (t :search/filter-nodes) :info (t :search/filter-info) :icon-theme :gray :icon "letter-n"}
       {:filter {:group :commands} :text (t :search/filter-commands) :info (t :search/filter-info) :icon-theme :gray :icon "command"}
-      {:filter {:group :files} :text (t :search/filter-files) :info (t :search/filter-info) :icon-theme :gray :icon "file"}
-      {:filter {:group :themes} :text (t :search/filter-themes) :info (t :search/filter-info) :icon-theme :gray :icon "palette"}]
+      (when current-page
+        {:filter {:group :current-page} :text (t :search/filter-current-page) :info (t :search/filter-info) :icon-theme :gray :icon "page"})
+      {:filter {:group :recents} :text (t :search/filter-recents) :info (t :search/filter-info) :icon-theme :gray :icon "history"}
+      {:filter {:group :favorites} :text (t :search/filter-favorites) :info (t :search/filter-info) :icon-theme :gray :icon "star"}
+      {:filter {:group :themes} :text (t :search/filter-themes) :info (t :search/filter-info) :icon-theme :gray :icon "palette"}
+      {:filter {:group :files} :text (t :search/filter-files) :info (t :search/filter-info) :icon-theme :gray :icon "file"}]
      (remove nil?))))
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
 (def default-results
   {:commands       {:status :success :show :less :items nil}
    :favorites      {:status :success :show :less :items nil}
+   :recents        {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
-   :nodes         {:status :success :show :less :items nil}
+   :nodes          {:status :success :show :less :items nil}
    :files          {:status :success :show :less :items nil}
    :themes         {:status :success :show :less :items nil}
    :filters        {:status :success :show :less :items nil}})
@@ -103,7 +107,7 @@
                             items
 
                             :else
-                            (take 5 items))))
+                            (take 10 items))))
         node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
                        (when-not (string/blank? input)
                          (or (some-> (last (string/split input "/"))
@@ -121,31 +125,32 @@
 
                  include-slash?
                  [(when-not node-exists?
-                    [(t :search/mode-create)         :create         (create-items input)])
+                    [(t :search/create)               :create         (create-items input)])
 
-                  [(t :search/mode-current-page)   :current-page   (visible-items :current-page)]
-                  [(t :search/mode-nodes)         :nodes         (visible-items :nodes)]
-                  [(t :search/mode-files)          :files          (visible-items :files)]
-                  [(t :search/mode-filters) :filters (visible-items :filters)]]
+                  [(t :search/filter-current-page)    :current-page   (visible-items :current-page)]
+                  [(t :search/filter-nodes)           :nodes          (visible-items :nodes)]
+                  [(t :search/filter-files)           :files          (visible-items :files)]
+                  [(t :search/filters)                :filters        (visible-items :filters)]]
 
                  filter-group
                  [(when (= filter-group :nodes)
-                    [(t :search/mode-current-page)   :current-page   (visible-items :current-page)])
-                  [(if (= filter-group :current-page) (t :search/mode-current-page) (name filter-group))
-                   filter-group
-                   (visible-items filter-group)]
+                    [(t :search/filter-current-page)  :current-page   (visible-items :current-page)])
+                  [(if (= filter-group :current-page) (t :search/filter-current-page) (name filter-group)) filter-group (visible-items filter-group)]
                   (when-not node-exists?
-                    [(t :search/mode-create)         :create         (create-items input)])]
+                    [(t :search/create)               :create         (create-items input)])]
 
                  :else
                  (->>
                   [(when-not node-exists?
-                     [(t :search/mode-create)         :create       (create-items input)])
-                   [(t :search/mode-current-page)   :current-page   (visible-items :current-page)]
-                   [(t :search/mode-nodes)         :nodes         (visible-items :nodes)]
-                  ;;  [(t :search/mode-commands)       :commands       (visible-items :commands)]
-                   [(t :search/mode-files)          :files          (visible-items :files)]
-                   [(t :search/mode-filters)        :filters        (visible-items :filters)]]
+                     [(t :search/create)              :create         (create-items input)])
+                   [(t :search/filter-current-page)   :current-page   (visible-items :current-page)]
+                   [(t :search/filter-nodes)          :nodes          (visible-items :nodes)]
+                  ;;[(t:search/filter-commands)       :commands       (visible-items :commands)]
+                   [(t :search/filter-files)          :files          (visible-items :files)]
+                   [(t :search/filters)               :filters        (visible-items :filters)]
+                   [(t :search/filter-favorites)      :favorites      (visible-items :favorites)]
+                   [(t :search/filter-recents)        :recents        (visible-items :recents)]
+                   ]
                   (remove nil?)))
         order (remove nil? order*)]
     (for [[group-name group-key group-items] order]
@@ -280,6 +285,47 @@
           (swap! !results update group         merge {:status :success :items items-on-current-page}))
         (swap! !results update group         merge {:status :success :items items})))))
 
+(defn- recents-item
+  [repo page]
+  (let [entity (db/entity [:block/uuid (:block/uuid page)])
+        source-page (model/get-alias-source-page repo (:db/id entity))
+        icon (cond
+               (ldb/class? entity)
+               "hash"
+               (ldb/property? entity)
+               "letter-p"
+               (ldb/whiteboard? entity)
+               "whiteboard"
+               (ldb/page? entity)
+               "page"
+               :else
+               "letter-n")
+        title (title/block-unique-title page)
+        title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
+    (hash-map :icon icon
+              :icon-theme :gray
+              :text title'
+              :source-page (or source-page page))))
+
+(defn- recents-or-favorites
+  [group state recents?]
+  (let [!results (::results state)
+        repo (state/get-current-repo)]
+    (swap! !results assoc-in [group :status] :loading)
+    (p/let [blocks (if recents?
+                     (recent-handler/get-recent-pages)
+                     (page-handler/get-favorites))
+            blocks (remove nil? blocks)
+            items (keep (fn [block]
+                          (recents-item repo block)) blocks)]
+      (swap! !results update group merge {:status :success :items items}))))
+
+(defmethod load-results :recents [group state]
+  (recents-or-favorites group state true))
+
+(defmethod load-results :favorites [group state]
+  (recents-or-favorites group state false))
+
 (defmethod load-results :files [group state]
   (let [!input (::input state)
         !results (::results state)]
@@ -367,18 +413,18 @@
 (defmethod load-results :default [_ state]
   (let [filter-group (:group @(::filter state))]
     (if (and (not (some-> state ::input deref seq))
-          (not filter-group))
-      (do (load-results :initial state)
-          (load-results :filters state))
+             (not filter-group))
+      (do ;;(load-results :initial state)
+        (load-results :filters state)
+        (load-results :favorites state)
+        (load-results :recents state))
       (if filter-group
         (load-results filter-group state)
         (do
           (load-results :commands state)
           (load-results :nodes state)
           (load-results :filters state)
-          (load-results :files state)
-          ;; (load-results :recents state)
-          )))))
+          (load-results :files state))))))
 
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
@@ -577,11 +623,11 @@
         show-more #(swap! (::results state) assoc-in [group :show] :more)]
     [:<>
      (mouse-active-effect! *mouse-active? [highlighted-item])
-     [:div {:class         (if (= title (t :search/mode-create))
+     [:div {:class         (if (= title (t :search/create))
                              "border-b border-gray-06 last:border-b-0"
                              "border-b border-gray-06 pb-1 last:border-b-0")
             :on-mouse-move #(reset! *mouse-active? true)}
-      (when-not (= title (t :search/mode-create))
+      (when-not (= title (t :search/create))
         [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
          [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
                 :on-click (fn [_e]
@@ -947,6 +993,10 @@
     (t :search/filter-themes)
     (= (name group-filter) "current-page")
     (t :search/filter-current-page)
+    (= (name group-filter) "recents")
+    (t :search/filter-recents)
+    (= (name group-filter) "favorites")
+    (t :search/filter-favorites)
     :else
     (string/capitalize (name group-filter))))
 
