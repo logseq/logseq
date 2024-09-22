@@ -183,6 +183,7 @@
                (case type
                  :number "number"
                  :date "calendar"
+                 :datetime "calendar"
                  :checkbox "checkbox"
                  :url "link"
                  :page "page"
@@ -435,6 +436,7 @@
                                  (:block/page (first v))))
                         (contains? #{:default} type))
             date? (= type :date)
+            datetime? (= type :datetime)
             checkbox? (= type :checkbox)
             property-key-cp' (property-key-cp block property (assoc (select-keys opts [:class-schema?])
                                                                     :block? block?
@@ -443,7 +445,7 @@
         [:div {:class (cond
                         (and (= (:db/ident property) :logseq.property.class/properties) (seq v))
                         "property-pair !flex flex-col"
-                        (or date? checkbox?)
+                        (or date? datetime? checkbox?)
                         "property-pair items-center"
                         :else
                         "property-pair items-start")}

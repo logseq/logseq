@@ -1176,11 +1176,11 @@
 (defn single-calendar
   [{:keys [del-btn? on-delete on-select on-day-click] :as opts}]
   (shui/calendar
-    (merge
-      {:mode "single"
-       :caption-layout "dropdown-buttons"
-     :fromYear 1899
-     :toYear 2099
+   (merge
+    {:mode "single"
+     :caption-layout "dropdown-buttons"
+     :fromYear 1000
+     :toYear 3000
      :components (cond-> {:Dropdown #(date-year-month-select (bean/bean %))}
                    del-btn? (assoc :Head #(DelDateButton on-delete)))
      :class-names {:months "" :root (when del-btn? "has-del-btn")}
@@ -1190,26 +1190,68 @@
                             (on-select' d))))}
     opts)))
 
-(defn nlp-calendar
-  [opts]
-  [:div.flex.flex-col.gap-2
-   (single-calendar opts)
+(defn- get-current-hh-mm
+  []
+  (let [current-time-s (first (.split (.toTimeString (js/Date.)) " "))]
+    (subs current-time-s 0 (- (count current-time-s) 3))))
+
+(rum/defc time-picker
+  [{:keys [on-change default-value]}]
+  [:div.flex.flex-row.items-center.gap-2.mx-3.mb-3
    (shui/input
-    {:type "text"
-     :placeholder "e.g. Next week"
-     :class "mx-3 mb-3"
-     :style {:width "initial"
-             :tab-index -1}
-     :auto-complete (if (util/chrome?) "chrome-off" "off")
-     :on-mouse-down util/stop-propagation
-     :on-key-down (fn [e]
-                    (when (= "Enter" (util/ekey e))
-                      (let [value (util/evalue e)]
-                        (when-not (string/blank? value)
-                          (when-let [result (date/nld-parse value)]
-                            (when-let [date (doto (goog.date.DateTime.) (.setTime (.getTime result)))]
-                              (let [on-select' (or (:on-select opts) (:on-day-click opts))]
-                                (on-select' date))))))))})])
+    {:id "time-picker"
+     :type "time"
+     :class "!py-0 !w-max !h-8"
+     :default-value (or default-value "00:00")
+     :on-blur (fn [e]
+                (on-change (util/evalue e)))})
+   (shui/button
+    {:variant :ghost
+     :size :sm
+     :class "text-muted-foreground"
+     :on-click (fn []
+                 (let [value (get-current-hh-mm)]
+                   (set! (.-value (gdom/getElement "time-picker")) value)
+                   (on-change value)))}
+    "Use current time")])
+
+(rum/defc nlp-calendar
+  [{:keys [selected on-select] :as opts}]
+  (let [on-select' (if (:datetime? opts)
+                     (fn [date value]
+                       (let [value (or (and (string? value) value)
+                                       (.-value (gdom/getElement "time-picker")))]
+                         (let [[h m] (string/split value ":")]
+                           (when selected
+                             (.setHours date h m 0))
+                           (on-select date))))
+                     on-select)]
+    [:div.flex.flex-col.gap-2
+     (single-calendar (assoc opts :on-select on-select'))
+     (when (:datetime? opts)
+       (time-picker (cond->
+                     {:on-change (fn [value] (on-select' selected value))}
+                      selected
+                      (assoc :default-value (str (util/zero-pad (.getHours selected))
+                                                 ":"
+                                                 (util/zero-pad (.getMinutes selected)))))))
+
+     (shui/input
+      {:type "text"
+       :placeholder "e.g. Next week"
+       :class "mx-3 mb-3"
+       :style {:width "initial"
+               :tab-index -1}
+       :auto-complete (if (util/chrome?) "chrome-off" "off")
+       :on-mouse-down util/stop-propagation
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (let [value (util/evalue e)]
+                          (when-not (string/blank? value)
+                            (when-let [result (date/nld-parse value)]
+                              (when-let [date (doto (goog.date.DateTime.) (.setTime (.getTime result)))]
+                                (let [on-select' (or (:on-select opts) (:on-day-click opts))]
+                                  (on-select' date))))))))})]))
 
 (comment
   (rum/defc emoji-picker

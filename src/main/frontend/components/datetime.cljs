@@ -149,7 +149,7 @@
         deadline-or-schedule? (and current-command
                                 (contains? #{"deadline" "scheduled"}
                                   (string/lower-case current-command)))
-        _date (state/sub :date-picker/date)
+        date (state/sub :date-picker/date)
         select-handler! (fn [^js d]
                           (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
                                 journal (date/js-date->journal-title gd)]
@@ -167,10 +167,10 @@
      ;; inline container
      [:div.border-red-500
       (ui/nlp-calendar
-        {:mode "single"
+       {:mode "single"
          :initial-focus true
          :show-week-number false
-         :selected _date
+         :selected date
          :on-select select-handler!
          :on-day-key-down (fn [^js d _ ^js e]
                             (when (= "Enter" (.-key e))
