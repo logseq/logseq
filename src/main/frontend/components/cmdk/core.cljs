@@ -182,17 +182,6 @@
 ;; Each result group has it's own load-results function
 (defmulti load-results (fn [group _state] group))
 
-(defmethod load-results :initial [_ state]
-  (let [!results (::results state)
-        command-items (->> (cp-handler/top-commands 100)
-                        (remove (fn [c] (= :window/close (:id c))))
-                        (map #(hash-map :icon "command"
-                                :icon-theme :gray
-                                :text (translate t %)
-                                :shortcut (:shortcut %)
-                                :source-command %)))]
-    (reset! !results (assoc-in default-results [:commands :items] command-items))))
-
 ;; The commands search uses the command-palette handler
 (defmethod load-results :commands [group state]
   (let [!input (::input state)
@@ -414,7 +403,7 @@
   (let [filter-group (:group @(::filter state))]
     (if (and (not (some-> state ::input deref seq))
              (not filter-group))
-      (do ;;(load-results :initial state)
+      (do
         (load-results :filters state)
         (load-results :favorites state)
         (load-results :recents state))
@@ -823,7 +812,7 @@
     (cond
       (and (= search-mode :graph) (not sidebar?))
       (t :search/add-graph-filter)
-      (or (= filter-group :initial) (= filter-group :nodes) (= filter-group nil))
+      (or (= filter-group :nodes) (= filter-group nil))
       (str (t :search/start-typing-to-search) " / " (t :search/new-page))
       :else
       (t :search/start-typing-to-search))))
