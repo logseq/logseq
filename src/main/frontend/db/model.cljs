@@ -356,7 +356,7 @@ independent of format as format specific heading characters are stripped"
   [page-name type]
   (let [repo (state/get-current-repo)]
     (when-let [db (conn/get-db repo)]
-     (ldb/page-exists? db page-name type))))
+      (ldb/page-exists? db page-name type))))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?
@@ -388,9 +388,9 @@ independent of format as format specific heading characters are stripped"
   [repo block-uuid]
   (when-let [db (conn/get-db repo)]
     (let [ids (ldb/get-block-children-ids db block-uuid)]
-     (when (seq ids)
-       (let [ids' (map (fn [id] [:block/uuid id]) ids)]
-         (db-utils/pull-many repo '[*] ids'))))))
+      (when (seq ids)
+        (let [ids' (map (fn [id] [:block/uuid id]) ids)]
+          (db-utils/pull-many repo '[*] ids'))))))
 
 (defn get-block-and-children
   [repo block-uuid]
@@ -720,16 +720,16 @@ independent of format as format specific heading characters are stripped"
 (defn get-all-whiteboards
   [repo]
   (d/q
-    '[:find [(pull ?page [:db/id
-                          :block/uuid
-                          :block/name
-                          :block/title
-                          :block/created-at
-                          :block/updated-at]) ...]
-      :where
-      [?page :block/name]
-      [?page :block/type "whiteboard"]]
-    (conn/get-db repo)))
+   '[:find [(pull ?page [:db/id
+                         :block/uuid
+                         :block/name
+                         :block/title
+                         :block/created-at
+                         :block/updated-at]) ...]
+     :where
+     [?page :block/name]
+     [?page :block/type "whiteboard"]]
+   (conn/get-db repo)))
 
 (defn get-whiteboard-id-nonces
   [repo page-id]
@@ -803,14 +803,14 @@ independent of format as format specific heading characters are stripped"
   (d/q '[:find ?page ?parent
          :where
          [?page :block/namespace ?parent]]
-    (conn/get-db repo)))
+       (conn/get-db repo)))
 
 (defn get-all-namespace-parents
   [repo]
   (let [db (conn/get-db repo)]
     (->> (get-all-namespace-relation repo)
-        (map (fn [[_ ?parent]]
-               (db-utils/entity db ?parent))))))
+         (map (fn [[_ ?parent]]
+                (db-utils/entity db ?parent))))))
 
 ;; Ignore files with empty blocks for now
 (defn get-pages-relation
@@ -876,6 +876,51 @@ independent of format as format specific heading characters are stripped"
                                 {:block/file [:db/id :file/path]}]
                               ids))))))
 
+(defn get-created-pages
+  [repo]
+  (d/q
+   '[:find [(pull ?b [*]) ...]
+     :in $ ?day
+     :where
+     [?b :block/name]
+     [?b :block/uuid]
+     [?b :block/type "page"]
+     [?b :block/created-at ?d]
+     [(>= ?d ?day)]] 
+   (conn/get-db repo)
+   :-10d))
+
+(defn get-all-pages-only ;; get-all-pages
+  [repo]
+  (d/q
+   '[:find [(pull ?b [*]) ...]
+     :where
+     [?b :block/name]
+     [?b :block/uuid]
+     [?b :block/type "page"]]
+   (conn/get-db repo)))
+
+
+(defn get-all-class
+  [repo]
+  (d/q
+   '[:find [(pull ?b [*]) ...]
+     :where
+     [?b :block/name]
+     [?b :block/uuid]
+     [?b :block/type "class"]]
+   (conn/get-db repo)))
+
+(defn get-all-journal
+  [repo]
+  (d/q
+   '[:find [(pull ?b [*]) ...]
+     :where
+     [?b :block/name]
+     [?b :block/uuid]
+     [?b :block/type "journal"]]
+   (conn/get-db repo)))
+
 (comment
   ;; For debugging
   (defn get-all-blocks
@@ -885,5 +930,4 @@ independent of format as format specific heading characters are stripped"
        '[:find [(pull ?b [*]) ...]
          :where
          [?b :block/uuid]]
-        (conn/get-db repo))))
-  )
+       (conn/get-db repo)))))

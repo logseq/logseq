@@ -58,8 +58,12 @@
       {:filter {:group :commands} :text (t :search/filter-commands) :info (t :search/filter-info) :icon-theme :gray :icon "command"}
       (when current-page
         {:filter {:group :current-page} :text (t :search/filter-current-page) :info (t :search/filter-info) :icon-theme :gray :icon "page"})
-      {:filter {:group :recents} :text (t :search/filter-recents) :info (t :search/filter-info) :icon-theme :gray :icon "history"}
       {:filter {:group :favorites} :text (t :search/filter-favorites) :info (t :search/filter-info) :icon-theme :gray :icon "star"}
+      {:filter {:group :recents} :text (t :search/filter-recents) :info (t :search/filter-info) :icon-theme :gray :icon "history"}
+      {:filter {:group :all-class} :text (t :search/filter-all-class) :info (t :search/filter-info) :icon-theme :gray :icon "tag"}
+      {:filter {:group :all-journal} :text (t :search/filter-all-journal) :info (t :search/filter-info) :icon-theme :gray :icon "calendar"}
+      {:filter {:group :all-pages} :text (t :search/filter-all-pages) :info (t :search/filter-info) :icon-theme :gray :icon "page"}
+      {:filter {:group :created-pages} :text (t :search/filter-created-pages) :info (t :search/filter-info) :icon-theme :gray :icon "page"}
       {:filter {:group :themes} :text (t :search/filter-themes) :info (t :search/filter-info) :icon-theme :gray :icon "palette"}
       {:filter {:group :files} :text (t :search/filter-files) :info (t :search/filter-info) :icon-theme :gray :icon "file"}]
      (remove nil?))))
@@ -139,18 +143,22 @@
                   (when-not node-exists?
                     [(t :search/create)               :create         (create-items input)])]
 
-                 :else
+                 (not (= input ""))
+                 [[(t :search/filter-current-page)   :current-page   (visible-items :current-page)]
+                  [(t :search/filter-nodes)          :nodes          (visible-items :nodes)]
+                  [(t :search/filters)               :filters        (visible-items :filters)]]
+
+                 (and (not (= input "")) (not node-exists?))
+                 [[(t :search/create)                :create         (create-items input)]
+                  [(t :search/filter-current-page)   :current-page   (visible-items :current-page)]
+                  [(t :search/filter-nodes)          :nodes          (visible-items :nodes)]]
+
+                 :else ;; initial or no-input
                  (->>
-                  [(when-not node-exists?
-                     [(t :search/create)              :create         (create-items input)])
-                   [(t :search/filter-current-page)   :current-page   (visible-items :current-page)]
-                   [(t :search/filter-nodes)          :nodes          (visible-items :nodes)]
-                  ;;[(t:search/filter-commands)       :commands       (visible-items :commands)]
-                   [(t :search/filter-files)          :files          (visible-items :files)]
-                   [(t :search/filters)               :filters        (visible-items :filters)]
+                  [[(t :search/filters)               :filters        (visible-items :filters)]
                    [(t :search/filter-favorites)      :favorites      (visible-items :favorites)]
                    [(t :search/filter-recents)        :recents        (visible-items :recents)]
-                   ]
+                   [(t :search/filter-created-pages)  :created-pages  (visible-items :created-pages)]]
                   (remove nil?)))
         order (remove nil? order*)]
     (for [[group-name group-key group-items] order]
@@ -297,23 +305,48 @@
               :source-page (or source-page page))))
 
 (defn- recents-or-favorites
-  [group state recents?]
+  [group state type]
   (let [!results (::results state)
         repo (state/get-current-repo)]
     (swap! !results assoc-in [group :status] :loading)
-    (p/let [blocks (if recents?
-                     (recent-handler/get-recent-pages)
-                     (page-handler/get-favorites))
+    (p/let [blocks (cond
+                     (= type "recents")
+                     (recent-handler/get-recent-pages true)
+                     (= type "favorites")
+                     (page-handler/get-favorites)
+                     (= type "all-class")
+                      (model/get-all-class repo)
+                     (= type "all-journal")
+                     (model/get-all-journal repo)
+                     (= type "all-pages")
+                      (model/get-all-pages-only repo)
+                     (= type "created-pages")
+                     (model/get-created-pages repo))
             blocks (remove nil? blocks)
             items (keep (fn [block]
                           (recents-item repo block)) blocks)]
       (swap! !results update group merge {:status :success :items items}))))
 
 (defmethod load-results :recents [group state]
-  (recents-or-favorites group state true))
+  (recents-or-favorites group state "recents"))
 
 (defmethod load-results :favorites [group state]
-  (recents-or-favorites group state false))
+  (recents-or-favorites group state "favorites"))
+
+(defmethod load-results :updated-blocks [group state]
+  (recents-or-favorites group state "updated-blocks"))
+
+(defmethod load-results :all-class [group state]
+  (recents-or-favorites group state "all-class"))
+
+(defmethod load-results :all-journal [group state]
+  (recents-or-favorites group state "all-journal"))
+
+(defmethod load-results :all-pages [group state]
+  (recents-or-favorites group state "all-pages"))
+
+(defmethod load-results :created-pages [group state]
+  (recents-or-favorites group state "created-pages"))
 
 (defmethod load-results :files [group state]
   (let [!input (::input state)
@@ -406,7 +439,9 @@
       (do
         (load-results :filters state)
         (load-results :favorites state)
-        (load-results :recents state))
+        (load-results :recents state)
+        (load-results :recents state)
+        (load-results :created-pages state))
       (if filter-group
         (load-results filter-group state)
         (do
@@ -985,7 +1020,13 @@
     (= (name group-filter) "recents")
     (t :search/filter-recents)
     (= (name group-filter) "favorites")
-    (t :search/filter-favorites)
+    (t :search/filter-favorites) 
+    (= (name group-filter) "all-class")
+    (t :search/filter-all-class) 
+    (= (name group-filter) "all-pages")
+    (t :search/filter-all-pages) 
+    (= (name group-filter) "created-pages")
+    (t :search/filter-created-pages)
     :else
     (string/capitalize (name group-filter))))
 

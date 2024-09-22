@@ -16,14 +16,27 @@
             (let [new-pages (vec (take 15 (distinct (cons db-id pages))))]
               (state/set-recent-pages! new-pages))))))))
 
+(defn get-recent-pages-inner
+  [remove-blocks?]
+  (if (true? remove-blocks?)
+    (->> (state/get-recent-pages)
+         (distinct)
+         (take 20)
+         (keep db/entity)
+         (filter db/page?)
+         (remove ldb/hidden?)
+         (remove (fn [e]
+                   (and (ldb/property? e)
+                        (true? (get-in e [:block/schema :hide?]))))))
+    (->> (state/get-recent-pages)
+         (distinct)
+         (take 20)
+         (keep db/entity)
+         (remove ldb/hidden?)
+         (remove (fn [e]
+                   (and (ldb/property? e)
+                        (true? (get-in e [:block/schema :hide?]))))))))
+
 (defn get-recent-pages
-  []
-  (->> (state/get-recent-pages)
-       (distinct)
-       (take 20)
-       (keep db/entity)
-       (filter db/page?)
-       (remove ldb/hidden?)
-       (remove (fn [e]
-                 (and (ldb/property? e)
-                      (true? (get-in e [:block/schema :hide?])))))))
+  [remove-blocks?]
+  (get-recent-pages-inner remove-blocks?))
