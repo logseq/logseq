@@ -923,6 +923,14 @@
   [inner-state state]
   (let [filter' @(::filter state)]
     (cond
+      (= (:group filter') :commands)
+      [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
+       (ui/render-keyboard-shortcut
+        (ui/keyboard-shortcut-from-config :go/keyboard-shortcuts
+                                          {:pick-first? true}))
+       [:div
+        {:on-click #(state/pub-event! [:modal/keymap])}
+        (t :settings-page/tab-keymap)]]
       filter'
       [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
        (shui/shortcut "esc" {:tiled false})
