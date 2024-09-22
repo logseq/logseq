@@ -17,7 +17,7 @@
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
-  [:default :number :date :checkbox :url :node])
+  [:default :number :date :datetime :checkbox :url :node])
 
 (def closed-value-property-types
   "Valid property :type for closed values"
@@ -141,6 +141,9 @@
    :date     [:fn
               {:error/message "should be a journal date"}
               date?]
+   :datetime [:fn
+              {:error/message "should be a datetime"}
+              number?]
    :checkbox boolean?
    :url      [:fn
               {:error/message "should be a URL"}

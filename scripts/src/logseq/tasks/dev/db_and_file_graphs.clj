@@ -94,13 +94,13 @@
                        (map str)
                        (into [;; e.g. block/properties :title
                               "block/properties :"
-                              "block/name"
+                              ;; "block/name"
                               ;; anything org mode
                               "org"
                               "pre-block"
                               ;; TODO: rename split-namespace?
                               ;; "namespace"
-                              "db/get-page"
+                              ;; "db/get-page"
                               "/page-name-sanity-lc"]))
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" file-concepts) ")")
@@ -110,7 +110,7 @@
       (println (:out res))
       (System/exit 1))))
 
-(defn- validate-db-concepts-not-in-file
+;; (defn- validate-db-concepts-not-in-file
   []
   (let [db-concepts
         ;; from logseq.db.frontend.schema

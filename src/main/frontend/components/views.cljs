@@ -169,12 +169,12 @@
 
         [{:id :block/created-at
           :name (t :page/created-at)
-          :type :date-time
+          :type :datetime
           :header header-cp
           :cell timestamp-cell-cp}
          {:id :block/updated-at
           :name (t :page/updated-at)
-          :type :date-time
+          :type :datetime
           :header header-cp
           :cell timestamp-cell-cp}])
        (remove nil?)))
@@ -618,7 +618,7 @@
        (case (get-in property [:block/schema :type])
          (:default :url :node)
          [:text-contains :text-not-contains]
-         :date
+         (:date :datetime)
          [:date-before :date-after]
          :number
          [:number-gt :number-lt :number-gte :number-lte :between]
