@@ -921,9 +921,10 @@
   {:init (fn [state]
            (assoc state ::rand-tip (rand-tip)))}
   [inner-state state]
-  (let [filter' @(::filter state)]
+  (let [filter' @(::filter state)
+        filter-group (:group filter')]
     (cond
-      (= (:group filter') :commands)
+      (= filter-group :commands)
       [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
        (ui/render-keyboard-shortcut
         (ui/keyboard-shortcut-from-config :go/keyboard-shortcuts
@@ -931,6 +932,11 @@
        [:div
         {:on-click #(state/pub-event! [:modal/keymap])}
         (t :settings-page/tab-keymap)]]
+      (= filter-group :themes)
+      [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
+       [:div
+        {:on-click #(state/pub-event! [:go/plugins])}
+        (t :themes)]]
       filter'
       [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
        (shui/shortcut "esc" {:tiled false})
