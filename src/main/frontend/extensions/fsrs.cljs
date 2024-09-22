@@ -61,9 +61,8 @@
             prop-fsrs-due (:due prop-card-map)]
         (db-property-handler/set-block-property!
          block-id :logseq.property.fsrs/state prop-fsrs-state)
-        (db-property-handler/create-property-text-block!
-         block-id :logseq.property.fsrs/due (str prop-fsrs-due)
-         {:new-block-id (db/new-block-id)})))))
+        (db-property-handler/set-block-property!
+         block-id :logseq.property.fsrs/due prop-fsrs-due)))))
 
 (defn- get-due-card-block-ids
   [repo]
