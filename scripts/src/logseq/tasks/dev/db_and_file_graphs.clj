@@ -110,7 +110,7 @@
       (println (:out res))
       (System/exit 1))))
 
-;; (defn- validate-db-concepts-not-in-file
+(defn- validate-db-concepts-not-in-file
   []
   (let [db-concepts
         ;; from logseq.db.frontend.schema
