@@ -40,7 +40,7 @@
   (when (some (fn [tag] (= :logseq.class/Card (:db/ident tag))) ;block should contains #Card
               (:block/tags block-entity))
     (let [fsrs-state (:logseq.property.fsrs/state block-entity)
-          fsrs-due (:property.value/content (:logseq.property.fsrs/due block-entity))
+          fsrs-due (:logseq.property.fsrs/due block-entity)
           return-default-card-map? (not (and fsrs-state fsrs-due))]
       (if return-default-card-map?
         (if-let [block-created-at (some-> (:block/created-at block-entity) (js/Date.) tick/instant)]
@@ -74,8 +74,7 @@
                 [?b :block/tags :logseq.class/Card]
                 (or-join [?b ?now-inst-ms]
                          (and
-                          [?b :logseq.property.fsrs/due ?due-b]
-                          [?due-b :property.value/content ?due]
+                          [?b :logseq.property.fsrs/due ?due]
                           [(>= ?now-inst-ms ?due)])
                          [(missing? $ ?b :logseq.property.fsrs/due)])
                 [?b :block/uuid]]
@@ -97,20 +96,19 @@
   {:init :show-answer
    :show-answer :init})
 
-(rum/defcs ^:private card <
-  (rum/local :init ::phase)
-  [state repo block-entity]
-  (let [*phase (::phase state)
-        show-btn? (contains? #{:show-answer} @*phase)]
+(rum/defcs ^:private card < rum/reactive
+  [state repo block-entity *phase]
+  (let [phase (rum/react *phase)
+        show-btn? (contains? #{:show-answer} phase)]
     [:div.ls-card.content
      [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
      (component-block/blocks-container
       (cond-> {}
-        (contains? #{:init} @*phase) (assoc :hide-children? true))
+        (contains? #{:init} phase) (assoc :hide-children? true))
       [block-entity])
      (btn-with-shortcut {:btn-text (t (if show-btn?
-                                        :flashcards/modal-btn-show-answers
-                                        :flashcards/modal-btn-hide-answers))
+                                        :flashcards/modal-btn-hide-answers
+                                        :flashcards/modal-btn-show-answers))
                          :shortcut "s"
                          :id (str "card-answers")
                          :on-click #(swap! *phase phase->next-phase)})]))
@@ -131,14 +129,15 @@
    :easy  "4"})
 
 (defn- rating-btns
-  [repo block-id *card-index]
+  [repo block-id *card-index *phase]
   (mapv
    (fn [rating]
      (btn-with-shortcut {:btn-text (name rating)
                          :shortcut (rating->shortcut rating)
                          :id (str "card-" (name rating))
                          :on-click #(do (repeat-card! repo block-id rating)
-                                        (swap! *card-index inc))}))
+                                        (swap! *card-index inc)
+                                        (reset! *phase :init))}))
    (keys rating->shortcut)))
 
 (declare update-due-cards-count)
@@ -150,10 +149,11 @@
   [state]
   (let [repo (state/get-current-repo)
         block-ids (get-due-card-block-ids repo)
-        *card-index (::card-index state)]
+        *card-index (::card-index state)
+        *phase (atom :init)]
     (if-let [block-entity (some-> (nth block-ids @*card-index nil) db/entity)]
-      (vec (concat [:div (card repo block-entity)]
-                   (rating-btns repo (:db/id block-entity) *card-index)))
+      (vec (concat [:div (card repo block-entity *phase)]
+                   (rating-btns repo (:db/id block-entity) *card-index *phase)))
       [:p.p-2 (t :flashcards/modal-finished)])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
