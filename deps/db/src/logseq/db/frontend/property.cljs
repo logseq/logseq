@@ -228,7 +228,7 @@
                                  :hide? false ; TODO: show for debug now, hide it later
                                  :public? false}}
    :logseq.property.fsrs/due {:schema
-                              {:type :number ;TODO: change to :datetime when supported
+                              {:type :datetime
                                :hide? false
                                :public? false}}))
 
