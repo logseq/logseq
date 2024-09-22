@@ -169,12 +169,12 @@
 
         [{:id :block/created-at
           :name (t :page/created-at)
-          :type :date-time
+          :type :datetime
           :header header-cp
           :cell timestamp-cell-cp}
          {:id :block/updated-at
           :name (t :page/updated-at)
-          :type :date-time
+          :type :datetime
           :header header-cp
           :cell timestamp-cell-cp}])
        (remove nil?)))
@@ -474,9 +474,11 @@
           values)
      (sort-by :label))))
 
-(defn timestamp-property?
-  [ident]
-  (contains? #{:block/created-at :block/updated-at} ident))
+(defn datetime-property?
+  [property]
+  (or
+   (= :datetime (get-in property [:block/schema :type]))
+   (contains? #{:block/created-at :block/updated-at} (:db/ident property))))
 
 (def timestamp-options
   [{:value "1 week ago"
@@ -511,7 +513,7 @@
   [columns {:keys [data-fns] :as table}]
   (let [[property set-property!] (rum/use-state nil)
         schema (:schema (db/get-db))
-        timestamp? (timestamp-property? (:db/ident property))
+        timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
         filters (get-in table [:state :filters])
         columns (remove #(false? (:column-list? %)) columns)
@@ -610,7 +612,7 @@
 
 (defn get-property-operators
   [property]
-  (if (contains? #{:block/created-at :block/updated-at} (:db/ident property))
+  (if (datetime-property? property)
     [:before :after]
     (concat
      [:is :is-not]
@@ -618,7 +620,7 @@
        (case (get-in property [:block/schema :type])
          (:default :url :node)
          [:text-contains :text-not-contains]
-         :date
+         (:date)
          [:date-before :date-after]
          :number
          [:number-gt :number-lt :number-gte :number-lte :between]

@@ -31,7 +31,8 @@
             [frontend.search :as search]
             [goog.functions :refer [debounce]]
             [frontend.handler.route :as route-handler]
-            [frontend.components.title :as title]))
+            [frontend.components.title :as title]
+            [cljs-time.coerce :as tc]))
 
 (rum/defc property-empty-btn-value
   [property & opts]
@@ -190,7 +191,7 @@
                    (shui/dialog-close!)
                    (state/set-editor-action! nil)
                    state)}
-  [state id {:keys [on-change value del-btn? on-delete]}]
+  [state id {:keys [datetime? on-change value del-btn? on-delete]}]
   (let [*ident (::identity state)
         initial-day (or (some-> value (.getTime) (js/Date.)) (js/Date.))
         initial-month (when value
@@ -202,87 +203,116 @@
             (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
               (let [journal (date/js-date->journal-title gd)]
                 (p/do!
-                 (when-not (db/get-case-page journal)
+                 (when-not (db/get-page journal)
                    (page-handler/<create! journal {:redirect? false
                                                    :create-first-block? false}))
                  (when (fn? on-change)
-                   (on-change (db/get-case-page journal)))
+                   (let [value (if datetime? (tc/to-long d) (db/get-page journal))]
+                     (on-change value)))
                  (shui/popup-hide! id)
                  (ui/hide-popups-until-preview-popup!)
                  (shui/dialog-close!))))))]
     (ui/nlp-calendar
      (cond->
       {:initial-focus true
+       :datetime? datetime?
        :selected initial-day
        :id @*ident
        :del-btn? del-btn?
        :on-delete on-delete
-       :on-day-click select-handler!}
+       :on-select select-handler!}
        initial-month
        (assoc :default-month initial-month)))))
 
 (rum/defc date-picker
-  [value {:keys [on-change on-delete del-btn? editing? multiple-values? other-position?]}]
+  [value {:keys [datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
   (let [*trigger-ref (rum/use-ref nil)
-        page value
-        title (when page (:block/title page))
-        value' (when title
-                 (js/Date. (date/journal-title->long title)))
+        value' (cond
+                 (map? value)
+                 (js/Date. (date/journal-title->long (:block/title value)))
+
+                 (number? value)
+                 (js/Date. value)
+
+                 :else
+                 (let [d (js/Date.)]
+                   (.setHours d 0 0 0)
+                   d))
         content-fn (fn [{:keys [id]}] (calendar-inner id
-                                        {:on-change on-change :value value'
-                                         :del-btn? del-btn? :on-delete on-delete}))
+                                                      {:on-change on-change
+                                                       :value value'
+                                                       :del-btn? del-btn?
+                                                       :on-delete on-delete
+                                                       :datetime? datetime?}))
         open-popup! (fn [e]
                       (when-not (or (util/meta-key? e) (util/shift-key? e))
                         (util/stop e)
                         (when-not config/publishing?
                           (shui/popup-show! (.-target e) content-fn
-                            {:align "start" :auto-focus? true}))))]
+                                            {:align "start" :auto-focus? true}))))]
     (rum/use-effect!
-      (fn []
-        (when editing?
-          (js/setTimeout
-            #(some-> (rum/deref *trigger-ref)
-               (.click)) 32)))
-      [editing?])
+     (fn []
+       (when editing?
+         (js/setTimeout
+          #(some-> (rum/deref *trigger-ref)
+                   (.click)) 32)))
+     [editing?])
 
     (if multiple-values?
       (shui/button
-        {:class "jtrigger h-6 empty-btn"
-         :ref *trigger-ref
-         :variant :text
-         :size :sm
-         :on-click open-popup!}
-        (ui/icon "calendar-plus" {:size 16}))
+       {:class "jtrigger h-6 empty-btn"
+        :ref *trigger-ref
+        :variant :text
+        :size :sm
+        :on-click open-popup!}
+       (ui/icon "calendar-plus" {:size 16}))
       (shui/trigger-as
-        :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
-        {:tabIndex 0
-         :class "jtrigger min-h-[24px]"                     ; FIXME: min-h-6 not works
-         :ref *trigger-ref
-         :on-click open-popup!}
-        (if page
-          (when-let [page-cp (state/get-component :block/page-cp)]
-            (rum/with-key
-              (page-cp {:disable-preview? true
-                        :meta-click? other-position?} page)
-              (:db/id page)))
-          (property-empty-btn-value nil))))))
+       :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
+       {:tabIndex 0
+        :class "jtrigger min-h-[24px]"                     ; FIXME: min-h-6 not works
+        :ref *trigger-ref
+        :on-click open-popup!}
+       (cond
+         (map? value)
+         (when-let [page-cp (state/get-component :block/page-cp)]
+           (rum/with-key
+             (page-cp {:disable-preview? true
+                       :meta-click? other-position?} value)
+             (:db/id value)))
+
+         (number? value)
+         (when-let [date (js/Date. value)]
+           [:div.flex.flex-row.gap-1.items-center
+            (when-let [page-cp (state/get-component :block/page-cp)]
+              (let [page-title (date/journal-name (date/js-date->goog-date date))]
+                (page-cp {:disable-preview? true}
+                         {:block/name page-title})))
+            [:span.opacity-50
+             (str (util/zero-pad (.getHours date))
+                  ":"
+                  (util/zero-pad (.getMinutes date)))]])
+
+         :else
+         (property-empty-btn-value nil))))))
 
 (rum/defc property-value-date-picker
   [block property value opts]
   (let [multiple-values? (db-property/many? property)
-        repo (state/get-current-repo)]
+        repo (state/get-current-repo)
+        datetime? (= :datetime (get-in property [:block/schema :type]))]
     (date-picker value
-      (merge opts
-        {:multiple-values? multiple-values?
-         :on-change (fn [page]
-                      (property-handler/set-block-property! repo (:block/uuid block)
-                        (:db/ident property)
-                        (:db/id page)))
-         :del-btn? (some-> value (:block/title) (boolean))
-         :on-delete (fn []
-                      (property-handler/set-block-property! repo (:block/uuid block)
-                        (:db/ident property) nil)
-                      (shui/popup-hide!))}))))
+                 (merge opts
+                        {:datetime? datetime?
+                         :multiple-values? multiple-values?
+                         :on-change (fn [value]
+                                      (property-handler/set-block-property! repo (:block/uuid block)
+                                                                            (:db/ident property)
+                                                                            (if (map? value) (:db/id value) value)))
+                         :del-btn? (some-> value (:block/title) (boolean))
+                         :on-delete (fn []
+                                      (property-handler/set-block-property! repo (:block/uuid block)
+                                                                            (:db/ident property) nil)
+                                      (shui/popup-hide!))}))))
 
 (defn- <create-page-if-not-exists!
   [block property classes page]
@@ -857,7 +887,7 @@
                                select-opts
                                (assoc opts :editing? editing?)))
         (case type
-          :date
+          (:date :datetime)
           (property-value-date-picker block property value (merge opts {:editing? editing?}))
 
           :checkbox
