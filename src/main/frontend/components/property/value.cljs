@@ -235,7 +235,9 @@
                  (js/Date. value)
 
                  :else
-                 (js/Date.))
+                 (let [d (js/Date.)]
+                   (.setHours d 0 0 0)
+                   d))
         content-fn (fn [{:keys [id]}] (calendar-inner id
                                                       {:on-change on-change
                                                        :value value'
@@ -280,12 +282,15 @@
 
          (number? value)
          (when-let [date (js/Date. value)]
-           [:div.flex.flex-row.gap-1
+           [:div.flex.flex-row.gap-1.items-center
             (when-let [page-cp (state/get-component :block/page-cp)]
-             (let [page-title (date/js-date->journal-title date)]
-               (page-cp {:disable-preview? true}
-                        {:block/name page-title})))
-            [:span (str (.getHours date) ":" (.getMinutes date))]])
+              (let [page-title (date/journal-name (date/js-date->goog-date date))]
+                (page-cp {:disable-preview? true}
+                         {:block/name page-title})))
+            [:span.opacity-50
+             (str (util/zero-pad (.getHours date))
+                  ":"
+                  (util/zero-pad (.getMinutes date)))]])
 
          :else
          (property-empty-btn-value nil))))))
