@@ -1,11 +1,11 @@
 (ns frontend.extensions.fsrs
   "Flashcards functions based on FSRS, only works in db-based graphs"
-  (:require [datascript.core :as d]
-            [frontend.common.missionary-util :as c.m]
+  (:require [frontend.common.missionary-util :as c.m]
             [frontend.components.block :as component-block]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.srs :as srs]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.state :as state]
@@ -17,7 +17,9 @@
             [clojure.string :as string]
             [logseq.shui.ui :as shui]
             [frontend.ui :as ui]
-            [frontend.modules.shortcut.core :as shortcut]))
+            [frontend.modules.shortcut.core :as shortcut]
+            [promesa.core :as p]
+            [frontend.db-mixins :as db-mixins]))
 
 (def ^:private instant->inst-ms (comp inst-ms tick/inst))
 (defn- inst-ms->instant [ms] (tick/instant (js/Date. ms)))
@@ -67,22 +69,21 @@
          {:logseq.property.fsrs/state prop-fsrs-state
           :logseq.property.fsrs/due prop-fsrs-due})))))
 
-(defn- get-due-card-block-ids
+(defn- <get-due-card-block-ids
   [repo]
-  (let [db (db/get-db repo)
-        now-inst-ms (inst-ms (js/Date.))]
-    (->> (d/q '[:find ?b
-                :in $ ?now-inst-ms
-                :where
-                [?b :block/tags :logseq.class/Card]
-                (or-join [?b ?now-inst-ms]
-                         (and
-                          [?b :logseq.property.fsrs/due ?due]
-                          [(>= ?now-inst-ms ?due)])
-                         [(missing? $ ?b :logseq.property.fsrs/due)])
-                [?b :block/uuid]]
-              db now-inst-ms)
-         (apply concat))))
+  (let [now-inst-ms (inst-ms (js/Date.))]
+    (db-async/<q repo {:transact-db? false}
+                 '[:find [?b ...]
+                   :in $ ?now-inst-ms
+                   :where
+                   [?b :block/tags :logseq.class/Card]
+                   (or-join [?b ?now-inst-ms]
+                            (and
+                             [?b :logseq.property.fsrs/due ?due]
+                             [(>= ?now-inst-ms ?due)])
+                            [(missing? $ ?b :logseq.property.fsrs/due)])
+                   [?b :block/uuid]]
+                 now-inst-ms)))
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
   (shui/button
@@ -162,54 +163,72 @@
                                    {:align "start"}))}
     (ui/icon "info-circle"))])
 
-(rum/defcs ^:private card < rum/reactive
-  [state repo block-entity *card-index *phase]
-  (let [phase (rum/react *phase)
-        next-phase (phase->next-phase block-entity phase)]
-    [:div.ls-card.content
-     [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
-     (let [option (case phase
-                    :init
-                    {:hide-children? true}
-                    :show-cloze
-                    {:show-cloze? true
-                     :hide-children? true}
-                    {:show-cloze? true})]
-       (component-block/blocks-container option [block-entity]))
-     [:div.mt-8
-      (if (contains? #{:show-cloze :show-answer} next-phase)
-        (btn-with-shortcut {:btn-text (t
-                                       (case next-phase
-                                         :show-answer
-                                         :flashcards/modal-btn-show-answers
-                                         :show-cloze
-                                         :flashcards/modal-btn-show-clozes
-                                         :init
-                                         :flashcards/modal-btn-hide-answers))
-                            :shortcut "s"
-                            :id (str "card-answers")
-                            :on-click #(swap! *phase
-                                              (fn [phase]
-                                                (phase->next-phase block-entity phase)))})
-        (rating-btns repo (:db/id block-entity) *card-index *phase))]]))
+(rum/defcs ^:private card < rum/reactive db-mixins/query
+  {:will-mount (fn [state]
+                 (when-let [[repo block-id _] (:rum/args state)]
+                   (db-async/<get-block repo block-id))
+                 state)}
+  [state repo block-id *card-index *phase]
+  (when-let [block-entity (db/sub-block block-id)]
+    (let [phase (rum/react *phase)
+          next-phase (phase->next-phase block-entity phase)]
+      [:div.ls-card.content
+       [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
+       (let [option (case phase
+                      :init
+                      {:hide-children? true}
+                      :show-cloze
+                      {:show-cloze? true
+                       :hide-children? true}
+                      {:show-cloze? true})]
+         (component-block/blocks-container option [block-entity]))
+       [:div.mt-8
+        (if (contains? #{:show-cloze :show-answer} next-phase)
+          (btn-with-shortcut {:btn-text (t
+                                         (case next-phase
+                                           :show-answer
+                                           :flashcards/modal-btn-show-answers
+                                           :show-cloze
+                                           :flashcards/modal-btn-show-clozes
+                                           :init
+                                           :flashcards/modal-btn-hide-answers))
+                              :shortcut "s"
+                              :id (str "card-answers")
+                              :on-click #(swap! *phase
+                                                (fn [phase]
+                                                  (phase->next-phase block-entity phase)))})
+          (rating-btns repo (:db/id block-entity) *card-index *phase))]])))
 
 (declare update-due-cards-count)
-(rum/defcs cards <
+(rum/defcs cards < rum/reactive
   (rum/local 0 ::card-index)
   (shortcut/mixin :shortcut.handler/cards false)
-  {:will-unmount (fn [state]
+  {:init (fn [state]
+           (let [*block-ids (atom nil)
+                 *loading? (atom nil)]
+             (reset! *loading? true)
+             (p/let [result (<get-due-card-block-ids (state/get-current-repo))]
+               (reset! *block-ids result)
+               (reset! *loading? false))
+             (assoc state
+                    ::block-ids *block-ids
+                    ::loading? *loading?)))
+   :will-unmount (fn [state]
                    (update-due-cards-count)
                    state)}
   [state]
   (let [repo (state/get-current-repo)
-        block-ids (get-due-card-block-ids repo)
+        *block-ids (::block-ids state)
+        block-ids (rum/react *block-ids)
+        loading? (rum/react (::loading? state))
         *card-index (::card-index state)
         *phase (atom :init)]
-    [:div#cards-modal.p-2
-     (if-let [block-entity (some-> (nth block-ids @*card-index nil) db/entity)]
-       [:div.flex.flex-col
-        (card repo block-entity *card-index *phase)]
-       [:p (t :flashcards/modal-finished)])]))
+    (when (false? loading?)
+      [:div#cards-modal.p-2
+      (if-let [block-id (nth block-ids @*card-index nil)]
+        [:div.flex.flex-col
+         (card repo block-id *card-index *phase)]
+        [:p (t :flashcards/modal-finished)])])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
 (def ^:private new-task--update-due-cards-count
@@ -220,7 +239,8 @@
         (m/?
          (m/reduce
           (fn [_ _]
-            (state/set-state! :srs/cards-due-count (count (get-due-card-block-ids repo))))
+            (p/let [due-cards (<get-due-card-block-ids repo)]
+              (state/set-state! :srs/cards-due-count (count due-cards))))
           (c.m/clock (* 3600 1000))))
         (srs/update-cards-due-count!)))))
 
