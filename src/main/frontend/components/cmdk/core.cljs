@@ -319,22 +319,26 @@
     (swap! !results assoc-in [group :status] :loading)
     (p/let [blocks (cond
                      (= type "recents")
-                     (recent-handler/get-recent-pages true)
+                     (search/fuzzy-search (recent-handler/get-recent-pages true) @!input {:limit 50
+                                                                                          :extract-fn :block/title})
                      (= type "favorites")
-                     (page-handler/get-favorites)
+                     (search/fuzzy-search (page-handler/get-favorites) @!input {:limit 30
+                                                                                :extract-fn :block/title})
                      (= type "all-class")
-                     (model/get-all-class repo)
+                     (search/fuzzy-search (model/get-all-class repo) @!input {:limit 200
+                                                                              :extract-fn :block/title})
                      (= type "all-journal")
-                     (model/get-all-journal repo)
+                     (search/fuzzy-search-journal (model/get-all-journal repo) @!input {:limit 200})
                      (= type "all-pages")
-                     (model/get-all-pages-only repo)
+                     (search/fuzzy-search (model/get-all-pages-only repo) @!input {:limit 200
+                                                                                   :extract-fn :block/title})
                      (= type "created-pages")
-                     (model/get-created-pages repo)
+                     (search/fuzzy-search (model/get-created-pages repo) @!input {:limit 30
+                                                                                  :extract-fn :block/title})
                      (= type "updated-blocks")
-                     (model/get-updated-blocks repo))
+                     (search/fuzzy-search (model/get-updated-blocks repo) @!input {:limit 30
+                                                                                   :extract-fn :block/title}))
             blocks (remove nil? blocks)
-            blocks (search/fuzzy-search blocks @!input {:limit 100
-                                                        :extract-fn :block/title})
             items (keep (fn [block]
                           (query-item repo block)) blocks)]
       (swap! !results update group merge {:status :success :items items}))))

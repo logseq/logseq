@@ -17,6 +17,7 @@
             [datascript.core :as d]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
+(def fuzzy-search-journal fuzzy/fuzzy-search-journal)
 
 (defn get-engine
   [repo]

@@ -89,3 +89,15 @@
                                     {:data item
                                      :score (score query (search-normalize s true))})))))
          (map :data))))
+
+(defn fuzzy-search-journal
+  [data query & {:keys [limit]
+                 :or {limit 20}}]
+  (let [query (search-normalize query true)]
+    (->> (for [item data]
+           (let [s (str item)]
+             {:data item
+              :score (score query (search-normalize s true))}))
+         (sort-by (comp - #(-> % :data :block/journal-day)))
+         (take limit)
+         (map :data))))
