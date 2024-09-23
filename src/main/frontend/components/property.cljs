@@ -146,7 +146,6 @@
   [exclude-properties select-opts]
   (let [[properties set-properties!] (rum/use-state nil)
         [excluded-properties set-excluded-properties!] (rum/use-state nil)]
-    (js/console.dir exclude-properties)
     (rum/use-effect!
      (fn []
        (p/let [properties (db-async/<db-based-get-all-properties (state/get-current-repo))]
