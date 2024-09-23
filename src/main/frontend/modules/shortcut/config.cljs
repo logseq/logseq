@@ -180,6 +180,18 @@
    :cards/recall                            {:binding "t"
                                              :fn      srs/recall}
 
+   :cards/again                             {:binding "1"
+                                             :fn      srs/card-again}
+
+   :cards/hard                              {:binding "2"
+                                             :fn      srs/card-hard}
+
+   :cards/good                              {:binding "3"
+                                             :fn      srs/card-good}
+
+   :cards/easy                              {:binding "4"
+                                             :fn      srs/card-easy}
+
    :editor/escape-editing                   {:binding []
                                              :fn      (fn [_ _]
                                                         (editor-handler/escape-editing))}
