@@ -63,7 +63,7 @@
       {:filter {:group :all-journal} :text (t :search/filter-all-journal) :info (t :search/filter-all) :icon-theme :gray :icon "calendar"}
       {:filter {:group :commands} :text (t :search/filter-commands) :info nil :icon-theme :gray :icon "command"}
       {:filter {:group :themes} :text (t :search/filter-themes) :info nil :icon-theme :gray :icon "palette"} 
-      {:filter {:group :updated-blocks} :text (t :search/filter-updated-blocks) :info (t :search/filter-query) :icon-theme :gray :icon "block"}
+      {:filter {:group :updated-blocks} :text (t :search/filter-updated-blocks) :info (t :search/filter-query) :icon-theme :gray :icon "letter-n"}
       {:filter {:group :created-pages} :text (t :search/filter-created-pages) :info (t :search/filter-query) :icon-theme :gray :icon "page"}
       {:filter {:group :favorites} :text (t :search/filter-favorites) :info nil :icon-theme :gray :icon "star"}
       {:filter {:group :recents} :text (t :search/filter-recents) :info nil :icon-theme :gray :icon "history"}]
@@ -239,6 +239,8 @@
                "letter-p"
                (ldb/whiteboard? entity)
                "whiteboard"
+               (ldb/journal? entity)
+               "calendar"
                :else
                "page")
         title (title/block-unique-title page)
@@ -295,6 +297,8 @@
                "letter-p"
                (ldb/whiteboard? entity)
                "whiteboard"
+               (ldb/journal? entity)
+               "calendar"
                (ldb/page? entity)
                "page"
                :else
