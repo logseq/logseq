@@ -132,7 +132,8 @@
         (keep
          (fn [property]
            (let [ident (or (:db/ident property) (:id property))]
-             (when-not (contains? #{:logseq.property/built-in?} ident)
+             (when-not (or (contains? #{:logseq.property/built-in?} ident)
+                           (contains? #{:map} (get-in property [:block/schema :type])))
                (let [property (if (de/entity? property)
                                 property
                                 (or (db/entity ident) property))

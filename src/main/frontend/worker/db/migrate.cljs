@@ -191,6 +191,15 @@
                       datoms)]
         (cons fix-schema fix-data)))))
 
+(defn- add-card-properties
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [card (d/entity db :logseq.class/Card)
+            card-id (:db/id card)]
+        [[:db/add card-id :logseq.property.class/properties :logseq.property.fsrs/due]
+         [:db/add card-id :logseq.property.class/properties :logseq.property.fsrs/state]]))))
+
 (defn- add-addresses-in-kvs-table
   [^Object sqlite-db]
   (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
@@ -253,7 +262,8 @@
    [19 {:classes [:logseq.class/Query]}]
    [20 {:fix fix-view-for}]
    [21 {:properties [:logseq.property.table/sized-columns]}]
-   [22 {:properties [:logseq.property.fsrs/state :logseq.property.fsrs/due]}]])
+   [22 {:properties [:logseq.property.fsrs/state :logseq.property.fsrs/due]}]
+   [23 {:fix add-card-properties}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

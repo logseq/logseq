@@ -223,14 +223,16 @@
                                            {:type :map
                                             :hide? true
                                             :public? false}}
-   :logseq.property.fsrs/state {:schema
-                                {:type :map
-                                 :hide? false ; TODO: show for debug now, hide it later
-                                 :public? false}}
-   :logseq.property.fsrs/due {:schema
+   :logseq.property.fsrs/due {:title "Due"
+                              :schema
                               {:type :datetime
                                :hide? false
-                               :public? false}}))
+                               :public? false}}
+   :logseq.property.fsrs/state {:title "State"
+                                :schema
+                                {:type :map
+                                 :hide? false ; TODO: show for debug now, hide it later
+                                 :public? false}}))
 
 (def built-in-properties
   (->> built-in-properties*
