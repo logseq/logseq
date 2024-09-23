@@ -442,7 +442,8 @@
                                                                     :block? block?
                                                                     :inline-text inline-text
                                                                     :page-cp page-cp))]
-        [:div {:class (cond
+        [:div {:key (str "property-pair-" (:db/id block) "-" (:db/id property))
+               :class (cond
                         (and (= (:db/ident property) :logseq.property.class/properties) (seq v))
                         "property-pair !flex flex-col"
                         (or date? datetime? checkbox?)
