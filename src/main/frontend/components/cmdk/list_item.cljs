@@ -49,7 +49,7 @@
 
 (rum/defc root [{:keys [group icon icon-theme query text info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click hls-page?
-                        hoverable compact rounded on-mouse-enter component-opts source-page] :as _props
+                        hoverable compact rounded on-mouse-enter component-opts source-page anchor-title] :as _props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [ref (rum/create-ref)
@@ -70,6 +70,7 @@
                       compact (str " py-1.5 px-3 gap-0.5")
                       (not highlighted) (str " "))
              :ref ref
+             :title (when anchor-title anchor-title)
              :on-click (when on-click on-click)
              :on-mouse-over #(set-hover? true)
              :on-mouse-out #(set-hover? false)

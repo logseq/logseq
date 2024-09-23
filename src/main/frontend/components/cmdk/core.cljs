@@ -21,6 +21,7 @@
    [frontend.handler.db-based.page :as db-page-handler]
    [frontend.search :as search]
    [frontend.state :as state]
+   [frontend.date :as date]
    [frontend.ui :as ui]
    [frontend.util :as util]
    [frontend.util.page :as page-util]
@@ -312,8 +313,8 @@
 
 (defn- from-query
   [group state type]
-  (let [!results (::results state)
   (let [!input (::input state)
+        !results (::results state)
         repo (state/get-current-repo)]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [blocks (cond
@@ -703,6 +704,8 @@
                    page? (= "page" (some-> item :icon))
                    text (some-> item :text)
                    source-page (some-> item :source-page)
+                   updated-at (:block/updated-at source-page)
+                   created-at (:block/created-at source-page)
                    hls-page? (and page? (pdf-utils/hls-file? (:block/title source-page)))]]
          (let [item (list-item/root
                      (assoc item
@@ -712,6 +715,10 @@
                             :hls-page? hls-page?
                             :compact true
                             :rounded false
+                            :anchor-title (when (and updated-at created-at)
+                                            (if (= updated-at created-at)
+                                              (str (t :page/created-at) (date/int->local-time-2 created-at) "\n")
+                                              (str (t :page/updated-at) (date/int->local-time-2 updated-at) "\n" (t :page/created-at) (date/int->local-time-2 created-at) "\n")))
                             :hoverable @*mouse-active?
                             :highlighted highlighted?
                              ;; for some reason, the highlight effect does not always trigger on a
