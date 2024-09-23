@@ -267,15 +267,13 @@
 
 (defn batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
-   Does no validation of property values.
-   NOTE: This fn only works for properties with cardinality equal to `one`."
+   Does no validation of property values."
   [conn block-ids property-id v]
   (assert property-id "property-id is nil")
   (throw-error-if-read-only-property property-id)
   (let [block-eids (map ->eid block-ids)
         property (d/entity @conn property-id)
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-        _ (assert (not (db-property/many? property)) "Property must be cardinality :one in batch-set-property!")
         property-type (get-in property [:block/schema :type] :default)
         _ (assert v "Can't set a nil property value must be not nil")
         v' (if (db-property-type/value-ref-property-types property-type)

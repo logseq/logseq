@@ -146,6 +146,7 @@
   [exclude-properties select-opts]
   (let [[properties set-properties!] (rum/use-state nil)
         [excluded-properties set-excluded-properties!] (rum/use-state nil)]
+    (js/console.dir exclude-properties)
     (rum/use-effect!
      (fn []
        (p/let [properties (db-async/<db-based-get-all-properties (state/get-current-repo))]
@@ -333,10 +334,6 @@
         *show-new-property-config? (::show-new-property-config? state)
         *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
-        existing-tag-alias (->> db-property/db-attribute-properties
-                                (map db-property/built-in-properties)
-                                (keep #(when (get block (:attribute %)) (:title %)))
-                                set)
         block-type (keyword (get block :block/type :block))
         page? (ldb/page? block)
         exclude-properties (fn [m]
@@ -344,7 +341,7 @@
                                    block-types (if (and page? (not= block-type :page))
                                                  #{:page block-type}
                                                  #{block-type})]
-                               (or (and (not page?) (contains? existing-tag-alias (:block/title m)))
+                               (or (and (not page?) (contains? #{:block/alias} (:block/title m)))
                                    ;; Filters out properties from being in wrong :view-context and :never view-contexts
                                    (and (not= view-context :all) (not (contains? block-types view-context))))))
         property (rum/react *property)
