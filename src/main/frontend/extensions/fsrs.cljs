@@ -9,12 +9,14 @@
             [frontend.extensions.srs :as srs]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [missionary.core :as m]
             [open-spaced-repetition.cljc-fsrs.core :as fsrs.core]
             [rum.core :as rum]
-            [tick.core :as tick]))
+            [tick.core :as tick]
+            [clojure.string :as string]
+            [logseq.shui.ui :as shui]
+            [frontend.modules.shortcut.core :as shortcut]))
 
 (def ^:private instant->inst-ms (comp inst-ms tick/inst))
 (defn- inst-ms->instant [ms] (tick/instant (js/Date. ms)))
@@ -59,10 +61,10 @@
             prop-card-map (fsrs-card-map->property-fsrs-state next-card-map)
             prop-fsrs-state (dissoc prop-card-map :due)
             prop-fsrs-due (:due prop-card-map)]
-        (db-property-handler/set-block-property!
-         block-id :logseq.property.fsrs/state prop-fsrs-state)
-        (db-property-handler/set-block-property!
-         block-id :logseq.property.fsrs/due prop-fsrs-due)))))
+        (db-property-handler/set-block-properties!
+         block-id
+         {:logseq.property.fsrs/state prop-fsrs-state
+          :logseq.property.fsrs/due prop-fsrs-due})))))
 
 (defn- get-due-card-block-ids
   [repo]
@@ -82,15 +84,26 @@
          (apply concat))))
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
-  (ui/button
-   [:span btn-text (when-not (util/sm-breakpoint?)
-                     [" " (ui/render-keyboard-shortcut shortcut {:theme :text})])]
-   :id id
-   :class (str id " " class)
-   :background background
-   :on-pointer-down (fn [e] (util/stop-propagation e))
-   :on-click (fn [_e]
-               (js/setTimeout #(on-click) 10))))
+  (shui/button
+   {:variant :outline
+    :auto-focus false
+    :size :sm
+    :id id
+    :class (str id " " class " !px-2 !py-1")
+    :background background
+    :on-pointer-down (fn [e] (util/stop-propagation e))
+    :on-click (fn [_e]
+                (js/setTimeout #(on-click) 10))}
+   [:div.flex.flex-row.items-center.gap-1
+    [:span btn-text]
+    (when-not (util/sm-breakpoint?)
+      (shui/button
+       {:variant :outline
+        :tab-index -1
+        :auto-focus false
+        :class "text-muted-foreground !px-1 !py-0 !h-4"
+        :size :sm}
+       [:span.text-sm shortcut]))]))
 
 (def ^:private phase->next-phase
   {:init :show-answer
@@ -106,12 +119,13 @@
       (cond-> {}
         (contains? #{:init} phase) (assoc :hide-children? true))
       [block-entity])
-     (btn-with-shortcut {:btn-text (t (if show-btn?
-                                        :flashcards/modal-btn-hide-answers
-                                        :flashcards/modal-btn-show-answers))
-                         :shortcut "s"
-                         :id (str "card-answers")
-                         :on-click #(swap! *phase phase->next-phase)})]))
+     [:div.mt-8
+      (btn-with-shortcut {:btn-text (t (if show-btn?
+                                         :flashcards/modal-btn-hide-answers
+                                         :flashcards/modal-btn-show-answers))
+                          :shortcut "s"
+                          :id (str "card-answers")
+                          :on-click #(swap! *phase phase->next-phase)})]]))
 
 ;; {
 ;;    :again 1 ;; We got the answer wrong. Automatically means that we
@@ -130,19 +144,21 @@
 
 (defn- rating-btns
   [repo block-id *card-index *phase]
-  (mapv
-   (fn [rating]
-     (btn-with-shortcut {:btn-text (name rating)
-                         :shortcut (rating->shortcut rating)
-                         :id (str "card-" (name rating))
-                         :on-click #(do (repeat-card! repo block-id rating)
-                                        (swap! *card-index inc)
-                                        (reset! *phase :init))}))
-   (keys rating->shortcut)))
+  [:div.flex.flex-row.items-center.gap-2.flex-wrap
+   (mapv
+    (fn [rating]
+      (btn-with-shortcut {:btn-text (string/capitalize (name rating))
+                          :shortcut (rating->shortcut rating)
+                          :id (str "card-" (name rating))
+                          :on-click #(do (repeat-card! repo block-id rating)
+                                         (swap! *card-index inc)
+                                         (reset! *phase :init))}))
+    (keys rating->shortcut))])
 
 (declare update-due-cards-count)
 (rum/defcs cards <
   (rum/local 0 ::card-index)
+  (shortcut/mixin :shortcut.handler/cards false)
   {:will-unmount (fn [state]
                    (update-due-cards-count)
                    state)}
@@ -152,8 +168,10 @@
         *card-index (::card-index state)
         *phase (atom :init)]
     (if-let [block-entity (some-> (nth block-ids @*card-index nil) db/entity)]
-      (vec (concat [:div (card repo block-entity *phase)]
-                   (rating-btns repo (:db/id block-entity) *card-index *phase)))
+      [:div#cards-modal.flex.flex-col.p-1
+       (card repo block-entity *phase)
+       [:div.mt-8
+        (rating-btns repo (:db/id block-entity) *card-index *phase)]]
       [:p.p-2 (t :flashcards/modal-finished)])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
