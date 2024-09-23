@@ -1,10 +1,12 @@
 (ns frontend.extensions.fsrs
   "Flashcards functions based on FSRS, only works in db-based graphs"
-  (:require [frontend.common.missionary-util :as c.m]
+  (:require [clojure.string :as string]
+            [frontend.common.missionary-util :as c.m]
             [frontend.components.block :as component-block]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.extensions.srs :as srs]
             [frontend.handler.block :as block-handler]
@@ -18,14 +20,9 @@
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [open-spaced-repetition.cljc-fsrs.core :as fsrs.core]
-            [rum.core :as rum]
-            [tick.core :as tick]
-            [clojure.string :as string]
-            [logseq.shui.ui :as shui]
-            [frontend.ui :as ui]
-            [frontend.modules.shortcut.core :as shortcut]
             [promesa.core :as p]
-            [frontend.db-mixins :as db-mixins]))
+            [rum.core :as rum]
+            [tick.core :as tick]))
 
 (def ^:private instant->inst-ms (comp inst-ms tick/inst))
 (defn- inst-ms->instant [ms] (tick/instant (js/Date. ms)))
