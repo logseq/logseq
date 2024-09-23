@@ -313,6 +313,7 @@
 (defn- from-query
   [group state type]
   (let [!results (::results state)
+  (let [!input (::input state)
         repo (state/get-current-repo)]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [blocks (cond
@@ -321,16 +322,18 @@
                      (= type "favorites")
                      (page-handler/get-favorites)
                      (= type "all-class")
-                      (model/get-all-class repo)
+                     (model/get-all-class repo)
                      (= type "all-journal")
                      (model/get-all-journal repo)
                      (= type "all-pages")
-                      (model/get-all-pages-only repo)
+                     (model/get-all-pages-only repo)
                      (= type "created-pages")
                      (model/get-created-pages repo)
                      (= type "updated-blocks")
                      (model/get-updated-blocks repo))
             blocks (remove nil? blocks)
+            blocks (search/fuzzy-search blocks @!input {:limit 100
+                                                        :extract-fn :block/title})
             items (keep (fn [block]
                           (query-item repo block)) blocks)]
       (swap! !results update group merge {:status :success :items items}))))
