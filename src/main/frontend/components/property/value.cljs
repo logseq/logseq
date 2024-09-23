@@ -9,6 +9,7 @@
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.page :as db-page-handler]
@@ -32,7 +33,8 @@
             [goog.functions :refer [debounce]]
             [frontend.handler.route :as route-handler]
             [frontend.components.title :as title]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]))
 
 (rum/defc property-empty-btn-value
   [property & opts]
@@ -131,6 +133,15 @@
       (editor-handler/edit-block! block :max {:container-id :unknown-container}))
     block))
 
+(defn- get-operating-blocks
+  [block]
+  (let [selected-blocks (some->> (state/get-selection-block-ids)
+                                 (map (fn [id] (db/entity [:block/uuid id])))
+                                 (seq)
+                                 block-handler/get-top-level-blocks
+                                 (remove ldb/property?))]
+    (or (seq selected-blocks) [block])))
+
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
   Otherwise, add a block's property and its value"
@@ -141,15 +152,20 @@
          class? (ldb/class? block)
          property (db/entity property-id)
          many? (db-property/many? property)
-         checkbox? (= :checkbox (get-in property [:block/schema :type]))]
+         checkbox? (= :checkbox (get-in property [:block/schema :type]))
+         blocks (get-operating-blocks block)]
      (assert (qualified-keyword? property-id) "property to add must be a keyword")
      (p/do!
       (if (and class? class-schema?)
         (db-property-handler/class-add-property! (:db/id block) property-id)
-        (if (and (db-property-type/user-ref-property-types (get-in property [:block/schema :type]))
-                 (string? property-value'))
-          (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
-          (property-handler/set-block-property! repo (:block/uuid block) property-id property-value')))
+        (let [block-ids (map :block/uuid blocks)]
+          (if (and (db-property-type/user-ref-property-types (get-in property [:block/schema :type]))
+                   (string? property-value'))
+            (p/let [new-block (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})]
+              (when (seq (remove #{(:db/id block)} (map :db/id block)))
+                (property-handler/batch-set-block-property! repo block-ids property-id (:db/id new-block)))
+              new-block)
+            (property-handler/batch-set-block-property! repo block-ids property-id property-value'))))
       (when exit-edit?
         (ui/hide-popups-until-preview-popup!)
         (shui/dialog-close!))
@@ -162,17 +178,21 @@
 
 (defn- add-or-remove-property-value
   [block property value selected? {:keys [refresh-result-f]}]
-  (let [many? (db-property/many? property)]
+  (let [many? (db-property/many? property)
+        blocks (get-operating-blocks block)]
     (p/do!
-      (if selected?
-        (<add-property! block (:db/ident property) value {:exit-edit? (not many?)})
-        (p/do!
-          (db-property-handler/delete-property-value! (:db/id block) (:db/ident property) value)
-          (when (or (not many?)
+     (if selected?
+       (<add-property! block (:db/ident property) value {:exit-edit? (not many?)})
+       (p/do!
+        (ui-outliner-tx/transact!
+         {:outliner-op :save-block}
+         (doseq [block blocks]
+           (db-property-handler/delete-property-value! (:db/id block) (:db/ident property) value)))
+        (when (or (not many?)
                   ;; values will be cleared
                   (and many? (<= (count (get block (:db/ident property))) 1)))
-            (shui/popup-hide!))))
-      (when (fn? refresh-result-f) (refresh-result-f)))))
+          (shui/popup-hide!))))
+     (when (fn? refresh-result-f) (refresh-result-f)))))
 
 (rum/defcs calendar-inner <
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
@@ -382,8 +402,12 @@
              (if (or (and (not multiple-choices?) (= chosen clear-value))
                      (and multiple-choices? (= chosen [clear-value])))
                (p/do!
-                (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block)
-                                                         (:db/ident property))
+                 (let [blocks (get-operating-blocks block)
+                       block-ids (map :block/uuid blocks)]
+                  (property-handler/batch-remove-block-property!
+                   (state/get-current-repo)
+                   block-ids
+                   (:db/ident property)))
                 (shui/popup-hide!))
                (f chosen selected?)))]
     (select/select (assoc opts
