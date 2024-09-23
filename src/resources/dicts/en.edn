@@ -112,6 +112,8 @@
  :search/filter-all-class "All class"
  :search/filter-all-journal "All journal"
  :search/filter-all-pages "All pages"
+ :search/filter-all "List view" 
+ :search/filter-query "Query"
  :search/filter-created-pages "Pages created within 10 days"
  :search/filter-updated-blocks "Blocks updated within 2 days"
  :search/filter-info "filter"

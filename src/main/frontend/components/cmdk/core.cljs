@@ -57,16 +57,16 @@
      [{:filter {:group :nodes} :text (t :search/filter-nodes) :info (t :search/filter-info) :icon-theme :gray :icon "letter-n"}
       (when current-page
         {:filter {:group :current-page} :text (t :search/filter-current-page) :info (t :search/filter-info) :icon-theme :gray :icon "page"})
-      {:filter {:group :favorites} :text (t :search/filter-favorites) :info (t :search/filter-info) :icon-theme :gray :icon "star"}
-      {:filter {:group :recents} :text (t :search/filter-recents) :info (t :search/filter-info) :icon-theme :gray :icon "history"}
-      {:filter {:group :created-pages} :text (t :search/filter-created-pages) :info (t :search/filter-info) :icon-theme :gray :icon "page"}
-      {:filter {:group :updated-blocks} :text (t :search/filter-updated-blocks) :info (t :search/filter-info) :icon-theme :gray :icon "block"}
-      {:filter {:group :all-class} :text (t :search/filter-all-class) :info (t :search/filter-info) :icon-theme :gray :icon "tag"}
-      {:filter {:group :all-pages} :text (t :search/filter-all-pages) :info (t :search/filter-info) :icon-theme :gray :icon "page"}
-      {:filter {:group :all-journal} :text (t :search/filter-all-journal) :info (t :search/filter-info) :icon-theme :gray :icon "calendar"}
-      {:filter {:group :commands} :text (t :search/filter-commands) :info (t :search/filter-info) :icon-theme :gray :icon "command"}
-      {:filter {:group :themes} :text (t :search/filter-themes) :info (t :search/filter-info) :icon-theme :gray :icon "palette"}
-      {:filter {:group :files} :text (t :search/filter-files) :info (t :search/filter-info) :icon-theme :gray :icon "file"}]
+      {:filter {:group :files} :text (t :search/filter-files) :info (t :search/filter-info) :icon-theme :gray :icon "file"}
+      {:filter {:group :all-class} :text (t :search/filter-all-class) :info (t :search/filter-all) :icon-theme :gray :icon "tag"}
+      {:filter {:group :all-pages} :text (t :search/filter-all-pages) :info (t :search/filter-all) :icon-theme :gray :icon "page"}
+      {:filter {:group :all-journal} :text (t :search/filter-all-journal) :info (t :search/filter-all) :icon-theme :gray :icon "calendar"}
+      {:filter {:group :commands} :text (t :search/filter-commands) :info nil :icon-theme :gray :icon "command"}
+      {:filter {:group :themes} :text (t :search/filter-themes) :info nil :icon-theme :gray :icon "palette"} 
+      {:filter {:group :updated-blocks} :text (t :search/filter-updated-blocks) :info (t :search/filter-query) :icon-theme :gray :icon "block"}
+      {:filter {:group :created-pages} :text (t :search/filter-created-pages) :info (t :search/filter-query) :icon-theme :gray :icon "page"}
+      {:filter {:group :favorites} :text (t :search/filter-favorites) :info nil :icon-theme :gray :icon "star"}
+      {:filter {:group :recents} :text (t :search/filter-recents) :info nil :icon-theme :gray :icon "history"}]
      (remove nil?))))
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
@@ -1042,11 +1042,13 @@
     (= (name group-filter) "recents")
     (t :search/filter-recents)
     (= (name group-filter) "favorites")
-    (t :search/filter-favorites) 
+    (t :search/filter-favorites)
     (= (name group-filter) "all-class")
-    (t :search/filter-all-class) 
+    (t :search/filter-all-class)
     (= (name group-filter) "all-pages")
-    (t :search/filter-all-pages) 
+    (t :search/filter-all-pages)
+    (= (name group-filter) "all-journal")
+    (t :search/filter-all-journal)
     (= (name group-filter) "created-pages")
     (t :search/filter-created-pages)
     (= (name group-filter) "updated-blocks")

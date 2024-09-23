@@ -112,6 +112,8 @@
  :search/filter-all-class "すべてのClass"
  :search/filter-all-journal "すべてのジャーナル"
  :search/filter-all-pages "すべてのページ"
+ :search/filter-all "一覧表示"
+ :search/filter-query "クエリー"
  :search/filter-created-pages "10日以内に作成されたページ"
  :search/filter-updated-blocks "2日以内に更新されたブロック"
  :search/create "作成"
