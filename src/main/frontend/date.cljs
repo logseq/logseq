@@ -10,7 +10,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [frontend.common.date :as common-date]))
+            [logseq.common.date :as common-date]))
 
 (defn nld-parse
   [s]

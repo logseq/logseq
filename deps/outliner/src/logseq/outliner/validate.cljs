@@ -3,7 +3,8 @@
   errors so the user action stops immediately to display a notification"
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.common.date :as common-date]))
 
 (defn ^:api validate-page-title-characters
   "Validates characters that must not be in a page title"
@@ -22,7 +23,7 @@
                     (merge meta-m
                            {:type :notification
                             :payload {:message "Page name can't be blank."
-                                      :type :error}})))))
+                                      :type :warning}})))))
 
 (defn ^:api validate-built-in-pages
   "Validates built-in pages shouldn't be modified"
@@ -95,8 +96,19 @@
   (when (ldb/page? entity)
     (validate-unique-for-page db new-title entity)))
 
+(defn ^:api validate-disallow-page-with-journal-name
+  "Validates a non-journal page renamed to journal format"
+  [new-title entity]
+  (when (and (ldb/page? entity) (not (ldb/journal? entity))
+             (common-date/normalize-date new-title nil))
+    (throw (ex-info "Page can't be renamed to a journal"
+                      {:type :notification
+                       :payload {:message "This page can't be changed to a journal page"
+                                 :type :warning}}))))
+
 (defn validate-block-title
   "Validates a block title when it has changed"
   [db new-title existing-block-entity]
   (validate-built-in-pages existing-block-entity)
-  (validate-unique-by-name-tag-and-block-type db new-title existing-block-entity))
+  (validate-unique-by-name-tag-and-block-type db new-title existing-block-entity)
+  (validate-disallow-page-with-journal-name new-title existing-block-entity))
