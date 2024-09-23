@@ -71,11 +71,11 @@
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
 (def default-results
-  {:commands       {:status :success :show :less :items nil}
-   :favorites      {:status :success :show :less :items nil}
-   :recents        {:status :success :show :less :items nil}
+  {;;  :commands       {:status :success :show :less :items nil}
+  ;;  :favorites      {:status :success :show :less :items nil}
+  ;;  :recents        {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
-   :nodes          {:status :success :show :less :items nil}
+   :nodes          {:status :success :show :more :items nil}
    :files          {:status :success :show :less :items nil}
    :themes         {:status :success :show :less :items nil}
    :filters        {:status :success :show :less :items nil}})
