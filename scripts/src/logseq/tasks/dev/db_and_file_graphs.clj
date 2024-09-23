@@ -89,8 +89,8 @@
   []
   (let [file-concepts (->>
                        ;; from logseq.db.frontend.schema
-                       [:block/properties-text-values :block/pre-block :recent/pages :block/file :block/properties-order
-                        :block/marker :block/priority :block/scheduled :block/deadline :block/macros]
+                       [:block/namespace :block/properties-text-values :block/pre-block :recent/pages :block/file :block/properties-order
+                        :block/repeated :block/deadline :block/scheduled :block/priority :block/marker :block/macros]
                        (map str)
                        (into [;; e.g. block/properties :title
                               "block/properties :"
@@ -98,8 +98,6 @@
                               ;; anything org mode
                               "org"
                               "pre-block"
-                              ;; TODO: rename split-namespace?
-                              ;; "namespace"
                               "db/get-page"
                               "/page-name-sanity-lc"]))
         ;; For now use the whole code line. If this is too brittle can make this smaller
