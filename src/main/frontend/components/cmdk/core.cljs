@@ -286,7 +286,7 @@
           (swap! !results update group         merge {:status :success :items items-on-current-page}))
         (swap! !results update group         merge {:status :success :items items})))))
 
-(defn- recents-item
+(defn- query-item
   [repo page]
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
         source-page (model/get-alias-source-page repo (:db/id entity))
@@ -310,7 +310,7 @@
               :text title'
               :source-page (or source-page page))))
 
-(defn- recents-or-favorites
+(defn- from-query
   [group state type]
   (let [!results (::results state)
         repo (state/get-current-repo)]
@@ -332,32 +332,32 @@
                      (model/get-updated-blocks repo))
             blocks (remove nil? blocks)
             items (keep (fn [block]
-                          (recents-item repo block)) blocks)]
+                          (query-item repo block)) blocks)]
       (swap! !results update group merge {:status :success :items items}))))
 
 (defmethod load-results :recents [group state]
-  (recents-or-favorites group state "recents"))
+  (from-query group state "recents"))
 
 (defmethod load-results :favorites [group state]
-  (recents-or-favorites group state "favorites"))
+  (from-query group state "favorites"))
 
 (defmethod load-results :updated-blocks [group state]
-  (recents-or-favorites group state "updated-blocks"))
+  (from-query group state "updated-blocks"))
 
 (defmethod load-results :all-class [group state]
-  (recents-or-favorites group state "all-class"))
+  (from-query group state "all-class"))
 
 (defmethod load-results :all-journal [group state]
-  (recents-or-favorites group state "all-journal"))
+  (from-query group state "all-journal"))
 
 (defmethod load-results :all-pages [group state]
-  (recents-or-favorites group state "all-pages"))
+  (from-query group state "all-pages"))
 
 (defmethod load-results :created-pages [group state]
-  (recents-or-favorites group state "created-pages"))
+  (from-query group state "created-pages"))
 
 (defmethod load-results :updated-blocks [group state]
-  (recents-or-favorites group state "updated-blocks"))
+  (from-query group state "updated-blocks"))
 
 (defmethod load-results :files [group state]
   (let [!input (::input state)
