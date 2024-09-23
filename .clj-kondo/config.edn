@@ -155,6 +155,7 @@
              logseq.common.util.page-ref page-ref
              logseq.common.util.block-ref block-ref
              logseq.common.util.macro macro-util
+             logseq.common.util.namespace ns-util
              logseq.db ldb
              logseq.db.frontend.content db-content
              logseq.db.frontend.class db-class

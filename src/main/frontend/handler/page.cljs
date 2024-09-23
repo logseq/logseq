@@ -45,7 +45,8 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.property.util :as pu]
             [datascript.impl.entity :as de]
-            [frontend.handler.db-based.page :as db-page-handler]))
+            [frontend.handler.db-based.page :as db-page-handler]
+            [logseq.common.util.namespace :as ns-util]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
@@ -375,7 +376,7 @@
                                   :split-namespace? true})))
             ref-text' (if result
                         (let [title (if-let [parent (:logseq.property/parent result)]
-                                      (str (:block/title parent) "/" (:block/title result))
+                                      (str (:block/title parent) ns-util/parent-char (:block/title result))
                                       (:block/title result))]
                           (page-ref/->page-ref title))
                         ref-text)]

@@ -12,6 +12,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.namespace :as ns-util]
             [datascript.core :as d]))
 
 (def db-based-graph? entity-util/db-based-graph?)
@@ -41,7 +42,7 @@
                 parent (when (= (:block/type e) "page")
                          (:logseq.property/parent e))]
             (if (and db-based? parent parent-title?)
-              (str (:block/title parent) "/" result')
+              (str (:block/title parent) ns-util/parent-char result')
               result'))
           default-value))))))
 

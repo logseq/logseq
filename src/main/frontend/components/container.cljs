@@ -57,7 +57,8 @@
             [react-draggable]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.common.util.namespace :as ns-util]))
 
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class count]} child]
@@ -144,7 +145,7 @@
         :else (let [title' (pdf-utils/fix-local-asset-pagename title)
                     parent (:logseq.property/parent page)]
                 (if (and parent (not (ldb/class? page)))
-                  (str (:block/title parent) "/" title')
+                  (str (:block/title parent) ns-util/parent-char title')
                   title')))]
 
      ;; dots trigger

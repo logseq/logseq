@@ -11,7 +11,7 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [clojure.set :as set]
-            [logseq.graph-parser.text :as text]))
+            [logseq.common.util.namespace :as ns-util]))
 
 ;; TODO: use sqlite for fuzzy search
 ;; maybe https://github.com/nalgeon/sqlean/blob/main/docs/fuzzy.md?
@@ -142,9 +142,9 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- search-blocks-aux
   [db sql q input page limit enable-snippet?]
   (try
-    (p/let [namespace? (text/namespace-page? q)
+    (p/let [namespace? (ns-util/namespace-page? q)
             last-part (when namespace?
-                        (some-> (last (string/split q "/"))
+                        (some-> (last (string/split q ns-util/parent-char))
                                 get-match-input))
             bind (cond
                    (and namespace? page)
@@ -222,7 +222,7 @@ DROP TRIGGER IF EXISTS blocks_au;
       ;;                 content)])
     (let [parent (:logseq.property/parent block)
           title (if (and parent (= "page" (:block/type block)))
-                  (str (:block/title parent) "/" title)
+                  (str (:block/title parent) ns-util/parent-char title)
                   title)]
       (when uuid
         {:id (str uuid)
@@ -286,7 +286,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                      (str "select id, page, title, " snippet-aux " from blocks_fts where ")
                      "select id, page, title from blocks_fts where ")
             pg-sql (if page "page = ? and" "")
-            match-sql (if (text/namespace-page? q)
+            match-sql (if (ns-util/namespace-page? q)
                         (str select pg-sql " title match ? or title match ? order by rank limit ?")
                         (str select pg-sql " title match ? order by rank limit ?"))
             matched-result (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?)

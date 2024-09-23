@@ -92,7 +92,8 @@
             [logseq.db.frontend.content :as db-content]
             [logseq.db :as ldb]
             [frontend.components.title :as title]
-            [frontend.modules.shortcut.utils :as shortcut-utils]))
+            [frontend.modules.shortcut.utils :as shortcut-utils]
+            [logseq.common.util.namespace :as ns-util]))
 
 ;; local state
 (defonce *dragging?
@@ -664,7 +665,7 @@
           (let [parent (:logseq.property/parent page-entity)]
             (if (and display-parent? parent (not (ldb/class? page-entity)))
               [:span
-               (str (:block/title parent) "/")
+               (str (:block/title parent) ns-util/parent-char)
                page-component]
               page-component))))]]))
 
