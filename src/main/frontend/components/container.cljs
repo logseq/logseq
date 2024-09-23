@@ -371,7 +371,8 @@
                  :icon-extension? true
                  :shortcut :go/whiteboards})))
 
-           (when (state/enable-flashcards? (state/get-current-repo))
+           (when (and (state/enable-flashcards? (state/get-current-repo))
+                      (not db-based?))
              [:div.flashcards-nav
               (flashcards srs-open?)])
 
