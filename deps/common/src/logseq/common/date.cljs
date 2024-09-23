@@ -1,4 +1,4 @@
-(ns frontend.common.date
+(ns logseq.common.date
   "Date related fns shared by worker and frontend namespaces. Eventually some
    of this should go to logseq.common.util.date-time"
   (:require [cljs-time.format :as tf]
