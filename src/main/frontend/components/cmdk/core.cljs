@@ -311,6 +311,13 @@
               :text title'
               :source-page (or source-page page))))
 
+(defn- sort-journal-day-and-updated-at []
+  (fn [item]
+    (or (when-let [parent-e (db/entity (:db/id (:block/page item)))]
+          (when-let [journal-day (:block/journal-day parent-e)]
+            (date/journal-day->ts journal-day)))
+        (:block/updated-at item))))
+
 (defn- from-query
   [group state type]
   (let [!input (::input state)
@@ -319,11 +326,9 @@
     (swap! !results assoc-in [group :status] :loading)
     (p/let [blocks (cond
                      (= type "recents")
-                     (search/fuzzy-search (recent-handler/get-recent-pages true) @!input {:limit 50
-                                                                                          :extract-fn :block/title})
+                     (recent-handler/get-recent-pages true)
                      (= type "favorites")
-                     (search/fuzzy-search (page-handler/get-favorites) @!input {:limit 30
-                                                                                :extract-fn :block/title})
+                     (page-handler/get-favorites)
                      (= type "all-class")
                      (search/fuzzy-search (model/get-all-class repo) @!input {:limit 200
                                                                               :extract-fn :block/title})
@@ -339,6 +344,19 @@
                      (search/fuzzy-search (model/get-updated-blocks repo) @!input {:limit 30
                                                                                    :extract-fn :block/title}))
             blocks (remove nil? blocks)
+            blocks (when blocks
+                     (cond
+                       (or (= type "updated-blocks") (= type "all-journal"))
+                       (sort-by (sort-journal-day-and-updated-at)
+                                #(compare %2 %1)
+                                blocks)
+                       (= type "favorites")
+                       blocks
+                       :else
+                       (sort-by (fn [item]
+                                  (:block/updated-at item))
+                                #(compare %2 %1)
+                                blocks)))
             items (keep (fn [block]
                           (query-item repo block)) blocks)]
       (swap! !results update group merge {:status :success :items items}))))
@@ -708,8 +726,7 @@
                    page? (= "page" (some-> item :icon))
                    text (some-> item :text)
                    source-page (some-> item :source-page)
-                   updated-at (:block/updated-at source-page)
-                   created-at (:block/created-at source-page)
+                   parent-page (:block/page source-page) 
                    hls-page? (and page? (pdf-utils/hls-file? (:block/title source-page)))]]
          (let [item (list-item/root
                      (assoc item
@@ -719,10 +736,19 @@
                             :hls-page? hls-page?
                             :compact true
                             :rounded false
-                            :anchor-title (when (and updated-at created-at)
-                                            (if (= updated-at created-at)
-                                              (str (t :page/created-at) (date/int->local-time-2 created-at) "\n")
-                                              (str (t :page/updated-at) (date/int->local-time-2 updated-at) "\n" (t :page/created-at) (date/int->local-time-2 created-at) "\n")))
+                            :anchor-title (if parent-page
+                                            (when-let [parent-e (db/entity (:db/id parent-page))]
+                                              (if-let [journal-day (:block/journal-day parent-e)]
+                                                (date/js-date->journal-title (date/journal-day->ts journal-day))
+                                                (:block/title parent-page)))
+                                            (if (:block/journal-day source-page)
+                                              (:block/title source-page)
+                                              (let [updated-at (:block/updated-at source-page)
+                                                    created-at (:block/created-at source-page)]
+                                                (when (and updated-at created-at)
+                                                  (if (= updated-at created-at)
+                                                    (str (t :page/created-at) (date/int->local-time-2 created-at) "\n")
+                                                    (str (t :page/updated-at) (date/int->local-time-2 updated-at) "\n" (t :page/created-at) (date/int->local-time-2 created-at) "\n"))))))
                             :hoverable @*mouse-active?
                             :highlighted highlighted?
                              ;; for some reason, the highlight effect does not always trigger on a
