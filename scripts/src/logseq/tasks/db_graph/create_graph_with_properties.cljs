@@ -4,6 +4,7 @@
    NOTE: This script is also used in CI to confirm graph creation works"
   (:require [logseq.outliner.cli :as outliner-cli]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.property.type :as db-property-type]
             [clojure.string :as string]
@@ -96,10 +97,11 @@
           {:block/title "node property block" :build/properties {:node [:block/uuid object-uuid]}}
           {:block/title "node without classes property block" :build/properties {:node-without-classes [:page "Page 1"]}}
           {:block/title "node-many property block" :build/properties {:node-many #{[:block/uuid object-uuid] [:page "Page object"]}}}
-          ;;  ;; :date-closed disabled for now since they're not supported
           {:block/title "date property block" :build/properties {:date [:page (date-journal-title today)]}}
           {:block/title "date-many property block" :build/properties {:date-many #{[:page (date-journal-title today)]
                                                                                    [:page (date-journal-title yesterday)]}}}
+          {:block/title "datetime property block" :build/properties {:datetime (common-util/time-ms)}}
+          ;; :date-closed disabled for now since they're not supported
           #_{:block/title "date-closed property block" :build/properties {:date-closed (random-closed-value :date-closed)}}]}
         {:page {:block/title "Block Property Queries"}
          :blocks
@@ -137,6 +139,7 @@
         {:page {:block/title "date page" :build/properties {:date [:page (date-journal-title today)]}}}
         {:page {:block/title "date-many page" :build/properties {:date-many #{[:page (date-journal-title today)]
                                                                               [:page (date-journal-title yesterday)]}}}}
+        {:page {:block/title "datetime page" :build/properties {:datetime (common-util/time-ms)}}}
         #_{:page {:block/title "date-closed page" :build/properties {:date-closed (random-closed-value :date-closed)}}}
         {:page {:block/title "Page Property Queries"}
          :blocks
