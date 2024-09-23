@@ -16,6 +16,7 @@
             [tick.core :as tick]
             [clojure.string :as string]
             [logseq.shui.ui :as shui]
+            [frontend.ui :as ui]
             [frontend.modules.shortcut.core :as shortcut]))
 
 (def ^:private instant->inst-ms (comp inst-ms tick/inst))
@@ -105,37 +106,50 @@
         :size :sm}
        [:span.text-sm shortcut]))]))
 
-(def ^:private phase->next-phase
-  {:init :show-answer
-   :show-answer :init})
+(defn- has-cloze?
+  [block]
+  (string/includes? (:block/title block) "{{cloze "))
+
+(defn- phase->next-phase
+  [block phase]
+  (let [cloze? (has-cloze? block)]
+    (case phase
+      :init
+      (if cloze? :show-cloze :show-answer)
+      :show-cloze
+      (if cloze? :show-answer :init)
+      :show-answer
+      :init)))
 
 (rum/defcs ^:private card < rum/reactive
   [state repo block-entity *phase]
   (let [phase (rum/react *phase)
-        show-btn? (contains? #{:show-answer} phase)]
+        next-phase (phase->next-phase block-entity phase)]
     [:div.ls-card.content
      [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
-     (component-block/blocks-container
-      (cond-> {}
-        (contains? #{:init} phase) (assoc :hide-children? true))
-      [block-entity])
+     (let [option (case phase
+                    :init
+                    {:hide-children? true}
+                    :show-cloze
+                    {:show-cloze? true
+                     :hide-children? true}
+                    {:show-cloze? true})]
+       (component-block/blocks-container option [block-entity]))
      [:div.mt-8
-      (btn-with-shortcut {:btn-text (t (if show-btn?
-                                         :flashcards/modal-btn-hide-answers
-                                         :flashcards/modal-btn-show-answers))
+      (btn-with-shortcut {:btn-text (t
+                                     (case next-phase
+                                       :show-answer
+                                       :flashcards/modal-btn-show-answers
+                                       :show-cloze
+                                       :flashcards/modal-btn-show-clozes
+                                       :init
+                                       :flashcards/modal-btn-hide-answers))
                           :shortcut "s"
                           :id (str "card-answers")
-                          :on-click #(swap! *phase phase->next-phase)})]]))
+                          :on-click #(swap! *phase
+                                            (fn [phase]
+                                              (phase->next-phase block-entity phase)))})]]))
 
-;; {
-;;    :again 1 ;; We got the answer wrong. Automatically means that we
-;;             ;; have forgotten the card. This is a lapse in memory.
-;;    :hard  2 ;; The answer was only partially correct and/or we took
-;;             ;; too long to recall it.
-;;    :good  3 ;; The answer was correct but we were not confident about it.
-;;    :easy  4 ;; The answer was correct and we were confident and quick
-;;             ;; in our recall.
-;;    }
 (def ^:private rating->shortcut
   {:again "1"
    :hard  "2"
@@ -153,7 +167,29 @@
                           :on-click #(do (repeat-card! repo block-id rating)
                                          (swap! *card-index inc)
                                          (reset! *phase :init))}))
-    (keys rating->shortcut))])
+    (keys rating->shortcut))
+   (shui/button
+    {:variant :ghost
+     :size :sm
+     :class "!px-0 text-muted-foreground !h-4"
+     :on-click (fn [e]
+                 (shui/popup-show! (.-target e)
+                                   (fn []
+                                     [:div.p-4.max-w-lg
+                                      [:dl
+                                       [:dt "Again"]
+                                       [:dd "We got the answer wrong. Automatically means that we have forgotten the card. This is a lapse in memory."]]
+                                      [:dl
+                                       [:dt "Hard"]
+                                       [:dd "The answer was only partially correct and/or we took too long to recall it."]]
+                                      [:dl
+                                       [:dt "Good"]
+                                       [:dd "The answer was correct but we were not confident about it."]]
+                                      [:dl
+                                       [:dt "Easy"]
+                                       [:dd "The answer was correct and we were confident and quick in our recall."]]])
+                                   {:align "start"}))}
+    (ui/icon "info-circle"))])
 
 (declare update-due-cards-count)
 (rum/defcs cards <
