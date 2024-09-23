@@ -545,10 +545,7 @@
                                             (p/then update-cardinality-fn))
                                         (update-cardinality-fn))))}))
 
-     (shui/dropdown-menu-separator)
-
-     (let [group' (->> [:<>
-                        (when (and (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+     (let [group' (->> [(when (and (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
                                 (not
                                   (and (= :default (get-in property [:block/schema :type]))
                                     (empty? (:property/closed-values property))
@@ -562,18 +559,19 @@
                           (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
                                                      :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
                                                                                   (assoc property-schema :hide? %) {})}))]
-                    (remove nil?)
-                    (into []))]
-       (when (and owner-block (> (count group') 1))
-         (conj group' (shui/dropdown-menu-separator))))
+                    (remove nil?))]
+       (when (> (count group') 0)
+         (cons (shui/dropdown-menu-separator) group')))
 
      (when owner-block
-       (dropdown-editor-menuitem
-        {:icon :share-3 :title "Go to this property" :desc ""
-         :item-props {:class "opacity-90 focus:opacity-100"
-                      :on-select (fn []
-                                   (shui/popup-hide-all!)
-                                   (route-handler/redirect-to-page! (:block/uuid property)))}}))
+       [:<>
+        (shui/dropdown-menu-separator)
+        (dropdown-editor-menuitem
+          {:icon :share-3 :title "Go to this property" :desc ""
+           :item-props {:class "opacity-90 focus:opacity-100"
+                        :on-select (fn []
+                                     (shui/popup-hide-all!)
+                                     (route-handler/redirect-to-page! (:block/uuid property)))}})])
 
      (when (and owner-block
                 (not (and
