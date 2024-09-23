@@ -1,10 +1,11 @@
 (ns logseq.outliner.validate
-  "Reusable validations from outliner level and above. Most validations throw
+  "Reusable DB graph validations for outliner level and above. Most validations throw
   errors so the user action stops immediately to display a notification"
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.common.date :as common-date]))
+            [logseq.common.date :as common-date]
+            [logseq.common.util.namespace :as ns-util]))
 
 (defn ^:api validate-page-title-characters
   "Validates characters that must not be in a page title"
@@ -14,6 +15,12 @@
                     (merge meta-m
                            {:type :notification
                             :payload {:message "Page name can't include \"#\"."
+                                      :type :warning}}))))
+  (when (string/includes? page-title ns-util/parent-char)
+    (throw (ex-info "Page name can't include \"/\"."
+                    (merge meta-m
+                           {:type :notification
+                            :payload {:message "Page name can't include \"/\"."
                                       :type :warning}})))))
 
 (defn ^:api validate-page-title
