@@ -143,17 +143,17 @@
                   [(if (= filter-group :current-page) (t :search/filter-current-page) (name filter-group)) filter-group (visible-items filter-group)]
                   (when-not node-exists?
                     [(t :search/create)               :create         (create-items input)])]
-
-                 (not (= input ""))
-                 [[(t :search/filter-current-page)   :current-page   (visible-items :current-page)]
-                  [(t :search/filter-nodes)          :nodes          (visible-items :nodes)]
-                  [(t :search/filters)               :filters        (visible-items :filters)]]
-
+                 
                  (and (not (= input "")) (not node-exists?))
                  [[(t :search/create)                :create         (create-items input)]
                   [(t :search/filter-current-page)   :current-page   (visible-items :current-page)]
                   [(t :search/filter-files)           :files          (visible-items :files)]
                   [(t :search/filter-nodes)          :nodes          (visible-items :nodes)]]
+                 
+                 (not (= input ""))
+                 [[(t :search/filter-current-page)   :current-page   (visible-items :current-page)]
+                  [(t :search/filter-nodes)          :nodes          (visible-items :nodes)]
+                  [(t :search/filters)               :filters        (visible-items :filters)]]
 
                  :else ;; initial or no-input
                  (->>
