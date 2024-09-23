@@ -94,20 +94,28 @@
                        (map str)
                        (into [;; e.g. block/properties :title
                               "block/properties :"
-                              ;; "block/name"
+                              "block/name"
                               ;; anything org mode
                               "org"
                               "pre-block"
                               ;; TODO: rename split-namespace?
                               ;; "namespace"
-                              ;; "db/get-page"
+                              "db/get-page"
                               "/page-name-sanity-lc"]))
+        ;; For now use the whole code line. If this is too brittle can make this smaller
+        allowed-exceptions #{"{:block/name page-title})))"
+                             "(when-not (db/get-page journal)"
+                             "(let [value (if datetime? (tc/to-long d) (db/get-page journal))]"}
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" file-concepts) ")")
-                   db-graph-paths)]
-    (when-not (and (= 1 (:exit res)) (= "" (:out res)))
+                   db-graph-paths)
+        invalid-lines (when (= 0 (:exit res))
+                        (remove #(->> (string/split % #":\s+") second string/trim (contains? allowed-exceptions))
+                                (string/split-lines (:out res))))]
+    (when (> (:exit res) 1) (System/exit 1))
+    (when (and (= 0 (:exit res)) (seq invalid-lines))
       (println "The following files should not have contained file specific concepts:")
-      (println (:out res))
+      (println (string/join "\n" invalid-lines))
       (System/exit 1))))
 
 (defn- validate-db-concepts-not-in-file
