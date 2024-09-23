@@ -10,7 +10,6 @@
             [frontend.db.async :as db-async]
             [frontend.extensions.srs :as srs]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.property :as property-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -67,8 +66,8 @@
             prop-card-map (fsrs-card-map->property-fsrs-state next-card-map)
             prop-fsrs-state (dissoc prop-card-map :due)
             prop-fsrs-due (:due prop-card-map)]
-        (db-property-handler/set-block-properties!
-         block-id
+        (property-handler/set-block-properties!
+         repo block-id
          {:logseq.property.fsrs/state prop-fsrs-state
           :logseq.property.fsrs/due prop-fsrs-due})))))
 
@@ -228,10 +227,10 @@
         *phase (atom :init)]
     (when (false? loading?)
       [:div#cards-modal.p-2
-      (if-let [block-id (nth block-ids @*card-index nil)]
-        [:div.flex.flex-col
-         (card repo block-id *card-index *phase)]
-        [:p (t :flashcards/modal-finished)])])))
+       (if-let [block-id (nth block-ids @*card-index nil)]
+         [:div.flex.flex-col
+          (card repo block-id *card-index *phase)]
+         [:p (t :flashcards/modal-finished)])])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
 (def ^:private new-task--update-due-cards-count
