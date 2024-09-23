@@ -37,7 +37,8 @@
    [frontend.util.text :as text-util]
    [goog.userAgent]
    [frontend.db.async :as db-async]
-   [logseq.db :as ldb]))
+   [logseq.db :as ldb]
+   [logseq.common.util.namespace :as ns-util]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -106,7 +107,7 @@
                             (take 5 items))))
         node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
                        (when-not (string/blank? input)
-                         (or (some-> (last (string/split input "/"))
+                         (or (some-> (last (string/split input ns-util/parent-char))
                                      string/trim
                                      db/get-page)
                              (some (fn [block]

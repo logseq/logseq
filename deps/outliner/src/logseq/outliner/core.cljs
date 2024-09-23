@@ -21,9 +21,9 @@
             [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.pipeline :as outliner-pipeline]
-            [logseq.graph-parser.text :as text]
             [logseq.common.util.macro :as macro-util]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.common.util.namespace :as ns-util]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -275,9 +275,9 @@
               block-type (if (contains? tags-set (:block/uuid page))
                            "class"
                            (:block/type page))]
-          (if (and (contains? #{"page" "class"} block-type) (text/namespace-page? title))
+          (if (and (contains? #{"page" "class"} block-type) (ns-util/namespace-page? title))
             (let [class? (= block-type "class")
-                  parts (->> (string/split title #"/")
+                  parts (->> (string/split title ns-util/parent-re)
                              (map string/trim)
                              (remove string/blank?))
                   pages (doall
