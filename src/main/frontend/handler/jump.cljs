@@ -93,14 +93,14 @@
                                    (some-> (:block-parent-id (first (state/get-editor-args)))
                                            js/document.getElementById)
                                    ;; current page
-                                   (d/sel1 js/document "#main-content-container .ls-page-properties"))]
+                                   (d/sel1 js/document "#main-content-container .ls-properties-area"))]
     (cond
       selected-block-or-page
       (when (empty? (d/sel js/document ".jtrigger-id"))
         (let [triggers (d/sel selected-block-or-page ".jtrigger")]
           (when (seq triggers)
             (reset! *jump-data {:mode :property
-                                :triggers (d/sel selected-block-or-page ".jtrigger")})
+                                :triggers triggers})
             (let [keys (generate-keys (count triggers))
                   key-down-handler (fn [e]
                                      (let [k (util/ekey e)]
@@ -117,10 +117,11 @@
                 (fn [id dom]
                   (let [class (if (d/has-class? dom "ui__checkbox")
                                 "jtrigger-id text-sm border rounded ml-4 px-1 shadow-xs"
-                                "jtrigger-id text-sm border rounded ml-2 px-1 shadow-xs")]
-                    (d/append! dom (-> (d/create-element :div)
-                                       (d/set-attr! :class class)
-                                       (d/set-text! (nth keys id))))))
+                                "jtrigger-id text-sm border rounded ml-2 px-1 shadow-xs")
+                        ^js view (or (.closest dom ".jtrigger-view") dom)]
+                    (d/append! view (-> (d/create-element :div)
+                                      (d/set-attr! :class class)
+                                      (d/set-text! (nth keys id))))))
                 (take (count keys) triggers)))
               (.addEventListener js/window "keydown" key-down-handler)))))
 

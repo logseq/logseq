@@ -62,7 +62,8 @@
          ;; remove private built-in properties
          (remove #(and (:db/ident %)
                        (db-property/logseq-property? (:db/ident %))
-                       (not (get-in % [:block/schema :public?])))))))
+                       (not (ldb/public-built-in-property? %))
+                       (not= (:db/ident %) :logseq.property/icon))))))
 
 (defn <get-all-properties
   "Returns all public properties as property maps including their
@@ -264,7 +265,7 @@
 
 (defn <get-tag-objects
   [graph class-id]
-  (let [class-children (db-model/get-class-children graph class-id)
+  (let [class-children (db-model/get-structured-children graph class-id)
         class-ids (distinct (conj class-children class-id))]
     (<q graph {:transact-db? true}
         '[:find [(pull ?b [*]) ...]
@@ -279,8 +280,7 @@
       '[:find [(pull ?b [*]) ...]
         :in $ ?class-id
         :where
-        [?class-id :db/ident ?ident]
-        [?b :logseq.property/view-for ?ident]]
+        [?b :logseq.property/view-for ?class-id]]
       class-id))
 
 (defn <get-tags

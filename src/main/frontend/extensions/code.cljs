@@ -395,14 +395,17 @@
      (let [block (db/pull [:block/uuid block-id])]
        (editor-handler/edit-block! block :max)))))
 
-(defn render!
+(defn ^:large-vars/cleanup-todo render!
   [state]
   (let [[config id attr _code theme user-options] (:rum/args state)
+        config-file? (= (:file-path config) "logseq/config.edn")
+        edit-block (state/get-edit-block)
         default-open? (and (:editor/code-mode? @state/state)
-                           (= (:block/uuid (state/get-edit-block))
+                           (= (:block/uuid edit-block)
                               (get-in config [:block :block/uuid])))
         _ (state/set-state! :editor/code-mode? false)
         original-mode (get attr :data-lang)
+        *editor-ref (get attr :editor-ref)
         mode (if (:file? config)
                (text->cm-mode original-mode :ext) ;; ref: src/main/frontend/components/file.cljs
                (text->cm-mode original-mode :name))
@@ -418,7 +421,9 @@
                             :matchBrackets lisp-like?
                             :styleActiveLine true}
         cm-options (merge default-cm-options
-                          (extra-codemirror-options)
+                          (cond-> (extra-codemirror-options)
+                            config-file?
+                            (dissoc :readOnly))
                           {:mode mode
                            :tabIndex -1 ;; do not accept TAB-in, since TAB is bind globally
                            :extraKeys (merge {"Esc" (fn [cm]
@@ -435,7 +440,9 @@
                             {:hintOptions {}})
                           user-options)
         editor (when textarea
-                 (from-textarea textarea (clj->js cm-options)))]
+                 (from-textarea textarea (clj->js cm-options)))
+        _ (when (and editor *editor-ref)
+            (reset! *editor-ref editor))]
     (when editor
       (let [textarea-ref (rum/ref-node state textarea-ref-name)
             element (.getWrapperElement editor)]
@@ -520,16 +527,16 @@
    :did-update (fn [state]
                  (let [next-theme (get-theme!)
                        last-theme @(:last-theme state)
-                       editor (some-> state :editor-atom deref)]
-                   (when (and editor (not= next-theme last-theme))
+                       editor' (some-> state :editor-atom deref)]
+                   (when (and editor' (not= next-theme last-theme))
                      (reset! (:last-theme state) next-theme)
-                     (.setOption editor "theme" next-theme)))
+                     (.setOption editor' "theme" next-theme)))
                  (reset! (:code-options state) (last (:rum/args state)))
                  (when-not (:file? (first (:rum/args state)))
                    (let [code (nth (:rum/args state) 3)
-                         editor @(:editor-atom state)]
-                     (when (and editor (not= (.getValue editor) code))
-                       (.setValue editor code))))
+                         editor' @(:editor-atom state)]
+                     (when (and editor' (not= (.getValue editor') code))
+                       (.setValue editor' code))))
                  state)}
   [state _config id attr code _theme _options]
   [:div.extensions__code

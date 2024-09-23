@@ -8,7 +8,6 @@
             [datascript.transit :as dt]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
-            [logseq.common.config :as common-config]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -24,8 +23,8 @@
   (transit/write transit-w data))
 
 (defn transit-read
-  [str]
-  (transit/read transit-r str))
+  [s]
+  (transit/read transit-r s))
 
 (def write-transit-str
   (let [write-handlers (->> (assoc dt/write-handlers
@@ -105,7 +104,7 @@
         :block/order (db-order/gen-key)}
         (seq classes)
         (assoc :property/schema.classes classes)
-        (or ref-type? (contains? (conj db-property-type/ref-property-types :entity) (:type prop-schema)))
+        (or ref-type? (contains? db-property-type/all-ref-property-types (:type prop-schema)))
         (assoc :db/valueType :db.type/ref))))))
 
 (defn build-new-class
@@ -116,8 +115,9 @@
    (cond-> (merge block
                   {:block/type "class"
                    :block/format :markdown})
-     (not= (:db/ident block) :logseq.class/Root)
-     (assoc :class/parent :logseq.class/Root))))
+     (and (not= (:db/ident block) :logseq.class/Root)
+          (nil? (:logseq.property/parent block)))
+     (assoc :logseq.property/parent :logseq.class/Root))))
 
 (defn build-new-page
   "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"
@@ -129,34 +129,10 @@
     :block/format :markdown
     :block/type "page"}))
 
-(defn page?
-  [block]
-  (contains? #{"page" "journal" "whiteboard" "class" "property" "hidden"}
-             (:block/type block)))
-
-(defn class?
-  [entity]
-  (= (:block/type entity) "class"))
-(defn property?
-  [entity]
-  (= (:block/type entity) "property"))
-(defn closed-value?
-  [entity]
-  (= (:block/type entity) "closed value"))
-(defn whiteboard?
-  "Given a page entity or map, check if it is a whiteboard page"
-  [page]
-  (= (:block/type page) "whiteboard"))
-
-(defn journal?
-  "Given a page entity or map, check if it is a journal page"
-  [page]
-  (= (:block/type page) "journal"))
-
-(defn hidden?
-  [page]
-  (when page
-    (if (string? page)
-      (or (string/starts-with? page "$$$")
-          (= common-config/favorites-page-name page))
-      (= (:block/type page) "hidden"))))
+(defn kv
+  "Creates a key-value pair tx with the key and value respectively stored under
+  :db/ident and :kv/value.  The key must be under the namespace :logseq.kv"
+  [k value]
+  {:pre [(= "logseq.kv" (namespace k))]}
+  {:db/ident k
+   :kv/value value})

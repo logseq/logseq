@@ -6,6 +6,12 @@
             [goog.object :as gobj]
             [cljs-bean.core :as bean]))
 
+(defn- keep-json-keyword?
+  [k]
+  (some->> (namespace k)
+    (contains? #{"block" "db" "file"})
+    (not)))
+
 (defn- entity->map
   "Convert a db Entity to a map"
   [e]
@@ -26,15 +32,17 @@
         (fn [a]
           (cond
             (keyword? a)
-            (cond-> (name a)
-              camel-case?
-              (csk/->camelCase))
+            (if (keep-json-keyword? a)
+              (str a)
+              (cond-> (name a)
+                camel-case?
+                (csk/->camelCase)))
 
             (uuid? a) (str a)
 
             ;; @FIXME compatible layer for classic APIs
             (and (map? a) (:block/uuid a))
-            (some->> (:block/title a) (assoc a :block/content))
+            (or (some->> (:block/title a) (assoc a :block/content)) a)
 
             :else a)) input)))))
 

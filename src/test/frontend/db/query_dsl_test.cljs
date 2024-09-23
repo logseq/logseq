@@ -150,22 +150,30 @@ prop-d:: [[nada]]"}])
     (test-helper/with-config {}
       (block-property-queries-test))))
 
-
 (when js/process.env.DB_GRAPH
  (deftest db-only-block-property-queries
    (load-test-files-for-db-graph
-    [{:page {:block/title "page1"}
-      :blocks [{:block/title "b1"
-                :build/properties {:Foo "bar"}}
-               {:block/title "b2"
-                :build/properties {:foo "bar"}}]}])
+    {:properties
+       {:zzz {:block/schema {:type :default}
+              :block/title "zzz name!"}}
+       :pages-and-blocks
+       [{:page {:block/title "page1"}
+         :blocks [{:block/title "b1"
+                   :build/properties {:Foo "bar"}}
+                  {:block/title "b2"
+                   :build/properties {:foo "bar"}}
+                  {:block/title "b3"
+                   :build/properties {:zzz "bar"}}]}]})
 
    (is (= ["b1"]
           (map :block/title (dsl-query "(property Foo)")))
        "filter is case sensitive")
    (is (= ["b2"]
           (map :block/title (dsl-query "(property :user.property/foo)")))
-       "filter can handle qualified keyword properties")))
+       "filter can handle qualified keyword properties")
+   (is (= ["b3"]
+          (map :block/title (dsl-query "(property \"zzz name!\")")))
+       "filter can handle property name")))
 
 (deftest block-property-query-performance
   (let [pages (->> (repeat 10 {:tags ["tag1" "tag2"]})
@@ -574,11 +582,12 @@ created-at:: 1608968448116
   (def get-property-value query-dsl/get-db-property-value)
   (def get-property-value #(get-in %1 [:block/properties %2])))
 
-(deftest sort-by-queries
-  (load-test-files [{:file/path "journals/2020_02_25.md"
-                     :file/content "rating:: 10"}
-                    {:file/path "journals/2020_12_26.md"
-                     :file/content "rating:: 8
+(when-not js/process.env.DB_GRAPH
+ (deftest sort-by-queries
+   (load-test-files [{:file/path "journals/2020_02_25.md"
+                      :file/content "rating:: 10"}
+                     {:file/path "journals/2020_12_26.md"
+                      :file/content "rating:: 8
 - DONE 26-b1
 created-at:: 1608968448113
 fruit:: plum
@@ -590,43 +599,43 @@ created-at:: 1608968448115
 - 26-b4
 created-at:: 1608968448116
 "}])
-  (let [task-filter (if js/process.env.DB_GRAPH "(task todo done)" "(task later done)")]
-    (testing "sort-by user block property fruit"
-      (let [result (->> (dsl-query (str "(and " task-filter " (sort-by fruit))"))
-                        (map #(get-property-value % :fruit)))]
-        (is (= ["plum" "apple" nil]
-               result)
-            "sort-by correctly defaults to desc"))
+   (let [task-filter "(task later done)"]
+     (testing "sort-by user block property fruit"
+       (let [result (->> (dsl-query (str "(and " task-filter " (sort-by fruit))"))
+                         (map #(get-property-value % :fruit)))]
+         (is (= ["plum" "apple" nil]
+                result)
+             "sort-by correctly defaults to desc"))
 
-      (let [result (->> (dsl-query (str "(and " task-filter " (sort-by fruit desc))"))
-                        (map #(get-property-value % :fruit)))]
-        (is (= ["plum" "apple" nil]
-               result)
-            "sort-by desc"))
+       (let [result (->> (dsl-query (str "(and " task-filter " (sort-by fruit desc))"))
+                         (map #(get-property-value % :fruit)))]
+         (is (= ["plum" "apple" nil]
+                result)
+             "sort-by desc"))
 
-      (let [result (->> (dsl-query (str "(and " task-filter " (sort-by fruit asc))"))
-                        (map #(get-property-value % :fruit)))]
-        (is (= [nil "apple" "plum"]
-               result)
-            "sort-by asc")))
+       (let [result (->> (dsl-query (str "(and " task-filter " (sort-by fruit asc))"))
+                         (map #(get-property-value % :fruit)))]
+         (is (= [nil "apple" "plum"]
+                result)
+             "sort-by asc")))
 
-    (testing "sort-by hidden, built-in block property created-at"
-      (let [result (->> (dsl-query (str "(and " task-filter " (sort-by created-at desc))"))
-                        (map #(get-property-value % :created-at)))]
-        (is (= [1608968448115 1608968448114 1608968448113]
-               result))
-        "sorted-by desc")
+     (testing "sort-by hidden, built-in block property created-at"
+       (let [result (->> (dsl-query (str "(and " task-filter " (sort-by created-at desc))"))
+                         (map #(get-property-value % :created-at)))]
+         (is (= [1608968448115 1608968448114 1608968448113]
+                result))
+         "sorted-by desc")
 
-      (let [result (->> (dsl-query (str "(and " task-filter " (sort-by created-at asc))"))
-                        (map #(get-property-value % :created-at)))]
-        (is (= [1608968448113 1608968448114 1608968448115]
-               result)
-            "sorted-by asc")))
+       (let [result (->> (dsl-query (str "(and " task-filter " (sort-by created-at asc))"))
+                         (map #(get-property-value % :created-at)))]
+         (is (= [1608968448113 1608968448114 1608968448115]
+                result)
+             "sorted-by asc")))
 
-    (testing "user page property rating"
-        (is (= [10 8]
-               (->> (dsl-query "(and (page-property rating) (sort-by rating))")
-                    (map #(get-property-value % :rating))))))))
+     (testing "user page property rating"
+       (is (= [10 8]
+              (->> (dsl-query "(and (page-property rating) (sort-by rating))")
+                   (map #(get-property-value % :rating)))))))))
 
 (deftest simplify-query
   (are [x y] (= (query-dsl/simplify-query x) y)

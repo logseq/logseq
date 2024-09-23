@@ -52,11 +52,32 @@
                 (filter (fn [v] (when (pos? (client-op/get-unpushed-ops-count repo)) v)))
                 merge-flow)))
 
+(defn- create-pull-remote-updates-flow
+  "Return a flow: emit to pull remote-updates.
+  reschedule next emit(INTERVAL-MS later) every time FLOW emit a value."
+  [interval-ms flow]
+  (let [v {:type :pull-remote-updates}
+        clock-flow (m/ap
+                     (loop []
+                       (m/amb
+                        (m/? (m/sleep interval-ms v))
+                        (recur))))]
+    (m/ap
+      (m/amb
+       v
+       (let [_ (m/?< (->> flow
+                          (m/reductions {} nil)
+                          (m/latest identity)))]
+         (try
+           (m/?< clock-flow)
+           (catch Cancelled _ (m/amb))))))))
+
 (defn- create-mixed-flow
   "Return a flow that emits all kinds of events:
   `:remote-update`: remote-updates data from server
   `:local-update-check`: event to notify to check if there're some new local-updates, then push to remote.
-  `:online-users-updated`: online users info updated"
+  `:online-users-updated`: online users info updated
+  `:pull-remote-updates`: pull remote updates"
   [repo get-ws-create-task *auto-push?]
   (let [remote-updates-flow (m/eduction
                              (map (fn [data]
@@ -66,8 +87,9 @@
                              (get-remote-updates get-ws-create-task))
         local-updates-check-flow (m/eduction
                                   (map (fn [data] {:type :local-update-check :value data}))
-                                  (create-local-updates-check-flow repo *auto-push? 2000))]
-    (c.m/mix remote-updates-flow local-updates-check-flow)))
+                                  (create-local-updates-check-flow repo *auto-push? 2000))
+        mix-flow (m/stream (c.m/mix remote-updates-flow local-updates-check-flow))]
+    (c.m/mix mix-flow (create-pull-remote-updates-flow 60000 mix-flow))))
 
 (defn- new-task--get-ws-create
   "Return a map with atom *current-ws and a task
@@ -182,7 +204,11 @@
                      get-ws-create-task add-log-fn))
 
                :online-users-updated
-               (reset! *online-users (:online-users (:value event)))))
+               (reset! *online-users (:online-users (:value event)))
+
+               :pull-remote-updates
+               (m/? (r.client/new-task--pull-remote-data
+                     repo conn graph-uuid date-formatter get-ws-create-task add-log-fn))))
            (m/ap)
            (m/reduce {} nil)
            (m/?))
@@ -211,8 +237,7 @@
         (let [user-uuid (:sub (worker-util/parse-jwt token))
               config (worker-state/get-config repo)
               date-formatter (common-config/get-date-formatter config)
-              {:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users]
-               onstarted-task :onstarted-task}
+              {:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users onstarted-task]}
               (create-rtc-loop graph-uuid repo conn date-formatter token)
               canceler (c.m/run-task rtc-loop-task :rtc-loop-task)
               start-ex (m/? onstarted-task)]
@@ -288,10 +313,10 @@
 (def ^:private create-get-state-flow
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
-      (let [{:keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *rtc-lock *online-users]}
+      (let [{rtc-lock :*rtc-lock :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *online-users]}
             (m/?< rtc-loop-metadata-flow)]
         (try
-          (when (and repo rtc-state-flow *rtc-auto-push? *rtc-lock)
+          (when (and repo rtc-state-flow *rtc-auto-push? rtc-lock)
             (m/?<
              (m/latest
               (fn [rtc-state rtc-auto-push? rtc-lock online-users pending-local-ops-count local-tx remote-tx]
@@ -304,7 +329,7 @@
                  :rtc-lock rtc-lock
                  :auto-push? rtc-auto-push?
                  :online-users online-users})
-              rtc-state-flow (m/watch *rtc-auto-push?) (m/watch *rtc-lock) (m/watch *online-users)
+              rtc-state-flow (m/watch *rtc-auto-push?) (m/watch rtc-lock) (m/watch *online-users)
               (client-op/create-pending-ops-count-flow repo)
               (rtc-log-and-state/create-local-t-flow graph-uuid)
               (rtc-log-and-state/create-remote-t-flow graph-uuid))))
@@ -388,4 +413,10 @@
       (def cancel c)
       (def rtc-state-flow rtc-state-flow)
       (def *rtc-auto-push? *rtc-auto-push?)))
-  (cancel))
+  (cancel)
+
+  (do
+    (def a (atom 1))
+    (def f1 (m/watch a))
+    (def f2 (create-pull-remote-updates-flow 5000 f1))
+    (def cancel (c.m/run-task (m/reduce (fn [_ v] (prn :v v)) f2) :xxx))))

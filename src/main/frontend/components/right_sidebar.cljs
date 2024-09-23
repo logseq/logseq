@@ -9,7 +9,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.extensions.slide :as slide]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
@@ -21,9 +20,9 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.components.icon :as icon]))
 
 (rum/defc toggle
   []
@@ -37,22 +36,16 @@
 (rum/defc block-cp < rum/reactive
   [repo idx block]
   (let [id (:block/uuid block)]
-    (page/page {:parameters  {:path {:name (str id)}}
+    (page/page-cp {:parameters  {:path {:name (str id)}}
                 :sidebar?    true
                 :sidebar/idx idx
                 :repo        repo})))
 
 (rum/defc page-cp < rum/reactive
   [repo page-name]
-  (page/page {:parameters {:path {:name page-name}}
-              :sidebar?   true
-              :repo       repo}))
-
-(rum/defc contents < rum/reactive db-mixins/query
-  []
-  [:div.contents.flex-col.flex.ml-3
-   (when-let [contents (db/get-page "contents")]
-     (page/contents-page contents))])
+  (page/page-cp {:parameters {:path {:name page-name}}
+                 :sidebar?   true
+                 :repo       repo}))
 
 (rum/defc shortcut-settings
   []
@@ -74,7 +67,7 @@
   (case (keyword block-type)
     :contents
     [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
-     (contents)]
+     (page-cp repo "contents")]
 
     :help
     [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :right-side-bar/help)] (onboarding/help)]
@@ -101,9 +94,7 @@
           page (db/entity repo lookup)]
       (if (ldb/page? page)
         [[:.flex.items-center.page-title
-          (if-let [icon (pu/get-block-property-value page :logseq.property/icon)]
-            [:.text-md.mr-2 icon]
-            (ui/icon (if (ldb/whiteboard? page) "whiteboard" "page") {:class "text-md mr-2"}))
+          (icon/get-node-icon-cp page {:class "text-md mr-2"})
           [:span.overflow-hidden.text-ellipsis (:block/title page)]]
          (page-cp repo (str (:block/uuid page)))]
         (block-with-breadcrumb repo page idx [repo db-id block-type] false)))
@@ -211,10 +202,12 @@
              [:.flex.flex-row.justify-between.pr-2.sidebar-item-header.color-level.rounded-t-md
               {:class         (when collapsed? "rounded-b-md")
                :draggable     true
-               :on-context-menu #(shui/popup-show! %
-                                   (actions-menu-content db-id idx block-type collapsed? block-count)
-                                   {:as-dropdown? true
-                                    :content-props {:on-click (fn [] (shui/popup-hide!))}})
+               :on-context-menu (fn [e]
+                                  (util/stop e)
+                                  (shui/popup-show! e
+                                                    (actions-menu-content db-id idx block-type collapsed? block-count)
+                                                    {:as-dropdown? true
+                                                     :content-props {:on-click (fn [] (shui/popup-hide!))}}))
                :on-drag-start (fn [event]
                                 (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event true)
                                 (reset! *drag-from idx))
@@ -223,8 +216,8 @@
                                 (reset! *drag-to nil)
                                 (reset! *drag-from nil))
                :on-pointer-up   (fn [event]
-                                (when (= (.-which (.-nativeEvent event)) 2)
-                                  (state/sidebar-remove-block! idx)))}
+                                  (when (= (.-which (.-nativeEvent event)) 2)
+                                    (state/sidebar-remove-block! idx)))}
 
               [:button.flex.flex-row.p-2.items-center.w-full.overflow-hidden
                {:aria-expanded (str (not collapsed?))
@@ -239,28 +232,29 @@
                 title]]
               [:.item-actions.flex.items-center
                (shui/button
-                 {:title (t :right-side-bar/pane-more)
-                  :class "px-3"
-                  :variant :text
-                  :on-click #(shui/popup-show!
-                               (.-target %)
-                               (actions-menu-content db-id idx block-type collapsed? block-count)
-                               {:as-dropdown? true
-                                :content-props {:on-click (fn [] (shui/popup-hide!))}})}
-                 (ui/icon "dots"))
+                {:title (t :right-side-bar/pane-more)
+                 :class "px-3"
+                 :variant :text
+                 :on-click #(shui/popup-show!
+                             (.-target %)
+                             (actions-menu-content db-id idx block-type collapsed? block-count)
+                             {:as-dropdown? true
+                              :content-props {:on-click (fn [] (shui/popup-hide!))}})}
+                (ui/icon "dots"))
 
                (shui/button
-                 {:title (t :right-side-bar/pane-close)
-                  :variant :text
-                  :class "px-3"
-                  :on-click #(state/sidebar-remove-block! idx)}
-                 (ui/icon "x"))]]
+                {:title (t :right-side-bar/pane-close)
+                 :variant :text
+                 :class "px-3"
+                 :on-click #(state/sidebar-remove-block! idx)}
+                (ui/icon "x"))]]
 
              [:div {:role "region"
                     :id (str "sidebar-panel-content-" idx)
                     :aria-labelledby (str "sidebar-panel-header-" idx)
                     :class           (util/classnames [{:hidden  collapsed?
                                                         :initial (not collapsed?)
+                                                        :sidebar-panel-content true
                                                         :px-2    (not (contains? #{:search :shortcut-settings} block-type))}])}
               (inner-component component (not drag-from))]
              (when drag-from (drop-area idx))])]

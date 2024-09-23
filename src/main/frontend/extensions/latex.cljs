@@ -4,7 +4,7 @@
             [frontend.ui :as ui]
             [frontend.config :as config]
             [frontend.util :as util]
-            [frontend.handler.plugin :refer [hook-extensions-enhancer-by-key] :as plugin-handler]
+            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key] :as plugin-handler]
             [promesa.core :as p]
             [goog.dom :as gdom]))
 
@@ -41,13 +41,14 @@
          (loader/load
           (config/asset-uri "/static/js/mhchem.min.js")
           (fn []
-            (p/finally
-              (p/all (when-let [enhancers (and config/lsp-enabled? (seq (hook-extensions-enhancer-by-key :katex)))]
-                       (for [{f :enhancer} enhancers]
-                         (when (fn? f) (f js/window.katex)))))
-              (fn []
-                (reset! *loading? false)
-                (render! state))))))
+            (some-> (when-let [enhancers (and config/lsp-enabled?
+                                           (seq (hook-extensions-enhancers-by-key :katex)))]
+                      (for [{f :enhancer} enhancers]
+                        (when (fn? f) (f js/window.katex))))
+              (p/all)
+              (p/finally (fn []
+                           (reset! *loading? false)
+                           (render! state)))))))
        state))))
 
 (defn- state-&-load-and-render!

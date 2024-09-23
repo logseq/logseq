@@ -29,7 +29,7 @@ and handles unexpected failure."
                                              :db-graph-mode? (config/db-based-graph? repo)})]
         (if (config/db-based-graph? repo)
           (map (fn [block]
-                (cond-> (dissoc block :block/properties)
+                (cond-> (dissoc block :block/properties :block/macros :block/properties-order)
                   (:block/properties block)
                   (merge (update-keys (:block/properties block)
                                       (fn [k]
@@ -43,13 +43,6 @@ and handles unexpected failure."
                                            :payload {:type "Extract-blocks"}}])
         (notification/show! "An unexpected error occurred during block extraction." :error)
         []))))
-
-(defn page-name->map
-  "Wrapper around logseq.graph-parser.block/page-name->map that adds in db"
-  ([original-page-name]
-   (page-name->map original-page-name true))
-  ([original-page-name with-timestamp?]
-   (gp-block/page-name->map original-page-name (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
 
 (defn- normalize-as-percentage
   [block]

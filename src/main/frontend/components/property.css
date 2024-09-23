@@ -47,16 +47,38 @@
   @apply grid;
 
   .property-pair {
-    @apply grid grid-cols-5 gap-1;
+    @apply grid grid-cols-4 gap-1;
 
     .jtrigger {
       @apply relative;
 
       &-id {
-        @apply absolute left-[-26px] top-[3px] rounded-full leading-none
+        @apply absolute left-[-22px] top-[2px] rounded-full leading-none
         flex items-center justify-center bg-primary text-primary-foreground border-none
-        text-xs min-w-[20px] min-h-[20px];
+        text-xs min-w-[20px] min-h-[20px] scale-95;
       }
+    }
+
+    .jtrigger-view {
+      > .jtrigger-id {
+        @apply left-[-14px];
+      }
+
+      &:has(> .jtrigger-id) {
+        .property-m {
+          @apply invisible;
+        }
+      }
+    }
+
+    .property-k {
+      .jtrigger {
+        &-id {
+          @apply left-[16px];
+        }
+      }
+
+      @apply inline-block overflow-hidden text-ellipsis whitespace-nowrap;
     }
 
     .property-value {
@@ -265,6 +287,10 @@ a.control-link {
   }
 }
 
+.property-key-inner {
+  @apply flex flex-row items-center gap-1 relative;
+}
+
 .property-select {
   .menu-link:hover, a.menu-link.chosen {
     .iconTablerExtBacklog {
@@ -277,16 +303,120 @@ a.control-link {
   }
 }
 
-.ls-page-properties {
-  @apply min-h-[40px];
-
-  &.no-mode {
-    @apply hidden;
-  }
+.ls-page-title .ls-page-properties {
+  @apply mt-4;
 }
 
 .ls-property-add {
   .cp__select-input {
     padding: 0.25em 0.75em;
   }
+}
+
+.ls-property-dropdown-editor {
+  @apply w-[300px] p-1.5;
+
+  .ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger {
+  }
+
+  [role=separator] {
+    @apply my-2;
+  }
+
+  .inner-wrap {
+    @apply flex items-center w-full justify-between;
+
+    > strong {
+      @apply flex items-center gap-1 font-normal opacity-90;
+    }
+
+    > label {
+      @apply text-xs flex items-center opacity-50;
+    }
+
+    &.disabled {
+      @apply opacity-70 select-none cursor-not-allowed;
+
+      > label {
+        @apply flex items-center gap-1 opacity-40 relative top-[2px] right-[1px];
+      }
+    }
+
+    & + svg {
+      @apply opacity-30;
+    }
+
+    .ui__switch {
+      @apply relative top-[1px];
+    }
+  }
+}
+
+.ls-property-name-edit-pane,
+.ls-base-edit-form {
+  @apply px-2 pt-2 pb-1;
+
+  > .input-wrap {
+    @apply gap-1.5;
+
+    > .ui__button:first-child {
+      @apply px-0 py-0 !w-9 border overflow-hidden;
+
+      > span {
+        @apply flex items-center;
+      }
+    }
+
+    > .ui__input:last-child {
+      @apply !h-[29px] px-2;
+    }
+  }
+}
+
+.ui__dropdown-menu-sub-content {
+  .cp__select-main {
+    @apply -mx-4 my-0;
+  }
+}
+
+.ls-property-choices-sub-pane {
+  @apply w-[220px] p-0;
+
+  > ul.choices-list {
+    @apply m-0 px-1.5 pt-1 pb-1;
+
+    li {
+      @apply flex items-center gap-1 relative;
+
+      .ls-icon-grip-vertical {
+        @apply opacity-50 cursor-move active:opacity-80;
+      }
+
+      > strong {
+        @apply text-sm px-0.5 flex-grow cursor-pointer font-normal
+        select-none active:opacity-60;
+      }
+
+      > .ui__button {
+        @apply !p-0 !w-7 !h-7 overflow-hidden flex-shrink-0;
+      }
+
+      > a.del {
+        @apply items-center absolute right-0 top-0 px-1 py-[7px] scale-90 hidden
+        opacity-80 hover:opacity-100 active:opacity-80 text-gray-08 hover:text-red-700;
+      }
+
+      &:hover a.del {
+        @apply flex;
+      }
+
+      &:hover .ls-icon-grip-vertical {
+        @apply opacity-80;
+      }
+    }
+  }
+}
+
+.ls-property-ui-position-sub-pane {
+  @apply w-[240px] p-0;
 }

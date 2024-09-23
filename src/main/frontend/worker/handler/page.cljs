@@ -6,6 +6,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.db.frontend.content :as db-content]
             [frontend.worker.handler.page.db-based.page :as db-worker-page]
             [frontend.worker.handler.page.file-based.page :as file-worker-page]))
@@ -14,7 +15,8 @@
   [conn config title {:keys [uuid]}]
   (assert (uuid? uuid) (str "rtc-create-page! `uuid` is not a uuid " uuid))
   (let [date-formatter    (common-config/get-date-formatter config)
-        [title page-name] (db-worker-page/get-title-and-pagename title)
+        title (db-worker-page/sanitize-title title)
+        page-name (common-util/page-name-sanity-lc title)
         page              (-> (gp-block/page-name->map title @conn true date-formatter
                                                        {:page-uuid uuid
                                                         :skip-existing-page-check? true})
@@ -36,7 +38,7 @@
   TODO: Add other options"
   [repo conn config title & {:as options}]
   (if (ldb/db-based-graph? @conn)
-    (db-worker-page/create! conn config title options)
+    (db-worker-page/create! conn title options)
     (file-worker-page/create! repo conn config title options)))
 
 (defn db-refs->page
@@ -86,8 +88,13 @@
                                  [[:db.fn/retractEntity [:file/path file-path]]])
                 delete-page-tx (concat (db-refs->page repo page)
                                        [[:db.fn/retractEntity (:db/id page)]])
-
+                restore-class-parent-tx (when db-based?
+                                          (->> (filter (fn [p] (ldb/class? p)) (:logseq.property/_parent page))
+                                               (map (fn [p]
+                                                      {:db/id (:db/id p)
+                                                       :logseq.property/parent :logseq.class/Root}))))
                 tx-data (concat truncate-blocks-tx-data
+                                restore-class-parent-tx
                                 delete-page-tx
                                 delete-file-tx)]
 

@@ -363,9 +363,9 @@
 (defn- write-debug-file [db]
   (let [ents (remove #(db-malli-schema/internal-ident? (:db/ident %))
                      (d/q '[:find [(pull ?b [*
-                                             {:class/schema.properties [:block/title]}
+                                             {:logseq.property.class/properties [:block/title]}
                                              {:property/schema.classes [:block/title]}
-                                             {:class/parent [:block/title]}
+                                             {:logseq.property/parent [:block/title]}
                                              {:block/refs [:block/title]}]) ...]
                             :in $
                             :where [?b :db/ident ?ident]]
@@ -376,7 +376,7 @@
                             (map (fn [m]
                                    (let [props (db-property/properties m)]
                                      (cond-> (select-keys m [:block/name :block/type :block/title :block/schema :db/ident
-                                                             :class/schema.properties :class/parent
+                                                             :logseq.property.class/properties :logseq.property/parent
                                                              :db/cardinality :property/schema.classes :block/refs])
                                        (seq props)
                                        (assoc :block/properties (-> (update-keys props name)
@@ -384,10 +384,10 @@
                                                                                    (if (:db/id v)
                                                                                      (db-property/property-value-content (d/entity db (:db/id v)))
                                                                                      v)))))
-                                       (seq (:class/schema.properties m))
-                                       (update :class/schema.properties #(set (map :block/title %)))
-                                       (some? (:class/parent m))
-                                       (update :class/parent :block/title)
+                                       (seq (:logseq.property.class/properties m))
+                                       (update :logseq.property.class/properties #(set (map :block/title %)))
+                                       (some? (:logseq.property/parent m))
+                                       (update :logseq.property/parent :block/title)
                                        (seq (:property/schema.classes m))
                                        (update :property/schema.classes #(set (map :block/title %)))
                                        (seq (:block/refs m))

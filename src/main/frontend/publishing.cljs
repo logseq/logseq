@@ -87,11 +87,13 @@
 
 (defn- register-components-fns!
   []
-  (state/set-page-blocks-cp! page-component/page)
+  (state/set-page-blocks-cp! page-component/page-cp)
+  (state/set-component! :block/->hiccup block/->hiccup)
   (state/set-component! :block/linked-references reference/block-linked-references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/breadcrumb block/breadcrumb)
   (state/set-component! :block/blocks-container block/blocks-container)
   (state/set-component! :block/reference block/block-reference)
   (state/set-component! :block/properties-cp block/db-properties-cp)

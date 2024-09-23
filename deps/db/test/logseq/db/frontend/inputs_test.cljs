@@ -6,7 +6,8 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.inputs :as db-inputs]
-            [logseq.db.sqlite.build :as sqlite-build]))
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (defn- custom-query [db {:keys [inputs query input-options]}]
   (let [q-args (cond-> (mapv #(db-inputs/resolve-input db % input-options) inputs)
@@ -97,6 +98,7 @@
 
 (deftest resolve-input-for-journal-date-inputs
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
+        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
         _ (sqlite-build/create-blocks
            conn
            [{:page {:build/journal 20230101}
@@ -147,6 +149,7 @@
 (deftest resolve-input-for-query-page
   (let [current-date (t/date-time 2023 1 1)
         conn (d/create-conn db-schema/schema-for-db-based-graph)
+          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
         _ (sqlite-build/create-blocks
            conn
            [{:page {:build/journal 20221231} :blocks [{:block/title "-1d"}]}
@@ -177,6 +180,7 @@
 
 (deftest resolve-input-for-relative-date-queries
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
+        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
         _ (sqlite-build/create-blocks
            conn
            [{:page {:build/journal 20220101} :blocks [{:block/title "-1y"}]}

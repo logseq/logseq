@@ -166,16 +166,13 @@
           (apply-remote-remove-ops-helper conn other-ops)]
       ;; move to page-block's first child
       (doseq [block-uuid block-uuids-need-move]
-        (transact-db! :move-blocks&persist-op
-                      repo conn
-                      [(d/entity @conn [:block/uuid block-uuid])]
-                      (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))
-                      false))
+        (when-let [b (d/entity @conn [:block/uuid block-uuid])]
+          (when-let [target-b
+                     (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))]
+            (transact-db! :move-blocks&persist-op repo conn [b] target-b false))))
       (doseq [block-uuid block-uuids-to-remove]
-        (transact-db! :delete-blocks
-                      repo conn date-formatter
-                      [(d/entity @conn [:block/uuid block-uuid])]
-                      {})))))
+        (when-let [b (d/entity @conn [:block/uuid block-uuid])]
+          (transact-db! :delete-blocks repo conn date-formatter [b] {}))))))
 
 (defn- insert-or-move-block
   [repo conn block-uuid remote-parents remote-block-order move? op-value]
@@ -335,8 +332,6 @@
     :block/tags
     :block/link
     :block/journal-day
-    :class/parent
-    :class/schema.properties
     :property/schema.classes
     :property.value/content})
 
@@ -538,7 +533,8 @@
 
         (< local-tx remote-t-before)
         (do (add-log-fn :rtc.log/apply-remote-update {:sub-type :need-pull-remote-data
-                                                      :remote-t remote-t :local-t local-tx})
+                                                      :remote-t remote-t :local-t local-tx
+                                                      :remote-t-before remote-t-before})
             (throw (ex-info "need pull earlier remote-data"
                             {:type ::need-pull-remote-data
                              :local-tx local-tx})))
@@ -552,9 +548,11 @@
               update-ops (vals update-ops-map)
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
-
           (js/console.groupCollapsed "rtc/apply-remote-ops-log")
-          (batch-tx/with-batch-tx-mode conn {:rtc-tx? true :persist-op? false :gen-undo-ops? false}
+          (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
+                                             :persist-op? false
+                                             :gen-undo-ops? false
+                                             :skip-store-conn rtc-const/RTC-E2E-TEST}
             (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo conn refed-blocks))
             (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
             (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))

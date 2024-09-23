@@ -8,7 +8,7 @@
 
 (defn clean-str
   [s]
-  (string/replace (string/lower-case s) #"[\[ \\/_\]\(\)]+" ""))
+  (string/lower-case (string/replace (string/lower-case s) #"[\[ \\/_\]\(\)]+" "")))
 
 (defn char-array
   [s]
@@ -31,30 +31,42 @@
 (defn score
   [oquery ostr]
   (let [query (clean-str oquery)
-        str (clean-str ostr)]
+        original-s (clean-str ostr)]
     (loop [q (seq (char-array query))
-           s (seq (char-array str))
+           s (seq (char-array original-s))
            mult 1
            idx MAX-STRING-LENGTH
-           score 0]
+           score' 0]
       (cond
         ;; add str-len-distance to score, so strings with matches in same position get sorted by length
         ;; boost score if we have an exact match including punctuation
-        (empty? q) (+ score
-                      (str-len-distance query str)
-                      (if (<= 0 (.indexOf ostr oquery)) MAX-STRING-LENGTH 0))
+        (empty? q) (+ score'
+                      (str-len-distance query original-s)
+                      (cond
+                        (string/starts-with? original-s query)
+                        (+ MAX-STRING-LENGTH 10)
+
+                        (<= 0 (.indexOf original-s query))
+                        MAX-STRING-LENGTH
+
+                        (<= 0 (.indexOf original-s query))
+                        (- MAX-STRING-LENGTH 0.1)
+
+                        :else
+                        0)
+                      (if (empty? s) 1 0))
         (empty? s) 0
         :else (if (= (first q) (first s))
                 (recur (rest q)
                        (rest s)
                        (inc mult) ;; increase the multiplier as more query chars are matched
                        (dec idx) ;; decrease idx so score gets lowered the further into the string we match
-                       (+ mult score)) ;; score for this match is current multiplier * idx
+                       (+ mult score')) ;; score for this match is current multiplier * idx
                 (recur q
                        (rest s)
                        1 ;; when there is no match, reset multiplier to one
                        (dec idx)
-                       (- score 0.1)))))))
+                       (- score' 0.1)))))))
 
 (defn search-normalize
   "Normalize string for searching (loose)"

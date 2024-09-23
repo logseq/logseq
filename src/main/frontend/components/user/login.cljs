@@ -86,13 +86,13 @@
        (LSAuthenticator
          {:termsLink "https://blog.logseq.com/terms/"}
          (fn [^js op]
-           (let [sign-out!      (.-signOut op)
+           (let [sign-out!'      (.-signOut op)
                  ^js user-proxy (.-user op)
                  ^js user       (try (js/JSON.parse (js/JSON.stringify user-proxy))
                                      (catch js/Error e
                                        (js/console.error "Error: Amplify user payload:" e)))
                  user'          (bean/->clj user)]
-             (user-pane sign-out! user')))))]))
+             (user-pane sign-out!' user')))))]))
 
 (rum/defcs modal-inner <
   shortcut/disable-all-shortcuts

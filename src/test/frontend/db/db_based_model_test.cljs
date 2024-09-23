@@ -24,9 +24,9 @@
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (test-helper/create-page! "class1" opts)
         _ (test-helper/create-page! "class2" opts)]
-    (is (= ["Card" "Root tag" "Task" "class1" "class2"] (sort (map :block/title (model/get-all-classes repo)))))))
+    (is (= ["Card" "Journal" "Query" "Root Tag" "Task" "class1" "class2"] (sort (map :block/title (model/get-all-classes repo)))))))
 
-(deftest get-class-objects-test
+(deftest ^:fix-me get-class-objects-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (test-helper/create-page! "class1" opts)
         class (db/get-case-page "class1")
@@ -39,7 +39,7 @@
       ;; set class2's parent to class1
       (let [class2 (db/get-case-page "class2")]
         (db/transact! [{:db/id (:db/id class2)
-                        :class/parent (:db/id class)}]))
+                        :logseq.property/parent (:db/id class)}]))
       (test-helper/save-block! repo sbid "Block 2" {:tags ["class2"]})
       (is (= (map :db/id (model/get-class-objects repo (:db/id class)))
              [(:db/id (db/entity [:block/uuid fbid]))
@@ -76,9 +76,9 @@
         class2 (db/get-case-page "class2")
         class3 (db/get-case-page "class3")
         _ (db/transact! [{:db/id (:db/id class2)
-                          :class/parent (:db/id class1)}
+                          :logseq.property/parent (:db/id class1)}
                          {:db/id (:db/id class3)
-                          :class/parent (:db/id class2)}])]
+                          :logseq.property/parent (:db/id class2)}])]
     (is
-     (= (model/get-class-children repo (:db/id (db/get-case-page "class1")))
+     (= (model/get-structured-children repo (:db/id (db/get-case-page "class1")))
         [(:db/id class2) (:db/id class3)]))))

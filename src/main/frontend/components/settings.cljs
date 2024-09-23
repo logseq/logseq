@@ -1,10 +1,10 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
-            [logseq.shui.ui :as shui]
             [frontend.colors :as colors]
             [frontend.components.assets :as assets]
             [frontend.components.file-sync :as fs]
+            [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -12,30 +12,31 @@
             [frontend.db :as db]
             [frontend.dicts :as dicts]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
-            [frontend.components.shortcut :as shortcut]
             [frontend.spec.storage :as storage-spec]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :refer [classnames web-platform?] :as util]
-            [frontend.version :refer [version]]
+            [frontend.version :as fv]
             [goog.object :as gobj]
             [goog.string :as gstring]
+            [logseq.db :as ldb]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [logseq.db :as ldb]))
+            [rum.core :as rum]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -228,7 +229,7 @@
    [:div
     [:div.rounded-md.sm:max-w-xs
      (ui/toggle wide-mode?
-       state/toggle-wide-mode!
+       ui-handler/toggle-wide-mode!
        true)]]
    (when (not (or (util/mobile?) (mobile-util/native-platform?)))
      [:div {:style {:text-align "right"}}
@@ -405,8 +406,8 @@
 
     [:<>
      (row-with-button-action
-       {:left-label "Accent color"
-        :description "Choosing an accent color may override any theme you have selected."
+       {:left-label (t :settings-page/accent-color)
+        :description (t :settings-page/accent-color-alert)
         :-for "toggle_radix_theme"
         :desc (when-not _in-modal?
                 [:span.pl-6 (ui/render-keyboard-shortcut
@@ -417,7 +418,7 @@
 (rum/defc modal-appearance-inner < rum/reactive
   []
   [:div.cp__settings-appearance-modal-inner
-   [:h1.text-2xl.font-bold.pb-2.pt-1 "Appearance"]
+   [:h1.text-2xl.font-bold.pb-2.pt-1 (t :appearance)]
    (theme-modes-row t)
    (editor-font-family-row t (state/sub :ui/editor-font))
    (toggle-wide-mode-row t (state/sub :ui/wide-mode?))
@@ -429,24 +430,37 @@
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
     (t :settings-page/custom-date-format)
-    (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
-               :class       "tippy-hover ml-2"
-               :interactive true
-               :disabled    false}
-              (svg/info))]
+    (when-not (config/db-based-graph? (state/get-current-repo))
+     (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
+                :class       "tippy-hover ml-2"
+                :interactive true
+                :disabled    false}
+               (svg/info)))]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
       {:value     preferred-date-format
        :on-change (fn [e]
-                    (let [format (util/evalue e)]
+                    (let [repo (state/get-current-repo)
+                          format (util/evalue e)
+                          db-based? (config/db-based-graph? repo)]
                       (when-not (string/blank? format)
-                        (config-handler/set-config! :journal/page-title-format format)
-                        (notification/show!
-                          [:div (t :settings-page/custom-date-format-notification)]
-                          :warning false)
+                        (if db-based?
+                          (p/do!
+                            (property-handler/set-block-property! repo
+                                                                :logseq.class/Journal
+                                                                :logseq.property.journal/title-format
+                                                                format)
+                            (notification/show! "Please refresh the app for this change to take effect"))
+                          (do
+                            (config-handler/set-config! :journal/page-title-format format)
+                            (notification/show!
+                             [:div (t :settings-page/custom-date-format-notification)]
+                             :warning false)))
+
                         (state/close-modal!)
-                        (route-handler/redirect! {:to :graphs}))))}
+                        (shui/dialog-close-all!)
+                        (when-not db-based? (route-handler/redirect! {:to :graphs})))))}
       (for [format (sort (date/journal-title-formatters))]
         [:option {:key format} format])]]]])
 
@@ -536,8 +550,10 @@
       (string/blank? value)
       (let [home (get (state/get-config) :default-home {})
             new-home (dissoc home :page)]
-        (config-handler/set-config! :default-home new-home)
-        (notification/show! "Home default page updated successfully!" :success))
+        (p/do!
+         (config-handler/set-config! :default-home new-home)
+         (config-handler/set-config! :feature/enable-journals? true)
+         (notification/show! "Journals enabled" :success)))
 
       ;; FIXME: home page should be db id instead of page name
       (ldb/get-page (db/get-db) value)
@@ -718,7 +734,7 @@
   (let [preferred-language (state/sub [:preferred-language])
         show-radix-themes? true]
     [:div.panel-wrap.is-general
-     (version-row t version)
+     (version-row t fv/version)
      (language-row t preferred-language)
      (theme-modes-row t)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
@@ -1106,7 +1122,7 @@
        (http-server-switcher-row))
      (when-not db-based? (flashcards-switcher-row enable-flashcards?))
      (when-not db-based? (zotero-settings-row))
-     (when (config/db-based-graph? current-repo)
+     (when (and config/dev? (config/db-based-graph? current-repo))
        ;; FIXME: Wire this up again to RTC init calls
        (rtc-switcher-row (state/enable-rtc? current-repo)))
      (when-not web-platform?

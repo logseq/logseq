@@ -42,9 +42,9 @@ necessary db filtering"
 
 (defn- ^:large-vars/html publishing-html
   [transit-db app-state options]
-  (let [{:keys [icon name alias title description url]} options
+  (let [{name' :name :keys [icon alias title description url]} options
         icon (or icon "static/img/logo.png")
-        project (or alias name)]
+        project (or alias name')]
     (str "<!DOCTYPE html>\n"
          (html
           (list
@@ -137,8 +137,8 @@ necessary db filtering"
   "Given the graph's db, filters the db using the given options and returns the
 generated index.html string and assets used by the html"
   [db* {:keys [app-state repo-config html-options db-graph?]}]
-  (let [all-pages-public? (if-let [val (:publishing/all-pages-public? repo-config)]
-                            val
+  (let [all-pages-public? (if-let [value (:publishing/all-pages-public? repo-config)]
+                            value
                             (:all-pages-public? repo-config))
         [db asset-filenames'] (if all-pages-public?
                                 (db/clean-export! db* {:db-graph? db-graph?})

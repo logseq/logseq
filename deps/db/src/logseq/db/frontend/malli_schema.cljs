@@ -7,7 +7,7 @@
             [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.entity-plus :as entity-plus]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.order :as db-order]))
 
 ;; :db/ident malli schemas
@@ -114,6 +114,9 @@
    (fn [ent]
      (reduce (fn [m [k v]]
                (if-let [property (and (db-property/property? k)
+                                      ;; This allows block types like property-value-block to require properties in
+                                      ;; their schema that they depend on
+                                      (not= :logseq.property/created-from-property k)
                                       (d/entity db k))]
                  (update m :block/properties (fnil conj [])
                          ;; use explicit call to be nbb compatible
@@ -208,7 +211,8 @@
    [:block/properties {:optional true} block-properties]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
-   [:block/tx-id {:optional true} :int]])
+   [:block/tx-id {:optional true} :int]
+   [:block/collapsed? {:optional true} :boolean]])
 
 (def page-attrs
   "Common attributes for pages"
@@ -233,17 +237,10 @@
   (vec
    (concat
     [:map
-     ;; Only for linked pages
-     [:block/collapsed? {:optional true} :boolean]
      ;; journal-day is only set for journal pages
      [:block/journal-day {:optional true} :int]]
     page-attrs
     page-or-block-attrs)))
-
-(def class-attrs
-  [[:db/ident class-ident]
-   [:class/parent {:optional true} :int]
-   [:class/schema.properties {:optional true} [:set :int]]])
 
 (def class-page
   (vec
@@ -252,19 +249,16 @@
      [:block/schema
       {:optional true}
       [:map
-       [:properties {:optional true} [:vector property-ident]]]]]
-    class-attrs
+       [:properties {:optional true} [:vector property-ident]]]]
+     [:db/ident class-ident]]
     page-attrs
     page-or-block-attrs)))
 
-(def property-type-schema-attrs
-  "Property :schema attributes that vary by :type"
-  [;; For closed values
-   [:position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
-  [[:hide? {:optional true} :boolean]])
+  [[:hide? {:optional true} :boolean]
+   [:position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
 
 (def internal-property
   (vec
@@ -278,10 +272,9 @@
          [:type (apply vector :enum (into db-property-type/internal-built-in-property-types
                                           db-property-type/user-built-in-property-types))]
          [:public? {:optional true} :boolean]
-         [:view-context {:optional true} [:enum :page :block]]
+         [:view-context {:optional true} [:enum :page :block :class :never]]
          [:shortcut {:optional true} :string]]
-        property-common-schema-attrs
-        property-type-schema-attrs))]]
+        property-common-schema-attrs))]]
     property-attrs
     page-attrs
     page-or-block-attrs)))
@@ -297,9 +290,7 @@
          [:map
           ;; Once a schema is defined it must have :type as this is an irreversible decision
           [:type :keyword]]
-         property-common-schema-attrs
-         (remove #(not (db-property-type/property-type-allows-schema-attribute? prop-type (first %)))
-                 property-type-schema-attrs)))])
+         property-common-schema-attrs))])
     db-property-type/user-built-in-property-types)))
 
 (def user-property
@@ -337,8 +328,7 @@
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
-    ;; other
-   [:block/collapsed? {:optional true} :boolean]])
+   [:logseq.property/created-from-property {:optional true} :int]])
 
 (def whiteboard-block
   "A (shape) block for whiteboard"
@@ -357,8 +347,9 @@
   (vec
    (concat
     [:map]
-    [[:property.value/content [:or :string :double :boolean]]]
-    (remove #(#{:block/title} (first %)) block-attrs)
+    [[:property.value/content [:or :string :double :boolean]]
+     [:logseq.property/created-from-property :int]]
+    (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def closed-value-block*
@@ -370,8 +361,9 @@
      [:db/ident {:optional true} logseq-property-ident]
      [:block/title {:optional true} :string]
      [:property.value/content {:optional true} [:or :string :double]]
-     [:block/closed-value-property {:optional true} [:set :int]] ]
-    (remove #(#{:block/title} (first %)) block-attrs)
+     [:logseq.property/created-from-property :int]
+     [:block/closed-value-property {:optional true} [:set :int]]]
+    (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def closed-value-block
@@ -429,15 +421,15 @@
   (into
    [:multi {:dispatch (fn [d]
                         (cond
-                          (sqlite-util/property? d)
+                          (entity-util/property? d)
                           :property
-                          (sqlite-util/class? d)
+                          (entity-util/class? d)
                           :class
-                          (sqlite-util/hidden? d)
+                          (entity-util/hidden? d)
                           :hidden
-                          (sqlite-util/whiteboard? d)
+                          (entity-util/whiteboard? d)
                           :normal-page
-                          (sqlite-util/page? d)
+                          (entity-util/page? d)
                           :normal-page
                           (:file/path d)
                           :file-block
@@ -468,7 +460,7 @@
 
 ;; Keep malli schema in sync with db schema
 ;; ========================================
-(let [malli-many-ref-attrs (->> (concat class-attrs property-attrs page-attrs block-attrs page-or-block-attrs (rest closed-value-block*))
+(let [malli-many-ref-attrs (->> (concat property-attrs page-attrs block-attrs page-or-block-attrs (rest closed-value-block*))
                                 (filter #(= (last %) [:set :int]))
                                 (map first)
                                 set)]
@@ -477,7 +469,7 @@
                          (string/join ", " undeclared-ref-attrs))
                     {}))))
 
-(let [malli-one-ref-attrs (->> (concat class-attrs property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
+(let [malli-one-ref-attrs (->> (concat property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (filter #(= (last %) :int))
                                (map first)
                                set)
@@ -487,7 +479,7 @@
                          (string/join ", " undeclared-ref-attrs))
                     {}))))
 
-(let [malli-non-ref-attrs (->> (concat class-attrs property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
+(let [malli-non-ref-attrs (->> (concat property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (concat (rest file-block) (rest asset-block) (rest property-value-block)
                                        (rest db-ident-key-val) (rest class-page))
                                (remove #(= (last %) [:set :int]))

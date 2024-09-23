@@ -1,4 +1,13 @@
 .cp__page {
+  &-inner-wrap {
+    &.is-node-page:not([data-ready]) {
+      .ls-page-blocks,
+      .ls-page-appendix-els {
+        @apply invisible;
+      }
+    }
+  }
+
   &-publish-actions {
     background-color: var(--ls-primary-background-color);
     padding: 50px 0;
@@ -66,6 +75,10 @@
 
   &.title {
     @apply mb-3;
+
+    .block-main-container {
+      @apply gap-2;
+    }
   }
 
   .edit-input {
@@ -86,7 +99,7 @@
     @apply font-[48px] leading-none;
 
     .ui__button {
-      @apply !h-auto mb-[-3px];
+      @apply !h-auto pb-[1.5px];
     }
   }
 }
@@ -132,6 +145,8 @@ html.is-native-iphone-without-notch {
   opacity: 0;
   color: var(--ls-primary-text-color);
   transform: scale(.8);
+  margin-left: -1px;
+
 
   &:hover {
     color: var(--ls-primary-text-color);
@@ -193,49 +208,7 @@ html.is-native-ios {
 }
 
 .references {
-  user-select: none;
-}
-
-.page-info {
-  padding-left: 1px;
-
-  &-inner {
-    @apply py-2;
-  }
-
-  .configure-wrap {
-    @apply px-2;
-  }
-
-  .ls-new-property {
-    @apply mt-[3px];
-  }
-
-  &.is-collapsed {
-    @apply border-transparent;
-
-    .ls-new-property {
-      @apply hidden;
-    }
-
-    .ls-page-properties {
-      &.no-properties {
-        @apply hidden;
-      }
-    }
-  }
-
-  .info-title {
-    @apply relative min-h-[28px] flex items-center;
-  }
-}
-
-.page-info-title-placeholder {
-  min-height: 28px;
-}
-
-.info-title a.tag:hover, .multi-values a.tag:hover {
-    text-decoration: none;
+  @apply select-none;
 }
 
 .no-ring {
@@ -243,14 +216,17 @@ html.is-native-ios {
 }
 
 .ls-dummy-block {
-  @apply pb-[27px];
+  @apply mb-[20px] pt-[5px] pb-[3px] h-[29px];
+
+  &.selected {
+  }
 
   .bullet {
-    @apply relative top-[4px] left-[-2px];
+    @apply relative -top-[2px] left-[-2px];
   }
 
   .text {
-    @apply relative top-[3px];
+    @apply relative -top-[2px];
   }
 }
 
@@ -267,5 +243,11 @@ html.is-native-ios {
     &.as-block {
       @apply -ml-5;
     }
+  }
+}
+
+.cp__right-sidebar {
+  .page-linked > .content {
+    @apply pt-2;
   }
 }

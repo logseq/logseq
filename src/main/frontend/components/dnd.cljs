@@ -3,8 +3,9 @@
             [cljs-bean.core :as bean]
             ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy horizontalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
-            ["@dnd-kit/core" :refer [DndContext closestCenter PointerSensor useSensor useSensors]]
-            [frontend.rum :as r]))
+            ["@dnd-kit/core" :refer [DndContext closestCenter MouseSensor useSensor useSensors]]
+            [frontend.rum :as r]
+            [frontend.state :as state]))
 
 (def dnd-context (r/adapt-class DndContext))
 (def sortable-context (r/adapt-class SortableContext))
@@ -28,65 +29,70 @@
            {:ref set-node-ref
             :style style}
            (bean/->clj attributes)
-           (bean/->clj listeners))
+           (bean/->clj listeners)
+           (dissoc props :id))
      children]))
 
 (rum/defc items
-  [col {:keys [on-drag-end parent-node vertical?]
+  [col {:keys [on-drag-end parent-node vertical? sort-by-inner-element?]
         :or {vertical? true}}]
   (let [ids (mapv :id col)
         items' (bean/->js ids)
         id->item (zipmap ids col)
-        [items set-items] (rum/use-state items')
+        [items-state set-items] (rum/use-state items')
         _ (rum/use-effect! (fn [] (set-items items')) [col])
         [_active-id set-active-id] (rum/use-state nil)
-        sensors (useSensors (useSensor PointerSensor (bean/->js {:activationConstraint {:distance 8}})))
+        sensors (useSensors (useSensor MouseSensor (bean/->js {:activationConstraint {:distance 8}})))
         dnd-opts {:sensors sensors
                   :collisionDetection closestCenter
                   :onDragStart (fn [event]
-                                 (set-active-id (.-id (.-active event))))
+                                 (when-not (state/editing?)
+                                   (set-active-id (.-id (.-active event)))))
                   :onDragEnd (fn [event]
                                (let [active-id (.-id (.-active event))
                                      over-id (.-id (.-over event))]
-                                 (js/console.dir event)
-                                 (when-not (= active-id over-id)
-                                   (let [old-index (.indexOf ids active-id)
-                                         new-index (.indexOf ids over-id)
-                                         new-items (arrayMove items old-index new-index)]
-                                     (when (fn? on-drag-end)
-                                       (let [new-values (->> (map (fn [id]
-                                                                    (let [item (id->item id)]
-                                                                      (if (map? item) (:value item) item)))
-                                                                  new-items)
-                                                             (remove nil?)
-                                                             vec)]
-                                         (if (not= (count new-values) (count ids))
-                                           (do
-                                             (js/console.error "Dnd length not matched: ")
-                                             {:old-items items
-                                              :new-items new-items})
-                                           (do
-                                             (set-items new-items)
-                                             (on-drag-end new-values {:active-id active-id
-                                                                      :over-id over-id
-                                                                      :direction (if (> new-index old-index)
-                                                                                   :down
-                                                                                   :up)})))))))
+                                 (when active-id
+                                   (when-not (= active-id over-id)
+                                     (let [old-index (.indexOf ids active-id)
+                                           new-index (.indexOf ids over-id)
+                                           new-items (arrayMove items-state old-index new-index)]
+                                       (when (fn? on-drag-end)
+                                         (let [new-values (->> (map (fn [id]
+                                                                      (let [item (id->item id)]
+                                                                        (if (map? item) (:value item) item)))
+                                                                    new-items)
+                                                               (remove nil?)
+                                                               vec)]
+                                           (if (not= (count new-values) (count ids))
+                                             (do
+                                               (js/console.error "Dnd length not matched: ")
+                                               {:old-items items-state
+                                                :new-items new-items})
+                                             (do
+                                               (set-items new-items)
+                                               (on-drag-end new-values {:active-id active-id
+                                                                        :over-id over-id
+                                                                        :direction (if (> new-index old-index)
+                                                                                     :down
+                                                                                     :up)}))))))))
                                  (set-active-id nil)))}
-        sortable-opts {:items items
+        sortable-opts {:items items-state
                        :strategy (if vertical?
                                    verticalListSortingStrategy
                                    horizontalListSortingStrategy)}
         children (for [item col]
                    (let [id (str (:id item))
                          prop (merge
-                                 (:prop item)
-                                 {:key id :id id})]
-                     (rum/with-key
-                       (if (:disabled? item)
-                         (non-sortable-item prop (:content item))
-                         (sortable-item prop (:content item)))
-                       id)))
+                               (:prop item)
+                               {:key id :id id})]
+                     (cond
+                       sort-by-inner-element?
+                       [:div (:content item)]
+
+                       (:disabled? item)
+                       (rum/with-key (non-sortable-item prop (:content item)) id)
+                       :else
+                       (rum/with-key (sortable-item prop (:content item)) id))))
         children' (if parent-node
                     [parent-node children]
                     children)]

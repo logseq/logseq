@@ -134,7 +134,7 @@
                                                            (throw (ex-info (str "No uuid for page ref name" (pr-str %)) {})))
                                                        :block/title %)
                                             ref-names)]
-                       {:block/title (db-content/page-ref->special-id-ref (:block/title m) block-refs)
+                       {:block/title (db-content/refs->special-id-ref (:block/title m) block-refs {:replace-tag? false})
                         :block/refs block-refs})))))))
 
 (defn- build-properties-tx [properties page-uuids all-idents]
@@ -156,7 +156,8 @@
                                 (let [new-block
                                       (merge (sqlite-util/build-new-property (get-ident all-idents prop-name)
                                                                              (:block/schema prop-m)
-                                                                             {:block-uuid (:block/uuid prop-m)})
+                                                                             {:block-uuid (:block/uuid prop-m)
+                                                                              :title (:block/title prop-m)})
                                              {:db/id (or (property-db-ids prop-name)
                                                          (throw (ex-info "No :db/id for property" {:property prop-name})))})
                                       pvalue-tx-m (->property-value-tx-m new-block (:build/properties prop-m) properties all-idents)]
@@ -205,11 +206,11 @@
                              (when-let [props (not-empty (:build/properties class-m))]
                                (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) uuid-maps all-idents))
                              (when class-parent
-                               {:class/parent
+                               {:logseq.property/parent
                                 (or (class-db-ids class-parent)
                                     (throw (ex-info (str "No :db/id for " class-parent) {})))})
                              (when schema-properties
-                               {:class/schema.properties
+                               {:logseq.property.class/properties
                                 (mapv #(hash-map :db/ident (get-ident all-idents %))
                                       schema-properties)}))))))
                      classes))]
@@ -465,7 +466,8 @@
                                                    :block/title page-name
                                                    :block/uuid
                                                    (common-uuid/gen-uuid :journal-page-uuid date-int)
-                                                   :block/type "journal"})))))
+                                                   :block/type "journal"
+                                                   :block/tags :logseq.class/Journal})))))
                            m))]
     ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
     (->> pages-and-blocks

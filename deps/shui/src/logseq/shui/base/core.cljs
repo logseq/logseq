@@ -14,7 +14,8 @@
                  {:on-key-down #(case (.-key %)
                                   (" " "Enter")
                                   (do (some-> (.-target %) (.click))
-                                      (.preventDefault %))
+                                    (.preventDefault %)
+                                    (.stopPropagation %))
                                   :dune)}
                  (map? props)
                  (merge props))

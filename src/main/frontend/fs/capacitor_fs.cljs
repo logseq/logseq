@@ -145,7 +145,7 @@
                                 (concat (rest dirs) files-dir)))))]
     (js->clj result :keywordize-keys true)))
 
-(defn- contents-matched?
+(defn- <contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
     (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
@@ -232,7 +232,7 @@
               disk-content (or disk-content "")
               repo-dir (config/get-local-dir repo)
               db-content (or old-content (db/get-file repo rpath) "")
-              contents-matched? (contents-matched? disk-content db-content)]
+              contents-matched? (<contents-matched? disk-content db-content)]
         (->
          (p/let [result (<write-file-with-utf8 fpath content)
                  mtime (-> (js->clj stat :keywordize-keys true)

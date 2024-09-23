@@ -5,6 +5,9 @@
             [malli.transform :as mt]
             [malli.util :as mu]))
 
+(goog-define RTC-E2E-TEST* false)
+(def RTC-E2E-TEST RTC-E2E-TEST*)
+
 (def block-pos-schema
   [:catn
    [:parent-uuid [:maybe :uuid]]
@@ -157,7 +160,7 @@
 (def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
-(def data-to-ws-schema
+(def ^:large-vars/data-var data-to-ws-schema
   (mu/closed-schema
    [:multi {:dispatch :action}
     ["list-graphs"
@@ -170,12 +173,17 @@
       [:action :string]
       [:graph-uuid :string]]]
     ["apply-ops"
-     [:map
-      [:req-id :string]
-      [:action :string]
-      [:graph-uuid :string]
-      [:ops [:sequential to-ws-op-schema]]
-      [:t-before :int]]]
+     [:or
+      [:map
+       [:req-id :string]
+       [:action :string]
+       [:graph-uuid :string]
+       [:ops [:sequential to-ws-op-schema]]
+       [:t-before :int]]
+      [:map
+       [:req-id :string]
+       [:action :string]
+       [:s3-key :string]]]]
     ["presign-put-temp-s3-obj"
      [:map
       [:req-id :string]
@@ -256,4 +264,7 @@
 (def data-to-ws-encoder (m/encoder data-to-ws-schema (mt/transformer
                                                       mt/string-transformer
                                                       (mt/key-transformer {:encode m/-keyword->string}))))
-(def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer nil #(m/-fail! ::data-to-ws-schema %)))
+(def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer nil
+                                   #(do
+                                      (prn ::data-to-ws-schema %)
+                                      (m/-fail! ::data-to-ws-schema %))))

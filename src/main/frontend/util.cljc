@@ -262,8 +262,8 @@
 
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
-  [class]
-  (some->> (string/split class #"\.")
+  [class']
+  (some->> (string/split class' #"\.")
            (string/join " ")
            (string/trim)))
 
@@ -345,7 +345,7 @@
    (when-not node-test?
      (extend-type js/NodeList
        ISeqable
-       (-seq [array] (array-seq array 0)))))
+       (-seq [arr] (array-seq arr 0)))))
 
 ;; Caret
 #?(:cljs
@@ -542,6 +542,14 @@
                                 :block    "center"}))))))
 
 #?(:cljs
+   (defn bottom-reached?
+     [node threshold]
+     (let [full-height (gobj/get node "scrollHeight")
+           scroll-top' (gobj/get node "scrollTop")
+           client-height (gobj/get node "clientHeight")]
+       (<= (- full-height scroll-top' client-height) threshold))))
+
+#?(:cljs
    (defn link?
      [node]
      (contains?
@@ -658,12 +666,6 @@
          (concat-without-spaces prefix new-value)
          (str prefix new-value)))
      s)))
-
-#?(:cljs
-   (def escape-regex-chars common-util/escape-regex-chars))
-
-#?(:cljs
-   (def replace-ignore-case common-util/replace-ignore-case))
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs
@@ -873,48 +875,64 @@
          (when section
            (gdom/getElement section "id"))))))
 
-(defn get-elem-idx
-  [nodes node]
-  (first (filter number? (map-indexed (fn [idx b] (when (= node b) idx)) nodes))))
+#?(:cljs
+   (defn- skip-same-top-blocks
+     [blocks block]
+     (let [property? (= (d/attr block "data-is-property") "true")
+           properties-area (rec-get-node block "ls-properties-area")]
+       (remove (fn [b]
+                 (and
+                  (not= b block)
+                  (or (= (when b (.-top (.getBoundingClientRect b)))
+                         (when block (.-top (.getBoundingClientRect block))))
+                      (when property?
+                        (and (not= (d/attr b "data-is-property") "true")
+                             (gdom/contains properties-area b)))))) blocks))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed
      "Gets previous non-collapsed block. If given a container
       looks up blocks in that container e.g. for embed"
      ([block] (get-prev-block-non-collapsed block {}))
-     ([block {:keys [container]}]
+     ([block {:keys [container up-down?]}]
       (when-let [blocks (if container
                           (get-blocks-noncollapse container)
                           (get-blocks-noncollapse))]
-        (when-let [index (get-elem-idx blocks block)]
-          (let [idx (dec index)]
-            (when (>= idx 0)
-              (nth-safe blocks idx))))))))
+        (let [blocks (if up-down?
+                       (skip-same-top-blocks blocks block)
+                       blocks)]
+          (when-let [index (.indexOf blocks block)]
+            (let [idx (dec index)]
+              (when (>= idx 0)
+                (nth-safe blocks idx)))))))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed-non-embed
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
                             remove-embedded-blocks)]
-       (when-let [index (get-elem-idx blocks block)]
+       (when-let [index (.indexOf blocks block)]
            (let [idx (dec index)]
              (when (>= idx 0)
                (nth-safe blocks idx)))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed
-     [block]
+     [block {:keys [up-down?]}]
      (when-let [blocks (and block (get-blocks-noncollapse))]
-       (when-let [index (get-elem-idx blocks block)]
-         (let [idx (inc index)]
-           (when (>= (count blocks) idx)
-             (nth-safe blocks idx)))))))
+       (let [blocks (if up-down?
+                      (skip-same-top-blocks blocks block)
+                      blocks)]
+         (when-let [index (.indexOf blocks block)]
+           (let [idx (inc index)]
+             (when (>= (count blocks) idx)
+               (nth-safe blocks idx))))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed-skip
      [block]
      (when-let [blocks (get-blocks-noncollapse)]
-       (when-let [index (get-elem-idx blocks block)]
+       (when-let [index (.indexOf blocks block)]
          (loop [idx (inc index)]
            (when (>= (count blocks) idx)
              (let [block (nth-safe blocks idx)
@@ -1250,7 +1268,7 @@
                                .-clientHeight)
 
              main-node   (app-scroll-container-node el)
-             scroll-top  (.-scrollTop main-node)
+             scroll-top'  (.-scrollTop main-node)
 
              current-pos (get-selection-start el)
              grapheme-pos (get-graphemes-pos (.-value (.textContent el)) current-pos)
@@ -1268,7 +1286,7 @@
              scroll      (- cursor-y (- vw-height (+ @keyboard-height (+ 40 4))))]
          (cond
            (and to-vw-one-quarter? (> cursor-y (* vw-height 0.4)))
-           (set! (.-scrollTop main-node) (+ scroll-top (- cursor-y (/ vw-height 4))))
+           (set! (.-scrollTop main-node) (+ scroll-top' (- cursor-y (/ vw-height 4))))
 
            (and (< cursor-y (+ header-height offset-height 4)) ;; 4 is top+bottom padding for per line
                 (>= cursor-y header-height))
@@ -1277,11 +1295,11 @@
            (< cursor-y header-height)
            (let [_ (.scrollIntoView el true)
                  main-node (app-scroll-container-node el)
-                 scroll-top (.-scrollTop main-node)]
-             (set! (.-scrollTop main-node) (- scroll-top (/ vw-height 4))))
+                 scroll-top' (.-scrollTop main-node)]
+             (set! (.-scrollTop main-node) (- scroll-top' (/ vw-height 4))))
 
            (> scroll 0)
-           (set! (.-scrollTop main-node) (+ scroll-top scroll))
+           (set! (.-scrollTop main-node) (+ scroll-top' scroll))
 
            :else
            nil)))))

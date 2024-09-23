@@ -16,6 +16,7 @@
    [frontend.handler.whiteboard :as whiteboard-handler]
    [frontend.handler.notification :as notification]
    [frontend.modules.shortcut.core :as shortcut]
+   [frontend.handler.db-based.page :as db-page-handler]
    [frontend.search :as search]
    [frontend.state :as state]
    [frontend.ui :as ui]
@@ -47,14 +48,17 @@
 
 (def GROUP-LIMIT 5)
 
-(def search-actions
-  [{:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"}
-   {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "letter-n"}
-   {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
-   {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
-   {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}])
-
-(def filters search-actions)
+(defn filters
+  []
+  (let [current-page (state/get-current-page)]
+    (->>
+     [(when current-page
+        {:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"})
+      {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "letter-n"}
+      {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
+      {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
+      {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}]
+     (remove nil?))))
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
 (def default-results
@@ -86,8 +90,8 @@
   (let [sidebar? (:sidebar? (last (:rum/args state)))
         results @(::results state)
         input @(::input state)
-        filter @(::filter state)
-        filter-group (:group filter)
+        filter' @(::filter state)
+        filter-group (:group filter')
         index (volatile! -1)
         visible-items (fn [group]
                         (let [{:keys [items show]} (get results group)]
@@ -102,7 +106,9 @@
                             (take 5 items))))
         node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
                        (when-not (string/blank? input)
-                         (or (db/get-page (string/trim input))
+                         (or (some-> (last (string/split input "/"))
+                                     string/trim
+                                     db/get-page)
                              (some (fn [block]
                                      (and
                                       (:block/tags block)
@@ -230,22 +236,23 @@
                (ldb/whiteboard? entity)
                "whiteboard"
                :else
-               "page")]
+               "page")
+        title (title/block-unique-title page)
+        title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
     (hash-map :icon icon
               :icon-theme :gray
-              :text (title/block-unique-title page)
+              :text title'
               :source-page (or source-page page))))
 
 (defn- block-item
   [repo block current-page !input]
   (let [id (:block/uuid block)
-        object? (seq (:block/tags block))
         text (title/block-unique-title block)
         icon "letter-n"]
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text @!input)
-     :header (when-not object? (block/breadcrumb {:search? true} repo id {}))
+     :header (when-not (db/page? block) (block/breadcrumb {:search? true} repo id {}))
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id (:block/uuid current-page)))
      :source-block block}))
@@ -257,11 +264,13 @@
         repo (state/get-current-repo)
         current-page (when-let [id (page-util/get-current-page-id)]
                        (db/entity id))
-        opts {:limit 100 :built-in? config/dev?}]
+        opts {:limit 100 :dev? config/dev? :built-in? true}]
     (swap! !results assoc-in [group :status] :loading)
     (swap! !results assoc-in [:current-page :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)
             blocks (remove nil? blocks)
+            blocks (search/fuzzy-search blocks @!input {:limit 100
+                                                        :extract-fn :block/title})
             items (keep (fn [block]
                           (if (:page? block)
                             (page-item repo block)
@@ -326,8 +335,8 @@
         input @!input
         q (or (get-filter-q input) "")
         matched-items (if (string/blank? q)
-                        filters
-                        (search/fuzzy-search filters q {:extract-fn :text}))]
+                        (filters)
+                        (search/fuzzy-search (filters) q {:extract-fn :text}))]
     (swap! !results update group merge {:status :success :items matched-items})))
 
 (defmethod load-results :current-page [group state]
@@ -487,17 +496,16 @@
         create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
-    (p/do!
-      (cond
-        create-class?
-        (page-handler/<create-class! class
-                                     {:redirect? false
-                                      :create-first-block? false})
-        create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
-        create-page? (page-handler/<create! @!input {:redirect? true}))
+    (p/let [result (cond
+                     create-class?
+                     (db-page-handler/<create-class! class
+                                                     {:redirect? false
+                                                      :create-first-block? false})
+                     create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
+                     create-page? (page-handler/<create! @!input {:redirect? true}))]
       (state/close-modal!)
-      (when create-class?
-        (state/pub-event! [:class/configure (db/get-case-page class)])))))
+      (when (and create-class? result)
+        (state/pub-event! [:class/configure result])))))
 
 (defn- get-filter-user-input
   [input]
@@ -556,7 +564,7 @@
         highlighted-item (or @(::highlighted-item state) first-item)
         highlighted-group @(::highlighted-group state)
         *mouse-active? (::mouse-active? state')
-        filter @(::filter state)
+        filter' @(::filter state)
         can-show-less? (< GROUP-LIMIT (count visible-items))
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
@@ -586,7 +594,7 @@
 
          (when (and (= group highlighted-group)
                     (or can-show-more? can-show-less?)
-                    (empty? filter)
+                    (empty? filter')
                     (not sidebar?))
            [:a.text-link.select-node.opacity-50.hover:opacity-90
             {:on-click (if (= show :more) show-less show-more)}
@@ -652,8 +660,7 @@
          e-type (gobj/getValueByKeys e "type")
          composing-end? (= e-type "compositionend")
          !input (::input state)
-         input-ref @(::input-ref state)
-         !load-results-throttled (::load-results-throttled state)]
+         input-ref @(::input-ref state)]
 
      ;; update the input value in the UI
      (reset! !input input)
@@ -661,14 +668,9 @@
 
      (reset! (::input-changed? state) true)
 
-     ;; ensure that there is a throttled version of the load-results function
-     (when-not @!load-results-throttled
-       (reset! !load-results-throttled (gfun/throttle load-results 50)))
-
      ;; retrieve the load-results function and update all the results
      (when (or (not composing?) composing-end?)
-       (when-let [load-results-throttled @!load-results-throttled]
-         (load-results-throttled :default state))))))
+       (load-results :default state)))))
 
 (defn- open-current-item-link
   "Opens a link for the current item if a page or block. For pages, opens the
@@ -737,11 +739,11 @@
       (and enter? (not composing?)) (do
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
-      esc? (let [filter @(::filter state)]
+      esc? (let [filter' @(::filter state)]
              (when-not (string/blank? input)
                (util/stop e)
                (handle-input-change state nil ""))
-             (when (and filter (string/blank? input))
+             (when (and filter' (string/blank? input))
                (util/stop e)
                (reset! (::filter state) nil)
                (load-results :default state)))
@@ -773,14 +775,23 @@
   [state all-items opts]
   (let [highlighted-item @(::highlighted-item state)
         input @(::input state)
-        input-ref (::input-ref state)]
+        input-ref (::input-ref state)
+        debounced-on-change (rum/use-callback
+                             (gfun/debounce
+                              (fn [e]
+                                (let [new-value (.-value (.-target e))]
+                                  (handle-input-change state e)
+                                  (when-let [on-change (:on-input-change opts)]
+                                    (on-change new-value))))
+                              100)
+                             [])]
     ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
     ;; if not then clear that puppy out!
     ;; This was moved to a functional component
     (rum/use-effect! (fn []
                        (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
                          (reset! (::highlighted-item state) nil)))
-      [all-items])
+                     [all-items])
     (rum/use-effect! (fn [] (load-results :default state)) [])
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input.cp__cmdk-search-input
@@ -789,30 +800,28 @@
        :autoComplete "off"
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
-       :on-change (fn [e]
-                    (let [new-value (.-value (.-target e))]
-                      (handle-input-change state e)
-                      (when-let [on-change (:on-input-change opts)]
-                        (on-change new-value))))
+       :on-change debounced-on-change
        :on-blur (fn [_e]
                   (when-let [on-blur (:on-input-blur opts)]
                     (on-blur input)))
-       :on-composition-end (fn [e] (handle-input-change state e))
-       :on-key-down (fn [e]
-                      (p/let [value (.-value @input-ref)
-                              last-char (last value)
-                              backspace? (= (util/ekey e) "Backspace")
-                              filter-group (:group @(::filter state))
-                              slash? (= (util/ekey e) "/")
-                              namespace-pages (when (and slash? (contains? #{:whiteboards} filter-group))
-                                                (search/block-search (state/get-current-repo) (str value "/") {}))
-                              namespace-page-matched? (some #(string/includes? % "/") namespace-pages)]
-                        (when (and filter-group
-                                (or (and slash? (not namespace-page-matched?))
-                                  (and backspace? (= last-char "/"))
-                                  (and backspace? (= input ""))))
-                          (reset! (::filter state) nil)
-                          (load-results :default state))))
+       :on-composition-end (gfun/debounce (fn [e] (handle-input-change state e)) 100)
+       :on-key-down (gfun/debounce
+                     (fn [e]
+                       (p/let [value (.-value @input-ref)
+                               last-char (last value)
+                               backspace? (= (util/ekey e) "Backspace")
+                               filter-group (:group @(::filter state))
+                               slash? (= (util/ekey e) "/")
+                               namespace-pages (when (and slash? (contains? #{:whiteboards} filter-group))
+                                                 (search/block-search (state/get-current-repo) (str value "/") {}))
+                               namespace-page-matched? (some #(string/includes? % "/") namespace-pages)]
+                         (when (and filter-group
+                                    (or (and slash? (not namespace-page-matched?))
+                                        (and backspace? (= last-char "/"))
+                                        (and backspace? (= input ""))))
+                           (reset! (::filter state) nil)
+                           (load-results :default state))))
+                     100)
        :default-value input}]]))
 
 (defn rand-tip
@@ -830,9 +839,9 @@
   {:init (fn [state]
            (assoc state ::rand-tip (rand-tip)))}
   [inner-state state]
-  (let [filter @(::filter state)]
+  (let [filter' @(::filter state)]
     (cond
-      filter
+      filter'
       [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
        [:div "Type"]
        (shui/shortcut "esc" {:tiled false})
@@ -917,49 +926,48 @@
 
 (rum/defcs cmdk
   < rum/static
-    rum/reactive
-    {:will-mount
-     (fn [state]
-       (when-not (:sidebar? (last (:rum/args state)))
-         (shortcut/unlisten-all!))
-       state)
+  rum/reactive
+  {:will-mount
+   (fn [state]
+     (when-not (:sidebar? (last (:rum/args state)))
+       (shortcut/unlisten-all!))
+     state)
 
-     :will-unmount
-     (fn [state]
-       (when-not (:sidebar? (last (:rum/args state)))
-         (shortcut/listen-all!))
-       state)}
-    {:init (fn [state]
-             (let [search-mode (:search/mode @state/state)
-                   opts (last (:rum/args state))]
-               (assoc state
-                 ::ref (atom nil)
-                 ::filter (if (and search-mode
-                                (not (contains? #{:global :graph} search-mode))
-                                (not (:sidebar? opts)))
-                            (atom {:group search-mode})
-                            (atom nil))
-                 ::input (atom (or (:initial-input opts) "")))))
-     :will-unmount (fn [state]
-                     (state/set-state! :search/mode nil)
-                     state)}
-    (mixins/event-mixin
-      (fn [state]
-        (let [ref @(::ref state)]
-          (mixins/on-key-down state {}
-            {:target ref
-             :all-handler (fn [e _key] (keydown-handler state e))})
-          (mixins/on-key-up state {} (fn [e _key]
-                                       (keyup-handler state e))))))
-    (rum/local false ::shift?)
-    (rum/local false ::meta?)
-    (rum/local nil ::highlighted-group)
-    (rum/local nil ::highlighted-item)
-    (rum/local default-results ::results)
-    (rum/local nil ::load-results-throttled)
-    (rum/local nil ::scroll-container-ref)
-    (rum/local nil ::input-ref)
-    (rum/local false ::input-changed?)
+   :will-unmount
+   (fn [state]
+     (when-not (:sidebar? (last (:rum/args state)))
+       (shortcut/listen-all!))
+     state)}
+  {:init (fn [state]
+           (let [search-mode (:search/mode @state/state)
+                 opts (last (:rum/args state))]
+             (assoc state
+                    ::ref (atom nil)
+                    ::filter (if (and search-mode
+                                      (not (contains? #{:global :graph} search-mode))
+                                      (not (:sidebar? opts)))
+                               (atom {:group search-mode})
+                               (atom nil))
+                    ::input (atom (or (:initial-input opts) "")))))
+   :will-unmount (fn [state]
+                   (state/set-state! :search/mode nil)
+                   state)}
+  (mixins/event-mixin
+   (fn [state]
+     (let [ref @(::ref state)]
+       (mixins/on-key-down state {}
+                           {:target ref
+                            :all-handler (fn [e _key] (keydown-handler state e))})
+       (mixins/on-key-up state {} (fn [e _key]
+                                    (keyup-handler state e))))))
+  (rum/local false ::shift?)
+  (rum/local false ::meta?)
+  (rum/local nil ::highlighted-group)
+  (rum/local nil ::highlighted-item)
+  (rum/local default-results ::results)
+  (rum/local nil ::scroll-container-ref)
+  (rum/local nil ::input-ref)
+  (rum/local false ::input-changed?)
   [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
         search-mode (:search/mode @state/state)
@@ -983,22 +991,23 @@
          (search-only state (string/capitalize (name group-filter)))])
 
       (let [items (filter
-                    (fn [[_group-name group-key group-count _group-items]]
-                      (and (not= 0 group-count)
-                        (if-not group-filter true
-                                             (or (= group-filter group-key)
-                                               (and (= group-filter :nodes)
-                                                 (= group-key :current-page))
-                                               (and (contains? #{:create} group-filter)
-                                                 (= group-key :create))))))
-                    results-ordered)]
-        (if (seq items)
+                   (fn [[_group-name group-key group-count _group-items]]
+                     (and (not= 0 group-count)
+                          (if-not group-filter true
+                                  (or (= group-filter group-key)
+                                      (and (= group-filter :nodes)
+                                           (= group-key :current-page))
+                                      (and (contains? #{:create} group-filter)
+                                           (= group-key :create))))))
+                   results-ordered)]
+        (when-not (= ["Filters"] (map first items))
+          (if (seq items)
           (for [[group-name group-key _group-count group-items] items]
             (let [title (string/capitalize group-name)]
               (result-group state title group-key group-items first-item sidebar?)))
           [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? @*input)
-             "No matched results")]))]
+             "No matched results")])))]
      (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]

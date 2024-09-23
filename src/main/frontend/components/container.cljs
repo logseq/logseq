@@ -13,6 +13,7 @@
             [frontend.components.dnd :as dnd-component]
             [frontend.components.icon :as icon]
             [frontend.components.handbooks :as handbooks]
+            [frontend.components.block :as block]
             [dommy.core :as d]
             [frontend.components.content :as cp-content]
             [frontend.components.title :as title]
@@ -55,7 +56,8 @@
             [logseq.common.path :as path]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.db :as ldb]))
 
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class count]} child]
@@ -74,9 +76,9 @@
 (rum/defc page-name
   [page icon recent?]
   (let [repo (state/get-current-repo)
+        db-based? (config/db-based-graph? repo)
         page (or (db/get-alias-source-page repo (:db/id page)) page)
         title (:block/title page)
-        whiteboard-page? (db-model/whiteboard-page? page)
         untitled? (db-model/untitled-page? title)
         name (:block/name page)
         file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
@@ -91,7 +93,7 @@
                            [:<>
                             (when-not recent?
                               (x-menu-item
-                               {:on-click #(page-handler/<unfavorite-page! title)}
+                               {:on-click #(page-handler/<unfavorite-page! (if db-based? (str (:block/uuid page)) title))}
                                (ctx-icon "star-off")
                                (t :page/unfavorite)
                                (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
@@ -117,23 +119,33 @@
                              (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))]))]
 
     ;; TODO: move to standalone component
-    [:a.flex.items-center.justify-between.relative.group
-     {:title (title/block-unique-title page)
-      :on-click
-      (fn [e]
-        (if (gobj/get e "shiftKey")
-          (open-in-sidebar)
-          (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
-      :on-context-menu (fn [^js e]
-                         (shui/popup-show! e (x-menu-content)
-                                           {:as-dropdown? true
-                                            :content-props {:on-click (fn [] (shui/popup-hide!))
-                                                            :class "w-60"}})
-                         (util/stop e))}
-     [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
-     [:span.page-title {:class (when untitled? "opacity-50")}
-      (if untitled? (t :untitled)
-          (pdf-utils/fix-local-asset-pagename title))]
+    [:a.flex.items-center.justify-between.relative.group.h-6
+     (cond->
+      {:on-click
+       (fn [e]
+         (if (gobj/get e "shiftKey")
+           (open-in-sidebar)
+           (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
+       :on-context-menu (fn [^js e]
+                          (shui/popup-show! e (x-menu-content)
+                                            {:as-dropdown? true
+                                             :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                             :class "w-60"}})
+                          (util/stop e))}
+       (ldb/object? page)
+       (assoc :title (title/block-unique-title page)))
+     [:span.page-icon.ml-3.justify-center icon]
+     [:span.page-title {:class (when untitled? "opacity-50")
+                        :style {:display "ruby"}}
+      (cond
+        (not (db/page? page))
+        (block/inline-text :markdown (:block/title page))
+        untitled? (t :untitled)
+        :else (let [title' (pdf-utils/fix-local-asset-pagename title)
+                    parent (:logseq.property/parent page)]
+                (if (and parent (not (ldb/class? page)))
+                  (str (:block/title parent) "/" title')
+                  title')))]
 
      ;; dots trigger
      (shui/button
@@ -166,16 +178,16 @@
         (rfe/push-state :page {:name "Favorites"})
         (util/stop e))}
      (when (seq favorite-entities)
-       (let [favorites (map
-                        (fn [e]
-                          (let [icon (icon/get-node-icon e {})]
-                            {:id (str (:db/id e))
-                             :value (:block/uuid e)
-                             :content [:li.favorite-item (page-name e icon false)]}))
-                        favorite-entities)]
-         (dnd-component/items favorites
-                              {:on-drag-end (fn [favorites]
-                                              (page-handler/<reorder-favorites! favorites))
+       (let [favorite-items (map
+                             (fn [e]
+                               (let [icon (icon/get-node-icon-cp e {})]
+                                 {:id (str (:db/id e))
+                                  :value (:block/uuid e)
+                                  :content [:li.favorite-item (page-name e icon false)]}))
+                             favorite-entities)]
+         (dnd-component/items favorite-items
+                              {:on-drag-end (fn [favorites']
+                                              (page-handler/<reorder-favorites! favorites'))
                                :parent-node :ul.favorites.text-sm}))))))
 
 (rum/defc recent-pages < rum/reactive db-mixins/query
@@ -198,7 +210,7 @@
           :draggable true
           :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
           :data-ref name}
-         (page-name page (icon/get-node-icon page {}) true)])])))
+         (page-name page (icon/get-node-icon-cp page {}) true)])])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
@@ -242,39 +254,6 @@
     [:span.flex-1 title]
     (when shortcut
       [:span.ml-1 (ui/render-keyboard-shortcut (ui/keyboard-shortcut-from-config shortcut))])]])
-
-(defn close-sidebar-on-mobile!
-  []
-  (and (util/sm-breakpoint?)
-       (state/toggle-left-sidebar!)))
-
-(defn create-dropdown
-  []
-  (ui/dropdown-with-links
-   (fn [{:keys [toggle-fn]}]
-     [:button#create-button
-      {:on-click toggle-fn}
-      [:<>
-       (ui/icon "plus" {:font? "true"})
-       [:span.mx-1 (t :left-side-bar/create)]]])
-   (->>
-    [{:title (t :left-side-bar/new-page)
-      :class "new-page-link"
-      :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (state/pub-event! [:go/search]))
-                :shortcut (ui/keyboard-shortcut-from-config :go/search)}
-      :icon (ui/type-icon {:name "new-page"
-                           :class "highlight"
-                           :extension? true})}
-     {:title (t :left-side-bar/new-whiteboard)
-      :class "new-whiteboard-link"
-      :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (whiteboard-handler/<create-new-whiteboard-and-redirect!))
-                :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)}
-      :icon (ui/type-icon {:name "new-whiteboard"
-                           :class "highlight"
-                           :extension? true})}])
-   {}))
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-nav
   [route-match close-modal-fn left-sidebar-open? enable-whiteboards? srs-open?
@@ -414,19 +393,7 @@
         (favorites t)
 
         (when (not config/publishing?)
-          (recent-pages t))]
-
-       [:footer.px-2 {:class "create"}
-        (when-not config/publishing?
-          (if enable-whiteboards?
-            (create-dropdown)
-            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
-             {:on-click (fn []
-                          (and (util/sm-breakpoint?)
-                               (state/toggle-left-sidebar!))
-                          (state/pub-event! [:go/search]))}
-             (ui/icon "circle-plus" {:style {:font-size 20}})
-             [:span.flex-1 (t :right-side-bar/new-page)]]))]]]
+          (recent-pages t))]]]
      [:span.shade-mask
       (cond-> {:on-click close-fn}
         (number? offset-ratio)
@@ -643,7 +610,7 @@
                  (doseq [page pages]
                    (let [page (util/safe-page-name-sanity-lc page)
                          [db-id block-type] (if (= page "contents")
-                                              ["contents" :contents]
+                                              [(or (:db/id (db/get-page page)) "contents") :contents]
                                               [(:db/id (db/get-page page)) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
@@ -827,18 +794,18 @@
               (let [show!
                     (fn [content]
                       (shui/popup-show! e
-                        (fn [{:keys [id]}]
-                          [:div {:on-click #(shui/popup-hide! id)
-                                 :data-keep-selection true}
-                           content])
-                        {:on-before-hide state/dom-clear-selection!
-                         :on-after-hide state/state-clear-selection!
-                         :content-props {:class "w-[280px] ls-context-menu-content"}
-                         :as-dropdown? true}))
+                                        (fn [{:keys [id]}]
+                                          [:div {:on-click #(shui/popup-hide! id)
+                                                 :data-keep-selection true}
+                                           content])
+                                        {:on-before-hide state/dom-clear-selection!
+                                         :on-after-hide state/state-clear-selection!
+                                         :content-props {:class "w-[280px] ls-context-menu-content"}
+                                         :as-dropdown? true}))
 
                     handled
                     (cond
-                      page
+                      (and page (not block-id))
                       (do
                         (show! (cp-content/page-title-custom-context-menu-content page-entity))
                         (state/set-state! :page-title/context nil))
@@ -889,7 +856,7 @@
      (mixins/listen state js/window "keyup"
                     (fn [_e]
                       (state/set-state! :editor/latest-shortcut nil)))))
-  [state route-match main-content]
+  [state route-match main-content']
   (let [{:keys [open-fn]} state
         current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
@@ -983,7 +950,7 @@
                :indexeddb-support?  indexeddb-support?
                :light?              light?
                :db-restoring?       db-restoring?
-               :main-content        main-content
+               :main-content        main-content'
                :show-action-bar?    show-action-bar?
                :show-recording-bar? show-recording-bar?})]
 

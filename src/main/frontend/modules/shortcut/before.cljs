@@ -7,10 +7,10 @@
 (defn prevent-default-behavior
   [f]
   (fn [e]
-    (f e)
-    ;; return false to prevent default browser behavior
-    ;; and stop event from bubbling
-    (.preventDefault e)
+    (when-not (false? (f e))
+      ;; return false to skip prevent default browser behavior
+      ;; and stop event from bubbling
+      (.preventDefault e))
     false))
 
 (defn enable-when-not-editing-mode!
@@ -28,10 +28,10 @@
   [f]
   (fn [e]
     (when (state/editing?)
-      (if (mobile-util/native-ios?)
-        (util/stop-propagation e)
-        (util/stop e))
-      (f e))))
+      (when-not (false? (f e))
+        (if (mobile-util/native-ios?)
+          (util/stop-propagation e)
+          (util/stop e))))))
 
 (defn enable-when-not-component-editing!
   [f]

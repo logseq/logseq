@@ -7,7 +7,7 @@
             [logseq.common.path :as path]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [frontend.common.date :as common-date]
+            [logseq.common.date :as common-date]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.tree :as otree]))
@@ -128,8 +128,6 @@
   [repo db tree opts context]
   (->> (tree->file-content-aux repo db tree opts context) (string/join "\n")))
 
-(def init-level 1)
-
 (defn- transact-file-tx-if-not-exists!
   [conn page-block ok-handler context]
   (when (:block/name page-block)
@@ -163,6 +161,7 @@
 (defn- save-tree-aux!
   [repo db page-block tree blocks-just-deleted? context request-id]
   (let [page-block (d/pull db '[*] (:db/id page-block))
+        init-level 1
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (d/entity db file-db-id) :file/path)
         result (if (and (string? file-path) (not-empty file-path))

@@ -3,7 +3,6 @@
   (:require [frontend.components.property :as property-component]
             [rum.core :as rum]
             [frontend.modules.shortcut.core :as shortcut]
-            [logseq.db :as ldb]
             [frontend.db :as db]))
 
 (rum/defcs dialog <
@@ -18,9 +17,6 @@
   (when (seq blocks)
     (let [*property-key (::property-key state)
           *property (::property state)
-          block (first blocks)
-          page? (ldb/page? block)]
+          block (first blocks)]
       [:div.ls-property-dialog
-       (property-component/property-input block *property-key (assoc opts
-                                                                     :*property *property
-                                                                     :page? page?))])))
+       (property-component/property-input block *property-key (assoc opts :*property *property))])))

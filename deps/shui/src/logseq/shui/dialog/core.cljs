@@ -4,6 +4,7 @@
             [medley.core :as medley]
             [logseq.shui.util :as util]
             [logseq.shui.base.core :as base]
+            [logseq.shui.form.core :as form]
             [promesa.core :as p]))
 
 ;; provider
@@ -176,12 +177,17 @@
        :open open?
        :on-open-change #(update-modal! id :open? %)}
       (alert-dialog-content props
-        (alert-dialog-header
-          (when title (alert-dialog-title title))
-          (when description (alert-dialog-description description)))
+        (when (or title description)
+          (alert-dialog-header
+            {:class "ui__alert-dialog-header"}
+            (when title (alert-dialog-title title))
+            (when description (alert-dialog-description description))))
+
         (when content
           [:div.ui__alert-dialog-main-content content])
+
         (alert-dialog-footer
+          {:class "ui__alert-dialog-footer"}
           (if footer
             footer
             [:<>
@@ -193,24 +199,63 @@
 
 (rum/defc confirm-inner
   [config]
-  (let [{:keys [deferred outside-cancel?]} config]
-    (alert-inner
-      (assoc config
-        :overlay-props
-        {:on-click #(when outside-cancel? (close!) (p/reject! deferred nil))}
-        :footer
-        [:<>
-         (base/button
-           {:key "cancel"
-            :on-click #(do (close!) (p/reject! deferred false))
-            :variant :outline
-            :size :sm}
-           "Cancel")
-         (base/button
-           {:key "ok"
-            :on-click #(do (close!) (p/resolve! deferred true))
-            :size :sm
-            } "OK")]))))
+  (let [{:keys [id deferred outside-cancel? data-reminder]} config
+        reminder? (boolean (and id data-reminder))
+        [ready?, set-ready!] (rum/use-state (not reminder?))
+        *ok-ref (rum/use-ref nil)
+        *reminder-ref (rum/use-ref nil)]
+
+    (rum/use-effect!
+      (fn []
+        (when ready?
+          (js/setTimeout
+            #(some-> (rum/deref *ok-ref) (.focus)) 128)))
+      [ready?])
+
+    (rum/use-effect!
+      (fn []
+        (try
+          (if-let [reminder-v (and reminder? (js/localStorage.getItem (str id)))]
+            (if (< (- (js/Date.now) reminder-v) (* 1000 60 10))
+              (do (detach-modal! id) (p/resolve! deferred true))
+              (set-ready! true))
+            (set-ready! true))
+          (catch js/Error _e
+            (set-ready! true))))
+      [])
+
+    (when ready?
+      (alert-inner
+        (assoc config
+          :data-mode :confirm
+          :overlay-props
+          {:on-click #(when outside-cancel? (close!) (p/reject! deferred nil))}
+
+          :footer
+          [:<>
+           [:span.flex.items-center.pt-1
+            (when (and id data-reminder)
+              [:label.flex.items-center.gap-1.text-sm
+               (form/checkbox {:ref *reminder-ref})
+               [:span.opacity-50 "Don't remind me again"]])]
+           [:span.flex.gap-2
+            (base/button
+              {:key "cancel"
+               :on-click #(do (close!) (p/reject! deferred false))
+               :variant :outline
+               :size :sm}
+              "Cancel")
+            (base/button
+              {:key "ok"
+               :ref *ok-ref
+               :on-click (fn []
+                           (when-let [^js reminder (and id data-reminder (rum/deref *reminder-ref))]
+                             (when (= "checked" (.-state (.-dataset reminder)))
+                               (js/localStorage.setItem (str id) (js/Date.now))))
+                           (close!)
+                           (p/resolve! deferred true))
+               :size :sm
+               } "OK")]])))))
 
 (rum/defc install-modals
   < rum/static

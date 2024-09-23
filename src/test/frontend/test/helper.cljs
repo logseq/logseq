@@ -7,7 +7,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.page :as page-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
             [datascript.core :as d]
             [logseq.graph-parser.text :as text]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -29,16 +29,16 @@
 (defn start-test-db!
   [& {:as opts}]
   (let [db-graph? (or (:db-graph? opts) (and node? (some? js/process.env.DB_GRAPH)))
-        test-db (if db-graph? test-db-name-db-version test-db-name)]
-    (state/set-current-repo! test-db)
-    (conn/start! test-db opts)
-    (let [conn (conn/get-db test-db false)]
+        test-db' (if db-graph? test-db-name-db-version test-db-name)]
+    (state/set-current-repo! test-db')
+    (conn/start! test-db' opts)
+    (let [conn (conn/get-db test-db' false)]
       (when db-graph?
         (db-pipeline/add-listener conn)
         (d/transact! conn (sqlite-create-graph/build-db-initial-data "")))
       (d/listen! conn ::listen-db-changes!
                  (fn [tx-report]
-                   (worker-pipeline/invoke-hooks test-db conn tx-report {}))))))
+                   (worker-pipeline/invoke-hooks test-db' conn tx-report {}))))))
 
 (defn destroy-test-db!
   []
@@ -153,9 +153,12 @@
 (defn load-test-files-for-db-graph
   [options*]
   (let [;; Builds options from markdown :file/content unless given explicit build-blocks config
-        options (if (:page (first options*))
-                  {:pages-and-blocks options* :auto-create-ontology? true}
-                  (build-blocks-tx-options options*))
+        options (cond (:page (first options*))
+                      {:pages-and-blocks options* :auto-create-ontology? true}
+                      (:pages-and-blocks options*)
+                      (assoc options* :auto-create-ontology? true)
+                      :else
+                      (build-blocks-tx-options options*))
         {:keys [init-tx block-props-tx]} (sqlite-build/build-blocks-tx options)]
     (db/transact! test-db init-tx)
     (when (seq block-props-tx)
@@ -236,7 +239,7 @@ This can be called in synchronous contexts as no async fns should be invoked"
   [repo block-uuid content {:keys [tags]}]
   (editor-handler/save-block! repo block-uuid content)
   (doseq [tag tags]
-    (page-handler/add-tag repo block-uuid (db/get-page tag))))
+    (db-page-handler/add-tag repo block-uuid (db/get-page tag))))
 
 (defn create-page!
   [title & {:as opts}]

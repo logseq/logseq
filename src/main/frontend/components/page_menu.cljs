@@ -1,25 +1,26 @@
 (ns frontend.components.page-menu
-  (:require [frontend.commands :as commands]
+  (:require [electron.ipc :as ipc]
+            [frontend.commands :as commands]
             [frontend.components.export :as export]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [logseq.db :as ldb]
+            [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.property.util :as pu]
+            [frontend.handler.shell :as shell]
+            [frontend.handler.user :as user-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [logseq.shui.ui :as shui]
-            [promesa.core :as p]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
-            [frontend.handler.shell :as shell]
-            [frontend.mobile.util :as mobile-util]
-            [electron.ipc :as ipc]
-            [frontend.config :as config]
-            [frontend.handler.user :as user-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
             [logseq.common.path :as path]
-            [frontend.handler.property.util :as pu]))
+            [logseq.db :as ldb]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
 
 (defn- delete-page!
   [page]
@@ -49,13 +50,14 @@
   [page]
   (when-let [page-name (and page (db/page? page) (:block/name page))]
     (let [repo (state/sub :git/current-repo)
-          page-title (:block/title page)
+          db-based? (config/db-based-graph? repo)
+          page-title (if db-based? (str (:block/uuid page)) (:block/title page))
           whiteboard? (ldb/whiteboard? page)
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
           public? (pu/get-block-property-value page :logseq.property/public)
           _favorites-updated? (state/sub :favorites/updated?)
-          favorited? (page-handler/favorited? page-name)
+          favorited? (page-handler/favorited? page-title)
           developer-mode? (state/sub [:ui/developer-mode?])
           file-rpath (when (util/electron?) (page-util/get-page-file-rpath page-name))
           _ (state/sub :auth/id-token)
@@ -63,8 +65,7 @@
                                     (file-sync-handler/enable-sync?)
                                     ;; FIXME: Sync state is not cleared when switching to a new graph
                                     (file-sync-handler/current-graph-sync-on?)
-                                    (file-sync-handler/get-current-graph-uuid))
-          db-based? (config/db-based-graph? repo)]
+                                    (file-sync-handler/get-current-graph-uuid))]
       (when (not block?)
         (->>
          [(when-not config/publishing?
@@ -126,7 +127,7 @@
                {:title   (t :page/open-with-default-app)
                 :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 
-          (when (or (state/get-current-page) whiteboard?)
+          (when page
             {:title   (t :export-page)
              :options {:on-click #(shui/dialog-open!
                                    (fn []
@@ -154,15 +155,10 @@
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page page-name) action)}}))
 
-          (when (and db-based? (not whiteboard?))
-            {:title (t :page/toggle-properties)
-             :options {:on-click (fn []
-                                   (page-handler/toggle-properties! page))}})
-
           (when (and db-based? (= (:block/type page) "page"))
             {:title (t :page/convert-to-tag)
              :options {:on-click (fn []
-                                   (page-handler/convert-to-tag! page))}})
+                                   (db-page-handler/convert-to-tag! page))}})
 
           (when developer-mode?
             {:title   (t :dev/show-page-data)

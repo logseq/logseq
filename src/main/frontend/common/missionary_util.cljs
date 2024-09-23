@@ -11,9 +11,9 @@
 (def ^:private retry-sentinel (js-obj))
 (defn backoff
   "Retry task when it throw exception `(get ex-data :missionary/retry)`"
-  [delays task]
+  [delays-seq task]
   (m/sp
-    (loop [[delay & delays] (seq delays)]
+    (loop [[delay & rest-delays] (seq delays-seq)]
       (let [r (try
                 (m/? task)
                 (catch :default e
@@ -24,7 +24,7 @@
                         retry-sentinel)
                     (throw e))))]
         (if (identical? r retry-sentinel)
-          (recur delays)
+          (recur rest-delays)
           r)))))
 
 (defn mix
@@ -59,6 +59,10 @@
   "Return the canceler"
   [task key & {:keys [succ fail]}]
   (task (or succ #(prn key :succ %)) (or fail #(js/console.log key %))))
+
+(defn run-task-throw
+  [task key & {:keys [succ]}]
+  (task (or succ #(prn key :succ %)) #(throw (ex-info "task failed" {:key key :e %}))))
 
 (comment
   (defn >!

@@ -8,11 +8,10 @@
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
-            [clojure.set :as set]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.components.class :as class-component]
             [frontend.components.cmdk.core :as cmdk]
+            [frontend.components.block :as block]
             [frontend.components.settings :as settings]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
@@ -23,7 +22,6 @@
             [frontend.components.whiteboard :as whiteboard]
             [frontend.components.user.login :as login]
             [frontend.components.repo :as repo]
-            [frontend.components.db-based.page :as db-page]
             [frontend.components.property.dialog :as property-dialog]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -39,7 +37,6 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as fs-watcher]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.file-sync :as file-sync-handler]
@@ -54,9 +51,6 @@
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.property.util :as pu]
-            [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.handler.property :as property-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.db-based.rtc :as rtc-handler]
@@ -84,7 +78,8 @@
             [frontend.modules.outliner.pipeline :as pipeline]
             [frontend.date :as date]
             [logseq.db :as ldb]
-            [frontend.persist-db :as persist-db]))
+            [frontend.persist-db :as persist-db]
+            [frontend.handler.export :as export]))
 
 ;; TODO: should we move all events here?
 
@@ -197,6 +192,7 @@
      (repo-handler/refresh-repos!))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
+  (export/cancel-db-backup!)
   (persist-db/export-current-graph!)
   (state/set-state! :db/async-query-loading #{})
   (state/set-state! :db/async-queries {})
@@ -292,64 +288,6 @@
     (some-> (ask-permission repo)
       (shui/dialog-open! {:align :top}))))
 
-(defonce *query-properties (atom {}))
-(rum/defc query-properties-settings-inner < rum/reactive
-  {:will-unmount (fn [state]
-                   (reset! *query-properties {})
-                   state)}
-  [block shown-properties all-properties]
-  (let [query-properties (rum/react *query-properties)
-        db-graph? (config/db-based-graph? (state/get-current-repo))]
-    [:div
-     [:h1.font-semibold.-mt-2.mb-2.text-lg (t :query/config-property-settings)]
-     [:a.flex
-      {:title "Refresh list of columns"
-       :on-click
-       (fn []
-         (reset! *query-properties {})
-         (let [k (pu/get-pid :logseq.property/query-properties)]
-           (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block) k)))}
-      (ui/icon "refresh")]
-     (for [property all-properties]
-       (let [property-value (get query-properties property)
-             shown? (if (nil? property-value)
-                      (contains? shown-properties property)
-                      property-value)]
-         [:div.flex.flex-row.my-2.justify-between.align-items
-          [:div (if (and db-graph? (qualified-keyword? property))
-                  (db-pu/get-property-name property)
-                  (name property))]
-          [:div.mt-1 (ui/toggle shown?
-                                (fn []
-                                  (let [value (not shown?)]
-                                    (swap! *query-properties assoc property value)
-                                    (editor-handler/set-block-query-properties!
-                                     (:block/uuid block)
-                                     all-properties
-                                     property
-                                     value)))
-                                true)]]))]))
-
-(defn query-properties-settings
-  [block shown-properties all-properties]
-  (fn [_close-fn]
-    (query-properties-settings-inner block shown-properties all-properties)))
-
-(defmethod handle :modal/set-query-properties [[_ block all-properties]]
-  (let [properties (:block/properties block)
-        query-properties (pu/lookup properties :logseq.property/query-properties)
-        block-properties (if (config/db-based-graph? (state/get-current-repo))
-                           query-properties
-                           (some-> query-properties
-                             (common-handler/safe-read-string "Parsing query properties failed")))
-        shown-properties (if (seq block-properties)
-                           (set block-properties)
-                           (set all-properties))
-        shown-properties (set/intersection (set all-properties) shown-properties)]
-    (shui/dialog-open!
-      (query-properties-settings block shown-properties all-properties)
-      {})))
-
 (defmethod handle :modal/show-cards [_]
   (shui/dialog-open!
     srs/global-cards
@@ -433,15 +371,17 @@
       (when (and (not dir-exists?)
                  (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
-  (p/do!
-   (state/pub-event! [:graph/sync-context])
+  (let [db-based? (config/db-based-graph? repo)]
+    (p/do!
+     (state/pub-event! [:graph/sync-context])
     ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
-   (when (mobile-util/native-ios?)
-     (js/setTimeout #(mobile/mobile-postinit) 1000))
+     (when (mobile-util/native-ios?)
+       (js/setTimeout #(mobile/mobile-postinit) 1000))
     ;; FIXME: an ugly implementation for redirecting to page on new window is restored
-   (repo-handler/graph-ready! repo)
-   (when-not (config/db-based-graph? repo)
-     (fs-watcher/load-graph-files! repo))))
+     (repo-handler/graph-ready! repo)
+     (if db-based?
+       (export/auto-db-backup! repo {:backup-now? true})
+       (fs-watcher/load-graph-files! repo)))))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
@@ -491,7 +431,8 @@
         payload (assoc payload
                   :user-id user-uuid
                   :graph-id graph-uuid
-                  :tx-id tx-id)]
+                  :tx-id tx-id
+                  :db-based (config/db-based-graph? (state/get-current-repo)))]
     (Sentry/captureException error
       (bean/->js {:tags payload}))))
 
@@ -845,12 +786,9 @@
 
 (defmethod handle :class/configure [[_ page]]
   (shui/dialog-open!
-    #(vector :<>
-       (class-component/configure page {})
-       (db-page/page-properties page {:configure? true
-                                      :mode :tag}))
-    {:label "page-configure"
-     :align :top}))
+   #(block/block-container {} page)
+   {:label "page-configure"
+    :align :top}))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
@@ -951,7 +889,7 @@
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
-(defmethod handle :editor/new-property [[_ {:keys [block] :as opts}]]
+(defmethod handle :editor/new-property [[_ {:keys [block target] :as opts}]]
   (p/do!
    (editor-handler/save-current-block!)
    (let [editing-block (state/get-edit-block)
@@ -994,13 +932,13 @@
                                                                 content'
                                                                 (assoc :custom-content content'))))))))))]
      (when (seq blocks)
-       (let [input (some-> (state/get-edit-input-id)
-                           (gdom/getElement))]
-         (if input
-           (shui/popup-show! input
+       (let [target' (or target
+                       (some-> (state/get-edit-input-id)
+                            (gdom/getElement)))]
+         (if target'
+           (shui/popup-show! target'
                              #(property-dialog/dialog blocks opts')
                              {:align "start"
-                              :as-dropdown? true
                               :auto-focus? true})
            (shui/dialog-open! #(property-dialog/dialog blocks opts')
                               {:id :property-dialog

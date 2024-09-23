@@ -18,7 +18,7 @@
      * :hide? - Boolean which hides property when set on a block or exported e.g. slides
      * :public? - Boolean which allows property to be used by user e.g. add and remove property to blocks/pages
      * :view-context - Keyword to indicate which view contexts a property can be
-       seen in when :public? is set. Valid values are :page and :block. Property can
+       seen in when :public? is set. Valid values are :page, :block and :never. Property can
        be viewed in any context if not set
    * :title - Property's :block/title
    * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident
@@ -28,18 +28,31 @@
   (ordered-map
    :block/alias           {:title "Alias"
                            :attribute :block/alias
-                           :schema {:type :node
+                           :schema {:type :page
                                     :cardinality :many
                                     :view-context :page
                                     :public? true}}
    :block/tags           {:title "Tags"
                           :attribute :block/tags
-                          :schema {:type :node
+                          :schema {:type :class
                                    :cardinality :many
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
-   :logseq.property/page-tags {:title "pageTags"
-                               :schema {:type :node
+   :logseq.property/parent {:title "Parent"
+                            :schema {:type :node
+                                     :public? true
+                                     :view-context :page}}
+   :logseq.property.class/properties {:title "Tag Properties"
+                                      :schema {:type :property
+                                               :cardinality :many
+                                               :public? true
+                                               :view-context :never}}
+   :logseq.property.class/hide-from-node {:title "Hide from Node"
+                                          :schema {:type :checkbox
+                                                   :public? true
+                                                   :view-context :class}}
+   :logseq.property/page-tags {:title "Page Tags"
+                               :schema {:type :page
                                         :public? true
                                         :view-context :page
                                         :cardinality :many}}
@@ -54,17 +67,6 @@
                                                     :hide? true}}
    :logseq.property/built-in?             {:schema {:type :checkbox
                                                     :hide? true}}
-   :logseq.property/hide-properties?      {:schema {:type :checkbox
-                                                    :hide? true}}
-   :logseq.property/query-table {:schema {:type :checkbox
-                                          :hide? true}}
-   ;; query-properties is a coll of property db-idents and keywords where keywords are special frontend keywords
-   :logseq.property/query-properties {:schema {:type :coll
-                                               :hide? true}}
-   :logseq.property/query-sort-by {:schema {:type :keyword
-                                            :hide? true}}
-   :logseq.property/query-sort-desc {:schema {:type :checkbox
-                                              :hide? true}}
    :logseq.property/ls-type {:schema {:type :keyword
                                       :hide? true}}
    :logseq.property/hl-type {:schema {:type :keyword :hide? true}}
@@ -92,6 +94,26 @@
    :logseq.property.tldraw/shape {:name :logseq.tldraw.shape
                                   :schema {:type :map
                                            :hide? true}}
+
+   ;; Journal props
+   :logseq.property.journal/title-format {:title "Title Format"
+                                          :schema
+                                          {:type :string
+                                           :public? false}}
+
+   ;; TODO: should we replace block/journal-day with those separate props?
+   ;; :logseq.property.journal/year {:title "Journal year"
+   ;;                                :schema
+   ;;                                {:type :raw-number
+   ;;                                 :public? false}}
+   ;; :logseq.property.journal/month {:title "Journal month"
+   ;;                                 :schema
+   ;;                                 {:type :raw-number
+   ;;                                  :public? false}}
+   ;; :logseq.property.journal/day {:title "Journal day"
+   ;;                               :schema
+   ;;                               {:type :raw-number
+   ;;                                :public? false}}
 
    ;; Task props
    :logseq.task/status
@@ -148,9 +170,24 @@
                                               :hide? true
                                               :view-context :page
                                               :public? true}}
-   :logseq.property/description {:schema
+   :logseq.property/description {:title "Description"
+                                 :schema
                                  {:type :default
                                   :public? true}}
+
+   :logseq.property.view/type
+   {:title "View Type"
+    :schema
+    {:type :default
+     :public? false
+     :hide? true}
+    :closed-values
+    (mapv (fn [[db-ident value]]
+            {:db-ident db-ident
+             :value value
+             :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
+          [[:logseq.property.view/type.table "Table View"]
+           [:logseq.property.view/type.list "List View"]])}
 
    :logseq.property.table/sorting {:schema
                                    {:type :coll
@@ -172,8 +209,14 @@
                                            {:type :coll
                                             :hide? true
                                             :public? false}}
+
+    :logseq.property.table/sized-columns {:schema
+                                          {:type :map
+                                           :hide? true
+                                           :public? false}}
+
    :logseq.property/view-for {:schema
-                              {:type :keyword
+                              {:type :node
                                :hide? true
                                :public? false}}
    :logseq.property.asset/remote-metadata {:schema
@@ -196,6 +239,10 @@
   "Internal properties that are also db schema attributes"
   #{:block/alias :block/tags})
 
+(def read-only-properties
+  "Property values that shouldn't be updated"
+  #{:logseq.property/built-in?})
+
 (assert (= db-attribute-properties
            (set (keep (fn [[k {:keys [attribute]}]] (when attribute k))
                       built-in-properties)))
@@ -203,7 +250,8 @@
 
 (def logseq-property-namespaces
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"
-    "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table"})
+    "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table"
+    "logseq.property.journal" "logseq.property.class" "logseq.property.view"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
@@ -289,12 +337,13 @@
 (defn create-user-property-ident-from-name
   "Creates a property :db/ident for a default user namespace.
    NOTE: Only use this when creating a db-ident for a new property."
-  [property-name]
-  (db-ident/create-db-ident-from-name default-user-namespace property-name))
+  ([property-name] (create-user-property-ident-from-name property-name default-user-namespace))
+  ([property-name user-namespace]
+   (db-ident/create-db-ident-from-name user-namespace property-name)))
 
 (defn get-class-ordered-properties
   [class-entity]
-  (->> (:class/schema.properties class-entity)
+  (->> (:logseq.property.class/properties class-entity)
        (sort-by :block/order)))
 
 (defn property-created-block?
@@ -318,3 +367,9 @@
               [(:block/title (d/entity db k))
                (ref->property-value-contents db v)]))
        (into {})))
+
+(defn public-built-in-property?
+  "Indicates whether built-in property can be seen and edited by users"
+  [entity]
+  ;; No need to do :built-in? check yet since user properties can't set this
+  (get-in entity [:block/schema :public?]))

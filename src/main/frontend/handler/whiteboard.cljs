@@ -118,8 +118,8 @@
                          (remove string/blank?)
                          (set))
         new-orders (when (seq created-ids)
-                     (let [max-key (last (sort (map :block/order (:block/_page page-entity))))]
-                       (db-order/gen-n-keys (count created-ids) max-key nil)))
+                     (let [max-key' (last (sort (map :block/order (:block/_page page-entity))))]
+                       (db-order/gen-n-keys (count created-ids) max-key' nil)))
         new-id->order (when (seq created-ids) (zipmap created-ids new-orders))
         created-shapes (set (filter #(created-ids (:id %)) upsert-shapes))
         deleted-ids (->> (set/difference old-ids new-ids)
@@ -275,7 +275,7 @@
   ([]
    (<create-new-whiteboard-and-redirect! (str (d/squuid))))
   ([name]
-   (when-not config/publishing?
+   (when-not (or config/publishing? (config/db-based-graph? (state/get-current-repo)))
      (p/let [id (<create-new-whiteboard-page! name)]
        (route-handler/redirect-to-page! id {:new-whiteboard? true})))))
 

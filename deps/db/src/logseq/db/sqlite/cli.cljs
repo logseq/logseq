@@ -6,10 +6,9 @@
             #_:clj-kondo/ignore
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
-            [goog.object :as gobj]
-            [clojure.edn :as edn]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
+            [cljs-bean.core :as bean]
             ["fs" :as fs]
             ["path" :as node-path]))
 
@@ -30,10 +29,10 @@
     (.all ^object stmt)))
 
 (defn- upsert-addr-content!
-  "Upsert addr+data-seq"
+  "Upsert addr+data-seq. Should be functionally equivalent to db-worker/upsert-addr-content!"
   [db data delete-addrs]
-  (let [insert (.prepare db "INSERT INTO kvs (addr, content) values (@addr, @content) on conflict(addr) do update set content = @content")
-        delete (.prepare db "DELETE from kvs where addr = ?")
+  (let [insert (.prepare db "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses")
+        delete (.prepare db "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);")
         insert-many (.transaction ^object db
                                   (fn [data]
                                     (doseq [item data]
@@ -44,31 +43,42 @@
     (insert-many data)))
 
 (defn- restore-data-from-addr
+"Should be functionally equivalent to db-worker/restore-data-from-addr"
   [db addr]
-  (when-let [content (-> (query db (str "select content from kvs where addr = " addr))
-                         first
-                         (gobj/get "content"))]
-    (try
-      (let [data (sqlite-util/transit-read content)]
-        (if-let [addresses (:addresses data)]
-          (assoc data :addresses (clj->js addresses))
-          data))
-      (catch :default _e              ; TODO: remove this once db goes to test
-        (edn/read-string content)))))
+  (when-let [result (-> (query db (str "select content, addresses from kvs where addr = " addr))
+                        first)]
+    (let [{:keys [content addresses]} (bean/->clj result)
+          addresses (when addresses
+                      (js/JSON.parse addresses))
+          data (sqlite-util/transit-read content)]
+      (if (and addresses (map? data))
+        (assoc data :addresses addresses)
+        data))))
 
 (defn new-sqlite-storage
   "Creates a datascript storage for sqlite. Should be functionally equivalent to db-worker/new-sqlite-storage"
   [db]
   (reify IStorage
     (-store [_ addr+data-seq delete-addrs]
-      (let [data (->>
-                  (map
-                   (fn [[addr data]]
-                     #js {:addr addr
-                          :content (sqlite-util/transit-write data)})
-                   addr+data-seq)
-                  (to-array))]
-        (upsert-addr-content! db data delete-addrs)))
+            ;; Only difference from db-worker impl is that js data maps don't start with '$' e.g. :$addr -> :addr
+            (let [used-addrs (set (mapcat
+                                   (fn [[addr data]]
+                                     (cons addr
+                                           (when (map? data)
+                                             (:addresses data))))
+                                   addr+data-seq))
+                  delete-addrs (remove used-addrs delete-addrs)
+                  data (map
+                        (fn [[addr data]]
+                          (let [data' (if (map? data) (dissoc data :addresses) data)
+                                addresses (when (map? data)
+                                            (when-let [addresses (:addresses data)]
+                                              (js/JSON.stringify (bean/->js addresses))))]
+                            #js {:addr addr
+                                 :content (sqlite-util/transit-write data')
+                                 :addresses addresses}))
+                        addr+data-seq)]
+              (upsert-addr-content! db data delete-addrs)))
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
 

@@ -36,7 +36,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [frontend.date :as date]))
 
 (declare icon)
 
@@ -240,7 +241,7 @@
      (let [links-children
            (let [links (if (fn? links) (links) links)
                  links (remove nil? links)]
-             (for [{:keys [options title icon key hr hover-detail item _as-link?]} links]
+             (for [{icon' :icon :keys [options title key hr hover-detail item _as-link?]} links]
                (let [new-options
                            (merge options
                                   (cond->
@@ -255,7 +256,7 @@
                              nil
                              (or item
                                  [:div.flex.items-center
-                                  (when icon icon)
+                                  (when icon' icon')
                                   [:div.title-wrap {:style {:margin-right "8px"
                                                             :margin-left  "4px"}} title]]))]
                  (if hr
@@ -513,41 +514,41 @@
            item-render
            class
            header]}]
-  (let [*current-idx (get state ::current-idx)]
+  (let [*current-idx (get state ::current-idx)
+        *groups (atom #{})]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
         (when header header)
         (for [[idx item] (medley/indexed matched)]
-          [:<>
-           {:key idx}
-           (let [item-cp
-                 [:div.menu-link-wrap
-                  {:key            idx
+          (let [react-key (str idx)
+                item-cp
+                [:div.menu-link-wrap
+                 {:key react-key
                    ;; mouse-move event to indicate that cursor moved by user
-                   :on-mouse-move  #(reset! *current-idx idx)}
-                  (let [chosen? (= @*current-idx idx)]
-                    (menu-link
-                      {:id (str "ac-" idx)
-                       :tab-index "0"
-                       :class (when chosen? "chosen")
+                  :on-mouse-move  #(reset! *current-idx idx)}
+                 (let [chosen? (= @*current-idx idx)]
+                   (menu-link
+                    {:id (str "ac-" react-key)
+                     :tab-index "0"
+                     :class (when chosen? "chosen")
                        ;; TODO: should have more tests on touch devices
                        ;:on-pointer-down #(util/stop %)
-                       :on-click (fn [e]
-                                   (util/stop e)
-                                   (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                     (on-shift-chosen item)
-                                     (on-chosen item e)))}
-                      (if item-render (item-render item chosen?) item)))]]
+                     :on-click (fn [e]
+                                 (util/stop e)
+                                 (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                   (on-shift-chosen item)
+                                   (on-chosen item e)))}
+                    (if item-render (item-render item chosen?) item)))]]
 
-             (if get-group-name
-               (if-let [group-name (get-group-name item)]
-                 [:div
-                  [:div.ui__ac-group-name group-name]
-                  item-cp]
-                 item-cp)
-
-               item-cp))])]
+            (let [group-name (and (fn? get-group-name) (get-group-name item))]
+              (if (and group-name (not (contains? @*groups group-name)))
+                (do
+                  (swap! *groups conj group-name)
+                  [:div
+                   [:div.ui__ac-group-name group-name]
+                   item-cp])
+                item-cp))))]
        (when empty-placeholder
          empty-placeholder))]))
 
@@ -586,7 +587,7 @@
     :on-click #(when close-backdrop? (close-fn))}
    [:div.absolute.inset-0.opacity-75]])
 
-(rum/defc modal-panel-content <
+(rum/defc modal-panel-content-cp <
   mixins/component-editing-mode
   [panel-content close-fn]
   (panel-content close-fn))
@@ -619,7 +620,7 @@
      [:div (cond-> {:class (if fullscreen? "" "panel-content")}
              (seq style)
              (assoc :style style))
-      (modal-panel-content panel-content close-fn)])])
+      (modal-panel-content-cp panel-content close-fn)])])
 
 (rum/defc modal < rum/reactive
   (mixins/event-mixin
@@ -635,10 +636,10 @@
       state
       {;; enter
        13 (fn [state e]
-            (.preventDefault e)
-            (some->
-             (.querySelector (rum/dom-node state) "button.ui__modal-enter")
-             (.click)))})))
+            (when-let [^js enter-el (some-> (rum/dom-node state)
+                                      (.querySelector "button.ui__modal-enter"))]
+              (.preventDefault e)
+              (.click enter-el)))})))
   []
   (let [modal-panel-content (state/sub :modal/panel-content)
         fullscreen? (state/sub :modal/fullscreen?)
@@ -669,15 +670,15 @@
 (rum/defc sub-modal < rum/reactive
   []
   (when-let [modals (seq (state/sub :modal/subsets))]
-    (for [[idx modal] (medley/indexed modals)]
-      (let [id (:modal/id modal)
-            modal-panel-content (:modal/panel-content modal)
-            close-btn? (:modal/close-btn? modal)
-            close-backdrop? (:modal/close-backdrop? modal)
-            show? (:modal/show? modal)
-            label (:modal/label modal)
-            style (:modal/style modal)
-            class (:modal/class modal)
+    (for [[idx modal'] (medley/indexed modals)]
+      (let [id (:modal/id modal')
+            modal-panel-content (:modal/panel-content modal')
+            close-btn? (:modal/close-btn? modal')
+            close-backdrop? (:modal/close-backdrop? modal')
+            show? (:modal/show? modal')
+            label (:modal/label modal')
+            style (:modal/style modal')
+            class (:modal/class modal')
             close-fn (fn []
                        (state/close-sub-modal! id))
             modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
@@ -769,17 +770,17 @@
 (rum/defc admonition
   [type content]
   (let [type (name type)]
-    (when-let [icon (case (string/lower-case type)
-                      "note" svg/note
-                      "tip" svg/tip
-                      "important" svg/important
-                      "caution" svg/caution
-                      "warning" svg/warning
-                      "pinned" svg/pinned
-                      nil)]
+    (when-let [icon' (case (string/lower-case type)
+                       "note" svg/note
+                       "tip" svg/tip
+                       "important" svg/important
+                       "caution" svg/caution
+                       "warning" svg/warning
+                       "pinned" svg/pinned
+                       nil)]
       [:div.flex.flex-row.admonitionblock.align-items {:class type}
        [:div.pr-4.admonition-icon.flex.flex-col.justify-center
-        {:title (string/capitalize type)} (icon)]
+        {:title (string/capitalize type)} (icon')]
        [:div.ml-4.text-lg
         content]])))
 
@@ -932,7 +933,7 @@
 (rum/defcs slider < rum/reactive
   {:init (fn [state]
            (assoc state ::value (atom (first (:rum/args state)))))}
-  [state _default-value {:keys [min max on-change]}]
+  [state _default-value {max' :max :keys [min on-change]}]
   (let [*value (::value state)
         value (rum/react *value)
         value' (int value)]
@@ -941,7 +942,7 @@
      {:type      "range"
       :value     value'
       :min       min
-      :max       max
+      :max       max'
       :style     {:width "100%"}
       :on-change #(let [value (util/evalue %)]
                     (reset! *value value))
@@ -961,7 +962,7 @@
 (def icon shui.icon.v2/root)
 
 (rum/defc button-inner
-  [text & {:keys [theme background variant href size class intent small? icon icon-props disabled? button-props]
+  [text & {icon' :icon :keys [theme background variant href size class intent small? icon-props disabled? button-props]
            :or   {small? false}
            :as   opts}]
   (let [button-props (merge
@@ -976,20 +977,20 @@
                                  :else (or variant :default))
                       :href    href
                       :size    (if small? :xs (or size :sm))
-                      :icon    icon
+                      :icon    icon'
                       :class   (if (and (string? background)
                                      (not (contains? #{"gray" "red"} background)))
                                  (str class " primary-" background) class)
                       :muted   disabled?}
                 button-props)
 
-        icon (when icon (shui/tabler-icon icon icon-props))
+        icon'' (when icon' (shui/tabler-icon icon' icon-props))
         href? (not (string/blank? href))
         text (cond
                href? [:a {:href href :target "_blank"
                           :style {:color "inherit"}} text]
                :else text)
-        children [icon text]]
+        children [icon'' text]]
 
     (shui/button props children)))
 
@@ -1007,12 +1008,6 @@
     (merge {:class (str (util/hiccup->class klass) " " class)
             :style (merge {:width size :height size} style)}
       (dissoc opts :style :class))]))
-
-(rum/defc type-icon
-  [{:keys [name class title extension?]}]
-  [:.type-icon {:class class
-                :title title}
-   (icon name {:extension? extension?})])
 
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
@@ -1131,6 +1126,132 @@
      trigger)
     (shui/tooltip-content
      tooltip-content))))
+
+(rum/defc DelDateButton
+  [on-delete]
+  (shui/button {:variant :outline :size :sm :class "del-date-btn" :on-click on-delete}
+    (shui/tabler-icon "trash" {:size 15})))
+
+(defonce month-values
+  [:January :February :March :April :May
+   :June :July :August :September :October
+   :November :December])
+
+(defn get-month-label
+  [n]
+  (some->> n (nth month-values)
+    (name)))
+
+(rum/defc date-year-month-select
+  [{:keys [name value onChange _children]}]
+  [:div.months-years-nav
+   (if (= name "years")
+     (shui/input
+      {:on-change (fn [v] (when v (onChange v)))
+       :class "h-6 ml-2 !w-auto !px-2"
+       :value value
+       :type "number"
+       :min 1
+       :max 9999})
+
+     (shui/dropdown-menu
+      (shui/dropdown-menu-trigger
+       {:as-child true}
+       (shui/button {:variant :ghost
+                     :class "!px-2 !py-0 h-6 border border-input rounded-md"
+                     :size :sm}
+         (get-month-label value)))
+      (shui/dropdown-menu-content
+        (for [[idx month] (medley/indexed month-values)
+              :let [label (clojure.core/name month)]]
+          (shui/dropdown-menu-checkbox-item
+            {:checked (= value idx)
+             :on-select (fn []
+                          (let [^js e (js/Event. "change")]
+                            (js/Object.defineProperty e "target"
+                              #js {:value #js {:value idx} :enumerable true})
+                            (onChange e)))}
+            label)))))])
+
+(defn single-calendar
+  [{:keys [del-btn? on-delete on-select on-day-click] :as opts}]
+  (shui/calendar
+   (merge
+    {:mode "single"
+     :caption-layout "dropdown-buttons"
+     :fromYear 1000
+     :toYear 3000
+     :components (cond-> {:Dropdown #(date-year-month-select (bean/bean %))}
+                   del-btn? (assoc :Head #(DelDateButton on-delete)))
+     :class-names {:months "" :root (when del-btn? "has-del-btn")}
+     :on-day-key-down (fn [^js d _ ^js e]
+                        (when (= "Enter" (.-key e))
+                          (let [on-select' (or on-select on-day-click)]
+                            (on-select' d))))}
+    opts)))
+
+(defn- get-current-hh-mm
+  []
+  (let [current-time-s (first (.split (.toTimeString (js/Date.)) " "))]
+    (subs current-time-s 0 (- (count current-time-s) 3))))
+
+(rum/defc time-picker
+  [{:keys [on-change default-value]}]
+  [:div.flex.flex-row.items-center.gap-2.mx-3.mb-3
+   (shui/input
+    {:id "time-picker"
+     :type "time"
+     :class "!py-0 !w-max !h-8"
+     :default-value (or default-value "00:00")
+     :on-blur (fn [e]
+                (on-change (util/evalue e)))})
+   (shui/button
+    {:variant :ghost
+     :size :sm
+     :class "text-muted-foreground"
+     :on-click (fn []
+                 (let [value (get-current-hh-mm)]
+                   (set! (.-value (gdom/getElement "time-picker")) value)
+                   (on-change value)))}
+    "Use current time")])
+
+(rum/defc nlp-calendar
+  [{:keys [selected on-select] :as opts}]
+  (let [on-select' (if (:datetime? opts)
+                     (fn [date value]
+                       (let [value (or (and (string? value) value)
+                                       (.-value (gdom/getElement "time-picker")))]
+                         (let [[h m] (string/split value ":")]
+                           (when selected
+                             (.setHours date h m 0))
+                           (on-select date))))
+                     on-select)]
+    [:div.flex.flex-col.gap-2
+     (single-calendar (assoc opts :on-select on-select'))
+     (when (:datetime? opts)
+       (time-picker (cond->
+                     {:on-change (fn [value] (on-select' selected value))}
+                      selected
+                      (assoc :default-value (str (util/zero-pad (.getHours selected))
+                                                 ":"
+                                                 (util/zero-pad (.getMinutes selected)))))))
+
+     (shui/input
+      {:type "text"
+       :placeholder "e.g. Next week"
+       :class "mx-3 mb-3"
+       :style {:width "initial"
+               :tab-index -1}
+       :auto-complete (if (util/chrome?) "chrome-off" "off")
+       :on-mouse-down util/stop-propagation
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (let [value (util/evalue e)]
+                          (when-not (string/blank? value)
+                            (when-let [result (date/nld-parse value)]
+                              (when-let [date (doto (goog.date.DateTime.) (.setTime (.getTime result)))]
+                                (let [on-select' (or (:on-select opts) (:on-day-click opts))]
+                                  (on-select' date))))))))})]))
 
 (comment
   (rum/defc emoji-picker

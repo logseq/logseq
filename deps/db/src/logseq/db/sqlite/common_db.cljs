@@ -28,7 +28,7 @@
   (->> (d/datoms db :avet :block/title page-name)
        (filter (fn [d]
                  (let [e (d/entity db (:e d))]
-                   (or (sqlite-util/page? e) (:block/tags e)))))
+                   (or (entity-util/page? e) (:block/tags e)))))
        (map :e)
        sort
        first))
@@ -92,7 +92,7 @@
                                      (map? (first property-values)))
                               property-values
                               #{property-values})
-                            (remove sqlite-util/page?))
+                            (remove entity-util/page?))
                     value-ids (when (every? map? values)
                                 (->> (map :db/id values)
                                      (filter (fn [id] (or (int? id) (keyword? id))))))
@@ -141,9 +141,9 @@
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
                              id))
-        page? (sqlite-util/page? block)
+        page? (entity-util/page? block)
         get-children (fn [block children]
-                       (let [long-page? (and (> (count children) 500) (not (sqlite-util/whiteboard? block)))]
+                       (let [long-page? (and (> (count children) 500) (not (entity-util/whiteboard? block)))]
                          (if long-page?
                            (->> (map (fn [e]
                                        (select-keys e [:db/id :block/uuid :block/page :block/order :block/parent :block/collapsed? :block/link]))
@@ -213,8 +213,8 @@
 
 (defn get-structured-datoms
   [db]
-  (mapcat (fn [type]
-            (->> (d/datoms db :avet :block/type type)
+  (mapcat (fn [type']
+            (->> (d/datoms db :avet :block/type type')
                  (mapcat (fn [d]
                            (d/datoms db :eavt (:e d))))))
           [
@@ -255,7 +255,8 @@
         idents (mapcat (fn [id]
                          (when-let [e (d/entity db id)]
                            (d/datoms db :eavt (:db/id e))))
-                       [:logseq.kv/db-type :logseq.kv/graph-uuid :logseq.property/empty-placeholder])
+                       [:logseq.kv/db-type :logseq.kv/graph-uuid :logseq.property/empty-placeholder
+                        :logseq.kv/graph-backup-folder])
         favorites (when db-graph? (get-favorites db))
         views (when db-graph? (get-views-data db))
         latest-journals (get-latest-journals db 1)
@@ -263,13 +264,14 @@
         all-pages (get-all-pages db)
         structured-datoms (when db-graph?
                             (get-structured-datoms db))
-        data (concat idents
-                     all-pages
-                     structured-datoms
-                     favorites
-                     views
-                     latest-journals
-                     all-files)]
+        data (distinct
+              (concat idents
+                      all-pages
+                      structured-datoms
+                      favorites
+                      views
+                      latest-journals
+                      all-files))]
     {:schema schema
      :initial-data data}))
 
@@ -281,7 +283,7 @@
 (defn create-kvs-table!
   "Creates a sqlite table for use with datascript.storage if one doesn't exist"
   [sqlite-db]
-  (.exec sqlite-db "create table if not exists kvs (addr INTEGER primary key, content TEXT)"))
+  (.exec sqlite-db "create table if not exists kvs (addr INTEGER primary key, content TEXT, addresses JSON)"))
 
 (defn get-storage-conn
   "Given a datascript storage, returns a datascript connection for it"

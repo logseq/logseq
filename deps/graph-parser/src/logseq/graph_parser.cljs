@@ -12,8 +12,8 @@
 
 (defn- retract-blocks-tx
   [blocks retain-uuids]
-  (mapcat (fn [{uuid :block/uuid eid :db/id}]
-            (if (and uuid (contains? retain-uuids uuid))
+  (mapcat (fn [{uuid' :block/uuid eid :db/id}]
+            (if (and uuid' (contains? retain-uuids uuid'))
               (map (fn [attr] [:db.fn/retractAttribute eid attr]) db-schema/retract-attributes)
               (when eid [[:db.fn/retractEntity eid]])))
           blocks))

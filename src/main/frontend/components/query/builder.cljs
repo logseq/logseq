@@ -21,7 +21,8 @@
             [promesa.core :as p]
             [frontend.config :as config]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [frontend.db-mixins :as db-mixins]))
 
 (rum/defc page-block-selector
   [*find]
@@ -150,6 +151,27 @@
                                   db-ident
                                   (keyword value)))))))
 
+(rum/defc property-value-select-inner
+  < rum/reactive db-mixins/query
+  [repo *property *find *tree opts loc db-graph? values]
+  (let [;; FIXME: lazy load property values consistently on first call
+        _ (when db-graph?
+            (doseq [id values] (db/sub-block id)))
+        values' (if db-graph?
+                  (map #(db-property/property-value-content (db/entity repo %)) values)
+                  values)
+        values'' (map #(hash-map :value (str %)
+                                   ;; Preserve original-value as some values like boolean do not display in select
+                                 :original-value %)
+                      (cons "Select all" values'))]
+    (select values''
+            (fn [{:keys [original-value]}]
+              (let [x (if (= original-value "Select all")
+                        [(if (= @*find :page) :page-property :property) @*property]
+                        [(if (= @*find :page) :page-property :property) @*property original-value])]
+                (reset! *property nil)
+                (append-tree! *tree opts loc x))))))
+
 (rum/defc property-value-select
   [repo *property *find *tree opts loc]
   (let [db-graph? (sqlite-util/db-based-graph? repo)
@@ -164,23 +186,7 @@
              (db-async/<get-block repo db-id :children? false)))
          (set-values! result)))
      [@*property])
-    (let [;; FIXME: lazy load property values consistently on first call
-          _ (when db-graph?
-              (doseq [id values] (db/sub-block id)))
-          values' (if db-graph?
-                    (map #(db-property/property-value-content (db/entity repo %)) values)
-                    values)
-          values'' (map #(hash-map :value (str %)
-                                   ;; Preserve original-value as some values like boolean do not display in select
-                                   :original-value %)
-                        (cons "Select all" values'))]
-      (select values''
-              (fn [{:keys [original-value]}]
-                (let [x (if (= original-value "Select all")
-                          [(if (= @*find :page) :page-property :property) @*property]
-                          [(if (= @*find :page) :page-property :property) @*property original-value])]
-                  (reset! *property nil)
-                  (append-tree! *tree opts loc x)))))))
+    (property-value-select-inner repo *property *find *tree opts loc db-graph? values)))
 
 (rum/defc tags
   [repo *tree opts loc]
@@ -205,7 +211,7 @@
     [:div
      (case @*mode
        "namespace"
-       (let [items (sort (db-model/get-all-namespace-parents repo))]
+       (let [items (sort (map :block/title (db-model/get-all-namespace-parents repo)))]
          (select items
                  (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:namespace value]))))
@@ -270,7 +276,7 @@
 
        "full text search"
        (search (fn [v] (append-tree! *tree opts loc v))
-               (:toggle-fn opts))
+         (:toggle-fn opts))
 
        "between"
        (between (merge opts
@@ -323,14 +329,18 @@
 
 (rum/defc add-filter
   [*find *tree loc clause]
-  [:a.flex.add-filter
-   {:title "Add clause"
+  (shui/button
+   {:class "!px-1 h-6 add-filter text-muted-foreground"
+    :size :sm
+    :variant :ghost
+    :title "Add clause"
+    :on-pointer-down util/stop-propagation
     :on-click (fn [^js e]
                 (shui/popup-show! (.-target e)
-                  (fn [{:keys [id]}]
-                    (picker *find *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
-                  {}))}
-   (ui/icon "plus" {:style {:font-size 20}})])
+                                  (fn [{:keys [id]}]
+                                    (picker *find *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
+                                  {:align :start}))}
+   (ui/icon "plus" {:size 12})))
 
 (declare clauses-group)
 
@@ -354,7 +364,11 @@
         (str "#" (second (second clause))))
 
       (contains? #{:property :page-property} (keyword f))
-      (str (name (second clause)) ": "
+      (str (if (and (config/db-based-graph? (state/get-current-repo))
+                    (qualified-keyword? (second clause)))
+             (:block/title (db/entity (second clause)))
+             (name (second clause)))
+           ": "
            (cond
              (and (vector? (last clause)) (= :page-ref (first (last clause))))
              (second (last clause))
@@ -399,7 +413,7 @@
        [:a.flex.text-sm.query-clause {:on-click toggle-fn}
         clause]
 
-       [:div.flex.flex-row.items-center.gap-2.p-1.rounded.border.query-clause-btn
+       [:div.flex.flex-row.items-center.gap-2.px-1.rounded.border.query-clause-btn
         [:a.flex.query-clause {:on-click toggle-fn}
          (dsl-human-output clause)]]))
    (fn [{:keys [toggle-fn]}]
@@ -449,16 +463,16 @@
                   "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg.w-64")}))
 
 (rum/defc clause
-  [*tree *find loc clause]
-  (when (seq clause)
+  [*tree *find loc clauses]
+  (when (seq clauses)
     [:div.query-builder-clause
-     (let [kind (keyword (first clause))]
+     (let [kind (keyword (first clauses))]
        (if (query-builder/operators-set kind)
          [:div.operator-clause.flex.flex-row.items-center {:data-level (count loc)}
           [:div.clause-bracket "("]
-          (clauses-group *tree *find (conj loc 0) kind (rest clause))
+          (clauses-group *tree *find (conj loc 0) kind (rest clauses))
           [:div.clause-bracket ")"]]
-         (clause-inner *tree loc clause)))]))
+         (clause-inner *tree loc clauses)))]))
 
 (rum/defc clauses-group
   [*tree *find loc kind clauses]

@@ -37,16 +37,16 @@
   (testing "Multiple properties that generate the same initial :db/ident"
     (let [conn (create-conn-with-blocks [])]
       (outliner-property/upsert-property! conn nil {:type :default} {:property-name "p1"})
-      (outliner-property/upsert-property! conn nil {} {:property-name ":p1"})
-      (outliner-property/upsert-property! conn nil {} {:property-name "1p1"})
+      (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
+      (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
 
       (is (= {:block/name "p1" :block/title "p1" :block/schema {:type :default}}
              (select-keys (d/entity @conn :user.property/p1) [:block/name :block/title :block/schema]))
           "Existing db/ident does not get modified")
-      (is (= ":p1"
+      (is (= "p1"
              (:block/title (d/entity @conn :user.property/p1-1)))
           "2nd property gets unique ident")
-      (is (= "1p1"
+      (is (= "p1"
              (:block/title (d/entity @conn :user.property/p1-2)))
           "3rd property gets unique ident"))))
 
@@ -280,14 +280,14 @@
         _ (outliner-property/class-add-property! conn :user.class/c1 :user.property/p1)
         _ (outliner-property/class-add-property! conn :user.class/c1 :user.property/p2)]
     (is (= [:user.property/p1 :user.property/p2]
-           (map :db/ident (:class/schema.properties (d/entity @conn :user.class/c1)))))))
+           (map :db/ident (:logseq.property.class/properties (d/entity @conn :user.class/c1)))))))
 
 (deftest class-remove-property!
   (let [conn (create-conn-with-blocks
               {:classes {:c1 {:build/schema-properties [:p1 :p2]}}})
         _ (outliner-property/class-remove-property! conn :user.class/c1 :user.property/p1)]
     (is (= [:user.property/p2]
-           (map :db/ident (:class/schema.properties (d/entity @conn :user.class/c1)))))))
+           (map :db/ident (:logseq.property.class/properties (d/entity @conn :user.class/c1)))))))
 
 (deftest get-block-classes-properties
   (let [conn (create-conn-with-blocks

@@ -42,8 +42,10 @@
   []
   (notification/show! "Import finished!" :success)
   (shui/dialog-close! :import-indicator)
+  (state/clear-async-query-state!)
   (ui-handler/re-render-root!)
-  (route-handler/redirect-to-home!))
+  (route-handler/redirect-to-home!)
+  (js/setTimeout ui-handler/re-render-root! 500))
 
 (defn- roam-import-handler
   [e]
@@ -192,7 +194,7 @@
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
-        "(Optional) Tags to import as tag classes:"]
+        "(Optional) Tags to import as new tags:"]
        [:span.text-xs
         "Tags are case insensitive and separated by commas"]]]
      (shui/input
@@ -207,7 +209,7 @@
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
-        "(Optional) Properties whose values are imported as tag classes e.g. 'type':"]
+        "(Optional) Properties whose values are imported as new tags e.g. 'type':"]
        [:span.text-xs
         "Properties are case insensitive and separated by commas"]]]
      (shui/input
@@ -222,7 +224,7 @@
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
-        "(Optional) Properties whose values are imported as parent classes e.g. 'parent':"]
+        "(Optional) Properties whose values are imported as parents of new tags e.g. 'parent':"]
        [:span.text-xs
         "Properties are case insensitive and separated by commas"]]]
      (shui/input

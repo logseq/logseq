@@ -11,7 +11,7 @@
             [logseq.shui.ui :as shui]))
 
 (rum/defc trigger-table []
-  [:table
+  [:table.classic-table.w-full
    [:thead
     [:tr
      [:th.text-left [:b (t :help/shortcuts-triggers)]]
@@ -82,7 +82,7 @@
                               :src "https://asset.logseq.com/static/img/logo.png"
                               :alt "image"}]}]
 
-    [:table
+    [:table.classic-table.w-full
      [:thead
       [:tr
        [:th.text-left [:b title]]
@@ -98,7 +98,8 @@
 (rum/defc shortcut-page
   [{:keys [show-title?]
     :or {show-title? true}}]
-  [:div.cp__shortcut-page
+  [:div.cp__shortcut-page.px-2
+   {:class "-mt-2"}
    (when show-title? [:h1.title (t :help/shortcut-page-title)])
    (trigger-table)
    (markdown-and-orgmode-syntax)

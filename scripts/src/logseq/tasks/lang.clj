@@ -5,7 +5,9 @@
             [frontend.dicts :as dicts]
             [logseq.tasks.util :as task-util]
             [babashka.cli :as cli]
-            [babashka.process :refer [shell]]))
+            [babashka.process :refer [shell]]
+            [babashka.fs :as fs]
+            [borkdude.rewrite-edn :as r]))
 
 (defn- get-dicts
   []
@@ -114,7 +116,8 @@
    "(t prompt-key" [:select/default-prompt :select/default-select-multiple :select.graph/prompt]
    ;; All args to ui/make-confirm-modal are not keywords
    "(t title" []
-   "(t (or title-key" [:views.table/default-title :all-pages/table-title :views.table/tagged-nodes
+   "(t (or title-key" [:views.table/live-query-title
+                       :views.table/default-title :all-pages/table-title :views.table/tagged-nodes
                        :views.table/property-nodes]
    "(t subtitle" [:asset/physical-delete]})
 
@@ -126,11 +129,22 @@
        string/split-lines
        (map #(keyword (subs % 3)))))
 
+(defn- delete-not-used-key-from-dict-file
+  [invalid-keys]
+  (let [paths (fs/list-dir "src/resources/dicts")]
+    (doseq [path paths]
+      (let [result (r/parse-string (String. (fs/read-all-bytes path)))
+            new-content (str (reduce
+                              (fn [result k]
+                                (r/dissoc result k))
+                              result invalid-keys))]
+        (spit (fs/file path) new-content)))))
+
 (defn- validate-ui-translations-are-used
   "This validation checks to see that translations done by (t ...) are equal to
   the ones defined for the default :en lang. This catches translations that have
   been added in UI but don't have an entry or translations no longer used in the UI"
-  []
+  [{:keys [fix?]}]
   (let [actual-dicts (->> (shell {:out :string}
                                  ;; This currently assumes all ui translations
                                  ;; use (t and src/main. This can easily be
@@ -156,20 +170,22 @@
           (task-util/print-table (map #(hash-map :invalid-key %) actual-only)))
         (when (seq expected-only)
           (println "\nThese translation keys are invalid because they are not used in the UI:")
-          (task-util/print-table (map #(hash-map :invalid-key %) expected-only)))
+          (task-util/print-table (map #(hash-map :invalid-key %) expected-only))
+          (when fix?
+            (delete-not-used-key-from-dict-file expected-only)
+            (println "These invalid keys have been removed.")))
         (System/exit 1)))))
 
 (def allowed-duplicates
   "Allows certain keys in a language to have the same translation
    as English. Happens more in romance languages but pretty rare otherwise"
   {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
-         :settings-of-plugins :code :on-boarding/section-pages
-         :shortcut.category/plugins :whiteboard/rectangle :whiteboard/triangle}
+         :settings-of-plugins :code :shortcut.category/plugins :whiteboard/rectangle :whiteboard/triangle}
    :de #{:graph :host :plugins :port :right-side-bar/whiteboards
          :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
          :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
    :es #{:settings-page/tab-general :settings-page/tab-editor :whiteboard/color}
-   :it #{:home :handbook/home :host :help/awesome-logseq :on-boarding/section-computer
+   :it #{:home :handbook/home :host :help/awesome-logseq
          :settings-page/tab-account :settings-page/tab-editor :whiteboard/link}
    :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
    :pl #{:port}
@@ -185,7 +201,7 @@
             :settings-page/tab-editor :shortcut.category/whiteboard :whiteboard/medium
             :whiteboard/twitter-url :whiteboard/youtube-url :linked-references/filter-heading}
    :tr #{:help/awesome-logseq}
-   :id #{:host :port :on-boarding/section-app}})
+   :id #{:host :port}})
 
 (defn- validate-languages-dont-have-duplicates
   "Looks up duplicates for all languages"
@@ -212,7 +228,7 @@
 
 (defn validate-translations
   "Runs multiple translation validations that fail fast if one of them is invalid"
-  []
+  [& args]
   (validate-non-default-languages)
-  (validate-ui-translations-are-used)
+  (validate-ui-translations-are-used {:fix? (contains? (set args) "--fix")})
   (validate-languages-dont-have-duplicates))

@@ -72,6 +72,10 @@
   @apply flex flex-1 flex-row flex-wrap gap-1;
 }
 
+.block-content-or-editor-inner {
+  @apply flex flex-1 flex-col w-full;
+}
+
 .block-head-wrap {
   @apply flex flex-1 w-full flex-row flex-wrap;
   @apply justify-between items-center;
@@ -126,10 +130,14 @@
 .block-body ul,
 .block-body ol,
 .block-body dl {
-  margin-bottom: 0;
+  @apply mb-0;
 
   > li {
-    margin: 0;
+    @apply py-[1px] m-0;
+
+    .ui__checkbox {
+      @apply mr-1.5 overflow-hidden relative top-0.5;
+    }
   }
 }
 
@@ -183,8 +191,8 @@
   border-left: 0;
 }
 
-.block-control-wrap {
-  @apply h-[24px] mt-[1px];
+.block-control-wrap, .ls-page-title .property-value .block-control-wrap {
+  @apply h-[24px];
 
   &.is-order-list {
     @apply mr-0 pr-0;
@@ -199,15 +207,23 @@
   }
 }
 
+.ls-page-title .block-control-wrap {
+  height: initial;
+}
+
 .block-title-wrap {
-  @apply inline;
+  @apply w-full inline;
 
   > .ui__checkbox {
-    @apply relative top-[3px];
+    @apply relative top-[2px];
+
+    > span {
+      @apply h-full;
+    }
   }
 
   &.as-heading {
-    @apply flex flex-1 items-center;
+    @apply flex flex-1 items-center flex-wrap;
 
     > .ui__checkbox {
       @apply top-0;
@@ -286,15 +302,13 @@
 }
 
 .block-ref {
-  border-bottom: 0.5px solid;
-  border-bottom-color: var(--ls-block-ref-link-text-color);
-  cursor: alias;
-  padding: 2px 0;
+  @apply border-b-[0.5px] border-b-[--ls-block-ref-link-text-color] cursor-alias;
+
   display: inherit;
+  margin-bottom: -1px;
 
   .block-ref {
-    padding: 6px 5px;
-    border: none;
+    @apply mx-1;
   }
 
   &:hover {
@@ -351,7 +365,7 @@
   }
 
   .ui__icon.ti {
-    @apply relative left-[1px] top-[3px];
+    @apply relative top-[3px] left-0;
   }
 }
 
@@ -680,6 +694,10 @@
 .bullet-link-wrap {
   color: var(--ls-primary-text-color);
 
+  .ui__icon {
+    @apply opacity-80;
+  }
+
   &:hover > .bullet-container:not(.typed-list) {
     background-color: var(--lx-gray-04-alpha, var(--ls-block-bullet-border-color, var(--rx-gray-04-alpha)));
 
@@ -830,6 +848,18 @@ html.is-mac {
 
   &-item {
     @apply bg-gray-03 rounded p-4;
+
+    > .only-page-blocks {
+      @apply relative -left-[11px];
+    }
+
+    .with-foldable-page {
+      > .preview-ref-link {
+        .page-ref .ui__icon.ti {
+          @apply top-[2px] left-0;
+        }
+      }
+    }
   }
 
   .page-reference:hover {
@@ -841,4 +871,75 @@ html.is-mac {
   .references-blocks-item {
     @apply bg-gray-04;
   }
+}
+
+.block-title-wrap a.tag, .block-body a.tag {
+  font-size: initial;
+  opacity: 1;
+}
+
+.positioned-properties.block-right {
+  button {
+    @apply whitespace-nowrap mr-0.5;
+  }
+
+  .block-title-wrap {
+    @apply overflow-hidden h-6 whitespace-nowrap text-ellipsis;
+  }
+}
+
+.block-tags {
+  @apply flex flex-row flex-wrap self-start items-center;
+  min-height: 24px;
+  max-width: 256px;
+  margin-right: -28px;
+}
+
+.block-tag {
+  @apply pr-1 flex flex-row items-center gap-1;
+}
+
+.block-tag a.tag {
+  @apply flex text-sm font-normal items-center opacity-70;
+}
+
+.block-tag a.tag:hover {
+  @apply opacity-100;
+}
+
+.block-tag span {
+  @apply whitespace-nowrap overflow-hidden;
+  max-width: 160px;
+  text-overflow: ellipsis;
+}
+
+.ls-table a.tag {
+  @apply text-sm;
+}
+
+.block-content-wrapper svg, .view-actions svg {
+  width: 18px;
+  height: 18px;
+}
+
+.ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
+  width: 38px;
+  height: 38px;
+}
+
+.ls-page-title .positioned-properties svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ls-page-title .ls-page-icon button {
+  margin-top: 8px;
+}
+
+.ls-page-title .positioned-properties {
+  height: 54px;
+}
+
+.ls-page-title .block-tags {
+  @apply relative -right-1 min-h-full;
 }

@@ -12,7 +12,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.util.priority :as priority]
+            [frontend.util.file-based.priority :as priority]
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.property.file :as property-file]
@@ -25,11 +25,11 @@
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
             [frontend.handler.file-based.status :as file-based-status]
-            [frontend.handler.db-based.property :as db-property-handler]))
+            [frontend.handler.db-based.property :as db-property-handler]
+            [logseq.common.util.macro :as macro-util]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
-(defonce angle-bracket "<")
 (defonce hashtag "#")
 (defonce colon ":")
 (defonce command-trigger "/")
@@ -157,7 +157,7 @@
                                      "square-asterisk")]
                           [command (->marker m) (str "Set status to " m) icon]))))]
     (when (seq result)
-      (update result 0 (fn [v] (conj v "TASK"))))))
+      (map (fn [v] (conj v "TASK")) result))))
 
 (defn file-based-priorities
   []
@@ -184,10 +184,10 @@
                            (if db-based?
                              (str "priorityLvl" item)
                              (str "circle-letter-" (util/safe-lower-case item)))])))
-                 (with-no-priority)
-                 (vec))]
+                (with-no-priority)
+                (vec))]
     (when (seq result)
-      (update result 0 (fn [v] (conj v "PRIORITY"))))))
+      (map (fn [v] (conj v "PRIORITY")) result))))
 
 ;; Credits to roamresearch.com
 
@@ -230,46 +230,15 @@
                         (+ 1 (count right))
                         (count right))]
      [[:editor/input template {:type "block"
-                               :last-pattern angle-bracket
+                               :last-pattern command-trigger
                                :backward-pos backward-pos}]])))
 
 (defn ->properties
   []
-  [[:editor/clear-current-bracket]
+  [[:editor/clear-current-slash]
    [:editor/insert-properties]
    [:editor/move-cursor-to-properties]])
 
-;; https://orgmode.org/manual/Structure-Templates.html
-(defn block-commands-map
-  []
-  (->>
-   (concat
-    [["Quote" (->block "quote")
-      "Add a quote"
-      "More"]
-     ["Src" (->block "src" "")]
-     ["Query" (->block "query")]
-     ["Latex export" (->block "export" "latex")]
-     ;; FIXME: current page's format
-     (when (= :org (state/get-preferred-format))
-       ["Properties" (->properties)])
-     ["Note" (->block "note")]
-     ["Tip" (->block "tip")]
-     ["Important" (->block "important")]
-     ["Caution" (->block "caution")]
-     ["Pinned" (->block "pinned")]
-     ["Warning" (->block "warning")]
-     ["Example" (->block "example")]
-     ["Export" (->block "export")]
-     ["Verse" (->block "verse")]
-     ["Ascii" (->block "export" "ascii")]
-     ["Center" (->block "center")]
-     ["Comment" (->block "comment")]]
-
-    ;; Allow user to modify or extend, should specify how to extend.
-    (state/get-commands))
-   (remove nil?)
-   (util/distinct-by-last-wins first)))
 
 (defn ^:large-vars/cleanup-todo commands-map
   [get-page-ref-text]
@@ -346,9 +315,35 @@
         "Number children"
         :icon/numberedChildren]]
 
+      ;; https://orgmode.org/manual/Structure-Templates.html
+      (cond->
+       [["Quote" (->block "quote")
+         "Create a quote block"
+         :icon/quote-block
+         "BLOCK TYPE"]
+        ;; Should this be replaced by "Code block"?
+        ["Src" (->block "src") "Create a code block"]
+        ["Advanced Query" (->block "query") "Create an advanced query block"]
+        ["Latex export" (->block "export" "latex") "Create a latex block"]
+        ["Note" (->block "note") "Create a note block"]
+        ["Tip" (->block "tip") "Create a tip block"]
+        ["Important" (->block "important") "Create an important block"]
+        ["Caution" (->block "caution") "Create a caution block"]
+        ["Pinned" (->block "pinned") "Create a pinned block"]
+        ["Warning" (->block "warning") "Create a warning block"]
+        ["Example" (->block "example") "Create an example block"]
+        ["Export" (->block "export") "Create an export block"]
+        ["Verse" (->block "verse") "Create a verse block"]
+        ["Ascii" (->block "export" "ascii") "Create an ascii block"]
+        ["Center" (->block "center") "Create a center block"]]
+
+        ;; FIXME: current page's format
+        (= :org (state/get-preferred-format))
+        (conj ["Properties" (->properties)]))
+
       ;; advanced
       [["Query"
-        [[:editor/input "{{query }}" {:backward-pos 2}]
+        [[:editor/input (str macro-util/query-macro " }}") {:backward-pos 2}]
          [:editor/exit]]
         query-doc
         :icon/query
@@ -417,21 +412,14 @@
     (reset! *initial-commands commands)
     (reset! *matched-commands commands)))
 
-(defonce *matched-block-commands (atom (block-commands-map)))
-
 (defn reinit-matched-commands!
   []
   (reset! *matched-commands @*initial-commands))
 
-(defn reinit-matched-block-commands!
-  []
-  (reset! *matched-block-commands (block-commands-map)))
-
 (defn restore-state
   []
   (state/clear-editor-action!)
-  (reinit-matched-commands!)
-  (reinit-matched-block-commands!))
+  (reinit-matched-commands!))
 
 (defn insert!
   [id value
@@ -646,19 +634,6 @@
                                                new-value
                                                (count prefix))))))
 
-(defmethod handle-step :editor/clear-current-bracket [[_ space?]]
-  (when-let [input-id (state/get-edit-input-id)]
-    (when-let [current-input (gdom/getElement input-id)]
-      (let [edit-content (gobj/get current-input "value")
-            current-pos (cursor/pos current-input)
-            prefix (subs edit-content 0 current-pos)
-            prefix (util/replace-last angle-bracket prefix "" (boolean space?))
-            new-value (str prefix
-                           (subs edit-content current-pos))]
-        (state/set-block-content-and-last-pos! input-id
-                                               new-value
-                                               (count prefix))))))
-
 (defn compute-pos-delta-when-change-marker
   [edit-content marker pos]
   (let [old-marker (some->> (first (util/safe-re-find file-based-status/bare-marker-pattern edit-content))
@@ -707,6 +682,11 @@
   (if (config/db-based-graph? (state/get-current-repo))
     (db-based-set-status status)
     (file-based-set-status status format)))
+
+(defmethod handle-step :editor/set-property [[_ property-id value]]
+  (when (config/db-based-graph? (state/get-current-repo))
+    (when-let [block (state/get-edit-block)]
+      (db-property-handler/set-block-property! (:db/id block) property-id value))))
 
 (defn- file-based-set-priority
   [priority]
@@ -865,8 +845,8 @@
   (prn "No handler for step: " type))
 
 (defn handle-steps
-  [vector format]
-  (doseq [step vector]
+  [vector' format]
+  (doseq [step vector']
     (handle-step step format)))
 
 (defn exec-plugin-simple-command!

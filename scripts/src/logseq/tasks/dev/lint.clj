@@ -21,6 +21,28 @@
     (println cmd)
     (shell cmd)))
 
+(defn kondo-git-changes
+  "Run clj-kondo across dirs and only for files that git diff detects as unstaged changes"
+  []
+  (let [kondo-dirs ["src" "deps/common" "deps/db" "deps/graph-parser" "deps/outliner" "deps/publishing"]
+        dir-regex (re-pattern (str "^(" (string/join "|" kondo-dirs) ")"))
+        dir-to-files (->> (shell {:out :string} "git diff --name-only")
+                          :out
+                          string/split-lines
+                          (filter #(re-find #"\.(cljs|clj|cljc)$" %))
+                          (group-by #(first (re-find dir-regex %)))
+                          ;; remove files that aren't in a kondo dir
+                          ((fn [x] (dissoc x nil))))]
+    (if (seq dir-to-files)
+        (doseq [[dir* files*] dir-to-files]
+          (let [dir (if (= dir* "src") "." dir*)
+                files (mapv #(string/replace-first % (str dir "/") "") files*)
+                cmd (str "cd " dir " && clj-kondo --lint " (string/join " " files))
+                _ (println cmd)
+                res (apply shell {:dir dir :continue :true} "clj-kondo --lint" files)]
+           (when (pos? (:exit res)) (System/exit (:exit res)))))
+        (println "No clj* files have changed to lint."))))
+
 (defn- validate-frontend-not-in-worker
   []
   (let [res (shell {:out :string}

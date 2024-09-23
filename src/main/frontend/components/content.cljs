@@ -62,7 +62,8 @@
      (shui/dropdown-menu-item
       {:key "delete"
        :on-click #(do (editor-handler/delete-selection %)
-                      (state/hide-custom-context-menu!))}
+                      (state/hide-custom-context-menu!)
+                    (shui/popup-hide!))}
 
       (t :editor/delete-selection)
       (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/delete)))
@@ -339,7 +340,7 @@
               (shui/dropdown-menu-item
                {:key "(Dev) Show block AST"
                 :on-click (fn []
-                            (let [block (db/pull [:block/uuid block-id])]
+                            (let [block (db/entity [:block/uuid block-id])]
                               (dev-common-handler/show-content-ast (:block/title block) (:block/format block))))}
                (t :dev/show-block-ast))
               (shui/dropdown-menu-item
@@ -454,7 +455,6 @@
   [state id {:keys [format
                     config
                     hiccup
-                    content
                     on-click
                     on-hide]
              :as option}]
@@ -463,4 +463,4 @@
      (hiccup-content id option)]
     ;; TODO: remove this
     (let [format (common-util/normalize-format format)]
-      (non-hiccup-content id content on-click on-hide config format))))
+      (non-hiccup-content id (:content option) on-click on-hide config format))))

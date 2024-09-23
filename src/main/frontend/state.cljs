@@ -21,7 +21,11 @@
             [rum.core :as rum]
             [frontend.rum :as r]
             [logseq.db.sqlite.util :as sqlite-util]
-            [clojure.set :as set]))
+            [logseq.shui.ui :as shui]
+            [clojure.set :as set]
+            [frontend.db.conn-state :as db-conn-state]
+            [datascript.core :as d]
+            [logseq.db :as ldb]))
 
 (defonce *profile-state
   (atom {}))
@@ -116,6 +120,8 @@
                                                false
                                                true)
       :ui/scrolling?                         (atom false)
+      :ui/show-empty-and-hidden-properties?  (atom {:mode :global
+                                                    :show? false})
       :document/mode?                        document-mode?
 
       :config                                {}
@@ -398,11 +404,11 @@
 (def db-default-config
   "Default repo config for DB graphs"
   (merge common-default-config
-         ;; The "NOW" query returns tasks with "Doing" status for recent past days
-         ;; The "NEXT" query returns tasks with "Todo" status for upcoming future days
+         ;; The "DOING" query returns tasks with "Doing" status for recent past days
+         ;; The "TODO" query returns tasks with "Todo" status for upcoming future days
          {:default-queries
           {:journals
-           [{:title "🔨 NOW"
+           [{:title [:span (shui/tabler-icon "InProgress50" {:class "align-middle pr-1"}) [:span.align-middle "DOING"]]
              :query '[:find (pull ?b [*])
                       :in $ ?start ?today
                       :where
@@ -413,7 +419,7 @@
                       [(<= ?d ?today)]]
              :inputs [:14d :today]
              :collapsed? false}
-            {:title "📅 NEXT"
+            {:title [:span (shui/tabler-icon "Todo" {:class "align-middle pr-1"}) [:span.align-middle "TODO"]]
              :query '[:find (pull ?b [*])
                       :in $ ?start ?next
                       :where
@@ -591,7 +597,13 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-date-formatter
   []
-  (common-config/get-date-formatter (get-config)))
+  (let [repo (get-current-repo)]
+    (if (sqlite-util/db-based-graph? repo)
+      (when-let [conn (db-conn-state/get-conn repo)]
+        (get (d/entity @conn :logseq.class/Journal)
+           :logseq.property.journal/title-format
+           "MMM do, yyyy"))
+      (common-config/get-date-formatter (get-config)))))
 
 (defn shortcuts []
   (:shortcuts (get-config)))
@@ -1112,10 +1124,6 @@ Similar to re-frame subscriptions"
   []
   (when-not (get-editor-action) (set-editor-action! :commands)))
 
-(defn set-editor-show-block-commands!
-  []
-  (when-not (get-editor-action) (set-editor-action! :block-commands)))
-
 (defn clear-editor-action!
   []
   (set-state! :editor/action nil))
@@ -1274,19 +1282,6 @@ Similar to re-frame subscriptions"
   []
   (swap! state assoc :ui/sidebar-open? false))
 
-(defn sidebar-add-block!
-  [repo db-id block-type]
-  (when (not (util/sm-breakpoint?))
-    (when db-id
-      (update-state! :sidebar/blocks (fn [blocks]
-                                       (->> (remove #(= (second %) db-id) blocks)
-                                            (cons [repo db-id block-type])
-                                            (distinct))))
-      (set-state! [:ui/sidebar-collapsed-blocks db-id] false)
-      (open-right-sidebar!)
-      (when-let [elem (gdom/getElementByClass "sidebar-item-list")]
-        (util/scroll-to elem 0)))))
-
 (defn sidebar-move-block!
   [from to]
   (update-state! :sidebar/blocks (fn [blocks]
@@ -1364,7 +1359,8 @@ Similar to re-frame subscriptions"
   (clear-cursor-range!)
   (set-state! :editor/content {})
   (set-state! :ui/select-query-cache {})
-  (set-state! :editor/block-refs #{}))
+  (set-state! :editor/block-refs #{})
+  (set-state! :editor/action-data nil))
 
 (defn into-code-editor-mode!
   []
@@ -1603,10 +1599,6 @@ Similar to re-frame subscriptions"
               :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)
               :modal/style style)))
    nil))
-
-(defn dropdown-opened?
-  []
-  (seq (:modal/dropdowns @state)))
 
 (defn close-dropdowns!
   []
@@ -1937,6 +1929,28 @@ Similar to re-frame subscriptions"
         chan (get-events-chan)]
     (async/put! chan [payload d])
     d))
+
+(defn sidebar-add-block!
+  [repo db-id block-type]
+  (when (not (util/sm-breakpoint?))
+    (let [page (and (sqlite-util/db-based-graph? repo)
+                    (= :page block-type)
+                    (some-> (db-conn-state/get-conn repo) deref (d/entity db-id)))]
+      (if (and page
+               ;; TODO: Use config/dev? when it's not a circular dep
+               (not goog.DEBUG)
+               (or (ldb/hidden? page)
+                   (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
+        (pub-event! [:notification/show {:content "Cannot open an internal page." :status :warning}])
+        (when db-id
+          (update-state! :sidebar/blocks (fn [blocks]
+                                           (->> (remove #(= (second %) db-id) blocks)
+                                                (cons [repo db-id block-type])
+                                                (distinct))))
+          (set-state! [:ui/sidebar-collapsed-blocks db-id] false)
+          (open-right-sidebar!)
+          (when-let [elem (gdom/getElementByClass "sidebar-item-list")]
+            (util/scroll-to elem 0)))))))
 
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
@@ -2365,6 +2379,10 @@ Similar to re-frame subscriptions"
   (rum/react
    (r/cached-derived-atom (:db/async-query-loading @state) [(get-current-repo) ::async-query (str k)]
                           (fn [s] (contains? s (str k))))))
+
+(defn clear-async-query-state!
+  []
+  (reset! (:db/async-query-loading @state) #{}))
 
 (defn set-color-accent! [color]
   (swap! state assoc :ui/radix-color color)

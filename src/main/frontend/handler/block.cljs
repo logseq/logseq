@@ -13,7 +13,7 @@
    [logseq.outliner.op]
    [frontend.state :as state]
    [frontend.util :as util]
-   [frontend.util.drawer :as drawer]
+   [frontend.util.file-based.drawer :as drawer]
    [goog.dom :as gdom]
    [logseq.graph-parser.block :as gp-block]
    [logseq.db.sqlite.util :as sqlite-util]
@@ -200,8 +200,8 @@
              db-graph? (config/db-based-graph? repo)
              block (or (db/entity [:block/uuid block-id]) block)
              content (if (and db-graph? (:block/name block))
-                       (:block/title block)
-                       (or custom-content (:block/title block) ""))
+                       (:block/title-with-refs-parent block)
+                       (or custom-content (:block/title-with-refs-parent block) ""))
              content-length (count content)
              text-range (cond
                           (vector? pos)

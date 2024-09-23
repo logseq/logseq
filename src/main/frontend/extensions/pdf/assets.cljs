@@ -30,18 +30,31 @@
             [rum.core :as rum]
             [fipp.edn :refer [pprint]]))
 
+(defn get-in-repo-assets-full-filename
+  [url]
+  (let [repo-dir (config/get-repo-dir (state/get-current-repo))]
+    (when (some-> url (string/trim) (string/includes? repo-dir))
+      (some-> (string/split url repo-dir)
+        (last)
+        (string/replace-first "/assets/" "")))))
+
 (defn inflate-asset
   [original-path & {:keys [href]}]
-  (let [filename  (util/node-path.basename original-path)
-        web-link? (string/starts-with? original-path "http")
+  (let [web-link? (string/starts-with? original-path "http")
+        blob-res? (some-> href (string/starts-with? "blob"))
+        filename  (util/node-path.basename original-path)
         ext-name  (util/get-file-ext filename)
-        url       (if (and href (string/starts-with? href "blob"))
-                    href
+        url       (if blob-res? href
                     (assets-handler/normalize-asset-resource-url original-path))
-        filekey   (util/safe-sanitize-file-name (subs filename 0 (- (count filename) (inc (count ext-name)))))]
+        filename' (if (or web-link? blob-res?) filename
+                    (some-> (get-in-repo-assets-full-filename url)
+                      (js/decodeURIComponent) (string/replace ' "/" "_")))
+        filekey   (util/safe-sanitize-file-name
+                    (subs filename' 0 (- (count filename') (inc (count ext-name)))))]
     (when-let [key (and (not (string/blank? filekey))
-                        (if web-link?
-                          (str filekey "__" (hash url)) filekey))]
+                     (if web-link?
+                       (str filekey "__" (hash url))
+                       filekey))]
 
       {:key           key
        :identity      (subs key (- (count key) 15))
@@ -113,12 +126,16 @@
                                       (pu/get-pid :logseq.property/hl-type) :area
                                       (pu/get-pid :logseq.property.pdf/hl-stamp) stamp)
                                %)
+                 db-base? (config/db-based-graph? (state/get-current-repo))
                  props (cond->
                         {(pu/get-pid :logseq.property/ls-type)  :annotation
                          (pu/get-pid :logseq.property.pdf/hl-page)  page
-                         (pu/get-pid :logseq.property/hl-color) (:color properties)
-                         (pu/get-pid :logseq.property.pdf/hl-value) hl}
-                         (not (config/db-based-graph? (state/get-current-repo)))
+                         (pu/get-pid :logseq.property/hl-color) (:color properties)}
+
+                         db-base?
+                         (assoc (pu/get-pid :logseq.property.pdf/hl-value) hl)
+
+                         (not db-base?)
                          ;; force custom uuid
                          (assoc :id (if (string? id) (uuid id) id)))
                  properties (wrap-props props)]
@@ -256,6 +273,7 @@
         page-name (:block/title page)
         file-path (pu/get-block-property-value block :logseq.property.pdf/file-path)
         hl-page (pu/get-block-property-value block :logseq.property.pdf/hl-page)
+        hl-value (pu/get-block-property-value block :logseq.property.pdf/hl-value)
         db-base? (config/db-based-graph? (state/get-current-repo))]
     (when-let [target-key (and page-name (subs page-name 5))]
       (p/let [hls (resolve-hls-data-by-key$ target-key)
@@ -263,7 +281,8 @@
               file-path (or file-path (str "../assets/" target-key ".pdf"))
               href (and db-base? (assets-handler/make-asset-url file-path))]
         (if-let [matched (or (and hls (medley/find-first #(= id (:id %)) hls))
-                           (and hl-page {:page hl-page}))]
+                           (if hl-page {:page hl-page}
+                             (when-let [page (some-> hl-value :page)] {:page page})))]
           (do
             (state/set-state! :pdf/ref-highlight matched)
             ;; open pdf viewer

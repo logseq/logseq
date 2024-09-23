@@ -391,10 +391,10 @@
 
 (defn- create-local-renderer-register
   [type *providers]
-  (fn [pid key {:keys [subs render] :as opts}]
+  (fn [pid key {subs' :subs :keys [render] :as opts}]
     (when-let [key (and key (keyword key))]
       (register-plugin-resources pid type
-        (merge opts {:key key :subs subs :render render}))
+        (merge opts {:key key :subs subs' :render render}))
       (swap! *providers conj pid)
       #(swap! *providers disj pid))))
 
@@ -402,12 +402,9 @@
   ([type *providers] (create-local-renderer-getter type *providers false))
   ([type *providers many?]
    (fn [key]
-     (when-let [key (or many? (and (seq @*providers) key (keyword key)))]
+     (when-let [key (and (seq @*providers) key (keyword key))]
        (when-let [rs (->> @*providers
-                       (map #(if many?
-                               (some-> (state/get-plugin-resources-with-type % type)
-                                 (vals))
-                               (state/get-plugin-resource % type key)))
+                       (map (fn [pid] (state/get-plugin-resource pid type key)))
                        (remove nil?)
                        (flatten)
                        (seq))]
@@ -425,11 +422,13 @@
 
 (def *extensions-enhancer-providers (atom #{}))
 (def register-extensions-enhancer
+  ;; a plugin can only register one enhancer for a type
   (create-local-renderer-register
     :extensions-enhancers *extensions-enhancer-providers))
-(def hook-extensions-enhancer-by-key
+(def hook-extensions-enhancers-by-key
+  ;; multiple plug-ins can obtain more than one enhancer
   (create-local-renderer-getter
-    :extensions-enhancers *extensions-enhancer-providers))
+    :extensions-enhancers *extensions-enhancer-providers true))
 
 (def *route-renderer-providers (atom #{}))
 (def register-route-renderer
@@ -477,6 +476,23 @@
      (if (has-setting-schema? id)
        (state/pub-event! [:go/plugins-settings id nav? (or (:name plugin) (:title plugin))])
        (open-settings-file-in-default-app! plugin)))))
+
+(defn open-report-modal!
+  ([] (open-report-modal! nil nil))
+  ([pid name]
+   (shui/dialog-open!
+     [:div.p-1
+      (when pid
+        [:h1.opacity-90.font-bold.pb-1.flex.item-center.gap-1
+         [:span.text-red-rx-10.flex.items-center (shui/tabler-icon "alert-triangle-filled" {:size 20})]
+         [:span name "  " [:code "#" (str pid)]]])
+      [:p
+       "If any plugin is unavailable or you think it contains malicious code,
+        please email " [:a.hover:underline {:href (str "mailto://support@logseq.com?subject=Report plugin from Logseq Marketplace"
+                                                           (when pid (str " (#" pid ")")))} "support@logseq.com"]
+       " . Mention the name of the plugin and the URL of its GitHub repository.
+       The Logseq team usually responds within a business day."]
+      ])))
 
 (defn parse-user-md-content
   [content {:keys [url]}]

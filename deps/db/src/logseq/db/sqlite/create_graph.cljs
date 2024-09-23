@@ -58,14 +58,6 @@
     {:tx tx
      :properties (filter #(= (:block/type %) "property") properties)}))
 
-(defn kv
-  "Creates a key-value pair tx with the key and value respectively stored under
-  :db/ident and :kv/value.  The key must be under the namespace :logseq.kv"
-  [key value]
-  {:pre [(= "logseq.kv" (namespace key))]}
-  {:db/ident key
-   :kv/value value})
-
 (def built-in-pages-names
   #{"Contents"})
 
@@ -80,33 +72,42 @@
                          (vec conflicting-idents))
                     {:idents conflicting-idents}))))
 
-(defn- build-initial-classes [db-ident->properties]
+(defn build-initial-classes*
+  [built-in-classes db-ident->properties]
   (map
-   (fn [[db-ident {:keys [schema title]}]]
+   (fn [[db-ident {:keys [properties schema title]}]]
      (let [title' (or title (name db-ident))]
        (mark-block-as-built-in
         (sqlite-util/build-new-class
-         (let [properties (mapv
-                           (fn [db-ident]
-                             (let [property (get db-ident->properties db-ident)]
-                               (assert property (str "Built-in property " db-ident " is not defined yet"))
-                               db-ident))
-                           (:properties schema))]
+         (let [schema-properties (mapv
+                                  (fn [db-ident]
+                                    (let [property (get db-ident->properties db-ident)]
+                                      (assert property (str "Built-in property " db-ident "is not defined yet"))
+                                      db-ident))
+                                  (:properties schema))]
            (cond->
             {:block/title title'
              :block/name (common-util/page-name-sanity-lc title')
              :db/ident db-ident
              :block/uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)}
+             (seq schema-properties)
+             (assoc :logseq.property.class/properties schema-properties)
              (seq properties)
-             (assoc :class/schema.properties properties)))))))
-   db-class/built-in-classes))
+             (merge properties)))))))
+   built-in-classes))
+
+(defn- build-initial-classes
+  [db-ident->properties]
+  (build-initial-classes* db-class/built-in-classes db-ident->properties))
 
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
   [config-content]
-  (let [initial-data [(kv :logseq.kv/db-type "db")
-                      (kv :logseq.kv/schema-version db-schema/version)
+  (let [initial-data [(sqlite-util/kv :logseq.kv/db-type "db")
+                      (sqlite-util/kv :logseq.kv/schema-version db-schema/version)
+                      (sqlite-util/kv :logseq.kv/graph-initial-schema-version db-schema/version)
+                      (sqlite-util/kv :logseq.kv/graph-created-at (common-util/time-ms))
                       ;; Empty property value used by db.type/ref properties
                       {:db/ident :logseq.property/empty-placeholder}
                       {:db/ident :logseq.class/Root}]

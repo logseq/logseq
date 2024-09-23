@@ -12,7 +12,8 @@
             [clojure.string :as string]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.modules.outliner.tree :as tree]))
+            [frontend.modules.outliner.tree :as tree]
+            [frontend.template :as template]))
 
 (defn trigger-custom-query!
   [config query *query-error *fulltext-query-result]
@@ -26,7 +27,9 @@
                        (let [q (:query query)
                              form (common-util/safe-read-string q)]
                          (cond
-                           (symbol? form)
+                           (and (symbol? form)
+                                ;; Queries only containgin template should trigger a query
+                                (not (re-matches template/template-re (string/trim q))))
                            (atom nil)
 
                            (re-matches #"\".*\"" q) ; full-text search

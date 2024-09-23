@@ -117,6 +117,7 @@
                           {:style {:margin-bottom "-2px"}}
                           [:input.cp__select-input.w-full
                            (merge {:type        "text"
+                                   :class "!p-1.5"
                                    :placeholder (or input-default-placeholder (t prompt-key))
                                    :auto-focus  true
                                    :value       @input

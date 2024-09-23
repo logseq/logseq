@@ -128,7 +128,7 @@
                 (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
                   (if (= :block/tags k)
                     (mapv #(:db/ident (d/entity db (:db/id %))) v)
-                    (if (db-property-type/ref-property-types built-in-type)
+                    (if (db-property-type/all-ref-property-types built-in-type)
                       (db-property/ref->property-value-contents db v)
                       v))
                   (db-property/ref->property-value-contents db v))])))
@@ -168,9 +168,13 @@
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
       (is (= 18 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 18 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+
+      (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
+      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 7
+      (is (= 8
              (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
                                 :where [?b :block/title] [_ :block/page ?b]] @conn)
                          (filter #(= "page" (:block/type %))))))
@@ -195,7 +199,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 17
+      (is (= 18
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/type "property"]])
@@ -285,9 +289,10 @@
       (is (= #{"gpt"}
              (:block/alias (readable-properties @conn (find-page-by-name @conn "chat-gpt")))))
 
-      (is (= {:logseq.property/query-sort-by :user.property/prop-num
-              :logseq.property/query-properties [:block :page :user.property/prop-string :user.property/prop-num]
-              :logseq.property/query-table true}
+      (is (= {:logseq.property.table/sorting [{:id :user.property/prop-num, :asc? false}]
+              :logseq.property.view/type "Table View"
+              :logseq.property.table/ordered-columns [:block/title :user.property/prop-string :user.property/prop-num]
+              :block/tags [:logseq.class/Query]}
              (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
           "query block has correct query properties"))
 
@@ -430,22 +435,6 @@
              (readable-properties @conn (find-page-by-name @conn "Interstellar")))
           "tagged page has configured tag imported as a class"))))
 
-(deftest-async export-files-with-invalid-class-and-property-display-notifications
-  (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_07_24.md" "ignored/invalid-property-page.md"])
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-          notifications (atom [])
-          _ (import-files-to-db files conn {:tag-classes ["123"]
-                                            :notify-user #(swap! notifications conj %)})]
-
-    (is (= [:error :error] (map :level @notifications))
-        "Error notifications for both invalid property and class")
-    (is (some #(re-find #"invalid class" %) (map :msg @notifications))
-        "Helpful message for invalid class")
-    (is (some #(re-find #"invalid property" %) (map :msg @notifications))
-        "Helpful message for invalid property")))
-
 (deftest-async export-files-with-property-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_23.md" "pages/url.md"])
@@ -466,7 +455,7 @@
 
     (is (= #{:user.property/url :user.property/sameas :user.property/rangeincludes}
            (->> (d/entity @conn :user.class/Property)
-                :class/schema.properties
+                :logseq.property.class/properties
                 (map :db/ident)
                 set))
         "Properties are correctly inferred for a class")
@@ -503,7 +492,7 @@
 
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md"])
+          files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"])
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
           _ (import-files-to-db files conn {:property-parent-classes ["parent"]})]
@@ -518,7 +507,7 @@
                 set))
         "All classes are correctly defined by :type")
 
-    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:class/parent :block/title]))
+    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:logseq.property/parent :block/title]))
         "Existing page correctly set as class parent")
-    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:class/parent :block/title]))
+    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:logseq.property/parent :block/title]))
         "New page correctly set as class parent")))

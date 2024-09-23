@@ -250,6 +250,7 @@
      [:ul.menu-list
       [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t :plugin/open-settings)]
       [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
+      [:li {:on-click #(plugin-handler/open-report-modal! id name)} (t :plugin/report-security)]
       [:li {:on-click
             #(-> (shui/dialog-confirm!
                    [:b (t :plugin/delete-alert name)])
@@ -607,9 +608,10 @@
                     [{:title [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
                       :options {:on-click plugin-config-handler/open-replace-plugins-modal}}]
 
+                    [{:hr true}]
+
                     (when (state/developer-mode?)
-                      [{:hr true}
-                       {:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
+                      [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
                         :options {:on-click
                                   #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                      (js/apis.openPath (str root "/preferences.json")))}}
@@ -618,6 +620,9 @@
                         :options {:on-click
                                   #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                      (js/apis.openPath root))}}])
+
+                    [{:title [:span.flex.items-center.gap-1 (ui/icon "alert-triangle") (t :plugin/report-security)]
+                      :options {:on-click #(plugin-handler/open-report-modal!)}}]
 
                     [{:hr true :key "dropdown-more"}
                      {:title (auto-check-for-updates-control)}])]
@@ -802,8 +807,7 @@
     (rum/local 1 ::current-page)
   [state]
   (let [*list-node-ref        (rum/create-ref)
-        installed-plugins     (state/sub [:plugin/installed-plugins])
-        installed-plugins     (vals installed-plugins)
+        installed-plugins'    (vals (state/sub [:plugin/installed-plugins]))
         updating              (state/sub :plugin/installing)
         develop-mode?         (state/sub :ui/developer-mode?)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
@@ -816,9 +820,9 @@
         *cached-query-flag    (::cached-query-flag state)
         *current-page         (::current-page state)
         default-filter-by?    (= :default @*filter-by)
-        theme-plugins         (filter #(:theme %) installed-plugins)
-        normal-plugins        (filter #(not (:theme %)) installed-plugins)
-        filtered-plugins      (when (seq installed-plugins)
+        theme-plugins         (filter #(:theme %) installed-plugins')
+        normal-plugins        (filter #(not (:theme %)) installed-plugins')
+        filtered-plugins      (when (seq installed-plugins')
                                 (if (= @*category :themes) theme-plugins normal-plugins))
         total-nums            [(count normal-plugins) (count theme-plugins)]
         filtered-plugins      (if-not default-filter-by?
@@ -1067,6 +1071,12 @@
                          :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
                                    :class "extra-item mt-2"}
                          :icon (ui/icon "apps")}
+
+                        {:title (t :themes)
+                         :options {:on-click #(plugin-handler/show-themes-modal!)
+                                   :class "extra-item"}
+                         :icon (ui/icon "palette")}
+
                         {:title (t :settings)
                          :options {:on-click #(plugin-handler/goto-plugins-settings!)
                                    :class "extra-item"}

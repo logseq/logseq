@@ -32,7 +32,7 @@
 
 (defn- search
   [mode]
-  (editor-handler/escape-editing false)
+  (editor-handler/escape-editing {:select? true})
   (if (state/get-search-mode)
     (js/setTimeout #(route-handler/go-to-search! mode) 128)
     (route-handler/go-to-search! mode)))
@@ -197,7 +197,9 @@
                                              :fn      editor-handler/keydown-new-line-handler}
 
    :editor/new-whiteboard                   {:binding "n w"
-                                             :fn      #(whiteboard-handler/<create-new-whiteboard-and-redirect!)}
+                                             :fn      (fn []
+                                                        (when-not (config/db-based-graph? (state/get-current-repo))
+                                                          (whiteboard-handler/<create-new-whiteboard-and-redirect!)))}
 
    :editor/follow-link                      {:binding "mod+o"
                                              :fn      editor-handler/follow-link-under-cursor!}
@@ -343,9 +345,9 @@
    :editor/toggle-number-list               {:binding "t n"
                                              :fn      #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
-   :editor/add-property                     {:binding "mod+p"
+   :editor/add-property                     {:binding (if mac? "mod+p" "ctrl+alt+p")
                                              :fn      (fn [e]
-                                                        (when e (.preventDefault e))
+                                                        (when e (util/stop e))
                                                         (state/pub-event! [:editor/new-property {}]))}
 
    :editor/add-property-deadline            {:binding "p d"
@@ -362,6 +364,14 @@
                                              :selection? true
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Priority"}]))}
+
+   :editor/add-property-icon                {:binding "p i"
+                                             :selection? true
+                                             :fn      (fn []
+                                                        (state/pub-event! [:editor/new-property {:property-key "Icon"}]))}
+
+   :editor/toggle-display-all-properties    {:binding "p t"
+                                             :fn      ui-handler/toggle-show-empty-hidden-properties!}
 
    :ui/toggle-brackets                      {:binding "t b"
                                              :fn      config-handler/toggle-ui-show-brackets!}
@@ -452,7 +462,7 @@
    :command/run                             {:binding  "mod+shift+1"
                                              :inactive (not (util/electron?))
                                              :fn       #(do
-                                                          (editor-handler/escape-editing)
+                                                          (editor-handler/escape-editing {:select? true})
                                                           (state/pub-event! [:command/run]))}
 
    :go/home                                 {:binding "g h"
@@ -769,6 +779,8 @@
             :editor/add-property-deadline
             :editor/add-property-status
             :editor/add-property-priority
+            :editor/add-property-icon
+            :editor/toggle-display-all-properties
             :ui/toggle-wide-mode
             :ui/select-theme-color
             :ui/goto-plugins
@@ -888,7 +900,9 @@
       :editor/add-property
       :editor/add-property-deadline
       :editor/add-property-status
-      :editor/add-property-priority]
+      :editor/add-property-priority
+      :editor/add-property-icon
+      :editor/toggle-display-all-properties]
 
      :shortcut.category/toggle
      [:ui/toggle-help

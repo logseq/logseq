@@ -166,7 +166,7 @@
                              [[% {:block/schema {:type %} :build/schema-classes [:TestClass]}]
                               [:node-without-classes {:block/schema {:type %}}]]
                              [[% {:block/schema {:type %}}]])
-                     (db-property-type/property-type-allows-schema-attribute? % :cardinality)
+                     (contains? db-property-type/cardinality-property-types %)
                      (conj [(keyword (str (name %) "-many"))
                             (cond-> {:block/schema {:type % :cardinality :many}}
                               (= :node %)

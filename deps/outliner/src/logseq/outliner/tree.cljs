@@ -117,7 +117,7 @@
      (map #(tree parent->children % (or default-level 1)) top-level-blocks'))))
 
 (defn get-sorted-block-and-children
-  [db db-id]
+  [db db-id & {:as opts}]
   (when db-id
     (when-let [root-block (d/entity db db-id)]
-      (ldb/get-block-and-children db (:block/uuid root-block)))))
+      (ldb/get-block-and-children db (:block/uuid root-block) opts))))

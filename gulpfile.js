@@ -4,7 +4,6 @@ const cp = require('child_process')
 const exec = utils.promisify(cp.exec)
 const path = require('path')
 const gulp = require('gulp')
-const cleanCSS = require('gulp-clean-css')
 const del = require('del')
 const ip = require('ip')
 const replace = require('gulp-replace');
@@ -33,7 +32,6 @@ const css = {
 
   _optimizeCSSForRelease () {
     return gulp.src(path.join(outputPath, 'css', 'style.css'))
-      .pipe(cleanCSS())
       .pipe(gulp.dest(path.join(outputPath, 'css')))
   }
 }

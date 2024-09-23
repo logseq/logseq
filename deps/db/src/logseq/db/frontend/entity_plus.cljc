@@ -10,53 +10,102 @@
             [datascript.impl.entity :as entity :refer [Entity]]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.common.util.date-time :as date-time-util]
+            [datascript.core :as d]))
 
 (def db-based-graph? entity-util/db-based-graph?)
 
 (def lookup-entity @#'entity/lookup-entity)
+
+(defn- get-journal-title
+  [db e]
+  (date-time-util/int->journal-title (:block/journal-day e)
+                                     (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))))
+
+(defn- get-block-title
+  [^Entity e k default-value]
+  (let [db (.-db e)
+        db-based? (db-based-graph? db)]
+    (if (and db-based? (= "journal" (:block/type e)))
+      (get-journal-title db e)
+      (or
+       (get (.-kv e) k)
+       (let [result (lookup-entity e k default-value)
+             parent-title? (:block.temp/parent-title? e)]
+         (or
+          (let [result' (if (string? result)
+                          (db-content/special-id-ref->page-ref result
+                                                               (:block/refs e))
+                          result)
+                parent (when (= (:block/type e) "page")
+                         (:logseq.property/parent e))]
+            (if (and db-based? parent parent-title?)
+              (str (:block/title parent) "/" result')
+              result'))
+          default-value))))))
+
+(defn- get-block-title-parent-refs
+  "Add parent to block ref titles"
+  [^Entity e k default-value]
+  (let [db (.-db e)
+        db-based? (db-based-graph? db)]
+    (if (and db-based? (= "journal" (:block/type e)))
+      (get-journal-title db e)
+      (or
+       (get (.-kv e) k)
+       (let [result (lookup-entity e :block/title default-value)]
+         (or
+          (if (string? result)
+            (db-content/special-id-ref->page-ref result
+                                                 (map (fn [e] (assoc e :block.temp/parent-title? true)) (:block/refs e)))
+            result)
+          default-value))))))
+
 (defn lookup-kv-then-entity
   ([e k] (lookup-kv-then-entity e k nil))
   ([^Entity e k default-value]
-   (when k
-     (case k
-       :block/raw-title
-       (lookup-entity e :block/title default-value)
+   (try
+     (when k
+       (case k
+         :block/raw-title
+         (let [db (.-db e)]
+           (if (and (db-based-graph? db) (= "journal" (:block/type e)))
+             (get-journal-title db e)
+             (lookup-entity e :block/title default-value)))
 
-       :block/properties
-       (let [db (.-db e)]
-         (if (db-based-graph? db)
-           (lookup-entity e :block/properties
-                          (->> (into {} e)
-                               (filter (fn [[k _]] (db-property/property? k)))
-                               (into {})))
-           (lookup-entity e :block/properties nil)))
+         :block/properties
+         (let [db (.-db e)]
+           (if (db-based-graph? db)
+             (lookup-entity e :block/properties
+                            (->> (into {} e)
+                                 (filter (fn [[k _]] (db-property/property? k)))
+                                 (into {})))
+             (lookup-entity e :block/properties nil)))
 
-       :block/title
-       (or
-        (get (.-kv e) k)
-        (let [result (lookup-entity e k default-value)]
-          (or
-           (if (string? result)
-             (db-content/special-id-ref->page-ref result (:block/refs e))
-             result)
-           default-value)))
+         :block/title
+         (get-block-title e k default-value)
 
-       :block/_parent
-       (->> (lookup-entity e k default-value)
-            (remove (fn [e] (or (:logseq.property/created-from-property e)
-                                (:block/closed-value-property e))))
-            seq)
+         :block/title-with-refs-parent
+         (get-block-title-parent-refs e k default-value)
 
-       :block/_raw-parent
-       (lookup-entity e :block/_parent default-value)
+         :block/_parent
+         (->> (lookup-entity e k default-value)
+              (remove (fn [e] (or (:logseq.property/created-from-property e)
+                                  (:block/closed-value-property e))))
+              seq)
 
-       :property/closed-values
-       (->> (lookup-entity e :block/_closed-value-property default-value)
-            (sort-by :block/order))
+         :block/_raw-parent
+         (lookup-entity e :block/_parent default-value)
 
-       (or (get (.-kv e) k)
-           (lookup-entity e k default-value))))))
+         :property/closed-values
+         (->> (lookup-entity e :block/_closed-value-property default-value)
+              (sort-by :block/order))
+
+         (or (get (.-kv e) k)
+             (lookup-entity e k default-value))))
+     (catch :default e
+       (js/console.error e)))))
 
 (defn- cache-with-kv
   [^js this]

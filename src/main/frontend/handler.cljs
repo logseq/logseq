@@ -1,8 +1,7 @@
 (ns frontend.handler
   "Main ns that handles application startup. Closest ns that we have to a
   system. Contains a couple of small system components"
-  (:require [cljs.reader :refer [read-string]]
-            [electron.ipc :as ipc]
+  (:require [electron.ipc :as ipc]
             [electron.listener :as el]
             [frontend.components.block :as block]
             [frontend.components.editor :as editor]
@@ -12,7 +11,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db.restore :as db-restore]
-            [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
@@ -112,29 +110,15 @@
   (js/window.addEventListener "online" handle-connection-change)
   (js/window.addEventListener "offline" handle-connection-change))
 
-(defn enable-datalog-console
-  "Enables datalog console in browser provided by https://github.com/homebaseio/datalog-console"
-  []
-  (js/document.documentElement.setAttribute "__datalog-console-remote-installed__" true)
-  (.addEventListener js/window "message"
-                     (fn [event]
-                       (let [db (conn/get-db)]
-                         (when-let [devtool-message (gobj/getValueByKeys event "data" ":datalog-console.client/devtool-message")]
-                           (let [msg-type (:type (read-string devtool-message))]
-                             (case msg-type
-
-                               :datalog-console.client/request-whole-database-as-string
-                               (.postMessage js/window #js {":datalog-console.remote/remote-message" (pr-str db)} "*")
-
-                               nil)))))))
-
 (defn- register-components-fns!
   []
-  (state/set-page-blocks-cp! page/page)
+  (state/set-page-blocks-cp! page/page-cp)
+  (state/set-component! :block/->hiccup block/->hiccup)
   (state/set-component! :block/linked-references reference/block-linked-references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/breadcrumb block/breadcrumb)
   (state/set-component! :block/reference block/block-reference)
   (state/set-component! :block/blocks-container block/blocks-container)
   (state/set-component! :block/properties-cp block/db-properties-cp)
@@ -200,8 +184,6 @@
 
    (util/<app-wake-up-from-sleep-loop (atom false))
 
-   (when config/dev?
-     (enable-datalog-console))
    (persist-var/load-vars)))
 
 (defn stop! []

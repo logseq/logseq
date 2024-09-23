@@ -19,7 +19,11 @@
    [promesa.core :as p]
    [frontend.persist-db :as persist-db]
    [cljs-bean.core :as bean]
-   [frontend.handler.export.common :as export-common-handler])
+   [frontend.handler.export.common :as export-common-handler]
+   [logseq.db.sqlite.common-db :as sqlite-common-db]
+   [logseq.db :as ldb]
+   [frontend.idb :as idb]
+   ["/frontend/utils" :as utils])
   (:import
    [goog.string StringBuffer]))
 
@@ -166,6 +170,20 @@
         (.setAttribute anchor "download" filename)
         (.click anchor)))))
 
+(defn export-repo-as-debug-json!
+  [repo]
+  (p/let [result (export-common-handler/<get-debug-datoms repo)
+          json-str (-> result
+                       bean/->js
+                       js/JSON.stringify)
+          filename (file-name (str repo "-debug-datoms") :json)
+          data-str (str "data:text/json;charset=utf-8,"
+                        (js/encodeURIComponent json-str))]
+    (when-let [anchor (gdom/getElement "download-as-json-debug")]
+      (.setAttribute anchor "href" data-str)
+      (.setAttribute anchor "download" filename)
+      (.click anchor))))
+
 (defn export-repo-as-sqlite-db!
   [repo]
   (p/let [data (persist-db/<export-db repo {:return-data? true})
@@ -205,3 +223,64 @@
       (.setAttribute anchor "href" data-str)
       (.setAttribute anchor "download" (file-name (str repo "_roam") :json))
       (.click anchor))))
+
+(defn- truncate-old-versioned-files!
+  "reserve the latest 12 version files"
+  [^js backups-handle]
+  (p/let [files (utils/getFiles backups-handle true)
+          old-versioned-files (drop 12 (reverse (sort-by (fn [^js file] (.-name file)) files)))]
+    (p/map (fn [^js files]
+             (doseq [^js file files]
+               (.remove (.-handle file))))
+           old-versioned-files)))
+
+(defn backup-db-graph
+  [repo]
+  (when (and repo (= repo (state/get-current-repo)))
+    (when-let [backup-folder (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder)]
+      (p/let [handle (idb/get-item (str "handle/" (js/btoa repo) "/" backup-folder))
+              repo-name (sqlite-common-db/sanitize-db-name repo)]
+        (if handle
+          (->
+           (p/let [graph-dir-handle (.getDirectoryHandle handle repo-name #js {:create true})
+                   backups-handle (.getDirectoryHandle graph-dir-handle "backups" #js {:create true})
+                   backup-handle ^js (.getFileHandle graph-dir-handle "db.sqlite" #js {:create true})
+                   file ^js (.getFile backup-handle)
+                   file-content (.text file)
+                   data (persist-db/<export-db repo {:return-data? true})
+                   decoded-content (.decode (js/TextDecoder.) data)]
+             (when (not= file-content decoded-content)
+               (p/do!
+                (when (> (.-size file) 0)
+                  (.move backup-handle backups-handle (str (util/time-ms) ".db.sqlite")))
+                (truncate-old-versioned-files! backups-handle)
+                (p/let [new-backup-handle ^js (.getFileHandle graph-dir-handle "db.sqlite" #js {:create true})]
+                  (utils/writeFile new-backup-handle data))
+                (println "Successfully created a backup for" repo-name "at" (str (js/Date.)) ".")
+                true)))
+           (p/catch (fn [error]
+                      (js/console.error error))))
+          (p/do!
+            ;; handle cleared
+           (notification/show! "DB backup failed, please go to Export and specify a backup folder." :error)
+           false))))))
+
+(defonce *backup-interval (atom nil))
+(defn cancel-db-backup!
+  []
+  (when-let [i @*backup-interval]
+    (js/clearInterval i)))
+
+(defn auto-db-backup!
+  [repo {:keys [backup-now?]
+         :or {backup-now? true}}]
+  (when (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder)
+    (when (and (config/db-based-graph? repo) util/web-platform? (utils/nfsSupported))
+      (cancel-db-backup!)
+
+      (when backup-now? (backup-db-graph repo))
+
+    ;; run backup every hour
+      (let [interval (js/setInterval #(backup-db-graph repo)
+                                     (* 1 60 60 1000))]
+        (reset! *backup-interval interval)))))

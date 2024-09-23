@@ -36,7 +36,7 @@
 
 (rum/defc page-cp
   [props]
-  (page/page {:page-name (gobj/get props "pageName") :whiteboard? true}))
+  (page/page-cp {:page-name (gobj/get props "pageName") :whiteboard? true}))
 
 (rum/defc block-cp
   [props]

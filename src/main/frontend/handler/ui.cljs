@@ -245,3 +245,30 @@
       (if (util/electron?)
        (ipc/ipc "openNewWindow" target-repo)
        (js/window.open (str config/app-website "#/?graph=" target-repo) "_blank")))))
+
+(defn toggle-show-empty-hidden-properties!
+  []
+  (let [editing-block (state/get-edit-block)
+        selected-ids (state/get-selection-block-ids)
+        block-ids (if editing-block
+                    (conj selected-ids (:block/uuid editing-block))
+                    selected-ids)
+        *state (:ui/show-empty-and-hidden-properties? @state/state)
+        {:keys [ids mode show?]} @*state]
+    (if (seq block-ids)
+      (let [block-ids' (set block-ids)]
+        (reset! *state
+               {:mode :block
+                :ids block-ids'
+                :show? (cond
+                         (= mode :global)
+                         true
+                         (not= ids block-ids')
+                         true
+                         :else
+                         (not show?))}))
+      (reset! *state
+              {:mode :global
+               :show? (if (= mode :block)
+                        true
+                        (not show?))}))))

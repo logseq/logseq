@@ -58,8 +58,8 @@
     (when (= (str LSP_SCHEME ":") (.-protocol parsed-url))
       (logseq-url-handler win parsed-url))))
 
-(defn setup-interceptor! [^js app]
-  (.setAsDefaultProtocolClient app LSP_SCHEME)
+(defn setup-interceptor! [^js app']
+  (.setAsDefaultProtocolClient app' LSP_SCHEME)
 
   (.registerFileProtocol
    protocol FILE_ASSETS_SCHEME
@@ -242,13 +242,19 @@
                (open-url-handler win url))))))
 
 (defn- on-app-ready!
-  [^js app]
-  (.on app "ready"
+  [^js app']
+  (.on app' "ready"
        (fn []
-         (let [t0 (setup-interceptor! app)
+         (logger/info (str "Logseq App(" (.getVersion app') ") Starting... "))
+
+         ;; Add React developer tool
+         (when-let [^js devtoolsInstaller (and dev? (js/require "electron-devtools-installer"))]
+           (-> (.default devtoolsInstaller (.-REACT_DEVELOPER_TOOLS devtoolsInstaller))
+             (.then #(js/console.log "Added Extension:" (.-REACT_DEVELOPER_TOOLS devtoolsInstaller)))))
+
+         (let [t0 (setup-interceptor! app')
                ^js win (win/create-main-window!)
                _ (reset! *win win)]
-           (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
 
            (utils/<restore-proxy-settings)
 
@@ -297,10 +303,10 @@
                                               (.hide win)))
                                         :else
                                         nil)))))
-           (.on app "before-quit" (fn [_e]
+           (.on app' "before-quit" (fn [_e]
                                     (reset! win/*quitting? true)))
 
-           (.on app "activate" #(when @*win (.show win)))))))
+           (.on app' "activate" #(when @*win (.show win)))))))
 
 (defn main []
   (if-not (.requestSingleInstanceLock app)

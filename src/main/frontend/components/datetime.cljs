@@ -8,7 +8,6 @@
             [frontend.handler.repeated :as repeated]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [rum.core :as rum]
@@ -150,7 +149,7 @@
         deadline-or-schedule? (and current-command
                                 (contains? #{"deadline" "scheduled"}
                                   (string/lower-case current-command)))
-        _date (state/sub :date-picker/date)
+        date (state/sub :date-picker/date)
         select-handler! (fn [^js d]
                           (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
                                 journal (date/js-date->journal-title gd)]
@@ -167,11 +166,11 @@
     [:div#date-time-picker.flex.flex-col.sm:flex-row
      ;; inline container
      [:div.border-red-500
-      (shui/calendar
-        {:mode "single"
+      (ui/nlp-calendar
+       {:mode "single"
          :initial-focus true
          :show-week-number false
-         :selected _date
+         :selected date
          :on-select select-handler!
          :on-day-key-down (fn [^js d _ ^js e]
                             (when (= "Enter" (.-key e))
