@@ -5,6 +5,7 @@
                   logseq.common.util.block-ref
                   logseq.common.util
                   logseq.common.util.date-time
+                  logseq.common.date
                   logseq.common.util.macro
                   logseq.common.marker
                   logseq.common.config]

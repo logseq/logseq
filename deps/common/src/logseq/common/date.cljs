@@ -63,14 +63,14 @@
   (and title
        (normalize-date (common-util/capitalize-all title) date-formatter)))
 
-(defn valid-journal-title?
+(defn ^:api valid-journal-title?
   "This is a loose rule, requires double check by journal-title->custom-format.
 
    BUG: This also accepts strings like 3/4/5 as journal titles"
   [title date-formatter]
   (boolean (normalize-journal-title title date-formatter)))
 
-(defn date->file-name
+(defn ^:api date->file-name
   "Date object to filename format"
   [date journal-filename-formatter]
   (let [formatter (if journal-filename-formatter
