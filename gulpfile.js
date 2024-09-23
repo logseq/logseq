@@ -76,7 +76,7 @@ const common = {
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
         'node_modules/@tabler/icons-react/dist/umd/tabler-icons-react.min.js'
-      ]).pipe(replace('"@tabler/icons-react"', '"tablerIcons"')).pipe(gulp.dest(path.join(outputPath, 'js'))),
+      ]).pipe(replace('"@tabler/icons-react"]={},a.react,', '"tablerIcons"]={},a.React,')).pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
         'node_modules/@glidejs/glide/dist/glide.min.js',
         'node_modules/@glidejs/glide/dist/css/glide.core.min.css',
