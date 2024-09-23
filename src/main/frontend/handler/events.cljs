@@ -935,8 +935,9 @@
                                                                 (assoc :custom-content content'))))))))))]
      (when (seq blocks)
        (let [target' (or target
-                       (some-> (state/get-edit-input-id)
-                            (gdom/getElement)))]
+                         (some-> (state/get-edit-input-id)
+                                 (gdom/getElement))
+                         (first (state/get-selection-blocks)))]
          (if target'
            (shui/popup-show! target'
                              #(property-dialog/dialog blocks opts')
