@@ -1,5 +1,5 @@
 (ns frontend.extensions.srs
-  "SRS fns, will be depreated in db-based version.
+  "SRS fns, will be deprecated in db-based version.
   see also `frontend.extensions.fsrs`"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
@@ -773,14 +773,12 @@
 (commands/register-slash-command ["Cards"
                                   [[:editor/input "{{cards }}" {:backward-pos 2}]]
                                   "Create a cards query"
-                                  {:db-graph? false
-                                   :icon :icon/cards}])
+                                  {:icon :icon/cards}])
 
 (commands/register-slash-command ["Cloze"
                                   [[:editor/input "{{cloze }}" {:backward-pos 2}]]
                                   "Create a cloze"
-                                  {:db-graph? false
-                                   :icon :icon/eye-question}])
+                                  {:icon :icon/eye-question}])
 
 ;; handlers
 (defn add-card-tag-to-block
