@@ -171,7 +171,6 @@
          (repo-config-handler/restore-repo-config! graph)
          (when-not (= :draw (state/get-current-route))
            (route-handler/redirect-to-home!))
-         (fsrs/update-due-cards-count)
          (state/pub-event! [:graph/ready graph])
          (if db-based?
            (rtc-handler/<rtc-start! graph)
@@ -716,6 +715,7 @@
 (defmethod handle :graph/restored [[_ graph]]
   (mobile/init!)
   (rtc-handler/<rtc-start! graph)
+  (fsrs/update-due-cards-count)
   (when-not (mobile-util/native-ios?)
     (state/pub-event! [:graph/ready graph])))
 

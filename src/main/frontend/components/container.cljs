@@ -213,11 +213,8 @@
           :data-ref name}
          (page-name page (icon/get-node-icon-cp page {}) true)])])))
 
-(rum/defcs flashcards < db-mixins/query rum/reactive
-  {:did-mount (fn [state]
-                (fsrs/update-due-cards-count)
-                state)}
-  [_state srs-open?]
+(rum/defc flashcards < db-mixins/query rum/reactive
+  [srs-open?]
   (let [num (state/sub :srs/cards-due-count)]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
      {:class (util/classnames [{:active srs-open?}])
