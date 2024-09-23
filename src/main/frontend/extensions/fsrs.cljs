@@ -121,35 +121,6 @@
       :show-answer
       :init)))
 
-(rum/defcs ^:private card < rum/reactive
-  [state repo block-entity *phase]
-  (let [phase (rum/react *phase)
-        next-phase (phase->next-phase block-entity phase)]
-    [:div.ls-card.content
-     [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
-     (let [option (case phase
-                    :init
-                    {:hide-children? true}
-                    :show-cloze
-                    {:show-cloze? true
-                     :hide-children? true}
-                    {:show-cloze? true})]
-       (component-block/blocks-container option [block-entity]))
-     [:div.mt-8
-      (btn-with-shortcut {:btn-text (t
-                                     (case next-phase
-                                       :show-answer
-                                       :flashcards/modal-btn-show-answers
-                                       :show-cloze
-                                       :flashcards/modal-btn-show-clozes
-                                       :init
-                                       :flashcards/modal-btn-hide-answers))
-                          :shortcut "s"
-                          :id (str "card-answers")
-                          :on-click #(swap! *phase
-                                            (fn [phase]
-                                              (phase->next-phase block-entity phase)))})]]))
-
 (def ^:private rating->shortcut
   {:again "1"
    :hard  "2"
@@ -191,6 +162,37 @@
                                    {:align "start"}))}
     (ui/icon "info-circle"))])
 
+(rum/defcs ^:private card < rum/reactive
+  [state repo block-entity *card-index *phase]
+  (let [phase (rum/react *phase)
+        next-phase (phase->next-phase block-entity phase)]
+    [:div.ls-card.content
+     [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
+     (let [option (case phase
+                    :init
+                    {:hide-children? true}
+                    :show-cloze
+                    {:show-cloze? true
+                     :hide-children? true}
+                    {:show-cloze? true})]
+       (component-block/blocks-container option [block-entity]))
+     [:div.mt-8
+      (if (contains? #{:show-cloze :show-answer} next-phase)
+        (btn-with-shortcut {:btn-text (t
+                                       (case next-phase
+                                         :show-answer
+                                         :flashcards/modal-btn-show-answers
+                                         :show-cloze
+                                         :flashcards/modal-btn-show-clozes
+                                         :init
+                                         :flashcards/modal-btn-hide-answers))
+                            :shortcut "s"
+                            :id (str "card-answers")
+                            :on-click #(swap! *phase
+                                              (fn [phase]
+                                                (phase->next-phase block-entity phase)))})
+        (rating-btns repo (:db/id block-entity) *card-index *phase))]]))
+
 (declare update-due-cards-count)
 (rum/defcs cards <
   (rum/local 0 ::card-index)
@@ -203,12 +205,11 @@
         block-ids (get-due-card-block-ids repo)
         *card-index (::card-index state)
         *phase (atom :init)]
-    (if-let [block-entity (some-> (nth block-ids @*card-index nil) db/entity)]
-      [:div#cards-modal.flex.flex-col.p-1
-       (card repo block-entity *phase)
-       [:div.mt-8
-        (rating-btns repo (:db/id block-entity) *card-index *phase)]]
-      [:p.p-2 (t :flashcards/modal-finished)])))
+    [:div#cards-modal.p-2
+     (if-let [block-entity (some-> (nth block-ids @*card-index nil) db/entity)]
+       [:div.flex.flex-col
+        (card repo block-entity *card-index *phase)]
+       [:p (t :flashcards/modal-finished)])]))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
 (def ^:private new-task--update-due-cards-count

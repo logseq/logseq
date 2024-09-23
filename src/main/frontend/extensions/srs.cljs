@@ -773,7 +773,8 @@
 (commands/register-slash-command ["Cards"
                                   [[:editor/input "{{cards }}" {:backward-pos 2}]]
                                   "Create a cards query"
-                                  {:icon :icon/cards}])
+                                  {:icon :icon/cards
+                                   :db-graph? false}])
 
 (commands/register-slash-command ["Cloze"
                                   [[:editor/input "{{cloze }}" {:backward-pos 2}]]
