@@ -113,6 +113,7 @@
  :search/filter-all-journal "All journal"
  :search/filter-all-pages "All pages"
  :search/filter-created-pages "Pages created within 10 days"
+ :search/filter-updated-blocks "Blocks updated within 2 days"
  :search/filter-info "filter"
  :search/create "Create"
  :search/filters "Filters"

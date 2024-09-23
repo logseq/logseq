@@ -890,6 +890,22 @@ independent of format as format specific heading characters are stripped"
    (conn/get-db repo)
    :-10d))
 
+(defn get-updated-blocks
+  [repo]
+  (d/q
+   '[:find [(pull ?b [*]) ...]
+     :in $ ?day
+     :where
+     [?b :block/title]
+     [?b :block/uuid]
+     [?b :block/page]
+     (not [?b :logseq.property/built-in?])
+     (not [?b :block/title ""])
+     [?b :block/updated-at ?d]
+     [(>= ?d ?day)]]
+   (conn/get-db repo)
+   :yesterday))
+
 (defn get-all-pages-only ;; get-all-pages
   [repo]
   (d/q

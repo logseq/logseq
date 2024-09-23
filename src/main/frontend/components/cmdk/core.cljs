@@ -60,6 +60,7 @@
       {:filter {:group :favorites} :text (t :search/filter-favorites) :info (t :search/filter-info) :icon-theme :gray :icon "star"}
       {:filter {:group :recents} :text (t :search/filter-recents) :info (t :search/filter-info) :icon-theme :gray :icon "history"}
       {:filter {:group :created-pages} :text (t :search/filter-created-pages) :info (t :search/filter-info) :icon-theme :gray :icon "page"}
+      {:filter {:group :updated-blocks} :text (t :search/filter-updated-blocks) :info (t :search/filter-info) :icon-theme :gray :icon "block"}
       {:filter {:group :all-class} :text (t :search/filter-all-class) :info (t :search/filter-info) :icon-theme :gray :icon "tag"}
       {:filter {:group :all-pages} :text (t :search/filter-all-pages) :info (t :search/filter-info) :icon-theme :gray :icon "page"}
       {:filter {:group :all-journal} :text (t :search/filter-all-journal) :info (t :search/filter-info) :icon-theme :gray :icon "calendar"}
@@ -322,7 +323,9 @@
                      (= type "all-pages")
                       (model/get-all-pages-only repo)
                      (= type "created-pages")
-                     (model/get-created-pages repo))
+                     (model/get-created-pages repo)
+                     (= type "updated-blocks")
+                     (model/get-updated-blocks repo))
             blocks (remove nil? blocks)
             items (keep (fn [block]
                           (recents-item repo block)) blocks)]
@@ -348,6 +351,9 @@
 
 (defmethod load-results :created-pages [group state]
   (recents-or-favorites group state "created-pages"))
+
+(defmethod load-results :updated-blocks [group state]
+  (recents-or-favorites group state "updated-blocks"))
 
 (defmethod load-results :files [group state]
   (let [!input (::input state)
@@ -442,7 +448,8 @@
         (load-results :favorites state)
         (load-results :recents state)
         (load-results :recents state)
-        (load-results :created-pages state))
+        (load-results :created-pages state)
+        (load-results :updated-blocks state))
       (if filter-group
         (load-results filter-group state)
         (do
@@ -1042,6 +1049,8 @@
     (t :search/filter-all-pages) 
     (= (name group-filter) "created-pages")
     (t :search/filter-created-pages)
+    (= (name group-filter) "updated-blocks")
+    (t :search/filter-updated-blocks)
     :else
     (string/capitalize (name group-filter))))
 
