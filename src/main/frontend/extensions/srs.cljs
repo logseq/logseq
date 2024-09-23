@@ -121,12 +121,17 @@
 
 (defn- reset-block-card-properties!
   [block]
-  (save-block-card-properties! block {card-last-interval-property -1
-                                      card-repeats-property 0
-                                      card-last-easiness-factor-property 2.5
-                                      card-last-reviewed-property "nil"
-                                      card-next-schedule-property "nil"
-                                      card-last-score-property "nil"}))
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (do
+        (property-handler/remove-block-property! repo (:block/uuid block) :logseq.property.fsrs/state)
+        (property-handler/remove-block-property! repo (:block/uuid block) :logseq.property.fsrs/due))
+      (save-block-card-properties! block {card-last-interval-property -1
+                                          card-repeats-property 0
+                                          card-last-easiness-factor-property 2.5
+                                          card-last-reviewed-property "nil"
+                                          card-next-schedule-property "nil"
+                                          card-last-score-property "nil"}))))
 
 
 ;;; used by other ns
