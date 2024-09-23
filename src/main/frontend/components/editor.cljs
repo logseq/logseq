@@ -146,10 +146,12 @@
                        (set-matched-pages! result))))]
     (rum/use-effect! search-f [(mixins/use-debounce 50 q)])
     (let [matched-pages (if (string/blank? q)
-                          (->> (map (fn [title] {:block/title title
-                                                 :nlp-date? true})
-                                    date/nlp-pages)
-                               (take 10))
+                          (if db-tag?
+                            (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                            (->> (map (fn [title] {:block/title title
+                                                  :nlp-date? true})
+                                     date/nlp-pages)
+                                (take 10)))
                           ;; reorder, shortest and starts-with first.
                           (let [matched-pages-with-new-page
                                 (fn [partial-matched-pages]
