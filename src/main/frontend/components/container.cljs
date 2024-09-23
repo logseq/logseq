@@ -25,7 +25,6 @@
             [frontend.db.model :as db-model]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.storage :as storage]
-            [frontend.extensions.srs :as srs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
