@@ -15,12 +15,14 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [logseq.db :as ldb]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.file :as property-file]
+            [frontend.handler.block :as block-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -794,23 +796,44 @@
             [title body] (mldoc/get-title&body content format)]
         [block (str title " #" card-hash-tag "\n" body)])))
 
-(defn make-block-a-card!
-  [block-id]
-  (when-let [block (db/entity [:block/uuid block-id])]
-    (let [block-content (add-card-tag-to-block block)
-          new-content (get block-content 1)]
-      (editor-handler/save-block! (state/get-current-repo) block-id new-content))))
+(defn- get-operating-blocks
+  [block-ids]
+  (some->> block-ids
+           (map (fn [id] (db/entity [:block/uuid id])))
+           (seq)
+           block-handler/get-top-level-blocks
+           (remove ldb/property?)))
 
 (defn batch-make-cards!
   ([] (batch-make-cards! (state/get-selection-block-ids)))
   ([block-ids]
-   (let [valid-blocks (->> block-ids
-                           (map #(db/entity [:block/uuid %]))
-                           (remove card-block?)
-                           (map #(db/pull [:block/uuid (:block/uuid %)])))
-         blocks (map add-card-tag-to-block valid-blocks)]
-     (when-not (empty? blocks)
-       (editor-handler/save-blocks! blocks)))))
+   (if (config/db-based-graph? (state/get-current-repo))
+     (let [blocks (get-operating-blocks block-ids)
+           block-ids (map :block/uuid blocks)]
+       (when (seq block-ids)
+         (property-handler/batch-set-block-property! (state/get-current-repo)
+                                                     block-ids
+                                                     :block/tags
+                                                     (:db/id (db/entity :logseq.class/Card)))))
+     (let [valid-blocks (->> block-ids
+                             (map #(db/entity [:block/uuid %]))
+                             (remove card-block?)
+                             (map #(db/pull [:block/uuid (:block/uuid %)])))
+           blocks (map add-card-tag-to-block valid-blocks)]
+       (when-not (empty? blocks)
+         (editor-handler/save-blocks! blocks))))))
+
+(defn make-block-a-card!
+  [block-id]
+  (if (config/db-based-graph? (state/get-current-repo))
+    (when-let [block-ids (when block-id [block-id])]
+      (batch-make-cards! block-ids))
+    (when-let [block (db/entity [:block/uuid block-id])]
+     (let [block-content (add-card-tag-to-block block)
+           new-content (get block-content 1)]
+       (editor-handler/save-block! (state/get-current-repo) block-id new-content)))))
+
+
 
 (defonce *due-cards-interval (atom nil))
 
