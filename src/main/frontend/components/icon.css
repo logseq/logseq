@@ -164,3 +164,7 @@
 .ls-icon-picker {
   @apply w-auto overflow-hidden;
 }
+
+.ls-icon-color-wrap em-emoji {
+  @apply !w-auto !h-auto;
+}
