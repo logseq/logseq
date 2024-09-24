@@ -537,7 +537,7 @@
 
         :else
         (-> (or (:on-redirect-to-page config) route-handler/redirect-to-page!)
-            (apply [(:block/uuid page)])))))
+            (apply [(or (:block/uuid page) (:block/name page))])))))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
@@ -780,7 +780,7 @@
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [state {:keys [label children preview? disable-preview?] :as config} page]
+  [state {:keys [label children preview? disable-preview? show-non-exists-page?] :as config} page]
   (let [entity (if (e/entity? page)
                  page
                  ;; Use uuid when available to uniquely identify case sensitive contexts
@@ -814,6 +814,10 @@
 
         (and (:block/name page) (util/uuid-string? (:block/name page)))
         (invalid-node-ref (:block/name page))
+
+        (and (:block/name page) show-non-exists-page?)
+        (page-inner config {:block/title (:block/name page)
+                            :block/name (:block/name page)} children label)
 
         :else
         nil))))
