@@ -1974,7 +1974,7 @@
                                (or (db/page? block)
                                    (:logseq.property/icon block)
                                    link?
-                                   (seq (:block/tags block))))
+                                   (some :logseq.property/icon (:block/tags block))))
                           icon
 
                           :else
@@ -2124,9 +2124,9 @@
 
          (when (and (seq block-title) (ldb/class-instance? (db/entity :logseq.class/Cards) block))
            [(shui/button
-             {:variant :outline
+             {:variant :ghost
               :size :sm
-              :class "ml-2"
+              :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
               :on-click (fn [_]
                           (state/pub-event! [:modal/show-cards (:db/id block)]))}
              "Practice")])))))))
