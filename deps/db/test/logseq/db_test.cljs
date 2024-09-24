@@ -45,11 +45,11 @@
     :block/uuid #uuid "d95f2912-a7af-41b9-8ed5-28861f7fc0be"
     :logseq.property/parent [:block/uuid #uuid "7008db08-ba0c-4aa9-afc6-7e4783e40a99"]}])
 
-(deftest get-class-parents-test
+(deftest get-page-parents
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)]
     (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
     (d/transact! conn class-parents-data)
     (is (= #{"x" "y"}
-           (->> (ldb/get-class-parents (ldb/get-page @conn "z"))
-                (map #(:block/title (d/entity @conn %)))
+           (->> (ldb/get-page-parents (ldb/get-page @conn "z") {:node-class? true})
+                (map :block/title)
                 set)))))
