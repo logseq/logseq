@@ -150,8 +150,8 @@
         own-order-list-type  (some-> type str string/lower-case)
         own-order-list-index (some->> own-order-list-type (get-idx-of-order-list-block block))]
     (assoc config :own-order-list-type own-order-list-type
-                  :own-order-list-index own-order-list-index
-                  :own-order-number-list? (= own-order-list-type "number"))))
+           :own-order-list-index own-order-list-index
+           :own-order-number-list? (= own-order-list-type "number"))))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
@@ -197,11 +197,8 @@
        (state/clear-edit! {:clear-editing-block? false}))
      (when-let [block-id (:block/uuid block)]
        (let [repo (state/get-current-repo)
-             db-graph? (config/db-based-graph? repo)
              block (or (db/entity [:block/uuid block-id]) block)
-             content (if (and db-graph? (:block/name block))
-                       (:block/title-with-refs-parent block)
-                       (or custom-content (:block/title-with-refs-parent block) ""))
+             content (or custom-content (:block/title block) "")
              content-length (count content)
              text-range (cond
                           (vector? pos)
@@ -402,7 +399,6 @@
                                 (set! (.. more -style -opacity) "30%"))))))
                       :else
                       nil)))))))))))
-
 
 (defn on-touch-end
   [_event block uuid *show-left-menu? *show-right-menu?]

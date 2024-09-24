@@ -1,13 +1,16 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
+            [datascript.impl.entity :as de]
+            [dommy.core :as dom]
             [frontend.commands :as commands :refer [*matched-commands]]
             [frontend.components.datetime :as datetime-comp]
-            [frontend.components.svg :as svg]
             [frontend.components.search :as search]
+            [frontend.components.svg :as svg]
             [frontend.components.title :as title]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.date :as date]
             [frontend.db :as db]
-            [logseq.db :as ldb]
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
@@ -16,25 +19,23 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
-            [frontend.search :refer [fuzzy-search]]
             [frontend.mixins :as mixins]
+            [frontend.search :refer [fuzzy-search]]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
-            [logseq.shui.popup.core :as shui-popup]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
             [goog.dom :as gdom]
             [goog.string :as gstring]
-            [dommy.core :as dom]
-            [logseq.graph-parser.property :as gp-property]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.shui.popup.core :as shui-popup]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [react-draggable]
-            [rum.core :as rum]
-            [frontend.config :as config]
-            [frontend.date :as date]))
+            [rum.core :as rum]))
 
 (defn filter-commands
   [page? commands]
@@ -118,7 +119,7 @@
     (fn [chosen-item _e]
       (let [value (.-value input)
             value' (str (common-util/safe-subs value 0 q)
-                     (common-util/safe-subs value (+ (count q) 4 pos)))]
+                        (common-util/safe-subs value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
         (p/let [page (db/get-page chosen-item)
@@ -149,9 +150,9 @@
                           (if db-tag?
                             (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
                             (->> (map (fn [title] {:block/title title
-                                                  :nlp-date? true})
-                                     date/nlp-pages)
-                                (take 10)))
+                                                   :nlp-date? true})
+                                      date/nlp-pages)
+                                 (take 10)))
                           ;; reorder, shortest and starts-with first.
                           (let [matched-pages-with-new-page
                                 (fn [partial-matched-pages]
@@ -175,7 +176,7 @@
          :on-enter    (fn []
                         (page-handler/page-not-exists-handler input id q current-pos))
          :item-render (fn [block _chosen?]
-                        (let [block (if (:block/uuid block)
+                        (let [block (if (and (:block/uuid block) (not (de/entity? block)))
                                       (db/entity [:block/uuid (:block/uuid block)])
                                       block)]
                           [:div.flex.flex-col
@@ -227,10 +228,10 @@
           [:span " to display this tag inline instead of at the end of this node."]])])))
 
 (rum/defc page-search < rum/reactive
-                        {:will-unmount (fn [state]
-                                         (reset! commands/*current-command nil)
-                                         state)}
-                        "Page or tag searching popup"
+  {:will-unmount (fn [state]
+                   (reset! commands/*current-command nil)
+                   state)}
+  "Page or tag searching popup"
   [id format]
   (let [action (state/sub :editor/action)
         db? (config/db-based-graph? (state/get-current-repo))
@@ -243,12 +244,12 @@
         (let [current-pos (cursor/pos input)
               edit-content (state/sub-edit-content)
               q (or
-                  (editor-handler/get-selected-text)
-                  (when (= action :page-search-hashtag)
-                    (common-util/safe-subs edit-content pos current-pos))
-                  (when (> (count edit-content) current-pos)
-                    (common-util/safe-subs edit-content pos current-pos))
-                  "")]
+                 (editor-handler/get-selected-text)
+                 (when (= action :page-search-hashtag)
+                   (common-util/safe-subs edit-content pos current-pos))
+                 (when (> (count edit-content) current-pos)
+                   (common-util/safe-subs edit-content pos current-pos))
+                 "")]
           (page-search-aux id format embed? db-tag? q current-pos input pos))))))
 
 (defn- search-blocks!
@@ -325,9 +326,9 @@
         edit-block (state/get-edit-block)
         selected-text (editor-handler/get-selected-text)
         q (or
-            selected-text
-            (when (>= (count edit-content) current-pos)
-              (subs edit-content pos current-pos)))]
+           selected-text
+           (when (>= (count edit-content) current-pos)
+             (subs edit-content pos current-pos)))]
     (when input
       (block-search-auto-complete edit-block input id q format selected-text))))
 
@@ -393,14 +394,14 @@
          (set-values! result)))
      [property q])
     (ui/auto-complete
-         values
-         {:on-chosen (editor-handler/property-value-on-chosen-handler id q)
-          :on-enter (fn [_state]
-                      ((editor-handler/property-value-on-chosen-handler id q) nil))
-          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property value: " q)]
-          :header [:div.px-4.py-2.text-sm.font-medium "Matched property values: "]
-          :item-render (fn [property-value] property-value)
-          :class       "black"})))
+     values
+     {:on-chosen (editor-handler/property-value-on-chosen-handler id q)
+      :on-enter (fn [_state]
+                  ((editor-handler/property-value-on-chosen-handler id q) nil))
+      :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property value: " q)]
+      :header [:div.px-4.py-2.text-sm.font-medium "Matched property values: "]
+      :item-render (fn [property-value] property-value)
+      :class       "black"})))
 
 (rum/defc property-value-search < rum/reactive
   [id]
@@ -422,10 +423,10 @@
 (rum/defc code-block-mode-keyup-listener
   [_q _edit-content last-pos current-pos]
   (rum/use-effect!
-    (fn []
-      (when (< current-pos last-pos)
-        (state/clear-editor-action!)))
-    [last-pos current-pos])
+   (fn []
+     (when (< current-pos last-pos)
+       (state/clear-editor-action!)))
+   [last-pos current-pos])
   [:<>])
 
 (rum/defc code-block-mode-picker < rum/reactive
@@ -450,11 +451,10 @@
                                              (editor-handler/insert-command! id
                                                                              prefix format {:last-pattern last-pattern})
                                              (-> (editor-handler/save-block!
-                                                   (state/get-current-repo)
-                                                   (:block/uuid (state/get-edit-block))
-                                                   (.-value input))
-                                               (p/then #(commands/handle-step [:codemirror/focus])))
-                                             ))
+                                                  (state/get-current-repo)
+                                                  (:block/uuid (state/get-edit-block))
+                                                  (.-value input))
+                                                 (p/then #(commands/handle-step [:codemirror/focus])))))
                             :on-enter (fn []
                                         (state/clear-editor-action!)
                                         (commands/handle-step [:codemirror/focus]))
@@ -615,7 +615,7 @@
 (defn- exist-editor-commands-popup?
   []
   (some->> (shui-popup/get-popups)
-    (some #(some-> % (:id) (str) (string/starts-with? ":editor.commands")))))
+           (some #(some-> % (:id) (str) (string/starts-with? ":editor.commands")))))
 
 (defn- open-editor-popup!
   [id content opts]
@@ -643,61 +643,61 @@
 (rum/defc shui-editor-popups
   [id format action _data]
   (rum/use-effect!
-    (fn []
-      (let [pid (case action
-                  :commands
-                  (open-editor-popup! :commands
-                    (commands id format)
-                    {:content-props {:withoutAnimation false}})
+   (fn []
+     (let [pid (case action
+                 :commands
+                 (open-editor-popup! :commands
+                                     (commands id format)
+                                     {:content-props {:withoutAnimation false}})
 
-                  (:block-search :page-search :page-search-hashtag)
-                  (open-editor-popup! action
-                    (if (= :block-search action)
-                      (block-search id format)
-                      (page-search id format))
-                    {:root-props {:onOpenChange
-                                  #(when-not %
-                                     (when (contains?
-                                             #{:block-search :page-search :page-search-hashtag}
-                                             (state/get-editor-action))
-                                       (state/clear-editor-action!)))}})
+                 (:block-search :page-search :page-search-hashtag)
+                 (open-editor-popup! action
+                                     (if (= :block-search action)
+                                       (block-search id format)
+                                       (page-search id format))
+                                     {:root-props {:onOpenChange
+                                                   #(when-not %
+                                                      (when (contains?
+                                                             #{:block-search :page-search :page-search-hashtag}
+                                                             (state/get-editor-action))
+                                                        (state/clear-editor-action!)))}})
 
-                  :datepicker
-                  (open-editor-popup! :datepicker
-                    (datetime-comp/date-picker id format nil) {})
+                 :datepicker
+                 (open-editor-popup! :datepicker
+                                     (datetime-comp/date-picker id format nil) {})
 
-                  :input
-                  (open-editor-popup! :input
-                    (editor-input id
-                      (fn [command m]
-                        (editor-handler/handle-command-input command id format m))
-                      (fn []
-                        (editor-handler/handle-command-input-close id)))
-                    {:content-props {:onOpenAutoFocus #()}})
+                 :input
+                 (open-editor-popup! :input
+                                     (editor-input id
+                                                   (fn [command m]
+                                                     (editor-handler/handle-command-input command id format m))
+                                                   (fn []
+                                                     (editor-handler/handle-command-input-close id)))
+                                     {:content-props {:onOpenAutoFocus #()}})
 
-                  :select-code-block-mode
-                  (open-editor-popup! :code-block-mode-picker
-                    (code-block-mode-picker id format) {})
+                 :select-code-block-mode
+                 (open-editor-popup! :code-block-mode-picker
+                                     (code-block-mode-picker id format) {})
 
-                  :template-search
-                  (open-editor-popup! :template-search
-                    (template-search id format) {})
+                 :template-search
+                 (open-editor-popup! :template-search
+                                     (template-search id format) {})
 
-                  (:property-search :property-value-search)
-                  (open-editor-popup! action
-                    (if (= :property-search action)
-                      (property-search id) (property-value-search id))
-                    {})
+                 (:property-search :property-value-search)
+                 (open-editor-popup! action
+                                     (if (= :property-search action)
+                                       (property-search id) (property-value-search id))
+                                     {})
 
-                  :zotero
-                  (open-editor-popup! :zotero
-                    (zotero/zotero-search id) {})
+                 :zotero
+                 (open-editor-popup! :zotero
+                                     (zotero/zotero-search id) {})
 
                   ;; TODO: try remove local model state
-                  false)]
-        #(when pid
-           (shui/popup-hide! pid))))
-    [action])
+                 false)]
+       #(when pid
+          (shui/popup-hide! pid))))
+   [action])
   [:<>])
 
 (rum/defc command-popups <

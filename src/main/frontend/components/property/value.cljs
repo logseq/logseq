@@ -773,7 +773,6 @@
   [property type value {:keys [page-cp inline-text other-position? _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
-        parent? (= (:db/ident property) :logseq.property/parent)
         inline-text-cp (fn [content]
                          [:div.flex.flex-row.items-center
                           (inline-text {} :markdown (macro-util/expand-value-if-macro content (state/get-macros)))
@@ -796,8 +795,7 @@
          (rum/with-key
            (page-cp {:disable-preview? true
                      :tag? tag?
-                     :meta-click? other-position?
-                     :display-parent? (not parent?)} value)
+                     :meta-click? other-position?} value)
            (:db/id value)))
 
        (contains? #{:node :class :property :page} type)

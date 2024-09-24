@@ -354,12 +354,12 @@
                            {:outliner-op :save-block})))))))
 
 (defn ^:api get-classes-parents
-  [db tags]
-  (ldb/get-classes-parents db tags))
+  [tags]
+  (ldb/get-classes-parents tags))
 
 (defn ^:api get-class-properties
-  [db class]
-  (let [class-parents (get-classes-parents db [class])]
+  [class]
+  (let [class-parents (get-classes-parents [class])]
     (->> (mapcat (fn [class]
                    (:logseq.property.class/properties class)) (concat [class] class-parents))
          (common-util/distinct-by :db/id)
@@ -371,7 +371,7 @@
         classes (->> (:block/tags block)
                      (sort-by :block/name)
                      (filter ldb/class?))
-        class-parents (get-classes-parents db classes)
+        class-parents (get-classes-parents classes)
         all-classes (->> (concat classes class-parents)
                          (filter (fn [class]
                                    (seq (:logseq.property.class/properties class)))))

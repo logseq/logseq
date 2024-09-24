@@ -2,24 +2,34 @@
   "Provides util handler fns for pages"
   (:require [cljs.reader :as reader]
             [clojure.string :as string]
+            [datascript.core :as d]
+            [datascript.impl.entity :as de]
+            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
+            [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.fs :as fs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.common.page :as page-common-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.property :as property-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.graph :as graph-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
+            [frontend.handler.ui :as ui-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -29,24 +39,13 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.common.util.block-ref :as block-ref]
-            [promesa.core :as p]
             [logseq.common.path :as path]
-            [electron.ipc :as ipc]
-            [frontend.context.i18n :refer [t]]
-            [frontend.persist-db.browser :as db-browser]
-            [datascript.core :as d]
-            [frontend.db.conn :as conn]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.graph-parser.db :as gp-db]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.modules.outliner.op :as outliner-op]
-            [frontend.handler.property.util :as pu]
-            [datascript.impl.entity :as de]
-            [frontend.handler.db-based.page :as db-page-handler]
-            [logseq.common.util.namespace :as ns-util]))
+            [promesa.core :as p]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
@@ -80,7 +79,6 @@
          (page-common-handler/db-favorited? page-block-uuid)))
       (page-common-handler/file-favorited? page-name))))
 
-
 (defn get-favorites
   "return page-block entities"
   []
@@ -98,7 +96,6 @@
                               (mapv util/safe-page-name-sanity-lc)
                               (distinct))]
           (keep (fn [page-name] (db/get-page page-name)) page-names))))))
-
 
 ;; FIXME: add whiteboard
 (defn- get-directory
@@ -375,9 +372,7 @@
                                   :create-first-block? false
                                   :split-namespace? true})))
             ref-text' (if result
-                        (let [title (if-let [parent (:logseq.property/parent result)]
-                                      (str (:block/title parent) ns-util/parent-char (:block/title result))
-                                      (:block/title result))]
+                        (let [title (:block/title result)]
                           (page-ref/->page-ref title))
                         ref-text)]
       (p/do!

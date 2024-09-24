@@ -12,7 +12,6 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util.namespace :as ns-util]
             [datascript.core :as d]))
 
 (def db-based-graph? entity-util/db-based-graph?)
@@ -33,35 +32,11 @@
       (or
        (get (.-kv e) k)
        (let [result (lookup-entity e k default-value)
-             parent-title? (:block.temp/parent-title? e)]
-         (or
-          (let [result' (if (string? result)
-                          (db-content/special-id-ref->page-ref result
-                                                               (:block/refs e))
-                          result)
-                parent (when (= (:block/type e) "page")
-                         (:logseq.property/parent e))]
-            (if (and db-based? parent parent-title?)
-              (str (:block/title parent) ns-util/parent-char result')
-              result'))
-          default-value))))))
-
-(defn- get-block-title-parent-refs
-  "Add parent to block ref titles"
-  [^Entity e k default-value]
-  (let [db (.-db e)
-        db-based? (db-based-graph? db)]
-    (if (and db-based? (= "journal" (:block/type e)))
-      (get-journal-title db e)
-      (or
-       (get (.-kv e) k)
-       (let [result (lookup-entity e :block/title default-value)]
-         (or
-          (if (string? result)
-            (db-content/special-id-ref->page-ref result
-                                                 (map (fn [e] (assoc e :block.temp/parent-title? true)) (:block/refs e)))
-            result)
-          default-value))))))
+             result' (if (string? result)
+                       (db-content/special-id-ref->page-ref result
+                                                            (:block/refs e))
+                       result)]
+         (or result' default-value))))))
 
 (defn lookup-kv-then-entity
   ([e k] (lookup-kv-then-entity e k nil))
@@ -86,9 +61,6 @@
 
          :block/title
          (get-block-title e k default-value)
-
-         :block/title-with-refs-parent
-         (get-block-title-parent-refs e k default-value)
 
          :block/_parent
          (->> (lookup-entity e k default-value)

@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [range])
   (:require-macros [hiccups.core])
   (:require ["/frontend/utils" :as utils]
-            [goog.functions :refer [debounce]]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [cljs.reader :as reader]
@@ -10,30 +9,33 @@
             [datascript.core :as d]
             [datascript.impl.entity :as e]
             [dommy.core :as dom]
+            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.block.macros :as block-macros]
-            [frontend.components.file-based.block :as file-block]
             [frontend.components.datetime :as datetime-comp]
+            [frontend.components.file-based.block :as file-block]
+            [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
             [frontend.components.plugins :as plugins]
-            [frontend.components.query.builder :as query-builder-component]
-            [frontend.components.svg :as svg]
-            [frontend.components.query :as query]
             [frontend.components.property :as property-component]
             [frontend.components.property.value :as pv]
-            [frontend.components.icon :as icon-component]
+            [frontend.components.query :as query]
+            [frontend.components.query.builder :as query-builder-component]
+            [frontend.components.svg :as svg]
+            [frontend.components.title :as title]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.model :as model]
-            [frontend.mixins :as mixins]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.async :as db-async]
+            [frontend.db.model :as model]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.sci :as sci]
             [frontend.extensions.video.youtube :as youtube]
             [frontend.extensions.zotero :as zotero]
@@ -42,58 +44,55 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.export.common :as export-common-handler]
+            [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.property.file :as property-file]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.handler.export.common :as export-common-handler]
-            [frontend.handler.property.util :as pu]
-            [frontend.handler.db-based.property :as db-property-handler]
-            [logseq.outliner.property :as outliner-property]
-            [frontend.mobile.util :as mobile-util]
+            [frontend.mixins :as mixins]
             [frontend.mobile.intent :as mobile-intent]
+            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.template :as template]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
-            [logseq.shui.dialog.core :as shui-dialog]
             [frontend.util :as util]
-            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.util.file-based.drawer :as drawer]
-            [frontend.handler.property.file :as property-file]
-            [frontend.handler.file-based.property.util :as property-util]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
+            [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.graph-parser.block :as gp-block]
             [logseq.common.config :as common-config]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.text :as text]
+            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.common.util.macro :as macro-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.text :as text]
+            [logseq.outliner.property :as outliner-property]
+            [logseq.shui.dialog.core :as shui-dialog]
+            [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]
-            [logseq.common.path :as path]
-            [electron.ipc :as ipc]
-            [frontend.db.async :as db-async]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db :as ldb]
-            [frontend.components.title :as title]
-            [frontend.modules.shortcut.utils :as shortcut-utils]
-            [logseq.common.util.namespace :as ns-util]))
+            [shadow.loader :as loader]))
 
 ;; local state
 (defonce *dragging?
@@ -552,10 +551,8 @@
 
    All page-names are sanitized except page-name-in-block"
   [state
-   {:keys [contents-page? whiteboard-page? html-export? meta-click? show-unique-title? stop-click-event?
-           display-parent?]
-    :or {stop-click-event? true
-         display-parent? true}
+   {:keys [contents-page? whiteboard-page? html-export? meta-click? show-unique-title? stop-click-event?]
+    :or {stop-click-event? true}
     :as config}
    page-entity children label]
   (let [*hover? (::hover? state)
@@ -660,12 +657,7 @@
                                    (let [inline-list (gp-mldoc/inline->edn (first (string/split-lines s))
                                                                            (mldoc/get-default-config (get page-entity :block/format :markdown)))]
                                      (->elem :span (map-inline config inline-list))))))]
-          (let [parent (:logseq.property/parent page-entity)]
-            (if (and display-parent? parent (not (ldb/class? page-entity)))
-              [:span
-               (str (:block/title parent) ns-util/parent-char)
-               page-component]
-              page-component))))]]))
+          page-component))]]))
 
 (rum/defc popup-preview-impl
   [children {:keys [*timer *timer1 visible? set-visible! render *el-popup]}]
@@ -2350,7 +2342,7 @@
                                                   util/caret-range)
                              {:block/keys [title format]} block
                              content (if (config/db-based-graph? (state/get-current-repo))
-                                       (:block/title-with-refs-parent block)
+                                       (:block/title block)
                                        (->> title
                                             (property-file/remove-built-in-properties-when-file-based
                                              (state/get-current-repo) format)
