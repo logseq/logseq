@@ -291,7 +291,7 @@
 (defmethod handle :modal/show-cards [[_ cards-id]]
   (let [db-based? (config/db-based-graph? (state/get-current-repo))]
     (shui/dialog-open!
-     (if db-based? (fn [] (fsrs/cards cards-id)) srs/global-cards)
+     (if db-based? (fn [] (fsrs/cards-view cards-id)) srs/global-cards)
      {:id :srs
       :label "flashcards__cp"})))
 

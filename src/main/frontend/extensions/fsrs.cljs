@@ -46,7 +46,9 @@
   "Return nil if block is not #card.
   Return default card-map if `:logseq.property.fsrs/state` or `:logseq.property.fsrs/due` is nil"
   [block-entity]
-  (when (some (fn [tag] (= :logseq.class/Card (:db/ident tag))) ;block should contains #Card
+  (when (some (fn [tag]
+                (assert (some? (:db/ident tag)) tag)
+                (= :logseq.class/Card (:db/ident tag))) ;block should contains #Card
               (:block/tags block-entity))
     (let [fsrs-state (:logseq.property.fsrs/state block-entity)
           fsrs-due (:logseq.property.fsrs/due block-entity)
@@ -66,7 +68,9 @@
     (when-let [card-map (get-card-map block-entity)]
       (let [next-card-map (fsrs.core/repeat-card! card-map rating)
             prop-card-map (fsrs-card-map->property-fsrs-state next-card-map)
-            prop-fsrs-state (dissoc prop-card-map :due)
+            prop-fsrs-state (-> prop-card-map
+                                (dissoc :due)
+                                (assoc :logseq/last-rating rating))
             prop-fsrs-due (:due prop-card-map)]
         (property-handler/set-block-properties!
          repo (:block/uuid block-entity)
@@ -175,7 +179,7 @@
                                    {:align "start"}))}
     (ui/icon "info-circle"))])
 
-(rum/defcs ^:private card < rum/reactive db-mixins/query
+(rum/defcs ^:private card-view < rum/reactive db-mixins/query
   {:will-mount (fn [state]
                  (when-let [[repo block-id _] (:rum/args state)]
                    (db-async/<get-block repo block-id))
@@ -212,7 +216,7 @@
           (rating-btns repo (:db/id block-entity) *card-index *phase))]])))
 
 (declare update-due-cards-count)
-(rum/defcs cards < rum/reactive
+(rum/defcs cards-view < rum/reactive
   (rum/local 0 ::card-index)
   (shortcut/mixin :shortcut.handler/cards false)
   {:init (fn [state]
@@ -266,22 +270,22 @@
         [:span.text-sm.opacity-50 (str (min (inc @*card-index) (count @*block-ids)) "/" (count @*block-ids))]]
        (if-let [block-id (nth block-ids @*card-index nil)]
          [:div.flex.flex-col
-          (card repo block-id *card-index *phase)]
+          (card-view repo block-id *card-index *phase)]
          [:p (t :flashcards/modal-finished)])])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
 (def ^:private new-task--update-due-cards-count
   "Return a task that update `:srs/cards-due-count` periodically."
   (m/sp
-   (let [repo (state/get-current-repo)]
-     (if (config/db-based-graph? repo)
-       (m/?
-        (m/reduce
-         (fn [_ _]
-           (p/let [due-cards (<get-due-card-block-ids repo nil)]
-             (state/set-state! :srs/cards-due-count (count due-cards))))
-         (c.m/clock (* 3600 1000))))
-       (srs/update-cards-due-count!)))))
+    (let [repo (state/get-current-repo)]
+      (if (config/db-based-graph? repo)
+        (m/?
+         (m/reduce
+          (fn [_ _]
+            (p/let [due-cards (<get-due-card-block-ids repo nil)]
+              (state/set-state! :srs/cards-due-count (count due-cards))))
+          (c.m/clock (* 3600 1000))))
+        (srs/update-cards-due-count!)))))
 
 (defn update-due-cards-count
   []
@@ -311,3 +315,76 @@
         block-ids
         :block/tags
         (:db/id (db/entity :logseq.class/Card)))))))
+
+(defn- cards-in-time-range
+  [cards start-instant end-instant]
+  (assert (and (tick/instant? start-instant)
+               (tick/instant? end-instant))
+          [start-instant end-instant])
+  (->> cards
+       (filter (fn [card] (tick/<= start-instant (:last-repeat card) end-instant)))))
+
+(defn- cards-today
+  [cards]
+  (let [date-today (tick/new-date)
+        start-instant (tick/instant (tick/at date-today (tick/new-time 0 0)))
+        end-instant (tick/instant)]
+    (cards-in-time-range cards start-instant end-instant)))
+
+(defn- cards-recent-7-days
+  [cards]
+  (let [now-instant (tick/instant)
+        date-7-days-ago (tick/date (tick/<< now-instant (tick/new-duration 7 :days)))
+        start-instant (tick/instant (tick/at date-7-days-ago (tick/new-time 0 0)))
+        end-instant now-instant]
+    (cards-in-time-range cards start-instant end-instant)))
+
+(defn- cards-recent-30-days
+  [cards]
+  (let [now-instant (tick/instant)
+        date-30-days-ago (tick/date (tick/<< now-instant (tick/new-duration 30 :days)))
+        start-instant (tick/instant (tick/at date-30-days-ago (tick/new-time 0 0)))
+        end-instant now-instant]
+    (cards-in-time-range cards start-instant end-instant)))
+
+(defn- cards-stat
+  [cards]
+  (let [state-grouped-cards (group-by :state cards)
+        state-cards-count (update-vals state-grouped-cards count)
+        {new-count :new
+         learning-count :learning
+         review-count :review
+         relearning-count :relearning} state-cards-count
+        passed-repeat-count (count (filter #(contains? #{:good :easy} (:logseq/last-rating %)) cards))
+        lapsed-repeat-count (count (filter #(contains? #{:again :hard} (:logseq/last-rating %)) cards))
+        true-retention-percent (when (seq cards) (/ review-count (count cards)))]
+    {:true-retention true-retention-percent
+     :passed-repeats passed-repeat-count
+     :lapsed-repeats lapsed-repeat-count
+     :new-state-cards (or new-count 0)
+     :learning-state-cards (or learning-count 0)
+     :review-state-cards (or review-count 0)
+     :relearning-state-cards (or relearning-count 0)}))
+
+(defn <cards-stat
+  "Some explanations on return value:
+  :true-retention, cards in review-state / all-cards-count
+  :passed-repeats, last rating is :good or :easy
+  :lapsed-repeats, last rating is :again or :hard
+  :XXX-state-cards, cards' state is XXX"
+  []
+  (p/let [repo (state/get-current-repo)
+          all-card-blocks
+          (db-async/<q repo {:transact-db? false}
+                       '[:find [(pull ?b [* {:block/tags [:db/ident]}]) ...]
+                         :where
+                         [?b :block/tags :logseq.class/Card]
+                         [?b :block/uuid]])
+          all-cards (map get-card-map all-card-blocks)
+          [today-stat
+           recent-7-days-stat
+           recent-30-days-stat]
+          (map cards-stat ((juxt cards-today cards-recent-7-days cards-recent-30-days) all-cards))]
+    {:today-stat today-stat
+     :recent-7-days-stat recent-7-days-stat
+     :recent-30-days-stat recent-30-days-stat}))
