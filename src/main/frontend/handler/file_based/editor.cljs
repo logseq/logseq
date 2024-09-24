@@ -5,6 +5,7 @@
             [frontend.commands :as commands]
             [frontend.format.block :as block]
             [frontend.db :as db]
+            [frontend.db.query-dsl :as query-dsl]
             [frontend.format.mldoc :as mldoc]
             [frontend.state :as state]
             [frontend.modules.outliner.op :as outliner-op]
@@ -211,3 +212,18 @@
                  block-ids)
         col (remove nil? col)]
     (file-property-handler/batch-set-block-property-aux! col)))
+
+(defn valid-dsl-query-block?
+  "Whether block has a valid dsl query."
+  [block]
+  (->> (:block/macros (db/entity (:db/id block)))
+       (some (fn [macro]
+               (let [properties (:block/properties macro)
+                     macro-name (:logseq.macro-name properties)
+                     macro-arguments (:logseq.macro-arguments properties)]
+                 (when-let [query-body (and (= "query" macro-name) (not-empty (string/join " " macro-arguments)))]
+                   (seq (:query
+                         (try
+                           (query-dsl/parse-query query-body)
+                           (catch :default _e
+                             nil))))))))))
