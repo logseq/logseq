@@ -623,7 +623,8 @@
 (defn get-title-with-parents
   [entity]
   (if (contains? #{"page" "class"} (:block/type entity))
-    (let [parents (get-page-parents entity)]
+    (let [parents (->> (get-page-parents entity)
+                       (remove (fn [e] (= :logseq.class/Root (:db/ident e)))))]
       (string/join
        ns-util/parent-char
        (map :block/title (conj parents entity))))
