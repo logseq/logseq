@@ -29,7 +29,6 @@
             [frontend.util :as util]
             [frontend.util.file-based.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.graph-parser.property :as gp-property]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
@@ -264,16 +263,8 @@
      (let [result (if (string/blank? query-string)
                     (:block/_refs (db/get-page card-hash-tag))
                     (let [query-string (template/resolve-dynamic-template! query-string)
-                          query-string (if-not (or (string/blank? query-string)
-                                                   (string/starts-with? query-string "(")
-                                                   (string/starts-with? query-string "["))
-                                         (page-ref/->page-ref (string/trim query-string))
-                                         query-string)
-                          {query* :query :keys [sort-by rules]} (query-dsl/parse query-string {:db-graph? (config/db-based-graph? repo)})
-                          query** (util/concat-without-nil
-                                   [['?b :block/refs '?br] ['?br :block/name card-hash-tag]]
-                                   (if (coll? (first query*)) query* [query*]))]
-                      (when-let [query' (query-dsl/query-wrapper query**
+                          {query* :query :keys [sort-by rules]} (query-dsl/parse query-string {:db-graph? (config/db-based-graph? repo)})]
+                      (when-let [query' (query-dsl/query-wrapper query*
                                                                  {:blocks? true
                                                                   :block-attrs [:db/id :block/properties]})]
                         (let [result (query-react/react-query repo
