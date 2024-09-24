@@ -273,7 +273,7 @@
    [22 {:properties [:logseq.property.fsrs/state :logseq.property.fsrs/due]}]
    [23 {:fix add-card-properties}]
    [24 {:classes [:logseq.class/Cards]}]
-   [25 {:classes [:logseq.class/Advanced-query]
+   [25 {:classes [:logseq.class/Advanced-Query]
         :properties [:logseq.property/query]
         :fix add-query-property-to-query-tag}]])
 
