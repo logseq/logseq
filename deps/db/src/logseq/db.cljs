@@ -627,7 +627,7 @@
                         (remove (fn [e] (= :logseq.class/Root (:db/ident e)))))]
       (string/join
        ns-util/parent-char
-       (map :block/title (conj parents' entity))))
+       (map :block/title (conj (vec parents') entity))))
     (:block/title entity)))
 
 (defn get-classes-parents
