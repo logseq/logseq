@@ -138,6 +138,22 @@
   [[:editor/input "" {:last-pattern command-trigger}]
    [:editor/search-block :embed]])
 
+(defn db-based-query
+  []
+  [[:editor/input "" {:last-pattern command-trigger}]
+   [:editor/set-property :block/tags :logseq.class/Query]])
+
+(defn file-based-query
+  []
+  [[:editor/input (str macro-util/query-macro " }}") {:backward-pos 2}]
+   [:editor/exit]])
+
+(defn query-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    (db-based-query)
+    (file-based-query)))
+
 (defn get-statuses
   []
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
@@ -166,7 +182,7 @@
 (defn db-based-priorities
   []
   (map (fn [e] (:block/title e))
-    (db-pu/get-closed-property-values :logseq.task/priority)))
+       (db-pu/get-closed-property-values :logseq.task/priority)))
 
 (defn get-priorities
   []
@@ -238,7 +254,6 @@
   [[:editor/clear-current-slash]
    [:editor/insert-properties]
    [:editor/move-cursor-to-properties]])
-
 
 (defn ^:large-vars/cleanup-todo commands-map
   [get-page-ref-text]
@@ -343,8 +358,7 @@
 
       ;; advanced
       [["Query"
-        [[:editor/input (str macro-util/query-macro " }}") {:backward-pos 2}]
-         [:editor/exit]]
+        (query-steps)
         query-doc
         :icon/query
         "ADVANCED"]
@@ -823,11 +837,11 @@
 (defmethod handle-step :editor/select-code-block-mode [[_]]
   (-> (p/delay 50)
       (p/then
-        (fn []
-          (when-let [input (state/get-input)]
+       (fn []
+         (when-let [input (state/get-input)]
             ;; update action cursor position
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
-            (state/set-editor-action! :select-code-block-mode))))))
+           (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+           (state/set-editor-action! :select-code-block-mode))))))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
@@ -835,8 +849,8 @@
 
 (defmethod handle-step :editor/exit [[_]]
   (p/do!
-    (state/pub-event! [:editor/save-current-block])
-    (state/clear-edit!)))
+   (state/pub-event! [:editor/save-current-block])
+   (state/clear-edit!)))
 
 (defmethod handle-step :editor/new-property [[_]]
   (state/pub-event! [:editor/new-property]))
