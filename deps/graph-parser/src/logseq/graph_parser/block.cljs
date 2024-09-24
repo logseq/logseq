@@ -17,7 +17,8 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.common.date :as common-date]))
 
 (defn heading-block?
   [block]
@@ -235,7 +236,7 @@
                                            v' (text/parse-property k v mldoc-ast user-config)]
                                        [k' v' mldoc-ast v])
                                      (do (swap! *invalid-properties conj k)
-                                       nil)))))
+                                         nil)))))
                           (remove #(nil? (second %))))
           page-refs (get-page-ref-names-from-properties properties user-config)
           block-refs (extract-block-refs properties)
@@ -387,6 +388,14 @@
         (let [type (if class? "class" (or (:block/type page) "page"))]
           (assoc page :block/type type))))))
 
+(defn- db-invalid-namespace-page?
+  "Namespace page neither exists nor journal"
+  [db db-based? page]
+  (and db-based?
+       (not (ldb/get-page db page))
+       (text/namespace-page? page)
+       (not (common-date/valid-journal-title-with-slash? page))))
+
 (defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} db date-formatter parse-block]
   (let [db-based? (ldb/db-based-graph? db)
@@ -402,12 +411,16 @@
                       (= (first form) "Custom")
                       (= (second form) "query"))
          (when-let [page (get-page-reference form (:format block))]
-           (swap! *refs conj page))
+           (when-let [page' (when-not (db-invalid-namespace-page? db db-based? page)
+                              page)]
+             (swap! *refs conj page')))
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
-             (when (common-util/tag-valid? tag)
-               (swap! *refs conj tag)
-               (swap! *structured-tags conj tag))))
+             (when-let [tag' (when-not (db-invalid-namespace-page? db db-based? tag)
+                               tag)]
+               (when (common-util/tag-valid? tag')
+                 (swap! *refs conj tag')
+                 (swap! *structured-tags conj tag')))))
          form))
      (concat title body))
     (swap! *refs #(remove string/blank? %))
@@ -450,10 +463,10 @@
                     (remove nil?)
                     (map (fn [ref]
                            (let [ref' (if-let [entity (ldb/get-case-page db (:block/title ref))]
-                              (if (= (:db/id parse-block) (:db/id entity))
-                                ref
-                                (select-keys entity [:block/uuid :block/title :block/name]))
-                              ref)]
+                                        (if (= (:db/id parse-block) (:db/id entity))
+                                          ref
+                                          (select-keys entity [:block/uuid :block/title :block/name]))
+                                        ref)]
                              (cond-> ref'
                                (:block.temp/original-page-name ref)
                                (assoc :block.temp/original-page-name (:block.temp/original-page-name ref)))))))
@@ -656,13 +669,13 @@
       (update :block/properties-text-values dissoc :id)
       (update :block/properties-order #(vec (remove #{:id} %)))
       (update :block/title (fn [c]
-                         (let [replace-str (re-pattern
-                                            (str
-                                             "\n*\\s*"
-                                             (if (= :markdown (:block/format block))
-                                               (str "id" gp-property/colons " " (:block/uuid block))
-                                               (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
-                           (string/replace-first c replace-str ""))))))
+                             (let [replace-str (re-pattern
+                                                (str
+                                                 "\n*\\s*"
+                                                 (if (= :markdown (:block/format block))
+                                                   (str "id" gp-property/colons " " (:block/uuid block))
+                                                   (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
+                               (string/replace-first c replace-str ""))))))
 
 (defn block-exists-in-another-page?
   "For sanity check only.

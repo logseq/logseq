@@ -45,9 +45,8 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.graph-parser.db :as gp-db]
-            [promesa.core :as p]
             [logseq.graph-parser.text :as text]
-            [logseq.common.util.namespace :as ns-util]))
+            [promesa.core :as p]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
@@ -322,7 +321,7 @@
                      (string/replace-first (str (t :new-page) " ") ""))
           wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
           chosen-last-part (if (text/namespace-page? chosen)
-                             (last (string/split chosen ns-util/parent-char))
+                             (text/get-namespace-last-part chosen)
                              chosen)
           wrapped-tag (if (and (util/safe-re-find #"\s+" chosen-last-part) (not wrapped?))
                         (page-ref/->page-ref chosen-last-part)

@@ -11,7 +11,8 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [clojure.set :as set]
-            [logseq.common.util.namespace :as ns-util]))
+            [logseq.common.util.namespace :as ns-util]
+            [logseq.graph-parser.text :as text]))
 
 ;; TODO: use sqlite for fuzzy search
 ;; maybe https://github.com/nalgeon/sqlean/blob/main/docs/fuzzy.md?
@@ -144,7 +145,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   (try
     (p/let [namespace? (ns-util/namespace-page? q)
             last-part (when namespace?
-                        (some-> (last (string/split q ns-util/parent-char))
+                        (some-> (text/get-namespace-last-part q)
                                 get-match-input))
             bind (cond
                    (and namespace? page)

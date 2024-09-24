@@ -151,3 +151,4 @@
             v'))))))
 
 (def namespace-page? ns-util/namespace-page?)
+(def get-namespace-last-part ns-util/get-last-part)

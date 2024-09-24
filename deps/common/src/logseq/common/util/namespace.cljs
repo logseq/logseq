@@ -18,3 +18,10 @@
        (not (string/starts-with? page-name "../"))
        (not (string/starts-with? page-name "./"))
        (not (common-util/url? page-name))))
+
+(defn get-last-part
+  "Get last part of a namespace page"
+  [page-name]
+  (if (namespace-page? page-name)
+    (last (string/split page-name parent-char))
+    page-name))

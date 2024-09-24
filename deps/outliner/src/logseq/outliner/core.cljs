@@ -320,32 +320,10 @@
       pages)
      (remove nil?))))
 
-(defn- build-page-parents
-  [db m date-formatter raw-title]
-  (let [refs (:block/refs m)
-        tags (:block/tags m)
-        *changed-uuids (atom {})
-        refs' (split-namespace-pages db refs tags date-formatter
-                                     {:*changed-uuids *changed-uuids})
-        tags' (map (fn [tag]
-                     (or (first (filter (fn [ref] (= (:block/uuid ref) (:block/uuid tag))) refs')) tag))
-                   tags)
-        raw-title' (if (seq @*changed-uuids)
-                     (reduce
-                      (fn [raw-content [old-id new-id]]
-                        (string/replace raw-content (str old-id) (str new-id)))
-                      raw-title
-                      @*changed-uuids)
-                     raw-title)]
-    (assoc m
-           :block/refs refs'
-           :block/title raw-title'
-           :block/tags tags')))
-
 (extend-type Entity
   otree/INode
-  (-save [this txs-state conn repo date-formatter {:keys [retract-attributes? retract-attributes]
-                                                   :or {retract-attributes? true}}]
+  (-save [this txs-state conn repo _date-formatter {:keys [retract-attributes? retract-attributes]
+                                                    :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [data this
@@ -386,10 +364,7 @@
               (outliner-validate/validate-block-title db (:block/title m*) block-entity))
           m (cond-> m*
               db-based?
-              (dissoc :block/pre-block? :block/priority :block/marker :block/properties-order))
-          m (if db-based?
-              (build-page-parents db m date-formatter (:block/title m))
-              m)]
+              (dissoc :block/pre-block? :block/priority :block/marker :block/properties-order))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)
