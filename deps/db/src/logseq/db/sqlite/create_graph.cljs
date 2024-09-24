@@ -82,7 +82,7 @@
          (let [schema-properties (mapv
                                   (fn [db-ident]
                                     (let [property (get db-ident->properties db-ident)]
-                                      (assert property (str "Built-in property " db-ident "is not defined yet"))
+                                      (assert property (str "Built-in property " db-ident " is not defined yet"))
                                       db-ident))
                                   (:properties schema))]
            (cond->

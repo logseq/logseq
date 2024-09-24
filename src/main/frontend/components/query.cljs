@@ -185,7 +185,7 @@
                                             :result result
                                             :collapsed? collapsed?'}))
 
-         (when dsl-query? builder)
+         (when (and dsl-query? builder) builder)
 
          (if built-in?
            [:div {:style {:margin-left 2}}

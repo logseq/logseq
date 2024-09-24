@@ -47,7 +47,7 @@
                              *fulltext-query-result)
 
                            :else
-                           (query-dsl/query (state/get-current-repo) q)))
+                           (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})))
 
                        :else
                        (query-custom/custom-query query {:current-block-uuid current-block-uuid}))

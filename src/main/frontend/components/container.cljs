@@ -25,7 +25,6 @@
             [frontend.db.model :as db-model]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.storage :as storage]
-            [frontend.extensions.srs :as srs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
@@ -58,6 +57,7 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [logseq.db :as ldb]
+            [frontend.extensions.fsrs :as fsrs]
             [logseq.common.util.namespace :as ns-util]))
 
 (rum/defc nav-content-item < rum/reactive
@@ -213,16 +213,13 @@
           :data-ref name}
          (page-name page (icon/get-node-icon-cp page {}) true)])])))
 
-(rum/defcs flashcards < db-mixins/query rum/reactive
-  {:did-mount (fn [state]
-                (srs/update-cards-due-count!)
-                state)}
-  [_state srs-open?]
+(rum/defc flashcards < db-mixins/query rum/reactive
+  [srs-open?]
   (let [num (state/sub :srs/cards-due-count)]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
      {:class (util/classnames [{:active srs-open?}])
       :on-click #(do
-                   (srs/update-cards-due-count!)
+                   (fsrs/update-due-cards-count)
                    (state/pub-event! [:modal/show-cards]))}
      (ui/icon "infinity")
      [:span.flex-1 (t :right-side-bar/flashcards)]
@@ -335,59 +332,59 @@
         (repo/repos-dropdown)
 
         [:div.nav-header.flex.flex-col.mt-1
-           (let [page (:page default-home)]
-             (if (and page (not (state/enable-journals? (state/get-current-repo))))
-               (sidebar-item
-                {:class "home-nav"
-                 :title page
-                 :on-click-handler route-handler/redirect-to-home!
-                 :active (and (not srs-open?)
-                              (= route-name :page)
-                              (= page (get-in route-match [:path-params :name])))
-                 :icon "home"
-                 :shortcut :go/home})
-               (sidebar-item
-                {:class "journals-nav"
-                 :active (and (not srs-open?)
-                              (or (= route-name :all-journals) (= route-name :home)))
-                 :title (t :left-side-bar/journals)
-                 :on-click-handler (fn [e]
-                                     (if (gobj/get e "shiftKey")
-                                       (route-handler/sidebar-journals!)
-                                       (route-handler/go-to-journals!)))
-                 :icon "calendar"
-                 :shortcut :go/journals})))
+         (let [page (:page default-home)]
+           (if (and page (not (state/enable-journals? (state/get-current-repo))))
+             (sidebar-item
+              {:class "home-nav"
+               :title page
+               :on-click-handler route-handler/redirect-to-home!
+               :active (and (not srs-open?)
+                            (= route-name :page)
+                            (= page (get-in route-match [:path-params :name])))
+               :icon "home"
+               :shortcut :go/home})
+             (sidebar-item
+              {:class "journals-nav"
+               :active (and (not srs-open?)
+                            (or (= route-name :all-journals) (= route-name :home)))
+               :title (t :left-side-bar/journals)
+               :on-click-handler (fn [e]
+                                   (if (gobj/get e "shiftKey")
+                                     (route-handler/sidebar-journals!)
+                                     (route-handler/go-to-journals!)))
+               :icon "calendar"
+               :shortcut :go/journals})))
 
-           (when enable-whiteboards?
-             (when (or config/dev? (not db-based?))
-               (sidebar-item
-                {:class "whiteboard"
-                 :title (t :right-side-bar/whiteboards)
-                 :href (rfe/href :whiteboards)
-                 :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
-                 :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-                 :icon "whiteboard"
-                 :icon-extension? true
-                 :shortcut :go/whiteboards})))
+         (when enable-whiteboards?
+           (when (or config/dev? (not db-based?))
+             (sidebar-item
+              {:class "whiteboard"
+               :title (t :right-side-bar/whiteboards)
+               :href (rfe/href :whiteboards)
+               :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
+               :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+               :icon "whiteboard"
+               :icon-extension? true
+               :shortcut :go/whiteboards})))
 
-           (when (and (state/enable-flashcards? (state/get-current-repo)) (not db-based?))
-             [:div.flashcards-nav
-              (flashcards srs-open?)])
+         (when (state/enable-flashcards? (state/get-current-repo))
+           [:div.flashcards-nav
+            (flashcards srs-open?)])
 
-           (sidebar-item
-            {:class "graph-view-nav"
-             :title (t :right-side-bar/graph-view)
-             :href (rfe/href :graph)
-             :active (and (not srs-open?) (= route-name :graph))
-             :icon "hierarchy"
-             :shortcut :go/graph-view})
+         (sidebar-item
+          {:class "graph-view-nav"
+           :title (t :right-side-bar/graph-view)
+           :href (rfe/href :graph)
+           :active (and (not srs-open?) (= route-name :graph))
+           :icon "hierarchy"
+           :shortcut :go/graph-view})
 
-           (sidebar-item
-            {:class "all-pages-nav"
-             :title (t :right-side-bar/all-pages)
-             :href (rfe/href :all-pages)
-             :active (and (not srs-open?) (= route-name :all-pages))
-             :icon "files"})]]
+         (sidebar-item
+          {:class "all-pages-nav"
+           :title (t :right-side-bar/all-pages)
+           :href (rfe/href :all-pages)
+           :active (and (not srs-open?) (= route-name :all-pages))
+           :icon "files"})]]
 
        [:div.nav-contents-container.flex.flex-col.gap-1.pt-1
         {:on-scroll on-contents-scroll}

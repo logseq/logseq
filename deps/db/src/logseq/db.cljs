@@ -1,7 +1,8 @@
 (ns logseq.db
   "Main namespace for public db fns. For DB and file graphs.
    For shared file graph only fns, use logseq.graph-parser.db"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
@@ -188,7 +189,6 @@
   [block]
   (assert (or (de/entity? block) (nil? block)))
   (first (sort-by-order (:block/_parent block))))
-
 
 (defn get-pages
   [db]
@@ -450,7 +450,6 @@
     (when (seq refs)
       (d/pull-many db '[*] (map :db/id refs)))))
 
-
 (defn get-block-refs-count
   [db id]
   (some-> (d/entity db id)
@@ -619,6 +618,24 @@
           (swap! *classes conj (:db/id current-parent))
           (recur (:logseq.property/parent current-parent)))))
     @*classes))
+
+(defn get-classes-parents
+  [db tags]
+  (let [tags' (filter class? tags)
+        result (map
+                (fn [id] (d/entity db id))
+                (mapcat get-class-parents tags'))]
+    (set result)))
+
+(defn class-instance?
+  "Whether `object` is an instance of `class`"
+  [class object]
+  (let [tags (:block/tags object)
+        tags-ids (set (map :db/id tags))]
+    (or
+     (contains? tags-ids (:db/id class))
+     (let [class-parents (get-classes-parents (.-db object) tags)]
+       (contains? (set/union class-parents tags-ids) (:db/id class))))))
 
 (defn get-all-pages-views
   [db]

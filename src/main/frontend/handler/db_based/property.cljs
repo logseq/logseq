@@ -49,16 +49,16 @@
     (outliner-op/create-property-text-block! block-id property-id value opts)))
 
 (defn batch-set-property!
-  [block-id property-id value]
+  [block-ids property-id value]
   (ui-outliner-tx/transact!
    {:outliner-op :batch-set-property}
-    (outliner-op/batch-set-property! block-id property-id value)))
+    (outliner-op/batch-set-property! block-ids property-id value)))
 
 (defn batch-remove-property!
-  [block-id property-id]
+  [block-ids property-id]
   (ui-outliner-tx/transact!
    {:outliner-op :batch-remove-property}
-    (outliner-op/batch-remove-property! block-id property-id)))
+    (outliner-op/batch-remove-property! block-ids property-id)))
 
 (defn class-add-property!
   [class-id property-id]

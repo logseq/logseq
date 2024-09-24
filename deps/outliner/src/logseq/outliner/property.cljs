@@ -43,7 +43,6 @@
           [:db/retract (:db/id block) property-id :logseq.property/empty-placeholder])
         block-tx-data]))))
 
-
 (defn- get-property-value-schema
   "Gets a malli schema to validate the property value for the given property type and builds
    it with additional args like datascript db"
@@ -267,15 +266,13 @@
 
 (defn batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
-   Does no validation of property values.
-   NOTE: This fn only works for properties with cardinality equal to `one`."
+   Does no validation of property values."
   [conn block-ids property-id v]
   (assert property-id "property-id is nil")
   (throw-error-if-read-only-property property-id)
   (let [block-eids (map ->eid block-ids)
         property (d/entity @conn property-id)
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-        _ (assert (not (db-property/many? property)) "Property must be cardinality :one in batch-set-property!")
         property-type (get-in property [:block/schema :type] :default)
         _ (assert v "Can't set a nil property value must be not nil")
         v' (if (db-property-type/value-ref-property-types property-type)
@@ -356,17 +353,13 @@
                            [[:db/retract (:db/id block) property-id property-value]]
                            {:outliner-op :save-block})))))))
 
-(defn ^:api get-class-parents
+(defn ^:api get-classes-parents
   [db tags]
-  (let [tags' (filter ldb/class? tags)
-        result (map
-                (fn [id] (d/entity db id))
-                (mapcat ldb/get-class-parents tags'))]
-    (set result)))
+  (ldb/get-classes-parents db tags))
 
 (defn ^:api get-class-properties
   [db class]
-  (let [class-parents (get-class-parents db [class])]
+  (let [class-parents (get-classes-parents db [class])]
     (->> (mapcat (fn [class]
                    (:logseq.property.class/properties class)) (concat [class] class-parents))
          (common-util/distinct-by :db/id)
@@ -378,7 +371,7 @@
         classes (->> (:block/tags block)
                      (sort-by :block/name)
                      (filter ldb/class?))
-        class-parents (get-class-parents db classes)
+        class-parents (get-classes-parents db classes)
         all-classes (->> (concat classes class-parents)
                          (filter (fn [class]
                                    (seq (:logseq.property.class/properties class)))))
