@@ -40,7 +40,14 @@
   metosin/malli                         {:mvn/version "0.16.1"}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
   missionary/missionary                 {:mvn/version "b.39"}
-  meander/epsilon                       {:mvn/version "0.0.650"}}
+  meander/epsilon                       {:mvn/version "0.0.650"}
+
+  io.github.open-spaced-repetition/cljc-fsrs {:git/sha "0e70e96a73cf63c85dcc2df4d022edf12806b239"
+                                              ;; TODO: use https://github.com/open-spaced-repetition/cljc-fsrs
+                                              ;; when PR merged
+                                              ;; https://github.com/open-spaced-repetition/cljc-fsrs/pull/5
+                                              :git/url "https://github.com/rcmerci/cljc-fsrs"}
+  tick/tick                             {:mvn/version "0.7.5"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.132"}

@@ -31,7 +31,8 @@
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.extensions.fsrs :as fsrs]))
 
 ;; TODO i18n support
 
@@ -100,7 +101,9 @@
      (when (state/enable-flashcards?)
        (shui/dropdown-menu-item
         {:key "Make a Card"
-         :on-click #(srs/batch-make-cards!)}
+         :on-click #(if (config/db-based-graph? (state/get-current-repo))
+                      (fsrs/batch-make-cards!)
+                      (srs/batch-make-cards!))}
         (t :context-menu/make-a-flashcard)))
 
      (shui/dropdown-menu-item
@@ -289,7 +292,9 @@
            (state/enable-flashcards?)
            (shui/dropdown-menu-item
             {:key      "Make a Card"
-             :on-click #(srs/make-block-a-card! block-id)}
+             :on-click #(if (config/db-based-graph? (state/get-current-repo))
+                          (fsrs/batch-make-cards! [block-id])
+                          (srs/batch-make-cards! [block-id]))}
             (t :context-menu/make-a-flashcard))
            :else
            nil)

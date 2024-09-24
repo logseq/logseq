@@ -82,9 +82,18 @@
   [v]
   (string/trim (subs v 1 (dec (count v)))))
 
+(defn wrapped-by
+  [v start end]
+  (and (string? v) (>= (count v) 2)
+       (= start (first v)) (= end (last v))))
+
 (defn wrapped-by-quotes?
   [v]
-  (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
+  (wrapped-by v "\"" "\""))
+
+(defn wrapped-by-parens?
+  [v]
+  (wrapped-by v "(" ")"))
 
 (defn url?
   "Test if it is a `protocol://`-style URL.
@@ -161,7 +170,6 @@
            (map string/capitalize)
            (string/join " ")))
 
-
 (defn distinct-by
   "Copy from medley"
   [f coll]
@@ -177,9 +185,9 @@
     (step (seq coll) #{})))
 
 (defn distinct-by-last-wins
-     [f col]
-     {:pre [(sequential? col)]}
-     (reverse (distinct-by f (reverse col))))
+  [f col]
+  {:pre [(sequential? col)]}
+  (reverse (distinct-by f (reverse col))))
 
 (defn normalize-format
   [format]
@@ -314,7 +322,6 @@
 (defn replace-first-ignore-case
   [s old-value new-value]
   (string/replace-first s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
-
 
 (defn sort-coll-by-dependency
   "Sort the elements in the collection based on dependencies.

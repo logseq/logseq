@@ -33,10 +33,10 @@
                {:label "Pages"
                 :value "page"
                 :selected (= @*find :page)}]
-     (fn [e v]
+              (fn [e v]
        ;; Prevent opening the current block's editor
-       (util/stop e)
-       (reset! *find (keyword v))))])
+                (util/stop e)
+                (reset! *find (keyword v))))])
 
 (defn- select
   ([items on-chosen]
@@ -83,10 +83,10 @@
 
 (defonce *between-dates (atom {}))
 (rum/defcs datepicker < rum/reactive
-                        (rum/local nil ::input-value)
-                        {:will-unmount (fn [state]
-                                         (swap! *between-dates dissoc (first (:rum/args state)))
-                                         state)}
+  (rum/local nil ::input-value)
+  {:will-unmount (fn [state]
+                   (swap! *between-dates dissoc (first (:rum/args state)))
+                   state)}
   [state id placeholder {:keys [auto-focus]}]
   (let [*input-value (::input-value state)]
     [:div.ml-4
@@ -97,24 +97,24 @@
        :value (some-> @*input-value (first))
        :on-focus (fn [^js e]
                    (js/setTimeout
-                     #(shui/popup-show! (.-target e)
-                        (let [select-handle! (fn [^js d]
-                                               (let [gd (date/js-date->goog-date d)
-                                                     journal-date (date/js-date->journal-title gd)]
-                                                 (reset! *input-value [journal-date d])
-                                                 (swap! *between-dates assoc id journal-date))
-                                               (shui/popup-hide!))]
-                          (shui/calendar
-                            {:mode "single"
-                             :initial-focus true
-                             :selected (some-> @*input-value (second))
-                             :on-select select-handle!
-                             :on-day-key-down (fn [^js d _ ^js e]
-                                                (when (= "Enter" (.-key e))
-                                                  (select-handle! d)
-                                                  (util/stop e)))}))
-                        {:id :query-datepicker
-                         :align :start}) 16))}]]))
+                    #(shui/popup-show! (.-target e)
+                                       (let [select-handle! (fn [^js d]
+                                                              (let [gd (date/js-date->goog-date d)
+                                                                    journal-date (date/js-date->journal-title gd)]
+                                                                (reset! *input-value [journal-date d])
+                                                                (swap! *between-dates assoc id journal-date))
+                                                              (shui/popup-hide!))]
+                                         (shui/calendar
+                                          {:mode "single"
+                                           :initial-focus true
+                                           :selected (some-> @*input-value (second))
+                                           :on-select select-handle!
+                                           :on-day-key-down (fn [^js d _ ^js e]
+                                                              (when (= "Enter" (.-key e))
+                                                                (select-handle! d)
+                                                                (util/stop e)))}))
+                                       {:id :query-datepicker
+                                        :align :start}) 16))}]]))
 
 (rum/defcs between <
   (rum/local nil ::start)
@@ -127,12 +127,12 @@
     (datepicker :end "End date" opts)]
    [:p.pt-2
     (ui/button "Submit"
-      :on-click (fn []
-                  (let [{:keys [start end]} @*between-dates]
-                    (when (and start end)
-                      (let [clause [:between [:page-ref start] [:page-ref end]]]
-                        (append-tree! tree opts loc clause)
-                        (reset! *between-dates {}))))))]])
+               :on-click (fn []
+                           (let [{:keys [start end]} @*between-dates]
+                             (when (and start end)
+                               (let [clause [:between [:page-ref start] [:page-ref end]]]
+                                 (append-tree! tree opts loc clause)
+                                 (reset! *between-dates {}))))))]])
 
 (rum/defc property-select
   [*mode *property]
@@ -276,7 +276,7 @@
 
        "full text search"
        (search (fn [v] (append-tree! *tree opts loc v))
-         (:toggle-fn opts))
+               (:toggle-fn opts))
 
        "between"
        (between (merge opts
@@ -330,7 +330,7 @@
 (rum/defc add-filter
   [*find *tree loc clause]
   (shui/button
-   {:class "!px-1 h-6 add-filter text-muted-foreground"
+   {:class "jtrigger !px-1 h-6 add-filter text-muted-foreground"
     :size :sm
     :variant :ghost
     :title "Add clause"
@@ -439,13 +439,13 @@
       [:div.flex.flex-row.gap-2
        (for [op query-builder/operators]
          (ui/button (string/upper-case (name op))
-           :intent "logseq"
-           :small? true
-           :on-click (fn []
-                       (swap! *tree (fn [q]
-                                      (let [loc' (if operator? (vec (butlast loc)) loc)]
-                                        (query-builder/wrap-operator q loc' op))))
-                       (toggle-fn))))]
+                    :intent "logseq"
+                    :small? true
+                    :on-click (fn []
+                                (swap! *tree (fn [q]
+                                               (let [loc' (if operator? (vec (butlast loc)) loc)]
+                                                 (query-builder/wrap-operator q loc' op))))
+                                (toggle-fn))))]
 
       (when operator?
         [:div
@@ -453,12 +453,12 @@
          [:div.flex.flex-row.gap-2
           (for [op (remove #{(keyword (string/lower-case clause))} query-builder/operators)]
             (ui/button (string/upper-case (name op))
-              :intent "logseq"
-              :small? true
-              :on-click (fn []
-                          (swap! *tree (fn [q]
-                                         (query-builder/replace-element q loc op)))
-                          (toggle-fn))))]])])
+                       :intent "logseq"
+                       :small? true
+                       :on-click (fn []
+                                   (swap! *tree (fn [q]
+                                                  (query-builder/replace-element q loc op)))
+                                   (toggle-fn))))]])])
    {:modal-class (util/hiccup->class
                   "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg.w-64")}))
 
@@ -505,10 +505,20 @@
                           [:and [@tree]])]
     (clauses-group *tree *find [0] kind' clauses)))
 
+(defn sanitize-q
+  [q-str]
+  (if (string/blank? q-str)
+    ""
+    (if (or (common-util/wrapped-by-parens? q-str)
+            (common-util/wrapped-by-quotes? q-str)
+            (page-ref/page-ref? q-str))
+      q-str
+      (str "\"" q-str "\""))))
+
 (rum/defcs builder <
   (rum/local nil ::find)
   {:init (fn [state]
-           (let [q-str (first (:rum/args state))
+           (let [q-str (sanitize-q (first (:rum/args state)))
                  query (common-util/safe-read-string
                         query-dsl/custom-readers
                         (query-dsl/pre-transform-query q-str))
@@ -535,13 +545,15 @@
                                                  repo (state/get-current-repo)
                                                  block (db/pull [:block/uuid (:block/uuid block)])]
                                              (when block
-                                               (let [content (string/replace (:block/title block)
-                                                                             #"\{\{query[^}]+\}\}"
-                                                                             (util/format "{{query %s}}" q))]
-                                                 (editor-handler/save-block! repo (:block/uuid block) content)))))))
+                                               (if (:property config)
+                                                 (editor-handler/save-block! repo (:block/uuid block) q)
+                                                 (let [content (string/replace (:block/title block)
+                                                                               #"\{\{query[^}]+\}\}"
+                                                                               (util/format "{{query %s}}" q))]
+                                                   (editor-handler/save-block! repo (:block/uuid block) content))))))))
              (assoc state ::tree *tree)))
    :will-mount (fn [state]
-                 (let [q-str (first (:rum/args state))
+                 (let [q-str (sanitize-q (first (:rum/args state)))
                        blocks-query? (:blocks? (query-dsl/parse-query q-str))
                        find-mode (cond
                                    blocks-query?

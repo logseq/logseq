@@ -33,7 +33,6 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-
 (defn- property-type-label
   [property-type]
   (case property-type
@@ -265,17 +264,17 @@
      (when-not other-position?
        (let [content-fn (fn [{:keys [id]}]
                           (icon-component/icon-search
-                            {:on-chosen
-                             (fn [_e icon]
-                               (if icon
-                                 (db-property-handler/upsert-property! (:db/ident property)
-                                   (:block/schema property)
-                                   {:properties {:logseq.property/icon icon}})
-                                 (db-property-handler/remove-block-property! (:db/id property)
-                                   (pu/get-pid :logseq.property/icon)))
-                               (shui/popup-hide! id))
-                             :icon-value icon
-                             :del-btn? (boolean icon)}))]
+                           {:on-chosen
+                            (fn [_e icon]
+                              (if icon
+                                (db-property-handler/upsert-property! (:db/ident property)
+                                                                      (:block/schema property)
+                                                                      {:properties {:logseq.property/icon icon}})
+                                (db-property-handler/remove-block-property! (:db/id property)
+                                                                            (pu/get-pid :logseq.property/icon)))
+                              (shui/popup-hide! id))
+                            :icon-value icon
+                            :del-btn? (boolean icon)}))]
 
          (shui/trigger-as
           :button.property-m
@@ -333,10 +332,6 @@
         *show-new-property-config? (::show-new-property-config? state)
         *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
-        existing-tag-alias (->> db-property/db-attribute-properties
-                                (map db-property/built-in-properties)
-                                (keep #(when (get block (:attribute %)) (:title %)))
-                                set)
         block-type (keyword (get block :block/type :block))
         page? (ldb/page? block)
         exclude-properties (fn [m]
@@ -344,7 +339,7 @@
                                    block-types (if (and page? (not= block-type :page))
                                                  #{:page block-type}
                                                  #{block-type})]
-                               (or (and (not page?) (contains? existing-tag-alias (:block/title m)))
+                               (or (and (not page?) (contains? #{:block/alias} (:block/title m)))
                                    ;; Filters out properties from being in wrong :view-context and :never view-contexts
                                    (and (not= view-context :all) (not (contains? block-types view-context))))))
         property (rum/react *property)
@@ -534,7 +529,7 @@
   [block]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)
-        classes (concat (:block/tags block) (outliner-property/get-class-parents db (:block/tags block)))]
+        classes (concat (:block/tags block) (outliner-property/get-classes-parents db (:block/tags block)))]
     (doseq [class classes]
       (db-async/<get-block repo (:db/id class) :children? false))
     (when (ldb/class? block)

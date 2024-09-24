@@ -123,7 +123,7 @@
                                          types)]
                               (when type
                                 [[:db/retract id :block/type]
-                                [:db/add id :block/type type]])))))
+                                 [:db/add id :block/type type]])))))
         schema (:schema db)]
     (ldb/transact! conn new-type-tx {:db-migrate? true})
     (d/reset-schema! conn (update schema :block/type #(assoc % :db/cardinality :db.cardinality/one)))
@@ -134,12 +134,12 @@
   (let [db @conn]
     (when (ldb/db-based-graph? db)
       (let [datoms (d/datoms db :avet :class/parent)]
-       (->> (set (map :e datoms))
-            (mapcat
-             (fn [id]
-               (let [value (:db/id (:class/parent (d/entity db id)))]
-                 [[:db/retract id :class/parent]
-                  [:db/add id :logseq.property/parent value]]))))))))
+        (->> (set (map :e datoms))
+             (mapcat
+              (fn [id]
+                (let [value (:db/id (:class/parent (d/entity db id)))]
+                  [[:db/retract id :class/parent]
+                   [:db/add id :logseq.property/parent value]]))))))))
 
 (defn- deprecate-class-schema-properties
   [conn _search-db]
@@ -184,12 +184,29 @@
             fix-data (keep
                       (fn [d]
                         (if-let [id (if (= :all-pages (:v d))
-                                   (:db/id (ldb/get-case-page db common-config/views-page-name))
-                                   (:db/id (d/entity db (:v d))))]
+                                      (:db/id (ldb/get-case-page db common-config/views-page-name))
+                                      (:db/id (d/entity db (:v d))))]
                           [:db/add (:e d) :logseq.property/view-for id]
                           [:db/retract (:e d) :logseq.property/view-for (:v d)]))
                       datoms)]
         (cons fix-schema fix-data)))))
+
+(defn- add-card-properties
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [card (d/entity db :logseq.class/Card)
+            card-id (:db/id card)]
+        [[:db/add card-id :logseq.property.class/properties :logseq.property.fsrs/due]
+         [:db/add card-id :logseq.property.class/properties :logseq.property.fsrs/state]]))))
+
+(defn- add-query-property-to-query-tag
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [query (d/entity db :logseq.class/Query)
+            query-id (:db/id query)]
+        [[:db/add query-id :logseq.property.class/properties :logseq.property/query]]))))
 
 (defn- add-addresses-in-kvs-table
   [^Object sqlite-db]
@@ -252,7 +269,13 @@
    [18 {:properties [:logseq.property.view/type]}]
    [19 {:classes [:logseq.class/Query]}]
    [20 {:fix fix-view-for}]
-   [21 {:properties [:logseq.property.table/sized-columns]}]])
+   [21 {:properties [:logseq.property.table/sized-columns]}]
+   [22 {:properties [:logseq.property.fsrs/state :logseq.property.fsrs/due]}]
+   [23 {:fix add-card-properties}]
+   [24 {:classes [:logseq.class/Cards]}]
+   [25 {:classes [:logseq.class/Advanced-query]
+        :properties [:logseq.property/query]
+        :fix add-query-property-to-query-tag}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

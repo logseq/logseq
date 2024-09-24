@@ -132,7 +132,8 @@
         (keep
          (fn [property]
            (let [ident (or (:db/ident property) (:id property))]
-             (when-not (contains? #{:logseq.property/built-in?} ident)
+             (when-not (or (contains? #{:logseq.property/built-in?} ident)
+                           (contains? #{:map :entity} (get-in property [:block/schema :type])))
                (let [property (if (de/entity? property)
                                 property
                                 (or (db/entity ident) property))
@@ -268,76 +269,74 @@
         remove-resizing-class #(dom/remove-class! js/document.documentElement "is-resizing-buf")]
 
     (rum/use-effect!
-      (fn []
-        (when (number? dx)
-          (some-> (rum/deref *el)
-            (dom/set-style! :transform (str "translate3D(" dx "px , 0, 0)")))))
-      [dx])
+     (fn []
+       (when (number? dx)
+         (some-> (rum/deref *el)
+                 (dom/set-style! :transform (str "translate3D(" dx "px , 0, 0)")))))
+     [dx])
 
     (rum/use-effect!
-      (fn []
-        (when-let [el (and (fn? js/window.interact) (rum/deref *el))]
-          (let [*field-rect (atom nil)
-                min-width 120
-                max-width 500]
-            (-> (js/interact el)
-              (.draggable
+     (fn []
+       (when-let [el (and (fn? js/window.interact) (rum/deref *el))]
+         (let [*field-rect (atom nil)
+               min-width 120
+               max-width 500]
+           (-> (js/interact el)
+               (.draggable
                 (bean/->js
-                  {:listeners
-                   {:start (fn []
-                             (let [{:keys [width right] :as rect} (bean/->clj (.toJSON (.getBoundingClientRect (.closest el ".ls-table-header-cell"))))
-                                   left-dx (if (>= width min-width) (- min-width width) 0)
-                                   right-dx (if (<= width max-width) (- max-width width) 0)]
-                               (reset! *field-rect rect)
-                               (swap! *field-rect assoc
+                 {:listeners
+                  {:start (fn []
+                            (let [{:keys [width right] :as rect} (bean/->clj (.toJSON (.getBoundingClientRect (.closest el ".ls-table-header-cell"))))
+                                  left-dx (if (>= width min-width) (- min-width width) 0)
+                                  right-dx (if (<= width max-width) (- max-width width) 0)]
+                              (reset! *field-rect rect)
+                              (swap! *field-rect assoc
                                  ;; calculate left/right boundary
-                                 :left-dx left-dx
-                                 :right-dx right-dx
-                                 :left-b (inc (+ left-dx right))
-                                 :right-b (inc (+ right-dx right)))
-                               (dom/add-class! el "is-active")))
-                    :move (fn [^js e]
-                            (let [dx (.-dx e)
-                                  pointer-x (js/Math.floor (.-clientX e))
-                                  {:keys [left-b right-b]} @*field-rect
-                                  left-b (js/Math.floor left-b)
-                                  right-b (js/Math.floor right-b)]
-                              (when (and (> pointer-x left-b)
-                                      (< pointer-x right-b))
-                                (set-dx! (fn [dx']
-                                           (if (contains? #{min-width max-width} (abs dx'))
-                                             dx'
-                                             (let [to-dx (+ (or dx' 0) dx)
-                                                   {:keys [left-dx right-dx]} @*field-rect]
-                                               (cond
+                                     :left-dx left-dx
+                                     :right-dx right-dx
+                                     :left-b (inc (+ left-dx right))
+                                     :right-b (inc (+ right-dx right)))
+                              (dom/add-class! el "is-active")))
+                   :move (fn [^js e]
+                           (let [dx (.-dx e)
+                                 pointer-x (js/Math.floor (.-clientX e))
+                                 {:keys [left-b right-b]} @*field-rect
+                                 left-b (js/Math.floor left-b)
+                                 right-b (js/Math.floor right-b)]
+                             (when (and (> pointer-x left-b)
+                                        (< pointer-x right-b))
+                               (set-dx! (fn [dx']
+                                          (if (contains? #{min-width max-width} (abs dx'))
+                                            dx'
+                                            (let [to-dx (+ (or dx' 0) dx)
+                                                  {:keys [left-dx right-dx]} @*field-rect]
+                                              (cond
                                                  ;; left
-                                                 (neg? to-dx) (if (> (abs left-dx) (abs to-dx)) to-dx left-dx)
+                                                (neg? to-dx) (if (> (abs left-dx) (abs to-dx)) to-dx left-dx)
                                                  ;; right
-                                                 (pos? to-dx) (if (> right-dx to-dx) to-dx right-dx)
-                                                 ))))))))
-                    :end (fn []
-                           (set-dx!
-                             (fn [dx]
-                               (let [w (js/Math.round (+ dx (:width @*field-rect)))]
-                                 (set-width! (cond
-                                               (< w min-width) min-width
-                                               (> w max-width) max-width
-                                               :else w)))
-                               (reset! *field-rect nil)
-                               (dom/remove-class! el "is-active")
-                               0)))}}))
-              (.styleCursor false)
-              (.on "dragstart" add-resizing-class)
-              (.on "dragend" remove-resizing-class)
-              (.on "mousedown" util/stop-propagation)
-              ))))
-      [])
+                                                (pos? to-dx) (if (> right-dx to-dx) to-dx right-dx)))))))))
+                   :end (fn []
+                          (set-dx!
+                           (fn [dx]
+                             (let [w (js/Math.round (+ dx (:width @*field-rect)))]
+                               (set-width! (cond
+                                             (< w min-width) min-width
+                                             (> w max-width) max-width
+                                             :else w)))
+                             (reset! *field-rect nil)
+                             (dom/remove-class! el "is-active")
+                             0)))}}))
+               (.styleCursor false)
+               (.on "dragstart" add-resizing-class)
+               (.on "dragend" remove-resizing-class)
+               (.on "mousedown" util/stop-propagation)))))
+     [])
 
     (rum/use-effect!
-      (fn []
-        (when (number? width)
-          (on-sized! width)))
-      [width])
+     (fn []
+       (when (number? width)
+         (on-sized! width)))
+     [width])
 
     [:a.ls-table-resize-handle
      {:data-no-dnd true
@@ -364,27 +363,27 @@
                                    ;; resize handle
                                    (when-not (false? (:resizable? column))
                                      (column-resizer column
-                                       (fn [size]
-                                         (set-sized-columns! (assoc sized-columns (:id column) size)))))])
+                                                     (fn [size]
+                                                       (set-sized-columns! (assoc sized-columns (:id column) size)))))])
                        :disabled? (= (:id column) :select)}) columns)
         items (if show-add-property?
                 (conj items
-                  {:id "add property"
-                   :prop {:style {:width "-webkit-fill-available"
-                                  :min-width 160}
-                          :on-click (fn [] (when (fn? add-property!) (add-property!)))}
-                   :value :add-new-property
-                   :content (add-property-button)
-                   :disabled? true})
+                      {:id "add property"
+                       :prop {:style {:width "-webkit-fill-available"
+                                      :min-width 160}
+                              :on-click (fn [] (when (fn? add-property!) (add-property!)))}
+                       :value :add-new-property
+                       :content (add-property-button)
+                       :disabled? true})
                 items)
         selection-rows-count (count selected-rows)]
     (shui/table-header
-      (dnd/items items {:vertical? false
-                        :on-drag-end (fn [ordered-columns _m]
-                                       (set-ordered-columns! ordered-columns))})
-      (when (pos? selection-rows-count)
-        [:div.absolute.top-0.left-8
-         (action-bar table selected-rows option)]))))
+     (dnd/items items {:vertical? false
+                       :on-drag-end (fn [ordered-columns _m]
+                                      (set-ordered-columns! ordered-columns))})
+     (when (pos? selection-rows-count)
+       [:div.absolute.top-0.left-8
+        (action-bar table selected-rows option)]))))
 
 (rum/defc table-row < rum/reactive
   [{:keys [row-selected?] :as table} row columns props {:keys [show-add-property?]}]
@@ -452,10 +451,10 @@
 
 (comment
   (defn- property-ref-type?
-   [property]
-   (let [schema (:block/schema property)
-         type (:type schema)]
-     (db-property-type/all-ref-property-types type))))
+    [property]
+    (let [schema (:block/schema property)
+          type (:type schema)]
+      (db-property-type/all-ref-property-types type))))
 
 (defn- get-property-values
   [rows property]
@@ -807,7 +806,6 @@
                         (set-filters! new-filters))))
         :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
 
-
       (filter-value-select table property value operator idx))))
 
 (rum/defc filters-row < rum/static
@@ -1008,27 +1006,27 @@
   [table option row-selection add-new-object! ready?]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))]
     (shui/table
-    (let [columns' (:columns table)
-          rows (:rows table)]
-      [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
-       {:class (when (not ready?) "invisible")}
-       [:div.relative
-        (table-header table columns' option selected-rows)
+     (let [columns' (:columns table)
+           rows (:rows table)]
+       [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
+        {:class (when (not ready?) "invisible")}
+        [:div.relative
+         (table-header table columns' option selected-rows)
 
-        (ui/virtualized-list
-         {:custom-scroll-parent (gdom/getElement "main-content-container")
-          :increase-viewport-by 128
-          :overscan 128
-          :compute-item-key (fn [idx]
-                              (let [block (nth rows idx)]
-                                (str "table-row-" (:db/id block))))
-          :total-count (count rows)
-          :item-content (fn [idx]
-                          (let [row (nth rows idx)]
-                            (table-row table row columns' {} option)))})
+         (ui/virtualized-list
+          {:custom-scroll-parent (gdom/getElement "main-content-container")
+           :increase-viewport-by 128
+           :overscan 128
+           :compute-item-key (fn [idx]
+                               (let [block (nth rows idx)]
+                                 (str "table-row-" (:db/id block))))
+           :total-count (count rows)
+           :item-content (fn [idx]
+                           (let [row (nth rows idx)]
+                             (table-row table row columns' {} option)))})
 
-        (when add-new-object!
-          (shui/table-footer (add-new-row table)))]]))))
+         (when add-new-object!
+           (shui/table-footer (add-new-row table)))]]))))
 
 (rum/defc list-view < rum/static
   [view-entity result config]
