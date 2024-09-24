@@ -331,30 +331,31 @@
         :icon/numberedChildren]]
 
       ;; https://orgmode.org/manual/Structure-Templates.html
-      (cond->
-       [["Quote" (->block "quote")
-         "Create a quote block"
-         :icon/quote-block
-         "BLOCK TYPE"]
+      (when-not db?
+        (cond->
+         [["Quote" (->block "quote")
+           "Create a quote block"
+           :icon/quote-block
+           "BLOCK TYPE"]
         ;; Should this be replaced by "Code block"?
-        ["Src" (->block "src") "Create a code block"]
-        ["Advanced Query" (->block "query") "Create an advanced query block"]
-        ["Latex export" (->block "export" "latex") "Create a latex block"]
-        ["Note" (->block "note") "Create a note block"]
-        ["Tip" (->block "tip") "Create a tip block"]
-        ["Important" (->block "important") "Create an important block"]
-        ["Caution" (->block "caution") "Create a caution block"]
-        ["Pinned" (->block "pinned") "Create a pinned block"]
-        ["Warning" (->block "warning") "Create a warning block"]
-        ["Example" (->block "example") "Create an example block"]
-        ["Export" (->block "export") "Create an export block"]
-        ["Verse" (->block "verse") "Create a verse block"]
-        ["Ascii" (->block "export" "ascii") "Create an ascii block"]
-        ["Center" (->block "center") "Create a center block"]]
+          ["Src" (->block "src") "Create a code block"]
+          ["Advanced Query" (->block "query") "Create an advanced query block"]
+          ["Latex export" (->block "export" "latex") "Create a latex block"]
+          ["Note" (->block "note") "Create a note block"]
+          ["Tip" (->block "tip") "Create a tip block"]
+          ["Important" (->block "important") "Create an important block"]
+          ["Caution" (->block "caution") "Create a caution block"]
+          ["Pinned" (->block "pinned") "Create a pinned block"]
+          ["Warning" (->block "warning") "Create a warning block"]
+          ["Example" (->block "example") "Create an example block"]
+          ["Export" (->block "export") "Create an export block"]
+          ["Verse" (->block "verse") "Create a verse block"]
+          ["Ascii" (->block "export" "ascii") "Create an ascii block"]
+          ["Center" (->block "center") "Create a center block"]]
 
         ;; FIXME: current page's format
-        (= :org (state/get-preferred-format))
-        (conj ["Properties" (->properties)]))
+          (= :org (state/get-preferred-format))
+          (conj ["Properties" (->properties)])))
 
       ;; advanced
       [["Query"

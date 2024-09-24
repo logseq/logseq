@@ -273,8 +273,7 @@
    [22 {:properties [:logseq.property.fsrs/state :logseq.property.fsrs/due]}]
    [23 {:fix add-card-properties}]
    [24 {:classes [:logseq.class/Cards]}]
-   [25 {:classes [:logseq.class/Advanced-Query]
-        :properties [:logseq.property/query]
+   [25 {:properties [:logseq.property/query]
         :fix add-query-property-to-query-tag}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]

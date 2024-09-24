@@ -3282,13 +3282,15 @@
         (db-properties-cp config block {:in-block-container? true})])
 
      (when (and db-based? (not collapsed?) (not (or table? property?)) (not (string/blank? (:block/title (:logseq.property/query block)))))
-       (let [query (:block/title (:logseq.property/query block))]
-         [:div.dsl-query {:style {:padding-left 42}}
+       (let [query (:block/title (:logseq.property/query block))
+             result (common-util/safe-read-string query)
+             advanced-query? (and (map? result) (:query result))]
+         [:div {:style {:padding-left 42}}
           (query/custom-query (wrap-query-components (assoc config
-                                                            :dsl-query? true
+                                                            :dsl-query? (not advanced-query?)
                                                             :cards? (ldb/class-instance? (db/entity :logseq.class/Cards) block)))
-                              {:builder nil
-                               :query (query-builder-component/sanitize-q query)})]))
+                              (if advanced-query? result {:builder nil
+                                                          :query (query-builder-component/sanitize-q query)}))]))
 
      (when-not (or (:hide-children? config) in-whiteboard? (or table? property?))
        (let [config' (-> (update config :level inc)
@@ -3635,7 +3637,7 @@
 
       ["Custom" "query" _options _result content]
       (try
-        (let [query (reader/read-string content)]
+        (let [query (common-util/safe-read-string content)]
           (query/custom-query (wrap-query-components config) query))
         (catch :default e
           (log/error :read-string-error e)
