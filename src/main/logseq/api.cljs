@@ -87,6 +87,13 @@
       (string/lower-case))
     k))
 
+(defn- encode-user-property-name
+  [k]
+  (if (string? k)
+    (-> k (string/trim)
+      (string/replace "/" "")
+      (string/replace " " ""))))
+
 ;; helpers
 (defn ^:export install-plugin-hook
   [pid hook ^js opts]
@@ -863,7 +870,7 @@
         property-name' (convert?to-built-in-property-name property-name')]
     (if (qualified-keyword? property-name')
       property-name'
-      (db-property/create-user-property-ident-from-name property-name "plugin.property"))))
+      (keyword "plugin.property" (encode-user-property-name property-name)))))
 
 ;; properties (db only)
 (defn ^:export get_property
