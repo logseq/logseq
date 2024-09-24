@@ -1,44 +1,43 @@
 (ns frontend.components.cmdk.core
-  (:require
-   [cljs-bean.core :as bean]
-   [clojure.string :as string]
-   [frontend.components.block :as block]
-   [frontend.components.cmdk.list-item :as list-item]
-   [frontend.components.title :as title]
-   [frontend.extensions.pdf.utils :as pdf-utils]
-   [frontend.context.i18n :refer [t]]
-   [frontend.db :as db]
-   [frontend.db.model :as model]
-   [frontend.handler.command-palette :as cp-handler]
-   [frontend.handler.editor :as editor-handler]
-   [frontend.handler.page :as page-handler]
-   [frontend.handler.route :as route-handler]
-   [frontend.handler.whiteboard :as whiteboard-handler]
-   [frontend.handler.notification :as notification]
-   [frontend.modules.shortcut.core :as shortcut]
-   [frontend.handler.db-based.page :as db-page-handler]
-   [frontend.search :as search]
-   [frontend.state :as state]
-   [frontend.ui :as ui]
-   [frontend.util :as util]
-   [frontend.util.page :as page-util]
-   [goog.functions :as gfun]
-   [goog.object :as gobj]
-   [logseq.shui.ui :as shui]
-   [promesa.core :as p]
-   [rum.core :as rum]
-   [frontend.mixins :as mixins]
-   [logseq.common.util.block-ref :as block-ref]
-   [logseq.common.util :as common-util]
-   [frontend.modules.shortcut.utils :as shortcut-utils]
-   [frontend.config :as config]
-   [logseq.common.path :as path]
-   [electron.ipc :as ipc]
-   [frontend.util.text :as text-util]
-   [goog.userAgent]
-   [frontend.db.async :as db-async]
-   [logseq.db :as ldb]
-   [logseq.common.util.namespace :as ns-util]))
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [electron.ipc :as ipc]
+            [frontend.components.block :as block]
+            [frontend.components.cmdk.list-item :as list-item]
+            [frontend.components.title :as title]
+            [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
+            [frontend.db.async :as db-async]
+            [frontend.db.model :as model]
+            [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.handler.command-palette :as cp-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.mixins :as mixins]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
+            [frontend.search :as search]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [frontend.util.page :as page-util]
+            [frontend.util.text :as text-util]
+            [goog.functions :as gfun]
+            [goog.object :as gobj]
+            [goog.userAgent]
+            [logseq.common.path :as path]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.db :as ldb]
+            [logseq.graph-parser.text :as text]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -84,7 +83,7 @@
                      (str "Create class called '" (get-class-from-input q) "'")
                      (str "Create page called '" q "'"))
              :source-create :page}]
-        (remove nil?)))))
+           (remove nil?)))))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered [state search-mode]
@@ -107,7 +106,7 @@
                             (take 5 items))))
         node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
                        (when-not (string/blank? input)
-                         (or (some-> (last (string/split input ns-util/parent-char))
+                         (or (some-> (text/get-namespace-last-part input)
                                      string/trim
                                      db/get-page)
                              (some (fn [block]
@@ -159,9 +158,9 @@
 
 (defn state->highlighted-item [state]
   (or (some-> state ::highlighted-item deref)
-    (some->> (state->results-ordered state (:search/mode @state/state))
-      (mapcat last)
-      (first))))
+      (some->> (state->results-ordered state (:search/mode @state/state))
+               (mapcat last)
+               (first))))
 
 (defn state->action [state]
   (let [highlighted-item (state->highlighted-item state)]
@@ -181,12 +180,12 @@
 (defmethod load-results :initial [_ state]
   (let [!results (::results state)
         command-items (->> (cp-handler/top-commands 100)
-                        (remove (fn [c] (= :window/close (:id c))))
-                        (map #(hash-map :icon "command"
-                                :icon-theme :gray
-                                :text (translate t %)
-                                :shortcut (:shortcut %)
-                                :source-command %)))]
+                           (remove (fn [c] (= :window/close (:id c))))
+                           (map #(hash-map :icon "command"
+                                           :icon-theme :gray
+                                           :text (translate t %)
+                                           :shortcut (:shortcut %)
+                                           :source-command %)))]
     (reset! !results (assoc-in default-results [:commands :items] command-items))))
 
 ;; The commands search uses the command-palette handler
@@ -195,18 +194,18 @@
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
     (let [commands (->> (cp-handler/top-commands 1000)
-                     (map #(assoc % :t (translate t %))))
+                        (map #(assoc % :t (translate t %))))
           search-results (if (string/blank? @!input)
                            commands
                            (search/fuzzy-search commands @!input {:extract-fn :t}))]
       (->> search-results
-        (map #(hash-map :icon "command"
-                :icon-theme :gray
-                :text (translate t %)
-                :shortcut (:shortcut %)
-                :source-command %))
-        (hash-map :status :success :items)
-        (swap! !results update group merge)))))
+           (map #(hash-map :icon "command"
+                           :icon-theme :gray
+                           :text (translate t %)
+                           :shortcut (:shortcut %)
+                           :source-command %))
+           (hash-map :status :success :items)
+           (swap! !results update group merge)))))
 
 (defn highlight-content-query
   "Return hiccup of highlighted content FTS result"
@@ -287,22 +286,22 @@
     (swap! !results assoc-in [group :status] :loading)
     (p/let [files* (search/file-search @!input 99)
             files (remove
-                    (fn [f]
-                      (and
-                        f
-                        (string/ends-with? f ".edn")
-                        (or (string/starts-with? f "whiteboards/")
+                   (fn [f]
+                     (and
+                      f
+                      (string/ends-with? f ".edn")
+                      (or (string/starts-with? f "whiteboards/")
                           (string/starts-with? f "assets/")
                           (string/starts-with? f "logseq/version-files")
                           (contains? #{"logseq/metadata.edn" "logseq/pages-metadata.edn" "logseq/graphs-txid.edn"} f))))
-                    files*)
+                   files*)
             items (map
-                    (fn [file]
-                      (hash-map :icon "file"
-                        :icon-theme :gray
-                        :text file
-                        :file-path file))
-                    files)]
+                   (fn [file]
+                     (hash-map :icon "file"
+                               :icon-theme :gray
+                               :text file
+                               :file-path file))
+                   files)]
       (swap! !results update group merge {:status :success :items items}))))
 
 (defmethod load-results :themes [group _state]
@@ -328,7 +327,7 @@
   [input]
   (or (when (string/starts-with? input "/")
         (subs input 1))
-    (last (common-util/split-last "/" input))))
+      (last (common-util/split-last "/" input))))
 
 (defmethod load-results :filters [group state]
   (let [!results (::results state)
@@ -368,7 +367,7 @@
 (defmethod load-results :default [_ state]
   (let [filter-group (:group @(::filter state))]
     (if (and (not (some-> state ::input deref seq))
-          (not filter-group))
+             (not filter-group))
       (do (load-results :initial state)
           (load-results :filters state))
       (if filter-group
@@ -443,8 +442,8 @@
 (defn- open-file
   [file-path]
   (if (or (string/ends-with? file-path ".edn")
-        (string/ends-with? file-path ".js")
-        (string/ends-with? file-path ".css"))
+          (string/ends-with? file-path ".js")
+          (string/ends-with? file-path ".css"))
     (route-handler/redirect! {:to :file
                               :path-params {:path file-path}})
     ;; open this file in directory
@@ -547,14 +546,14 @@
         b2 (.-bottom target-rect)]
     (when-not (<= t1 t2 b2 b1)          ; not visible
       (.scrollIntoView target
-        #js {:inline "nearest"
-             :behavior "smooth"}))))
+                       #js {:inline "nearest"
+                            :behavior "smooth"}))))
 
 (rum/defc mouse-active-effect!
   [*mouse-active? deps]
   (rum/use-effect!
-    #(reset! *mouse-active? false)
-    deps)
+   #(reset! *mouse-active? false)
+   deps)
   nil)
 
 (rum/defcs result-group
@@ -828,13 +827,13 @@
 (defn rand-tip
   []
   (rand-nth
-    [[:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-      [:div "Type"]
-      (shui/shortcut "/")
-      [:div "to filter search results"]]
-     [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-      (shui/shortcut ["mod" "enter"])
-      [:div "to open search in the sidebar"]]]))
+   [[:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
+     [:div "Type"]
+     (shui/shortcut "/")
+     [:div "to filter search results"]]
+    [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
+     (shui/shortcut ["mod" "enter"])
+     [:div "to open search in the sidebar"]]]))
 
 (rum/defcs tip <
   {:init (fn [state]
@@ -854,31 +853,31 @@
 (rum/defc hint-button
   [text shortcut opts]
   (shui/button
-    (merge {:class "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80"
-            :variant :ghost
-            :size  :sm}
-      opts)
-    [[:span.opacity-60 text]
+   (merge {:class "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80"
+           :variant :ghost
+           :size  :sm}
+          opts)
+   [[:span.opacity-60 text]
      ;; shortcut
-     (when (not-empty shortcut)
-       (for [key shortcut]
-         [:div.ui__button-shortcut-key
-          (case key
-            "cmd" [:div (if goog.userAgent/MAC "⌘" "Ctrl")]
-            "shift" [:div "⇧"]
-            "return" [:div "⏎"]
-            "esc" [:div.tracking-tightest {:style {:transform   "scaleX(0.8) scaleY(1.2) "
-                                                   :font-size   "0.5rem"
-                                                   :font-weight "500"}} "ESC"]
-            (cond-> key (string? key) .toUpperCase))]))]))
+    (when (not-empty shortcut)
+      (for [key shortcut]
+        [:div.ui__button-shortcut-key
+         (case key
+           "cmd" [:div (if goog.userAgent/MAC "⌘" "Ctrl")]
+           "shift" [:div "⇧"]
+           "return" [:div "⏎"]
+           "esc" [:div.tracking-tightest {:style {:transform   "scaleX(0.8) scaleY(1.2) "
+                                                  :font-size   "0.5rem"
+                                                  :font-weight "500"}} "ESC"]
+           (cond-> key (string? key) .toUpperCase))]))]))
 
 (rum/defc hints
   [state]
   (let [action (state->action state)
         button-fn (fn [text shortcut & {:as opts}]
                     (hint-button text shortcut
-                      {:on-click #(handle-action action (assoc state :opts opts) %)
-                       :muted    true}))]
+                                 {:on-click #(handle-action action (assoc state :opts opts) %)
+                                  :muted    true}))]
     (when action
       [:div.hints
        [:div.text-sm.leading-6
@@ -918,12 +917,12 @@
    [:div "Search only:"]
    [:div group-name]
    (shui/button
-     {:variant  :ghost
-      :size     :icon
-      :class    "p-1 scale-75"
-      :on-click (fn []
-                  (reset! (::filter state) nil))}
-     (shui/tabler-icon "x"))])
+    {:variant  :ghost
+     :size     :icon
+     :class    "p-1 scale-75"
+     :on-click (fn []
+                 (reset! (::filter state) nil))}
+    (shui/tabler-icon "x"))])
 
 (rum/defcs cmdk
   < rum/static
@@ -1003,12 +1002,12 @@
                    results-ordered)]
         (when-not (= ["Filters"] (map first items))
           (if (seq items)
-          (for [[group-name group-key _group-count group-items] items]
-            (let [title (string/capitalize group-name)]
-              (result-group state title group-key group-items first-item sidebar?)))
-          [:div.flex.flex-col.p-4.opacity-50
-           (when-not (string/blank? @*input)
-             "No matched results")])))]
+            (for [[group-name group-key _group-count group-items] items]
+              (let [title (string/capitalize group-name)]
+                (result-group state title group-key group-items first-item sidebar?)))
+            [:div.flex.flex-col.p-4.opacity-50
+             (when-not (string/blank? @*input)
+               "No matched results")])))]
      (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]
