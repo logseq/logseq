@@ -97,9 +97,11 @@ test('block related apis',
  */
 export async function loadLocalE2eTestsPlugin(page) {
   const pid = 'a-logseq-plugin-for-e2e-tests'
-  const hasLoaded = await page.evaluate(([pid]) => {
+  const hasLoaded = await page.evaluate(async ([pid]) => {
     // @ts-ignore
     const p = window.LSPluginCore.registeredPlugins.get(pid)
+    // @ts-ignore
+    await window.LSPluginCore.enable(pid)
     return p != null
   }, [pid])
 
