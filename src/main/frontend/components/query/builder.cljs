@@ -21,6 +21,7 @@
             [promesa.core :as p]
             [frontend.config :as config]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.db-mixins :as db-mixins]))
 
@@ -153,12 +154,18 @@
 
 (rum/defc property-value-select-inner
   < rum/reactive db-mixins/query
-  [repo *property *find *tree opts loc db-graph? values]
+  [repo *property *find *tree opts loc values {:keys [db-graph? ref-property? property-type]}]
   (let [;; FIXME: lazy load property values consistently on first call
-        _ (when db-graph?
+        ;; Guard against non ref properties like :logseq.property/icon
+        _ (when (and db-graph? ref-property?)
             (doseq [id values] (db/sub-block id)))
         values' (if db-graph?
-                  (map #(db-property/property-value-content (db/entity repo %)) values)
+                  (if ref-property?
+                    (map #(db-property/property-value-content (db/entity repo %)) values)
+                    (if (contains? #{:checkbox} property-type)
+                      values
+                      ;; Don't display non-ref property values as they don't have display and query support
+                      []))
                   values)
         values'' (map #(hash-map :value (str %)
                                    ;; Preserve original-value as some values like boolean do not display in select
@@ -175,18 +182,23 @@
 (rum/defc property-value-select
   [repo *property *find *tree opts loc]
   (let [db-graph? (sqlite-util/db-based-graph? repo)
+        property-type (when db-graph? (get-in (db/entity repo @*property) [:block/schema :type]))
+        ref-property? (and db-graph? (contains? db-property-type/all-ref-property-types property-type))
         [values set-values!] (rum/use-state nil)]
     (rum/use-effect!
      (fn []
        (p/let [result (if db-graph?
                         (db-async/<get-block-property-values repo @*property)
                         (db-async/<file-get-property-values repo @*property))]
-         (when db-graph?
+         (when (and db-graph? ref-property?)
            (doseq [db-id result]
              (db-async/<get-block repo db-id :children? false)))
          (set-values! result)))
      [@*property])
-    (property-value-select-inner repo *property *find *tree opts loc db-graph? values)))
+    (property-value-select-inner repo *property *find *tree opts loc values
+                                 {:db-graph? db-graph?
+                                  :ref-property? ref-property?
+                                  :property-type property-type})))
 
 (rum/defc tags
   [repo *tree opts loc]
