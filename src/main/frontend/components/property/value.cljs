@@ -709,6 +709,28 @@
         :on-click (fn [] (<create-new-block! block property ""))}
        (property-empty-btn-value property)])))
 
+(rum/defcs query-cp <
+  (rum/local false ::show-setting?)
+  [state block property v-block]
+  [:div.flex.flex-1.flex-row.gap-1.justify-between
+   [:div.flex.flex-1 (property-normal-block-value block property v-block)]
+   (shui/button
+    {:variant :ghost
+     :size :sm
+     :class "jtrigger px-1 text-muted-foreground"
+     :title "Update query"
+     :on-click (fn [e]
+                 (shui/popup-show!
+                  (.-target e)
+                  (fn []
+                    [:div.p-4.h-64 {:style {:width "42rem"}}
+                     (let [block (db/entity (:db/id v-block))
+                           query (:block/title block)]
+                       (query-builder-component/builder query {:property property
+                                                               :block block}))])
+                  {:align :end}))}
+    (ui/icon "settings" {:size 18}))])
+
 (rum/defcs property-block-value < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [block (first (:rum/args state))]
@@ -726,9 +748,7 @@
           (when v-block
             (cond
               (= (:db/ident property) :logseq.property/query)
-              (let [query (:block/title v-block)]
-                (query-builder-component/builder query {:property property
-                                                        :block v-block}))
+              (query-cp block property v-block)
 
               (:block/page v-block)
               (property-normal-block-value block property v-block)

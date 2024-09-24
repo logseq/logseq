@@ -21,17 +21,20 @@
          (assoc (db/entity (:db/id b)) :id (:db/id b))) result))
 
 (defn- init-result
-  [result]
+  [result view-entity]
   (let [result' (if (map? result)
                   (mapcat second result)
                   result)]
-    (result->entities result')))
+    (->> (result->entities result')
+         (remove (fn [b] (contains?
+                          #{(:db/id view-entity) (:db/id (:logseq.property/query view-entity))}
+                          (:db/id b)))))))
 
 (rum/defcs query-result < rum/static mixins/container-id
   (rum/local nil ::result)
   [state config view-entity result]
   (let [*result (::result state)
-        result' (or @*result (init-result result))
+        result' (or @*result (init-result result view-entity))
         columns' (columns (assoc config :container-id (::container-id state)) result')]
     [:div.query-result.w-full.mt-1
      {:on-pointer-down util/stop-propagation}
