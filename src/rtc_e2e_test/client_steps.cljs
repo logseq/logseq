@@ -7,7 +7,6 @@
             [frontend.worker.rtc.core :as rtc-core]
             [helper]
             [logseq.db :as ldb]
-            [logseq.outliner.batch-tx :as batch-tx]
             [missionary.core :as m]))
 
 (def ^:private step0
