@@ -20,5 +20,6 @@ logseq.graph-parser.block/extract-plain
 logseq.graph-parser.block/extract-refs-from-text
 ;; API
 logseq.graph-parser.text/get-page-name
+logseq.graph-parser.text/get-namespace-last-part
 ;; API
 logseq.graph-parser.whiteboard/shape->block
