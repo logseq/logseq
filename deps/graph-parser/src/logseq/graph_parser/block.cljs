@@ -388,11 +388,10 @@
         (let [type (if class? "class" (or (:block/type page) "page"))]
           (assoc page :block/type type))))))
 
-(defn- db-invalid-namespace-page?
-  "Namespace page neither exists nor journal"
-  [db db-based? page]
+(defn- db-namespace-page?
+  "Namespace page that're not journal pages"
+  [db-based? page]
   (and db-based?
-       (not (ldb/get-page db page))
        (text/namespace-page? page)
        (not (common-date/valid-journal-title-with-slash? page))))
 
@@ -411,12 +410,12 @@
                       (= (first form) "Custom")
                       (= (second form) "query"))
          (when-let [page (get-page-reference form (:format block))]
-           (when-let [page' (when-not (db-invalid-namespace-page? db db-based? page)
+           (when-let [page' (when-not (db-namespace-page? db-based? page)
                               page)]
              (swap! *refs conj page')))
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
-             (when-let [tag' (when-not (db-invalid-namespace-page? db db-based? tag)
+             (when-let [tag' (when-not (db-namespace-page? db-based? tag)
                                tag)]
                (when (common-util/tag-valid? tag')
                  (swap! *refs conj tag')
