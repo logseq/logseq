@@ -20,11 +20,6 @@
     :properties {:logseq.property/icon {:type :tabler-icon :id "search"}}
     :schema {:properties [:logseq.property/query]}}
 
-   :logseq.class/Advanced-Query
-   {:title "Advanced Query"
-    :properties {:logseq.property/icon {:type :tabler-icon :id "search"}
-                 :logseq.property/parent :logseq.class/Query}}
-
    :logseq.class/Card
    {:title "Card"
     :schema {:properties [:logseq.property.fsrs/state :logseq.property.fsrs/due]}}
