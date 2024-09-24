@@ -146,32 +146,32 @@
                                       (editor-handler/<get-matched-blocks q {:nlp-pages? true}))]
                        (set-matched-pages! result))))]
     (rum/use-effect! search-f [(mixins/use-debounce 50 q)])
-    (let [matched-pages (if (string/blank? q)
-                          (if db-tag?
-                            (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
-                            (->> (map (fn [title] {:block/title title
-                                                   :nlp-date? true})
-                                      date/nlp-pages)
-                                 (take 10)))
-                          ;; reorder, shortest and starts-with first.
-                          (let [matched-pages-with-new-page
-                                (fn [partial-matched-pages]
-                                  (if (or (db/page-exists? q (if db-tag? "class" "page"))
-                                          (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
-                                    partial-matched-pages
-                                    (if db-tag?
-                                      (concat [{:block/title (str (t :new-tag) " " q)}]
-                                              partial-matched-pages)
-                                      (cons {:block/title (str (t :new-page) " " q)}
-                                            partial-matched-pages))))]
-                            (if (and (seq matched-pages)
-                                     (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
-                              (cons (first matched-pages)
-                                    (matched-pages-with-new-page (rest matched-pages)))
-                              (matched-pages-with-new-page matched-pages))))]
+    (let [matched-pages' (if (string/blank? q)
+                           (if db-tag?
+                             (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                             (->> (map (fn [title] {:block/title title
+                                                    :nlp-date? true})
+                                       date/nlp-pages)
+                                  (take 10)))
+                           ;; reorder, shortest and starts-with first.
+                           (let [matched-pages-with-new-page
+                                 (fn [partial-matched-pages]
+                                   (if (or (db/page-exists? q (if db-tag? "class" "page"))
+                                           (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
+                                     partial-matched-pages
+                                     (if db-tag?
+                                       (concat [{:block/title (str (t :new-tag) " " q)}]
+                                               partial-matched-pages)
+                                       (cons {:block/title (str (t :new-page) " " q)}
+                                             partial-matched-pages))))]
+                             (if (and (seq matched-pages)
+                                      (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
+                               (cons (first matched-pages)
+                                     (matched-pages-with-new-page (rest matched-pages)))
+                               (matched-pages-with-new-page matched-pages))))]
       [:<>
        (ui/auto-complete
-        matched-pages
+        matched-pages'
         {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
          :on-enter    (fn []
                         (page-handler/page-not-exists-handler input id q current-pos))
