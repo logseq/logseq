@@ -1639,7 +1639,9 @@
                     arguments)]
     (cond
       (= name "query")
-      (macro-query-cp config arguments)
+      (if (config/db-based-graph? (state/get-current-repo))
+        [:div.warning "{{query}} has been deprecated. Use `/Query` command instead."]
+        (macro-query-cp config arguments))
 
       (= name "function")
       (macro-function-cp config arguments)
