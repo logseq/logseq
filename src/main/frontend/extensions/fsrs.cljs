@@ -316,57 +316,57 @@
         :block/tags
         (:db/id (db/entity :logseq.class/Card)))))))
 
-(defn- cards-in-time-range
-  [cards start-instant end-instant]
-  (assert (and (tick/instant? start-instant)
-               (tick/instant? end-instant))
-          [start-instant end-instant])
-  (->> cards
-       (filter (fn [card] (tick/<= start-instant (:last-repeat card) end-instant)))))
-
-(defn- cards-today
-  [cards]
-  (let [date-today (tick/new-date)
-        start-instant (tick/instant (tick/at date-today (tick/new-time 0 0)))
-        end-instant (tick/instant)]
-    (cards-in-time-range cards start-instant end-instant)))
-
-(defn- cards-recent-7-days
-  [cards]
-  (let [now-instant (tick/instant)
-        date-7-days-ago (tick/date (tick/<< now-instant (tick/new-duration 7 :days)))
-        start-instant (tick/instant (tick/at date-7-days-ago (tick/new-time 0 0)))
-        end-instant now-instant]
-    (cards-in-time-range cards start-instant end-instant)))
-
-(defn- cards-recent-30-days
-  [cards]
-  (let [now-instant (tick/instant)
-        date-30-days-ago (tick/date (tick/<< now-instant (tick/new-duration 30 :days)))
-        start-instant (tick/instant (tick/at date-30-days-ago (tick/new-time 0 0)))
-        end-instant now-instant]
-    (cards-in-time-range cards start-instant end-instant)))
-
-(defn- cards-stat
-  [cards]
-  (let [state-grouped-cards (group-by :state cards)
-        state-cards-count (update-vals state-grouped-cards count)
-        {new-count :new
-         learning-count :learning
-         review-count :review
-         relearning-count :relearning} state-cards-count
-        passed-repeat-count (count (filter #(contains? #{:good :easy} (:logseq/last-rating %)) cards))
-        lapsed-repeat-count (count (filter #(contains? #{:again :hard} (:logseq/last-rating %)) cards))
-        true-retention-percent (when (seq cards) (/ review-count (count cards)))]
-    {:true-retention true-retention-percent
-     :passed-repeats passed-repeat-count
-     :lapsed-repeats lapsed-repeat-count
-     :new-state-cards (or new-count 0)
-     :learning-state-cards (or learning-count 0)
-     :review-state-cards (or review-count 0)
-     :relearning-state-cards (or relearning-count 0)}))
-
 (comment
+  (defn- cards-in-time-range
+    [cards start-instant end-instant]
+    (assert (and (tick/instant? start-instant)
+                 (tick/instant? end-instant))
+            [start-instant end-instant])
+    (->> cards
+         (filter (fn [card] (tick/<= start-instant (:last-repeat card) end-instant)))))
+
+  (defn- cards-today
+    [cards]
+    (let [date-today (tick/new-date)
+          start-instant (tick/instant (tick/at date-today (tick/new-time 0 0)))
+          end-instant (tick/instant)]
+      (cards-in-time-range cards start-instant end-instant)))
+
+  (defn- cards-recent-7-days
+    [cards]
+    (let [now-instant (tick/instant)
+          date-7-days-ago (tick/date (tick/<< now-instant (tick/new-duration 7 :days)))
+          start-instant (tick/instant (tick/at date-7-days-ago (tick/new-time 0 0)))
+          end-instant now-instant]
+      (cards-in-time-range cards start-instant end-instant)))
+
+  (defn- cards-recent-30-days
+    [cards]
+    (let [now-instant (tick/instant)
+          date-30-days-ago (tick/date (tick/<< now-instant (tick/new-duration 30 :days)))
+          start-instant (tick/instant (tick/at date-30-days-ago (tick/new-time 0 0)))
+          end-instant now-instant]
+      (cards-in-time-range cards start-instant end-instant)))
+
+  (defn- cards-stat
+    [cards]
+    (let [state-grouped-cards (group-by :state cards)
+          state-cards-count (update-vals state-grouped-cards count)
+          {new-count :new
+           learning-count :learning
+           review-count :review
+           relearning-count :relearning} state-cards-count
+          passed-repeat-count (count (filter #(contains? #{:good :easy} (:logseq/last-rating %)) cards))
+          lapsed-repeat-count (count (filter #(contains? #{:again :hard} (:logseq/last-rating %)) cards))
+          true-retention-percent (when (seq cards) (/ review-count (count cards)))]
+      {:true-retention true-retention-percent
+       :passed-repeats passed-repeat-count
+       :lapsed-repeats lapsed-repeat-count
+       :new-state-cards (or new-count 0)
+       :learning-state-cards (or learning-count 0)
+       :review-state-cards (or review-count 0)
+       :relearning-state-cards (or relearning-count 0)}))
+
   (defn <cards-stat
     "Some explanations on return value:
   :true-retention, cards in review-state / all-cards-count

@@ -105,7 +105,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                            (js/console.error "Upsert blocks wrong data: ")
                            (js/console.dir item)
                            (throw (ex-info "Search upsert-blocks wrong data: "
-                                          (bean/->clj item)))))))))
+                                           (bean/->clj item)))))))))
 
 (defn delete-blocks!
   [db ids]
@@ -220,10 +220,7 @@ DROP TRIGGER IF EXISTS blocks_au;
       ;; (let [content (if (and db-based? (seq (:block/properties block)))
       ;;                 (str content (when (not= content "") "\n") (get-db-properties-str db properties))
       ;;                 content)])
-    (let [parent (:logseq.property/parent block)
-          title (if (and parent (= "page" (:block/type block)))
-                  (str (:block/title parent) ns-util/parent-char title)
-                  title)]
+    (let [title (ldb/get-title-with-parents block)]
       (when uuid
         {:id (str uuid)
          :page (str (or (:block/uuid page) uuid))
@@ -307,7 +304,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                   (ldb/class? block))))
                                       {:db/id (:db/id block)
                                        :block/uuid block-id
-                                       :block/title (or snippet title)
+                                       :block/title (if (ldb/page? block)
+                                                      (ldb/get-title-with-parents block)
+                                                      (or snippet title))
                                        :block/page (if (common-util/uuid-string? page)
                                                      (uuid page)
                                                      nil)

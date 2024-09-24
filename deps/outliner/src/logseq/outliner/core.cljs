@@ -259,8 +259,8 @@
       [?b :block/name ?child-name]
       [?p :block/name ?parent-name]]
     db
-     (common-util/page-name-sanity-lc parent-title)
-     (common-util/page-name-sanity-lc child-title))
+    (common-util/page-name-sanity-lc parent-title)
+    (common-util/page-name-sanity-lc child-title))
    first
    (d/entity db)))
 
@@ -357,7 +357,7 @@
                   db-based?
                   (dissoc :block/properties))
           m* (-> data'
-                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered :block.temp/parent-title?
+                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?)
                  common-util/remove-nils
                  block-with-updated-at
@@ -500,7 +500,6 @@
                                       :db/id db-id)]))
                           [(assoc block :db/id (dec (- idx)))]))) blocks)
        (apply concat)))
-
 
 (defn- get-id
   [x]
@@ -700,7 +699,6 @@
           sibling? (if (ldb/page? block) false sibling?)
           block (if (de/entity? block) block (d/entity db (:db/id block)))]
       [block sibling?])))
-
 
 (defn ^:api blocks-with-level
   "Calculate `:block/level` for all the `blocks`. Blocks should be sorted already."

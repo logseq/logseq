@@ -290,7 +290,7 @@
          block-id (when (and (not (config/db-based-graph? repo)) (map? properties))
                     (get properties :id))
          content (if (config/db-based-graph? repo)
-                   (:block/title-with-refs-parent (db/entity (:db/id block)))
+                   (:block/title (db/entity (:db/id block)))
                    (-> (property-file/remove-built-in-properties-when-file-based repo format title)
                        (drawer/remove-logbook)))]
      (cond
@@ -1658,7 +1658,8 @@
           matched (keep (fn [b]
                           (when-let [id (:block/uuid b)]
                             (when-not (= id (:block/uuid block)) ; avoid block self-reference
-                              (db/entity [:block/uuid id]))))
+                              (assoc (db/entity [:block/uuid id])
+                                     :block/title (:block/title b)))))
                         nodes)]
     (-> (concat matched
                 (when nlp-pages?

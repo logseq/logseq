@@ -137,7 +137,7 @@
        (views/view view-entity {:data data
                                 :set-data! set-data!
                                 :views-title (class-views class views view-entity {:set-view-entity! set-view-entity!
-                                                                       :set-views! set-views!})
+                                                                                   :set-views! set-views!})
                                 :columns columns
                                 :add-new-object! #(add-new-class-object! class set-data!)
                                 :show-add-property? true
@@ -165,7 +165,7 @@
   (when class
     (let [class (db/sub-block (:db/id class))
           config {:container-id (:container-id state)}
-          properties (cond->> (outliner-property/get-class-properties (db/get-db) class)
+          properties (cond->> (outliner-property/get-class-properties class)
                        (= :logseq.class/Root (:db/ident class))
                        (concat [(db/entity :block/tags)]))
           repo (state/get-current-repo)
