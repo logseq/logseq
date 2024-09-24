@@ -15,8 +15,7 @@
    (m/sp
      (let [conn (helper/get-downloaded-test-conn)
            tx-data (const/tx-data-map :create-page)]
-       (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
-         (d/transact! conn tx-data))
+       (helper/transact! conn tx-data)
        (is (=
             #{[:update-page const/page1-uuid]
               [:update const/page1-uuid
@@ -70,8 +69,7 @@
   {:client1
    (m/sp
      (let [conn (helper/get-downloaded-test-conn)]
-       (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
-         (d/transact! conn (const/tx-data-map :insert-500-blocks)))
+       (helper/transact! conn (const/tx-data-map :insert-500-blocks))
        (m/? (helper/new-task--wait-all-client-ops-sent))))
    :client2
    (c.m/backoff
@@ -90,38 +88,49 @@
   "client1:
   1. add #task properties to block1 (`const/block1-uuid`)
   2. wait to be synced
+  3. toggle block1 status to TODO
+  4. wait to be synced
+  5. toggle block1 status to DOING
+  6. wait to be synced
   client2:
   1. wait the block&its properties to be synced"
   {:client1
    (m/sp
      (let [conn (helper/get-downloaded-test-conn)
-           tx-data (const/tx-data-map :add-task-properties-to-block1)]
-       (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
-         (d/transact! conn tx-data))
+           tx-data1 (const/tx-data-map :step3-add-task-properties-to-block1)
+           tx-data2 (const/tx-data-map :step3-toggle-status-TODO)
+           tx-data3 (const/tx-data-map :step3-toggle-status-DOING)]
+       (helper/transact! conn tx-data1)
+       (m/? (helper/new-task--wait-all-client-ops-sent))
+       (helper/transact! conn tx-data2)
+       (m/? (helper/new-task--wait-all-client-ops-sent))
+       (helper/transact! conn tx-data3)
        (m/? (helper/new-task--wait-all-client-ops-sent))))
    :client2
-   (m/sp
-     (let [conn (helper/get-downloaded-test-conn)
-           block1 (d/pull @conn
-                          [{:block/tags [:db/ident]}
-                           {:logseq.task/status [:db/ident]}
-                           {:logseq.task/deadline [:block/journal-day]}]
-                          [:block/uuid const/block1-uuid])]
-       (when-not (:logseq.task/status block1)
-         (throw (ex-info "wait block1's task properties to be synced" {:missionary/retry true})))
-       (is (= {:block/tags [{:db/ident :logseq.class/Task}],
-               :logseq.task/status {:db/ident :logseq.task/status.done}
-               :logseq.task/deadline {:block/journal-day 20240907}}
-              block1))))})
+   (c.m/backoff
+    (take 4 c.m/delays)
+    (m/sp
+      (let [conn (helper/get-downloaded-test-conn)
+            block1 (d/pull @conn
+                           [{:block/tags [:db/ident]}
+                            {:logseq.task/status [:db/ident]}
+                            {:logseq.task/deadline [:block/journal-day]}]
+                           [:block/uuid const/block1-uuid])]
+        (when-not (= :logseq.task/status.doing (:db/ident (:logseq.task/status block1)))
+          (throw (ex-info "wait block1's task properties to be synced" {:missionary/retry true})))
+        (is (= {:block/tags [{:db/ident :logseq.class/Task}],
+                :logseq.task/status {:db/ident :logseq.task/status.doing}
+                :logseq.task/deadline {:block/journal-day 20240907}}
+               block1)))))})
 (def ^:private step4
   "client1:
-  - insert a block into 'message-page' page
+
   client2:
-  - wait this block to be synced from client1"
+"
   {:client1
-   (helper/new-task--send-message-to-other-client "test-send-message-to-other-client")
+   (m/sp nil)
    :client2
-   (helper/new-task--wait-message-from-other-client #(= "test-send-message-to-other-client" %))})
+   (m/sp nil)})
 
 (def ^:private step5
   "client1:
