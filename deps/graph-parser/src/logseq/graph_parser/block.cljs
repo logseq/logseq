@@ -395,6 +395,42 @@
        (text/namespace-page? page)
        (not (common-date/valid-journal-title-with-slash? page))))
 
+(defn- ref->map
+  [db *col {:keys [date-formatter db-based? *name->id tag?]}]
+  (let [col (remove string/blank? @*col)
+        children-pages (when-not db-based?
+                         (->> (mapcat (fn [p]
+                                        (let [p (if (map? p)
+                                                  (:block/title p)
+                                                  p)]
+                                          (when (string? p)
+                                            (let [p (or (text/get-nested-page-name p) p)]
+                                              (when (text/namespace-page? p)
+                                                (common-util/split-namespace-pages p))))))
+                                      col)
+                              (remove string/blank?)
+                              (distinct)))
+        col (->> (distinct (concat col children-pages))
+                 (remove nil?))]
+    (map
+     (fn [item]
+       (let [macro? (and (map? item)
+                         (= "macro" (:type item)))]
+         (when-not macro?
+           (let [m (page-name->map item db true date-formatter {:class? tag?})
+                 result (cond->> m
+                          (and db-based? tag? (not (:db/ident m)))
+                          (db-class/build-new-class db))
+                 page-name (if db-based? (:block/title result) (:block/name result))
+                 id (get @*name->id page-name)]
+             (when (nil? id)
+               (swap! *name->id assoc page-name (:block/uuid result)))
+             ;; Changing a :block/uuid should be done cautiously here as it can break
+             ;; the identity of built-in concepts in db graphs
+             (if id
+               (assoc result :block/uuid id)
+               result))))) col)))
+
 (defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} db date-formatter parse-block]
   (let [db-based? (ldb/db-based-graph? db)
@@ -424,41 +460,10 @@
      (concat title body))
     (swap! *refs #(remove string/blank? %))
     (let [*name->id (atom {})
-          ref->map-fn (fn [*col tag?]
-                        (let [col (remove string/blank? @*col)
-                              children-pages (when-not db-based?
-                                               (->> (mapcat (fn [p]
-                                                              (let [p (if (map? p)
-                                                                        (:block/title p)
-                                                                        p)]
-                                                                (when (string? p)
-                                                                  (let [p (or (text/get-nested-page-name p) p)]
-                                                                    (when (text/namespace-page? p)
-                                                                      (common-util/split-namespace-pages p))))))
-                                                            col)
-                                                    (remove string/blank?)
-                                                    (distinct)))
-                              col (->> (distinct (concat col children-pages))
-                                       (remove nil?))]
-                          (map
-                           (fn [item]
-                             (let [macro? (and (map? item)
-                                               (= "macro" (:type item)))]
-                               (when-not macro?
-                                 (let [m (page-name->map item db true date-formatter {:class? tag?})
-                                       result (cond->> m
-                                                (and db-based? tag? (not (:db/ident m)))
-                                                (db-class/build-new-class db))
-                                       page-name (if db-based? (:block/title result) (:block/name result))
-                                       id (get @*name->id page-name)]
-                                   (when (nil? id)
-                                     (swap! *name->id assoc page-name (:block/uuid result)))
-                                   ;; Changing a :block/uuid should be done cautiously here as it can break
-                                   ;; the identity of built-in concepts in db graphs
-                                   (if id
-                                     (assoc result :block/uuid id)
-                                     result))))) col)))
-          refs (->> (ref->map-fn *refs false)
+          ref->map-options {:db-based? db-based?
+                            :date-formatter date-formatter
+                            :*name->id *name->id}
+          refs (->> (ref->map db *refs ref->map-options)
                     (remove nil?)
                     (map (fn [ref]
                            (let [ref' (if-let [entity (ldb/get-case-page db (:block/title ref))]
@@ -469,7 +474,7 @@
                              (cond-> ref'
                                (:block.temp/original-page-name ref)
                                (assoc :block.temp/original-page-name (:block.temp/original-page-name ref)))))))
-          tags (ref->map-fn *structured-tags true)]
+          tags (ref->map db *structured-tags (assoc ref->map-options :tag? true))]
       (assoc block
              :refs refs
              :tags tags))))
