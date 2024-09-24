@@ -34,7 +34,8 @@
             [frontend.handler.route :as route-handler]
             [frontend.components.title :as title]
             [cljs-time.coerce :as tc]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]))
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.components.query.builder :as query-builder-component]))
 
 (rum/defc property-empty-btn-value
   [property & opts]
@@ -63,45 +64,45 @@
         on-chosen! (fn [_e icon]
                      (if icon
                        (db-property-handler/set-block-property!
-                         (:db/id block)
-                         :logseq.property/icon
-                         (select-keys icon [:type :id :color]))
+                        (:db/id block)
+                        :logseq.property/icon
+                        (select-keys icon [:type :id :color]))
                        (db-property-handler/remove-block-property!
-                         (:db/id block)
-                         :logseq.property/icon))
+                        (:db/id block)
+                        :logseq.property/icon))
                      (clear-overlay!))]
 
     (rum/use-effect!
-      (fn []
-        (when editing?
-          (clear-overlay!)
-          (let [^js container (or (some-> js/document.activeElement (.closest ".page"))
-                                (gdom/getElement "main-content-container"))
-                icon (get block (pu/get-pid :logseq.property/icon))]
-            (util/schedule
-              (fn []
-                (when-let [^js target (some-> (.querySelector container (str "#ls-block-" (str (:block/uuid block))))
-                                        (.querySelector ".block-main-container"))]
-                  (shui/popup-show! target
-                    #(icon-component/icon-search
-                       {:on-chosen on-chosen!
-                        :icon-value icon
-                        :del-btn? (some? icon)})
-                    {:id :ls-icon-picker
-                     :align :start})))))))
-      [editing?])
+     (fn []
+       (when editing?
+         (clear-overlay!)
+         (let [^js container (or (some-> js/document.activeElement (.closest ".page"))
+                                 (gdom/getElement "main-content-container"))
+               icon (get block (pu/get-pid :logseq.property/icon))]
+           (util/schedule
+            (fn []
+              (when-let [^js target (some-> (.querySelector container (str "#ls-block-" (str (:block/uuid block))))
+                                            (.querySelector ".block-main-container"))]
+                (shui/popup-show! target
+                                  #(icon-component/icon-search
+                                    {:on-chosen on-chosen!
+                                     :icon-value icon
+                                     :del-btn? (some? icon)})
+                                  {:id :ls-icon-picker
+                                   :align :start})))))))
+     [editing?])
 
     [:div.col-span-3.flex.flex-row.items-center.gap-2
      (icon-component/icon-picker icon-value
-       {:disabled? config/publishing?
-        :del-btn? (some? icon-value)
-        :on-chosen on-chosen!})]))
+                                 {:disabled? config/publishing?
+                                  :del-btn? (some? icon-value)
+                                  :on-chosen on-chosen!})]))
 
 (defn- select-type?
   [property type]
   (or (contains? #{:node :number :url :date :page :class :property} type)
     ;; closed values
-    (seq (:property/closed-values property))))
+      (seq (:property/closed-values property))))
 
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
@@ -402,8 +403,8 @@
              (if (or (and (not multiple-choices?) (= chosen clear-value))
                      (and multiple-choices? (= chosen [clear-value])))
                (p/do!
-                 (let [blocks (get-operating-blocks block)
-                       block-ids (map :block/uuid blocks)]
+                (let [blocks (get-operating-blocks block)
+                      block-ids (map :block/uuid blocks)]
                   (property-handler/batch-remove-block-property!
                    (state/get-current-repo)
                    block-ids
@@ -594,16 +595,16 @@
     (select-node property opts' *result)))
 
 (rum/defcs select < rum/reactive db-mixins/query
-                    {:init (fn [state]
-                             (let [*values (atom :loading)
-                                   refresh-result-f (fn []
-                                                      (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
-                                                                       (:db/ident (nth (:rum/args state) 1)))]
-                                                        (reset! *values result)))]
-                               (refresh-result-f)
-                               (assoc state
-                                 ::values *values
-                                 ::refresh-result-f refresh-result-f)))}
+  {:init (fn [state]
+           (let [*values (atom :loading)
+                 refresh-result-f (fn []
+                                    (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
+                                                                                        (:db/ident (nth (:rum/args state) 1)))]
+                                      (reset! *values result)))]
+             (refresh-result-f)
+             (assoc state
+                    ::values *values
+                    ::refresh-result-f refresh-result-f)))}
   [state block property
    {:keys [multiple-choices? dropdown? content-props] :as select-opts}
    {:keys [*show-new-property-config?]}]
@@ -628,55 +629,55 @@
                                :value (:db/id block)
                                :label-value value})) (:property/closed-values property))
                     (->> values
-                      (mapcat (fn [value]
-                                (if (coll? value)
-                                  (map (fn [v] {:value v}) value)
-                                  [{:value value}])))
-                      (map (fn [{:keys [value]}]
-                             (if (and ref-type? (number? value))
-                               (when-let [e (db/entity value)]
-                                 {:label (db-property/property-value-content e)
-                                  :value value})
-                               {:label value
-                                :value value})))
-                      (distinct)))
+                         (mapcat (fn [value]
+                                   (if (coll? value)
+                                     (map (fn [v] {:value v}) value)
+                                     [{:value value}])))
+                         (map (fn [{:keys [value]}]
+                                (if (and ref-type? (number? value))
+                                  (when-let [e (db/entity value)]
+                                    {:label (db-property/property-value-content e)
+                                     :value value})
+                                  {:label value
+                                   :value value})))
+                         (distinct)))
             items (->> (if (= :date type)
                          (map (fn [m] (let [label (:block/title (db/entity (:value m)))]
                                         (when label
                                           (assoc m :label label)))) items)
                          items)
-                    (remove nil?))
+                       (remove nil?))
             on-chosen (fn [chosen selected?]
                         (let [value (if (map? chosen) (:value chosen) chosen)]
                           (add-or-remove-property-value block property value selected?
-                            {:refresh-result-f refresh-result-f})))
+                                                        {:refresh-result-f refresh-result-f})))
             selected-choices' (get block (:db/ident property))
             selected-choices (if (every? de/entity? selected-choices')
                                (map :db/id selected-choices')
                                [selected-choices'])]
         (select-aux block property
-          {:multiple-choices? multiple-choices?
-           :items items
-           :selected-choices selected-choices
-           :dropdown? dropdown?
-           :show-new-when-not-exact-match? (not (or closed-values? (= :date type)))
-           :input-default-placeholder "Select"
-           :extract-chosen-fn :value
-           :extract-fn (fn [x] (or (:label-value x) (:label x)))
-           :content-props content-props
-           :on-chosen on-chosen
-           :input-opts (fn [_]
-                         {:on-blur (fn []
-                                     (when-let [f (:on-chosen select-opts)] (f)))
-                          :on-click (fn []
-                                      (when *show-new-property-config?
-                                        (reset! *show-new-property-config? false)))
-                          :on-key-down
-                          (fn [e]
-                            (case (util/ekey e)
-                              "Escape"
-                              (when-let [f (:on-chosen select-opts)] (f))
-                              nil))})})))))
+                    {:multiple-choices? multiple-choices?
+                     :items items
+                     :selected-choices selected-choices
+                     :dropdown? dropdown?
+                     :show-new-when-not-exact-match? (not (or closed-values? (= :date type)))
+                     :input-default-placeholder "Select"
+                     :extract-chosen-fn :value
+                     :extract-fn (fn [x] (or (:label-value x) (:label x)))
+                     :content-props content-props
+                     :on-chosen on-chosen
+                     :input-opts (fn [_]
+                                   {:on-blur (fn []
+                                               (when-let [f (:on-chosen select-opts)] (f)))
+                                    :on-click (fn []
+                                                (when *show-new-property-config?
+                                                  (reset! *show-new-property-config? false)))
+                                    :on-key-down
+                                    (fn [e]
+                                      (case (util/ekey e)
+                                        "Escape"
+                                        (when-let [f (:on-chosen select-opts)] (f))
+                                        nil))})})))))
 
 (rum/defcs property-normal-block-value <
   {:init (fn [state]
@@ -723,6 +724,11 @@
                                "Invalid block value, please delete the current property."]]
           (when v-block
             (cond
+              (= (:db/ident property) :logseq.property/query)
+              (let [query (:block/title v-block)]
+                (query-builder-component/builder query {:property property
+                                                        :block v-block}))
+
               (:block/page v-block)
               (property-normal-block-value block property v-block)
 
@@ -988,7 +994,7 @@
   (let [block (db/sub-block (:db/id block))
         value (get block (:db/ident property))
         value' (if (coll? value) value
-                 (when (some? value) #{value}))]
+                   (when (some? value) #{value}))]
     (multiple-values-inner block property value' opts schema)))
 
 (rum/defcs property-value < rum/reactive
@@ -1038,10 +1044,10 @@
                      :else
                      (let [parent? (= (:db/ident property) :logseq.property/parent)
                            value-cp (property-scalar-value block property v
-                                      (merge
-                                        opts
-                                        {:editor-id editor-id
-                                         :dom-id dom-id}))
+                                                           (merge
+                                                            opts
+                                                            {:editor-id editor-id
+                                                             :dom-id dom-id}))
                            page-ancestors (when parent?
                                             (let [ancestor-pages (loop [parents [block]]
                                                                    (if-let [parent (:logseq.property/parent (last parents))]

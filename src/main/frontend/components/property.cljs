@@ -33,7 +33,6 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-
 (defn- property-type-label
   [property-type]
   (case property-type
@@ -265,17 +264,17 @@
      (when-not other-position?
        (let [content-fn (fn [{:keys [id]}]
                           (icon-component/icon-search
-                            {:on-chosen
-                             (fn [_e icon]
-                               (if icon
-                                 (db-property-handler/upsert-property! (:db/ident property)
-                                   (:block/schema property)
-                                   {:properties {:logseq.property/icon icon}})
-                                 (db-property-handler/remove-block-property! (:db/id property)
-                                   (pu/get-pid :logseq.property/icon)))
-                               (shui/popup-hide! id))
-                             :icon-value icon
-                             :del-btn? (boolean icon)}))]
+                           {:on-chosen
+                            (fn [_e icon]
+                              (if icon
+                                (db-property-handler/upsert-property! (:db/ident property)
+                                                                      (:block/schema property)
+                                                                      {:properties {:logseq.property/icon icon}})
+                                (db-property-handler/remove-block-property! (:db/id property)
+                                                                            (pu/get-pid :logseq.property/icon)))
+                              (shui/popup-hide! id))
+                            :icon-value icon
+                            :del-btn? (boolean icon)}))]
 
          (shui/trigger-as
           :button.property-m
@@ -530,7 +529,7 @@
   [block]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)
-        classes (concat (:block/tags block) (outliner-property/get-class-parents db (:block/tags block)))]
+        classes (concat (:block/tags block) (outliner-property/get-classes-parents db (:block/tags block)))]
     (doseq [class classes]
       (db-async/<get-block repo (:db/id class) :children? false))
     (when (ldb/class? block)

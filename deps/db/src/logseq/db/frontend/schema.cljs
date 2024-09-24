@@ -2,7 +2,7 @@
   "Main datascript schemas for the Logseq app"
   (:require [clojure.set :as set]))
 
-(def version 23)
+(def version 25)
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
   {:db/ident        {:db/unique :db.unique/identity}
@@ -103,8 +103,7 @@
    :file/content {}
    :file/created-at {}
    :file/last-modified-at {}
-   :file/size {}
-   })
+   :file/size {}})
 
 (def schema-for-db-based-graph
   (merge

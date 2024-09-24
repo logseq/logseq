@@ -21,7 +21,6 @@
             [frontend.config :as config]
             [frontend.state :as state]))
 
-
 ;; Query fields:
 
 ;; Operators:
@@ -241,20 +240,19 @@
     (= 4 (count e))
     (build-between-three-arg e)))
 
-
 (defn ->file-property-value
   "Parses property values for file graphs and handles non-string values or any page-ref like values"
   [v*]
   (if (some? v*)
-   (let [v (str v*)
-         result (if-some [res (text/parse-non-string-property-value v)]
-                  res
-                  (if (string/starts-with? v "#")
-                    (subs v 1)
-                    (or (page-ref/get-page-name v) v)))]
-     (if (string? result)
-       (or (parse-double result) (string/trim result))
-       result))
+    (let [v (str v*)
+          result (if-some [res (text/parse-non-string-property-value v)]
+                   res
+                   (if (string/starts-with? v "#")
+                     (subs v 1)
+                     (or (page-ref/get-page-name v) v)))]
+      (if (string? result)
+        (or (parse-double result) (string/trim result))
+        result))
     v*))
 
 (defn ->db-property-value
@@ -323,7 +321,7 @@
       (if db-graph?
         (let [markers' (set (map (comp string/capitalize name) markers))]
           {:query (list 'task '?b (set markers'))
-          :rules [:task]})
+           :rules [:task]})
         (let [markers (set (map (comp string/upper-case name) markers))]
           {:query (list 'task '?b markers)
            :rules [:task]})))))
@@ -571,7 +569,7 @@ Some bindings in this fn:
 
 (def custom-readers {:readers {'tag (fn [x] (page-ref/->page-ref x))}})
 (defn parse
-  [s {:keys [db-graph?] :as opts}]
+  [s {:keys [db-graph? cards?] :as opts}]
   (when (and (string? s)
              (not (string/blank? s)))
     (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
@@ -586,7 +584,8 @@ Some bindings in this fn:
           (when form (build-query form {:sort-by sort-by
                                         :blocks? blocks?
                                         :db-graph? db-graph?
-                                        :sample sample}))
+                                        :sample sample
+                                        :cards? cards?}))
           result' (when (seq result)
                     (let [key (if (coll? (first result))
                                 ;; Only queries for this branch are not's like:
@@ -652,7 +651,13 @@ Some bindings in this fn:
    (query repo query-string {}))
   ([repo query-string query-opts]
    (when (and (string? query-string) (not= "\"\"" query-string))
-     (let [{query* :query :keys [rules sort-by blocks? sample]} (parse-query query-string)]
+     (let [{query* :query :keys [rules sort-by blocks? sample]} (parse-query query-string {:cards? (:cards? query-opts)})
+           query* (if (:cards? query-opts)
+                    (let [card-id (:db/id (db-utils/entity :logseq.class/Card))]
+                      (util/concat-without-nil
+                       [['?b :block/tags card-id]]
+                       (if (coll? (first query*)) query* [query*])))
+                    query*)]
        (when-let [query' (some-> query* (query-wrapper {:blocks? blocks?
                                                         :block-attrs (when (config/db-based-graph? repo)
                                                                        db-block-attrs)}))]

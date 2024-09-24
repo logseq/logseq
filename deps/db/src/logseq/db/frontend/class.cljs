@@ -7,20 +7,32 @@
   "Map of built-in classes for db graphs with their :db/ident as keys"
   {:logseq.class/Root {:title "Root Tag"}
 
-   :logseq.class/Query
-   {:title "Query"
-    :properties {:logseq.property/icon {:type :tabler-icon :id "search"}}}
-
    :logseq.class/Task
    {:title "Task"
     :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}
+
+   :logseq.class/Journal
+   {:title "Journal"
+    :properties {:logseq.property.journal/title-format "MMM do, yyyy"}}
+
+   :logseq.class/Query
+   {:title "Query"
+    :properties {:logseq.property/icon {:type :tabler-icon :id "search"}}
+    :schema {:properties [:logseq.property/query]}}
+
+   :logseq.class/Advanced-query
+   {:title "Advanced query"
+    :properties {:logseq.property/icon {:type :tabler-icon :id "search"}
+                 :logseq.property/parent :logseq.class/Query}}
 
    :logseq.class/Card
    {:title "Card"
     :schema {:properties [:logseq.property.fsrs/state :logseq.property.fsrs/due]}}
 
-   :logseq.class/Journal {:title "Journal"
-                          :properties {:logseq.property.journal/title-format "MMM do, yyyy"}}
+   :logseq.class/Cards
+   {:title "Cards"
+    :properties {:logseq.property/icon {:type :tabler-icon :id "search"}
+                 :logseq.property/parent :logseq.class/Query}}
 
    ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project
    })

@@ -8,6 +8,8 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
+            [frontend.db.model :as db-model]
+            [frontend.db.query-dsl :as query-dsl]
             [frontend.extensions.srs :as srs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.property :as property-handler]
@@ -72,20 +74,28 @@
           :logseq.property.fsrs/due prop-fsrs-due})))))
 
 (defn- <get-due-card-block-ids
-  [repo]
-  (let [now-inst-ms (inst-ms (js/Date.))]
-    (db-async/<q repo {:transact-db? false}
-                 '[:find [?b ...]
-                   :in $ ?now-inst-ms
-                   :where
-                   [?b :block/tags :logseq.class/Card]
-                   (or-join [?b ?now-inst-ms]
-                            (and
-                             [?b :logseq.property.fsrs/due ?due]
-                             [(>= ?now-inst-ms ?due)])
-                            [(missing? $ ?b :logseq.property.fsrs/due)])
-                   [?b :block/uuid]]
-                 now-inst-ms)))
+  [repo cards-id]
+  (let [now-inst-ms (inst-ms (js/Date.))
+        cards (when (and cards-id (not= (keyword cards-id) :global)) (db/entity cards-id))
+        query (:block/title (:logseq.property/query cards))
+        result (query-dsl/parse query {:db-graph? true})
+        q '[:find [?b ...]
+            :in $ ?now-inst-ms %
+            :where
+            [?b :block/tags :logseq.class/Card]
+            (or-join [?b ?now-inst-ms]
+                     (and
+                      [?b :logseq.property.fsrs/due ?due]
+                      [(>= ?now-inst-ms ?due)])
+                     [(missing? $ ?b :logseq.property.fsrs/due)])
+            [?b :block/uuid]]
+        q' (if query
+             (let [query* (:query result)]
+               (util/concat-without-nil
+                q
+                (if (coll? (first query*)) query* [query*])))
+             q)]
+    (db-async/<q repo {:transact-db? false} q' now-inst-ms (:rules result))))
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
   (shui/button
@@ -207,26 +217,53 @@
   (shortcut/mixin :shortcut.handler/cards false)
   {:init (fn [state]
            (let [*block-ids (atom nil)
-                 *loading? (atom nil)]
+                 *loading? (atom nil)
+                 cards-id (last (:rum/args state))]
              (reset! *loading? true)
-             (p/let [result (<get-due-card-block-ids (state/get-current-repo))]
+             (p/let [result (<get-due-card-block-ids (state/get-current-repo) cards-id)]
                (reset! *block-ids result)
                (reset! *loading? false))
              (assoc state
                     ::block-ids *block-ids
+                    ::cards-id (atom (or cards-id :global))
                     ::loading? *loading?)))
    :will-unmount (fn [state]
                    (update-due-cards-count)
                    state)}
-  [state]
+  [state _cards-id]
   (let [repo (state/get-current-repo)
+        *cards-id (::cards-id state)
+        cards-id (rum/react *cards-id)
+        all-cards (concat
+                   [{:db/id :global
+                     :block/title "All cards"}]
+                   (db-model/get-class-objects repo (:db/id (db/entity :logseq.class/Cards))))
         *block-ids (::block-ids state)
         block-ids (rum/react *block-ids)
         loading? (rum/react (::loading? state))
         *card-index (::card-index state)
         *phase (atom :init)]
     (when (false? loading?)
-      [:div#cards-modal.p-2
+      [:div#cards-modal.p-1.flex.flex-col.gap-8
+       [:div.flex.flex-row.items-center.gap-2.flex-wrap
+        (shui/select
+         {:on-value-change (fn [v]
+                             (reset! *cards-id v)
+                             (p/let [result (<get-due-card-block-ids repo (if (= :global v) nil v))]
+                               (reset! *card-index 0)
+                               (reset! *block-ids result)))
+          :default-value cards-id}
+         (shui/select-trigger
+          {:class "!px-2 !py-0 !h-8 w-64"}
+          (shui/select-value
+           {:placeholder "Select cards"})
+          (shui/select-content
+           (shui/select-group
+            (for [card-entity all-cards]
+              (shui/select-item {:value (:db/id card-entity)}
+                                (:block/title card-entity)))))))
+
+        [:span.text-sm.opacity-50 (str (inc @*card-index) "/" (count @*block-ids))]]
        (if-let [block-id (nth block-ids @*card-index nil)]
          [:div.flex.flex-col
           (card repo block-id *card-index *phase)]
@@ -236,15 +273,15 @@
 (def ^:private new-task--update-due-cards-count
   "Return a task that update `:srs/cards-due-count` periodically."
   (m/sp
-    (let [repo (state/get-current-repo)]
-      (if (config/db-based-graph? repo)
-        (m/?
-         (m/reduce
-          (fn [_ _]
-            (p/let [due-cards (<get-due-card-block-ids repo)]
-              (state/set-state! :srs/cards-due-count (count due-cards))))
-          (c.m/clock (* 3600 1000))))
-        (srs/update-cards-due-count!)))))
+   (let [repo (state/get-current-repo)]
+     (if (config/db-based-graph? repo)
+       (m/?
+        (m/reduce
+         (fn [_ _]
+           (p/let [due-cards (<get-due-card-block-ids repo nil)]
+             (state/set-state! :srs/cards-due-count (count due-cards))))
+         (c.m/clock (* 3600 1000))))
+       (srs/update-cards-due-count!)))))
 
 (defn update-due-cards-count
   []
