@@ -274,7 +274,7 @@
         property (d/entity @conn property-id)
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
         property-type (get-in property [:block/schema :type] :default)
-        _ (assert v "Can't set a nil property value must be not nil")
+        _ (assert (some? v) "Can't set a nil property value must be not nil")
         v' (if (db-property-type/value-ref-property-types property-type)
              (convert-ref-property-value conn property-id v property-type)
              v)
