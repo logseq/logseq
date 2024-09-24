@@ -69,7 +69,7 @@
             prop-fsrs-state (dissoc prop-card-map :due)
             prop-fsrs-due (:due prop-card-map)]
         (property-handler/set-block-properties!
-         repo block-id
+         repo (:block/uuid block-entity)
          {:logseq.property.fsrs/state prop-fsrs-state
           :logseq.property.fsrs/due prop-fsrs-due})))))
 
@@ -263,7 +263,7 @@
               (shui/select-item {:value (:db/id card-entity)}
                                 (:block/title card-entity)))))))
 
-        [:span.text-sm.opacity-50 (str (inc @*card-index) "/" (count @*block-ids))]]
+        [:span.text-sm.opacity-50 (str (min (inc @*card-index) (count @*block-ids)) "/" (count @*block-ids))]]
        (if-let [block-id (nth block-ids @*card-index nil)]
          [:div.flex.flex-col
           (card repo block-id *card-index *phase)]
