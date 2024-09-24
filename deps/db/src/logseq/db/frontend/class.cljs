@@ -20,8 +20,8 @@
     :properties {:logseq.property/icon {:type :tabler-icon :id "search"}}
     :schema {:properties [:logseq.property/query]}}
 
-   :logseq.class/Advanced-query
-   {:title "Advanced query"
+   :logseq.class/Advanced-Query
+   {:title "Advanced Query"
     :properties {:logseq.property/icon {:type :tabler-icon :id "search"}
                  :logseq.property/parent :logseq.class/Query}}
 
