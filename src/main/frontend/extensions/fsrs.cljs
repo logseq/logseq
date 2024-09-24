@@ -277,15 +277,15 @@
 (def ^:private new-task--update-due-cards-count
   "Return a task that update `:srs/cards-due-count` periodically."
   (m/sp
-    (let [repo (state/get-current-repo)]
-      (if (config/db-based-graph? repo)
-        (m/?
-         (m/reduce
-          (fn [_ _]
-            (p/let [due-cards (<get-due-card-block-ids repo nil)]
-              (state/set-state! :srs/cards-due-count (count due-cards))))
-          (c.m/clock (* 3600 1000))))
-        (srs/update-cards-due-count!)))))
+   (let [repo (state/get-current-repo)]
+     (if (config/db-based-graph? repo)
+       (m/?
+        (m/reduce
+         (fn [_ _]
+           (p/let [due-cards (<get-due-card-block-ids repo nil)]
+             (state/set-state! :srs/cards-due-count (count due-cards))))
+         (c.m/clock (* 3600 1000))))
+       (srs/update-cards-due-count!)))))
 
 (defn update-due-cards-count
   []
@@ -366,25 +366,26 @@
      :review-state-cards (or review-count 0)
      :relearning-state-cards (or relearning-count 0)}))
 
-(defn <cards-stat
-  "Some explanations on return value:
+(comment
+  (defn <cards-stat
+    "Some explanations on return value:
   :true-retention, cards in review-state / all-cards-count
   :passed-repeats, last rating is :good or :easy
   :lapsed-repeats, last rating is :again or :hard
   :XXX-state-cards, cards' state is XXX"
-  []
-  (p/let [repo (state/get-current-repo)
-          all-card-blocks
-          (db-async/<q repo {:transact-db? false}
-                       '[:find [(pull ?b [* {:block/tags [:db/ident]}]) ...]
-                         :where
-                         [?b :block/tags :logseq.class/Card]
-                         [?b :block/uuid]])
-          all-cards (map get-card-map all-card-blocks)
-          [today-stat
-           recent-7-days-stat
-           recent-30-days-stat]
-          (map cards-stat ((juxt cards-today cards-recent-7-days cards-recent-30-days) all-cards))]
-    {:today-stat today-stat
-     :recent-7-days-stat recent-7-days-stat
-     :recent-30-days-stat recent-30-days-stat}))
+    []
+    (p/let [repo (state/get-current-repo)
+            all-card-blocks
+            (db-async/<q repo {:transact-db? false}
+                         '[:find [(pull ?b [* {:block/tags [:db/ident]}]) ...]
+                           :where
+                           [?b :block/tags :logseq.class/Card]
+                           [?b :block/uuid]])
+            all-cards (map get-card-map all-card-blocks)
+            [today-stat
+             recent-7-days-stat
+             recent-30-days-stat]
+            (map cards-stat ((juxt cards-today cards-recent-7-days cards-recent-30-days) all-cards))]
+      {:today-stat today-stat
+       :recent-7-days-stat recent-7-days-stat
+       :recent-30-days-stat recent-30-days-stat})))
