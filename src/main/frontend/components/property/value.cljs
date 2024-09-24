@@ -306,7 +306,8 @@
            [:div.flex.flex-row.gap-1.items-center
             (when-let [page-cp (state/get-component :block/page-cp)]
               (let [page-title (date/journal-name (date/js-date->goog-date date))]
-                (page-cp {:disable-preview? true}
+                (page-cp {:disable-preview? true
+                          :show-non-exists-page? true}
                          {:block/name page-title})))
             [:span.opacity-50
              (str (util/zero-pad (.getHours date))
