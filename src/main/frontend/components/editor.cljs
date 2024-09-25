@@ -292,7 +292,8 @@
                  state)}
   [state _edit-block input id q format selected-text]
   (let [result (->> (rum/react (get state ::result))
-                    (remove (fn [b] (string/blank? (:block/title (db-model/query-block-by-uuid (:block/uuid b)))))))
+                    (remove (fn [b] (or (nil? (:block/uuid b))
+                                        (string/blank? (:block/title (db-model/query-block-by-uuid (:block/uuid b))))))))
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Block embed"))
         chosen-handler (block-on-chosen-handler embed? input id q format selected-text)
