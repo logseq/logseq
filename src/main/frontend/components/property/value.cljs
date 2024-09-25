@@ -714,7 +714,8 @@
   (rum/local false ::show-setting?)
   [state block property v-block]
   (let [result (common-util/safe-read-string (:block/title v-block))
-        advanced-query? (and (map? result) (:query result))]
+        advanced-query? (or (and (map? result) (:query result))
+                            (string/starts-with? (string/triml (:block/title v-block)) "{"))]
     [:div.flex.flex-1.flex-row.gap-1.justify-between
      [:div.flex.flex-1 (property-normal-block-value block property v-block)]
      (when-not advanced-query?

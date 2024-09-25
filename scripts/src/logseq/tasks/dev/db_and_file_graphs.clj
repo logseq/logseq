@@ -36,7 +36,8 @@
 (def db-graph-paths
   "Paths _only_ for DB graphs"
   ["src/main/frontend/handler/db_based"
-   "src/main/frontend/worker/handler/page/db_based"
+   ;; TODO: Re-enable if db namespace support is moved elsewhere
+  ;;  "src/main/frontend/worker/handler/page/db_based"
    "src/main/frontend/components/class.cljs"
    "src/main/frontend/components/property.cljs"
    "src/main/frontend/components/property"
