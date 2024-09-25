@@ -129,11 +129,14 @@
                   (if class?
                     (cond
                       (and (de/entity? page) (ldb/class? page))
-                      page
-                      (de/entity? page) ; page exists but not a class, avoid converting here becuase this could be troublesome.
+                      (assoc page :logseq.property/parent parent-eid)
+
+                      (de/entity? page) ; page exists but not a class, avoid converting here because this could be troublesome.
                       nil
+
                       (zero? idx)
                       (db-class/build-new-class db page)
+
                       :else
                       (db-class/build-new-class db (assoc page :logseq.property/parent parent-eid)))
                     (if (or (de/entity? page) (zero? idx))
