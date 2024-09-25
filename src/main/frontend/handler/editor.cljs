@@ -2870,9 +2870,10 @@
         ;; stop accepting edits if the new block is not created yet
         (some? @(:editor/async-unsaved-chars @state/state))
         (do
-          (when (not= key "Enter")
+          (when (= 1 (count (str key)))
             (state/update-state! :editor/async-unsaved-chars
-                                 (fn [s] (str s key))))
+                                 (fn [s]
+                                   (str s key))))
           (util/stop e))
 
         (and (contains? #{"ArrowLeft" "ArrowRight"} key)
