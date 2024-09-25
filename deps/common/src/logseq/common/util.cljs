@@ -233,7 +233,7 @@
      (reader/read-string opts content)
      (catch :default e
        (log/error :parse/read-string-failed e)
-       {}))))
+       nil))))
 
 (defn safe-read-map-string
   "Reads an edn map string and returns {} if it fails to parse"

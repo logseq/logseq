@@ -168,9 +168,8 @@
               :result result
               :group-by-page? (query-result/get-group-by-page q {:table? table?})}]
     (if (:custom-query? config)
-      [:code (if dsl-query?
-               (util/format "{{query %s}}" query)
-               "{{query hidden}}")]
+      ;; Don't display recursive results when query blocks are a query result
+      [:code (if dsl-query? (str "Results for " (pr-str query)) "Advanced query results")]
       (when-not (and built-in? (empty? result))
         [:div.custom-query (get config :attr {})
          (when (and (not db-based?) (not built-in?))
