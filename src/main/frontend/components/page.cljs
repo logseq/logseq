@@ -62,13 +62,13 @@
     [state]
     ;; Only query if block name is in the route
     (when-let [route-name (get-in (first (:rum/args state))
-                            [:parameters :path :block-route-name])]
+                                  [:parameters :path :block-route-name])]
       (->> (model/get-block-by-page-name-and-block-route-name
-             (state/get-current-repo)
-             (get-page-name state)
-             route-name)
-        :block/uuid
-        str)))
+            (state/get-current-repo)
+            (get-page-name state)
+            route-name)
+           :block/uuid
+           str)))
   (def get-block-uuid-by-block-route-name (constantly nil)))
 
 (defn- get-block
@@ -128,7 +128,7 @@
                                     _ (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))]
                               (js/setTimeout #(let [target-block page]
                                                 (dnd/move-blocks event blocks target-block nil :sibling))
-                                0)))
+                                             0)))
           *dummy-block-uuid (rum/use-ref (random-uuid))
           *el-ref (rum/use-ref nil)
           _ (frontend-rum/use-atom (@state/state :selection/blocks))
@@ -140,44 +140,44 @@
       ;; mounted
       ;(rum/use-effect! #(focus!) [])
       (rum/use-effect! #(if selected? (focus!)
-                          (some-> (rum/deref *el-ref) (.blur))) [selected?])
+                            (some-> (rum/deref *el-ref) (.blur))) [selected?])
 
       (shui/trigger-as
-        :div.ls-dummy-block.ls-block
+       :div.ls-dummy-block.ls-block
 
-        {:style {:width "100%"
+       {:style {:width "100%"
                  ;; The same as .dnd-separator
-                 :border-top (if hover
-                               "3px solid #ccc"
-                               nil)}
-         :ref *el-ref
-         :tabIndex 0
-         :on-click click-handler-fn
-         :id idstr
-         :blockid idstr
-         :class (when selected? "selected")}
+                :border-top (if hover
+                              "3px solid #ccc"
+                              nil)}
+        :ref *el-ref
+        :tabIndex 0
+        :on-click click-handler-fn
+        :id idstr
+        :blockid idstr
+        :class (when selected? "selected")}
 
-        [:div.flex.items-center
-         [:div.flex.items-center.mx-1 {:style {:height 24}}
-          [:span.bullet-container.cursor
-           [:span.bullet]]]
+       [:div.flex.items-center
+        [:div.flex.items-center.mx-1 {:style {:height 24}}
+         [:span.bullet-container.cursor
+          [:span.bullet]]]
 
-         [:div.flex.flex-1
-          {:on-drag-enter #(set-hover! true)
-           :on-drag-over #(util/stop %)
-           :on-drop drop-handler-fn
-           :on-drag-leave #(set-hover! false)}
-          [:span.opacity-70.text
-           "Click here to edit..."]]]))))
+        [:div.flex.flex-1
+         {:on-drag-enter #(set-hover! true)
+          :on-drag-over #(util/stop %)
+          :on-drop drop-handler-fn
+          :on-drag-leave #(set-hover! false)}
+         [:span.opacity-70.text
+          "Click here to edit..."]]]))))
 
 (rum/defc add-button
   [args]
   [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
    {:on-click (fn [] (editor-handler/api-insert-new-block! "" args))
     :on-key-down (fn [e]
-                    (when (= "Enter" (util/ekey e))
-                      (editor-handler/api-insert-new-block! "" args))
-                    (util/stop e))
+                   (when (= "Enter" (util/ekey e))
+                     (editor-handler/api-insert-new-block! "" args))
+                   (util/stop e))
     :tab-index 0}
    [:div.flex.flex-row
     [:div.block {:style {:height      20
@@ -259,12 +259,12 @@
          (for [query queries]
            (rum/with-key
              (ui/catch-error
-               (ui/component-error "Failed default query:" {:content (pr-str query)})
-               (query/custom-query (component-block/wrap-query-components
-                                     {:attr {:class "mt-10"}
-                                      :editor-box editor/box
-                                      :page page-cp})
-                 query))
+              (ui/component-error "Failed default query:" {:content (pr-str query)})
+              (query/custom-query (component-block/wrap-query-components
+                                   {:attr {:class "mt-10"}
+                                    :editor-box editor/box
+                                    :page page-cp})
+                                  query))
              (str repo "-custom-query-" (:query query))))]))))
 
 (rum/defc tagged-pages
@@ -469,8 +469,8 @@
   (reset! *control-show? true)
   (let [all-collapsed?
         (->> (editor-handler/all-blocks-with-level {:collapse? true})
-          (filter (fn [b] (editor-handler/collapsable? (:block/uuid b))))
-          (empty?))]
+             (filter (fn [b] (editor-handler/collapsable? (:block/uuid b))))
+             (empty?))]
     (reset! *all-collapsed? all-collapsed?)))
 
 (defn- page-mouse-leave
@@ -495,10 +495,10 @@
 (defn- get-path-page-name
   [state page-name]
   (or page-name
-    (get-block-uuid-by-block-route-name state)
+      (get-block-uuid-by-block-route-name state)
     ;; is page name or uuid
-    (get-page-name state)
-    (state/get-current-page)))
+      (get-page-name state)
+      (state/get-current-page)))
 
 (defn get-page-entity
   [page-name]
@@ -642,7 +642,7 @@
 
             (when-not block-or-whiteboard?
               (when (and (not journal?) (not db-based?))
-                (hierarchy/structures route-page-name)))
+                (hierarchy/structures (:block/title page))))
 
             (when-not (or whiteboard? unlinked-refs? sidebar? home? (and block? (not db-based?)))
               [:div {:key "page-unlinked-references"}
@@ -679,7 +679,6 @@
      "-"
      (or (:page-name option)
          (get-page-name state)))))
-
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
@@ -724,13 +723,13 @@
      [:p {:title "Pause simulation"}
       "Pause simulation"]
      (ui/toggle
-       (rum/react *simulation-paused?)
-       (fn []
-         (let [paused? @*simulation-paused?]
-           (if paused?
-             (pixi/resume-simulation!)
-             (pixi/stop-simulation!))))
-       true)]))
+      (rum/react *simulation-paused?)
+      (fn []
+        (let [paused? @*simulation-paused?]
+          (if paused?
+            (pixi/resume-simulation!)
+            (pixi/stop-simulation!))))
+      true)]))
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings forcesettings n-hops]
@@ -765,20 +764,20 @@
       [:div.shadow-xl.rounded-sm
        [:ul
         (graph-filter-section
-          [:span.font-medium "Nodes"]
-          (fn [open?]
-            (filter-expand-area
-              open?
-              [:div
-               [:p.text-sm.opacity-70.px-4
-                (let [c1 (count (:nodes graph))
-                      s1 (if (> c1 1) "s" "")
+         [:span.font-medium "Nodes"]
+         (fn [open?]
+           (filter-expand-area
+            open?
+            [:div
+             [:p.text-sm.opacity-70.px-4
+              (let [c1 (count (:nodes graph))
+                    s1 (if (> c1 1) "s" "")
                       ;; c2 (count (:links graph))
                       ;; s2 (if (> c2 1) "s" "")
-                      ]
+                    ]
                   ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
-                  (util/format "%d page%s" c1 s1))]
-               [:div.p-6
+                (util/format "%d page%s" c1 s1))]
+             [:div.p-6
                 ;; [:div.flex.items-center.justify-between.mb-2
                 ;;  [:span "Layout"]
                 ;;  (ui/select
@@ -792,174 +791,174 @@
                 ;;    (fn [_e value]
                 ;;      (set-setting! :layout value))
                 ;;    {:class "graph-layout"})]
-                [:div.flex.items-center.justify-between.mb-2
-                 [:span (t :settings-page/enable-journals)]
+              [:div.flex.items-center.justify-between.mb-2
+               [:span (t :settings-page/enable-journals)]
                  ;; FIXME: why it's not aligned well?
-                 [:div.mt-1
-                  (ui/toggle journal?
-                    (fn []
-                      (let [value (not journal?)]
-                        (reset! *journal? value)
-                        (set-setting! :journal? value)))
-                    true)]]
-                [:div.flex.items-center.justify-between.mb-2
-                 [:span "Orphan pages"]
-                 [:div.mt-1
-                  (ui/toggle orphan-pages?
-                    (fn []
-                      (let [value (not orphan-pages?)]
-                        (reset! *orphan-pages? value)
-                        (set-setting! :orphan-pages? value)))
-                    true)]]
-                [:div.flex.items-center.justify-between.mb-2
-                 [:span "Built-in pages"]
-                 [:div.mt-1
-                  (ui/toggle builtin-pages?
-                    (fn []
-                      (let [value (not builtin-pages?)]
-                        (reset! *builtin-pages? value)
-                        (set-setting! :builtin-pages? value)))
-                    true)]]
-                [:div.flex.items-center.justify-between.mb-2
-                 [:span "Excluded pages"]
-                 [:div.mt-1
-                  (ui/toggle excluded-pages?
-                    (fn []
-                      (let [value (not excluded-pages?)]
-                        (reset! *excluded-pages? value)
-                        (set-setting! :excluded-pages? value)))
-                    true)]]
-                (when (config/db-based-graph? (state/get-current-repo))
-                  [:div.flex.flex-col.mb-2
-                   [:p "Created before"]
-                   (when created-at-filter
-                     [:div (.toDateString (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])
-                   (ui/tippy {:html [:div.pr-3 (str (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))]}
+               [:div.mt-1
+                (ui/toggle journal?
+                           (fn []
+                             (let [value (not journal?)]
+                               (reset! *journal? value)
+                               (set-setting! :journal? value)))
+                           true)]]
+              [:div.flex.items-center.justify-between.mb-2
+               [:span "Orphan pages"]
+               [:div.mt-1
+                (ui/toggle orphan-pages?
+                           (fn []
+                             (let [value (not orphan-pages?)]
+                               (reset! *orphan-pages? value)
+                               (set-setting! :orphan-pages? value)))
+                           true)]]
+              [:div.flex.items-center.justify-between.mb-2
+               [:span "Built-in pages"]
+               [:div.mt-1
+                (ui/toggle builtin-pages?
+                           (fn []
+                             (let [value (not builtin-pages?)]
+                               (reset! *builtin-pages? value)
+                               (set-setting! :builtin-pages? value)))
+                           true)]]
+              [:div.flex.items-center.justify-between.mb-2
+               [:span "Excluded pages"]
+               [:div.mt-1
+                (ui/toggle excluded-pages?
+                           (fn []
+                             (let [value (not excluded-pages?)]
+                               (reset! *excluded-pages? value)
+                               (set-setting! :excluded-pages? value)))
+                           true)]]
+              (when (config/db-based-graph? (state/get-current-repo))
+                [:div.flex.flex-col.mb-2
+                 [:p "Created before"]
+                 (when created-at-filter
+                   [:div (.toDateString (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])
+                 (ui/tippy {:html [:div.pr-3 (str (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))]}
                      ;; Slider keeps track off the range from min created-at to max created-at
                      ;; because there were bugs with setting min and max directly
-                     (ui/slider created-at-filter
-                       {:min 0
-                        :max (- (get-in graph [:all-pages :created-at-max])
-                               (get-in graph [:all-pages :created-at-min]))
-                        :on-change #(do
-                                      (reset! *created-at-filter (int %))
-                                      (set-setting! :created-at-filter (int %)))}))])
-                (when (seq focus-nodes)
-                  [:div.flex.flex-col.mb-2
-                   [:p {:title "N hops from selected nodes"}
-                    "N hops from selected nodes"]
-                   (ui/tippy {:html [:div.pr-3 n-hops]}
-                     (ui/slider (or n-hops 10)
-                       {:min 1
-                        :max 10
-                        :on-change #(reset! *n-hops (int %))}))])
+                           (ui/slider created-at-filter
+                                      {:min 0
+                                       :max (- (get-in graph [:all-pages :created-at-max])
+                                               (get-in graph [:all-pages :created-at-min]))
+                                       :on-change #(do
+                                                     (reset! *created-at-filter (int %))
+                                                     (set-setting! :created-at-filter (int %)))}))])
+              (when (seq focus-nodes)
+                [:div.flex.flex-col.mb-2
+                 [:p {:title "N hops from selected nodes"}
+                  "N hops from selected nodes"]
+                 (ui/tippy {:html [:div.pr-3 n-hops]}
+                           (ui/slider (or n-hops 10)
+                                      {:min 1
+                                       :max 10
+                                       :on-change #(reset! *n-hops (int %))}))])
 
-                [:a.opacity-70.opacity-100 {:on-click (fn []
-                                                        (swap! *graph-reset? not)
-                                                        (reset! *focus-nodes [])
-                                                        (reset! *n-hops nil)
-                                                        (reset! *created-at-filter nil)
-                                                        (set-setting! :created-at-filter nil)
-                                                        (state/clear-search-filters!))}
-                 "Reset Graph"]]]))
-          {})
+              [:a.opacity-70.opacity-100 {:on-click (fn []
+                                                      (swap! *graph-reset? not)
+                                                      (reset! *focus-nodes [])
+                                                      (reset! *n-hops nil)
+                                                      (reset! *created-at-filter nil)
+                                                      (set-setting! :created-at-filter nil)
+                                                      (state/clear-search-filters!))}
+               "Reset Graph"]]]))
+         {})
         (graph-filter-section
-          [:span.font-medium "Search"]
-          (fn [open?]
-            (filter-expand-area
-              open?
+         [:span.font-medium "Search"]
+         (fn [open?]
+           (filter-expand-area
+            open?
+            [:div.p-6
+             (if (seq search-graph-filters)
+               [:div
+                (for [q search-graph-filters]
+                  [:div.flex.flex-row.justify-between.items-center.mb-2
+                   [:span.font-medium q]
+                   [:a.search-filter-close.opacity-70.opacity-100 {:on-click #(state/remove-search-filter! q)}
+                    svg/close]])
+
+                [:a.opacity-70.opacity-100 {:on-click state/clear-search-filters!}
+                 "Clear All"]]
+               [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
+                "Click to search"])]))
+         {:search-filters search-graph-filters})
+        (graph-filter-section
+         [:span.font-medium "Forces"]
+         (fn [open?]
+           (filter-expand-area
+            open?
+            [:div
+             [:p.text-sm.opacity-70.px-4
+              (let [c2 (count (:links graph))
+                    s2 (if (> c2 1) "s" "")]
+                (util/format "%d link%s" c2 s2))]
+             [:div.p-6
+              (simulation-switch)
+
+              [:div.flex.flex-col.mb-2
+               [:p {:title "Link Distance"}
+                "Link Distance"]
+               (ui/tippy {:html [:div.pr-3 link-dist]}
+                         (ui/slider (/ link-dist 10)
+                                    {:min 1   ;; 10
+                                     :max 18  ;; 180
+                                     :on-change #(let [value (int %)]
+                                                   (reset! *link-dist (* value 10))
+                                                   (set-forcesetting! :link-dist (* value 10)))}))]
+              [:div.flex.flex-col.mb-2
+               [:p {:title "Charge Strength"}
+                "Charge Strength"]
+               (ui/tippy {:html [:div.pr-3 charge-strength]}
+                         (ui/slider (/ charge-strength 100)
+                                    {:min -10  ;;-1000
+                                     :max 10   ;;1000
+                                     :on-change #(let [value (int %)]
+                                                   (reset! *charge-strength (* value 100))
+                                                   (set-forcesetting! :charge-strength (* value 100)))}))]
+              [:div.flex.flex-col.mb-2
+               [:p {:title "Charge Range"}
+                "Charge Range"]
+               (ui/tippy {:html [:div.pr-3 charge-range]}
+                         (ui/slider (/ charge-range 100)
+                                    {:min 5    ;;500
+                                     :max 40   ;;4000
+                                     :on-change #(let [value (int %)]
+                                                   (reset! *charge-range (* value 100))
+                                                   (set-forcesetting! :charge-range (* value 100)))}))]
+
+              [:a.opacity-70.opacity-100 {:on-click (fn []
+                                                      (swap! *graph-forcereset? not)
+                                                      (reset! *link-dist 70)
+                                                      (reset! *charge-strength -600)
+                                                      (reset! *charge-range 600))}
+               "Reset Forces"]]]))
+         {})
+        (graph-filter-section
+         [:span.font-medium "Export"]
+         (fn [open?]
+           (filter-expand-area
+            open?
+            (when-let [canvas (js/document.querySelector "#global-graph canvas")]
               [:div.p-6
-               (if (seq search-graph-filters)
-                 [:div
-                  (for [q search-graph-filters]
-                    [:div.flex.flex-row.justify-between.items-center.mb-2
-                     [:span.font-medium q]
-                     [:a.search-filter-close.opacity-70.opacity-100 {:on-click #(state/remove-search-filter! q)}
-                      svg/close]])
-
-                  [:a.opacity-70.opacity-100 {:on-click state/clear-search-filters!}
-                   "Clear All"]]
-                 [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
-                  "Click to search"])]))
-          {:search-filters search-graph-filters})
-        (graph-filter-section
-          [:span.font-medium "Forces"]
-          (fn [open?]
-            (filter-expand-area
-              open?
-              [:div
-               [:p.text-sm.opacity-70.px-4
-                (let [c2 (count (:links graph))
-                      s2 (if (> c2 1) "s" "")]
-                  (util/format "%d link%s" c2 s2))]
-               [:div.p-6
-                (simulation-switch)
-
-                [:div.flex.flex-col.mb-2
-                 [:p {:title "Link Distance"}
-                  "Link Distance"]
-                 (ui/tippy {:html [:div.pr-3 link-dist]}
-                   (ui/slider (/ link-dist 10)
-                     {:min 1   ;; 10
-                      :max 18  ;; 180
-                      :on-change #(let [value (int %)]
-                                    (reset! *link-dist (* value 10))
-                                    (set-forcesetting! :link-dist (* value 10)))}))]
-                [:div.flex.flex-col.mb-2
-                 [:p {:title "Charge Strength"}
-                  "Charge Strength"]
-                 (ui/tippy {:html [:div.pr-3 charge-strength]}
-                   (ui/slider (/ charge-strength 100)
-                     {:min -10  ;;-1000
-                      :max 10   ;;1000
-                      :on-change #(let [value (int %)]
-                                    (reset! *charge-strength (* value 100))
-                                    (set-forcesetting! :charge-strength (* value 100)))}))]
-                [:div.flex.flex-col.mb-2
-                 [:p {:title "Charge Range"}
-                  "Charge Range"]
-                 (ui/tippy {:html [:div.pr-3 charge-range]}
-                   (ui/slider (/ charge-range 100)
-                     {:min 5    ;;500
-                      :max 40   ;;4000
-                      :on-change #(let [value (int %)]
-                                    (reset! *charge-range (* value 100))
-                                    (set-forcesetting! :charge-range (* value 100)))}))]
-
-                [:a.opacity-70.opacity-100 {:on-click (fn []
-                                                        (swap! *graph-forcereset? not)
-                                                        (reset! *link-dist 70)
-                                                        (reset! *charge-strength -600)
-                                                        (reset! *charge-range 600))}
-                 "Reset Forces"]]]))
-          {})
-        (graph-filter-section
-          [:span.font-medium "Export"]
-          (fn [open?]
-            (filter-expand-area
-              open?
-              (when-let [canvas (js/document.querySelector "#global-graph canvas")]
-                [:div.p-6
                  ;; We'll get an empty image if we don't wrap this in a requestAnimationFrame
-                 [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "png")))} "as PNG"]]])))
-          {:search-filters search-graph-filters})]]]]))
+               [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "png")))} "as PNG"]]])))
+         {:search-filters search-graph-filters})]]]]))
 
 (defonce last-node-position (atom nil))
 (defn- graph-register-handlers
   [graph focus-nodes n-hops dark?]
   (.on graph "nodeClick"
-    (fn [event node]
-      (let [x (.-x event)
-            y (.-y event)
-            drag? (not (let [[last-node last-x last-y] @last-node-position
-                             threshold 5]
-                         (and (= node last-node)
-                           (<= (abs (- x last-x)) threshold)
-                           (<= (abs (- y last-y)) threshold))))]
-        (graph/on-click-handler graph node event focus-nodes n-hops drag? dark?))))
+       (fn [event node]
+         (let [x (.-x event)
+               y (.-y event)
+               drag? (not (let [[last-node last-x last-y] @last-node-position
+                                threshold 5]
+                            (and (= node last-node)
+                                 (<= (abs (- x last-x)) threshold)
+                                 (<= (abs (- y last-y)) threshold))))]
+           (graph/on-click-handler graph node event focus-nodes n-hops drag? dark?))))
   (.on graph "nodeMousedown"
-    (fn [event node]
-      (reset! last-node-position [node (.-x event) (.-y event)]))))
+       (fn [event node]
+         (reset! last-node-position [node (.-x event) (.-y event)]))))
 
 (rum/defc global-graph-inner < rum/reactive
   [graph settings forcesettings theme]
@@ -973,8 +972,8 @@
         forcereset? (rum/react *graph-forcereset?)
         focus-nodes (when n-hops (rum/react *focus-nodes))
         graph (if (and (integer? n-hops)
-                    (seq focus-nodes)
-                    (not (:orphan-pages? settings)))
+                       (seq focus-nodes)
+                       (not (:orphan-pages? settings)))
                 (graph-handler/n-hops graph focus-nodes n-hops)
                 graph)]
     [:div.relative#global-graph
@@ -1001,16 +1000,16 @@
     nodes))
 
 (rum/defcs global-graph < rum/reactive
-                          (mixins/event-mixin
-                            (fn [state]
-                              (mixins/listen state js/window "resize"
-                                (fn [_e]
-                                  (reset! layout [js/window.innerWidth js/window.innerHeight])))))
-                          {:will-unmount (fn [state]
-                                           (reset! *n-hops nil)
-                                           (reset! *focus-nodes [])
-                                           (state/set-search-mode! :global)
-                                           state)}
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/listen state js/window "resize"
+                    (fn [_e]
+                      (reset! layout [js/window.innerWidth js/window.innerHeight])))))
+  {:will-unmount (fn [state]
+                   (reset! *n-hops nil)
+                   (reset! *focus-nodes [])
+                   (state/set-search-mode! :global)
+                   state)}
   [state]
   (let [settings (state/graph-settings)
         forcesettings (state/graph-forcesettings)
@@ -1030,10 +1029,10 @@
       [:span (t :right-side-bar/show-journals)]
       [:div.mt-1
        (ui/toggle show-journals-in-page-graph? ;my-val;
-         (fn []
-           (let [value (not show-journals-in-page-graph?)]
-             (reset! *show-journals-in-page-graph? value)))
-         true)]]
+                  (fn []
+                    (let [value (not show-journals-in-page-graph?)]
+                      (reset! *show-journals-in-page-graph? value)))
+                  true)]]
 
      (graph/graph-2d {:nodes (:nodes graph)
                       :links (:links graph)
