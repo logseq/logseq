@@ -342,7 +342,7 @@
   []
   (p/let [^js res (js/fetch "./whiteboard/onboarding.edn") ;; do we need to cache it?
           text (.text res)
-          edn (common-util/safe-read-string text)]
+          edn (common-util/safe-read-map-string text)]
     edn))
 
 (defn clone-whiteboard-from-edn

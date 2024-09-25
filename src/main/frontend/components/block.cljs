@@ -443,7 +443,7 @@
 (defn image-link [config url href label metadata full_text]
   (let [metadata (if (string/blank? metadata)
                    nil
-                   (common-util/safe-read-string metadata))
+                   (common-util/safe-read-map-string metadata))
         title (second (first label))
         repo (state/get-current-repo)]
     (ui/catch-error
@@ -1150,7 +1150,7 @@
 (defn- show-link?
   [config metadata s full-text]
   (let [media-formats (set (map name config/media-formats))
-        metadata-show (:show (common-util/safe-read-string metadata))
+        metadata-show (:show (common-util/safe-read-map-string metadata))
         format (get-in config [:block :block/format])]
     (or
      (and
@@ -3636,7 +3636,7 @@
 
       ["Custom" "query" _options _result content]
       (try
-        (let [query (common-util/safe-read-string content)]
+        (let [query (common-util/safe-read-map-string content)]
           (query/custom-query (wrap-query-components config) query))
         (catch :default e
           (log/error :read-string-error e)

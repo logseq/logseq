@@ -306,7 +306,7 @@
    - blocks will be adapted to tldraw shapes. All blocks's parent is the given page."
   [file content {:keys [verbose] :or {verbose true}}]
   (let [_ (when verbose (println "Parsing start: " file))
-        {:keys [pages blocks]} (common-util/safe-read-string content)
+        {:keys [pages blocks]} (common-util/safe-read-map-string content)
         blocks (map
                 (fn [block]
                   (-> block

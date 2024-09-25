@@ -105,7 +105,7 @@
                                           "web application/logseq"))))
           blocks-str (when blocks-blob (.text blocks-blob))]
          (when blocks-str
-           (common-util/safe-read-string blocks-str))))
+           (common-util/safe-read-map-string blocks-str))))
 
 (defn- markdown-blocks?
   [text]
