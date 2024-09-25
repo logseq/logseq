@@ -102,26 +102,37 @@
     (db-async/<q repo {:transact-db? false} q' now-inst-ms (:rules result))))
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
-  (shui/button
-   {:variant :outline
-    :auto-focus false
-    :size :sm
-    :id id
-    :class (str id " " class " !px-2 !py-1")
-    :background background
-    :on-pointer-down (fn [e] (util/stop-propagation e))
-    :on-click (fn [_e]
-                (js/setTimeout #(on-click) 10))}
-   [:div.flex.flex-row.items-center.gap-1
-    [:span btn-text]
-    (when-not (util/sm-breakpoint?)
-      (shui/button
-       {:variant :outline
-        :tab-index -1
-        :auto-focus false
-        :class "text-muted-foreground !px-1 !py-0 !h-4"
-        :size :sm}
-       [:span.text-sm shortcut]))]))
+  (let [bg-class (case id
+                   "card-again" nil
+                   "card-hard" "primary-purple"
+                   "card-good" nil
+                   "card-easy" "primary-green"
+                   nil)]
+    (shui/button
+     {:variant :default
+      :title (str "Shortcut: " shortcut)
+      :auto-focus false
+      :size :sm
+      :id id
+      :class (str id " " class " !px-2 !py-1"
+                  (if (= id "card-again")
+                    " bg-destructive/90 hover:bg-destructive "
+                    " bg-primary/90 hover:bg-primary ")
+                  bg-class)
+      :background background
+      :on-pointer-down (fn [e] (util/stop-propagation e))
+      :on-click (fn [_e]
+                  (js/setTimeout #(on-click) 10))}
+     [:div.flex.flex-row.items-center.gap-1
+      [:span btn-text]
+      (when-not (util/sm-breakpoint?)
+        (shui/button
+         {:variant :text
+          :tab-index -1
+          :auto-focus false
+          :class "!px-1 !py-0 !h-4 opacity-70"
+          :size :sm}
+         [:span.text-sm shortcut]))])))
 
 (defn- has-cloze?
   [block]
@@ -146,7 +157,7 @@
 
 (defn- rating-btns
   [repo block-id *card-index *phase]
-  [:div.flex.flex-row.items-center.gap-2.flex-wrap
+  [:div.flex.flex-row.items-center.gap-8.flex-wrap
    (mapv
     (fn [rating]
       (btn-with-shortcut {:btn-text (string/capitalize (name rating))
@@ -188,7 +199,7 @@
   (when-let [block-entity (db/sub-block block-id)]
     (let [phase (rum/react *phase)
           next-phase (phase->next-phase block-entity phase)]
-      [:div.ls-card.content
+      [:div.ls-card.content.flex.flex-col.overflow-y-auto
        [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
        (let [option (case phase
                       :init
@@ -248,7 +259,7 @@
         *card-index (::card-index state)
         *phase (atom :init)]
     (when (false? loading?)
-      [:div#cards-modal.p-1.flex.flex-col.gap-8
+      [:div#cards-modal.p-4.flex.flex-col.gap-8.h-full.flex-1
        [:div.flex.flex-row.items-center.gap-2.flex-wrap
         (shui/select
          {:on-value-change (fn [v]

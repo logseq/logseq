@@ -1,0 +1,5 @@
+@media (min-width: 640px) {
+    .ls-card {
+        min-height: 60vh;
+    }
+}
