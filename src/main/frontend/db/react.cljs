@@ -68,11 +68,6 @@
             (remove-q! query))))))
   (swap! query-components dissoc component))
 
-;; TODO: rename :custom to :query/custom
-(defn remove-custom-query!
-  [repo query]
-  (remove-q! [repo :custom query]))
-
 ;; Reactive query
 
 (defn get-query-cached-result

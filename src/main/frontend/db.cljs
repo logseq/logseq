@@ -46,7 +46,7 @@
   get-current-page
   remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   q
-  query-state query-components remove-custom-query! set-new-result!])
+  query-state query-components set-new-result!])
 
 (defn start-db-conn!
   ([repo]
