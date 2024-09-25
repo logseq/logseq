@@ -60,11 +60,11 @@
 (defn last-shui-preview-popup?
   []
   (= "ls-preview-popup"
-    (some-> (shui-popup/get-last-popup) :content-props :class)))
+     (some-> (shui-popup/get-last-popup) :content-props :class)))
 (defn hide-popups-until-preview-popup!
   []
   (while (and (shui-popups?)
-           (not (last-shui-preview-popup?)))
+              (not (last-shui-preview-popup?)))
     (shui/popup-hide!)))
 
 (def built-in-colors
@@ -77,10 +77,10 @@
    "gray"])
 
 (defn ->block-background-color
- [color]
- (if (some #{color} built-in-colors)
-   (str "var(--ls-highlight-color-" color ")")
-   color))
+  [color]
+  (if (some #{color} built-in-colors)
+    (str "var(--ls-highlight-color-" color ")")
+    color))
 
 (defn built-in-color?
   [color]
@@ -180,9 +180,9 @@
                (reset! (:open? state) true))
              (let [on-toggle (:on-toggle opts)]
                (when (fn? on-toggle)
-                (add-watch (:open? state) ::listen-open-value
-                           (fn [_ _ _ _]
-                             (on-toggle @(:open? state)))))))
+                 (add-watch (:open? state) ::listen-open-value
+                            (fn [_ _ _ _]
+                              (on-toggle @(:open? state)))))))
            state)}
   [state content-fn modal-content-fn
    & [{:keys [modal-class z-index trigger-class _initial-open? *toggle-fn
@@ -221,11 +221,11 @@
      (dissoc options :only-child?) child]
     [:a.flex.justify-between.menu-link
      (cond-> options
-             (true? no-padding?)
-             (assoc :class (str class " no-padding"))
+       (true? no-padding?)
+       (assoc :class (str class " no-padding"))
 
-             true
-             (dissoc :no-padding?))
+       true
+       (dissoc :no-padding?))
 
      [:span.flex-1 child]
      (when shortcut
@@ -243,15 +243,15 @@
                  links (remove nil? links)]
              (for [{icon' :icon :keys [options title key hr hover-detail item _as-link?]} links]
                (let [new-options
-                           (merge options
-                                  (cond->
-                                    {:title    hover-detail
-                                     :on-click (fn [e]
-                                                 (when-not (false? (when-let [on-click-fn (:on-click options)]
-                                                                     (on-click-fn e)))
-                                                   (close-fn)))}
-                                    key
-                                    (assoc :key key)))
+                     (merge options
+                            (cond->
+                             {:title    hover-detail
+                              :on-click (fn [e]
+                                          (when-not (false? (when-let [on-click-fn (:on-click options)]
+                                                              (on-click-fn e)))
+                                            (close-fn)))}
+                              key
+                              (assoc :key key)))
                      child (if hr
                              nil
                              (or item
@@ -262,8 +262,8 @@
                  (if hr
                    [:hr.menu-separator {:key (or key "dropdown-hr")}]
                    (rum/with-key
-                    (menu-link new-options child)
-                    title)))))
+                     (menu-link new-options child)
+                     title)))))
 
            wrapper-children
            [:.menu-links-wrapper
@@ -319,12 +319,12 @@
            [:div.flex-shrink-0.flex {:style {:margin-top -9
                                              :margin-right -18}}
             (button
-              {:button-props {:aria-label "Close"}
-               :variant :ghost
-               :class "hover:bg-transparent hover:text-foreground"
-               :on-click (fn []
-                           (notification/clear! uid))
-               :icon "x"})]]]]]])))
+             {:button-props {:aria-label "Close"}
+              :variant :ghost
+              :class "hover:bg-transparent hover:text-foreground"
+              :on-click (fn []
+                          (notification/clear! uid))
+              :icon "x"})]]]]]])))
 
 (declare button)
 
@@ -333,9 +333,9 @@
   [:div.ui__notifications-content
    [:div.pointer-events-auto.notification-clear
     (button (t :notification/clear-all)
-     :intent "logseq"
-     :on-click (fn []
-                 (notification/clear-all!)))]])
+            :intent "logseq"
+            :on-click (fn []
+                        (notification/clear-all!)))]])
 
 (rum/defc notification < rum/reactive
   []
@@ -350,7 +350,7 @@
                                     :key     (name k)}
                                    (fn [state]
                                      (notification-content state (:content v) (:status v) k)))))
-                           contents)
+                              contents)
            clear-all (when (> (count contents) 1)
                        (css-transition
                         {:timeout 100
@@ -364,7 +364,7 @@
   [input opts]
   (let [time-fn (fn []
                   (try
-                    (util/time-ago input)
+                    (util/human-time input)
                     (catch :default e
                       (js/console.error e)
                       input)))
@@ -637,7 +637,7 @@
       {;; enter
        13 (fn [state e]
             (when-let [^js enter-el (some-> (rum/dom-node state)
-                                      (.querySelector "button.ui__modal-enter"))]
+                                            (.querySelector "button.ui__modal-enter"))]
               (.preventDefault e)
               (.click enter-el)))})))
   []
@@ -716,8 +716,8 @@
   (let [control? (get state ::control?)]
     [:div.content
      [:div.flex-1.flex-row.foldable-title (cond->
-                                            {:on-mouse-over #(reset! control? true)
-                                             :on-mouse-out  #(reset! control? false)}
+                                           {:on-mouse-over #(reset! control? true)
+                                            :on-mouse-out  #(reset! control? false)}
                                             title-trigger?
                                             (assoc :on-pointer-down on-pointer-down
                                                    :class "cursor"))
@@ -725,9 +725,9 @@
        (when-not (mobile-util/native-platform?)
          [:a.block-control.opacity-50.hover:opacity-100.mr-2
           (cond->
-            {:style    {:width       14
-                        :height      16
-                        :margin-left -30}}
+           {:style    {:width       14
+                       :height      16
+                       :margin-left -30}}
             (not title-trigger?)
             (assoc :on-pointer-down on-pointer-down))
           [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
@@ -751,10 +751,10 @@
                                 _default-collapsed? _init-collapsed]}]
   (let [collapsed? (get state ::collapsed?)
         on-pointer-down (fn [e]
-                        (util/stop e)
-                        (swap! collapsed? not)
-                        (when on-pointer-down
-                          (on-pointer-down @collapsed?)))]
+                          (util/stop e)
+                          (swap! collapsed? not)
+                          (when on-pointer-down
+                            (on-pointer-down @collapsed?)))]
     [:div.flex.flex-col
      {:class class}
      (foldable-title {:on-pointer-down on-pointer-down
@@ -947,7 +947,7 @@
       :on-change #(let [value (util/evalue %)]
                     (reset! *value value))
       :on-pointer-up #(let [value (util/evalue %)]
-                      (on-change value))}]))
+                        (on-change value))}]))
 
 (rum/defcs tweet-embed < (rum/local true :loading?)
   [state id]
@@ -966,9 +966,9 @@
            :or   {small? false}
            :as   opts}]
   (let [button-props (merge
-                       (dissoc opts
-                         :theme :background :href :variant :class :intent :small? :icon :icon-props :disabled? :button-props)
-                       button-props)
+                      (dissoc opts
+                              :theme :background :href :variant :class :intent :small? :icon :icon-props :disabled? :button-props)
+                      button-props)
         props (merge {:variant (cond
                                  (= theme :gray) :ghost
                                  (= background "gray") :secondary
@@ -979,10 +979,10 @@
                       :size    (if small? :xs (or size :sm))
                       :icon    icon'
                       :class   (if (and (string? background)
-                                     (not (contains? #{"gray" "red"} background)))
+                                        (not (contains? #{"gray" "red"} background)))
                                  (str class " primary-" background) class)
                       :muted   disabled?}
-                button-props)
+                     button-props)
 
         icon'' (when icon' (shui/tabler-icon icon' icon-props))
         href? (not (string/blank? href))
@@ -1007,7 +1007,7 @@
    [:span.ui__point.overflow-hidden.rounded-full.inline-block
     (merge {:class (str (util/hiccup->class klass) " " class)
             :style (merge {:width size :height size} style)}
-      (dissoc opts :style :class))]))
+           (dissoc opts :style :class))]))
 
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
@@ -1130,7 +1130,7 @@
 (rum/defc DelDateButton
   [on-delete]
   (shui/button {:variant :outline :size :sm :class "del-date-btn" :on-click on-delete}
-    (shui/tabler-icon "trash" {:size 15})))
+               (shui/tabler-icon "trash" {:size 15})))
 
 (defonce month-values
   [:January :February :March :April :May
@@ -1140,7 +1140,7 @@
 (defn get-month-label
   [n]
   (some->> n (nth month-values)
-    (name)))
+           (name)))
 
 (rum/defc date-year-month-select
   [{:keys [name value onChange _children]}]
@@ -1160,18 +1160,18 @@
        (shui/button {:variant :ghost
                      :class "!px-2 !py-0 h-6 border border-input rounded-md"
                      :size :sm}
-         (get-month-label value)))
+                    (get-month-label value)))
       (shui/dropdown-menu-content
-        (for [[idx month] (medley/indexed month-values)
-              :let [label (clojure.core/name month)]]
-          (shui/dropdown-menu-checkbox-item
-            {:checked (= value idx)
-             :on-select (fn []
-                          (let [^js e (js/Event. "change")]
-                            (js/Object.defineProperty e "target"
-                              #js {:value #js {:value idx} :enumerable true})
-                            (onChange e)))}
-            label)))))])
+       (for [[idx month] (medley/indexed month-values)
+             :let [label (clojure.core/name month)]]
+         (shui/dropdown-menu-checkbox-item
+          {:checked (= value idx)
+           :on-select (fn []
+                        (let [^js e (js/Event. "change")]
+                          (js/Object.defineProperty e "target"
+                                                    #js {:value #js {:value idx} :enumerable true})
+                          (onChange e)))}
+          label)))))])
 
 (defn single-calendar
   [{:keys [del-btn? on-delete on-select on-day-click] :as opts}]
@@ -1255,5 +1255,5 @@
 
 (comment
   (rum/defc emoji-picker
-   [opts]
-   (EmojiPicker. (assoc opts :data emoji-data))))
+    [opts]
+    (EmojiPicker. (assoc opts :data emoji-data))))

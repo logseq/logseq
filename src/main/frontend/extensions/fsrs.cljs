@@ -101,38 +101,40 @@
              q)]
     (db-async/<q repo {:transact-db? false} q' now-inst-ms (:rules result))))
 
-(defn- btn-with-shortcut [{:keys [shortcut id btn-text background on-click class]}]
+(defn- btn-with-shortcut [{:keys [shortcut id btn-text due background on-click class]}]
   (let [bg-class (case id
                    "card-again" nil
                    "card-hard" "primary-purple"
                    "card-good" nil
                    "card-easy" "primary-green"
                    nil)]
-    (shui/button
-     {:variant :default
-      :title (str "Shortcut: " shortcut)
-      :auto-focus false
-      :size :sm
-      :id id
-      :class (str id " " class " !px-2 !py-1"
-                  (if (= id "card-again")
-                    " bg-destructive/90 hover:bg-destructive "
-                    " bg-primary/90 hover:bg-primary ")
-                  bg-class)
-      :background background
-      :on-pointer-down (fn [e] (util/stop-propagation e))
-      :on-click (fn [_e]
-                  (js/setTimeout #(on-click) 10))}
-     [:div.flex.flex-row.items-center.gap-1
-      [:span btn-text]
-      (when-not (util/sm-breakpoint?)
-        (shui/button
-         {:variant :text
-          :tab-index -1
-          :auto-focus false
-          :class "!px-1 !py-0 !h-4 opacity-70"
-          :size :sm}
-         [:span.text-sm shortcut]))])))
+    [:div.flex.flex-row.items-center.gap-2
+     (shui/button
+      {:variant :default
+       :title (str "Shortcut: " shortcut)
+       :auto-focus false
+       :size :sm
+       :id id
+       :class (str id " " class " !px-2 !py-1"
+                   (if (= id "card-again")
+                     " bg-destructive/90 hover:bg-destructive "
+                     " bg-primary/90 hover:bg-primary ")
+                   bg-class)
+       :background background
+       :on-pointer-down (fn [e] (util/stop-propagation e))
+       :on-click (fn [_e]
+                   (js/setTimeout #(on-click) 10))}
+      [:div.flex.flex-row.items-center.gap-1
+       [:span btn-text]
+       (when-not (util/sm-breakpoint?)
+         (shui/button
+          {:variant :text
+           :tab-index -1
+           :auto-focus false
+           :class "!px-1 !py-0 !h-4 opacity-70"
+           :size :sm}
+          [:span.text-sm shortcut]))])
+     (when due [:div.text-sm.opacity-50 (util/human-time due {:ago? false})])]))
 
 (defn- has-cloze?
   [block]
@@ -156,39 +158,43 @@
    :easy  "4"})
 
 (defn- rating-btns
-  [repo block-id *card-index *phase]
-  [:div.flex.flex-row.items-center.gap-8.flex-wrap
-   (mapv
-    (fn [rating]
-      (btn-with-shortcut {:btn-text (string/capitalize (name rating))
-                          :shortcut (rating->shortcut rating)
-                          :id (str "card-" (name rating))
-                          :on-click #(do (repeat-card! repo block-id rating)
-                                         (swap! *card-index inc)
-                                         (reset! *phase :init))}))
-    (keys rating->shortcut))
-   (shui/button
-    {:variant :ghost
-     :size :sm
-     :class "!px-0 text-muted-foreground !h-4"
-     :on-click (fn [e]
-                 (shui/popup-show! (.-target e)
-                                   (fn []
-                                     [:div.p-4.max-w-lg
-                                      [:dl
-                                       [:dt "Again"]
-                                       [:dd "We got the answer wrong. Automatically means that we have forgotten the card. This is a lapse in memory."]]
-                                      [:dl
-                                       [:dt "Hard"]
-                                       [:dd "The answer was only partially correct and/or we took too long to recall it."]]
-                                      [:dl
-                                       [:dt "Good"]
-                                       [:dd "The answer was correct but we were not confident about it."]]
-                                      [:dl
-                                       [:dt "Easy"]
-                                       [:dd "The answer was correct and we were confident and quick in our recall."]]])
-                                   {:align "start"}))}
-    (ui/icon "info-circle"))])
+  [repo block *card-index *phase]
+  (let [block-id (:db/id block)]
+    [:div.flex.flex-row.items-center.gap-8.flex-wrap
+     (mapv
+      (fn [rating]
+        (let [card-map (get-card-map block)
+              due (:due (fsrs.core/repeat-card! card-map rating))]
+          (btn-with-shortcut {:btn-text (string/capitalize (name rating))
+                              :shortcut (rating->shortcut rating)
+                              :due due
+                              :id (str "card-" (name rating))
+                              :on-click #(do (repeat-card! repo block-id rating)
+                                             (swap! *card-index inc)
+                                             (reset! *phase :init))})))
+      (keys rating->shortcut))
+     (shui/button
+      {:variant :ghost
+       :size :sm
+       :class "!px-0 text-muted-foreground !h-4"
+       :on-click (fn [e]
+                   (shui/popup-show! (.-target e)
+                                     (fn []
+                                       [:div.p-4.max-w-lg
+                                        [:dl
+                                         [:dt "Again"]
+                                         [:dd "We got the answer wrong. Automatically means that we have forgotten the card. This is a lapse in memory."]]
+                                        [:dl
+                                         [:dt "Hard"]
+                                         [:dd "The answer was only partially correct and/or we took too long to recall it."]]
+                                        [:dl
+                                         [:dt "Good"]
+                                         [:dd "The answer was correct but we were not confident about it."]]
+                                        [:dl
+                                         [:dt "Easy"]
+                                         [:dd "The answer was correct and we were confident and quick in our recall."]]])
+                                     {:align "start"}))}
+      (ui/icon "info-circle"))]))
 
 (rum/defcs ^:private card-view < rum/reactive db-mixins/query
   {:will-mount (fn [state]
@@ -224,7 +230,7 @@
                               :on-click #(swap! *phase
                                                 (fn [phase]
                                                   (phase->next-phase block-entity phase)))})
-          (rating-btns repo (:db/id block-entity) *card-index *phase))]])))
+          (rating-btns repo block-entity *card-index *phase))]])))
 
 (declare update-due-cards-count)
 (rum/defcs cards-view < rum/reactive
