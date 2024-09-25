@@ -646,7 +646,7 @@ Some bindings in this fn:
     {:block/_parent ...}])
 
 (defn query
-  "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
+  "Runs a dsl query with query as a string. Primary use is from '/query' or '{{query }}'"
   ([repo query-string]
    (query repo query-string {}))
   ([repo query-string query-opts]
@@ -705,8 +705,6 @@ Some bindings in this fn:
   (string/includes? query' (str "(" filter-name)))
 
 (comment
-  ;; {{query (and (page-property foo bar) [[hello]])}}
-
   (query "(and [[foo]] [[bar]])")
 
   (query "(or [[foo]] [[bar]])")
