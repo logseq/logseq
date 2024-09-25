@@ -4,7 +4,6 @@
   (:require ["/frontend/utils" :as utils]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
-            [cljs.reader :as reader]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as e]
