@@ -379,7 +379,7 @@
       (str (if (and (config/db-based-graph? (state/get-current-repo))
                     (qualified-keyword? (second clause)))
              (:block/title (db/entity (second clause)))
-             (name (second clause)))
+             (some-> (second clause) name))
            ": "
            (cond
              (and (vector? (last clause)) (= :page-ref (first (last clause))))
