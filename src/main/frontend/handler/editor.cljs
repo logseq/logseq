@@ -3359,7 +3359,7 @@
                  (string/includes? content "#+END_QUERY"))
         (let [ast (mldoc/->edn (string/trim content) (or (:block/format entity) :markdown))
               q (mldoc/extract-first-query-from-ast ast)]
-          (some? (:query (common-util/safe-read-string q))))))))
+          (some? (:query (common-util/safe-read-map-string q))))))))
 
 (defn collapsable?
   ([block-id]

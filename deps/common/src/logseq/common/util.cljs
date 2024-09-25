@@ -225,8 +225,20 @@
       false)))
 
 (defn safe-read-string
+  "Reads an edn string and returns nil if it fails to parse"
   ([content]
    (safe-read-string {} content))
+  ([opts content]
+   (try
+     (reader/read-string opts content)
+     (catch :default e
+       (log/error :parse/read-string-failed e)
+       {}))))
+
+(defn safe-read-map-string
+  "Reads an edn map string and returns {} if it fails to parse"
+  ([content]
+   (safe-read-map-string {} content))
   ([opts content]
    (try
      (reader/read-string opts content)
