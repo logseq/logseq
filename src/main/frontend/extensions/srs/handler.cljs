@@ -5,9 +5,7 @@
   [id]
   (let [nodes (sel [:#cards-modal (str "." id)])]
     (doseq [node nodes]
-      (.focus node)
-      (.click node)
-      (js/setTimeout #(.blur node) 100))))
+      (.click node))))
 
 (defn toggle-answers []
   (click "card-answers"))
