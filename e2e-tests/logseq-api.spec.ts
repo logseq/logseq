@@ -1,9 +1,30 @@
 import { test } from './fixtures'
 import { expect } from '@playwright/test'
 import { callPageAPI } from './utils'
+import { Page } from 'playwright'
+
+async function createDBGraph(page: Page) {
+  await page.locator(`a.cp__repos-select-trigger`).click()
+  await page.click('text="Create db graph"')
+  await page.waitForSelector('.new-graph')
+  const name = `e2e-db-${Date.now()}`
+  await page.keyboard.type(name)
+  await page.locator('.new-graph > .ui__button').click()
+  return name
+}
+
+test.skip('test db graph', async ({ page }) => {
+  const name = await createDBGraph(page)
+  await page.waitForSelector(`a[title="logseq_db_${name}"]`)
+
+  await page.pause()
+})
 
 test('block related apis',
   async ({ page }) => {
+    const name = await createDBGraph(page)
+    await page.waitForSelector(`a[title="logseq_db_${name}"]`)
+
     const callAPI = callPageAPI.bind(null, page)
 
     const bPageName = 'block-test-page'
