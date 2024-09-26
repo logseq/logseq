@@ -154,6 +154,25 @@
     (db-based-query)
     (file-based-query)))
 
+(defn db-based-code-block
+  []
+  [[:editor/input "" {:last-pattern command-trigger}]
+   [:editor/set-property :logseq.property/node.type :code]
+   [:codemirror/focus]])
+
+(defn file-based-code-block
+  []
+  [[:editor/input "```\n```\n" {:type "block"
+                                :backward-pos 5
+                                :only-breakline? true}]
+   [:editor/select-code-block-mode]])
+
+(defn code-block-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    (db-based-code-block)
+    (file-based-code-block)))
+
 (defn get-statuses
   []
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
@@ -288,10 +307,9 @@
                         {:last-pattern command-trigger
                          :backward-pos 6}]] "Create a underline text decoration"
           :icon/underline])
-       ["Code block" [[:editor/input "```\n```\n" {:type "block"
-                                                   :backward-pos 5
-                                                   :only-breakline? true}]
-                      [:editor/select-code-block-mode]] "Insert code block"
+       ["Code block"
+        (code-block-steps)
+        "Insert code block"
         :icon/code]]
 
       (headings)

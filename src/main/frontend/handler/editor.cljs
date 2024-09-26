@@ -845,6 +845,7 @@
                           db-based? (config/db-based-graph? repo)
                           delete-prev-block? (and db-based?
                                                   (empty? (:block/tags block))
+                                                  (not (:logseq.property/node.type block))
                                                   (seq (:block/properties block))
                                                   (empty? (:block/properties prev-block))
                                                   (not (:logseq.property/created-from-property block)))]
