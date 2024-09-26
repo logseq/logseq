@@ -2038,8 +2038,106 @@
 
 (declare src-cp)
 
-(defn build-block-title
+(defn- text-block-title
   [config {:block/keys [marker pre-block? properties] :as block}]
+  (let [block-title (:block.temp/ast-title block)
+        config (assoc config :block block)
+        level (:level config)
+        slide? (boolean (:slide? config))
+        block-ref? (:block-ref? config)
+        block-type (or (keyword (pu/lookup properties :logseq.property/ls-type)) :default)
+        html-export? (:html-export? config)
+        bg-color (pu/lookup properties :logseq.property/background-color)
+        ;; `heading-level` is for backward compatibility, will remove it in later releases
+        heading-level (:block/heading-level block)
+        heading (or
+                 (and heading-level
+                      (<= heading-level 6)
+                      heading-level)
+                 (pu/lookup properties :logseq.property/heading))
+        heading (if (true? heading) (min (inc level) 6) heading)
+        elem (if heading
+               (keyword (str "h" heading ".block-title-wrap.as-heading"
+                             (when block-ref? ".inline")))
+               :span.block-title-wrap)]
+    (->elem
+     elem
+     (merge
+      {:data-hl-type (pu/lookup properties :logseq.property/hl-type)}
+      (when (and marker
+                 (not (string/blank? marker))
+                 (not= "nil" marker))
+        {:data-marker (str (string/lower-case marker))})
+      (when bg-color
+        (let [built-in-color? (ui/built-in-color? bg-color)]
+          {:style {:background-color (if built-in-color?
+                                       (str "var(--ls-highlight-color-" bg-color ")")
+                                       bg-color)
+                   :color (when-not built-in-color? "white")}
+           :class "px-1 with-bg-color"})))
+
+     ;; children
+     (let [area?  (= :area (keyword (pu/lookup properties :logseq.property/hl-type)))
+           hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
+                     [:div.prefix-link
+                      {:on-pointer-down
+                       (fn [^js e]
+                         (let [^js target (.-target e)]
+                           (case block-type
+                             ;; pdf annotation
+                             :annotation
+                             (if (and area? (.contains (.-classList target) "blank"))
+                               :actions
+                               (do
+                                 (pdf-assets/open-block-ref! block)
+                                 (util/stop e)))
+
+                             :dune)))}
+
+                      [:span.hl-page
+                       [:strong.forbid-edit (str "P" (or
+                                                      (pu/lookup properties :logseq.property.pdf/hl-page)
+                                                      "?"))]
+                       [:label.blank " "]]
+
+                      (when (and area?
+                                 (pu/lookup properties :logseq.property.pdf/hl-stamp))
+                        (pdf-assets/area-display block))])]
+       (remove-nils
+        (concat
+         (when (config/local-file-based-graph? (state/get-current-repo))
+           [(when (and (not pre-block?)
+                       (not html-export?)
+                       (not slide?))
+              (file-block/block-checkbox block (str "mr-1 cursor")))
+            (when (and (not pre-block?)
+                       (not html-export?)
+                       (not slide?))
+              (file-block/marker-switch block))
+            (file-block/marker-cp block)
+            (file-block/priority-cp block)])
+
+         ;; highlight ref block (inline)
+         (when-not area? [(hl-ref)])
+
+         (conj
+          (map-inline config block-title)
+          (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
+
+         ;; highlight ref block (area)
+         (when area? [(hl-ref)])
+
+         (when (and (seq block-title) (ldb/class-instance? (db/entity :logseq.class/Cards) block))
+           [(shui/button
+             {:variant :ghost
+              :size :sm
+              :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
+              :on-click (fn [_]
+                          (state/pub-event! [:modal/show-cards (:db/id block)]))}
+             "Practice")])))))))
+
+(defn build-block-title
+  [config block]
   (let [node-type (:logseq.property.node/type block)]
     (case node-type
       :code
@@ -2050,101 +2148,7 @@
       :math
       (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
 
-      (let [block-title (:block.temp/ast-title block)
-            config (assoc config :block block)
-            level (:level config)
-            slide? (boolean (:slide? config))
-            block-ref? (:block-ref? config)
-            block-type (or (keyword (pu/lookup properties :logseq.property/ls-type)) :default)
-            html-export? (:html-export? config)
-            bg-color (pu/lookup properties :logseq.property/background-color)
-        ;; `heading-level` is for backward compatibility, will remove it in later releases
-            heading-level (:block/heading-level block)
-            heading (or
-                     (and heading-level
-                          (<= heading-level 6)
-                          heading-level)
-                     (pu/lookup properties :logseq.property/heading))
-            heading (if (true? heading) (min (inc level) 6) heading)
-            elem (if heading
-                   (keyword (str "h" heading ".block-title-wrap.as-heading"
-                                 (when block-ref? ".inline")))
-                   :span.block-title-wrap)]
-        (->elem
-         elem
-         (merge
-          {:data-hl-type (pu/lookup properties :logseq.property/hl-type)}
-          (when (and marker
-                     (not (string/blank? marker))
-                     (not= "nil" marker))
-            {:data-marker (str (string/lower-case marker))})
-          (when bg-color
-            (let [built-in-color? (ui/built-in-color? bg-color)]
-              {:style {:background-color (if built-in-color?
-                                           (str "var(--ls-highlight-color-" bg-color ")")
-                                           bg-color)
-                       :color (when-not built-in-color? "white")}
-               :class "px-1 with-bg-color"})))
-
-     ;; children
-         (let [area?  (= :area (keyword (pu/lookup properties :logseq.property/hl-type)))
-               hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
-                         [:div.prefix-link
-                          {:on-pointer-down
-                           (fn [^js e]
-                             (let [^js target (.-target e)]
-                               (case block-type
-                             ;; pdf annotation
-                                 :annotation
-                                 (if (and area? (.contains (.-classList target) "blank"))
-                                   :actions
-                                   (do
-                                     (pdf-assets/open-block-ref! block)
-                                     (util/stop e)))
-
-                                 :dune)))}
-
-                          [:span.hl-page
-                           [:strong.forbid-edit (str "P" (or
-                                                          (pu/lookup properties :logseq.property.pdf/hl-page)
-                                                          "?"))]
-                           [:label.blank " "]]
-
-                          (when (and area?
-                                     (pu/lookup properties :logseq.property.pdf/hl-stamp))
-                            (pdf-assets/area-display block))])]
-           (remove-nils
-            (concat
-             (when (config/local-file-based-graph? (state/get-current-repo))
-               [(when (and (not pre-block?)
-                           (not html-export?)
-                           (not slide?))
-                  (file-block/block-checkbox block (str "mr-1 cursor")))
-                (when (and (not pre-block?)
-                           (not html-export?)
-                           (not slide?))
-                  (file-block/marker-switch block))
-                (file-block/marker-cp block)
-                (file-block/priority-cp block)])
-
-         ;; highlight ref block (inline)
-             (when-not area? [(hl-ref)])
-
-             (conj
-              (map-inline config block-title)
-              (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
-
-         ;; highlight ref block (area)
-             (when area? [(hl-ref)])
-
-             (when (and (seq block-title) (ldb/class-instance? (db/entity :logseq.class/Cards) block))
-               [(shui/button
-                 {:variant :ghost
-                  :size :sm
-                  :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
-                  :on-click (fn [_]
-                              (state/pub-event! [:modal/show-cards (:db/id block)]))}
-                 "Practice")])))))))))
+      (text-block-title config block))))
 
 (rum/defc span-comma
   []
