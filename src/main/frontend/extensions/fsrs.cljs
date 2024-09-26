@@ -116,13 +116,13 @@
        :size :sm
        :id id
        :class (str id " " class " !px-2 !py-1 bg-primary/5 hover:bg-primary/10
-        text-primary border-primary hover:text-primary opacity-90 hover:opacity-100 " bg-class)
+        border-primary opacity-90 hover:opacity-100 " bg-class)
        :on-pointer-down (fn [e] (util/stop-propagation e))
        :on-click (fn [_e] (js/setTimeout #(on-click) 10))}
       [:div.flex.flex-row.items-center.gap-1
        [:span btn-text]
        (when-not (util/sm-breakpoint?)
-         [:span.opacity-80.scale-90 (shui/shortcut shortcut)])])
+         [:span.scale-90 (shui/shortcut shortcut)])])
      (when due [:div.text-sm.opacity-50 (util/human-time due {:ago? false})])]))
 
 (defn- has-cloze?
