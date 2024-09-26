@@ -175,7 +175,7 @@
 @media (min-width: 820px) {
     .ui__dialog-content[label=flashcards__cp] {
         min-width: 800px;
-        max-width: 1024px;
+        max-width: 980px;
     }
 }
 
