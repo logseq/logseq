@@ -89,6 +89,10 @@
     &-purple {
       --primary: var(--rx-purple-10-hsl);
     }
+
+    &-logseq {
+      --primary: 200 97% 37%;;
+    }
   }
 }
 

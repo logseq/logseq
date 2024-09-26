@@ -104,8 +104,8 @@
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text due on-click class]}]
   (let [bg-class (case id
                    "card-again" "primary-red"
-                   "card-hard" "primary-yellow"
-                   "card-good" "primary-purple"
+                   "card-hard" "primary-purple"
+                   "card-good" "primary-logseq"
                    "card-easy" "primary-green"
                    nil)]
     [:div.flex.flex-row.items-center.gap-2
