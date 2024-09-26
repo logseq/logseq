@@ -274,7 +274,8 @@
    [23 {:fix add-card-properties}]
    [24 {:classes [:logseq.class/Cards]}]
    [25 {:properties [:logseq.property/query]
-        :fix add-query-property-to-query-tag}]])
+        :fix add-query-property-to-query-tag}]
+   [26 {:properties [:logseq.property/node.type]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

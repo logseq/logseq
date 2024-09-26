@@ -3509,9 +3509,10 @@
 (declare ->hiccup)
 
 (rum/defc src-cp < rum/static
-  [config options html-export?]
+  [config options]
   (when options
-    (let [{:keys [lines language]} options
+    (let [html-export? (:html-export? config)
+          {:keys [lines language]} options
           attr (when language
                  {:data-lang language})
           code (apply str lines)
@@ -3704,9 +3705,9 @@
          {:data-lang lang}
          (if-let [opts (plugin-handler/hook-fenced-code-by-lang lang)]
            [:div.ui-fenced-code-wrap
-            (src-cp config options html-export?)
+            (src-cp config options)
             (plugins/hook-ui-fenced-code (:block config) (string/join "" (:lines options)) opts)]
-           (src-cp config options html-export?))])
+           (src-cp config options))])
 
       :else
       "")
