@@ -157,7 +157,7 @@
 (defn db-based-code-block
   []
   [[:editor/input "" {:last-pattern command-trigger}]
-   [:editor/set-property :logseq.property/node.type :code]
+   [:editor/set-property :logseq.property.node/type :code]
    [:codemirror/focus]])
 
 (defn file-based-code-block
@@ -178,14 +178,14 @@
   []
   (if (config/db-based-graph? (state/get-current-repo))
     [[:editor/input "" {:last-pattern command-trigger}]
-     [:editor/set-property :logseq.property/node.type :quote]]
+     [:editor/set-property :logseq.property.node/type :quote]]
     (->block "quote")))
 
 (defn math-block-steps
   []
   (if (config/db-based-graph? (state/get-current-repo))
     [[:editor/input "" {:last-pattern command-trigger}]
-     [:editor/set-property :logseq.property/node.type :math]]
+     [:editor/set-property :logseq.property.node/type :math]]
     (->block "export" "latex")))
 
 (defn get-statuses

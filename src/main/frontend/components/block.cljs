@@ -2040,11 +2040,11 @@
 
 (defn build-block-title
   [config {:block/keys [marker pre-block? properties] :as block}]
-  (let [node-type (:logseq.property/node.type block)]
+  (let [node-type (:logseq.property.node/type block)]
     (case node-type
       :code
       [:div.flex.flex-1.w-full
-       (src-cp (assoc config :block block) {:language (:logseq.property/code.mode block)})]
+       (src-cp (assoc config :block block) {:language (:logseq.property.code/mode block)})]
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
       :math
@@ -2407,7 +2407,7 @@
       :block-content-slotted
       (-> block (dissoc :block/children :block/page)))]
 
-    (when-not (contains? #{:code :math} (:logseq.property/node.type block))
+    (when-not (contains? #{:code :math} (:logseq.property.node/type block))
       (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
         (when (and (not block-ref-with-title?)
                    (seq body)
@@ -2721,7 +2721,7 @@
         table? (:table? config)]
     [:div.block-content-or-editor-wrap
      {:class (when (:page-title? config) "ls-page-title-container")
-      :data-node-type (some-> (:logseq.property/node.type block) name)}
+      :data-node-type (some-> (:logseq.property.node/type block) name)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
       [:div.flex.flex-1.flex-row.gap-1.items-center

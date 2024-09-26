@@ -750,8 +750,8 @@
                                            (ui-outliner-tx/transact!
                                             {:outliner-op :save-block}
                                             (db-property-handler/set-block-properties! (:db/id block)
-                                                                                       {:logseq.property/node.type :code
-                                                                                        :logseq.property/code.mode "clojure"})
+                                                                                       {:logseq.property.node/type :code
+                                                                                        :logseq.property.code/mode "clojure"})
                                             (outliner-op/save-block! {:db/id (:db/id block) :block/title ""}))
 
                                            (shui/popup-hide!)))}
