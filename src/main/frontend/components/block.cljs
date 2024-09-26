@@ -2045,6 +2045,11 @@
       :code
       [:div.flex.flex-1.w-full
        (src-cp (assoc config :block block) {:language (:logseq.property/code.mode block)})]
+
+      ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
+      :math
+      (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
+
       (let [block-title (:block.temp/ast-title block)
             config (assoc config :block block)
             level (:level config)
@@ -2402,7 +2407,7 @@
       :block-content-slotted
       (-> block (dissoc :block/children :block/page)))]
 
-    (when-not (contains? #{:code} (:logseq.property/node.type block))
+    (when-not (contains? #{:code :math} (:logseq.property/node.type block))
       (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
         (when (and (not block-ref-with-title?)
                    (seq body)

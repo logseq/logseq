@@ -181,6 +181,13 @@
      [:editor/set-property :logseq.property/node.type :quote]]
     (->block "quote")))
 
+(defn math-block-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    [[:editor/input "" {:last-pattern command-trigger}]
+     [:editor/set-property :logseq.property/node.type :math]]
+    (->block "export" "latex")))
+
 (defn get-statuses
   []
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
@@ -322,8 +329,10 @@
        ["Quote"
         (quote-block-steps)
         "Create a quote block"
-        :icon/quote-block
-        "BLOCK TYPE"]]
+        :icon/quote-block]
+       ["Math block"
+        (math-block-steps)
+        "Create a latex block"]]
 
       (headings)
 
@@ -367,7 +376,7 @@
          [;; Should this be replaced by "Code block"?
           ["Src" (->block "src") "Create a code block"]
           ["Advanced Query" (->block "query") "Create an advanced query block"]
-          ["Latex export" (->block "export" "latex") "Create a latex block"]
+          ["Math block" (->block "export" "latex") "Create a latex block"]
           ["Note" (->block "note") "Create a note block"]
           ["Tip" (->block "tip") "Create a tip block"]
           ["Important" (->block "important") "Create an important block"]
