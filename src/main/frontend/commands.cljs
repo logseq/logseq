@@ -194,7 +194,7 @@
 (defn db-based-code-block
   []
   [[:editor/input "" {:last-pattern command-trigger}]
-   [:editor/set-property :logseq.property.node/type :code]
+   [:editor/upsert-type-block :code]
    [:codemirror/focus]])
 
 (defn file-based-code-block
@@ -755,6 +755,11 @@
           block-property-value (get updated-block block-property-id)]
       (when block-property-value
         (db-property-handler/set-block-property! (:db/id block-property-value) property-id value)))))
+
+(defmethod handle-step :editor/upsert-type-block [[_ type]]
+  (when (config/db-based-graph? (state/get-current-repo))
+    (when-let [block (state/get-edit-block)]
+      (state/pub-event! [:editor/upsert-type-block {:block block :type type}]))))
 
 (defn- file-based-set-priority
   [priority]
