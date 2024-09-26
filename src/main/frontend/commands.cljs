@@ -173,6 +173,14 @@
     (db-based-code-block)
     (file-based-code-block)))
 
+(declare ->block)
+(defn quote-block-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    [[:editor/input "" {:last-pattern command-trigger}]
+     [:editor/set-property :logseq.property/node.type :quote]]
+    (->block "quote")))
+
 (defn get-statuses
   []
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
@@ -310,7 +318,12 @@
        ["Code block"
         (code-block-steps)
         "Insert code block"
-        :icon/code]]
+        :icon/code]
+       ["Quote"
+        (quote-block-steps)
+        "Create a quote block"
+        :icon/quote-block
+        "BLOCK TYPE"]]
 
       (headings)
 
@@ -351,11 +364,7 @@
       ;; https://orgmode.org/manual/Structure-Templates.html
       (when-not db?
         (cond->
-         [["Quote" (->block "quote")
-           "Create a quote block"
-           :icon/quote-block
-           "BLOCK TYPE"]
-        ;; Should this be replaced by "Code block"?
+         [;; Should this be replaced by "Code block"?
           ["Src" (->block "src") "Create a code block"]
           ["Advanced Query" (->block "query") "Create an advanced query block"]
           ["Latex export" (->block "export" "latex") "Create a latex block"]

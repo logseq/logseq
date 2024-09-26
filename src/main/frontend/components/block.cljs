@@ -2402,7 +2402,7 @@
       :block-content-slotted
       (-> block (dissoc :block/children :block/page)))]
 
-    (when-not (:logseq.property/node.type block)
+    (when-not (contains? #{:code} (:logseq.property/node.type block))
       (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
         (when (and (not block-ref-with-title?)
                    (seq body)
@@ -2715,7 +2715,8 @@
                      (rum/react *refs-count))
         table? (:table? config)]
     [:div.block-content-or-editor-wrap
-     {:class (when (:page-title? config) "ls-page-title-container")}
+     {:class (when (:page-title? config) "ls-page-title-container")
+      :data-node-type (some-> (:logseq.property/node.type block) name)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
       [:div.flex.flex-1.flex-row.gap-1.items-center
