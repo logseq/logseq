@@ -55,6 +55,7 @@
             [frontend.handler.code :as code-handler]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.graph :as graph-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]
@@ -944,6 +945,22 @@
            (shui/dialog-open! #(property-dialog/dialog blocks opts')
                               {:id :property-dialog
                                :align "start"})))))))
+
+(defmethod handle :editor/upsert-type-block [[_ {:keys [block type]}]]
+  (p/do!
+    (editor-handler/save-current-block!)
+    (p/delay 16)
+    (let [block (db/entity (:db/id block))
+          block-type (:logseq.property.node/type block)
+          block-title (:block/title block)
+          turn-type! #(db-property-handler/set-block-property!
+                      (:block/uuid %) :logseq.property.node/type (keyword type))]
+      (if (or (not (nil? block-type))
+            (not (string/blank? block-title)))
+        ;; insert block
+        (let [[p _ block'] (editor-handler/insert-new-block-aux! {} block "")]
+          (some-> p (p/then (fn [] (turn-type! block')))))
+        (turn-type! block)))))
 
 (rum/defc multi-tabs-dialog
   []
