@@ -154,6 +154,43 @@
     (db-based-query)
     (file-based-query)))
 
+(defn ->block
+  ([type]
+   (->block type nil))
+  ([type optional]
+   (let [format (get (state/get-edit-block) :block/format)
+         markdown-src? (and (= format :markdown)
+                            (= (string/lower-case type) "src"))
+         [left right] (cond
+                        markdown-src?
+                        ["```" "\n```"]
+
+                        :else
+                        (->> ["#+BEGIN_%s" "\n#+END_%s"]
+                             (map #(util/format %
+                                                (string/upper-case type)))))
+         template (str
+                   left
+                   (if optional (str " " optional) "")
+                   "\n"
+                   right)
+         backward-pos (if (= type "src")
+                        (+ 1 (count right))
+                        (count right))]
+     [[:editor/input template {:type "block"
+                               :last-pattern command-trigger
+                               :backward-pos backward-pos}]])))
+
+(defn- advanced-query-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    [[:editor/input "" {:last-pattern command-trigger}]
+     [:editor/set-property :block/tags :logseq.class/Query]
+     [:editor/set-property :logseq.property/query ""]
+     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.node/type :code]
+     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/mode "clojure"]]
+    (->block "query")))
+
 (defn db-based-code-block
   []
   [[:editor/input "" {:last-pattern command-trigger}]
@@ -173,7 +210,6 @@
     (db-based-code-block)
     (file-based-code-block)))
 
-(declare ->block)
 (defn quote-block-steps
   []
   (if (config/db-based-graph? (state/get-current-repo))
@@ -255,33 +291,6 @@
 
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
-
-(defn ->block
-  ([type]
-   (->block type nil))
-  ([type optional]
-   (let [format (get (state/get-edit-block) :block/format)
-         markdown-src? (and (= format :markdown)
-                            (= (string/lower-case type) "src"))
-         [left right] (cond
-                        markdown-src?
-                        ["```" "\n```"]
-
-                        :else
-                        (->> ["#+BEGIN_%s" "\n#+END_%s"]
-                             (map #(util/format %
-                                                (string/upper-case type)))))
-         template (str
-                   left
-                   (if optional (str " " optional) "")
-                   "\n"
-                   right)
-         backward-pos (if (= type "src")
-                        (+ 1 (count right))
-                        (count right))]
-     [[:editor/input template {:type "block"
-                               :last-pattern command-trigger
-                               :backward-pos backward-pos}]])))
 
 (defn ->properties
   []
@@ -375,7 +384,6 @@
         (cond->
          [;; Should this be replaced by "Code block"?
           ["Src" (->block "src") "Create a code block"]
-          ["Advanced Query" (->block "query") "Create an advanced query block"]
           ["Math block" (->block "export" "latex") "Create a latex block"]
           ["Note" (->block "note") "Create a note block"]
           ["Tip" (->block "tip") "Create a tip block"]
@@ -399,6 +407,7 @@
         query-doc
         :icon/query
         "ADVANCED"]
+       ["Advanced Query" (advanced-query-steps) "Create an advanced query block" :icon/advanced-query]
        (when-not db?
          ["Zotero" (zotero-steps) "Import Zotero journal article" :icon/circle-letter-z])
        ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
@@ -739,6 +748,14 @@
     (when-let [block (state/get-edit-block)]
       (db-property-handler/set-block-property! (:db/id block) property-id value))))
 
+(defmethod handle-step :editor/set-property-on-block-property [[_ block-property-id property-id value]]
+  (when (config/db-based-graph? (state/get-current-repo))
+    (let [updated-block (when-let [block-uuid (:block/uuid (state/get-edit-block))]
+                          (db/entity [:block/uuid block-uuid]))
+          block-property-value (get updated-block block-property-id)]
+      (when block-property-value
+        (db-property-handler/set-block-property! (:db/id block-property-value) property-id value)))))
+
 (defn- file-based-set-priority
   [priority]
   (when-let [input-id (state/get-edit-input-id)]
@@ -897,8 +914,11 @@
 
 (defn handle-steps
   [vector' format]
-  (doseq [step vector']
-    (handle-step step format)))
+  (if (config/db-based-graph? (state/get-current-repo))
+    (p/doseq [step vector']
+      (handle-step step format))
+    (doseq [step vector']
+      (handle-step step format))))
 
 (defn exec-plugin-simple-command!
   [pid {:keys [block-id] :as cmd} action]
