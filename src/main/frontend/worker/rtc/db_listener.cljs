@@ -27,7 +27,7 @@
 
 (def ^:private watched-attr-ns
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs"
-    "logseq.property.linked-references" "logseq.task"
+    "logseq.property.linked-references" "logseq.task" "logseq.property.node" "logseq.property.code"
     "logseq.class" "logseq.kv"})
 
 (defn- watched-attr?

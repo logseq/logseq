@@ -154,6 +154,40 @@
     (db-based-query)
     (file-based-query)))
 
+(defn db-based-code-block
+  []
+  [[:editor/input "" {:last-pattern command-trigger}]
+   [:editor/set-property :logseq.property.node/type :code]
+   [:codemirror/focus]])
+
+(defn file-based-code-block
+  []
+  [[:editor/input "```\n```\n" {:type "block"
+                                :backward-pos 5
+                                :only-breakline? true}]
+   [:editor/select-code-block-mode]])
+
+(defn code-block-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    (db-based-code-block)
+    (file-based-code-block)))
+
+(declare ->block)
+(defn quote-block-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    [[:editor/input "" {:last-pattern command-trigger}]
+     [:editor/set-property :logseq.property.node/type :quote]]
+    (->block "quote")))
+
+(defn math-block-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    [[:editor/input "" {:last-pattern command-trigger}]
+     [:editor/set-property :logseq.property.node/type :math]]
+    (->block "export" "latex")))
+
 (defn get-statuses
   []
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
@@ -288,11 +322,17 @@
                         {:last-pattern command-trigger
                          :backward-pos 6}]] "Create a underline text decoration"
           :icon/underline])
-       ["Code block" [[:editor/input "```\n```\n" {:type "block"
-                                                   :backward-pos 5
-                                                   :only-breakline? true}]
-                      [:editor/select-code-block-mode]] "Insert code block"
-        :icon/code]]
+       ["Code block"
+        (code-block-steps)
+        "Insert code block"
+        :icon/code]
+       ["Quote"
+        (quote-block-steps)
+        "Create a quote block"
+        :icon/quote-block]
+       ["Math block"
+        (math-block-steps)
+        "Create a latex block"]]
 
       (headings)
 
@@ -333,14 +373,10 @@
       ;; https://orgmode.org/manual/Structure-Templates.html
       (when-not db?
         (cond->
-         [["Quote" (->block "quote")
-           "Create a quote block"
-           :icon/quote-block
-           "BLOCK TYPE"]
-        ;; Should this be replaced by "Code block"?
+         [;; Should this be replaced by "Code block"?
           ["Src" (->block "src") "Create a code block"]
           ["Advanced Query" (->block "query") "Create an advanced query block"]
-          ["Latex export" (->block "export" "latex") "Create a latex block"]
+          ["Math block" (->block "export" "latex") "Create a latex block"]
           ["Note" (->block "note") "Create a note block"]
           ["Tip" (->block "tip") "Create a tip block"]
           ["Important" (->block "important") "Create an important block"]

@@ -153,7 +153,6 @@
 ;; export CodeMirror to global scope
 (set! js/window -CodeMirror CodeMirror)
 
-
 (defn- all-tokens-by-cursor
   "All tokens from the beginning of the document to the cursor(inclusive)."
   [cm]
@@ -162,7 +161,6 @@
         pos (.-ch cur)]
     (concat (mapcat #(.getLineTokens cm %) (range line))
             (filter #(<= (.-end %) pos) (.getLineTokens cm line)))))
-
 
 (defn- tokens->doc-state
   "Parse tokens into document state of the last token."
@@ -392,7 +390,7 @@
   (p/do!
    (code-handler/save-code-editor!)
    (when-let [block-id (:block/uuid config)]
-     (let [block (db/pull [:block/uuid block-id])]
+     (let [block (db/entity [:block/uuid block-id])]
        (editor-handler/edit-block! block :max)))))
 
 (defn ^:large-vars/cleanup-todo render!
@@ -481,12 +479,14 @@
                                                    shifted?
                                                    (case key-code
                                                      "Enter"
-                                                     (when-let [blockid (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid"))]
-                                                       (code-handler/save-code-editor!)
-                                                       (js/setTimeout
-                                                        #(editor-handler/api-insert-new-block! ""
-                                                                                               {:block-uuid (uuid blockid)
-                                                                                                :sibling? true}) 32))
+                                                     (do
+                                                       (util/stop e)
+                                                       (when-let [blockid (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid"))]
+                                                         (code-handler/save-code-editor!)
+                                                         (js/setTimeout
+                                                          #(editor-handler/api-insert-new-block! ""
+                                                                                                 {:block-uuid (uuid blockid)
+                                                                                                  :sibling? true}) 32)))
                                                      nil)))))
         (.addEventListener element "pointerdown"
                            (fn [e]
@@ -539,7 +539,7 @@
                        (.setValue editor' code))))
                  state)}
   [state _config id attr code _theme _options]
-  [:div.extensions__code
+  [:div.extensions__code.flex.flex-1
    (when-let [mode (:data-lang attr)]
      (when-not (= mode "calc")
        [:div.extensions__code-lang

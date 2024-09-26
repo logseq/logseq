@@ -32,7 +32,7 @@
                     {:type :notification
                      :payload {:message "Can't set a tag as a parent for non-tag page"
                                :type :warning}
-                     :blocks (remove ldb/class? blocks)}))))
+                     :blocks (map #(select-keys % [:db/id :block/title]) (remove ldb/class? blocks))}))))
 
 (defn- build-property-value-tx-data
   ([block property-id value]
