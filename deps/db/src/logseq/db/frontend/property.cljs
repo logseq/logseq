@@ -233,6 +233,18 @@
                               {:type :node
                                :hide? true
                                :public? false}}
+   :logseq.property.asset/type {:title "File type"
+                                :schema {:type :string
+                                         :hide? true
+                                         :public? false}}
+   :logseq.property.asset/size {:title "File size"
+                                :schema {:type :raw-number
+                                         :hide? true
+                                         :public? false}}
+   :logseq.property.asset/checksum {:title "File checksum"
+                                    :schema {:type :string
+                                             :hide? true
+                                             :public? false}}
    :logseq.property.asset/remote-metadata {:schema
                                            {:type :map
                                             :hide? true
