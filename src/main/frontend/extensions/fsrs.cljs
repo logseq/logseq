@@ -205,7 +205,7 @@
   (when-let [block-entity (db/sub-block block-id)]
     (let [phase (rum/react *phase)
           next-phase (phase->next-phase block-entity phase)]
-      [:div.ls-card.content.flex.flex-col.overflow-y-auto
+      [:div.ls-card.content.flex.flex-col.overflow-y-auto.overflow-x-hidden
        [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
        (let [option (case phase
                       :init
