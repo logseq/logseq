@@ -1639,7 +1639,7 @@
     (cond
       (= name "query")
       (if (config/db-based-graph? (state/get-current-repo))
-        [:div.warning "{{query}} has been deprecated. Use `/Query` command instead."]
+        [:div.warning "{{query}} is deprecated. Use '/Query' command instead."]
         (macro-query-cp config arguments))
 
       (= name "function")
@@ -1647,7 +1647,7 @@
 
       (= name "namespace")
       (if (config/db-based-graph? (state/get-current-repo))
-        [:div.warning "Namespace has been deprecated, use tags instead"]
+        [:div.warning "Namespace is deprecated, use tags instead"]
         (let [namespace (first arguments)]
           (when-not (string/blank? namespace)
             (let [namespace (string/lower-case (page-ref/get-page-name! namespace))
@@ -1698,7 +1698,7 @@
 
       (= name "embed")
       (if (config/db-based-graph? (state/get-current-repo))
-        [:div.warning "embed has been deprecated. Use / command 'Node embed' instead."]
+        [:div.warning "{{embed}} is deprecated. Use '/Node embed' command instead."]
         (macro-embed-cp config arguments))
 
       (= name "renderer")
@@ -3630,9 +3630,11 @@
       [:pre.pre-wrap-white-space
        (join-lines l)]
       ["Quote" l]
-      (->elem
-       :blockquote
-       (markup-elements-cp config l))
+      (if (config/db-based-graph? (state/get-current-repo))
+        [:div.warning "#+BEGIN_QUOTE is deprecated. Use '/Quote' command instead."]
+        (->elem
+         :blockquote
+         (markup-elements-cp config l)))
       ["Raw_Html" content]
       (when (not html-export?)
         [:div.raw_html {:dangerouslySetInnerHTML
@@ -3651,15 +3653,20 @@
       ["Export" "latex" _options content]
       (if html-export?
         (latex/html-export content true false)
-        (latex/latex (str (d/squuid)) content true false))
+        (if (config/db-based-graph? (state/get-current-repo))
+         [:div.warning "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command instead."]
+          (latex/latex (str (d/squuid)) content true false)))
 
       ["Custom" "query" _options _result content]
-      (try
-        (let [query (common-util/safe-read-map-string content)]
-          (query/custom-query (wrap-query-components config) query))
-        (catch :default e
-          (log/error :read-string-error e)
-          (ui/block-error "Invalid query:" {:content content})))
+      (if (config/db-based-graph? (state/get-current-repo))
+        [:div.warning "#+BEGIN_QUERY is deprecated. Use '/Advanced Query' command instead."]
+        (try
+          (let [query (common-util/safe-read-map-string content)]
+            (query/custom-query (wrap-query-components config) query))
+          (catch :default e
+            (log/error :read-string-error e)
+            (ui/block-error "Invalid query:" {:content content}))))
+
 
       ["Custom" "note" _options result _content]
       (ui/admonition "note" (markup-elements-cp config result))
