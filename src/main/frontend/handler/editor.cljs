@@ -1415,40 +1415,41 @@
   (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
     (path/path-join repo-dir assets-dir filename)))
 
-(defn save-assets!
+(defn file-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
 
    Returns: [file-rpath file-obj file-fpath matched-alias]"
   ([repo files]
    (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
-     (save-assets! repo repo-dir assets-dir files
-                   (fn [index file-stem]
+     (file-based-save-assets! repo repo-dir assets-dir files
+                              (fn [index file-stem]
                      ;; TODO: maybe there're other chars we need to handle?
-                     (let [file-base (-> file-stem
-                                         (string/replace " " "_")
-                                         (string/replace "%" "_")
-                                         (string/replace "/" "_"))
-                           file-name (str file-base "_" (.now js/Date) "_" index)]
-                       (string/replace file-name #"_+" "_"))))))
+                                (let [file-base (-> file-stem
+                                                    (string/replace " " "_")
+                                                    (string/replace "%" "_")
+                                                    (string/replace "/" "_"))
+                                      file-name (str file-base "_" (.now js/Date) "_" index)]
+                                  (string/replace file-name #"_+" "_"))))))
   ([repo repo-dir asset-dir-rpath files gen-filename]
    (p/all
     (for [[index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
-      (let [file-name (util/node-path.basename (.-name file))
-            [file-stem ext-full ext-base] (if file-name
-                                            (let [ext-base (util/node-path.extname file-name)
-                                                  ext-full (if-not (config/extname-of-supported? ext-base)
-                                                             (util/full-path-extname file-name) ext-base)]
-                                              [(subs file-name 0 (- (count file-name)
-                                                                    (count ext-full))) ext-full ext-base])
-                                            ["" "" ""])
-            filename  (str (gen-filename index file-stem) ext-full)
-            file-rpath  (str asset-dir-rpath "/" filename)
-            matched-alias (assets-handler/get-matched-alias-by-ext ext-base)
-            file-rpath (cond-> file-rpath
-                         (not (nil? matched-alias))
-                         (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
-            dir (or (:dir matched-alias) repo-dir)]
+      (p/let [file-name (util/node-path.basename (.-name file))
+              [file-stem ext-full ext-base] (if file-name
+                                              (let [ext-base (util/node-path.extname file-name)
+                                                    ext-full (if-not (config/extname-of-supported? ext-base)
+                                                               (util/full-path-extname file-name) ext-base)]
+                                                [(subs file-name 0 (- (count file-name)
+                                                                      (count ext-full))) ext-full ext-base])
+                                              ["" "" ""])
+              filename  (str (gen-filename index file-stem) ext-full)
+              file-rpath  (str asset-dir-rpath "/" filename)
+              matched-alias (assets-handler/get-matched-alias-by-ext ext-base)
+              file-rpath (cond-> file-rpath
+                           (not (nil? matched-alias))
+                           (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
+              dir (or (:dir matched-alias) repo-dir)
+              checksum (assets-handler/get-file-checksum file)]
         (if (util/electron?)
           (let [from (not-empty (.-path file))]
             (js/console.debug "Debug: Copy Asset #" dir file-rpath from)
@@ -1518,39 +1519,135 @@
       (path/get-relative-path current-file-fpath file-path))
     file-path))
 
+(defn file-upload-assets!
+  "Paste asset and insert link to current editing block"
+  [repo id ^js files format uploading? drop-or-paste?]
+  (when (config/local-file-based-graph? repo)
+    (-> (file-based-save-assets! repo (js->clj files))
+          ;; FIXME: only the first asset is handled
+        (p/then
+         (fn [res]
+           (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (and (seq res) (first res))]
+             (let [image? (config/ext-of-image? asset-file-name)]
+               (insert-command!
+                id
+                (assets-handler/get-asset-file-link format
+                                                    (if matched-alias
+                                                      (str
+                                                       (if image? "../assets/" "")
+                                                       "@" (:name matched-alias) "/" asset-file-name)
+                                                      (resolve-relative-path (or asset-file-fpath asset-file-name)))
+                                                    (if file-obj (.-name file-obj) (if image? "image" "asset"))
+                                                    image?)
+                format
+                {:last-pattern (if drop-or-paste? "" commands/command-trigger)
+                 :restore?     true
+                 :command      :insert-asset})))))
+        (p/catch (fn [e]
+                   (js/console.error e)))
+        (p/finally
+          (fn []
+            (reset! uploading? false)
+            (reset! *asset-uploading? false)
+            (reset! *asset-uploading-process 0))))))
+
+(defn db-based-save-assets!
+  "Save incoming(pasted) assets to assets directory.
+
+   Returns: [file-rpath file-obj file-fpath]"
+  ([repo files]
+   (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
+     (db-based-save-assets! repo repo-dir assets-dir files)))
+  ([repo repo-dir asset-dir-rpath files]
+   (p/all
+    (for [[index ^js file] (map-indexed vector files)]
+      ;; WARN file name maybe fully qualified path when paste file
+      (p/let [file-name (util/node-path.basename (.-name file))
+              checksum (assets-handler/get-file-checksum file)
+              block-id (ldb/new-block-id)
+              ext (when file-name
+                    (string/lower-case (.substr (util/node-path.extname file-name) 1)))
+              _ (when (string/blank? ext)
+                  (throw (ex-info "File doesn't have a valid ext."
+                                  {:file-name file-name})))
+              file-path   (str block-id "." ext)
+              file-rpath  (str asset-dir-rpath "/" file-path)
+              dir repo-dir
+              asset (db/entity :logseq.class/Asset)
+              properties {:logseq.property.asset/type ext
+                          :logseq.property.asset/size (.-size file)
+                          :logseq.property.asset/checksum checksum
+                          :block/tags (:db/id asset)}
+              result (api-insert-new-block! file-name
+                                            {:page (:block/uuid asset)
+                                             :block-uuid block-id
+                                             :edit-block? false
+                                             :properties properties})
+              new-entity (db/entity [:block/uuid (:block/uuid result)])]
+        (if (util/electron?)
+          (let [from (not-empty (.-path file))]
+            (js/console.debug "Debug: Copy Asset #" dir file-rpath from)
+            (-> (js/window.apis.copyFileToAssets dir file-rpath from)
+                (p/then
+                 (fn [_dest]
+                   new-entity))
+                (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
+
+          (->
+           (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
+                  (cond
+                    (mobile-util/native-platform?)
+                    ;; capacitor fs accepts Blob, File implements Blob
+                    (p/let [buffer (.arrayBuffer file)
+                            content (base64/encodeByteArray (js/Uint8Array. buffer))
+                            fpath (path/path-join dir file-rpath)]
+                      (capacitor-fs/<write-file-with-base64 fpath content))
+
+                    (config/db-based-graph? repo) ;; memory-fs
+                    (p/let [buffer (.arrayBuffer file)
+                            content (js/Uint8Array. buffer)]
+                      (fs/write-file! repo dir file-rpath content nil))
+
+                    :else
+                    (throw (ex-info "Paste failed"
+                                    {:file-name file-name})))
+                  new-entity)
+           (p/catch (fn [error]
+                      (prn :paste-file-error)
+                      (js/console.error error))))))))))
+
+(defn db-upload-assets!
+  "Paste asset and insert link to current editing block"
+  [repo id ^js files format uploading? drop-or-paste?]
+  (when (or (config/local-file-based-graph? repo)
+            (config/db-based-graph? repo))
+    (-> (db-based-save-assets! repo (js->clj files))
+          ;; FIXME: only the first asset is handled
+        (p/then
+         (fn [entities]
+           (let [entity (first entities)]
+             (insert-command!
+              id
+              (page-ref/->page-ref (:block/uuid entity))
+              format
+              {:last-pattern (if drop-or-paste? "" commands/command-trigger)
+               :restore?     true
+               :command      :insert-asset}))))
+        (p/catch (fn [e]
+                   (js/console.error e)))
+        (p/finally
+          (fn []
+            (reset! uploading? false)
+            (reset! *asset-uploading? false)
+            (reset! *asset-uploading-process 0))))))
+
 (defn upload-asset!
   "Paste asset and insert link to current editing block"
   [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)]
-    (when (or (config/local-file-based-graph? repo)
-              (config/db-based-graph? repo))
-      (-> (save-assets! repo (js->clj files))
-          ;; FIXME: only the first asset is handled
-          (p/then
-           (fn [res]
-             (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (and (seq res) (first res))]
-               (let [image? (config/ext-of-image? asset-file-name)]
-                 (insert-command!
-                  id
-                  (assets-handler/get-asset-file-link format
-                                                      (if matched-alias
-                                                        (str
-                                                         (if image? "../assets/" "")
-                                                         "@" (:name matched-alias) "/" asset-file-name)
-                                                        (resolve-relative-path (or asset-file-fpath asset-file-name)))
-                                                      (if file-obj (.-name file-obj) (if image? "image" "asset"))
-                                                      image?)
-                  format
-                  {:last-pattern (if drop-or-paste? "" commands/command-trigger)
-                   :restore?     true
-                   :command      :insert-asset})))))
-          (p/catch (fn [e]
-                     (js/console.error e)))
-          (p/finally
-            (fn []
-              (reset! uploading? false)
-              (reset! *asset-uploading? false)
-              (reset! *asset-uploading-process 0)))))))
+    (if (config/db-based-graph? repo)
+      (db-upload-assets! repo id ^js files format uploading? drop-or-paste?)
+      (file-upload-assets! repo id ^js files format uploading? drop-or-paste?))))
 
 ;; Editor should track some useful information, like editor modes.
 ;; For example:

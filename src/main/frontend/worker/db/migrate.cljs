@@ -200,6 +200,16 @@
         [[:db/add card-id :logseq.property.class/properties :logseq.property.fsrs/due]
          [:db/add card-id :logseq.property.class/properties :logseq.property.fsrs/state]]))))
 
+(defn- add-asset-properties
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [e (d/entity db :logseq.class/Asset)
+            eid (:db/id e)]
+        [[:db/add eid :logseq.property.class/properties :logseq.property.asset/type]
+         [:db/add eid :logseq.property.class/properties :logseq.property.asset/size]
+         [:db/add eid :logseq.property.class/properties :logseq.property.asset/checksum]]))))
+
 (defn- add-query-property-to-query-tag
   [conn _search-db]
   (let [db @conn]
@@ -276,7 +286,9 @@
    [25 {:properties [:logseq.property/query]
         :fix add-query-property-to-query-tag}]
    [26 {:properties [:logseq.property.node/type]}]
-   [27 {:properties [:logseq.property.code/mode]}]])
+   [27 {:properties [:logseq.property.code/mode]}]
+   [28 {:classes [:logseq.class/Asset]
+        :properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
@@ -308,7 +320,7 @@
                             schema-version->updates)
               properties (mapcat :properties updates)
               new-properties (->> (select-keys db-property/built-in-properties properties)
-                                ;; property already exists, this should never happen
+                                  ;; property already exists, this should never happen
                                   (remove (fn [[k _]]
                                             (when (d/entity db k)
                                               (assert (str "DB migration: property already exists " k)))))
@@ -317,12 +329,12 @@
                                   (map (fn [b] (assoc b :logseq.property/built-in? true))))
               classes (mapcat :classes updates)
               new-classes (->> (select-keys db-class/built-in-classes classes)
-                             ;; class already exists, this should never happen
+                               ;; class already exists, this should never happen
                                (remove (fn [[k _]]
                                          (when (d/entity db k)
                                            (assert (str "DB migration: class already exists " k)))))
                                (into {})
-                               (#(sqlite-create-graph/build-initial-classes* % {}))
+                               (#(sqlite-create-graph/build-initial-classes* % (zipmap properties properties)))
                                (map (fn [b] (assoc b :logseq.property/built-in? true))))
               fixes (mapcat
                      (fn [update']

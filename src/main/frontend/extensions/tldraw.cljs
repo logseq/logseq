@@ -77,12 +77,12 @@
                           (-> b
                               (update :block/uuid str)
                               (update :block/title #(->> (text-util/cut-by % "$pfts_2lqh>$" "$<pfts_2lqh$")
-                                                           (apply str))))) blocks)]
+                                                         (apply str))))) blocks)]
       (clj->js {:blocks blocks}))))
 
 (defn save-asset-handler
   [file]
-  (-> (editor-handler/save-assets! (state/get-current-repo) [(js->clj file)])
+  (-> (editor-handler/file-based-save-assets! (state/get-current-repo) [(js->clj file)])
       (p/then
        (fn [res]
          (when-let [[asset-file-name _ full-file-path] (and (seq res) (first res))]

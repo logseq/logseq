@@ -2994,7 +2994,7 @@
               (when (and (config/local-file-based-graph? repo) (not (state/editing?)))
                 ;; Basically the same logic as editor-handler/upload-asset,
                 ;; does not require edting
-                (-> (editor-handler/save-assets! repo (js->clj files))
+                (-> (editor-handler/file-based-save-assets! repo (js->clj files))
                     (p/then
                      (fn [res]
                        (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (and (seq res) (first res))]
