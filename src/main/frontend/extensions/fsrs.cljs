@@ -101,39 +101,28 @@
              q)]
     (db-async/<q repo {:transact-db? false} q' now-inst-ms (:rules result))))
 
-(defn- btn-with-shortcut [{:keys [shortcut id btn-text due background on-click class]}]
+(defn- btn-with-shortcut [{:keys [shortcut id btn-text due on-click class]}]
   (let [bg-class (case id
-                   "card-again" nil
-                   "card-hard" "primary-purple"
-                   "card-good" nil
+                   "card-again" "primary-red"
+                   "card-hard" "primary-yellow"
+                   "card-good" "primary-purple"
                    "card-easy" "primary-green"
                    nil)]
     [:div.flex.flex-row.items-center.gap-2
      (shui/button
-      {:variant :default
+      {:variant :outline
        :title (str "Shortcut: " shortcut)
        :auto-focus false
        :size :sm
        :id id
-       :class (str id " " class " !px-2 !py-1"
-                   (if (= id "card-again")
-                     " bg-destructive/90 hover:bg-destructive "
-                     " bg-primary/90 hover:bg-primary ")
-                   bg-class)
-       :background background
+       :class (str id " " class " !px-2 !py-1 bg-primary/5 hover:bg-primary/10
+        text-primary border-primary hover:text-primary opacity-90 hover:opacity-100 " bg-class)
        :on-pointer-down (fn [e] (util/stop-propagation e))
-       :on-click (fn [_e]
-                   (js/setTimeout #(on-click) 10))}
+       :on-click (fn [_e] (js/setTimeout #(on-click) 10))}
       [:div.flex.flex-row.items-center.gap-1
        [:span btn-text]
        (when-not (util/sm-breakpoint?)
-         (shui/button
-          {:variant :text
-           :tab-index -1
-           :auto-focus false
-           :class "!px-1 !py-0 !h-4 opacity-70"
-           :size :sm}
-          [:span.text-sm shortcut]))])
+         [:span.opacity-80.scale-90 (shui/shortcut shortcut)])])
      (when due [:div.text-sm.opacity-50 (util/human-time due {:ago? false})])]))
 
 (defn- has-cloze?
@@ -215,7 +204,7 @@
                        :hide-children? true}
                       {:show-cloze? true})]
          (component-block/blocks-container option [block-entity]))
-       [:div.mt-8
+       [:div.mt-8.pb-2
         (if (contains? #{:show-cloze :show-answer} next-phase)
           (btn-with-shortcut {:btn-text (t
                                          (case next-phase
@@ -230,7 +219,7 @@
                               :on-click #(swap! *phase
                                                 (fn [phase]
                                                   (phase->next-phase block-entity phase)))})
-          (rating-btns repo block-entity *card-index *phase))]])))
+          [:div.flex.justify-center (rating-btns repo block-entity *card-index *phase)])]])))
 
 (declare update-due-cards-count)
 (rum/defcs cards-view < rum/reactive
@@ -265,7 +254,7 @@
         *card-index (::card-index state)
         *phase (atom :init)]
     (when (false? loading?)
-      [:div#cards-modal.p-4.flex.flex-col.gap-8.h-full.flex-1
+      [:div#cards-modal.flex.flex-col.gap-8.h-full.flex-1
        [:div.flex.flex-row.items-center.gap-2.flex-wrap
         (shui/select
          {:on-value-change (fn [v]
