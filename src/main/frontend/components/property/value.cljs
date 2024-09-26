@@ -463,9 +463,13 @@
            (let [;; Disallows cyclic hierarchies
                  exclude-ids (-> (set (map (fn [id] (:block/uuid (db/entity id))) children-pages))
                                  (conj (:block/uuid block))) ; break cycle
-                 options (if (ldb/class? block) (model/get-all-classes repo)
-                             (->> (model/get-all-pages repo)
-                                  (remove (fn [e] (or (ldb/built-in? e) (ldb/property? e))))))
+                 options (if (ldb/class? block)
+                           (model/get-all-classes repo)
+                           (cond->>
+                            (->> (model/get-all-pages repo)
+                                 (remove (fn [e] (or (ldb/built-in? e) (ldb/property? e)))))
+                             (contains? #{"property" "page"} (:block/type block))
+                             (remove ldb/class?)))
                  excluded-options (remove (fn [e] (contains? exclude-ids (:block/uuid e))) options)]
              excluded-options)
 
