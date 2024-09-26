@@ -16,7 +16,7 @@
 
 (defn render!
   [state]
-  (let [[id s display?] (:rum/args state)]
+  (let [[id s _ display?] (:rum/args state)]
     (try
       (when-let [elem (gdom/getElement id)]
         (js/katex.render s elem
@@ -42,13 +42,13 @@
           (config/asset-uri "/static/js/mhchem.min.js")
           (fn []
             (some-> (when-let [enhancers (and config/lsp-enabled?
-                                           (seq (hook-extensions-enhancers-by-key :katex)))]
+                                              (seq (hook-extensions-enhancers-by-key :katex)))]
                       (for [{f :enhancer} enhancers]
                         (when (fn? f) (f js/window.katex))))
-              (p/all)
-              (p/finally (fn []
-                           (reset! *loading? false)
-                           (render! state)))))))
+                    (p/all)
+                    (p/finally (fn []
+                                 (reset! *loading? false)
+                                 (render! state)))))))
        state))))
 
 (defn- state-&-load-and-render!

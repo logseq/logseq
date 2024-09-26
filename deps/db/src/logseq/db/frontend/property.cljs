@@ -38,6 +38,16 @@
                                    :cardinality :many
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
+   :logseq.property.node/type {:title "Node type"
+                               :schema {:type :keyword
+                                        :public? false
+                                        :hide? true
+                                        :view-context :block}}
+   :logseq.property.code/mode {:title "Code mode"
+                               :schema {:type :string
+                                        :public? false
+                                        :hide? true
+                                        :view-context :block}}
    :logseq.property/parent {:title "Parent"
                             :schema {:type :node
                                      :public? true
@@ -264,7 +274,8 @@
 
 (def logseq-property-namespaces
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs" "logseq.task"
-    "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table"
+    "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table" "logseq.property.node"
+    "logseq.property.code"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"})
 
 (defn logseq-property?

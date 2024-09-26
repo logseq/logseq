@@ -111,7 +111,7 @@ body {
     font-weight: bold;
   }
 
-  blockquote {
+  blockquote, .block-content-or-editor-wrap[data-node-type='quote'] {
     display: block;
     text-indent: 0;
     padding: 8px 20px;
@@ -122,8 +122,12 @@ body {
     font-size: 1rem;
   }
 
-  html blockquote {
+  html blockquote, .block-content-or-editor-wrap[data-node-type='quote']  {
     border-left-color: var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha, hsl(var(--primary)/.4)));
+  }
+
+  .block-content-or-editor-wrap[data-node-type='quote'] {
+    margin: 0.5rem 0;
   }
 
   summary {

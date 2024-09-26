@@ -2036,7 +2036,9 @@
 
 (declare block-content)
 
-(defn build-block-title
+(declare src-cp)
+
+(defn- text-block-title
   [config {:block/keys [marker pre-block? properties] :as block}]
   (let [block-title (:block.temp/ast-title block)
         config (assoc config :block block)
@@ -2133,6 +2135,20 @@
               :on-click (fn [_]
                           (state/pub-event! [:modal/show-cards (:db/id block)]))}
              "Practice")])))))))
+
+(defn build-block-title
+  [config block]
+  (let [node-type (:logseq.property.node/type block)]
+    (case node-type
+      :code
+      [:div.flex.flex-1.w-full
+       (src-cp (assoc config :block block) {:language (:logseq.property.code/mode block)})]
+
+      ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
+      :math
+      (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
+
+      (text-block-title config block))))
 
 (rum/defc span-comma
   []
@@ -2395,20 +2411,21 @@
       :block-content-slotted
       (-> block (dissoc :block/children :block/page)))]
 
-    (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
-      (when (and (not block-ref-with-title?)
-                 (seq body)
-                 (or (not title-collapse-enabled?)
-                     (and title-collapse-enabled?
-                          (or (not collapsed?)
-                              (some? (mldoc/extract-first-query-from-ast body))))))
-        [:div.block-body
-         (let [body (block/trim-break-lines! (:block.temp/ast-body block))
-               uuid (:block/uuid block)]
-           (for [[idx child] (medley/indexed body)]
-             (when-let [block (markup-element-cp config child)]
-               (rum/with-key (block-child block)
-                 (str uuid "-" idx)))))]))))
+    (when-not (contains? #{:code :math} (:logseq.property.node/type block))
+      (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
+        (when (and (not block-ref-with-title?)
+                   (seq body)
+                   (or (not title-collapse-enabled?)
+                       (and title-collapse-enabled?
+                            (or (not collapsed?)
+                                (some? (mldoc/extract-first-query-from-ast body))))))
+          [:div.block-body
+           (let [body (block/trim-break-lines! (:block.temp/ast-body block))
+                 uuid (:block/uuid block)]
+             (for [[idx child] (medley/indexed body)]
+               (when-let [block (markup-element-cp config child)]
+                 (rum/with-key (block-child block)
+                   (str uuid "-" idx)))))])))))
 
 (rum/defcs block-tag <
   (rum/local false ::hover?)
@@ -2707,7 +2724,8 @@
                      (rum/react *refs-count))
         table? (:table? config)]
     [:div.block-content-or-editor-wrap
-     {:class (when (:page-title? config) "ls-page-title-container")}
+     {:class (when (:page-title? config) "ls-page-title-container")
+      :data-node-type (some-> (:logseq.property.node/type block) name)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
       [:div.flex.flex-1.flex-row.gap-1.items-center
@@ -3509,12 +3527,13 @@
 (declare ->hiccup)
 
 (rum/defc src-cp < rum/static
-  [config options html-export?]
+  [config options]
   (when options
-    (let [{:keys [lines language]} options
+    (let [html-export? (:html-export? config)
+          {:keys [lines language]} options
           attr (when language
                  {:data-lang language})
-          code (apply str lines)
+          code (if lines (apply str lines) (:block/title (:block config)))
           [inside-portal? set-inside-portal?] (rum/use-state nil)]
       (cond
         html-export?
@@ -3522,7 +3541,7 @@
 
         :else
         (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
-          [:div.ui-fenced-code-editor
+          [:div.ui-fenced-code-editor.flex.flex-1
            {:ref (fn [el]
                    (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
            (cond
@@ -3704,9 +3723,9 @@
          {:data-lang lang}
          (if-let [opts (plugin-handler/hook-fenced-code-by-lang lang)]
            [:div.ui-fenced-code-wrap
-            (src-cp config options html-export?)
+            (src-cp config options)
             (plugins/hook-ui-fenced-code (:block config) (string/join "" (:lines options)) opts)]
-           (src-cp config options html-export?))])
+           (src-cp config options))])
 
       :else
       "")

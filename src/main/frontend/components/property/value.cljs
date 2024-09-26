@@ -36,7 +36,8 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.modules.outliner.op :as outliner-op]))
 
 (rum/defc property-empty-btn-value
   [property & opts]
@@ -732,11 +733,29 @@
                      (shui/popup-show!
                       (.-target e)
                       (fn []
-                        [:div.p-4.h-64 {:style {:width "42rem"}}
-                         (let [block (db/entity (:db/id v-block))
-                               query (:block/title block)]
-                           (query-builder-component/builder query {:property property
-                                                                   :block block}))])
+                        (let [block (db/entity (:db/id v-block))
+                              query (:block/title block)]
+                          [:div.p-4.h-64.flex.flex-col.gap-4 {:style {:width "42rem"}}
+                           [:div.flex.flex-1
+                            (query-builder-component/builder query {:property property
+                                                                    :block block})]
+
+                           [:div
+                            (shui/button
+                             {:variant :ghost
+                              :size :sm
+                              :class "text-muted-foreground"
+                              :on-click (fn []
+                                          (p/do!
+                                           (ui-outliner-tx/transact!
+                                            {:outliner-op :save-block}
+                                            (db-property-handler/set-block-properties! (:db/id block)
+                                                                                       {:logseq.property.node/type :code
+                                                                                        :logseq.property.code/mode "clojure"})
+                                            (outliner-op/save-block! {:db/id (:db/id block) :block/title ""}))
+
+                                           (shui/popup-hide!)))}
+                             "Switch to advanced query")]]))
                       {:align :end}))}
         (ui/icon "settings" {:size 18})))]))
 
