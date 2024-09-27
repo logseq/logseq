@@ -177,7 +177,7 @@
   (let [[result set-result!] (rum/use-state nil)]
     (rum/use-effect!
      (fn []
-       (set-result! (query-result/trigger-custom-query! config q (:*query-error config))))
+       (query-result/trigger-custom-query! config q (:*query-error config) set-result!))
      [q])
     (when (and (util/atom? result) (seq @result))
       (custom-query* config q result))))

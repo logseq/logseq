@@ -82,4 +82,4 @@
            (query-refresh-button query-time {:full-text-search? full-text-search?
                                              :on-pointer-down (fn [e]
                                                                 (util/stop e)
-                                                                (query-result/trigger-custom-query! config q query-error-atom))}))]])]))
+                                                                (query-result/trigger-custom-query! config q query-error-atom (fn [])))}))]])]))

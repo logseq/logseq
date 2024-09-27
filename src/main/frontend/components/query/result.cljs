@@ -14,42 +14,38 @@
             [promesa.core :as p]))
 
 (defn trigger-custom-query!
-  [config query *query-error]
+  [config query *query-error set-result!]
   (let [repo (state/get-current-repo)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
-        _ (reset! *query-error nil)
-        query-atom (try
-                     (cond
-                       (:dsl-query? config)
-                       (let [q (:query query)
-                             form (common-util/safe-read-string q)]
-                         (cond
-                           (and (symbol? form)
+        _ (reset! *query-error nil)]
+    (try
+      (cond
+        (:dsl-query? config)
+        (let [q (:query query)
+              form (common-util/safe-read-string q)]
+          (cond
+            (and (symbol? form)
                                 ;; Queries only containgin template should trigger a query
-                                (not (re-matches template/template-re (string/trim q))))
-                           (atom nil)
+                 (not (re-matches template/template-re (string/trim q))))
+            nil
 
-                           (re-matches #"\".*\"" q) ; full-text search
-                           (let [*result (atom nil)]
-                             (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
-                               (when (seq blocks)
-                                 (let [result (->> blocks
-                                                   (keep (fn [b]
-                                                           (when-not (= (:block/uuid b) current-block-uuid)
-                                                             (db/entity [:block/uuid (:block/uuid b)])))))]
-                                   (reset! *result result))))
-                             *result)
+            (re-matches #"\".*\"" q) ; full-text search
+            (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
+              (when (seq blocks)
+                (let [result (->> blocks
+                                  (keep (fn [b]
+                                          (when-not (= (:block/uuid b) current-block-uuid)
+                                            (db/entity [:block/uuid (:block/uuid b)])))))]
+                  (set-result! (atom result)))))
 
-                           :else
-                           (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})))
+            :else
+            (set-result! (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)}))))
 
-                       :else
-                       (query-custom/custom-query query {:current-block-uuid current-block-uuid}))
-                     (catch :default e
-                       (reset! *query-error e)
-                       (atom nil)))]
-    (or query-atom (atom nil))))
+        :else
+        (set-result! (query-custom/custom-query query {:current-block-uuid current-block-uuid})))
+      (catch :default e
+        (reset! *query-error e)))))
 
 (defn get-group-by-page [{:keys [result-transform query] :as query-m}
                          {:keys [table?]}]
