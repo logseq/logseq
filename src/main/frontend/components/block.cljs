@@ -871,6 +871,14 @@
     (when draw-component
       (draw-component {:file file :block-uuid block-uuid}))))
 
+(rum/defc asset-cp
+  [config block]
+  (let [asset-type (:logseq.property.asset/type block)]
+    (asset-link config (:block/title block)
+                (path/path-join (str "../" common-config/local-assets-dir) (str (:block/uuid block) "." asset-type))
+                nil
+                nil)))
+
 (rum/defc page-reference < rum/reactive
   "Component for page reference"
   [html-export? s {:keys [nested-link? show-brackets? id] :as config} label]
@@ -882,12 +890,16 @@
           show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
           block-uuid (:block/uuid config)
           contents-page? (= "contents" (string/lower-case (str id)))
-          block (db/get-page s)]
+          block (db/get-page s)
+          asset? (some? (:logseq.property.asset/type block))]
       (cond
         (string/ends-with? s ".excalidraw")
         [:div.draw {:on-click (fn [e]
                                 (.stopPropagation e))}
          (excalidraw s block-uuid)]
+
+        asset?
+        (asset-cp config block)
 
         (or (ldb/page? block) (:block/tags block))
         [:span.page-reference
@@ -1047,16 +1059,21 @@
               block-type (keyword (pu/lookup properties :logseq.property/ls-type))
               hl-type (pu/lookup properties :logseq.property/hl-type)
               repo (state/get-current-repo)
-              stop-inner-events? (= block-type :whiteboard-shape)]
+              stop-inner-events? (= block-type :whiteboard-shape)
+              asset? (some? (:logseq.property.asset/type block))]
           (if (and block (:block/title block))
             (let [title [:span.block-ref
                          (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                         block nil (:block/uuid block)
                                         (:slide? config))]
-                  inner (if label
+                  inner (cond
+                          asset?
+                          (asset-cp config block)
+                          label
                           (->elem
                            :span.block-ref
                            (map-inline config label))
+                          :else
                           title)]
               [:div.block-ref-wrap.inline
                {:data-type    (name (or block-type :default))
