@@ -943,3 +943,16 @@ html.is-mac {
 .ls-page-title .block-tags {
   @apply relative -right-1 min-h-full;
 }
+
+.ls-code-editor-wrap {
+  @apply relative;
+
+  .extensions__code-lang {
+    @apply hidden;
+  }
+
+  > a.select-language {
+    @apply absolute right-1 top-1 bg-gray-02-alpha border rounded text-gray-11
+    select-none opacity-70 hover:opacity-90 z-[1] text-xs px-1.5;
+  }
+}
