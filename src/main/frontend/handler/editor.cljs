@@ -3355,7 +3355,8 @@
   (let [property-keys (->> (keys (:block/properties block))
                            (remove db-property/db-attribute-properties)
                            (remove #(outliner-property/property-with-other-position? (db/entity %))))]
-    (or (and (seq property-keys)
+    (or (ldb/class-instance? (db/entity :logseq.class/Query) block)
+        (and (seq property-keys)
              (not (db-pu/all-hidden-properties? property-keys)))
         (and (seq (:block/tags block))
              (some (fn [t]

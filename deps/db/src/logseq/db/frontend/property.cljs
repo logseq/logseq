@@ -61,10 +61,11 @@
                                           :schema {:type :checkbox
                                                    :public? true
                                                    :view-context :class}}
-   :logseq.property/query {:title "Query"
-                           :schema {:type :default
-                                    :public? true
-                                    :view-context :block}}
+   :logseq.property/query-title {:title "Query title"
+                                 :schema {:type :default
+                                          :public? true
+                                          :hide? true
+                                          :view-context :block}}
    :logseq.property/page-tags {:title "Page Tags"
                                :schema {:type :page
                                         :public? true

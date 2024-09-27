@@ -18,7 +18,7 @@
    :logseq.class/Query
    {:title "Query"
     :properties {:logseq.property/icon {:type :tabler-icon :id "search"}}
-    :schema {:properties [:logseq.property/query]}}
+    :schema {:properties [:logseq.property/query-title]}}
 
    :logseq.class/Card
    {:title "Card"

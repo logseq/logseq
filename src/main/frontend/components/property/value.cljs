@@ -775,9 +775,6 @@
                                "Invalid block value, please delete the current property."]]
           (when v-block
             (cond
-              (= (:db/ident property) :logseq.property/query)
-              (query-cp block property v-block)
-
               (:block/page v-block)
               (property-normal-block-value block property v-block)
 

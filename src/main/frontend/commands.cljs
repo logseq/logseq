@@ -141,7 +141,8 @@
 (defn db-based-query
   []
   [[:editor/input "" {:last-pattern command-trigger}]
-   [:editor/set-property :block/tags :logseq.class/Query]])
+   [:editor/set-property :block/tags :logseq.class/Query]
+   [:editor/set-property :logseq.property/query-title ""]])
 
 (defn file-based-query
   []
@@ -186,9 +187,10 @@
   (if (config/db-based-graph? (state/get-current-repo))
     [[:editor/input "" {:last-pattern command-trigger}]
      [:editor/set-property :block/tags :logseq.class/Query]
-     [:editor/set-property :logseq.property/query ""]
-     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.node/display-type :code]
-     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/mode "clojure"]]
+     [:editor/set-property :logseq.property/query-title ""]
+     [:editor/set-property :logseq.property.node/type :code]
+     [:editor/set-property :logseq.property.code/mode "clojure"]
+     [:codemirror/focus]]
     (->block "query")))
 
 (defn db-based-code-block

@@ -27,7 +27,7 @@
                   result)]
     (->> (result->entities result')
          (remove (fn [b] (contains?
-                          #{(:db/id view-entity) (:db/id (:logseq.property/query view-entity))}
+                          #{(:db/id view-entity)}
                           (:db/id b)))))))
 
 (rum/defcs query-result < rum/static mixins/container-id
@@ -36,7 +36,7 @@
   (let [*result (::result state)
         result' (or @*result (init-result result view-entity))
         columns' (columns (assoc config :container-id (::container-id state)) result')]
-    [:div.query-result.w-full.mt-1
+    [:div.query-result.w-full
      {:on-pointer-down util/stop-propagation}
      (views/view view-entity
                  {:title-key :views.table/live-query-title

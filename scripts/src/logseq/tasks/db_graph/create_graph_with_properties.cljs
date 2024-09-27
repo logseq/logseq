@@ -45,7 +45,7 @@
 
 (defn- query [query-string]
   {:block/title query-string
-   :build/properties {:logseq.property/query query-string}
+   :build/properties {:logseq.property/query-title query-string}
    :block/tags [{:db/ident :logseq.class/Query}]})
 
 (defn- create-init-data
