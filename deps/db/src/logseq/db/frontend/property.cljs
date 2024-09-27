@@ -61,7 +61,7 @@
                                           :schema {:type :checkbox
                                                    :public? true
                                                    :view-context :class}}
-   :logseq.property/query-title {:title "Query title"
+   :logseq.property/query       {:title "Query"
                                  :schema {:type :default
                                           :public? true
                                           :hide? true

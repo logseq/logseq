@@ -229,7 +229,7 @@
     (when (ldb/db-based-graph? db)
       (let [query (d/entity db :logseq.class/Query)
             query-id (:db/id query)]
-        [[:db/add query-id :logseq.property.class/properties :logseq.property/query-title]]))))
+        [[:db/add query-id :logseq.property.class/properties :logseq.property/query]]))))
 
 (defn- add-addresses-in-kvs-table
   [^Object sqlite-db]
@@ -296,7 +296,7 @@
    [22 {:properties [:logseq.property.fsrs/state :logseq.property.fsrs/due]}]
    [23 {:fix add-card-properties}]
    [24 {:classes [:logseq.class/Cards]}]
-   [25 {:properties [:logseq.property/query-title]
+   [25 {:properties [:logseq.property/query]
         :fix add-query-property-to-query-tag}]
    [26 {:properties [:logseq.property.node/type]}]
    [27 {:properties [:logseq.property.code/mode]}]

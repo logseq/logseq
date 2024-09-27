@@ -27,7 +27,7 @@
                   result)]
     (->> (result->entities result')
          (remove (fn [b] (contains?
-                          #{(:db/id view-entity)}
+                          #{(:db/id view-entity) (:db/id (:logseq.property/query view-entity))}
                           (:db/id b)))))))
 
 (rum/defcs query-result < rum/static mixins/container-id

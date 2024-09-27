@@ -2039,11 +2039,9 @@
 (declare src-cp)
 (declare block-title)
 
-(rum/defcs ^:large-vars/cleanup-todo text-block-title <
-  (rum/local false ::hover?)
-  [state config {:block/keys [marker pre-block? properties] :as block}]
-  (let [*hover? (::hover? state)
-        block-ast-title (:block.temp/ast-title block)
+(rum/defc ^:large-vars/cleanup-todo text-block-title
+  [config {:block/keys [marker pre-block? properties] :as block}]
+  (let [block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
         level (:level config)
         slide? (boolean (:slide? config))
@@ -2066,9 +2064,7 @@
     (->elem
      elem
      (merge
-      {:data-hl-type (pu/lookup properties :logseq.property/hl-type)
-       :on-mouse-over #(reset! *hover? true)
-       :on-mouse-out #(reset! *hover? false)}
+      {:data-hl-type (pu/lookup properties :logseq.property/hl-type)}
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
@@ -2137,67 +2133,57 @@
              (shui/button
               {:variant :ghost
                :size :sm
-               :class "ml-2 !px-1 !h-6 text-xs text-muted-foreground"
+               :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
                :on-click (fn [e]
                            (util/stop e)
                            (state/pub-event! [:modal/show-cards (:db/id block)]))}
               "Practice")
-             [:div "Practice cards"])])
+             [:div "Practice cards"])])))))))
 
-         (when (and
-                @*hover?
-                (:display-query-title? config))
-           [(shui/tooltip-provider
-             (shui/tooltip
-              (shui/tooltip-trigger
-               {:as-child true}
-               (shui/button
-                {:variant :ghost
-                 :size :sm
-                 :class "ml-2 !px-1 !h-6 text-xs text-muted-foreground fade-in"
-                 :on-pointer-down (fn [e]
-                                    (util/stop e)
-                                    (shui/dialog-open! (fn []
-                                                         [:div.p-4 {:style {:min-width "42rem"}}
-                                                          (block-title (assoc config :editing-mode? true) (:parent-block config))])
-                                                       {}))}
-                (ui/icon "settings" {:size 14})))
-              (shui/tooltip-content
-               "Update query")))])))))))
-
-(rum/defc block-title < rum/reactive db-mixins/query
-  [config block]
-  (let [node-type (:logseq.property.node/display-type block)
+(rum/defcs block-title < rum/reactive db-mixins/query
+  (rum/local false ::hover?)
+  [state config block]
+  (let [*hover? (::hover? state)
+        node-type (:logseq.property.node/display-type block)
         query? (ldb/class-instance? (db/entity :logseq.class/Query) block)
-        query-title-block* (and query? (:logseq.property/query-title block))
-        query-title-block (when query-title-block* (db/sub-block (:db/id query-title-block*)))]
-    ;; Display query title instead of the query if the query title is not blank
-    (if (and query? (seq (:block/title query-title-block))
-             (not (or (:sidebar? config)
-                      (:table? config)
-                      (:editing-mode? config)
-                      (= (:id config) (str (:block/uuid block))))))
-      (let [block' (merge query-title-block
-                          (block/parse-title-and-body (:block/uuid query-title-block) :markdown false (:block/title query-title-block)))]
-        (text-block-title (assoc config
-                                 :parent-block block
-                                 :display-query-title? true)
-                          block'))
-      (case node-type
-        :code
-        [:div.flex.flex-1.w-full
-         (src-cp (assoc config :block block) {:language (:logseq.property.code/mode block)})]
+        query (:logseq.property/query block)
+        empty-query-title? (and query? (string/blank? (:block/title query)))
+        query-block? (:logseq.property/_query block)
+        advanced-query? (= :code (:logseq.property.node/display-type query))]
+    (cond
+      (= :code node-type)
+      [:div.flex.flex-1.w-full
+       (src-cp (assoc config :block block) {:language (:logseq.property.code/mode block)})]
+
+      query-block?
+      (query-builder-component/builder (:block/title block)
+                                       {:block block
+                                        :query-object? true})
 
         ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
-        :math
-        (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
+      (= :math node-type)
+      (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
 
-        (if query?
-          (let [block' (db/entity (:db/id block))]
-            (query-builder-component/builder (:block/title block')
-                                             {:block block'
-                                              :query-object? true}))
-          (text-block-title config block))))))
+      (and empty-query-title? (not advanced-query?))
+      (let [block' (db/entity (:db/id block))]
+        [:div.flex.flex-row.w-full.gap-1
+         {:on-mouse-over #(reset! *hover? true)
+          :on-mouse-out #(reset! *hover? false)}
+         (query-builder-component/builder (:block/title block')
+                                          {:block block'
+                                           :query-object? true})
+         (when @*hover?
+           (shui/button
+            {:variant "outline"
+             :size :sm
+             :class "!h-6"
+             :on-pointer-down (fn [e]
+                                (util/stop e)
+                                (editor-handler/query-edit-title! block))}
+            [:span "Edit query title"]))])
+
+      :else
+      (text-block-title config block))))
 
 (rum/defc span-comma
   []
@@ -3350,9 +3336,13 @@
 
      (when (and db-based? (not collapsed?) (not (or table? property?))
                 (ldb/class-instance? (db/entity :logseq.class/Query) block))
-       (let [query (:block/title (db/entity (:db/id block)))
+       (let [query-block (:logseq.property/query block)
+             query-block-title (:block/title query-block)
+             query (if (string/blank? query-block-title)
+                     (:block/title (db/entity (:db/id block)))
+                     query-block-title)
              result (common-util/safe-read-string query)
-             advanced-query? (and (map? result) (:query result))]
+             advanced-query? (map? result)]
          [:div {:style {:padding-left 42}}
           (query/custom-query (wrap-query-components (assoc config
                                                             :dsl-query? (not advanced-query?)
