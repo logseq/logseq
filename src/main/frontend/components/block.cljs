@@ -3545,59 +3545,74 @@
                        :class "px-1.5 h-7 text-xs mb-0.5"})]
          [:div.max-h-72.overflow-auto
           (ui/auto-complete matched
-            {:on-chosen (fn [chosen]
+            {:on-chosen (fn [chosen e]
                           (when (and (= :code (:logseq.property.node/display-type block))
                                   (not= chosen (:logseq.property.code/mode block)))
-                            (on-select! chosen))
+                            (on-select! chosen e))
                           (shui/popup-hide!))
              :item-render (fn [mode]
                             [:strong mode])})]]))))
 
 (rum/defc src-cp < rum/static
   [config options]
-  (when options
-    (let [html-export? (:html-export? config)
-          {:keys [lines language]} options
-          attr (when language
-                 {:data-lang language})
-          block (:block config)
-          code (if lines (apply str lines) (:block/title block))
-          [inside-portal? set-inside-portal?] (rum/use-state nil)]
-      (cond
-        html-export?
-        (highlight/html-export attr code)
+  (let [block (:block config)
+        *mode-ref (rum/use-ref nil)]
 
-        :else
-        (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
-          [:div.ui-fenced-code-editor.flex.flex-1
-           {:ref (fn [el]
-                   (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
-           (cond
-             (nil? inside-portal?) nil
+    (rum/use-effect!
+      (fn []
+        (when (= (some-> (state/sub :editor/pending-type-block) :block :block/uuid) (:block/uuid block))
+          (util/schedule #(some-> (rum/deref *mode-ref) (.click)))
+          (state/set-state! :editor/pending-type-block nil)))
+      [])
 
-             (or (:slide? config) inside-portal?)
-             (highlight/highlight (str (random-uuid))
-                                  {:class     (str "language-" language)
-                                   :data-lang language}
-                                  code)
+    (when options
+      (let [html-export? (:html-export? config)
+            {:keys [lines language]} options
+            attr (when language
+                   {:data-lang language})
+            code (if lines (apply str lines) (:block/title block))
+            [inside-portal? set-inside-portal?] (rum/use-state nil)]
+        (cond
+          html-export?
+          (highlight/html-export attr code)
 
-             :else
-             [:div.ls-code-editor-wrap.border.w-full
-              [:a.select-language
-               {:on-click (fn [^js e]
-                            (shui/popup-show! (.-target e)
-                              #(src-lang-picker block
-                                 (fn [mode]
-                                   (when-let [^js cm (get-cm-instance (.-target e))]
-                                     (.setOption cm "mode" mode)
-                                     (db-property-handler/set-block-property!
-                                       (:db/id block) :logseq.property.code/mode mode))))
-                              {:align :end}))}
-               (or language "Select a language")]
-              (lazy-editor/editor config (str (d/squuid)) attr code options)
-              (let [options (:options options) block (:block config)]
-                (when (and (= language "clojure") (contains? (set options) ":results"))
-                  (sci/eval-result code block)))])])))))
+          :else
+          (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
+            [:div.ui-fenced-code-editor.flex.flex-1
+             {:ref (fn [el]
+                     (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
+             (cond
+               (nil? inside-portal?) nil
+
+               (or (:slide? config) inside-portal?)
+               (highlight/highlight (str (random-uuid))
+                 {:class (str "language-" language)
+                  :data-lang language}
+                 code)
+
+               :else
+               [:div.ls-code-editor-wrap
+                [:a.select-language
+                 {:ref *mode-ref
+                  :on-click (fn [^js e]
+                              (let [target (.-target e)]
+                                (shui/popup-show! target
+                                  #(src-lang-picker block
+                                     (fn [mode ^js e]
+                                       (when-let [^js cm (get-cm-instance target)]
+                                         (.setOption cm "mode" mode)
+                                         (when (or (string/blank? (util/trim-safe code))
+                                                 (not= (some-> e (.-type)) "click"))
+                                           (.focus cm)
+                                           (.setCursor cm (.lineCount cm) 0))
+                                         (db-property-handler/set-block-property!
+                                           (:db/id block) :logseq.property.code/mode mode))))
+                                  {:align :end})))}
+                 (or language "Select a language")]
+                (lazy-editor/editor config (str (d/squuid)) attr code options)
+                (let [options (:options options) block (:block config)]
+                  (when (and (= language "clojure") (contains? (set options) ":results"))
+                    (sci/eval-result code block)))])]))))))
 
 (defn ^:large-vars/cleanup-todo markup-element-cp
   [{:keys [html-export?] :as config} item]

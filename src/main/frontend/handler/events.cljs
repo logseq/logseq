@@ -959,8 +959,12 @@
             (not (string/blank? block-title)))
         ;; insert block
         (let [[p _ block'] (editor-handler/insert-new-block-aux! {} block "")]
-          (some-> p (p/then (fn [] (turn-type! block')))))
-        (turn-type! block)))))
+          (some-> p
+            (p/then #(turn-type! block'))
+            (p/then #(state/set-pending-type-block! block'))))
+        (-> (turn-type! block)
+          (p/then #(when (string/blank? block-title)
+                     (state/set-pending-type-block! block))))))))
 
 (rum/defc multi-tabs-dialog
   []

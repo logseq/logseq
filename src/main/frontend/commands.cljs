@@ -195,7 +195,7 @@
   []
   [[:editor/input "" {:last-pattern command-trigger}]
    [:editor/upsert-type-block :code]
-   [:codemirror/focus]])
+   [:editor/exit]])
 
 (defn file-based-code-block
   []
