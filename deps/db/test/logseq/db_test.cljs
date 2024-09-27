@@ -3,7 +3,8 @@
             [logseq.db.frontend.schema :as db-schema]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.test.helper :as db-test]))
 
 
 ;;; datoms
@@ -53,3 +54,16 @@
            (->> (ldb/get-page-parents (ldb/get-page @conn "z") {:node-class? true})
                 (map :block/title)
                 set)))))
+
+(deftest get-case-page
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties
+               {:foo {:block/schema {:type :default}}
+                :Foo {:block/schema {:type :default}}}
+               :classes {:movie {} :Movie {}}})]
+    ;; Case sensitive properties
+    (is (= "foo" (:block/title (ldb/get-case-page @conn "foo"))))
+    (is (= "Foo" (:block/title (ldb/get-case-page @conn "Foo"))))
+    ;; Case sensitive classes
+    (is (= "movie" (:block/title (ldb/get-case-page @conn "movie"))))
+    (is (= "Movie" (:block/title (ldb/get-case-page @conn "Movie"))))))
