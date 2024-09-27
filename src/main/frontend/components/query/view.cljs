@@ -4,7 +4,6 @@
             [frontend.db :as db]
             [logseq.db :as ldb]
             [rum.core :as rum]
-            [frontend.util :as util]
             [frontend.mixins :as mixins]))
 
 (defn- columns
@@ -37,7 +36,6 @@
         result' (or @*result (init-result result view-entity))
         columns' (columns (assoc config :container-id (::container-id state)) result')]
     [:div.query-result.w-full
-     {:on-pointer-down util/stop-propagation}
      (views/view view-entity
                  {:title-key :views.table/live-query-title
                   :data result'
