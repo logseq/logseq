@@ -1448,8 +1448,7 @@
               file-rpath (cond-> file-rpath
                            (not (nil? matched-alias))
                            (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
-              dir (or (:dir matched-alias) repo-dir)
-              checksum (assets-handler/get-file-checksum file)]
+              dir (or (:dir matched-alias) repo-dir)]
         (if (util/electron?)
           (let [from (not-empty (.-path file))]
             (js/console.debug "Debug: Copy Asset #" dir file-rpath from)
@@ -1580,7 +1579,7 @@
                           :block/tags (:db/id asset)}
               result (api-insert-new-block! file-name
                                             {:page (:block/uuid asset)
-                                             :block-uuid block-id
+                                             :custom-uuid block-id
                                              :edit-block? false
                                              :properties properties})
               new-entity (db/entity [:block/uuid (:block/uuid result)])]
