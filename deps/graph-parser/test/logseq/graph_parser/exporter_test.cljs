@@ -9,16 +9,15 @@
             ["fs" :as fs]
             [logseq.common.graph :as common-graph]
             [promesa.core :as p]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
-            [logseq.outliner.db-pipeline :as db-pipeline]))
+            [logseq.outliner.db-pipeline :as db-pipeline]
+            [logseq.db.test.helper :as db-test]))
 
 ;; Helpers
 ;; =======
@@ -140,8 +139,7 @@
 (deftest-async ^:integration export-docs-graph
   (p/let [file-graph-dir "test/resources/docs-0.10.9"
           _ (docs-graph-helper/clone-docs-repo-if-not-exists file-graph-dir "v0.10.9")
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           assets (atom [])
           {:keys [import-state]}
           (import-file-graph-to-db file-graph-dir conn {:assets assets})]
@@ -153,8 +151,7 @@
 (deftest-async export-basic-graph
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           ;; Simulate frontend path-refs being calculated
           _ (db-pipeline/add-listener conn)
           assets (atom [])
@@ -410,8 +407,7 @@
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
 
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
@@ -438,8 +434,7 @@
 (deftest-async export-files-with-property-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_23.md" "pages/url.md"])
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           _ (import-files-to-db files conn {:property-classes ["type"]})
           _ (@#'gp-exporter/export-class-properties conn conn)]
 
@@ -483,8 +478,7 @@
 (deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["ignored/icon-page.md"])
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           {:keys [import-state]} (import-files-to-db files conn {})]
     (is (= 2
            (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
@@ -493,8 +487,7 @@
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"])
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           _ (import-files-to-db files conn {:property-parent-classes ["parent"]})]
 
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
