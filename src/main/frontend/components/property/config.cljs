@@ -579,7 +579,7 @@
                       (contains? #{:logseq.property/parent} (:db/ident property)))))
        (dropdown-editor-menuitem
         {:id :delete-property :icon :x
-         :title (if class-schema? "Delete property from tag" "Delete from from node")
+         :title (if class-schema? "Delete property from tag" "Delete property from node")
          :desc "" :disabled? false
          :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
                       :on-select (fn [^js e]
