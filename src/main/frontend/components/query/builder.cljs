@@ -361,7 +361,7 @@
   (let [f (first clause)]
     (cond
       (string? clause)
-      (str "search: " clause)
+      (str "Search: " clause)
 
       (= (keyword f) :page-ref)
       (page-ref/->page-ref (second clause))
@@ -557,7 +557,7 @@
                                                  repo (state/get-current-repo)
                                                  block (db/pull [:block/uuid (:block/uuid block)])]
                                              (when block
-                                               (if (:property config)
+                                               (if (:query-object? config)
                                                  (editor-handler/save-block! repo (:block/uuid block) q)
                                                  (let [content (string/replace (:block/title block)
                                                                                #"\{\{query[^}]+\}\}"
