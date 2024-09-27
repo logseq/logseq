@@ -2037,11 +2037,11 @@
 (declare block-content)
 
 (declare src-cp)
-(declare build-block-title)
+(declare block-title)
 
-(defn- text-block-title
+(defn- ^:large-vars/cleanup-todo text-block-title
   [config {:block/keys [marker pre-block? properties] :as block}]
-  (let [block-title (:block.temp/ast-title block)
+  (let [block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
         level (:level config)
         slide? (boolean (:slide? config))
@@ -2122,13 +2122,13 @@
          (when-not area? [(hl-ref)])
 
          (conj
-          (map-inline config block-title)
+          (map-inline config block-ast-title)
           (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
 
          ;; highlight ref block (area)
          (when area? [(hl-ref)])
 
-         (when (and (seq block-title) (ldb/class-instance? (db/entity :logseq.class/Cards) block))
+         (when (and (seq block-ast-title) (ldb/class-instance? (db/entity :logseq.class/Cards) block))
            [(ui/tooltip
              (shui/button
               {:variant :ghost
@@ -2150,26 +2150,29 @@
                                   (util/stop e)
                                   (shui/dialog-open! (fn []
                                                        [:div.p-4 {:style {:min-width "42rem"}}
-                                                        (build-block-title (assoc config :editing-mode? true) (:parent-block config))])
+                                                        (block-title (assoc config :editing-mode? true) (:parent-block config))])
                                                      {}))}
               (ui/icon "settings" {:size 14}))
              [:div "Update query"])])))))))
 
-(defn build-block-title
+(rum/defc block-title < rum/reactive db-mixins/query
   [config block]
   (let [node-type (:logseq.property.node/display-type block)
-        query? (ldb/class-instance? (db/entity :logseq.class/Query) block)]
+        query? (ldb/class-instance? (db/entity :logseq.class/Query) block)
+        query-title-block* (and query? (:logseq.property/query-title block))
+        query-title-block (when query-title-block* (db/sub-block (:db/id query-title-block*)))]
     ;; Display query title instead of the query if the query title is not blank
-    (if (and query? (seq (:block/title (:logseq.property/query-title block)))
+    (if (and query? (seq (:block/title query-title-block))
              (not (or (:sidebar? config)
                       (:table? config)
                       (:editing-mode? config)
                       (= (:id config) (str (:block/uuid block))))))
-      (let [block' (:logseq.property/query-title block)
-            block'' (merge block' (block/parse-title-and-body (:block/uuid block') :markdown false (:block/title block')))]
+      (let [block' (merge query-title-block
+                          (block/parse-title-and-body (:block/uuid query-title-block) :markdown false (:block/title query-title-block)))]
         (text-block-title (assoc config
                                  :parent-block block
-                                 :display-query-title? true) block''))
+                                 :display-query-title? true)
+                          block'))
       (case node-type
         :code
         [:div.flex.flex-1.w-full
@@ -2660,7 +2663,7 @@
       [:div.flex.flex-row.justify-between.block-content-inner
        (when-not plugin-slotted?
          [:div.block-head-wrap
-          (build-block-title config block)])
+          (block-title config block)])
 
        (file-block/clock-summary-cp block ast-body)]
 
@@ -3337,16 +3340,15 @@
 
      (when (and db-based? (not collapsed?) (not (or table? property?))
                 (ldb/class-instance? (db/entity :logseq.class/Query) block))
-       (let [query (:block/title block)
-             query' (if (string/blank? query) (:block/title block) query)
-             result (common-util/safe-read-string query')
+       (let [query (:block/title (db/entity (:db/id block)))
+             result (common-util/safe-read-string query)
              advanced-query? (and (map? result) (:query result))]
          [:div {:style {:padding-left 42}}
           (query/custom-query (wrap-query-components (assoc config
                                                             :dsl-query? (not advanced-query?)
                                                             :cards? (ldb/class-instance? (db/entity :logseq.class/Cards) block)))
                               (if advanced-query? result {:builder nil
-                                                          :query (query-builder-component/sanitize-q query')}))]))
+                                                          :query (query-builder-component/sanitize-q query)}))]))
 
      (when-not (or (:hide-children? config) in-whiteboard? (or table? property?))
        (let [config' (-> (update config :level inc)
