@@ -16,7 +16,7 @@
   (->> content
        (d/q '[:find [(pull ?b [*]) ...]
               :in $ ?content
-              :where [?b :block/title ?content]]
+              :where [?b :block/title ?content] [(missing? $ ?b :logseq.property/built-in?)]]
             @conn)
        first))
 
@@ -77,3 +77,21 @@
           "Apple"
           (find-block-by-content conn "Fruit")))
         "Allow class to have same name as a page")))
+
+(deftest new-graph-should-be-valid
+  (let [conn (create-conn-with-blocks {})
+        pages (d/q '[:find [(pull ?b [*]) ...] :where [?b :block/title] [?b :block/type]] @conn)
+        validation-errors (atom {})]
+    (doseq [page pages]
+      (try
+        ;; Try as many of the relevant validations
+        (outliner-validate/validate-unique-by-name-tag-and-block-type @conn (:block/title page) page)
+        (outliner-validate/validate-page-title (:block/title page) {:node page})
+        (outliner-validate/validate-page-title-characters (:block/title page) {:node page})
+
+        (catch :default e
+          (if (= :notification (:type (ex-data e)))
+            (swap! validation-errors update (select-keys page [:block/title :db/ident :block/uuid]) (fnil conj []) e)
+            (throw e)))))
+    (is (= {} @validation-errors)
+        "Default pages shouldn't have any validation errors")))
