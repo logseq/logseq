@@ -1,22 +1,20 @@
 (ns frontend.components.query.result
   "Query result related functionality for query components"
-  (:require [frontend.db.utils :as db-utils]
-            [frontend.search :as search]
+  (:require [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-custom :as query-custom]
+            [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
-            [frontend.state :as state]
-            [logseq.common.util :as common-util]
-            [frontend.util :as util]
-            [clojure.string :as string]
-            [promesa.core :as p]
-            [rum.core :as rum]
+            [frontend.db.utils :as db-utils]
             [frontend.modules.outliner.tree :as tree]
-            [frontend.template :as template]))
+            [frontend.search :as search]
+            [frontend.state :as state]
+            [frontend.template :as template]
+            [logseq.common.util :as common-util]
+            [promesa.core :as p]))
 
 (defn trigger-custom-query!
-  [config query *query-error *fulltext-query-result]
+  [config query *query-error]
   (let [repo (state/get-current-repo)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
@@ -33,15 +31,15 @@
                            (atom nil)
 
                            (re-matches #"\".*\"" q) ; full-text search
-                           (do
+                           (let [*result (atom nil)]
                              (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
                                (when (seq blocks)
                                  (let [result (->> blocks
                                                    (keep (fn [b]
                                                            (when-not (= (:block/uuid b) current-block-uuid)
                                                              (db/entity [:block/uuid (:block/uuid b)])))))]
-                                   (reset! *fulltext-query-result result))))
-                             *fulltext-query-result)
+                                   (reset! *result result))))
+                             *result)
 
                            :else
                            (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})))
@@ -64,10 +62,8 @@
 (defn get-query-result
   "Fetches a query's result, transforms it as needed and saves the result into
   an atom that is passed in as an argument"
-  [config query-m *query-error *fulltext-query-result current-block-uuid options]
-  (let [query-atom (trigger-custom-query! config query-m *query-error *fulltext-query-result)
-        query-result (and query-atom (rum/react query-atom))
-        ;; exclude the current one, otherwise it'll loop forever
+  [{:keys [current-block-uuid table?] :as config} query-m query-result]
+  (let [;; exclude the current one, otherwise it'll loop forever
         remove-blocks (if current-block-uuid [current-block-uuid] nil)
         transformed-query-result (when query-result
                                    (let [result (query-react/custom-query-result-transform query-result remove-blocks query-m)]
@@ -76,7 +72,7 @@
                                          (get query-m :remove-block-children? true)
                                          tree/filter-top-level-blocks)
                                        result)))
-        group-by-page? (get-group-by-page query-m options)
+        group-by-page? (get-group-by-page query-m {:table? table?})
         result (if (and group-by-page? (:block/uuid (first transformed-query-result)))
                  (let [result (db-utils/group-by-page transformed-query-result)]
                    (if (map? result)
@@ -85,5 +81,4 @@
                  transformed-query-result)]
     (when-let [query-result (:query-result config)]
       (reset! query-result result))
-    (when query-atom
-      (util/safe-with-meta result (meta @query-atom)))))
+    result))
