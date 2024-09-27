@@ -832,6 +832,15 @@
   []
   nil)
 
+(rum/defc editor-pending-type-block-observer
+  < rum/static rum/reactive
+  []
+  (let [pending-block (state/sub :editor/pending-type-block)
+        editing-block (state/sub :editor/block)]
+    (js/console.warn "FIXME: Apply pending block:" pending-block)
+    [:<>
+     (block/setup-editing-effects editing-block)]))
+
 (rum/defcs ^:large-vars/cleanup-todo root-container <
   (mixins/modal :modal/show?)
   rum/reactive
@@ -974,6 +983,7 @@
         :nfs-granted? granted?
         :db-restoring? db-restoring?})
       (app-context-menu-observer)
+      (editor-pending-type-block-observer)
 
       [:a#download.hidden]
       (when (and (not config/mobile?)

@@ -2723,14 +2723,15 @@
         refs-count (if (seq (:block/_refs block))
                      (count (:block/_refs block))
                      (rum/react *refs-count))
-        table? (:table? config)]
+        table? (:table? config)
+        type-block-editor? (contains? #{:code} (:logseq.property.node/display-type block))]
     [:div.block-content-or-editor-wrap
      {:class (when (:page-title? config) "ls-page-title-container")
       :data-node-type (some-> (:logseq.property.node/display-type block) name)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
       [:div.flex.flex-1.flex-row.gap-1.items-center
-       (if (and edit? editor-box)
+       (if (and edit? editor-box (not type-block-editor?))
          [:div.editor-wrapper.flex.flex-1
           {:id editor-id
            :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
@@ -3556,6 +3557,7 @@
 (rum/defc src-cp < rum/static
   [config options]
   (let [block (:block config)
+        container-id (:container-id config)
         *mode-ref (rum/use-ref nil)]
 
     (rum/use-effect!
@@ -3594,6 +3596,8 @@
                [:div.ls-code-editor-wrap
                 [:a.select-language
                  {:ref *mode-ref
+                  :containerid (str container-id)
+                  :blockid (str (:block/uuid block))
                   :on-click (fn [^js e]
                               (let [target (.-target e)]
                                 (shui/popup-show! target
@@ -3961,6 +3965,26 @@
           items
           {:debug-id page})
          [:div.only-page-blocks items]))]))
+
+(rum/defc setup-editing-effects
+  [editing-block]
+  (let [container-id (some-> (:editor/container-id @state/state) (deref))
+        uuid' (:block/uuid editing-block)]
+    (rum/use-effect!
+      (fn []
+        (case (:logseq.property.node/display-type editing-block)
+          :code
+          (let [cursor-pos (some-> (:editor/cursor-range @state/state) (deref) (count))
+                target (js/document.querySelector
+                         (util/format "a.select-language[blockid=\"%s\"][containerid=\"%s\"]" uuid' container-id))]
+            (when-let [cm (get-cm-instance target)]
+              ;; move to friendly cursor
+              (doto cm
+                (.focus)
+                (.setCursor 0 (or cursor-pos 0)))))
+          :dune))
+      [editing-block]))
+  nil)
 
 ;; headers to hiccup
 (defn ->hiccup
