@@ -2039,9 +2039,11 @@
 (declare src-cp)
 (declare block-title)
 
-(defn- ^:large-vars/cleanup-todo text-block-title
-  [config {:block/keys [marker pre-block? properties] :as block}]
-  (let [block-ast-title (:block.temp/ast-title block)
+(rum/defcs ^:large-vars/cleanup-todo text-block-title <
+  (rum/local false ::hover?)
+  [state config {:block/keys [marker pre-block? properties] :as block}]
+  (let [*hover? (::hover? state)
+        block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
         level (:level config)
         slide? (boolean (:slide? config))
@@ -2064,7 +2066,9 @@
     (->elem
      elem
      (merge
-      {:data-hl-type (pu/lookup properties :logseq.property/hl-type)}
+      {:data-hl-type (pu/lookup properties :logseq.property/hl-type)
+       :on-mouse-over #(reset! *hover? true)
+       :on-mouse-out #(reset! *hover? false)}
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
@@ -2133,27 +2137,33 @@
              (shui/button
               {:variant :ghost
                :size :sm
-               :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
+               :class "ml-2 !px-1 !h-6 text-xs text-muted-foreground"
                :on-click (fn [e]
                            (util/stop e)
                            (state/pub-event! [:modal/show-cards (:db/id block)]))}
               "Practice")
              [:div "Practice cards"])])
 
-         (when (:display-query-title? config)
-           [(ui/tooltip
-             (shui/button
-              {:variant :ghost
-               :size :sm
-               :class "ml-2 !px-1 !h-6 text-xs text-muted-foreground"
-               :on-pointer-down (fn [e]
-                                  (util/stop e)
-                                  (shui/dialog-open! (fn []
-                                                       [:div.p-4 {:style {:min-width "42rem"}}
-                                                        (block-title (assoc config :editing-mode? true) (:parent-block config))])
-                                                     {}))}
-              (ui/icon "settings" {:size 14}))
-             [:div "Update query"])])))))))
+         (when (and
+                @*hover?
+                (:display-query-title? config))
+           [(shui/tooltip-provider
+             (shui/tooltip
+              (shui/tooltip-trigger
+               {:as-child true}
+               (shui/button
+                {:variant :ghost
+                 :size :sm
+                 :class "ml-2 !px-1 !h-6 text-xs text-muted-foreground fade-in"
+                 :on-pointer-down (fn [e]
+                                    (util/stop e)
+                                    (shui/dialog-open! (fn []
+                                                         [:div.p-4 {:style {:min-width "42rem"}}
+                                                          (block-title (assoc config :editing-mode? true) (:parent-block config))])
+                                                       {}))}
+                (ui/icon "settings" {:size 14})))
+              (shui/tooltip-content
+               "Update query")))])))))))
 
 (rum/defc block-title < rum/reactive db-mixins/query
   [config block]

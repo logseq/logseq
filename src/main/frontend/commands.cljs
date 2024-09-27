@@ -188,7 +188,7 @@
     [[:editor/input "" {:last-pattern command-trigger}]
      [:editor/set-property :block/tags :logseq.class/Query]
      [:editor/set-property :logseq.property/query-title ""]
-     [:editor/set-property :logseq.property.node/type :code]
+     [:editor/set-property :logseq.property.node/display-type :code]
      [:editor/set-property :logseq.property.code/mode "clojure"]
      [:codemirror/focus]]
     (->block "query")))
