@@ -1,14 +1,12 @@
 (ns logseq.db.sqlite.build-test
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.test.helper :as db-test]))
 
 (deftest build-tags
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+  (let [conn (db-test/create-conn)
         _ (sqlite-build/create-blocks
            conn
            [{:page {:block/title "page1"}
@@ -27,8 +25,7 @@
         "Person class is created and correctly associated to a page")))
 
 (deftest build-properties-user
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+  (let [conn (db-test/create-conn)
         _ (sqlite-build/create-blocks
            conn
            [{:page {:block/title "page1"}
@@ -53,8 +50,7 @@
         "description property is created and correctly associated to a page")))
 
 (deftest build-properties-built-in
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+  (let [conn (db-test/create-conn)
         _ (sqlite-build/create-blocks
            conn
            [{:page {:block/title "page1"}

@@ -1,16 +1,8 @@
 (ns logseq.outliner.validate-test
   (:require [cljs.test :refer [deftest is]]
-            [logseq.db.frontend.schema :as db-schema]
             [datascript.core :as d]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.outliner.validate :as outliner-validate]))
-
-(defn- create-conn-with-blocks [opts]
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-        _ (sqlite-build/create-blocks conn opts)]
-    conn))
+            [logseq.outliner.validate :as outliner-validate]
+            [logseq.db.test.helper :as db-test]))
 
 (defn- find-block-by-content [conn content]
   (->> content
@@ -21,7 +13,7 @@
        first))
 
 (deftest validate-block-title-unique-for-properties
-  (let [conn (create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               ;; use a property name that's same as built-in
               {:properties {:background-image {:block/schema {:type :default}}}})]
 
@@ -42,7 +34,7 @@
         "Disallow duplicate user property")))
 
 (deftest validate-block-title-unique-for-pages
-  (let [conn (create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}}
                {:page {:block/title "Apple" :build/tags [:Company]}}
                {:page {:block/title "Banana" :build/tags [:Fruit]}}])]
@@ -79,7 +71,7 @@
         "Allow class to have same name as a page")))
 
 (deftest new-graph-should-be-valid
-  (let [conn (create-conn-with-blocks {})
+  (let [conn (db-test/create-conn)
         pages (d/q '[:find [(pull ?b [*]) ...] :where [?b :block/title] [?b :block/type]] @conn)
         validation-errors (atom {})]
     (doseq [page pages]
