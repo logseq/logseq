@@ -2171,7 +2171,7 @@
        (query-builder-component/builder (:block/title block)
                                         {:block block
                                          :query-object? true})
-       (when (and @*hover? (not empty-query-title?))
+       (when (and @*hover? (not (string/blank? (:block/title block))))
          (shui/button
           {:variant "outline"
            :size :sm
