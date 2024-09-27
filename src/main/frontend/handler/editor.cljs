@@ -845,7 +845,7 @@
                           db-based? (config/db-based-graph? repo)
                           delete-prev-block? (and db-based?
                                                   (empty? (:block/tags block))
-                                                  (not (:logseq.property.node/type block))
+                                                  (not (:logseq.property.node/display-type block))
                                                   (seq (:block/properties block))
                                                   (empty? (:block/properties prev-block))
                                                   (not (:logseq.property/created-from-property block)))]
@@ -3360,7 +3360,6 @@
         (and (seq (:block/tags block))
              (some (fn [t]
                      (let [properties (map :db/ident (:logseq.property.class/properties t))]
-                       (prn :tags (:block/title t) properties)
                        (and (seq properties)
                             (not (db-pu/all-hidden-properties? properties))))) (:block/tags block))))))
 

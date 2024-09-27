@@ -38,11 +38,11 @@
                                    :cardinality :many
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
-   :logseq.property.node/type {:title "Node type"
-                               :schema {:type :keyword
-                                        :public? false
-                                        :hide? true
-                                        :view-context :block}}
+   :logseq.property.node/display-type {:title "Node Display Type"
+                                       :schema {:type :keyword
+                                                :public? false
+                                                :hide? true
+                                                :view-context :block}}
    :logseq.property.code/mode {:title "Code mode"
                                :schema {:type :string
                                         :public? false
