@@ -951,10 +951,10 @@
     (editor-handler/save-current-block!)
     (p/delay 16)
     (let [block (db/entity (:db/id block))
-          block-type (:logseq.property.node/type block)
+          block-type (:logseq.property.node/display-type block)
           block-title (:block/title block)
           turn-type! #(db-property-handler/set-block-property!
-                      (:block/uuid %) :logseq.property.node/type (keyword type))]
+                      (:block/uuid %) :logseq.property.node/display-type (keyword type))]
       (if (or (not (nil? block-type))
             (not (string/blank? block-title)))
         ;; insert block

@@ -9,6 +9,7 @@
             [datascript.impl.entity :as e]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.search :refer [fuzzy-search]]
             [frontend.commands :as commands]
             [frontend.components.block.macros :as block-macros]
             [frontend.components.datetime :as datetime-comp]
@@ -3526,6 +3527,32 @@
 
 (declare ->hiccup)
 
+(defn get-cm-instance
+  [^js target]
+  (some-> target (.closest ".ls-code-editor-wrap")
+    (.querySelector ".CodeMirror") (.-CodeMirror)))
+
+(rum/defc src-lang-picker
+  [block on-select!]
+  (let [[q, set-q!] (rum/use-state "")]
+    (when-let [modes (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))]
+      (let [matched (seq (fuzzy-search modes q))
+            matched (or matched (if (string/blank? q) modes [q]))]
+        [:div.overflow-hidden
+         [:div.p-1
+          (shui/input {:auto-focus true
+                       :on-change (fn [^js e] (set-q! (util/evalue e)))
+                       :class "px-1.5 h-7 text-xs mb-0.5"})]
+         [:div.max-h-72.overflow-auto
+          (ui/auto-complete matched
+            {:on-chosen (fn [chosen]
+                          (when (and (= :code (:logseq.property.node/display-type block))
+                                  (not= chosen (:logseq.property.code/mode block)))
+                            (on-select! chosen))
+                          (shui/popup-hide!))
+             :item-render (fn [mode]
+                            [:strong mode])})]]))))
+
 (rum/defc src-cp < rum/static
   [config options]
   (when options
@@ -3533,7 +3560,8 @@
           {:keys [lines language]} options
           attr (when language
                  {:data-lang language})
-          code (if lines (apply str lines) (:block/title (:block config)))
+          block (:block config)
+          code (if lines (apply str lines) (:block/title block))
           [inside-portal? set-inside-portal?] (rum/use-state nil)]
       (cond
         html-export?
@@ -3554,7 +3582,18 @@
                                   code)
 
              :else
-             [:<>
+             [:div.ls-code-editor-wrap.border.w-full
+              [:a.select-language
+               {:on-click (fn [^js e]
+                            (shui/popup-show! (.-target e)
+                              #(src-lang-picker block
+                                 (fn [mode]
+                                   (when-let [^js cm (get-cm-instance (.-target e))]
+                                     (.setOption cm "mode" mode)
+                                     (db-property-handler/set-block-property!
+                                       (:db/id block) :logseq.property.code/mode mode))))
+                              {:align :end}))}
+               (or language "Select a language")]
               (lazy-editor/editor config (str (d/squuid)) attr code options)
               (let [options (:options options) block (:block config)]
                 (when (and (= language "clojure") (contains? (set options) ":results"))
