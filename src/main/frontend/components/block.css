@@ -212,7 +212,7 @@
 }
 
 .block-title-wrap {
-  @apply w-full inline;
+  @apply w-full inline-flex;
 
   > .ui__checkbox {
     @apply relative top-[2px];

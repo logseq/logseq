@@ -126,6 +126,7 @@
 
 (rum/defcs custom-query* < rum/reactive rum/static db-mixins/query
   (rum/local nil ::query-result-atom)
+  (rum/local nil ::prev-q)
   {:init (fn [state]
            (let [[{:keys [dsl-query? db-graph? built-in-query?] :as config}
                   {:keys [collapsed?]}] (:rum/args state)]
@@ -138,7 +139,8 @@
            (assoc state :query-error (atom nil)
                   :fulltext-query-result (atom nil)))}
   [state {:keys [db-graph? dsl-query? built-in-query?] :as config} {:keys [builder query view collapsed?] :as q}]
-  (let [*query-result-atom (::query-result-atom state)
+  (let [*prev-q (::prev-q state)
+        *query-result-atom (::query-result-atom state)
         *query-error (:query-error state)
         *fulltext-query-result (:fulltext-query-result state)
         current-block-uuid (or (:block/uuid (:block config))
@@ -150,11 +152,13 @@
         table? (when-not db-graph?
                  (or (get-in current-block [:block/properties :query-table])
                      (and (string? query) (string/ends-with? (string/trim query) "table"))))
+        q-changed? (not= @*prev-q q)
         result (when (or built-in-collapsed? (not collapsed?'))
-                 (or @*query-result-atom
+                 (or (if q-changed? false @*query-result-atom)
                      (let [result (query-result/get-query-result config q *query-error *fulltext-query-result current-block-uuid {:table? table?})]
                        (reset! *query-result-atom result)
                        result)))
+        _ (when q-changed? (reset! *prev-q q))
         ;; Args for displaying query header and results
         view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))

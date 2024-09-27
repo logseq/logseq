@@ -39,10 +39,7 @@
                                  (let [result (->> blocks
                                                    (keep (fn [b]
                                                            (when-not (= (:block/uuid b) current-block-uuid)
-                                                             [:block/uuid (:block/uuid b)])))
-                                                  ;; Why pull-many here instead of `d/entity`?
-                                                   (db/pull-many (state/get-current-repo) '[*])
-                                                   (remove nil?))]
+                                                             (db/entity [:block/uuid (:block/uuid b)])))))]
                                    (reset! *fulltext-query-result result))))
                              *fulltext-query-result)
 
@@ -54,8 +51,7 @@
                      (catch :default e
                        (reset! *query-error e)
                        (atom nil)))]
-    (or query-atom
-        (atom nil))))
+    (or query-atom (atom nil))))
 
 (defn get-group-by-page [{:keys [result-transform query] :as query-m}
                          {:keys [table?]}]
