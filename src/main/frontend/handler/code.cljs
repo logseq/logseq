@@ -27,7 +27,7 @@
           ;; update default value for the editor initial state
           (set! ds -v value)
           (cond
-            (= :code (:logseq.property.node/type block))
+            (= :code (:logseq.property.node/display-type block))
             (editor-handler/save-block-if-changed! block value)
 
             ;; save block content
