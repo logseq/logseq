@@ -189,8 +189,7 @@
      [:editor/set-property :block/tags :logseq.class/Query]
      [:editor/set-property :logseq.property/query ""]
      [:editor/set-property-on-block-property :logseq.property/query :logseq.property.node/display-type :code]
-     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/mode "clojure"]
-     [:codemirror/focus]]
+     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/mode "clojure"]]
     (->block "query")))
 
 (defn db-based-code-block
@@ -404,12 +403,8 @@
           (conj ["Properties" (->properties)])))
 
       ;; advanced
-      [["Query"
-        (query-steps)
-        query-doc
-        :icon/query
-        "ADVANCED"]
-       ["Advanced Query" (advanced-query-steps) "Create an advanced query block" :icon/advanced-query]
+      [["Query" (query-steps) query-doc :icon/query "ADVANCED"]
+       ["Advanced Query" (advanced-query-steps) "Create an advanced query block" :icon/query]
        (when-not db?
          ["Zotero" (zotero-steps) "Import Zotero journal article" :icon/circle-letter-z])
        ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]

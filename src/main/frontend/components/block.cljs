@@ -2165,22 +2165,21 @@
       (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
 
       (and empty-query-title? (not advanced-query?))
-      (let [block' (db/entity (:db/id block))]
-        [:div.flex.flex-row.w-full.gap-1
-         {:on-mouse-over #(reset! *hover? true)
-          :on-mouse-out #(reset! *hover? false)}
-         (query-builder-component/builder (:block/title block')
-                                          {:block block'
-                                           :query-object? true})
-         (when @*hover?
-           (shui/button
-            {:variant "outline"
-             :size :sm
-             :class "!h-6"
-             :on-pointer-down (fn [e]
-                                (util/stop e)
-                                (editor-handler/query-edit-title! block))}
-            [:span "Edit query title"]))])
+      [:div.flex.flex-row.w-full.gap-1
+       {:on-mouse-over #(reset! *hover? true)
+        :on-mouse-out #(reset! *hover? false)}
+       (query-builder-component/builder (:block/title block)
+                                        {:block block
+                                         :query-object? true})
+       (when @*hover?
+         (shui/button
+          {:variant "outline"
+           :size :sm
+           :class "!h-6"
+           :on-pointer-down (fn [e]
+                              (util/stop e)
+                              (editor-handler/query-edit-title! block))}
+          [:span "Edit query title"]))]
 
       :else
       (text-block-title config block))))
@@ -3329,6 +3328,23 @@
 
         (when (and @*show-right-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-right-menu config block editing?))])
+
+     (when-not (:table? config)
+       (let [query* (:logseq.property/query (db/entity (:db/id block)))
+             query (when query* (db/sub-block (:db/id query*)))
+             advanced-query? (= :code (:logseq.property.node/display-type query))]
+         (when query
+           (cond
+             (and advanced-query? (not collapsed?))
+             [:div.flex.flex-1.my-1 {:style {:margin-left 42}}
+              (src-cp (assoc config :block query)
+                      {:language (:logseq.property.code/mode query)})]
+
+             (and (not advanced-query?) (not collapsed?) (not (string/blank? (:block/title query))))
+             [:div.flex.flex-1.my-1 {:style {:margin-left 42}}
+              (query-builder-component/builder (:block/title query)
+                                               {:block query
+                                                :query-object? true})]))))
 
      (when (and db-based? (not collapsed?) (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
