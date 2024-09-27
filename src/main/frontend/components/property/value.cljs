@@ -106,8 +106,9 @@
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
-  (shui/popup-hide!)
-  (shui/dialog-close!)
+  (when-not (get-in property [:block/schema :hide?])
+    (shui/popup-hide!)
+    (shui/dialog-close!))
   (p/let [block
           (if (and (= :default (get-in property [:block/schema :type]))
                    (not (db-property/many? property)))

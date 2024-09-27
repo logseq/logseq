@@ -218,10 +218,7 @@
 
             (and (= :default type)
                  (not (seq (:property/closed-values property))))
-            (p/do!
-             (pv/<create-new-block! block property "")
-             (shui/popup-hide!)
-             (shui/dialog-close!))
+            (pv/<create-new-block! block property "")
 
             (or (not= :default type)
                 (and (= :default type) (seq (:property/closed-values property))))
