@@ -164,6 +164,7 @@
       :editor/cursor-range                   (atom nil)
       :editor/container-id                   (atom nil)
       :editor/next-edit-block                (atom nil)
+      :editor/pending-type-block             {}
 
       :selection/mode                        (atom false)
       ;; Warning: blocks order is determined when setting this attribute
@@ -2397,6 +2398,12 @@ Similar to re-frame subscriptions"
 (defn handbook-open?
   []
   (:ui/handbooks-open? @state))
+
+(defn set-pending-type-block!
+  [block]
+  (when block
+    (set-state! :editor/pending-type-block
+      {:block block :at (js/Date.now)})))
 
 (defn get-handbook-route-chan
   []

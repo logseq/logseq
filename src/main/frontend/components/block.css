@@ -945,7 +945,7 @@ html.is-mac {
 }
 
 .ls-code-editor-wrap {
-  @apply relative;
+  @apply relative w-full;
 
   .extensions__code-lang {
     @apply hidden;
