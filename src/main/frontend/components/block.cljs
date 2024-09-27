@@ -2037,10 +2037,11 @@
 (declare block-content)
 
 (declare src-cp)
+(declare block-title)
 
-(defn- text-block-title
+(rum/defc ^:large-vars/cleanup-todo text-block-title
   [config {:block/keys [marker pre-block? properties] :as block}]
-  (let [block-title (:block.temp/ast-title block)
+  (let [block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
         level (:level config)
         slide? (boolean (:slide? config))
@@ -2121,33 +2122,66 @@
          (when-not area? [(hl-ref)])
 
          (conj
-          (map-inline config block-title)
+          (map-inline config block-ast-title)
           (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
 
          ;; highlight ref block (area)
          (when area? [(hl-ref)])
 
-         (when (and (seq block-title) (ldb/class-instance? (db/entity :logseq.class/Cards) block))
-           [(shui/button
-             {:variant :ghost
-              :size :sm
-              :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
-              :on-click (fn [_]
-                          (state/pub-event! [:modal/show-cards (:db/id block)]))}
-             "Practice")])))))))
+         (when (and (seq block-ast-title) (ldb/class-instance? (db/entity :logseq.class/Cards) block))
+           [(ui/tooltip
+             (shui/button
+              {:variant :ghost
+               :size :sm
+               :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
+               :on-click (fn [e]
+                           (util/stop e)
+                           (state/pub-event! [:modal/show-cards (:db/id block)]))}
+              "Practice")
+             [:div "Practice cards"])])))))))
 
-(defn build-block-title
-  [config block]
-  (let [node-type (:logseq.property.node/display-type block)]
-    (case node-type
-      :code
+(rum/defcs block-title < rum/reactive db-mixins/query
+  (rum/local false ::hover?)
+  [state config block]
+  (let [*hover? (::hover? state)
+        node-type (:logseq.property.node/display-type block)
+        query? (ldb/class-instance? (db/entity :logseq.class/Query) block)
+        query (:logseq.property/query block)
+        empty-query-title? (and query? (string/blank? (:block/title query)))
+        query-block? (:logseq.property/_query block)
+        advanced-query? (= :code (:logseq.property.node/display-type query))]
+    (cond
+      (= :code node-type)
       [:div.flex.flex-1.w-full
        (src-cp (assoc config :block block) {:language (:logseq.property.code/mode block)})]
 
-      ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
-      :math
+      query-block?
+      (query-builder-component/builder (:block/title block)
+                                       {:block block
+                                        :query-object? true})
+
+        ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
+      (= :math node-type)
       (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
 
+      (and empty-query-title? (not advanced-query?))
+      [:div.flex.flex-row.w-full.gap-1
+       {:on-mouse-over #(reset! *hover? true)
+        :on-mouse-out #(reset! *hover? false)}
+       (query-builder-component/builder (:block/title block)
+                                        {:block block
+                                         :query-object? true})
+       (when @*hover?
+         (shui/button
+          {:variant "outline"
+           :size :sm
+           :class "!h-6"
+           :on-pointer-down (fn [e]
+                              (util/stop e)
+                              (editor-handler/query-edit-title! block))}
+          [:span "Edit query title"]))]
+
+      :else
       (text-block-title config block))))
 
 (rum/defc span-comma
@@ -2604,6 +2638,7 @@
                                             (block-content-on-pointer-down e block block-id content edit-input-id config))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
+              :key (str "block-content-" uuid)
               :on-pointer-up (fn [e]
                                (when (and
                                       (state/in-selection-mode?)
@@ -2623,7 +2658,7 @@
       [:div.flex.flex-row.justify-between.block-content-inner
        (when-not plugin-slotted?
          [:div.block-head-wrap
-          (build-block-title config block)])
+          (block-title config block)])
 
        (file-block/clock-summary-cp block ast-body)]
 
@@ -3294,14 +3329,36 @@
         (when (and @*show-right-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-right-menu config block editing?))])
 
+     (when-not (:table? config)
+       (let [query* (:logseq.property/query (db/entity (:db/id block)))
+             query (when query* (db/sub-block (:db/id query*)))
+             advanced-query? (= :code (:logseq.property.node/display-type query))]
+         (when query
+           (cond
+             (and advanced-query? (not collapsed?))
+             [:div.flex.flex-1.my-1 {:style {:margin-left 42}}
+              (src-cp (assoc config :block query)
+                      {:language (:logseq.property.code/mode query)})]
+
+             (and (not advanced-query?) (not collapsed?) (not (string/blank? (:block/title query))))
+             [:div.flex.flex-1.my-1 {:style {:margin-left 42}}
+              (query-builder-component/builder (:block/title query)
+                                               {:block query
+                                                :query-object? true})]))))
+
      (when (and db-based? (not collapsed?) (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])
 
-     (when (and db-based? (not collapsed?) (not (or table? property?)) (not (string/blank? (:block/title (:logseq.property/query block)))))
-       (let [query (:block/title (:logseq.property/query block))
+     (when (and db-based? (not collapsed?) (not (or table? property?))
+                (ldb/class-instance? (db/entity :logseq.class/Query) block))
+       (let [query-block (:logseq.property/query block)
+             query-block-title (:block/title query-block)
+             query (if (string/blank? query-block-title)
+                     (:block/title (db/entity (:db/id block)))
+                     query-block-title)
              result (common-util/safe-read-string query)
-             advanced-query? (and (map? result) (:query result))]
+             advanced-query? (map? result)]
          [:div {:style {:padding-left 42}}
           (query/custom-query (wrap-query-components (assoc config
                                                             :dsl-query? (not advanced-query?)
@@ -3654,7 +3711,7 @@
       (if html-export?
         (latex/html-export content true false)
         (if (config/db-based-graph? (state/get-current-repo))
-         [:div.warning "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command instead."]
+          [:div.warning "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command instead."]
           (latex/latex (str (d/squuid)) content true false)))
 
       ["Custom" "query" _options _result content]
@@ -3666,7 +3723,6 @@
           (catch :default e
             (log/error :read-string-error e)
             (ui/block-error "Invalid query:" {:content content}))))
-
 
       ["Custom" "note" _options result _content]
       (ui/admonition "note" (markup-elements-cp config result))
