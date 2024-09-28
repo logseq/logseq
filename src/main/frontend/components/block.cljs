@@ -2165,7 +2165,7 @@
       (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
 
       (and empty-query-title? (not advanced-query?))
-      [:div.flex.flex-row.w-full.gap-1
+      [:div.flex.flex-row.w-full.gap-1.flex-wrap
        {:on-mouse-over #(reset! *hover? true)
         :on-mouse-out #(reset! *hover? false)}
        (query-builder-component/builder (:block/title (db/entity (:db/id block)))

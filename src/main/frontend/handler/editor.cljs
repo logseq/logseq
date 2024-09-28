@@ -3833,7 +3833,7 @@
 (defn query-edit-title!
   [block]
   (let [query-block (:logseq.property/query block)
-        current-query (:block/title block)]
+        current-query (:block/title (db/entity (:db/id block)))]
     (p/do!
      (state/clear-edit!)
      (ui-outliner-tx/transact!
