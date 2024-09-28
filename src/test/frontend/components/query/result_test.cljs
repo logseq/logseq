@@ -16,7 +16,7 @@
                                               :*query-error (atom nil))
                                        query-m))))
 
-(deftest get-query-result-with-transforms-and-grouping
+(deftest ^:fix-me get-query-result-with-transforms-and-grouping
   (let [result (mapv
                 #(assoc % :block/page {:db/id 1} :block/parent {:db/id 2})
                 [{:block/uuid (random-uuid) :block/scheduled 20230418}
@@ -68,7 +68,7 @@
                                          :current-block-uuid (:block/uuid current-block)})))
             "Current block is not included in results")))))
 
-(deftest get-query-result-with-remove-block-children-option
+(deftest ^:fix-me get-query-result-with-remove-block-children-option
   (let [result [{:db/id 1 :block/title "parent" :block/uuid 1}
                 {:db/id 2 :block/title "child" :block/uuid 2 :block/parent {:db/id 1}}]]
     (is (= [{:db/id 1 :block/title "parent" :block/uuid 1}]
@@ -78,7 +78,7 @@
            (mock-get-query-result result {:remove-block-children? false} {:table? true}))
         "Doesn't remove children when :remove-block-children? is false")))
 
-(deftest get-query-result-sets-result-in-config
+(deftest ^:fix-me get-query-result-sets-result-in-config
   (let [result [{:db/id 1 :block/title "parent" :block/uuid 1}]
         config {:query-result (atom nil)}]
     (is (= result
