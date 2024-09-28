@@ -1509,13 +1509,6 @@ Arg *stop: atom, reset to true to stop the loop"
   [pred coll]
   `(vec (remove ~pred ~coll)))
 
-#?(:cljs
-   (defn safe-with-meta
-     [o meta]
-     (if (satisfies? IMeta o)
-       (with-meta o meta)
-       o)))
-
 ;; from rum
 #?(:cljs
    (def schedule
