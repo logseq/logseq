@@ -2156,7 +2156,7 @@
        (src-cp (assoc config :block block) {:language (:logseq.property.code/mode block)})]
 
       query-block?
-      (query-builder-component/builder (:block/title block)
+      (query-builder-component/builder (:block/title (db/entity (:db/id block)))
                                        {:block block
                                         :query-object? true})
 
@@ -2168,7 +2168,7 @@
       [:div.flex.flex-row.w-full.gap-1
        {:on-mouse-over #(reset! *hover? true)
         :on-mouse-out #(reset! *hover? false)}
-       (query-builder-component/builder (:block/title block)
+       (query-builder-component/builder (:block/title (db/entity (:db/id block)))
                                         {:block block
                                          :query-object? true})
        (when (and @*hover? (not (string/blank? (:block/title block))))
@@ -3342,7 +3342,7 @@
 
              (and (not advanced-query?) (not collapsed?) (not (string/blank? (:block/title query))))
              [:div.flex.flex-1.my-1 {:style {:margin-left 42}}
-              (query-builder-component/builder (:block/title query)
+              (query-builder-component/builder (:block/title (db/entity (:db/id query)))
                                                {:block query
                                                 :query-object? true})]))))
 
