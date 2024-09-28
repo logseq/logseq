@@ -130,7 +130,6 @@
               (do
                 (p/let [result p-or-value
                         result' (transform-fn result)]
-                  (prn :debug :query-result result')
                   (reset! result-atom result'))
                 result-atom)
 
