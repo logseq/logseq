@@ -2144,11 +2144,12 @@
   (rum/local false ::hover?)
   [state config block]
   (let [*hover? (::hover? state)
-        node-type (:logseq.property.node/display-type block)
-        query? (ldb/class-instance? (db/entity :logseq.class/Query) block)
-        query (:logseq.property/query block)
+        block' (db/entity (:db/id block))
+        node-type (:logseq.property.node/display-type block')
+        query? (ldb/class-instance? (db/entity :logseq.class/Query) block')
+        query (:logseq.property/query block')
         empty-query-title? (and query? (string/blank? (:block/title query)))
-        query-block? (:logseq.property/_query block)
+        query-block? (:logseq.property/_query block')
         advanced-query? (= :code (:logseq.property.node/display-type query))]
     (cond
       (= :code node-type)
@@ -2156,7 +2157,7 @@
        (src-cp (assoc config :block block) {:language (:logseq.property.code/mode block)})]
 
       query-block?
-      (query-builder-component/builder (:block/title (db/entity (:db/id block)))
+      (query-builder-component/builder (:block/title block')
                                        {:block block
                                         :query-object? true})
 
@@ -2168,7 +2169,7 @@
       [:div.flex.flex-row.w-full.gap-1.flex-wrap
        {:on-mouse-over #(reset! *hover? true)
         :on-mouse-out #(reset! *hover? false)}
-       (query-builder-component/builder (:block/title (db/entity (:db/id block)))
+       (query-builder-component/builder (:block/title block')
                                         {:block block
                                          :query-object? true})
        (when (and @*hover? (not (string/blank? (:block/title block))))
@@ -3352,9 +3353,10 @@
 
      (when (and db-based? (not collapsed?) (not (or table? property?))
                 (ldb/class-instance? (db/entity :logseq.class/Query) block))
-       (let [query-block (:logseq.property/query block)
+       (let [query-block (:logseq.property/query (db/entity (:db/id block)))
              query-block-title (:block/title query-block)
-             query (if (string/blank? query-block-title)
+             query (if (and (string/blank? query-block-title)
+                            (not (= :code (:logseq.property.node/display-type query-block))))
                      (:block/title (db/entity (:db/id block)))
                      query-block-title)
              result (common-util/safe-read-string query)
