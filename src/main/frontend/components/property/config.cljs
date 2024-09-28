@@ -433,11 +433,13 @@
          (dropdown-editor-menuitem
           (assoc v :item-props item-props))))]))
 
-(defn- property-type-label
+(defn property-type-label
   [property-type]
   (case property-type
     :default
     "Text"
+    :datetime
+    "DateTime"
     ((comp string/capitalize name) property-type)))
 
 (defn- handle-delete-property!

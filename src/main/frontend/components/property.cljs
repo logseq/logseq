@@ -33,13 +33,6 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(defn- property-type-label
-  [property-type]
-  (case property-type
-    :default
-    "Text"
-    ((comp string/capitalize name) property-type)))
-
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
   [entity property-uuid-or-name schema {:keys [class-schema?]}]
@@ -83,7 +76,7 @@
                                   (when built-in?
                                     db-property-type/internal-built-in-property-types))
                           (map (fn [type]
-                                 {:label (property-type-label type)
+                                 {:label (property-config/property-type-label type)
                                   :value type})))]
     [:div {:class "flex items-center col-span-1"}
      (shui/select
