@@ -1,5 +1,6 @@
 (ns frontend.extensions.code
-  (:require [clojure.string :as string]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             ["codemirror" :as CodeMirror]
             ["codemirror/addon/edit/closebrackets"]
             ["codemirror/addon/edit/matchbrackets"]
@@ -443,7 +444,16 @@
             (reset! *editor-ref editor))]
     (when editor
       (let [textarea-ref (rum/ref-node state textarea-ref-name)
-            element (.getWrapperElement editor)]
+            element (.getWrapperElement editor)
+            *cursor-prev (volatile! nil)
+            *cursor-curr (volatile! nil)
+            update-cursor-state! (fn []
+                                   (let [pos (.getCursor editor)
+                                         pos (bean/->clj (js/JSON.parse (js/JSON.stringify pos)))]
+                                     (if (not @*cursor-prev)
+                                       (vreset! *cursor-prev pos)
+                                       (vreset! *cursor-prev @*cursor-curr))
+                                     (vreset! *cursor-curr pos)))]
         (gobj/set textarea-ref codemirror-ref-name editor)
         (when (= mode "calc")
           (.on editor "change" (fn [_cm _e]
@@ -463,11 +473,20 @@
                                                 {:editor editor
                                                  :config config
                                                  :state state})))
+        (.on editor "cursorActivity" update-cursor-state!)
         (.addEventListener element "keydown" (fn [e]
                                                (let [key-code (.-code e)
                                                      meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))
                                                      shifted? (.-shiftKey e)]
                                                  (cond
+                                                   (contains? #{"ArrowUp" "ArrowDown"} key-code)
+                                                   (do
+                                                     (when (= @*cursor-prev @*cursor-curr)
+                                                       (let [direction (if (= "ArrowUp" key-code) :up :down)]
+                                                         (editor-handler/move-cross-boundary-up-down
+                                                           direction {:input textarea
+                                                                      :pos [direction 0]})))
+                                                     (update-cursor-state!))
                                                    meta-or-ctrl-pressed?
                                                    ;; prevent default behavior of browser
                                                    ;; Cmd + [ => Go back in browser, outdent in CodeMirror
