@@ -230,7 +230,9 @@
 (defn- find-or-create-property-value
   "Find or create a property value. Only to be used with properties that have ref types"
   [conn property-id v]
-  (or (get-property-value-eid @conn property-id v)
+  ;; FIXME: some properties should always create new values
+  (or (when-not (contains? #{:logseq.property/query} property-id)
+        (get-property-value-eid @conn property-id v))
       (let [v-uuid (create-property-text-block! conn nil property-id v {})]
         (:db/id (d/entity @conn [:block/uuid v-uuid])))))
 

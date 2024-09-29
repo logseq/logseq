@@ -101,23 +101,23 @@
   [props-to-rename]
   (fn [conn _search-db]
     (when (ldb/db-based-graph? @conn)
-     (let [props-tx (mapv (fn [[old new]]
-                            (merge {:db/id (:db/id (d/entity @conn old))
-                                    :db/ident new}
-                                   (when-let [new-title (get-in db-property/built-in-properties [new :title])]
-                                     {:block/title new-title
-                                      :block/name (common-util/page-name-sanity-lc new-title)})))
-                          props-to-rename)]
+      (let [props-tx (mapv (fn [[old new]]
+                             (merge {:db/id (:db/id (d/entity @conn old))
+                                     :db/ident new}
+                                    (when-let [new-title (get-in db-property/built-in-properties [new :title])]
+                                      {:block/title new-title
+                                       :block/name (common-util/page-name-sanity-lc new-title)})))
+                           props-to-rename)]
        ;; Property changes need to be in their own tx for subsequent uses of properties to take effect
-       (ldb/transact! conn props-tx {:db-migrate? true})
+        (ldb/transact! conn props-tx {:db-migrate? true})
 
-       (mapcat (fn [[old new]]
+        (mapcat (fn [[old new]]
                  ;; can't use datoms b/c user properties aren't indexed
-                 (->> (d/q '[:find ?b ?prop-v :in $ ?prop :where [?b ?prop ?prop-v]] @conn old)
-                      (mapcat (fn [[id prop-value]]
-                                [[:db/retract id old]
-                                 [:db/add id new prop-value]]))))
-               props-to-rename)))))
+                  (->> (d/q '[:find ?b ?prop-v :in $ ?prop :where [?b ?prop ?prop-v]] @conn old)
+                       (mapcat (fn [[id prop-value]]
+                                 [[:db/retract id old]
+                                  [:db/add id new prop-value]]))))
+                props-to-rename)))))
 
 (defn- update-block-type-many->one
   [conn _search-db]

@@ -41,6 +41,30 @@
                      :payload {:message "Built-in pages can't be edited"
                                :type :warning}}))))
 
+(defn- validate-unique-for-property-page
+  [entity db new-title]
+  (when-let [_res (seq (d/q (if (:logseq.property/built-in? entity)
+                              '[:find [?b ...]
+                                :in $ ?eid ?title
+                                :where
+                                [?b :block/title ?title]
+                                [?b :block/type "property"]
+                                [(not= ?b ?eid)]]
+                              '[:find [?b ...]
+                                :in $ ?eid ?title
+                                :where
+                                [?b :block/title ?title]
+                                [?b :block/type "property"]
+                                [(missing? $ ?b :logseq.property/built-in?)]
+                                [(not= ?b ?eid)]])
+                            db
+                            (:db/id entity)
+                            new-title))]
+    (throw (ex-info "Duplicate property"
+                    {:type :notification
+                     :payload {:message (str "Another property named " (pr-str new-title) " already exists")
+                               :type :warning}}))))
+
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (cond
@@ -62,21 +86,7 @@
                                  :type :warning}})))
 
     (ldb/property? entity)
-    (when-let [_res (seq (d/q '[:find [?b ...]
-                                :in $ ?eid ?type ?title
-                                :where
-                                [?b :block/title ?title]
-                                [?b :block/type ?type]
-                                [(missing? $ ?b :logseq.property/built-in?)]
-                                [(not= ?b ?eid)]]
-                              db
-                              (:db/id entity)
-                              (:block/type entity)
-                              new-title))]
-      (throw (ex-info "Duplicate property"
-                      {:type :notification
-                       :payload {:message (str "Another property named " (pr-str new-title) " already exists")
-                                 :type :warning}})))
+    (validate-unique-for-property-page entity db new-title)
 
     :else
     (when-let [_res (seq (d/q '[:find [?b ...]
