@@ -51,7 +51,7 @@
     }
 
     .clause-bracket {
-        @apply text-2xl font-thin opacity-30;
+        @apply font-bold opacity-50;
         font-family: "Inter";
     }
 

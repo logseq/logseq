@@ -1,11 +1,9 @@
 (ns logseq.outliner.property-test
   (:require [cljs.test :refer [deftest is testing are]]
-            [logseq.db.frontend.schema :as db-schema]
             [datascript.core :as d]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.outliner.property :as outliner-property]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.test.helper :as db-test]))
 
 (defn- find-block-by-content [conn content]
   (->> content
@@ -15,27 +13,21 @@
             @conn)
        first))
 
-(defn- create-conn-with-blocks [opts]
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-        _ (sqlite-build/create-blocks conn opts)]
-    conn))
-
 (deftest upsert-property!
   (testing "Creates a property"
-    (let [conn (create-conn-with-blocks [])
+    (let [conn (db-test/create-conn-with-blocks [])
           _ (outliner-property/upsert-property! conn nil {:type :number} {:property-name "num"})]
       (is (= {:type :number}
              (:block/schema (d/entity @conn :user.property/num)))
           "Creates property with property-name")))
 
   (testing "Updates a property"
-    (let [conn (create-conn-with-blocks {:properties {:num {:block/schema {:type :number}}}})
+    (let [conn (db-test/create-conn-with-blocks {:properties {:num {:block/schema {:type :number}}}})
           _ (outliner-property/upsert-property! conn :user.property/num {:type :default :cardinality :many} {})]
       (is (db-property/many? (d/entity @conn :user.property/num)))))
 
   (testing "Multiple properties that generate the same initial :db/ident"
-    (let [conn (create-conn-with-blocks [])]
+    (let [conn (db-test/create-conn-with-blocks [])]
       (outliner-property/upsert-property! conn nil {:type :default} {:property-name "p1"})
       (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
       (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
@@ -65,7 +57,7 @@
 
 (deftest create-property-text-block!
   (testing "Create a new :default property value"
-    (let [conn (create-conn-with-blocks
+    (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}
                   :blocks [{:block/title "b1" :build/properties {:default "foo"}}
                            {:block/title "b2"}]}])
@@ -82,7 +74,7 @@
           "Has correct created-from-property")))
 
   (testing "Create cases for a new :one :number property value"
-    (let [conn (create-conn-with-blocks
+    (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}
                   :blocks [{:block/title "b1" :build/properties {:num 2}}
                            {:block/title "b2"}]}])
@@ -105,7 +97,7 @@
           "Wrong value isn't transacted")))
 
   (testing "Create new :many :number property values"
-    (let [conn (create-conn-with-blocks
+    (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}
                   :blocks [{:block/title "b1" :build/properties {:num-many #{2}}}
                            {:block/title "b2"}]}])
@@ -122,7 +114,7 @@
 
 (deftest set-block-property-basic-cases
   (testing "Set a :number value with existing value"
-    (let [conn (create-conn-with-blocks
+    (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}
                   :blocks [{:block/title "b1" :build/properties {:num 2}}
                            {:block/title "b2"}]}])
@@ -135,7 +127,7 @@
              (:db/id (:user.property/num (find-block-by-content conn "b2")))))))
 
   (testing "Update a :number value with existing value"
-    (let [conn (create-conn-with-blocks
+    (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}
                   :blocks [{:block/title "b1" :build/properties {:num 2}}
                            {:block/title "b2" :build/properties {:num 3}}]}])
@@ -149,7 +141,7 @@
 
 (deftest set-block-property-with-non-ref-values
   (testing "Setting :default with same property value reuses existing entity"
-    (let [conn (create-conn-with-blocks
+    (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}
                   :blocks [{:block/title "b1" :build/properties {:logseq.property/order-list-type "number"}}
                            {:block/title "b2"}]}])
@@ -163,7 +155,7 @@
              (:db/id (:logseq.property/order-list-type (find-block-by-content conn "b2")))))))
 
   (testing "Setting :checkbox with same property value reuses existing entity"
-    (let [conn (create-conn-with-blocks
+    (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}
                   :blocks [{:block/title "b1" :build/properties {:checkbox true}}
                            {:block/title "b2"}]}])
@@ -176,7 +168,7 @@
       (is (= property-value (:user.property/checkbox (find-block-by-content conn "b2")))))))
 
 (deftest remove-block-property!
-  (let [conn (create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "b1" :build/properties {:default "foo"}}]}])
         block (find-block-by-content conn "b1")
@@ -188,7 +180,7 @@
     (is (nil? (:user.property/default updated-block)) "Block property is deleted")))
 
 (deftest batch-set-property!
-  (let [conn (create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "item 1"}
                          {:block/title "item 2"}]}])
@@ -201,7 +193,7 @@
         "Property values are batch set")))
 
 (deftest batch-remove-property!
-  (let [conn (create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "item 1" :build/properties {:logseq.property/order-list-type "number"}}
                          {:block/title "item 2" :build/properties {:logseq.property/order-list-type "number"}}]}])
@@ -213,7 +205,7 @@
         "Property values are batch removed")))
 
 (deftest add-existing-values-to-closed-values!
-  (let [conn (create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "b1" :build/properties {:num 1}}
                          {:block/title "b2" :build/properties {:num 2}}]}])
@@ -223,7 +215,7 @@
            (map db-property/closed-value-content (:block/_closed-value-property (d/entity @conn :user.property/num)))))))
 
 (deftest upsert-closed-value!
-  (let [conn (create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               {:properties {:num {:build/closed-values [{:uuid (random-uuid) :value 2}]
                                   :block/schema {:type :number}}}})]
 
@@ -260,7 +252,7 @@
 (deftest delete-closed-value!
   (let [closed-value-uuid (random-uuid)
         used-closed-value-uuid (random-uuid)
-        conn (create-conn-with-blocks
+        conn (db-test/create-conn-with-blocks
               {:properties {:default {:build/closed-values [{:uuid closed-value-uuid :value "foo"}
                                                             {:uuid used-closed-value-uuid :value "bar"}]
                                       :block/schema {:type :default}}}
@@ -273,7 +265,7 @@
     (is (nil? (d/entity @conn [:block/uuid closed-value-uuid])))))
 
 (deftest class-add-property!
-  (let [conn (create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               {:classes {:c1 {}}
                :properties {:p1 {:block/schema {:type :default}}
                             :p2 {:block/schema {:type :default}}}})
@@ -283,14 +275,14 @@
            (map :db/ident (:logseq.property.class/properties (d/entity @conn :user.class/c1)))))))
 
 (deftest class-remove-property!
-  (let [conn (create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               {:classes {:c1 {:build/schema-properties [:p1 :p2]}}})
         _ (outliner-property/class-remove-property! conn :user.class/c1 :user.property/p1)]
     (is (= [:user.property/p2]
            (map :db/ident (:logseq.property.class/properties (d/entity @conn :user.class/c1)))))))
 
 (deftest get-block-classes-properties
-  (let [conn (create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               {:classes {:c1 {:build/schema-properties [:p1]}
                          :c2 {:build/schema-properties [:p2 :p3]}}
                :pages-and-blocks

@@ -33,13 +33,6 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(defn- property-type-label
-  [property-type]
-  (case property-type
-    :default
-    "Text"
-    ((comp string/capitalize name) property-type)))
-
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
   [entity property-uuid-or-name schema {:keys [class-schema?]}]
@@ -83,7 +76,7 @@
                                   (when built-in?
                                     db-property-type/internal-built-in-property-types))
                           (map (fn [type]
-                                 {:label (property-type-label type)
+                                 {:label (property-config/property-type-label type)
                                   :value type})))]
     [:div {:class "flex items-center col-span-1"}
      (shui/select
@@ -218,10 +211,7 @@
 
             (and (= :default type)
                  (not (seq (:property/closed-values property))))
-            (p/do!
-             (pv/<create-new-block! block property "")
-             (shui/popup-hide!)
-             (shui/dialog-close!))
+            (pv/<create-new-block! block property "")
 
             (or (not= :default type)
                 (and (= :default type) (seq (:property/closed-values property))))
@@ -339,7 +329,8 @@
                                    block-types (if (and page? (not= block-type :page))
                                                  #{:page block-type}
                                                  #{block-type})]
-                               (or (and (not page?) (contains? #{:block/alias} (:block/title m)))
+                               (or (contains? #{:logseq.property/query} (:db/ident m))
+                                   (and (not page?) (contains? #{:block/alias} (:db/ident m)))
                                    ;; Filters out properties from being in wrong :view-context and :never view-contexts
                                    (and (not= view-context :all) (not (contains? block-types view-context))))))
         property (rum/react *property)
@@ -654,7 +645,7 @@
                           (state/set-selection-blocks! [block])
                           (some-> js/document.activeElement (.blur)))
                         (d/remove-class! target "ls-popup-closed")))}
-       (let [properties' (remove (fn [[k _v]] (contains? #{:logseq.property/icon} k)) full-properties)]
+       (let [properties' (remove (fn [[k _v]] (contains? #{:logseq.property/icon :logseq.property/query} k)) full-properties)]
          (properties-section block (if class-schema? properties properties') opts))
 
        (rum/with-key (new-property block opts) (str id "-add-property"))])))

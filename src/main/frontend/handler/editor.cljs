@@ -3355,7 +3355,8 @@
   (let [property-keys (->> (keys (:block/properties block))
                            (remove db-property/db-attribute-properties)
                            (remove #(outliner-property/property-with-other-position? (db/entity %))))]
-    (or (and (seq property-keys)
+    (or (ldb/class-instance? (db/entity :logseq.class/Query) block)
+        (and (seq property-keys)
              (not (db-pu/all-hidden-properties? property-keys)))
         (and (seq (:block/tags block))
              (some (fn [t]
@@ -3828,3 +3829,16 @@
   (.setData (gobj/get event "dataTransfer")
             (if page? "page-name" "block-uuid")
             (str block-or-page-name)))
+
+(defn query-edit-title!
+  [block]
+  (let [query-block (:logseq.property/query block)
+        current-query (:block/title (db/entity (:db/id block)))]
+    (p/do!
+     (state/clear-edit!)
+     (ui-outliner-tx/transact!
+      {:outliner-op :save-block}
+      (save-block-inner! block "" {})
+      (when query-block
+        (save-block-inner! query-block current-query {})))
+     (js/setTimeout #(edit-block! (db/entity (:db/id block)) :max) 100))))

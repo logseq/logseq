@@ -141,7 +141,8 @@
 (defn db-based-query
   []
   [[:editor/input "" {:last-pattern command-trigger}]
-   [:editor/set-property :block/tags :logseq.class/Query]])
+   [:editor/set-property :block/tags :logseq.class/Query]
+   [:editor/set-property :logseq.property/query ""]])
 
 (defn file-based-query
   []
@@ -402,12 +403,8 @@
           (conj ["Properties" (->properties)])))
 
       ;; advanced
-      [["Query"
-        (query-steps)
-        query-doc
-        :icon/query
-        "ADVANCED"]
-       ["Advanced Query" (advanced-query-steps) "Create an advanced query block" :icon/advanced-query]
+      [["Query" (query-steps) query-doc :icon/query "ADVANCED"]
+       ["Advanced Query" (advanced-query-steps) "Create an advanced query block" :icon/query]
        (when-not db?
          ["Zotero" (zotero-steps) "Import Zotero journal article" :icon/circle-letter-z])
        ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
