@@ -54,7 +54,6 @@ necessary db filtering"
              {:content
               "minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no",
               :name "viewport"}]
-            [:link {:type "text/css", :href "static/css/tabler-icons.min.css", :rel "stylesheet"}]
             [:link {:type "text/css", :href "static/css/style.css", :rel "stylesheet"}]
             [:link {:type "text/css", :href "static/css/custom.css", :rel "stylesheet"}]
             [:link {:type "text/css", :href "static/css/export.css", :rel "stylesheet"}]
