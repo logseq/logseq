@@ -131,8 +131,8 @@
   (let [collapsed?' (:collapsed? config)
         result' (rum/react *result)]
     (when (seq result')
-      (let [result (when *result (query-result/get-query-result config q result'))
-        ;; Args for displaying query header and results
+      (let [result (when *result (query-result/transform-query-result config q result'))
+            ;; Args for displaying query header and results
             view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
             view-f (and view-fn (sci/eval-string (pr-str view-fn)))
             page-list? (and (seq result) (some? (:block/name (first result))))
