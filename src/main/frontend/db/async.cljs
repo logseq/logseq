@@ -239,7 +239,7 @@
                                         [(>= ?d ?day)])]
                              date
                              future-day
-                             db-model/block-attrs)]
+                             db-model/file-graph-block-attrs)]
             (->> result
                  db-model/sort-by-order-recursive
                  db-utils/group-by-page)))))))
