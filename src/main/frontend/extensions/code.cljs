@@ -449,7 +449,8 @@
             *cursor-curr (volatile! nil)
             update-cursor-state! (fn []
                                    (let [pos (.getCursor editor)
-                                         pos (bean/->clj (js/JSON.parse (js/JSON.stringify pos)))]
+                                         pos (bean/->clj (js/JSON.parse (js/JSON.stringify pos)))
+                                         pos (select-keys pos [:line :ch])]
                                      (if (not @*cursor-prev)
                                        (vreset! *cursor-prev pos)
                                        (vreset! *cursor-prev @*cursor-curr))
@@ -466,7 +467,9 @@
                                     (not (gobj/get cm "escPressed")))
                                (code-handler/save-code-editor!))
                              (state/set-block-component-editing-mode! false)
-                             (state/set-state! :editor/code-block-context nil)))
+                             (state/set-state! :editor/code-block-context nil)
+                             (vreset! *cursor-curr nil)
+                             (vreset! *cursor-prev nil)))
         (.on editor "focus" (fn [_e]
                               (state/set-block-component-editing-mode! true)
                               (state/set-state! :editor/code-block-context
@@ -480,12 +483,15 @@
                                                      shifted? (.-shiftKey e)]
                                                  (cond
                                                    (contains? #{"ArrowUp" "ArrowDown"} key-code)
-                                                   (do
-                                                     (when (= @*cursor-prev @*cursor-curr)
-                                                       (let [direction (if (= "ArrowUp" key-code) :up :down)]
-                                                         (editor-handler/move-cross-boundary-up-down
-                                                           direction {:input textarea
-                                                                      :pos [direction 0]})))
+                                                   (let [direction (if (= "ArrowUp" key-code) :up :down)]
+                                                     (when (and (= @*cursor-prev @*cursor-curr)
+                                                             (case direction
+                                                               :up (zero? (:line @*cursor-curr))
+                                                               :down (= (:line @*cursor-curr) (.lastLine editor))
+                                                               false))
+                                                       (editor-handler/move-cross-boundary-up-down
+                                                         direction {:input textarea
+                                                                    :pos [direction 0]}))
                                                      (update-cursor-state!))
                                                    meta-or-ctrl-pressed?
                                                    ;; prevent default behavior of browser
