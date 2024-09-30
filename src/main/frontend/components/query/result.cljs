@@ -43,7 +43,9 @@
             (set-result! (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)}))))
 
         :else
-        (set-result! (query-custom/custom-query query {:current-block-uuid current-block-uuid})))
+        (set-result! (query-custom/custom-query query {:current-block-uuid current-block-uuid
+                                                       ;; FIXME: Remove this temporary workaround for reactivity not working
+                                                       :use-cache? false})))
       (catch :default e
         (reset! *query-error e)))))
 
