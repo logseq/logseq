@@ -4032,14 +4032,17 @@
       (fn []
         (case (:logseq.property.node/display-type editing-block)
           :code
-          (let [cursor-pos (some-> (:editor/cursor-range @state/state) (deref) (count))
+          (let [_cursor-pos (some-> (:editor/cursor-range @state/state) (deref) (count))
+                direction (:block.tmp/direction editing-block)
                 target (js/document.querySelector
                          (util/format "a.select-language[blockid=\"%s\"][containerid=\"%s\"]" uuid' container-id))]
             (when-let [cm (get-cm-instance target)]
-              ;; move to friendly cursor
-              (doto cm
-                (.focus)
-                (.setCursor 0 (or cursor-pos 0)))))
+              (let [to-line (case direction
+                              :up (.lastLine cm) 0)]
+                ;; move to friendly cursor
+                (doto cm
+                  (.focus)
+                  (.setCursor to-line 0)))))
           :dune))
       [editing-block]))
   nil)
