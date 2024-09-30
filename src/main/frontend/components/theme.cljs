@@ -143,8 +143,9 @@
      #(storage/set :file-sync/onboarding-state onboarding-state)
      [onboarding-state])
 
-    [:div.theme-container
-     {:on-click on-click}
+    [:div#root-container.theme-container
+     {:on-click on-click
+      :tab-index -1}
      child
 
      (pdf/default-embed-playground)

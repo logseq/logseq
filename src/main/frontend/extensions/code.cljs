@@ -154,6 +154,11 @@
 ;; export CodeMirror to global scope
 (set! js/window -CodeMirror CodeMirror)
 
+(defn- block-render-type-is-code?
+  [block]
+  (some-> block :logseq.property.node/display-type
+    (= :code)))
+
 (defn- all-tokens-by-cursor
   "All tokens from the beginning of the document to the cursor(inclusive)."
   [cm]
@@ -387,12 +392,17 @@
          mode)))))
 
 (defn- save-editor!
-  [config]
+  [^js cm config]
   (p/do!
    (code-handler/save-code-editor!)
    (when-let [block-id (:block/uuid config)]
      (let [block (db/entity [:block/uuid block-id])]
-       (editor-handler/edit-block! block :max)))))
+       (if (block-render-type-is-code? block)
+         (let [block-node (some-> cm (.getTextArea) (.closest ".ls-block"))]
+           ;; select block
+           (util/schedule #(.focus (aget js/window "root-container")))
+           (state/exit-editing-and-set-selected-blocks! [block-node]))
+         (editor-handler/edit-block! block :max))))))
 
 (defn ^:large-vars/cleanup-todo render!
   [state]
@@ -428,7 +438,7 @@
                            :extraKeys (merge {"Esc" (fn [cm]
                                                       ;; Avoid reentrancy
                                                       (gobj/set cm "escPressed" true)
-                                                      (save-editor! config))}
+                                                      (save-editor! cm config))}
                                              (when config-edit?
                                                {"':'" complete-after
                                                 "Ctrl-Space" "autocomplete"}))}
@@ -503,15 +513,15 @@
                                                      nil)
                                                    shifted?
                                                    (case key-code
+                                                     ;; create new block
                                                      "Enter"
                                                      (do
                                                        (util/stop e)
                                                        (when-let [blockid (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid"))]
                                                          (code-handler/save-code-editor!)
-                                                         (js/setTimeout
-                                                          #(editor-handler/api-insert-new-block! ""
-                                                                                                 {:block-uuid (uuid blockid)
-                                                                                                  :sibling? true}) 32)))
+                                                         (util/schedule #(editor-handler/api-insert-new-block! ""
+                                                                           {:block-uuid (uuid blockid)
+                                                                            :sibling? true}))))
                                                      nil)))))
         (.addEventListener element "pointerdown"
                            (fn [e]
