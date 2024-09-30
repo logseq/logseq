@@ -987,6 +987,9 @@
 
     nil))
 
+(defmethod handle :editor/run-query-command [_]
+  (editor-handler/run-query-command!))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]

@@ -1413,9 +1413,10 @@
   [config arguments]
   [:div.dsl-query.pr-3.sm:pr-0
    (let [query (->> (string/join ", " arguments)
-                    (string/trim))]
+                    (string/trim))
+         build-option (assoc (:block config) :file-version/query-macro-title query)]
      (query/custom-query (wrap-query-components (assoc config :dsl-query? true))
-                         {:builder (query-builder-component/builder query config)
+                         {:builder (query-builder-component/builder build-option {})
                           :query query}))])
 
 (defn- macro-function-cp
@@ -2140,47 +2141,37 @@
               "Practice")
              [:div "Practice cards"])])))))))
 
-(rum/defcs block-title < rum/reactive db-mixins/query
-  (rum/local false ::hover?)
-  [state config block]
-  (let [*hover? (::hover? state)
+(rum/defc block-title < rum/reactive db-mixins/query
+  [config block]
+  (let [collapsed? (:collapsed? config)
         block' (db/entity (:db/id block))
         node-type (:logseq.property.node/display-type block')
         query? (ldb/class-instance? (db/entity :logseq.class/Query) block')
         query (:logseq.property/query block')
-        empty-query-title? (and query? (string/blank? (:block/title query)))
-        query-block? (:logseq.property/_query block')
-        advanced-query? (= :code (:logseq.property.node/display-type query))]
+        advanced-query? (and query? (= :code node-type))]
     (cond
       (= :code node-type)
       [:div.flex.flex-1.w-full
        (src-cp (assoc config :block block) {:language (:logseq.property.code/mode block)})]
 
-      query-block?
-      (query-builder-component/builder (:block/title block')
-                                       {:block block
-                                        :query-object? true})
-
-        ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
+      ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
       (= :math node-type)
       (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
 
-      (and empty-query-title? (not advanced-query?))
-      [:div.flex.flex-row.w-full.gap-1.flex-wrap
-       {:on-mouse-over #(reset! *hover? true)
-        :on-mouse-out #(reset! *hover? false)}
-       (query-builder-component/builder (:block/title block')
-                                        {:block block
-                                         :query-object? true})
-       (when (and @*hover? (not (string/blank? (:block/title block))))
-         (shui/button
-          {:variant "outline"
-           :size :sm
-           :class "!h-6"
-           :on-pointer-down (fn [e]
-                              (util/stop e)
-                              (editor-handler/query-edit-title! block))}
-          [:span "Edit query title"]))]
+      (and query?
+           collapsed?
+           (not advanced-query?)
+           (string/blank? (:block/title block'))
+           (seq (:block/title query)))
+      (text-block-title config
+                        (merge query
+                               (block/parse-title-and-body (:block/uuid query) :markdown false (:block/title query))))
+
+      (seq (:logseq.property/_query block'))
+      (query-builder-component/builder block' {})
+
+      (and query? (string/blank? (:block/title block')))
+      [:span.opacity-50 "Set query title"]
 
       :else
       (text-block-title config block))))
@@ -2581,14 +2572,14 @@
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
-  (let [repo (state/get-current-repo)
+  (let [collapsed? (:collapsed? config)
+        repo (state/get-current-repo)
         content (if (config/db-based-graph? (state/get-current-repo))
                   (:block/raw-title block)
                   (property-util/remove-built-in-properties format (:block/raw-title block)))
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         ast-body (:block.temp/ast-body block)
         ast-title (:block.temp/ast-title block)
-        collapsed? (util/collapsed? block)
         block (assoc block :block/title content)
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
         block-ref? (:block-ref? config)
@@ -3146,6 +3137,24 @@
       [block* result]
       [nil result])))
 
+(rum/defc query-property-cp < rum/reactive db-mixins/query
+  [block config collapsed?]
+  (let [block (db/entity (:db/id block))
+        query? (ldb/class-instance? (db/entity :logseq.class/Query) block)]
+    (when (and query? (not collapsed?))
+      (let [query-id (:db/id (:logseq.property/query block))
+            query (some-> query-id db/sub-block)
+            advanced-query? (= :code (:logseq.property.node/display-type query))]
+        (cond
+          (and advanced-query? (not collapsed?))
+          [:div.flex.flex-1.my-1 {:style {:margin-left 42}}
+           (src-cp (assoc config :block query)
+                   {:language "clojure"})]
+
+          (and (not advanced-query?) (not collapsed?))
+          [:div.my-1 {:style {:margin-left 42}}
+           (block-container (assoc config :property? true) query)])))))
+
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [*ref (atom nil)
@@ -3186,6 +3195,7 @@
 
                      :else
                      db-collapsed?)
+        config (assoc config :collapsed? collapsed?)
         breadcrumb-show? (:breadcrumb-show? config)
         *show-left-menu? (::show-block-left-menu? container-state)
         *show-right-menu? (::show-block-right-menu? container-state)
@@ -3318,7 +3328,8 @@
                    hide-block-refs-count? (or (and (:embed? config)
                                                    (= (:block/uuid block) (:embed-id config)))
                                               table?)]
-               (block-content-or-editor config block
+               (block-content-or-editor config
+                                        block
                                         {:edit-input-id edit-input-id
                                          :block-id block-id
                                          :edit? editing?
@@ -3331,21 +3342,7 @@
           (block-right-menu config block editing?))])
 
      (when-not (:table? config)
-       (let [query* (:logseq.property/query (db/entity (:db/id block)))
-             query (when query* (db/sub-block (:db/id query*)))
-             advanced-query? (= :code (:logseq.property.node/display-type query))]
-         (when query
-           (cond
-             (and advanced-query? (not collapsed?))
-             [:div.flex.flex-1.my-1 {:style {:margin-left 42}}
-              (src-cp (assoc config :block query)
-                      {:language (:logseq.property.code/mode query)})]
-
-             (and (not advanced-query?) (not collapsed?) (not (string/blank? (:block/title query))))
-             [:div.flex.flex-1.my-1 {:style {:margin-left 42}}
-              (query-builder-component/builder (:block/title (db/entity (:db/id query)))
-                                               {:block query
-                                                :query-object? true})]))))
+       (query-property-cp block config collapsed?))
 
      (when (and db-based? (not collapsed?) (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
@@ -3354,11 +3351,8 @@
      (when (and db-based? (not collapsed?) (not (or table? property?))
                 (ldb/class-instance? (db/entity :logseq.class/Query) block))
        (let [query-block (:logseq.property/query (db/entity (:db/id block)))
-             query-block-title (:block/title query-block)
-             query (if (and (string/blank? query-block-title)
-                            (not (= :code (:logseq.property.node/display-type query-block))))
-                     (:block/title (db/entity (:db/id block)))
-                     query-block-title)
+             query-block (if query-block (db/sub-block (:db/id query-block)) query-block)
+             query (:block/title query-block)
              result (common-util/safe-read-string query)
              advanced-query? (map? result)]
          [:div {:style {:padding-left 42}}
