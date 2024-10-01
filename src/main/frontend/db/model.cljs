@@ -23,7 +23,37 @@
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
 
-(def block-attrs ldb/block-attrs)
+(def file-graph-block-attrs
+  "In file graphs, use it to replace '*' for datalog queries"
+  '[:db/id
+    :block/uuid
+    :block/parent
+    :block/order
+    :block/collapsed?
+    :block/format
+    :block/refs
+    :block/_refs
+    :block/path-refs
+    :block/tags
+    :block/link
+    :block/title
+    :block/marker
+    :block/priority
+    :block/properties
+    :block/properties-order
+    :block/properties-text-values
+    :block/pre-block?
+    :block/scheduled
+    :block/deadline
+    :block/repeated?
+    :block/created-at
+    :block/updated-at
+    ;; TODO: remove this in later releases
+    :block/heading-level
+    :block/file
+    :logseq.property/parent
+    {:block/page [:db/id :block/name :block/title :block/journal-day]}
+    {:block/_parent ...}])
 
 (def hidden-page? ldb/hidden?)
 
@@ -587,7 +617,7 @@ independent of format as format specific heading characters are stripped"
              [?block :block/path-refs ?ref-page]]
            db
            pages
-           (butlast block-attrs))
+           (butlast file-graph-block-attrs))
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))
           db-utils/group-by-page
           (map (fn [[k blocks]]

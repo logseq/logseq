@@ -43,7 +43,9 @@
             (set-result! (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)}))))
 
         :else
-        (set-result! (query-custom/custom-query query {:current-block-uuid current-block-uuid})))
+        (set-result! (query-custom/custom-query query {:current-block-uuid current-block-uuid
+                                                       ;; FIXME: Remove this temporary workaround for reactivity not working
+                                                       :use-cache? false})))
       (catch :default e
         (reset! *query-error e)))))
 
@@ -55,9 +57,8 @@
          (and (not result-transform)
               (not (and (string? query) (string/includes? query "(by-page false)")))))))
 
-(defn get-query-result
-  "Fetches a query's result, transforms it as needed and saves the result into
-  an atom that is passed in as an argument"
+(defn transform-query-result
+  "Transforms a query result if query conditions and config indicate a transformation"
   [{:keys [current-block-uuid table?] :as config} query-m query-result]
   (let [;; exclude the current one, otherwise it'll loop forever
         remove-blocks (if current-block-uuid [current-block-uuid] nil)
