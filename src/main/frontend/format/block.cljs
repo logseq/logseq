@@ -78,7 +78,12 @@ and handles unexpected failure."
           format (or format :markdown)
           parse-config (mldoc/get-default-config format)
           ast (format/to-edn title format parse-config)
-          blocks (extract-blocks ast title format {:parse-block block})
+          ;; Disable extraction for display-type blocks as there isn't a reason to have
+          ;; it enabled yet and can cause visible bugs when '#' is used
+          blocks (if (and (config/db-based-graph? (state/get-current-repo))
+                          (:logseq.property.node/display-type block))
+                   [block]
+                   (extract-blocks ast title format {:parse-block block}))
           new-block (first blocks)
           block (cond->
                  (merge block new-block)
