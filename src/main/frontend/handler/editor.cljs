@@ -3285,7 +3285,8 @@
       (util/stop e)
       (let [block {:block/uuid block-id}
             left? (= direction :left)
-            opts {:container-id (some-> node (dom/attr "containerid") (parse-long))}]
+            opts {:container-id (some-> node (dom/attr "containerid") (parse-long))
+                  :event e}]
         (edit-block! block (if left? 0 :max) opts)))))
 
 (defn shortcut-left-right [direction]
