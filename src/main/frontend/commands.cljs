@@ -142,7 +142,7 @@
   []
   [[:editor/input "" {:last-pattern command-trigger}]
    [:editor/set-property :block/tags :logseq.class/Query]
-   [:editor/set-property :logseq.property/query ""]])
+   [:editor/exit]])
 
 (defn file-based-query
   []
