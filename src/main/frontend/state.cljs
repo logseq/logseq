@@ -2034,7 +2034,7 @@ Similar to re-frame subscriptions"
    (set-selection-blocks! blocks direction)))
 
 (defn set-editing!
-  [edit-input-id content block cursor-range & {:keys [move-cursor? container-id property-block direction]
+  [edit-input-id content block cursor-range & {:keys [move-cursor? container-id property-block direction event pos]
                                                :or {move-cursor? true}}]
   (when-not (exists? js/process)
     (if (> (count content)
@@ -2053,7 +2053,9 @@ Similar to re-frame subscriptions"
                         (assoc block
                                :block.temp/container (gobj/get container "id"))
                         block)
-                block (assoc block :block.tmp/direction direction)
+                block (assoc block :block.editing/direction direction
+                        :block.editing/event event
+                        :block.editing/pos pos)
                 content (string/trim (or content ""))]
             (assert (and container-id (:block/uuid block))
                     "container-id or block uuid is missing")
