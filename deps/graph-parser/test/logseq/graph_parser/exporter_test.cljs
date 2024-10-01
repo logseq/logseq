@@ -17,7 +17,8 @@
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.outliner.db-pipeline :as db-pipeline]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.db.frontend.rules :as rules]))
 
 ;; Helpers
 ;; =======
@@ -39,6 +40,13 @@
                 :where [?b :block/title ?content] [(missing? $ ?b :block/type)]]
               db)
          first)))
+
+(defn- find-block-by-property [db property property-value]
+  (->> (d/q '[:find [(pull ?b [*]) ...]
+              :in $ ?prop ?prop-value %
+              :where (property ?b ?prop ?prop-value)]
+            db property property-value (rules/extract-rules rules/db-query-dsl-rules [:property]))
+       first))
 
 (defn- find-page-by-name [db name]
   (->> name
@@ -124,13 +132,13 @@
               (if (boolean? v)
                 [k v]
                 [k
-                (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
-                  (if (= :block/tags k)
-                    (mapv #(:db/ident (d/entity db (:db/id %))) v)
-                    (if (db-property-type/all-ref-property-types built-in-type)
-                      (db-property/ref->property-value-contents db v)
-                      v))
-                  (db-property/ref->property-value-contents db v))])))
+                 (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
+                   (if (= :block/tags k)
+                     (mapv #(:db/ident (d/entity db (:db/id %))) v)
+                     (if (db-property-type/all-ref-property-types built-in-type)
+                       (db-property/ref->property-value-contents db v)
+                       v))
+                   (db-property/ref->property-value-contents db v))])))
        (into {})))
 
 ;; Tests
@@ -289,8 +297,9 @@
       (is (= {:logseq.property.table/sorting [{:id :user.property/prop-num, :asc? false}]
               :logseq.property.view/type "Table View"
               :logseq.property.table/ordered-columns [:block/title :user.property/prop-string :user.property/prop-num]
+              :logseq.property/query "(property :prop-string)"
               :block/tags [:logseq.class/Query]}
-             (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
+             (readable-properties @conn (find-block-by-property @conn :logseq.property/query "(property :prop-string)")))
           "query block has correct query properties"))
 
     (testing "db attributes"
