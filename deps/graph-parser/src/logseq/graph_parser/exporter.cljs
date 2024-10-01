@@ -142,7 +142,10 @@
           block)]
     (cond-> block'
       (macro-util/query-macro? (:block/title block))
-      (update :block/tags (fnil conj []) :logseq.class/Query))))
+      ((fn [b]
+         (merge (update b :block/tags (fnil conj []) :logseq.class/Query)
+                ;; Blank title here as query property has already been set
+                {:block/title ""}))))))
 
 (defn- update-block-marker
   "If a block has a marker, convert it to a task object"
@@ -381,6 +384,11 @@
                          [(built-in-property-name-to-idents prop) prop-value]))))
              (into {}))]
     (cond-> m
+      (macro-util/query-macro? title)
+      (assoc :logseq.property/query
+             (or (some->> (second (re-find #"\{\{query(.*)\}\}" title))
+                          string/trim)
+                 title))
       (and (contains? props :query-sort-desc) (:query-sort-by props))
       (update :logseq.property.table/sorting
               (fn [v]
