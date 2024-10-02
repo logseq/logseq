@@ -176,7 +176,7 @@
       (is (= 18 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
-      (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
+      (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 8
@@ -294,16 +294,26 @@
       (is (= #{"gpt"}
              (:block/alias (readable-properties @conn (find-page-by-name @conn "chat-gpt")))))
 
+      ;; Queries
       (is (= {:logseq.property.table/sorting [{:id :user.property/prop-num, :asc? false}]
               :logseq.property.view/type "Table View"
               :logseq.property.table/ordered-columns [:block/title :user.property/prop-string :user.property/prop-num]
               :logseq.property/query "(property :prop-string)"
               :block/tags [:logseq.class/Query]}
              (readable-properties @conn (find-block-by-property @conn :logseq.property/query "(property :prop-string)")))
-          "query block has correct query properties")
+          "simple query block has correct query properties")
       (is (= "For example, here's a query with title text:"
-           (:block/title (find-block-by-content @conn #"query with title text")))
-          "Text around a query block is set as a query's title"))
+             (:block/title (find-block-by-content @conn #"query with title text")))
+          "Text around a simple query block is set as a query's title")
+      (is (= {:logseq.property.view/type "List View"
+              :logseq.property/query "{:query (task todo doing)}"
+              :block/tags [:logseq.class/Query]
+              :logseq.property.table/ordered-columns [:block/title]}
+             (readable-properties @conn (find-block-by-content @conn #"tasks with")))
+          "Advanced query has correct query properties")
+      (is (= "tasks with todo and doing"
+             (:block/title (find-block-by-content @conn #"tasks with")))
+          "Advanced query has custom title migrated"))
 
     (testing "db attributes"
       (is (= true
@@ -371,9 +381,7 @@
     (testing "multiline blocks"
       (is (= "|markdown| table|\n|some|thing|" (:block/title (find-block-by-content @conn #"markdown.*table"))))
       (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (find-block-by-content @conn #"multiline block"))))
-      (is (= "logbook block" (:block/title (find-block-by-content @conn #"logbook block"))))
-      (is (re-find #"(?s)^Text before\n#\+BEGIN_QUERY.*END_QUERY\nText after$"
-                   (:block/title (find-block-by-content @conn #":title \"tasks")))))
+      (is (= "logbook block" (:block/title (find-block-by-content @conn #"logbook block")))))
 
     (testing "block refs and path-refs"
       (let [block (find-block-by-content @conn "old todo block")]
