@@ -43,7 +43,7 @@
                                                 :public? false
                                                 :hide? true
                                                 :view-context :block}}
-   :logseq.property.code/mode {:title "Code mode"
+   :logseq.property.code/lang {:title "Code mode"
                                :schema {:type :string
                                         :public? false
                                         :hide? true
