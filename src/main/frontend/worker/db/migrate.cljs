@@ -300,7 +300,8 @@
         :fix add-query-property-to-query-tag}]
    [26 {:properties [:logseq.property.node/type]}]
    [27 {:properties [:logseq.property.code/mode]}]
-   [28 {:fix (rename-properties {:logseq.property.node/type :logseq.property.node/display-type})}]])
+   [28 {:fix (rename-properties {:logseq.property.node/type :logseq.property.node/display-type})}]
+   [29 {:properties [:logseq.property.code/lang]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

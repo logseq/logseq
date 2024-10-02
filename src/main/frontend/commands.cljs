@@ -189,7 +189,7 @@
      [:editor/set-property :block/tags :logseq.class/Query]
      [:editor/set-property :logseq.property/query ""]
      [:editor/set-property-on-block-property :logseq.property/query :logseq.property.node/display-type :code]
-     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/mode "clojure"]]
+     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/lang "clojure"]]
     (->block "query")))
 
 (defn db-based-code-block

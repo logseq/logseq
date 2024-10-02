@@ -951,8 +951,14 @@ html.is-mac {
     @apply hidden;
   }
 
-  > a.select-language {
-    @apply absolute right-1 top-1 bg-gray-02-alpha border rounded text-gray-11
-    select-none opacity-70 hover:opacity-90 z-[1] text-xs px-1.5;
+  > .code-block-actions {
+    @apply absolute right-1 top-1 select-none z-[1] text-xs;
+    button {
+        @apply !py-0 h-4 text-muted-foreground hover:text-foreground text-xs px-1;
+    }
+    svg {
+      width: 14px;
+      height: 14px;
+    }
   }
 }

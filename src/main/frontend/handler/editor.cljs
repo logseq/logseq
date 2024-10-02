@@ -940,6 +940,11 @@
     (set-blocks-id! [block-id])
     (util/copy-to-clipboard! (tap-clipboard block-id)))))
 
+(defn copy-block-content!
+  [block]
+  (util/copy-to-clipboard! (:block/title block))
+  (notification/show! "Copied!" :success))
+
 (defn select-block!
   [block-uuid]
   (block-handler/select-block! block-uuid))
@@ -2571,8 +2576,8 @@
                 value (state/get-edit-content)]
             (p/do!
              (when (and
-                     (not (state/block-component-editing?))
-                     (not= (clean-content! repo format title)
+                    (not (state/block-component-editing?))
+                    (not= (clean-content! repo format title)
                           (string/trim value)))
                (save-block! repo uuid value))
 
