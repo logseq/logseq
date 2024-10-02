@@ -624,17 +624,29 @@
   "Does everything page properties does and updates a couple of block specific attributes"
   [{:block/keys [title] :as block*} db page-names-to-uuids refs {:keys [property-classes] :as options}]
   (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
+        advanced-query (some->> (second (re-find #"(?s)#\+BEGIN_QUERY(.*)#\+END_QUERY" title)) string/trim)
         additional-props (cond-> {}
+                           ;; Order matters as we ensure a simple query gets priority
                            (macro-util/query-macro? title)
                            (assoc :logseq.property/query
                                   (or (some->> (second (re-find #"\{\{query(.*)\}\}" title))
                                                string/trim)
-                                      title)))
+                                      title))
+                           (seq advanced-query)
+                           (assoc :logseq.property/query
+                                  (if-let [query-map (not-empty (common-util/safe-read-map-string advanced-query))]
+                                    (pr-str (dissoc query-map :title :group-by-page? :collapsed?))
+                                    advanced-query)))
         {:keys [block-properties pvalues-tx]}
         (when (seq additional-props)
           (build-properties-and-values additional-props db page-names-to-uuids
                                        (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
-                                       options))]
+                                       options))
+        pvalues-tx' (if (and pvalues-tx (seq advanced-query))
+                      (concat pvalues-tx [{:block/uuid (second (:logseq.property/query block-properties))
+                                           :logseq.property.code/mode "clojure"
+                                           :logseq.property.node/display-type :code}])
+                      pvalues-tx)]
     {:block
      (cond-> block
        (seq block-properties)
@@ -646,10 +658,23 @@
                  ;; Put all non-query content in title. Could just be a blank string
                  {:block/title (string/trim (string/replace-first title #"\{\{query(.*)\}\}" ""))})))
 
+       (seq advanced-query)
+       ((fn [b]
+          (let [query-map (common-util/safe-read-map-string advanced-query)]
+            (cond-> (update b :block/tags (fnil conj []) :logseq.class/Query)
+              true
+              (assoc :block/title
+                     (or (when-let [title' (:title query-map)]
+                           (if (string? title') title' (pr-str title')))
+                         ;; Put all non-query content in title for now
+                         (string/trim (string/replace-first title #"(?s)#\+BEGIN_QUERY(.*)#\+END_QUERY" ""))))
+              (:collapsed? query-map)
+              (assoc :block/collapsed? true)))))
+
        (and (seq property-classes) (seq (:block/refs block*)))
        ;; remove unused, nonexistent property page
        (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs))))
-     :properties-tx (concat properties-tx (when pvalues-tx pvalues-tx))}))
+     :properties-tx (concat properties-tx (when pvalues-tx' pvalues-tx'))}))
 
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
