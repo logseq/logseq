@@ -82,14 +82,18 @@
       (throw (ex-info (str "No uuid found for page name " (pr-str page-name))
                       {:page-name page-name}))))
 
+(defn- logseq-class-ident?
+  [k]
+  (and (qualified-keyword? k) (= "logseq.class" (namespace k))))
+
 (defn- update-page-tags
   [block db tag-classes page-names-to-uuids all-idents]
   (if (seq (:block/tags block))
     (let [page-tags (->> (:block/tags block)
                          (remove #(or (:block.temp/new-class %)
                                       (contains? tag-classes (:block/name %))
-                                      ;; Ignore new class tags from extract
-                                      (= % :logseq.class/Journal)))
+                                      ;; Ignore new class tags from extract e.g. :logseq.class/Journal
+                                      (logseq-class-ident? %)))
                          (map #(vector :block/uuid (get-page-uuid page-names-to-uuids (:block/name %))))
                          set)]
       (cond-> block
@@ -97,7 +101,7 @@
         (update :block/tags
                 (fn [tags]
                   ;; Don't lazy load as this needs to build before the page does
-                  (vec (keep #(if (= % :logseq.class/Journal)
+                  (vec (keep #(if (logseq-class-ident? %)
                                 %
                                 (convert-tag-to-class db % page-names-to-uuids tag-classes all-idents)) tags))))
         (seq page-tags)
@@ -124,7 +128,10 @@
   [block db tag-classes page-names-to-uuids all-idents]
   (let [block'
         (if (seq (:block/tags block))
-          (let [original-tags (remove :block.temp/new-class (:block/tags block))]
+          (let [original-tags (remove #(or (:block.temp/new-class %)
+                                           ;; Filter out new classes already set on a block e.g. :logseq.class/Query
+                                           (logseq-class-ident? %))
+                                      (:block/tags block))]
             (-> block
                 (update :block/title
                         content-without-tags-ignore-case
@@ -138,14 +145,12 @@
                              (map #(add-uuid-to-page-map % page-names-to-uuids))))
                 (update :block/tags
                         (fn [tags]
-                          (vec (keep #(convert-tag-to-class db % page-names-to-uuids tag-classes all-idents) tags))))))
+                          (vec (keep #(if (logseq-class-ident? %)
+                                        %
+                                        (convert-tag-to-class db % page-names-to-uuids tag-classes all-idents))
+                                     tags))))))
           block)]
-    (cond-> block'
-      (macro-util/query-macro? (:block/title block))
-      ((fn [b]
-         (merge (update b :block/tags (fnil conj []) :logseq.class/Query)
-                ;; Blank title here as query property has already been set
-                {:block/title ""}))))))
+    block'))
 
 (defn- update-block-marker
   "If a block has a marker, convert it to a task object"
@@ -384,11 +389,6 @@
                          [(built-in-property-name-to-idents prop) prop-value]))))
              (into {}))]
     (cond-> m
-      (macro-util/query-macro? title)
-      (assoc :logseq.property/query
-             (or (some->> (second (re-find #"\{\{query(.*)\}\}" title))
-                          string/trim)
-                 title))
       (and (contains? props :query-sort-desc) (:query-sort-by props))
       (update :logseq.property.table/sorting
               (fn [v]
@@ -622,14 +622,34 @@
 
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
-  [block* db page-names-to-uuids refs {:keys [property-classes] :as options}]
-  (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)]
+  [{:block/keys [title] :as block*} db page-names-to-uuids refs {:keys [property-classes] :as options}]
+  (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
+        additional-props (cond-> {}
+                           (macro-util/query-macro? title)
+                           (assoc :logseq.property/query
+                                  (or (some->> (second (re-find #"\{\{query(.*)\}\}" title))
+                                               string/trim)
+                                      title)))
+        {:keys [block-properties pvalues-tx]}
+        (when (seq additional-props)
+          (build-properties-and-values additional-props db page-names-to-uuids
+                                       (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
+                                       options))]
     {:block
      (cond-> block
+       (seq block-properties)
+       (merge block-properties)
+
+       (macro-util/query-macro? title)
+       ((fn [b]
+          (merge (update b :block/tags (fnil conj []) :logseq.class/Query)
+                 ;; Put all non-query content in title. Could just be a blank string
+                 {:block/title (string/trim (string/replace-first title #"\{\{query(.*)\}\}" ""))})))
+
        (and (seq property-classes) (seq (:block/refs block*)))
        ;; remove unused, nonexistent property page
        (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs))))
-     :properties-tx properties-tx}))
+     :properties-tx (concat properties-tx (when pvalues-tx pvalues-tx))}))
 
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
@@ -683,7 +703,7 @@
 
 (defn- build-block-tx
   [db block* pre-blocks page-names-to-uuids {:keys [tag-classes import-state] :as options}]
-  ;; (prn ::block-in block)
+  ;; (prn ::block-in block*)
   (let [;; needs to come before update-block-refs to detect new property schemas
         {:keys [block properties-tx]}
         (handle-block-properties block* db page-names-to-uuids (:block/refs block*) options)
