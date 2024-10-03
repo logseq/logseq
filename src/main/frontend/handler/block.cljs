@@ -22,8 +22,7 @@
    [frontend.handler.property.util :as pu]
    [dommy.core :as dom]
    [goog.object :as gobj]
-   [promesa.core :as p]
-   [datascript.impl.entity :as de]))
+   [promesa.core :as p]))
 
 ;;  Fns
 
@@ -178,7 +177,8 @@
                            (state/get-current-editor-container-id)
                            :unknown-container)]
       (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range
-                          {:container-id container-id :direction direction :event event :pos pos}))
+                          {:db (db/get-db)
+                           :container-id container-id :direction direction :event event :pos pos}))
     (mark-last-input-time! repo)))
 
 (defn sanity-block-content
@@ -189,18 +189,18 @@
         (drawer/remove-logbook))))
 
 (defn edit-block!
-  [block pos & {:keys [_container-id custom-content tail-len]
-                :or {tail-len 0}
+  [block pos & {:keys [_container-id custom-content tail-len save-code-editor?]
+                :or {tail-len 0
+                     save-code-editor? true}
                 :as opts}]
   (when (and (not config/publishing?) (:block/uuid block))
     (p/do!
-     (state/pub-event! [:editor/save-code-editor])
+     (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
      (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
        (state/clear-edit! {:clear-editing-block? false}))
      (when-let [block-id (:block/uuid block)]
        (let [repo (state/get-current-repo)
-             block (if (de/entity? block) block
-                       (or (db/entity [:block/uuid block-id]) block))
+             block (or (db/entity [:block/uuid block-id]) block)
              content (or custom-content (:block/title block) "")
              content-length (count content)
              text-range (cond
