@@ -141,8 +141,7 @@
 (defn db-based-query
   []
   [[:editor/input "" {:last-pattern command-trigger}]
-   [:editor/set-property :block/tags :logseq.class/Query]
-   [:editor/exit]])
+   [:editor/run-query-command]])
 
 (defn file-based-query
   []
@@ -789,6 +788,9 @@
   (if (config/db-based-graph? (state/get-current-repo))
     (state/pub-event! [:editor/new-property {:property-key "Deadline"}])
     (handle-step [:editor/show-date-picker :deadline])))
+
+(defmethod handle-step :editor/run-query-command [[_]]
+  (state/pub-event! [:editor/run-query-command]))
 
 (defmethod handle-step :editor/insert-properties [[_ _] _format]
   (when-let [input-id (state/get-edit-input-id)]

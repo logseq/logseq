@@ -17,7 +17,8 @@
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.outliner.db-pipeline :as db-pipeline]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.db.frontend.rules :as rules]))
 
 ;; Helpers
 ;; =======
@@ -39,6 +40,13 @@
                 :where [?b :block/title ?content] [(missing? $ ?b :block/type)]]
               db)
          first)))
+
+(defn- find-block-by-property [db property property-value]
+  (->> (d/q '[:find [(pull ?b [*]) ...]
+              :in $ ?prop ?prop-value %
+              :where (property ?b ?prop ?prop-value)]
+            db property property-value (rules/extract-rules rules/db-query-dsl-rules [:property]))
+       first))
 
 (defn- find-page-by-name [db name]
   (->> name
@@ -124,13 +132,13 @@
               (if (boolean? v)
                 [k v]
                 [k
-                (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
-                  (if (= :block/tags k)
-                    (mapv #(:db/ident (d/entity db (:db/id %))) v)
-                    (if (db-property-type/all-ref-property-types built-in-type)
-                      (db-property/ref->property-value-contents db v)
-                      v))
-                  (db-property/ref->property-value-contents db v))])))
+                 (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
+                   (if (= :block/tags k)
+                     (mapv #(:db/ident (d/entity db (:db/id %))) v)
+                     (if (db-property-type/all-ref-property-types built-in-type)
+                       (db-property/ref->property-value-contents db v)
+                       v))
+                   (db-property/ref->property-value-contents db v))])))
        (into {})))
 
 ;; Tests
@@ -168,7 +176,7 @@
       (is (= 18 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
-      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
+      (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 8
@@ -286,12 +294,26 @@
       (is (= #{"gpt"}
              (:block/alias (readable-properties @conn (find-page-by-name @conn "chat-gpt")))))
 
+      ;; Queries
       (is (= {:logseq.property.table/sorting [{:id :user.property/prop-num, :asc? false}]
               :logseq.property.view/type "Table View"
               :logseq.property.table/ordered-columns [:block/title :user.property/prop-string :user.property/prop-num]
+              :logseq.property/query "(property :prop-string)"
               :block/tags [:logseq.class/Query]}
-             (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
-          "query block has correct query properties"))
+             (readable-properties @conn (find-block-by-property @conn :logseq.property/query "(property :prop-string)")))
+          "simple query block has correct query properties")
+      (is (= "For example, here's a query with title text:"
+             (:block/title (find-block-by-content @conn #"query with title text")))
+          "Text around a simple query block is set as a query's title")
+      (is (= {:logseq.property.view/type "List View"
+              :logseq.property/query "{:query (task todo doing)}"
+              :block/tags [:logseq.class/Query]
+              :logseq.property.table/ordered-columns [:block/title]}
+             (readable-properties @conn (find-block-by-content @conn #"tasks with")))
+          "Advanced query has correct query properties")
+      (is (= "tasks with todo and doing"
+             (:block/title (find-block-by-content @conn #"tasks with")))
+          "Advanced query has custom title migrated"))
 
     (testing "db attributes"
       (is (= true
@@ -359,9 +381,7 @@
     (testing "multiline blocks"
       (is (= "|markdown| table|\n|some|thing|" (:block/title (find-block-by-content @conn #"markdown.*table"))))
       (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (find-block-by-content @conn #"multiline block"))))
-      (is (= "logbook block" (:block/title (find-block-by-content @conn #"logbook block"))))
-      (is (re-find #"(?s)^Text before\n#\+BEGIN_QUERY.*END_QUERY\nText after$"
-                   (:block/title (find-block-by-content @conn #":title \"tasks")))))
+      (is (= "logbook block" (:block/title (find-block-by-content @conn #"logbook block")))))
 
     (testing "block refs and path-refs"
       (let [block (find-block-by-content @conn "old todo block")]

@@ -82,14 +82,18 @@
       (throw (ex-info (str "No uuid found for page name " (pr-str page-name))
                       {:page-name page-name}))))
 
+(defn- logseq-class-ident?
+  [k]
+  (and (qualified-keyword? k) (= "logseq.class" (namespace k))))
+
 (defn- update-page-tags
   [block db tag-classes page-names-to-uuids all-idents]
   (if (seq (:block/tags block))
     (let [page-tags (->> (:block/tags block)
                          (remove #(or (:block.temp/new-class %)
                                       (contains? tag-classes (:block/name %))
-                                      ;; Ignore new class tags from extract
-                                      (= % :logseq.class/Journal)))
+                                      ;; Ignore new class tags from extract e.g. :logseq.class/Journal
+                                      (logseq-class-ident? %)))
                          (map #(vector :block/uuid (get-page-uuid page-names-to-uuids (:block/name %))))
                          set)]
       (cond-> block
@@ -97,7 +101,7 @@
         (update :block/tags
                 (fn [tags]
                   ;; Don't lazy load as this needs to build before the page does
-                  (vec (keep #(if (= % :logseq.class/Journal)
+                  (vec (keep #(if (logseq-class-ident? %)
                                 %
                                 (convert-tag-to-class db % page-names-to-uuids tag-classes all-idents)) tags))))
         (seq page-tags)
@@ -124,7 +128,10 @@
   [block db tag-classes page-names-to-uuids all-idents]
   (let [block'
         (if (seq (:block/tags block))
-          (let [original-tags (remove :block.temp/new-class (:block/tags block))]
+          (let [original-tags (remove #(or (:block.temp/new-class %)
+                                           ;; Filter out new classes already set on a block e.g. :logseq.class/Query
+                                           (logseq-class-ident? %))
+                                      (:block/tags block))]
             (-> block
                 (update :block/title
                         content-without-tags-ignore-case
@@ -138,11 +145,12 @@
                              (map #(add-uuid-to-page-map % page-names-to-uuids))))
                 (update :block/tags
                         (fn [tags]
-                          (vec (keep #(convert-tag-to-class db % page-names-to-uuids tag-classes all-idents) tags))))))
+                          (vec (keep #(if (logseq-class-ident? %)
+                                        %
+                                        (convert-tag-to-class db % page-names-to-uuids tag-classes all-idents))
+                                     tags))))))
           block)]
-    (cond-> block'
-      (macro-util/query-macro? (:block/title block))
-      (update :block/tags (fnil conj []) :logseq.class/Query))))
+    block'))
 
 (defn- update-block-marker
   "If a block has a marker, convert it to a task object"
@@ -614,14 +622,59 @@
 
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
-  [block* db page-names-to-uuids refs {:keys [property-classes] :as options}]
-  (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)]
+  [{:block/keys [title] :as block*} db page-names-to-uuids refs {:keys [property-classes] :as options}]
+  (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
+        advanced-query (some->> (second (re-find #"(?s)#\+BEGIN_QUERY(.*)#\+END_QUERY" title)) string/trim)
+        additional-props (cond-> {}
+                           ;; Order matters as we ensure a simple query gets priority
+                           (macro-util/query-macro? title)
+                           (assoc :logseq.property/query
+                                  (or (some->> (second (re-find #"\{\{query(.*)\}\}" title))
+                                               string/trim)
+                                      title))
+                           (seq advanced-query)
+                           (assoc :logseq.property/query
+                                  (if-let [query-map (not-empty (common-util/safe-read-map-string advanced-query))]
+                                    (pr-str (dissoc query-map :title :group-by-page? :collapsed?))
+                                    advanced-query)))
+        {:keys [block-properties pvalues-tx]}
+        (when (seq additional-props)
+          (build-properties-and-values additional-props db page-names-to-uuids
+                                       (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
+                                       options))
+        pvalues-tx' (if (and pvalues-tx (seq advanced-query))
+                      (concat pvalues-tx [{:block/uuid (second (:logseq.property/query block-properties))
+                                           :logseq.property.code/mode "clojure"
+                                           :logseq.property.node/display-type :code}])
+                      pvalues-tx)]
     {:block
      (cond-> block
+       (seq block-properties)
+       (merge block-properties)
+
+       (macro-util/query-macro? title)
+       ((fn [b]
+          (merge (update b :block/tags (fnil conj []) :logseq.class/Query)
+                 ;; Put all non-query content in title. Could just be a blank string
+                 {:block/title (string/trim (string/replace-first title #"\{\{query(.*)\}\}" ""))})))
+
+       (seq advanced-query)
+       ((fn [b]
+          (let [query-map (common-util/safe-read-map-string advanced-query)]
+            (cond-> (update b :block/tags (fnil conj []) :logseq.class/Query)
+              true
+              (assoc :block/title
+                     (or (when-let [title' (:title query-map)]
+                           (if (string? title') title' (pr-str title')))
+                         ;; Put all non-query content in title for now
+                         (string/trim (string/replace-first title #"(?s)#\+BEGIN_QUERY(.*)#\+END_QUERY" ""))))
+              (:collapsed? query-map)
+              (assoc :block/collapsed? true)))))
+
        (and (seq property-classes) (seq (:block/refs block*)))
        ;; remove unused, nonexistent property page
        (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs))))
-     :properties-tx properties-tx}))
+     :properties-tx (concat properties-tx (when pvalues-tx' pvalues-tx'))}))
 
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
@@ -675,7 +728,7 @@
 
 (defn- build-block-tx
   [db block* pre-blocks page-names-to-uuids {:keys [tag-classes import-state] :as options}]
-  ;; (prn ::block-in block)
+  ;; (prn ::block-in block*)
   (let [;; needs to come before update-block-refs to detect new property schemas
         {:keys [block properties-tx]}
         (handle-block-properties block* db page-names-to-uuids (:block/refs block*) options)
