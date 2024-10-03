@@ -68,7 +68,7 @@
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (cond
-    (and (seq tags) (= "page" (:block/type entity)))
+    (and (seq tags) (ldb/internal-page? entity))
     (when-let [res (seq (d/q '[:find [?b ...]
                                :in $ ?eid ?title [?tag-id ...]
                                :where

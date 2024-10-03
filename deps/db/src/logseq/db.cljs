@@ -473,7 +473,7 @@
   [page]
   (cond (property? page)
         (not (public-built-in-property? page))
-        (or (class? page) (= "page" (:block/type page)))
+        (or (class? page) (internal-page? page))
         false
         ;; Default to true for closed value and future internal types.
         ;; Other types like whiteboard are not considered because they aren't built-in
