@@ -2760,7 +2760,8 @@
                      (count (:block/_refs block))
                      (rum/react *refs-count))
         table? (:table? config)
-        type-block-editor? (contains? #{:code} (:logseq.property.node/display-type block))]
+        type-block-editor? (contains? #{:code} (:logseq.property.node/display-type block))
+        config (assoc config :block-parent-id block-id)]
     [:div.block-content-or-editor-wrap
      {:class (when (:page-title? config) "ls-page-title-container")
       :data-node-type (some-> (:logseq.property.node/display-type block) name)}
@@ -4053,7 +4054,7 @@
      (fn []
        (case (:logseq.property.node/display-type editing-block)
          :code
-         (let [_cursor-pos (some-> (:editor/cursor-range @state/state) (deref) (count))
+         (let [cursor-pos (some-> (:editor/cursor-range @state/state) (deref) (count))
                direction (:block.editing/direction editing-block)
                pos (:block.editing/pos editing-block)
                target (js/document.querySelector
@@ -4064,10 +4065,10 @@
                              (case pos
                                :max (.lastLine cm)
                                0))]
-                ;; move to friendly cursor
+               ;; move to friendly cursor
                (doto cm
                  (.focus)
-                 (.setCursor to-line (or _cursor-pos 0))))))
+                 (.setCursor to-line (or cursor-pos 0))))))
          :dune))
      [editing-block]))
   nil)

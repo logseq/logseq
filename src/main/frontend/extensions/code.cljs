@@ -157,7 +157,7 @@
 (defn- block-render-type-is-code?
   [block]
   (some-> block :logseq.property.node/display-type
-    (= :code)))
+          (= :code)))
 
 (defn- all-tokens-by-cursor
   "All tokens from the beginning of the document to the cursor(inclusive)."
@@ -407,8 +407,8 @@
 (defn ^:large-vars/cleanup-todo render!
   [state]
   (let [[config id attr _code theme user-options] (:rum/args state)
+        edit-block (:block config)
         config-file? (= (:file-path config) "logseq/config.edn")
-        edit-block (state/get-edit-block)
         default-open? (and (:editor/code-mode? @state/state)
                            (= (:block/uuid edit-block)
                               (get-in config [:block :block/uuid])))
@@ -481,6 +481,7 @@
                              (vreset! *cursor-curr nil)
                              (vreset! *cursor-prev nil)))
         (.on editor "focus" (fn [_e]
+                              (state/set-editing-block-dom-id! (:block-parent-id config))
                               (state/set-block-component-editing-mode! true)
                               (state/set-state! :editor/code-block-context
                                                 {:editor editor
@@ -492,16 +493,36 @@
                                                      meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))
                                                      shifted? (.-shiftKey e)]
                                                  (cond
-                                                   (contains? #{"ArrowUp" "ArrowDown"} key-code)
-                                                   (let [direction (if (= "ArrowUp" key-code) :up :down)]
+                                                   (contains? #{"ArrowLeft" "ArrowRight"} key-code)
+                                                   (let [direction (if (= "ArrowLeft" key-code) :left :right)
+                                                         line (when-let [line (:line @*cursor-curr)]
+                                                                (.getLine (.-doc editor) line))]
                                                      (when (and (= @*cursor-prev @*cursor-curr)
-                                                             (case direction
-                                                               :up (zero? (:line @*cursor-curr))
-                                                               :down (= (:line @*cursor-curr) (.lastLine editor))
-                                                               false))
+                                                                (or (and direction (nil? @*cursor-curr))
+                                                                    (case direction
+                                                                      :left (and (zero? (:line @*cursor-curr))
+                                                                                 (zero? (:ch  @*cursor-curr)))
+                                                                      :right (and (= (:line @*cursor-curr) (.lastLine editor))
+                                                                                  (= (count line) (:ch @*cursor-curr)))
+                                                                      false)))
+                                                       (editor-handler/move-to-block-when-cross-boundary direction {}))
+                                                     (update-cursor-state!))
+
+                                                   (contains? #{"ArrowUp" "ArrowDown"} key-code)
+                                                   (let [direction (if (= "ArrowUp" key-code) :up :down)
+                                                         line (when-let [line (:line @*cursor-curr)]
+                                                                (.getLine (.-doc editor) line))]
+                                                     (when (and (= @*cursor-prev @*cursor-curr)
+                                                                (or (and direction (nil? @*cursor-curr))
+                                                                    (case direction
+                                                                      :up (and (zero? (:line @*cursor-curr))
+                                                                               (zero? (:ch  @*cursor-curr)))
+                                                                      :down (and (= (:line @*cursor-curr) (.lastLine editor))
+                                                                                 (= (count line) (:ch @*cursor-curr)))
+                                                                      false)))
                                                        (editor-handler/move-cross-boundary-up-down
-                                                         direction {:input textarea
-                                                                    :pos [direction 0]}))
+                                                        direction {:input textarea
+                                                                   :pos [direction 0]}))
                                                      (update-cursor-state!))
                                                    meta-or-ctrl-pressed?
                                                    ;; prevent default behavior of browser
@@ -520,8 +541,8 @@
                                                        (when-let [blockid (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid"))]
                                                          (code-handler/save-code-editor!)
                                                          (util/schedule #(editor-handler/api-insert-new-block! ""
-                                                                           {:block-uuid (uuid blockid)
-                                                                            :sibling? true}))))
+                                                                                                               {:block-uuid (uuid blockid)
+                                                                                                                :sibling? true}))))
                                                      nil)))))
         (.addEventListener element "pointerdown"
                            (fn [e]
