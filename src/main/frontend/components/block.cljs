@@ -23,6 +23,7 @@
             [frontend.components.query.builder :as query-builder-component]
             [frontend.components.svg :as svg]
             [frontend.components.title :as title]
+            [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -91,7 +92,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [frontend.storage :as storage]))
 
 ;; local state
 (defonce *dragging?
@@ -2152,7 +2154,7 @@
     (cond
       (= :code node-type)
       [:div.flex.flex-1.w-full
-       (src-cp (assoc config :block block) {:language (:logseq.property.code/mode block)})]
+       (src-cp (assoc config :block block) {:language (:logseq.property.code/lang block)})]
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
       (= :math node-type)
@@ -2401,7 +2403,8 @@
                           content
                           block
                           cursor-range
-                          {:move-cursor? false
+                          {:db (db/get-db)
+                           :move-cursor? false
                            :container-id (:container-id config)}))]
                 ;; wait a while for the value of the caret range
                 (p/do!
@@ -2749,14 +2752,17 @@
         refs-count (if (seq (:block/_refs block))
                      (count (:block/_refs block))
                      (rum/react *refs-count))
-        table? (:table? config)]
+        table? (:table? config)
+        type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
+                                (not= (:db/id block) (:db/id (state/sub :editor/raw-mode-block))))
+        config (assoc config :block-parent-id block-id)]
     [:div.block-content-or-editor-wrap
      {:class (when (:page-title? config) "ls-page-title-container")
       :data-node-type (some-> (:logseq.property.node/display-type block) name)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
       [:div.flex.flex-1.flex-row.gap-1.items-center
-       (if (and edit? editor-box)
+       (if (and edit? editor-box (not type-block-editor?))
          [:div.editor-wrapper.flex.flex-1
           {:id editor-id
            :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
@@ -2777,7 +2783,8 @@
                                                           (:block/title block))]
                                           (editor-handler/clear-selection!)
                                           (editor-handler/unhighlight-blocks!)
-                                          (state/set-editing! edit-input-id content block "" {:container-id (:container-id config)}))}})
+                                          (state/set-editing! edit-input-id content block "" {:db (db/get-db)
+                                                                                              :container-id (:container-id config)}))}})
            (block-content config block edit-input-id block-id slide?))
 
           (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
@@ -3579,39 +3586,100 @@
 
 (declare ->hiccup)
 
+(defn- get-code-mode-by-lang
+  [lang]
+  (some (fn [m] (when (= (.-name m) lang) (.-mode m))) js/window.CodeMirror.modeInfo))
+
+(rum/defc src-lang-picker
+  [block on-select!]
+  (when-let [langs (map (fn [m] (.-name m)) js/window.CodeMirror.modeInfo)]
+    (let [options (map (fn [lang] {:label lang :value lang}) langs)]
+      (select/select {:items options
+                      :input-default-placeholder "Choose language"
+                      :on-chosen
+                      (fn [chosen _ _ e]
+                        (let [lang (:value chosen)]
+                          (when (and (= :code (:logseq.property.node/display-type block))
+                                     (not= lang (:logseq.property.code/lang block)))
+                            (on-select! lang e)))
+                        (shui/popup-hide!))}))))
+
 (rum/defc src-cp < rum/static
   [config options]
-  (when options
-    (let [html-export? (:html-export? config)
-          {:keys [lines language]} options
-          attr (when language
-                 {:data-lang language})
-          code (if lines (apply str lines) (:block/title (:block config)))
-          [inside-portal? set-inside-portal?] (rum/use-state nil)]
-      (cond
-        html-export?
-        (highlight/html-export attr code)
+  (let [block (:block config)
+        container-id (:container-id config)
+        *mode-ref (rum/use-ref nil)
+        *actions-ref (rum/use-ref nil)]
 
-        :else
-        (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
-          [:div.ui-fenced-code-editor.flex.flex-1
-           {:ref (fn [el]
-                   (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
-           (cond
-             (nil? inside-portal?) nil
+    (when options
+      (let [html-export? (:html-export? config)
+            {:keys [lines language]} options
+            attr (when language
+                   {:data-lang language})
+            code (if lines (apply str lines) (:block/title block))
+            [inside-portal? set-inside-portal?] (rum/use-state nil)]
+        (cond
+          html-export?
+          (highlight/html-export attr code)
 
-             (or (:slide? config) inside-portal?)
-             (highlight/highlight (str (random-uuid))
-                                  {:class     (str "language-" language)
-                                   :data-lang language}
-                                  code)
+          :else
+          (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
+            [:div.ui-fenced-code-editor.flex.flex-1
+             {:ref (fn [el]
+                     (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))
+              :on-mouse-over #(dom/add-class! (rum/deref *actions-ref) "opacity-100")
+              :on-mouse-leave (fn [e]
+                                (when (dom/has-class? (.-target e) "code-editor")
+                                  (dom/remove-class! (rum/deref *actions-ref) "opacity-100")))}
+             (cond
+               (nil? inside-portal?) nil
 
-             :else
-             [:<>
-              (lazy-editor/editor config (str (d/squuid)) attr code options)
-              (let [options (:options options) block (:block config)]
-                (when (and (= language "clojure") (contains? (set options) ":results"))
-                  (sci/eval-result code block)))])])))))
+               (or (:slide? config) inside-portal?)
+               (highlight/highlight (str (random-uuid))
+                                    {:class (str "language-" language)
+                                     :data-lang language}
+                                    code)
+
+               :else
+               [:div.ls-code-editor-wrap
+                [:div.code-block-actions.flex.flex-row.gap-1.opacity-0.transition-opacity.ease-in.duration-300
+                 {:ref *actions-ref}
+                 (shui/button
+                  {:variant :text
+                   :size :sm
+                   :class "select-language"
+                   :ref *mode-ref
+                   :containerid (str container-id)
+                   :blockid (str (:block/uuid block))
+                   :on-click (fn [^js e]
+                               (util/stop-propagation e)
+                               (let [target (.-target e)]
+                                 (shui/popup-show! target
+                                                   #(src-lang-picker block
+                                                                     (fn [lang ^js _e]
+                                                                       (when-let [^js cm (util/get-cm-instance (util/rec-get-node target "ls-block"))]
+                                                                         (if-let [mode (get-code-mode-by-lang lang)]
+                                                                           (.setOption cm "mode" mode)
+                                                                           (throw (ex-info "code mode not found"
+                                                                                           {:lang lang})))
+                                                                         (storage/set :latest-code-lang lang)
+                                                                         (db-property-handler/set-block-property!
+                                                                          (:db/id block) :logseq.property.code/lang lang))))
+                                                   {:align :end})))}
+                  (or language "Choose language")
+                  (ui/icon "chevron-down"))
+                 (shui/button
+                  {:variant :text
+                   :size :sm
+                   :on-click (fn [e]
+                               (util/stop-propagation e)
+                               (editor-handler/copy-block-content! block))}
+                  (ui/icon "copy")
+                  "Copy")]
+                (lazy-editor/editor config (str (d/squuid)) attr code options)
+                (let [options (:options options) block (:block config)]
+                  (when (and (= language "clojure") (contains? (set options) ":results"))
+                    (sci/eval-result code block)))])]))))))
 
 (defn ^:large-vars/cleanup-todo markup-element-cp
   [{:keys [html-export?] :as config} item]

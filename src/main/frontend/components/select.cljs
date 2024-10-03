@@ -133,22 +133,22 @@
                              {:item-render       (or item-cp (fn [result chosen?]
                                                                (render-item result chosen? multiple-choices? *selected-choices)))
                               :class             "cp__select-results"
-                              :on-chosen         (fn [raw-chosen]
+                              :on-chosen         (fn [raw-chosen e]
                                                    (reset! input "")
                                                    (let [chosen (extract-chosen-fn raw-chosen)]
                                                      (if multiple-choices?
                                                        (if (selected-choices chosen)
                                                          (do
                                                            (swap! *selected-choices disj chosen)
-                                                           (when on-chosen (on-chosen chosen false @*selected-choices)))
+                                                           (when on-chosen (on-chosen chosen false @*selected-choices e)))
                                                          (do
                                                            (swap! *selected-choices conj chosen)
-                                                           (when on-chosen (on-chosen chosen true @*selected-choices))))
+                                                           (when on-chosen (on-chosen chosen true @*selected-choices e))))
                                                        (do
                                                          (when (and close-modal? (not multiple-choices?))
                                                            (state/close-modal!))
                                                          (when on-chosen
-                                                           (on-chosen chosen true @*selected-choices))))))
+                                                           (on-chosen chosen true @*selected-choices e))))))
                               :empty-placeholder (empty-placeholder t)})]
 
                            (when (and multiple-choices? (fn? on-apply))
@@ -206,7 +206,7 @@
                           [:div.mb-2 (t :select.graph/empty-placeholder-description)]
                           (ui/button
                            (t :select.graph/add-graph)
-                            :href (rfe/href :graphs)
+                           :href (rfe/href :graphs)
                            :on-click state/close-modal!)])}
    :graph-remove
    {:items-fn (fn []
@@ -223,14 +223,14 @@
    {:items-fn (fn []
                 (let [current-repo (state/get-current-repo)]
                   (->> (state/get-repos)
-                      (remove (fn [{:keys [url]}]
+                       (remove (fn [{:keys [url]}]
                                 ;; Can't replace current graph as ui wouldn't reload properly
-                                (or (= url current-repo) (not (config/db-based-graph? url)))))
-                      (map (fn [{:keys [url] :as original-graph}]
-                             {:value (text-util/get-graph-name-from-path url)
-                              :id (config/get-repo-dir url)
-                              :graph url
-                              :original-graph original-graph})))))
+                                 (or (= url current-repo) (not (config/db-based-graph? url)))))
+                       (map (fn [{:keys [url] :as original-graph}]
+                              {:value (text-util/get-graph-name-from-path url)
+                               :id (config/get-repo-dir url)
+                               :graph url
+                               :original-graph original-graph})))))
     :on-chosen #(dev-common-handler/import-chosen-graph (:graph %))}})
 
 (rum/defc select-modal < rum/reactive

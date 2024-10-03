@@ -940,6 +940,11 @@
     (set-blocks-id! [block-id])
     (util/copy-to-clipboard! (tap-clipboard block-id)))))
 
+(defn copy-block-content!
+  [block]
+  (util/copy-to-clipboard! (:block/title block))
+  (notification/show! "Copied!" :success))
+
 (defn select-block!
   [block-uuid]
   (block-handler/select-block! block-uuid))
@@ -2555,11 +2560,10 @@
       (util/scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
-(defn- move-cross-boundary-up-down
+(defn move-cross-boundary-up-down
   [direction move-opts]
-  (when-let [input (state/get-input)]
-    (let [line-pos (util/get-line-pos (.-value input) (util/get-selection-start input))
-          repo (state/get-current-repo)
+  (when-let [input (or (:input move-opts) (state/get-input))]
+    (let [repo (state/get-current-repo)
           f (case direction
               :up util/get-prev-block-non-collapsed
               :down util/get-next-block-non-collapsed)
@@ -2571,15 +2575,17 @@
           (let [container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
                 value (state/get-edit-content)]
             (p/do!
-             (when (not= (clean-content! repo format title)
-                         (string/trim value))
+             (when (and
+                    (not (state/block-component-editing?))
+                    (not= (clean-content! repo format title)
+                          (string/trim value)))
                (save-block! repo uuid value))
 
              (let [new-uuid (cljs.core/uuid sibling-block-id)
                    block (db/entity [:block/uuid new-uuid])]
                (edit-block! block
                             (or (:pos move-opts)
-                                [direction line-pos])
+                                [direction (util/get-line-pos (.-value input) (util/get-selection-start input))])
                             {:container-id container-id
                              :direction direction})))))
         (case direction
@@ -2608,11 +2614,11 @@
         (cursor/move-cursor-up input)
         (cursor/move-cursor-down input)))))
 
-(defn- move-to-block-when-cross-boundary
-  [direction]
+(defn move-to-block-when-cross-boundary
+  [direction {:keys [block]}]
   (let [up? (= :left direction)
         pos (if up? :max 0)
-        {:block/keys [format uuid] :as block} (state/get-edit-block)
+        {:block/keys [format uuid] :as block} (or block (state/get-edit-block))
         repo (state/get-current-repo)
         editing-block (gdom/getElement (state/get-editing-block-dom-id))
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
@@ -2658,7 +2664,7 @@
 
         (or (and left? (cursor/start? input))
             (and right? (cursor/end? input)))
-        (move-to-block-when-cross-boundary direction)
+        (move-to-block-when-cross-boundary direction {})
 
         :else
         (if left?
@@ -3284,7 +3290,8 @@
       (util/stop e)
       (let [block {:block/uuid block-id}
             left? (= direction :left)
-            opts {:container-id (some-> node (dom/attr "containerid") (parse-long))}]
+            opts {:container-id (some-> node (dom/attr "containerid") (parse-long))
+                  :event e}]
         (edit-block! block (if left? 0 :max) opts)))))
 
 (defn shortcut-left-right [direction]

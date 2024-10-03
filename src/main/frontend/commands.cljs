@@ -188,14 +188,14 @@
      [:editor/set-property :block/tags :logseq.class/Query]
      [:editor/set-property :logseq.property/query ""]
      [:editor/set-property-on-block-property :logseq.property/query :logseq.property.node/display-type :code]
-     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/mode "clojure"]]
+     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/lang "clojure"]]
     (->block "query")))
 
 (defn db-based-code-block
   []
   [[:editor/input "" {:last-pattern command-trigger}]
-   [:editor/set-property :logseq.property.node/display-type :code]
-   [:codemirror/focus]])
+   [:editor/upsert-type-block :code]
+   [:editor/exit]])
 
 (defn file-based-code-block
   []
@@ -751,6 +751,11 @@
           block-property-value (get updated-block block-property-id)]
       (when block-property-value
         (db-property-handler/set-block-property! (:db/id block-property-value) property-id value)))))
+
+(defmethod handle-step :editor/upsert-type-block [[_ type]]
+  (when (config/db-based-graph? (state/get-current-repo))
+    (when-let [block (state/get-edit-block)]
+      (state/pub-event! [:editor/upsert-type-block {:block block :type type}]))))
 
 (defn- file-based-set-priority
   [priority]
