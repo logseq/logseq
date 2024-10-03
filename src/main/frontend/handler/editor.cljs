@@ -2614,11 +2614,11 @@
         (cursor/move-cursor-up input)
         (cursor/move-cursor-down input)))))
 
-(defn- move-to-block-when-cross-boundary
-  [direction]
+(defn move-to-block-when-cross-boundary
+  [direction {:keys [block]}]
   (let [up? (= :left direction)
         pos (if up? :max 0)
-        {:block/keys [format uuid] :as block} (state/get-edit-block)
+        {:block/keys [format uuid] :as block} (or block (state/get-edit-block))
         repo (state/get-current-repo)
         editing-block (gdom/getElement (state/get-editing-block-dom-id))
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
@@ -2664,7 +2664,7 @@
 
         (or (and left? (cursor/start? input))
             (and right? (cursor/end? input)))
-        (move-to-block-when-cross-boundary direction)
+        (move-to-block-when-cross-boundary direction {})
 
         :else
         (if left?
