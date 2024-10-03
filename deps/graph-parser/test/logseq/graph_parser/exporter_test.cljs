@@ -182,7 +182,7 @@
       (is (= 8
              (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
                                 :where [?b :block/title] [_ :block/page ?b]] @conn)
-                         (filter #(= "page" (:block/type %))))))
+                         (filter ldb/internal-page?))))
           "Correct number of pages with block content")
       (is (= 4 (count (d/datoms @conn :avet :block/type "whiteboard"))))
       (is (= 1 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")

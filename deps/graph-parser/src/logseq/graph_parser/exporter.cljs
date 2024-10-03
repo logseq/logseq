@@ -813,7 +813,7 @@
                                                                 m))
                                  block-changes (cond-> (select-keys m allowed-attributes)
                                                  ;; disallow any type -> "page" but do allow any conversion to a non-page type
-                                                 (= (:block/type m) "page")
+                                                 (ldb/internal-page? m)
                                                  (dissoc :block/type))]
                              (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
                                (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "

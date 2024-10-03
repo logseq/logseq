@@ -155,7 +155,7 @@
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page page-name) action)}}))
 
-          (when (and db-based? (= (:block/type page) "page"))
+          (when (and db-based? (ldb/internal-page? page))
             {:title (t :page/convert-to-tag)
              :options {:on-click (fn []
                                    (db-page-handler/convert-to-tag! page))}})

@@ -350,7 +350,7 @@
                    (and (= :logseq.property/parent (:db/ident property))
                         (ldb/class? block)))
         ;; Note: property and other types shouldn't be converted to class
-        page? (= "page" (:block/type page-entity))]
+        page? (ldb/internal-page? page-entity)]
     (cond
       ;; page not exists or page exists but not a page type
       (or (nil? id) (and class? (not page?)))
