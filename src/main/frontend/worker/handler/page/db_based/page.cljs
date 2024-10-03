@@ -106,15 +106,22 @@
                                         (when last-part? (ldb/get-page db part))
                                         (-> (gp-block/page-name->map part db true date-formatter
                                                                      {:page-uuid (when last-part? block-uuid)
-                                                                      :skip-existing-page-check? true})
+                                                                      :skip-existing-page-check? true
+                                                                      :class? class?})
                                             (assoc :block/format :markdown)))]
                          result))
                      parts))]
          (cond
-           (and (not class?) (ldb/class? (first pages)))
+           (and (not class?) (not (every? ldb/internal-page? pages)))
            (throw (ex-info "Cannot create this page unless all parents are pages"
                            {:type :notification
                             :payload {:message "Cannot create this page unless all parents are pages"
+                                      :type :warning}}))
+
+           (and class? (not (every? ldb/class? pages)))
+           (throw (ex-info "Cannot create this tag unless all parents are tags"
+                           {:type :notification
+                            :payload {:message "Cannot create this tag unless all parents are tags"
                                       :type :warning}}))
 
            :else
