@@ -12,7 +12,8 @@
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.text :as text]))
+            [logseq.graph-parser.text :as text]
+            [logseq.outliner.validate :as outliner-validate]))
 
 (defn- build-page-tx [conn properties page {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)
@@ -86,64 +87,60 @@
    (d/entity db)))
 
 (defn- split-namespace-pages
-  [db page tags date-formatter & {:keys [*changed-uuids]}]
-  (let [tags-set (set (map :block/uuid tags))]
+  [db page date-formatter]
+  (let [{:block/keys [title] block-uuid :block/uuid block-type :block/type} page]
     (->>
-     (let [{:block/keys [title]} page
-           block-uuid (:block/uuid page)
-           block-type (if (contains? tags-set (:block/uuid page))
-                        "class"
-                        (:block/type page))]
-       (if (and (contains? #{"page" "class"} block-type) (ns-util/namespace-page? title))
-         (let [class? (= block-type "class")
-               parts (->> (string/split title ns-util/parent-re)
-                          (map string/trim)
-                          (remove string/blank?))
-               pages (doall
-                      (map-indexed
-                       (fn [idx part]
-                         (let [last-part? (= idx (dec (count parts)))
-                               page (if (zero? idx)
-                                      (ldb/get-page db part)
-                                      (get-page-by-parent-name db (nth parts (dec idx)) part))
-                               result (or page
-                                          (when last-part? (ldb/get-page db part))
-                                          (-> (gp-block/page-name->map part db true date-formatter
-                                                                       {:page-uuid (when last-part? block-uuid)})
-                                              (assoc :block/format :markdown)))]
-                           (when (and last-part? (not= (:block/uuid result) block-uuid)
-                                      *changed-uuids)
-                             (swap! *changed-uuids assoc block-uuid (:block/uuid result)))
-                           result))
-                       parts))]
-           (cond
-             (and (not class?) (ldb/class? (first pages)))
-             [page]
+     (if (and (contains? #{"page" "class"} block-type) (ns-util/namespace-page? title))
+       (let [class? (= block-type "class")
+             parts (->> (string/split title ns-util/parent-re)
+                        (map string/trim)
+                        (remove string/blank?))
+             pages (doall
+                    (map-indexed
+                     (fn [idx part]
+                       (let [last-part? (= idx (dec (count parts)))
+                             page (if (zero? idx)
+                                    (ldb/get-page db part)
+                                    (get-page-by-parent-name db (nth parts (dec idx)) part))
+                             result (or page
+                                        (when last-part? (ldb/get-page db part))
+                                        (-> (gp-block/page-name->map part db true date-formatter
+                                                                     {:page-uuid (when last-part? block-uuid)
+                                                                      :skip-existing-page-check? true})
+                                            (assoc :block/format :markdown)))]
+                         result))
+                     parts))]
+         (cond
+           (and (not class?) (ldb/class? (first pages)))
+           (throw (ex-info "Cannot create this page unless all parents are pages"
+                           {:type :notification
+                            :payload {:message "Cannot create this page unless all parents are pages"
+                                      :type :warning}}))
 
-             :else
-             (map-indexed
-              (fn [idx page]
-                (let [parent-eid (when (> idx 0)
-                                   (when-let [id (:block/uuid (nth pages (dec idx)))]
-                                     [:block/uuid id]))]
-                  (if class?
-                    (cond
-                      (and (de/entity? page) (ldb/class? page))
-                      (assoc page :logseq.property/parent parent-eid)
+           :else
+           (map-indexed
+            (fn [idx page]
+              (let [parent-eid (when (> idx 0)
+                                 (when-let [id (:block/uuid (nth pages (dec idx)))]
+                                   [:block/uuid id]))]
+                (if class?
+                  (cond
+                    (and (de/entity? page) (ldb/class? page))
+                    (assoc page :logseq.property/parent parent-eid)
 
-                      (de/entity? page) ; page exists but not a class, avoid converting here because this could be troublesome.
-                      nil
+                    (de/entity? page) ; page exists but not a class, avoid converting here because this could be troublesome.
+                    nil
 
-                      (zero? idx)
-                      (db-class/build-new-class db page)
+                    (zero? idx)
+                    (db-class/build-new-class db page)
 
-                      :else
-                      (db-class/build-new-class db (assoc page :logseq.property/parent parent-eid)))
-                    (if (or (de/entity? page) (zero? idx))
-                      page
-                      (assoc page :logseq.property/parent parent-eid)))))
-              pages)))
-         [page]))
+                    :else
+                    (db-class/build-new-class db (assoc page :logseq.property/parent parent-eid)))
+                  (if (or (de/entity? page) (zero? idx))
+                    page
+                    (assoc page :logseq.property/parent parent-eid)))))
+            pages)))
+       [page])
      (remove nil?))))
 
 (defn create!
@@ -173,10 +170,16 @@
                                                     :skip-existing-page-check? true})
                           (assoc :block/format format))
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
-                             (let [pages (split-namespace-pages db page nil date-formatter)]
+                             (let [pages (split-namespace-pages db page date-formatter)]
                                [(last pages) (butlast pages)])
                              [page nil])]
         (when page
+          ;; Don't validate journal names because they can have '/'
+          (when (not= "journal" type)
+            (outliner-validate/validate-page-title-characters (str (:block/title page)) {:node page})
+            (doseq [parent parents]
+              (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
+
           (let [page-uuid (:block/uuid page)
                 page-txs  (build-page-tx conn properties page (select-keys options [:whiteboard? :class? :tags]))
                 first-block-tx (when (and
