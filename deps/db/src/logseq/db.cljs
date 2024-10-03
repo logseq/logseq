@@ -76,6 +76,7 @@
              (throw e))))))))
 
 (def page? entity-util/page?)
+(def internal-page? entity-util/internal-page?)
 (def class? entity-util/class?)
 (def property? entity-util/property?)
 (def closed-value? entity-util/closed-value?)
