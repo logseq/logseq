@@ -3837,15 +3837,24 @@
             (if page? "page-name" "block-uuid")
             (str block-or-page-name)))
 
-(defn query-edit-title!
-  [block]
-  (let [query-block (:logseq.property/query block)
-        current-query (:block/title (db/entity (:db/id block)))]
-    (p/do!
-     (state/clear-edit!)
-     (ui-outliner-tx/transact!
-      {:outliner-op :save-block}
-      (save-block-inner! block "" {})
-      (when query-block
-        (save-block-inner! query-block current-query {})))
-     (js/setTimeout #(edit-block! (db/entity (:db/id block)) :max) 100))))
+(defn run-query-command!
+  []
+  (let [repo (state/get-current-repo)]
+    (when-let [block (some-> (state/get-edit-block)
+                             :db/id
+                             (db/entity))]
+      (p/do!
+       (save-current-block!)
+       (state/clear-edit!)
+       (p/let [query-block (or (:logseq.property/query block)
+                               (p/do!
+                                (property-handler/set-block-property! repo (:db/id block) :logseq.property/query "")
+                                (:logseq.property/query (db/entity (:db/id block)))))
+               current-query (:block/title (db/entity (:db/id block)))]
+         (p/do!
+          (ui-outliner-tx/transact!
+           {:outliner-op :save-block}
+           (property-handler/set-block-property! repo (:db/id block) :block/tags :logseq.class/Query)
+           (save-block-inner! block "" {})
+           (when query-block
+             (save-block-inner! query-block current-query {})))))))))

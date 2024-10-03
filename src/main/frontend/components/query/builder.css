@@ -3,6 +3,10 @@
 
     &-filter {
         @apply flex flex-row flex-wrap items-center gap-1;
+        svg {
+          width: 14px;
+          height: 14px;
+        }
     }
 
     .cp__select-main {
