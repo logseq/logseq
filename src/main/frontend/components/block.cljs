@@ -2760,7 +2760,8 @@
                      (count (:block/_refs block))
                      (rum/react *refs-count))
         table? (:table? config)
-        type-block-editor? (contains? #{:code} (:logseq.property.node/display-type block))
+        type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
+                                (not= (:db/id block) (:db/id (state/sub :editor/raw-mode-block))))
         config (assoc config :block-parent-id block-id)]
     [:div.block-content-or-editor-wrap
      {:class (when (:page-title? config) "ls-page-title-container")
@@ -3588,12 +3589,6 @@
 
 (declare ->hiccup)
 
-(defn get-cm-instance
-  [^js target]
-  (when target
-    (when-let [node (util/rec-get-node target "ls-code-editor-wrap")]
-      (some-> node (.querySelector ".CodeMirror") (.-CodeMirror)))))
-
 (defn- get-code-mode-by-lang
   [lang]
   (some (fn [m] (when (= (.-name m) lang) (.-mode m))) js/window.CodeMirror.modeInfo))
@@ -3618,13 +3613,6 @@
         container-id (:container-id config)
         *mode-ref (rum/use-ref nil)
         *actions-ref (rum/use-ref nil)]
-
-    (rum/use-effect!
-     (fn []
-       (when (= (some-> (state/sub :editor/pending-type-block) :block :block/uuid) (:block/uuid block))
-         (util/schedule #(some-> (rum/deref *mode-ref) (.click)))
-         (state/set-state! :editor/pending-type-block nil)))
-     [])
 
     (when options
       (let [html-export? (:html-export? config)
@@ -3672,7 +3660,7 @@
                                  (shui/popup-show! target
                                                    #(src-lang-picker block
                                                                      (fn [lang ^js e]
-                                                                       (when-let [^js cm (get-cm-instance target)]
+                                                                       (when-let [^js cm (util/get-cm-instance target)]
                                                                          (if-let [mode (get-code-mode-by-lang lang)]
                                                                            (.setOption cm "mode" mode)
                                                                            (throw (ex-info "code mode not found"
@@ -4045,33 +4033,6 @@
           items
           {:debug-id page})
          [:div.only-page-blocks items]))]))
-
-(rum/defc setup-editing-effects
-  [editing-block]
-  (let [container-id (some-> (:editor/container-id @state/state) (deref))
-        uuid' (:block/uuid editing-block)]
-    (rum/use-effect!
-     (fn []
-       (case (:logseq.property.node/display-type editing-block)
-         :code
-         (let [cursor-pos (some-> (:editor/cursor-range @state/state) (deref) (count))
-               direction (:block.editing/direction editing-block)
-               pos (:block.editing/pos editing-block)
-               target (js/document.querySelector
-                       (util/format ".select-language[blockid=\"%s\"][containerid=\"%s\"]" uuid' container-id))]
-           (when-let [cm (get-cm-instance target)]
-             (let [to-line (case direction
-                             :up (.lastLine cm)
-                             (case pos
-                               :max (.lastLine cm)
-                               0))]
-               ;; move to friendly cursor
-               (doto cm
-                 (.focus)
-                 (.setCursor to-line (or cursor-pos 0))))))
-         :dune))
-     [editing-block]))
-  nil)
 
 ;; headers to hiccup
 (defn ->hiccup

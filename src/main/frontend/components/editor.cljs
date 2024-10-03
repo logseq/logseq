@@ -745,7 +745,10 @@
                   ::ref (atom nil)))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
-                state)}
+                state)
+   :will-unmount (fn [state]
+                   (state/set-state! :editor/raw-mode-block nil)
+                   state)}
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside

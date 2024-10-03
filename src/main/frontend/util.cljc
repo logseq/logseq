@@ -1536,3 +1536,10 @@ Arg *stop: atom, reset to true to stop the loop"
                 (js->clj)
                 (into {})
                 (walk/keywordize-keys)))))))
+
+#?(:cljs
+   (defn get-cm-instance
+     [^js target]
+     (when target
+       (when-let [node (rec-get-node target "ls-code-editor-wrap")]
+         (some-> node (.querySelector ".CodeMirror") (.-CodeMirror))))))

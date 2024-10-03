@@ -168,7 +168,7 @@
   (let [_favorites-updated? (state/sub :favorites/updated?)
         favorite-entities (page-handler/get-favorites)]
     (nav-content-item
-      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
+     [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
       (ui/icon "star" {:size 16})
       [:strong.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
 
@@ -409,32 +409,32 @@
 
     ;; restore size
     (rum/use-layout-effect!
-      (fn []
-        (when-let [width (storage/get :ls-left-sidebar-width)]
-          (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width)))
-      [])
+     (fn []
+       (when-let [width (storage/get :ls-left-sidebar-width)]
+         (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width)))
+     [])
 
     ;; draggable handler
     (rum/use-effect!
-      (fn []
-        (when-let [el (and (fn? js/window.interact) (rum/deref *el-ref))]
-          (let [^js sidebar-el (.querySelector el-doc "#left-sidebar")]
-            (-> (js/interact el)
-              (.draggable
+     (fn []
+       (when-let [el (and (fn? js/window.interact) (rum/deref *el-ref))]
+         (let [^js sidebar-el (.querySelector el-doc "#left-sidebar")]
+           (-> (js/interact el)
+               (.draggable
                 #js {:listeners
                      #js {:move (fn [^js/MouseEvent e]
                                   (when-let [offset (.-left (.-rect e))]
                                     (let [width (.toFixed (max (min offset 460) 240) 2)]
                                       (adjust-size! (str width "px")))))}})
-              (.styleCursor false)
-              (.on "dragstart" (fn []
-                                 (.. sidebar-el -classList (add "is-resizing"))
-                                 (.. el-doc -classList (add "is-resizing-buf"))))
-              (.on "dragend" (fn []
-                               (.. sidebar-el -classList (remove "is-resizing"))
-                               (.. el-doc -classList (remove "is-resizing-buf"))))))
-          #()))
-      [])
+               (.styleCursor false)
+               (.on "dragstart" (fn []
+                                  (.. sidebar-el -classList (add "is-resizing"))
+                                  (.. el-doc -classList (add "is-resizing-buf"))))
+               (.on "dragend" (fn []
+                                (.. sidebar-el -classList (remove "is-resizing"))
+                                (.. el-doc -classList (remove "is-resizing-buf"))))))
+         #()))
+     [])
     [:span.left-sidebar-resizer {:ref *el-ref}]))
 
 (rum/defcs left-sidebar < rum/reactive
@@ -479,7 +479,7 @@
 
      ;; sidebar contents
      (sidebar-nav route-match close-fn left-sidebar-open? enable-whiteboards? srs-open? *closing?
-       @*close-signal (and touch-pending? touching-x-offset))
+                  @*close-signal (and touch-pending? touching-x-offset))
      ;; resizer
      (sidebar-resizer)]))
 
@@ -724,16 +724,16 @@
   []
 
   (rum/use-effect!
-    (fn []
-      (state/set-state! :ui/handbooks-open? false))
-    [])
+   (fn []
+     (state/set-state! :ui/handbooks-open? false))
+   [])
 
   (rum/use-effect!
-    (fn []
-      (let [h #(state/set-state! :ui/help-open? false)]
-        (.addEventListener js/document.body "click" h)
-        #(.removeEventListener js/document.body "click" h)))
-    [])
+   (fn []
+     (let [h #(state/set-state! :ui/help-open? false)]
+       (.addEventListener js/document.body "click" h)
+       #(.removeEventListener js/document.body "click" h)))
+   [])
 
   [:div.cp__sidebar-help-menu-popup
    [:div.list-wrap
@@ -777,69 +777,60 @@
 
 (rum/defc app-context-menu-observer
   < rum/static
-    (mixins/event-mixin
-      (fn [state]
+  (mixins/event-mixin
+   (fn [state]
         ;; fixme: this mixin will register global event listeners on window
         ;; which might cause unexpected issues
-        (mixins/listen state js/window "contextmenu"
-          (fn [^js e]
-            (let [target (gobj/get e "target")
-                  block-el (.closest target ".bullet-container[blockid]")
-                  block-id (some-> block-el (.getAttribute "blockid"))
-                  {:keys [block block-ref]} (state/sub :block-ref/context)
-                  {:keys [page page-entity]} (state/sub :page-title/context)]
+     (mixins/listen state js/window "contextmenu"
+                    (fn [^js e]
+                      (let [target (gobj/get e "target")
+                            block-el (.closest target ".bullet-container[blockid]")
+                            block-id (some-> block-el (.getAttribute "blockid"))
+                            {:keys [block block-ref]} (state/sub :block-ref/context)
+                            {:keys [page page-entity]} (state/sub :page-title/context)]
 
-              (let [show!
-                    (fn [content]
-                      (shui/popup-show! e
-                                        (fn [{:keys [id]}]
-                                          [:div {:on-click #(shui/popup-hide! id)
-                                                 :data-keep-selection true}
-                                           content])
-                                        {:on-before-hide state/dom-clear-selection!
-                                         :on-after-hide state/state-clear-selection!
-                                         :content-props {:class "w-[280px] ls-context-menu-content"}
-                                         :as-dropdown? true}))
+                        (let [show!
+                              (fn [content]
+                                (shui/popup-show! e
+                                                  (fn [{:keys [id]}]
+                                                    [:div {:on-click #(shui/popup-hide! id)
+                                                           :data-keep-selection true}
+                                                     content])
+                                                  {:on-before-hide state/dom-clear-selection!
+                                                   :on-after-hide state/state-clear-selection!
+                                                   :content-props {:class "w-[280px] ls-context-menu-content"}
+                                                   :as-dropdown? true}))
 
-                    handled
-                    (cond
-                      (and page (not block-id))
-                      (do
-                        (show! (cp-content/page-title-custom-context-menu-content page-entity))
-                        (state/set-state! :page-title/context nil))
+                              handled
+                              (cond
+                                (and page (not block-id))
+                                (do
+                                  (show! (cp-content/page-title-custom-context-menu-content page-entity))
+                                  (state/set-state! :page-title/context nil))
 
-                      block-ref
-                      (do
-                        (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
-                        (state/set-state! :block-ref/context nil))
+                                block-ref
+                                (do
+                                  (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
+                                  (state/set-state! :block-ref/context nil))
 
                       ;; block selection
-                      (and (state/selection?) (not (d/has-class? target "bullet")))
-                      (show! (cp-content/custom-context-menu-content))
+                                (and (state/selection?) (not (d/has-class? target "bullet")))
+                                (show! (cp-content/custom-context-menu-content))
 
                       ;; block bullet
-                      (and block-id (parse-uuid block-id))
-                      (let [block (.closest target ".ls-block")]
-                        (when block
-                          (state/clear-selection!)
-                          (state/conj-selection-block! block :down))
-                        (show! (cp-content/block-context-menu-content target (uuid block-id))))
+                                (and block-id (parse-uuid block-id))
+                                (let [block (.closest target ".ls-block")]
+                                  (when block
+                                    (state/clear-selection!)
+                                    (state/conj-selection-block! block :down))
+                                  (show! (cp-content/block-context-menu-content target (uuid block-id))))
 
-                      :else
-                      false)]
-                (when (not (false? handled))
-                  (util/stop e))))))))
+                                :else
+                                false)]
+                          (when (not (false? handled))
+                            (util/stop e))))))))
   []
   nil)
-
-(rum/defc editor-pending-type-block-observer
-  < rum/static rum/reactive
-  []
-  (let [pending-block (state/sub :editor/pending-type-block)
-        editing-block (state/sub :editor/block)]
-    (js/console.warn "FIXME: Apply pending block:" pending-block)
-    [:<>
-     (block/setup-editing-effects editing-block)]))
 
 (rum/defcs ^:large-vars/cleanup-todo root-container <
   (mixins/modal :modal/show?)
@@ -917,12 +908,12 @@
 
      [:main.theme-container-inner#app-container-wrapper
       {:class (util/classnames
-                [{:ls-left-sidebar-open left-sidebar-open?
-                  :ls-right-sidebar-open sidebar-open?
-                  :ls-wide-mode wide-mode?
-                  :ls-window-controls window-controls?
-                  :ls-fold-button-on-right fold-button-on-right?
-                  :ls-hl-colored ls-block-hl-colored?}])
+               [{:ls-left-sidebar-open left-sidebar-open?
+                 :ls-right-sidebar-open sidebar-open?
+                 :ls-wide-mode wide-mode?
+                 :ls-window-controls window-controls?
+                 :ls-fold-button-on-right fold-button-on-right?
+                 :ls-hl-colored ls-block-hl-colored?}])
        :on-pointer-up (fn []
                         (when-let [container (gdom/getElement "app-container-wrapper")]
                           (d/remove-class! container "blocks-selection-mode")
@@ -983,7 +974,6 @@
         :nfs-granted? granted?
         :db-restoring? db-restoring?})
       (app-context-menu-observer)
-      (editor-pending-type-block-observer)
 
       [:a#download.hidden]
       (when (and (not config/mobile?)
