@@ -644,7 +644,7 @@
                                        options))
         pvalues-tx' (if (and pvalues-tx (seq advanced-query))
                       (concat pvalues-tx [{:block/uuid (second (:logseq.property/query block-properties))
-                                           :logseq.property.code/mode "clojure"
+                                           :logseq.property.code/lang "clojure"
                                            :logseq.property.node/display-type :code}])
                       pvalues-tx)]
     {:block
