@@ -390,11 +390,10 @@
   [config]
   (p/do!
    (code-handler/save-code-editor!)
-   (when-let [block-id (:block/uuid config)]
-     (let [block (db/entity [:block/uuid block-id])]
+   (when-let [block (:block config)]
+     (let [block (db/entity [:block/uuid (:block/uuid block)])]
        (state/set-state! :editor/raw-mode-block block)
-       (when-not (= (:db/id block) (:db/id (state/get-edit-block)))
-         (editor-handler/edit-block! block :max))))))
+       (editor-handler/edit-block! block :max {:save-code-editor? false})))))
 
 (defn ^:large-vars/cleanup-todo render!
   [state]

@@ -2034,7 +2034,7 @@ Similar to re-frame subscriptions"
    (set-selection-blocks! blocks direction)))
 
 (defn set-editing!
-  [edit-input-id content block cursor-range & {:keys [move-cursor? container-id property-block direction event pos]
+  [edit-input-id content block cursor-range & {:keys [db move-cursor? container-id property-block direction event pos]
                                                :or {move-cursor? true}}]
   (when-not (exists? js/process)
     (if (> (count content)
@@ -2069,9 +2069,8 @@ Similar to re-frame subscriptions"
           (set-state! :editor/last-key-code nil)
           (set-state! :editor/set-timestamp-block nil)
           (set-state! :editor/cursor-range cursor-range)
-
-          (when (= :code (:logseq.property.node/display-type block))
-            (pub-event! [:editor/focus-code-editor block]))
+          (when (= :code (:logseq.property.node/display-type (d/entity db (:db/id block))))
+            (pub-event! [:editor/focus-code-editor block block-element]))
           (when-let [input (gdom/getElement edit-input-id)]
             (let [pos (count cursor-range)]
               (when content

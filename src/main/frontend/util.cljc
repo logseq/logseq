@@ -1541,5 +1541,4 @@ Arg *stop: atom, reset to true to stop the loop"
    (defn get-cm-instance
      [^js target]
      (when target
-       (when-let [node (rec-get-node target "ls-code-editor-wrap")]
-         (some-> node (.querySelector ".CodeMirror") (.-CodeMirror))))))
+       (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))

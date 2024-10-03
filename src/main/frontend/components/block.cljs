@@ -92,7 +92,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [frontend.storage :as storage]))
 
 ;; local state
 (defonce *dragging?
@@ -2411,7 +2412,8 @@
                           content
                           block
                           cursor-range
-                          {:move-cursor? false
+                          {:db (db/get-db)
+                           :move-cursor? false
                            :container-id (:container-id config)}))]
                 ;; wait a while for the value of the caret range
                 (p/do!
@@ -2790,7 +2792,8 @@
                                                           (:block/title block))]
                                           (editor-handler/clear-selection!)
                                           (editor-handler/unhighlight-blocks!)
-                                          (state/set-editing! edit-input-id content block "" {:container-id (:container-id config)}))}})
+                                          (state/set-editing! edit-input-id content block "" {:db (db/get-db)
+                                                                                              :container-id (:container-id config)}))}})
            (block-content config block edit-input-id block-id slide?))
 
           (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
@@ -3659,16 +3662,13 @@
                                (let [target (.-target e)]
                                  (shui/popup-show! target
                                                    #(src-lang-picker block
-                                                                     (fn [lang ^js e]
-                                                                       (when-let [^js cm (util/get-cm-instance target)]
+                                                                     (fn [lang ^js _e]
+                                                                       (when-let [^js cm (util/get-cm-instance (util/rec-get-node target "ls-block"))]
                                                                          (if-let [mode (get-code-mode-by-lang lang)]
                                                                            (.setOption cm "mode" mode)
                                                                            (throw (ex-info "code mode not found"
                                                                                            {:lang lang})))
-                                                                         (when (or (string/blank? (util/trim-safe code))
-                                                                                   (not= (some-> e (.-type)) "click"))
-                                                                           (.focus cm)
-                                                                           (.setCursor cm (.lineCount cm) 0))
+                                                                         (storage/set :latest-code-lang lang)
                                                                          (db-property-handler/set-block-property!
                                                                           (:db/id block) :logseq.property.code/lang lang))))
                                                    {:align :end})))}
