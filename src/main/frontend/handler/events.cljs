@@ -55,6 +55,7 @@
             [frontend.handler.code :as code-handler]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.graph :as graph-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]
@@ -80,7 +81,9 @@
             [logseq.db :as ldb]
             [frontend.persist-db :as persist-db]
             [frontend.handler.export :as export]
-            [frontend.extensions.fsrs :as fsrs]))
+            [frontend.extensions.fsrs :as fsrs]
+            [frontend.storage :as storage]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]))
 
 ;; TODO: should we move all events here?
 
@@ -885,6 +888,22 @@
 (defmethod handle :editor/save-code-editor [_]
   (code-handler/save-code-editor!))
 
+(defmethod handle :editor/focus-code-editor [[_ editing-block container]]
+  (when-let [^js cm (util/get-cm-instance container)]
+    (when-not (.hasFocus cm)
+      (let [cursor-pos (some-> (:editor/cursor-range @state/state) (deref) (count))
+            direction (:block.editing/direction editing-block)
+            pos (:block.editing/pos editing-block)
+            to-line (case direction
+                      :up (.lastLine cm)
+                      (case pos
+                        :max (.lastLine cm)
+                        0))]
+                 ;; move to friendly cursor
+        (doto cm
+          (.focus)
+          (.setCursor to-line (or cursor-pos 0)))))))
+
 (defmethod handle :editor/toggle-children-number-list [[_ block]]
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
@@ -944,6 +963,36 @@
            (shui/dialog-open! #(property-dialog/dialog blocks opts')
                               {:id :property-dialog
                                :align "start"})))))))
+
+(defmethod handle :editor/upsert-type-block [[_ {:keys [block type]}]]
+  (p/do!
+   (editor-handler/save-current-block!)
+   (p/delay 16)
+   (let [block (db/entity (:db/id block))
+         block-type (:logseq.property.node/display-type block)
+         block-title (:block/title block)
+         latest-code-lang (storage/get :latest-code-lang)
+         turn-type! #(if (and (= (keyword type) :code) latest-code-lang)
+                       (db-property-handler/set-block-properties!
+                        (:block/uuid %)
+                        {:logseq.property.node/display-type (keyword type)
+                         :logseq.property.code/lang latest-code-lang})
+                       (db-property-handler/set-block-property!
+                        (:block/uuid %) :logseq.property.node/display-type (keyword type)))]
+     (p/let [block (if (or (not (nil? block-type))
+                           (not (string/blank? block-title)))
+                     (p/let [result (ui-outliner-tx/transact!
+                                     {:outliner-op :insert-blocks}
+                                     ;; insert a new block
+                                     (let [[_p _ block'] (editor-handler/insert-new-block-aux! {} block "")]
+                                       (turn-type! block')))
+                             result' (ldb/read-transit-str result)]
+                       (when-let [id (:block/uuid (first (:blocks result')))]
+                         (db/entity [:block/uuid id])))
+                     (p/do!
+                      (turn-type! block)
+                      (db/entity [:block/uuid (:block/uuid block)])))]
+       (js/setTimeout #(editor-handler/edit-block! block :max) 100)))))
 
 (rum/defc multi-tabs-dialog
   []

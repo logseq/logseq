@@ -29,13 +29,13 @@ and handles unexpected failure."
                                              :db-graph-mode? (config/db-based-graph? repo)})]
         (if (config/db-based-graph? repo)
           (map (fn [block]
-                (cond-> (dissoc block :block/properties :block/macros :block/properties-order)
-                  (:block/properties block)
-                  (merge (update-keys (:block/properties block)
-                                      (fn [k]
-                                        (or ({:heading :logseq.property/heading} k)
-                                            (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {}))))))))
-              blocks)
+                 (cond-> (dissoc block :block/properties :block/macros :block/properties-order)
+                   (:block/properties block)
+                   (merge (update-keys (:block/properties block)
+                                       (fn [k]
+                                         (or ({:heading :logseq.property/heading} k)
+                                             (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {}))))))))
+               blocks)
           blocks))
       (catch :default e
         (log/error :exception e)
@@ -131,13 +131,13 @@ and handles unexpected failure."
     (if (= typ "Paragraph")
       (let [indexed-paras (map-indexed vector paras)]
         [typ (->> (filter
-                            #(let [[index value] %]
-                               (not (and (> index 0)
-                                         (= value ["Break_Line"])
-                                         (contains? #{"Timestamp" "Macro"}
-                                                    (first (nth paras (dec index)))))))
-                            indexed-paras)
-                           (map #(last %)))])
+                   #(let [[index value] %]
+                      (not (and (> index 0)
+                                (= value ["Break_Line"])
+                                (contains? #{"Timestamp" "Macro"}
+                                           (first (nth paras (dec index)))))))
+                   indexed-paras)
+                  (map #(last %)))])
       ast)))
 
 (defn trim-break-lines!
