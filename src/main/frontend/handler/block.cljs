@@ -22,7 +22,8 @@
    [frontend.handler.property.util :as pu]
    [dommy.core :as dom]
    [goog.object :as gobj]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [datascript.impl.entity :as de]))
 
 ;;  Fns
 
@@ -177,7 +178,7 @@
                            (state/get-current-editor-container-id)
                            :unknown-container)]
       (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range
-        {:container-id container-id :direction direction :event event :pos pos}))
+                          {:container-id container-id :direction direction :event event :pos pos}))
     (mark-last-input-time! repo)))
 
 (defn sanity-block-content
@@ -198,7 +199,8 @@
        (state/clear-edit! {:clear-editing-block? false}))
      (when-let [block-id (:block/uuid block)]
        (let [repo (state/get-current-repo)
-             block (or (db/entity [:block/uuid block-id]) block)
+             block (if (de/entity? block) block
+                       (or (db/entity [:block/uuid block-id]) block))
              content (or custom-content (:block/title block) "")
              content-length (count content)
              text-range (cond

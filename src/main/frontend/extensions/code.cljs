@@ -154,11 +154,6 @@
 ;; export CodeMirror to global scope
 (set! js/window -CodeMirror CodeMirror)
 
-(defn- block-render-type-is-code?
-  [block]
-  (some-> block :logseq.property.node/display-type
-          (= :code)))
-
 (defn- all-tokens-by-cursor
   "All tokens from the beginning of the document to the cursor(inclusive)."
   [cm]
@@ -392,16 +387,13 @@
          mode)))))
 
 (defn- save-editor!
-  [^js cm config]
+  [config]
   (p/do!
    (code-handler/save-code-editor!)
    (when-let [block-id (:block/uuid config)]
      (let [block (db/entity [:block/uuid block-id])]
-       (if (block-render-type-is-code? block)
-         (let [block-node (some-> cm (.getTextArea) (.closest ".ls-block"))]
-           ;; select block
-           (util/schedule #(.focus (aget js/window "root-container")))
-           (state/exit-editing-and-set-selected-blocks! [block-node]))
+       (state/set-state! :editor/raw-mode-block block)
+       (when-not (= (:db/id block) (:db/id (state/get-edit-block)))
          (editor-handler/edit-block! block :max))))))
 
 (defn ^:large-vars/cleanup-todo render!
@@ -438,7 +430,7 @@
                            :extraKeys (merge {"Esc" (fn [cm]
                                                       ;; Avoid reentrancy
                                                       (gobj/set cm "escPressed" true)
-                                                      (save-editor! cm config))}
+                                                      (save-editor! config))}
                                              (when config-edit?
                                                {"':'" complete-after
                                                 "Ctrl-Space" "autocomplete"}))}
@@ -481,6 +473,8 @@
                              (vreset! *cursor-curr nil)
                              (vreset! *cursor-prev nil)))
         (.on editor "focus" (fn [_e]
+                              (when-not (= (:block/uuid edit-block) (:block/uuid (state/get-edit-block)))
+                                (editor-handler/edit-block! edit-block :max))
                               (state/set-editing-block-dom-id! (:block-parent-id config))
                               (state/set-block-component-editing-mode! true)
                               (state/set-state! :editor/code-block-context

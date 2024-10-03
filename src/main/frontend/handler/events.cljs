@@ -886,6 +886,27 @@
 (defmethod handle :editor/save-code-editor [_]
   (code-handler/save-code-editor!))
 
+(defmethod handle :editor/focus-code-editor [[_ editing-block]]
+  (when (= :code (:logseq.property.node/display-type editing-block))
+    (let [container-id (some-> (:editor/container-id @state/state) (deref))
+          uuid' (:block/uuid editing-block)
+          target (js/document.querySelector
+                  (util/format ".select-language[blockid=\"%s\"][containerid=\"%s\"]" uuid' container-id))]
+      (when-let [^js cm (util/get-cm-instance target)]
+        (when-not (.hasFocus cm)
+          (let [cursor-pos (some-> (:editor/cursor-range @state/state) (deref) (count))
+                direction (:block.editing/direction editing-block)
+                pos (:block.editing/pos editing-block)
+                to-line (case direction
+                          :up (.lastLine cm)
+                          (case pos
+                            :max (.lastLine cm)
+                            0))]
+                 ;; move to friendly cursor
+            (doto cm
+              (.focus)
+              (.setCursor to-line (or cursor-pos 0)))))))))
+
 (defmethod handle :editor/toggle-children-number-list [[_ block]]
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
@@ -948,23 +969,20 @@
 
 (defmethod handle :editor/upsert-type-block [[_ {:keys [block type]}]]
   (p/do!
-    (editor-handler/save-current-block!)
-    (p/delay 16)
-    (let [block (db/entity (:db/id block))
-          block-type (:logseq.property.node/display-type block)
-          block-title (:block/title block)
-          turn-type! #(db-property-handler/set-block-property!
+   (editor-handler/save-current-block!)
+   (p/delay 16)
+   (let [block (db/entity (:db/id block))
+         block-type (:logseq.property.node/display-type block)
+         block-title (:block/title block)
+         turn-type! #(db-property-handler/set-block-property!
                       (:block/uuid %) :logseq.property.node/display-type (keyword type))]
-      (if (or (not (nil? block-type))
-            (not (string/blank? block-title)))
-        ;; insert block
-        (let [[p _ block'] (editor-handler/insert-new-block-aux! {} block "")]
-          (some-> p
-            (p/then #(turn-type! block'))
-            (p/then #(state/set-pending-type-block! block'))))
-        (-> (turn-type! block)
-          (p/then #(when (string/blank? block-title)
-                     (state/set-pending-type-block! block))))))))
+     (if (or (not (nil? block-type))
+             (not (string/blank? block-title)))
+       ;; insert a new block
+       (let [[p _ block'] (editor-handler/insert-new-block-aux! {} block "")]
+         (some-> p
+                 (p/then #(turn-type! block'))))
+       (turn-type! block)))))
 
 (rum/defc multi-tabs-dialog
   []
