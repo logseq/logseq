@@ -330,7 +330,7 @@
                                       (property-handler/set-block-property! repo (:block/uuid block)
                                                                             (:db/ident property)
                                                                             (if (map? value) (:db/id value) value)))
-                         :del-btn? (some-> value (:block/title) (boolean))
+                         :del-btn? (some? value)
                          :on-delete (fn []
                                       (property-handler/set-block-property! repo (:block/uuid block)
                                                                             (:db/ident property) nil)
