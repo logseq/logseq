@@ -1249,10 +1249,11 @@
                       (when (= "Enter" (util/ekey e))
                         (let [value (util/evalue e)]
                           (when-not (string/blank? value)
-                            (when-let [result (date/nld-parse value)]
-                              (when-let [date (doto (goog.date.DateTime.) (.setTime (.getTime result)))]
+                            (let [result (date/nld-parse value)]
+                              (if-let [date (and result (doto (goog.date.DateTime.) (.setTime (.getTime result))))]
                                 (let [on-select' (or (:on-select opts) (:on-day-click opts))]
-                                  (on-select' date))))))))})]))
+                                  (on-select' date))
+                                (notification/show! (str (pr-str value) " is not a valid date. Please try again") :warning)))))))})]))
 
 (comment
   (rum/defc emoji-picker
