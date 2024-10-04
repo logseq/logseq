@@ -1,11 +1,11 @@
-(ns frontend.components.datetime
+(ns frontend.components.file-based.datetime
   (:require [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.repeated :as repeated]
+            [frontend.handler.file-based.repeated :as repeated]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
