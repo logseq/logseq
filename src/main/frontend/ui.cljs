@@ -1216,16 +1216,17 @@
     "Use current time")])
 
 (rum/defc nlp-calendar
-  [{:keys [selected on-select] :as opts}]
-  (let [on-select' (if (:datetime? opts)
+  [{:keys [selected on-select on-day-click] :as opts}]
+  (let [default-on-select (or on-select on-day-click)
+        on-select' (if (:datetime? opts)
                      (fn [date value]
                        (let [value (or (and (string? value) value)
                                        (.-value (gdom/getElement "time-picker")))]
                          (let [[h m] (string/split value ":")]
                            (when selected
                              (.setHours date h m 0))
-                           (on-select date))))
-                     on-select)]
+                           (default-on-select date))))
+                     default-on-select)]
     [:div.flex.flex-col.gap-2
      (single-calendar (assoc opts :on-select on-select'))
      (when (:datetime? opts)

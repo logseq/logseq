@@ -241,7 +241,7 @@
        :id @*ident
        :del-btn? del-btn?
        :on-delete on-delete
-       :on-select select-handler!}
+       :on-day-click select-handler!}
        initial-month
        (assoc :default-month initial-month)))))
 
