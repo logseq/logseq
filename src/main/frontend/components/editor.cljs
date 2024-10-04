@@ -3,7 +3,7 @@
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.commands :as commands :refer [*matched-commands]]
-            [frontend.components.datetime :as datetime-comp]
+            [frontend.components.file-based.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
             [frontend.components.title :as title]

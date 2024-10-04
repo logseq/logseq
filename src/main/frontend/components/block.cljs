@@ -9,9 +9,7 @@
             [datascript.impl.entity :as e]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [frontend.commands :as commands]
             [frontend.components.block.macros :as block-macros]
-            [frontend.components.datetime :as datetime-comp]
             [frontend.components.file-based.block :as file-block]
             [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -54,7 +52,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property.file :as property-file]
             [frontend.handler.property.util :as pu]
-            [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -2281,48 +2278,6 @@
         [:button.p-1.mr-2 p])]
      [:code "Property name begins with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric."]]))
 
-(rum/defc timestamp-editor
-  [ast *show-datapicker?]
-
-  (let [*trigger-ref (rum/use-ref nil)]
-    (rum/use-effect!
-     (fn []
-       (let [pid (shui/popup-show!
-                  (.closest (rum/deref *trigger-ref) "a")
-                  (datetime-comp/date-picker nil nil (repeated/timestamp->map ast))
-                  {:id :timestamp-editor
-                   :align :start
-                   :root-props {:onOpenChange #(reset! *show-datapicker? %)}
-                   :content-props {:onEscapeKeyDown #(reset! *show-datapicker? false)}})]
-         #(do (shui/popup-hide! pid)
-              (reset! *show-datapicker? false))))
-     [])
-    [:i {:ref *trigger-ref}]))
-
-(rum/defcs timestamp-cp
-  < rum/reactive
-  (rum/local false ::show-datepicker?)
-  [state block typ ast]
-  (let [ts-block-id (get-in (state/sub [:editor/set-timestamp-block]) [:block :block/uuid])
-        _active? (= (get block :block/uuid) ts-block-id)
-        *show-datapicker? (get state ::show-datepicker?)]
-    [:div.flex.flex-col.gap-4.timestamp
-     [:div.text-sm.flex.flex-row
-      [:div.opacity-50.font-medium.timestamp-label
-       (str typ ": ")]
-      [:a.opacity-80.hover:opacity-100
-       {:on-pointer-down (fn [e]
-                           (util/stop e)
-                           (state/clear-editor-action!)
-                           (editor-handler/escape-editing)
-                           (reset! *show-datapicker? true)
-                           (reset! commands/*current-command typ)
-                           (state/set-timestamp-block! {:block block
-                                                        :typ typ}))}
-       [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]
-       (when (and _active? @*show-datapicker?)
-         (timestamp-editor ast *show-datapicker?))]]]))
-
 (defn- target-forbidden-edit?
   [target]
   (or
@@ -2659,11 +2614,11 @@
 
       (when deadline
         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
-          (timestamp-cp block "DEADLINE" deadline-ast)))
+          (file-block/timestamp-cp block "DEADLINE" deadline-ast)))
 
       (when scheduled
         (when-let [scheduled-ast (block-handler/get-scheduled-ast block)]
-          (timestamp-cp block "SCHEDULED" scheduled-ast)))
+          (file-block/timestamp-cp block "SCHEDULED" scheduled-ast)))
 
       (when-not (config/db-based-graph? repo)
         (when-let [invalid-properties (:block/invalid-properties block)]

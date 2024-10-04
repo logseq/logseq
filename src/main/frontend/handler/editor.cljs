@@ -29,7 +29,6 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.file :as property-file]
             [frontend.handler.property.util :as pu]
-            [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
@@ -39,7 +38,6 @@
             [frontend.state :as state]
             [frontend.template :as template]
             [frontend.util :as util]
-            [frontend.util.file-based.clock :as clock]
             [frontend.util.cursor :as cursor]
             [frontend.util.file-based.drawer :as drawer]
             [frontend.util.keycode :as keycode]
@@ -610,43 +608,11 @@
                {:outliner-op :insert-blocks}
                (outliner-op/insert-blocks! [new-block] page {:sibling? false})))))))))
 
-(defn update-timestamps-content!
-  [{:block/keys [repeated? marker format] :as block} content]
-  (if repeated?
-    (let [scheduled-ast (block-handler/get-scheduled-ast block)
-          deadline-ast (block-handler/get-deadline-ast block)
-          content (some->> (filter repeated/repeated? [scheduled-ast deadline-ast])
-                           (map (fn [ts]
-                                  [(repeated/timestamp->text ts)
-                                   (repeated/next-timestamp-text ts)]))
-                           (reduce (fn [content [old new]]
-                                     (string/replace content old new))
-                                   content))
-          content (string/replace-first
-                   content marker
-                   (case marker
-                     "DOING"
-                     "TODO"
-
-                     "NOW"
-                     "LATER"
-
-                     marker))
-          content (clock/clock-out format content)
-          content (drawer/insert-drawer
-                   format content "logbook"
-                   (util/format (str (if (= :org format) "-" "*")
-                                     " State \"DONE\" from \"%s\" [%s]")
-                                marker
-                                (date/get-date-time-string-3)))]
-      content)
-    content))
-
 (defn check
   [{:block/keys [marker title repeated? uuid] :as block}]
   (let [new-content (string/replace-first title marker "DONE")
         new-content (if repeated?
-                      (update-timestamps-content! block title)
+                      (file-editor-handler/update-timestamps-content! block title)
                       new-content)
         input-id (state/get-edit-input-id)]
     (if (and input-id
