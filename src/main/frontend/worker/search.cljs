@@ -278,7 +278,7 @@ DROP TRIGGER IF EXISTS blocks_au;
             ;; the 2nd column in blocks_fts (content)
             ;; pfts_2lqh is a key for retrieval
             ;; highlight and snippet only works for some matching with high rank
-          snippet-aux "snippet(blocks_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 32)"
+          snippet-aux "snippet(blocks_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 256)"
           select (if enable-snippet?
                    (str "select id, page, title, " snippet-aux " from blocks_fts where ")
                    "select id, page, title from blocks_fts where ")
