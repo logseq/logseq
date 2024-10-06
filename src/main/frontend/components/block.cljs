@@ -322,28 +322,28 @@
                   :on-click
                   (fn [e]
                     (util/stop e)
-                    (when-let [block-id (:block/uuid config)]
+                    (when-let [block-id (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
                       (let [*local-selected? (atom local?)]
                         (-> (shui/dialog-confirm!
-                             [:div.text-xs.opacity-60.-my-2
-                              (when local?
-                                [:label.flex.gap-1.items-center
-                                 (shui/checkbox
-                                  {:default-checked @*local-selected?
-                                   :on-checked-change #(reset! *local-selected? %)})
-                                 (t :asset/physical-delete)])]
-                             {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                              :outside-cancel? true})
-                            (p/then (fn []
-                                      (shui/dialog-close!)
-                                      (editor-handler/delete-asset-of-block!
-                                       {:block-id block-id
-                                        :local? local?
-                                        :delete-local? @*local-selected?
-                                        :repo (state/get-current-repo)
-                                        :href src
-                                        :title title
-                                        :full-text full-text})))))))}
+                              [:div.text-xs.opacity-60.-my-2
+                               (when local?
+                                 [:label.flex.gap-1.items-center
+                                  (shui/checkbox
+                                    {:default-checked @*local-selected?
+                                     :on-checked-change #(reset! *local-selected? %)})
+                                  (t :asset/physical-delete)])]
+                              {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                               :outside-cancel? true})
+                          (p/then (fn []
+                                    (shui/dialog-close!)
+                                    (editor-handler/delete-asset-of-block!
+                                      {:block-id block-id
+                                       :local? local?
+                                       :delete-local? @*local-selected?
+                                       :repo (state/get-current-repo)
+                                       :href src
+                                       :title title
+                                       :full-text full-text})))))))}
                  (ui/icon "trash")])
 
               [:button.asset-action-btn
