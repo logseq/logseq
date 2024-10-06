@@ -135,9 +135,13 @@ DROP TRIGGER IF EXISTS blocks_au;
                         (string/replace " or " " OR ")
                         (string/replace " | " " OR ")
                         (string/replace " not " " NOT "))]
-    (if (not= q match-input)
+    (cond
+      (re-find #"[^\w\s]" q)            ; punctuations
+      (str "\"" match-input "\"*")
+      (not= q match-input)
       (string/replace match-input "," "")
-      (str "\"" match-input "\"*"))))
+      :else
+      match-input)))
 
 (defn- search-blocks-aux
   [db sql q input page limit enable-snippet?]
