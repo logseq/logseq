@@ -472,7 +472,9 @@
                              (vreset! *cursor-curr nil)
                              (vreset! *cursor-prev nil)))
         (.on editor "focus" (fn [_e]
-                              (when-not (= (:block/uuid edit-block) (:block/uuid (state/get-edit-block)))
+                              (when (and
+                                     (contains? #{:code} (:logseq.property.node/display-type edit-block))
+                                     (not= (:block/uuid edit-block) (:block/uuid (state/get-edit-block))))
                                 (editor-handler/edit-block! edit-block :max))
                               (state/set-editing-block-dom-id! (:block-parent-id config))
                               (state/set-block-component-editing-mode! true)

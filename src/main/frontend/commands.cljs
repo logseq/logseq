@@ -154,6 +154,16 @@
     (db-based-query)
     (file-based-query)))
 
+(defn- calc-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    [[:editor/input "" {:last-pattern command-trigger}]
+     [:editor/upsert-type-block :code "calc"]
+     [:codemirror/focus]]
+    [[:editor/input "```calc\n\n```" {:type "block"
+                                      :backward-pos 4}]
+     [:codemirror/focus]]))
+
 (defn ->block
   ([type]
    (->block type nil))
@@ -407,9 +417,9 @@
        (when-not db?
          ["Zotero" (zotero-steps) "Import Zotero journal article" :icon/circle-letter-z])
        ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
-       ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
-                                                       :backward-pos 4}]
-                      [:codemirror/focus]] "Insert a calculator" :icon/calculator]
+       ["Calculator"
+        (calc-steps)
+        "Insert a calculator" :icon/calculator]
        (when-not db?
          ["Draw" (fn []
                    (let [file (draw/file-name)
@@ -752,10 +762,10 @@
       (when block-property-value
         (db-property-handler/set-block-property! (:db/id block-property-value) property-id value)))))
 
-(defmethod handle-step :editor/upsert-type-block [[_ type]]
+(defmethod handle-step :editor/upsert-type-block [[_ type lang]]
   (when (config/db-based-graph? (state/get-current-repo))
     (when-let [block (state/get-edit-block)]
-      (state/pub-event! [:editor/upsert-type-block {:block block :type type}]))))
+      (state/pub-event! [:editor/upsert-type-block {:block block :type type :lang lang}]))))
 
 (defn- file-based-set-priority
   [priority]

@@ -964,14 +964,14 @@
                               {:id :property-dialog
                                :align "start"})))))))
 
-(defmethod handle :editor/upsert-type-block [[_ {:keys [block type]}]]
+(defmethod handle :editor/upsert-type-block [[_ {:keys [block type lang]}]]
   (p/do!
    (editor-handler/save-current-block!)
    (p/delay 16)
    (let [block (db/entity (:db/id block))
          block-type (:logseq.property.node/display-type block)
          block-title (:block/title block)
-         latest-code-lang (storage/get :latest-code-lang)
+         latest-code-lang (or lang (storage/get :latest-code-lang))
          turn-type! #(if (and (= (keyword type) :code) latest-code-lang)
                        (db-property-handler/set-block-properties!
                         (:block/uuid %)
