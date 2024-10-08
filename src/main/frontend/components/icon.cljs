@@ -54,8 +54,7 @@
             (ldb/page? node-entity)
             "page"
             (= asset-type "pdf")
-            {:type :emoji
-             :id "books"}
+            "book"
             :else
             "letter-n")))))
 

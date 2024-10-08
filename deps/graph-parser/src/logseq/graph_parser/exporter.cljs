@@ -313,7 +313,7 @@
   "All built-in property names as a set of keywords"
   (-> built-in-property-name-to-idents keys set
       ;; built-in-properties that map to new properties
-      (set/union #{:filters :query-table :query-properties :query-sort-by :query-sort-desc})))
+      (set/union #{:filters :query-table :query-properties :query-sort-by :query-sort-desc :hl-stamp})))
 
 (def all-built-in-names
   "All built-in properties and classes as a set of keywords"
