@@ -415,11 +415,12 @@
   [state config title href metadata full_text]
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
-        href (config/get-local-asset-absolute-path href)]
+        href (config/get-local-asset-absolute-path href)
+        db-based? (config/db-based-graph? (state/get-current-repo))]
     (when (and (or granted?
                    (util/electron?)
                    (mobile-util/native-platform?)
-                   (config/db-based-graph? (state/get-current-repo)))
+                   db-based?)
                (nil? @src))
       (p/then (assets-handler/<make-asset-url href) #(reset! src %)))
 
@@ -456,11 +457,14 @@
            title]
 
           (= ext :pdf)
-          [:a.asset-ref.is-pdf {:href @src
-                                :on-click (fn [e]
-                                            (util/stop e)
-                                            (open-pdf-file e (:asset-block config) @src))}
-           title]
+          [:a.asset-ref.is-pdf
+           {:href @src
+            :on-click (fn [e]
+                        (util/stop e)
+                        (open-pdf-file e (:asset-block config) @src))}
+           (if db-based?
+             title
+             [:span [:span.opacity-70 "[[📚"] title [:span.opacity-70 "]]"]])]
 
           :else
           [:a.asset-ref.is-doc {:href @src
@@ -2002,7 +2006,8 @@
                                (or (db/page? block)
                                    (:logseq.property/icon block)
                                    link?
-                                   (some :logseq.property/icon (:block/tags block))))
+                                   (some :logseq.property/icon (:block/tags block))
+                                   (contains? #{"pdf"} (:logseq.property.asset/type block))))
                           icon
 
                           :else

@@ -223,16 +223,6 @@
         [[:db/add card-id :logseq.property.class/properties :logseq.property.fsrs/due]
          [:db/add card-id :logseq.property.class/properties :logseq.property.fsrs/state]]))))
 
-(defn- add-asset-properties
-  [conn _search-db]
-  (let [db @conn]
-    (when (ldb/db-based-graph? db)
-      (let [e (d/entity db :logseq.class/Asset)
-            eid (:db/id e)]
-        [[:db/add eid :logseq.property.class/properties :logseq.property.asset/type]
-         [:db/add eid :logseq.property.class/properties :logseq.property.asset/size]
-         [:db/add eid :logseq.property.class/properties :logseq.property.asset/checksum]]))))
-
 (defn- add-query-property-to-query-tag
   [conn _search-db]
   (let [db @conn]
