@@ -1509,13 +1509,6 @@ Arg *stop: atom, reset to true to stop the loop"
   [pred coll]
   `(vec (remove ~pred ~coll)))
 
-#?(:cljs
-   (defn safe-with-meta
-     [o meta]
-     (if (satisfies? IMeta o)
-       (with-meta o meta)
-       o)))
-
 ;; from rum
 #?(:cljs
    (def schedule
@@ -1543,3 +1536,9 @@ Arg *stop: atom, reset to true to stop the loop"
                 (js->clj)
                 (into {})
                 (walk/keywordize-keys)))))))
+
+#?(:cljs
+   (defn get-cm-instance
+     [^js target]
+     (when target
+       (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))

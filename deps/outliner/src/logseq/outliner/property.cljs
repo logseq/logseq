@@ -25,15 +25,6 @@
     (throw (ex-info "Read-only property value shouldn't be edited"
                     {:property property-ident}))))
 
-(defn- throw-error-if-add-class-parent-to-page
-  [blocks entity]
-  (when (and (ldb/class? entity) (not (every? ldb/class? blocks)))
-    (throw (ex-info "Can't set a tag as a parent for non-tag page"
-                    {:type :notification
-                     :payload {:message "Can't set a tag as a parent for non-tag page"
-                               :type :warning}
-                     :blocks (map #(select-keys % [:db/id :block/title]) (remove ldb/class? blocks))}))))
-
 (defn- build-property-value-tx-data
   ([block property-id value]
    (build-property-value-tx-data block property-id value (= property-id :logseq.task/status)))
@@ -230,7 +221,9 @@
 (defn- find-or-create-property-value
   "Find or create a property value. Only to be used with properties that have ref types"
   [conn property-id v]
-  (or (get-property-value-eid @conn property-id v)
+  ;; FIXME: some properties should always create new values
+  (or (when-not (contains? #{:logseq.property/query} property-id)
+        (get-property-value-eid @conn property-id v))
       (let [v-uuid (create-property-text-block! conn nil property-id v {})]
         (:db/id (d/entity @conn [:block/uuid v-uuid])))))
 
@@ -282,9 +275,9 @@
   (let [block-eids (map ->eid block-ids)
         property (d/entity @conn property-id)
         _ (when (= (:db/ident property) :logseq.property/parent)
-            (throw-error-if-add-class-parent-to-page
-             (map #(d/entity @conn %) block-eids)
-             (if (number? v) (d/entity @conn v) v)))
+            (outliner-validate/validate-parent-property
+             (if (number? v) (d/entity @conn v) v)
+             (map #(d/entity @conn %) block-eids)))
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
         property-type (get-in property [:block/schema :type] :default)
         _ (assert (some? v) "Can't set a nil property value must be not nil")

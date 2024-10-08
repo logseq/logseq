@@ -214,10 +214,8 @@
     [:div (loop [content content ;; why recur? because there might be multiple matches
                  result  []]
             (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
-                  hiccups-add [(when-not (string/blank? b-cut)
-                                 [:span b-cut])
-                               (when-not (string/blank? hl-cut)
-                                 [:mark.p-0.rounded-none hl-cut])]
+                  hiccups-add [[:span b-cut]
+                               [:mark.p-0.rounded-none hl-cut]]
                   hiccups-add (remove nil? hiccups-add)
                   new-result (concat result hiccups-add)]
               (if-not (string/blank? e-cut)

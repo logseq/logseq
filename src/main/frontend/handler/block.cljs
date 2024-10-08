@@ -171,12 +171,14 @@
     (state/set-editor-last-input-time! repo (util/time-ms))))
 
 (defn- edit-block-aux
-  [repo block content text-range {:keys [container-id]}]
+  [repo block content text-range {:keys [container-id direction event pos]}]
   (when block
     (let [container-id (or container-id
                            (state/get-current-editor-container-id)
                            :unknown-container)]
-      (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range {:container-id container-id}))
+      (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range
+                          {:db (db/get-db)
+                           :container-id container-id :direction direction :event event :pos pos}))
     (mark-last-input-time! repo)))
 
 (defn sanity-block-content
@@ -187,12 +189,13 @@
         (drawer/remove-logbook))))
 
 (defn edit-block!
-  [block pos & {:keys [_container-id custom-content tail-len]
-                :or {tail-len 0}
+  [block pos & {:keys [_container-id custom-content tail-len save-code-editor?]
+                :or {tail-len 0
+                     save-code-editor? true}
                 :as opts}]
   (when (and (not config/publishing?) (:block/uuid block))
     (p/do!
-     (state/pub-event! [:editor/save-code-editor])
+     (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
      (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
        (state/clear-edit! {:clear-editing-block? false}))
      (when-let [block-id (:block/uuid block)]
@@ -214,7 +217,7 @@
                           (subs content 0 pos))
              content (sanity-block-content repo (:block/format block) content)]
          (state/clear-selection!)
-         (edit-block-aux repo block content text-range opts))))))
+         (edit-block-aux repo block content text-range (assoc opts :pos pos)))))))
 
 (defn- get-original-block-by-dom
   [node]

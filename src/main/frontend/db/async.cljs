@@ -169,11 +169,11 @@
   (when-let [page (some-> page-name (db-model/get-page))]
     (when-let [^Object worker @db-browser/*worker]
       (p/let [result (.get-block-and-children worker
-                       (state/get-current-repo)
-                       (str (:block/uuid page))
-                       (ldb/write-transit-str
-                         {:children? true
-                          :nested-children? false}))]
+                                              (state/get-current-repo)
+                                              (str (:block/uuid page))
+                                              (ldb/write-transit-str
+                                               {:children? true
+                                                :nested-children? false}))]
         (some-> result (ldb/read-transit-str) (:children))))))
 
 (defn <get-block-refs
@@ -239,7 +239,7 @@
                                         [(>= ?d ?day)])]
                              date
                              future-day
-                             db-model/block-attrs)]
+                             db-model/file-graph-block-attrs)]
             (->> result
                  db-model/sort-by-order-recursive
                  db-utils/group-by-page)))))))

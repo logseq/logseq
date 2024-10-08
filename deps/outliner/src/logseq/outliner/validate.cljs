@@ -41,10 +41,34 @@
                      :payload {:message "Built-in pages can't be edited"
                                :type :warning}}))))
 
+(defn- validate-unique-for-property-page
+  [entity db new-title]
+  (when-let [_res (seq (d/q (if (:logseq.property/built-in? entity)
+                              '[:find [?b ...]
+                                :in $ ?eid ?title
+                                :where
+                                [?b :block/title ?title]
+                                [?b :block/type "property"]
+                                [(not= ?b ?eid)]]
+                              '[:find [?b ...]
+                                :in $ ?eid ?title
+                                :where
+                                [?b :block/title ?title]
+                                [?b :block/type "property"]
+                                [(missing? $ ?b :logseq.property/built-in?)]
+                                [(not= ?b ?eid)]])
+                            db
+                            (:db/id entity)
+                            new-title))]
+    (throw (ex-info "Duplicate property"
+                    {:type :notification
+                     :payload {:message (str "Another property named " (pr-str new-title) " already exists")
+                               :type :warning}}))))
+
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (cond
-    (and (seq tags) (= "page" (:block/type entity)))
+    (and (seq tags) (ldb/internal-page? entity))
     (when-let [res (seq (d/q '[:find [?b ...]
                                :in $ ?eid ?title [?tag-id ...]
                                :where
@@ -62,21 +86,7 @@
                                  :type :warning}})))
 
     (ldb/property? entity)
-    (when-let [_res (seq (d/q '[:find [?b ...]
-                                :in $ ?eid ?type ?title
-                                :where
-                                [?b :block/title ?title]
-                                [?b :block/type ?type]
-                                [(missing? $ ?b :logseq.property/built-in?)]
-                                [(not= ?b ?eid)]]
-                              db
-                              (:db/id entity)
-                              (:block/type entity)
-                              new-title))]
-      (throw (ex-info "Duplicate property"
-                      {:type :notification
-                       :payload {:message (str "Another property named " (pr-str new-title) " already exists")
-                                 :type :warning}})))
+    (validate-unique-for-property-page entity db new-title)
 
     :else
     (when-let [_res (seq (d/q '[:find [?b ...]
@@ -109,9 +119,9 @@
   (when (and (ldb/page? entity) (not (ldb/journal? entity))
              (common-date/normalize-date new-title nil))
     (throw (ex-info "Page can't be renamed to a journal"
-                      {:type :notification
-                       :payload {:message "This page can't be changed to a journal page"
-                                 :type :warning}}))))
+                    {:type :notification
+                     :payload {:message "This page can't be changed to a journal page"
+                               :type :warning}}))))
 
 (defn validate-block-title
   "Validates a block title when it has changed"
@@ -119,3 +129,17 @@
   (validate-built-in-pages existing-block-entity)
   (validate-unique-by-name-tag-and-block-type db new-title existing-block-entity)
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
+
+(defn validate-parent-property
+  "Validates whether given parent and children are valid. Allows 'class' and
+  'page' types to have a relationship with their own type. May consider allowing more
+  page types if they don't cause systemic bugs"
+  [parent-ent child-ents]
+  (when (or (and (ldb/class? parent-ent) (not (every? ldb/class? child-ents)))
+            (and (ldb/internal-page? parent-ent) (not (every? ldb/internal-page? child-ents)))
+            (not ((some-fn ldb/class? ldb/internal-page?) parent-ent)))
+    (throw (ex-info "Can't set this page as a parent because the child page is a different type"
+                    {:type :notification
+                     :payload {:message "Can't set this page as a parent because the child page is a different type"
+                               :type :warning}
+                     :blocks (map #(select-keys % [:db/id :block/title]) (remove ldb/class? child-ents))}))))

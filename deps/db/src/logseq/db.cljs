@@ -21,38 +21,6 @@
             [logseq.common.util.namespace :as ns-util])
   (:refer-clojure :exclude [object?]))
 
-;; Use it as an input argument for datalog queries
-(def block-attrs
-  '[:db/id
-    :block/uuid
-    :block/parent
-    :block/order
-    :block/collapsed?
-    :block/format
-    :block/refs
-    :block/_refs
-    :block/path-refs
-    :block/tags
-    :block/link
-    :block/title
-    :block/marker
-    :block/priority
-    :block/properties
-    :block/properties-order
-    :block/properties-text-values
-    :block/pre-block?
-    :block/scheduled
-    :block/deadline
-    :block/repeated?
-    :block/created-at
-    :block/updated-at
-    ;; TODO: remove this in later releases
-    :block/heading-level
-    :block/file
-    :logseq.property/parent
-    {:block/page [:db/id :block/name :block/title :block/journal-day]}
-    {:block/_parent ...}])
-
 (defonce *transact-fn (atom nil))
 (defn register-transact-fn!
   [f]
@@ -108,6 +76,7 @@
              (throw e))))))))
 
 (def page? entity-util/page?)
+(def internal-page? entity-util/internal-page?)
 (def class? entity-util/class?)
 (def property? entity-util/property?)
 (def closed-value? entity-util/closed-value?)
@@ -504,7 +473,7 @@
   [page]
   (cond (property? page)
         (not (public-built-in-property? page))
-        (or (class? page) (= "page" (:block/type page)))
+        (or (class? page) (internal-page? page))
         false
         ;; Default to true for closed value and future internal types.
         ;; Other types like whiteboard are not considered because they aren't built-in

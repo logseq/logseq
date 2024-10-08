@@ -1,4 +1,4 @@
-(ns frontend.handler.repeated
+(ns frontend.handler.file-based.repeated
   "Provides fns related to schedule and deadline"
   (:require [cljs-time.core :as t]
             [cljs-time.local :as tl]

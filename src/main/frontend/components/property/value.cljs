@@ -4,7 +4,6 @@
             [datascript.impl.entity :as de]
             [dommy.core :as d]
             [frontend.components.icon :as icon-component]
-            [frontend.components.query.builder :as query-builder-component]
             [frontend.components.select :as select]
             [frontend.components.title :as title]
             [frontend.config :as config]
@@ -29,15 +28,13 @@
             [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.modules.outliner.op :as outliner-op]))
+            [rum.core :as rum]))
 
 (rum/defc property-empty-btn-value
   [property & opts]
@@ -109,8 +106,9 @@
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
-  (shui/popup-hide!)
-  (shui/dialog-close!)
+  (when-not (get-in property [:block/schema :hide?])
+    (shui/popup-hide!)
+    (shui/dialog-close!))
   (p/let [block
           (if (and (= :default (get-in property [:block/schema :type]))
                    (not (db-property/many? property)))
@@ -243,7 +241,7 @@
        :id @*ident
        :del-btn? del-btn?
        :on-delete on-delete
-       :on-select select-handler!}
+       :on-day-click select-handler!}
        initial-month
        (assoc :default-month initial-month)))))
 
@@ -332,7 +330,7 @@
                                       (property-handler/set-block-property! repo (:block/uuid block)
                                                                             (:db/ident property)
                                                                             (if (map? value) (:db/id value) value)))
-                         :del-btn? (some-> value (:block/title) (boolean))
+                         :del-btn? (some? value)
                          :on-delete (fn []
                                       (property-handler/set-block-property! repo (:block/uuid block)
                                                                             (:db/ident property) nil)
@@ -352,7 +350,7 @@
                    (and (= :logseq.property/parent (:db/ident property))
                         (ldb/class? block)))
         ;; Note: property and other types shouldn't be converted to class
-        page? (= "page" (:block/type page-entity))]
+        page? (ldb/internal-page? page-entity)]
     (cond
       ;; page not exists or page exists but not a page type
       (or (nil? id) (and class? (not page?)))
@@ -466,11 +464,11 @@
                                  (conj (:block/uuid block))) ; break cycle
                  options (if (ldb/class? block)
                            (model/get-all-classes repo)
-                           (cond->>
-                            (->> (model/get-all-pages repo)
-                                 (remove (fn [e] (or (ldb/built-in? e) (ldb/property? e)))))
-                             (contains? #{"property" "page"} (:block/type block))
-                             (remove ldb/class?)))
+                           (when (ldb/internal-page? block)
+                             (cond->>
+                              (->> (model/get-all-pages repo)
+                                   (filter ldb/internal-page?)
+                                   (remove ldb/built-in?)))))
                  excluded-options (remove (fn [e] (contains? exclude-ids (:block/uuid e))) options)]
              excluded-options)
 
@@ -715,50 +713,6 @@
         :on-click (fn [] (<create-new-block! block property ""))}
        (property-empty-btn-value property)])))
 
-(rum/defcs query-cp <
-  (rum/local false ::show-setting?)
-  [state block property v-block]
-  (let [result (common-util/safe-read-string (:block/title v-block))
-        advanced-query? (or (and (map? result) (:query result))
-                            (string/starts-with? (string/triml (:block/title v-block)) "{"))]
-    [:div.flex.flex-1.flex-row.gap-1.justify-between
-     [:div.flex.flex-1 (property-normal-block-value block property v-block)]
-     (when-not advanced-query?
-       (shui/button
-        {:variant :ghost
-         :size :sm
-         :class "jtrigger px-1 text-muted-foreground"
-         :title "Update query"
-         :on-click (fn [e]
-                     (shui/popup-show!
-                      (.-target e)
-                      (fn []
-                        (let [block (db/entity (:db/id v-block))
-                              query (:block/title block)]
-                          [:div.p-4.h-64.flex.flex-col.gap-4 {:style {:width "42rem"}}
-                           [:div.flex.flex-1
-                            (query-builder-component/builder query {:property property
-                                                                    :block block})]
-
-                           [:div
-                            (shui/button
-                             {:variant :ghost
-                              :size :sm
-                              :class "text-muted-foreground"
-                              :on-click (fn []
-                                          (p/do!
-                                           (ui-outliner-tx/transact!
-                                            {:outliner-op :save-block}
-                                            (db-property-handler/set-block-properties! (:db/id block)
-                                                                                       {:logseq.property.node/type :code
-                                                                                        :logseq.property.code/mode "clojure"})
-                                            (outliner-op/save-block! {:db/id (:db/id block) :block/title ""}))
-
-                                           (shui/popup-hide!)))}
-                             "Switch to advanced query")]]))
-                      {:align :end}))}
-        (ui/icon "settings" {:size 18})))]))
-
 (rum/defcs property-block-value < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [block (first (:rum/args state))]
@@ -775,9 +729,6 @@
                                "Invalid block value, please delete the current property."]]
           (when v-block
             (cond
-              (= (:db/ident property) :logseq.property/query)
-              (query-cp block property v-block)
-
               (:block/page v-block)
               (property-normal-block-value block property v-block)
 

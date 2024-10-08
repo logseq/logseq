@@ -25,26 +25,26 @@
 (defn- delete-page!
   [page]
   (page-handler/<delete! (:block/uuid page)
-                        (fn []
-                          (notification/show! (str "Page " (:block/title page) " was deleted successfully!")
-                                              :success))
-                        {:error-handler (fn [{:keys [msg]}]
-                                          (notification/show! msg :warning))}))
+                         (fn []
+                           (notification/show! (str "Page " (:block/title page) " was deleted successfully!")
+                                               :success))
+                         {:error-handler (fn [{:keys [msg]}]
+                                           (notification/show! msg :warning))}))
 
 (defn delete-page-confirm!
   [page]
   (when page
     (-> (shui/dialog-confirm!
-          {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
-                   [:span.top-1.relative
-                    (shui/tabler-icon "alert-triangle")]
-                   (if (config/db-based-graph? (state/get-current-repo))
-                     (t :page/db-delete-confirmation)
-                     (t :page/delete-confirmation))]
-           :content [:p.opacity-60 (str "- " (:block/title page))]
-           :outside-cancel? true})
-      (p/then #(delete-page! page))
-      (p/catch #()))))
+         {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
+                  [:span.top-1.relative
+                   (shui/tabler-icon "alert-triangle")]
+                  (if (config/db-based-graph? (state/get-current-repo))
+                    (t :page/db-delete-confirmation)
+                    (t :page/delete-confirmation))]
+          :content [:p.opacity-60 (str "- " (:block/title page))]
+          :outside-cancel? true})
+        (p/then #(delete-page! page))
+        (p/catch #()))))
 
 (defn ^:large-vars/cleanup-todo page-menu
   [page]
@@ -155,7 +155,7 @@
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page page-name) action)}}))
 
-          (when (and db-based? (= (:block/type page) "page"))
+          (when (and db-based? (ldb/internal-page? page))
             {:title (t :page/convert-to-tag)
              :options {:on-click (fn []
                                    (db-page-handler/convert-to-tag! page))}})

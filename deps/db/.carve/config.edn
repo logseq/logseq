@@ -12,5 +12,6 @@
                   ;; Some fns are used by frontend but not worth moving over yet
                   logseq.db.frontend.schema
                   logseq.db.frontend.validate
+                  logseq.db.test.helper
                   logseq.db]
  :report {:format :ignore}}

@@ -1,11 +1,11 @@
-(ns frontend.components.datetime
+(ns frontend.components.file-based.datetime
   (:require [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.repeated :as repeated]
+            [frontend.handler.file-based.repeated :as repeated]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -151,18 +151,20 @@
                                   (string/lower-case current-command)))
         date (state/sub :date-picker/date)
         select-handler! (fn [^js d]
-                          (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
-                                journal (date/js-date->journal-title gd)]
+                          ;; d is nil when clicked more than once
+                          (when d
+                            (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
+                                  journal (date/js-date->journal-title gd)]
                             ;; deadline-or-schedule? is handled in on-submit, not here
-                            (when-not deadline-or-schedule?
+                              (when-not deadline-or-schedule?
                               ;; similar to page reference
-                              (editor-handler/insert-command! dom-id
-                                (page-ref/->page-ref journal)
-                                format
-                                {:command :page-ref})
-                              (state/clear-editor-action!)
-                              (reset! commands/*current-command nil))
-                            (state/set-state! :date-picker/date d)))]
+                                (editor-handler/insert-command! dom-id
+                                                                (page-ref/->page-ref journal)
+                                                                format
+                                                                {:command :page-ref})
+                                (state/clear-editor-action!)
+                                (reset! commands/*current-command nil))
+                              (state/set-state! :date-picker/date d))))]
     [:div#date-time-picker.flex.flex-col.sm:flex-row
      ;; inline container
      [:div.border-red-500

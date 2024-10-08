@@ -9,16 +9,16 @@
             ["fs" :as fs]
             [logseq.common.graph :as common-graph]
             [promesa.core :as p]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
-            [logseq.outliner.db-pipeline :as db-pipeline]))
+            [logseq.outliner.db-pipeline :as db-pipeline]
+            [logseq.db.test.helper :as db-test]
+            [logseq.db.frontend.rules :as rules]))
 
 ;; Helpers
 ;; =======
@@ -40,6 +40,13 @@
                 :where [?b :block/title ?content] [(missing? $ ?b :block/type)]]
               db)
          first)))
+
+(defn- find-block-by-property [db property property-value]
+  (->> (d/q '[:find [(pull ?b [*]) ...]
+              :in $ ?prop ?prop-value %
+              :where (property ?b ?prop ?prop-value)]
+            db property property-value (rules/extract-rules rules/db-query-dsl-rules [:property]))
+       first))
 
 (defn- find-page-by-name [db name]
   (->> name
@@ -125,13 +132,13 @@
               (if (boolean? v)
                 [k v]
                 [k
-                (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
-                  (if (= :block/tags k)
-                    (mapv #(:db/ident (d/entity db (:db/id %))) v)
-                    (if (db-property-type/all-ref-property-types built-in-type)
-                      (db-property/ref->property-value-contents db v)
-                      v))
-                  (db-property/ref->property-value-contents db v))])))
+                 (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
+                   (if (= :block/tags k)
+                     (mapv #(:db/ident (d/entity db (:db/id %))) v)
+                     (if (db-property-type/all-ref-property-types built-in-type)
+                       (db-property/ref->property-value-contents db v)
+                       v))
+                   (db-property/ref->property-value-contents db v))])))
        (into {})))
 
 ;; Tests
@@ -140,8 +147,7 @@
 (deftest-async ^:integration export-docs-graph
   (p/let [file-graph-dir "test/resources/docs-0.10.9"
           _ (docs-graph-helper/clone-docs-repo-if-not-exists file-graph-dir "v0.10.9")
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           assets (atom [])
           {:keys [import-state]}
           (import-file-graph-to-db file-graph-dir conn {:assets assets})]
@@ -153,8 +159,7 @@
 (deftest-async export-basic-graph
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           ;; Simulate frontend path-refs being calculated
           _ (db-pipeline/add-listener conn)
           assets (atom [])
@@ -171,13 +176,13 @@
       (is (= 18 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
-      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
+      (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 8
              (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
                                 :where [?b :block/title] [_ :block/page ?b]] @conn)
-                         (filter #(= "page" (:block/type %))))))
+                         (filter ldb/internal-page?))))
           "Correct number of pages with block content")
       (is (= 4 (count (d/datoms @conn :avet :block/type "whiteboard"))))
       (is (= 1 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
@@ -289,12 +294,26 @@
       (is (= #{"gpt"}
              (:block/alias (readable-properties @conn (find-page-by-name @conn "chat-gpt")))))
 
+      ;; Queries
       (is (= {:logseq.property.table/sorting [{:id :user.property/prop-num, :asc? false}]
               :logseq.property.view/type "Table View"
               :logseq.property.table/ordered-columns [:block/title :user.property/prop-string :user.property/prop-num]
+              :logseq.property/query "(property :prop-string)"
               :block/tags [:logseq.class/Query]}
-             (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
-          "query block has correct query properties"))
+             (readable-properties @conn (find-block-by-property @conn :logseq.property/query "(property :prop-string)")))
+          "simple query block has correct query properties")
+      (is (= "For example, here's a query with title text:"
+             (:block/title (find-block-by-content @conn #"query with title text")))
+          "Text around a simple query block is set as a query's title")
+      (is (= {:logseq.property.view/type "List View"
+              :logseq.property/query "{:query (task todo doing)}"
+              :block/tags [:logseq.class/Query]
+              :logseq.property.table/ordered-columns [:block/title]}
+             (readable-properties @conn (find-block-by-content @conn #"tasks with")))
+          "Advanced query has correct query properties")
+      (is (= "tasks with todo and doing"
+             (:block/title (find-block-by-content @conn #"tasks with")))
+          "Advanced query has custom title migrated"))
 
     (testing "db attributes"
       (is (= true
@@ -362,9 +381,7 @@
     (testing "multiline blocks"
       (is (= "|markdown| table|\n|some|thing|" (:block/title (find-block-by-content @conn #"markdown.*table"))))
       (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (find-block-by-content @conn #"multiline block"))))
-      (is (= "logbook block" (:block/title (find-block-by-content @conn #"logbook block"))))
-      (is (re-find #"(?s)^Text before\n#\+BEGIN_QUERY.*END_QUERY\nText after$"
-                   (:block/title (find-block-by-content @conn #":title \"tasks")))))
+      (is (= "logbook block" (:block/title (find-block-by-content @conn #"logbook block")))))
 
     (testing "block refs and path-refs"
       (let [block (find-block-by-content @conn "old todo block")]
@@ -410,8 +427,7 @@
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
 
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
@@ -438,8 +454,7 @@
 (deftest-async export-files-with-property-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_23.md" "pages/url.md"])
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           _ (import-files-to-db files conn {:property-classes ["type"]})
           _ (@#'gp-exporter/export-class-properties conn conn)]
 
@@ -483,8 +498,7 @@
 (deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["ignored/icon-page.md"])
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           {:keys [import-state]} (import-files-to-db files conn {})]
     (is (= 2
            (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
@@ -493,8 +507,7 @@
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"])
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          conn (db-test/create-conn)
           _ (import-files-to-db files conn {:property-parent-classes ["parent"]})]
 
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))

@@ -3,7 +3,7 @@
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.commands :as commands :refer [*matched-commands]]
-            [frontend.components.datetime :as datetime-comp]
+            [frontend.components.file-based.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
             [frontend.components.title :as title]
@@ -745,7 +745,10 @@
                   ::ref (atom nil)))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
-                state)}
+                state)
+   :will-unmount (fn [state]
+                   (state/set-state! :editor/raw-mode-block nil)
+                   state)}
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside

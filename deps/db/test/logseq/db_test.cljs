@@ -3,8 +3,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
-
+            [logseq.db.test.helper :as db-test]))
 
 ;;; datoms
 ;;; - 1 <----+
@@ -46,10 +45,22 @@
     :logseq.property/parent [:block/uuid #uuid "7008db08-ba0c-4aa9-afc6-7e4783e40a99"]}])
 
 (deftest get-page-parents
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)]
-    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+  (let [conn (db-test/create-conn)]
     (d/transact! conn class-parents-data)
     (is (= #{"x" "y"}
            (->> (ldb/get-page-parents (ldb/get-page @conn "z") {:node-class? true})
                 (map :block/title)
                 set)))))
+
+(deftest get-case-page
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties
+               {:foo {:block/schema {:type :default}}
+                :Foo {:block/schema {:type :default}}}
+               :classes {:movie {} :Movie {}}})]
+    ;; Case sensitive properties
+    (is (= "foo" (:block/title (ldb/get-case-page @conn "foo"))))
+    (is (= "Foo" (:block/title (ldb/get-case-page @conn "Foo"))))
+    ;; Case sensitive classes
+    (is (= "movie" (:block/title (ldb/get-case-page @conn "movie"))))
+    (is (= "Movie" (:block/title (ldb/get-case-page @conn "Movie"))))))

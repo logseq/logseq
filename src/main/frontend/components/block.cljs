@@ -9,9 +9,7 @@
             [datascript.impl.entity :as e]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [frontend.commands :as commands]
             [frontend.components.block.macros :as block-macros]
-            [frontend.components.datetime :as datetime-comp]
             [frontend.components.file-based.block :as file-block]
             [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -23,6 +21,7 @@
             [frontend.components.query.builder :as query-builder-component]
             [frontend.components.svg :as svg]
             [frontend.components.title :as title]
+            [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -53,7 +52,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property.file :as property-file]
             [frontend.handler.property.util :as pu]
-            [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -91,7 +89,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [frontend.storage :as storage]))
 
 ;; local state
 (defonce *dragging?
@@ -323,7 +322,7 @@
                   :on-click
                   (fn [e]
                     (util/stop e)
-                    (when-let [block-id (:block/uuid config)]
+                    (when-let [block-id (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
                       (let [*local-selected? (atom local?)]
                         (-> (shui/dialog-confirm!
                              [:div.text-xs.opacity-60.-my-2
@@ -1430,9 +1429,10 @@
   [config arguments]
   [:div.dsl-query.pr-3.sm:pr-0
    (let [query (->> (string/join ", " arguments)
-                    (string/trim))]
+                    (string/trim))
+         build-option (assoc (:block config) :file-version/query-macro-title query)]
      (query/custom-query (wrap-query-components (assoc config :dsl-query? true))
-                         {:builder (query-builder-component/builder query config)
+                         {:builder (query-builder-component/builder build-option {})
                           :query query}))])
 
 (defn- macro-function-cp
@@ -1656,7 +1656,7 @@
     (cond
       (= name "query")
       (if (config/db-based-graph? (state/get-current-repo))
-        [:div.warning "{{query}} has been deprecated. Use `/Query` command instead."]
+        [:div.warning "{{query}} is deprecated. Use '/Query' command instead."]
         (macro-query-cp config arguments))
 
       (= name "function")
@@ -1664,7 +1664,7 @@
 
       (= name "namespace")
       (if (config/db-based-graph? (state/get-current-repo))
-        [:div.warning "Namespace has been deprecated, use tags instead"]
+        [:div.warning "Namespace is deprecated, use tags instead"]
         (let [namespace (first arguments)]
           (when-not (string/blank? namespace)
             (let [namespace (string/lower-case (page-ref/get-page-name! namespace))
@@ -1715,7 +1715,7 @@
 
       (= name "embed")
       (if (config/db-based-graph? (state/get-current-repo))
-        [:div.warning "embed has been deprecated. Use / command 'Node embed' instead."]
+        [:div.warning "{{embed}} is deprecated. Use '/Node embed' command instead."]
         (macro-embed-cp config arguments))
 
       (= name "renderer")
@@ -2054,10 +2054,11 @@
 (declare block-content)
 
 (declare src-cp)
+(declare block-title)
 
-(defn- text-block-title
+(rum/defc ^:large-vars/cleanup-todo text-block-title
   [config {:block/keys [marker pre-block? properties] :as block}]
-  (let [block-title (:block.temp/ast-title block)
+  (let [block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
         level (:level config)
         slide? (boolean (:slide? config))
@@ -2138,33 +2139,57 @@
          (when-not area? [(hl-ref)])
 
          (conj
-          (map-inline config block-title)
+          (map-inline config block-ast-title)
           (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
 
          ;; highlight ref block (area)
          (when area? [(hl-ref)])
 
-         (when (and (seq block-title) (ldb/class-instance? (db/entity :logseq.class/Cards) block))
-           [(shui/button
-             {:variant :ghost
-              :size :sm
-              :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
-              :on-click (fn [_]
-                          (state/pub-event! [:modal/show-cards (:db/id block)]))}
-             "Practice")])))))))
+         (when (and (seq block-ast-title) (ldb/class-instance? (db/entity :logseq.class/Cards) block))
+           [(ui/tooltip
+             (shui/button
+              {:variant :ghost
+               :size :sm
+               :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
+               :on-click (fn [e]
+                           (util/stop e)
+                           (state/pub-event! [:modal/show-cards (:db/id block)]))}
+              "Practice")
+             [:div "Practice cards"])])))))))
 
-(defn build-block-title
+(rum/defc block-title < rum/reactive db-mixins/query
   [config block]
-  (let [node-type (:logseq.property.node/type block)]
-    (case node-type
-      :code
+  (let [collapsed? (:collapsed? config)
+        block' (db/entity (:db/id block))
+        node-type (:logseq.property.node/display-type block')
+        query? (ldb/class-instance? (db/entity :logseq.class/Query) block')
+        query (:logseq.property/query block')
+        advanced-query? (and query? (= :code node-type))]
+    (cond
+      (= :code node-type)
       [:div.flex.flex-1.w-full
-       (src-cp (assoc config :block block) {:language (:logseq.property.code/mode block)})]
+       (src-cp (assoc config :block block) {:language (:logseq.property.code/lang block)})]
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
-      :math
+      (= :math node-type)
       (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
 
+      (and query?
+           collapsed?
+           (not advanced-query?)
+           (string/blank? (:block/title block'))
+           (seq (:block/title query)))
+      (text-block-title config
+                        (merge query
+                               (block/parse-title-and-body (:block/uuid query) :markdown false (:block/title query))))
+
+      (seq (:logseq.property/_query block'))
+      (query-builder-component/builder block' {})
+
+      (and query? (string/blank? (:block/title block')))
+      [:span.opacity-50 "Set query title"]
+
+      :else
       (text-block-title config block))))
 
 (rum/defc span-comma
@@ -2270,48 +2295,6 @@
         [:button.p-1.mr-2 p])]
      [:code "Property name begins with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric."]]))
 
-(rum/defc timestamp-editor
-  [ast *show-datapicker?]
-
-  (let [*trigger-ref (rum/use-ref nil)]
-    (rum/use-effect!
-     (fn []
-       (let [pid (shui/popup-show!
-                  (.closest (rum/deref *trigger-ref) "a")
-                  (datetime-comp/date-picker nil nil (repeated/timestamp->map ast))
-                  {:id :timestamp-editor
-                   :align :start
-                   :root-props {:onOpenChange #(reset! *show-datapicker? %)}
-                   :content-props {:onEscapeKeyDown #(reset! *show-datapicker? false)}})]
-         #(do (shui/popup-hide! pid)
-              (reset! *show-datapicker? false))))
-     [])
-    [:i {:ref *trigger-ref}]))
-
-(rum/defcs timestamp-cp
-  < rum/reactive
-  (rum/local false ::show-datepicker?)
-  [state block typ ast]
-  (let [ts-block-id (get-in (state/sub [:editor/set-timestamp-block]) [:block :block/uuid])
-        _active? (= (get block :block/uuid) ts-block-id)
-        *show-datapicker? (get state ::show-datepicker?)]
-    [:div.flex.flex-col.gap-4.timestamp
-     [:div.text-sm.flex.flex-row
-      [:div.opacity-50.font-medium.timestamp-label
-       (str typ ": ")]
-      [:a.opacity-80.hover:opacity-100
-       {:on-pointer-down (fn [e]
-                           (util/stop e)
-                           (state/clear-editor-action!)
-                           (editor-handler/escape-editing)
-                           (reset! *show-datapicker? true)
-                           (reset! commands/*current-command typ)
-                           (state/set-timestamp-block! {:block block
-                                                        :typ typ}))}
-       [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]
-       (when (and _active? @*show-datapicker?)
-         (timestamp-editor ast *show-datapicker?))]]]))
-
 (defn- target-forbidden-edit?
   [target]
   (or
@@ -2392,7 +2375,8 @@
                           content
                           block
                           cursor-range
-                          {:move-cursor? false
+                          {:db (db/get-db)
+                           :move-cursor? false
                            :container-id (:container-id config)}))]
                 ;; wait a while for the value of the caret range
                 (p/do!
@@ -2428,7 +2412,7 @@
       :block-content-slotted
       (-> block (dissoc :block/children :block/page)))]
 
-    (when-not (contains? #{:code :math} (:logseq.property.node/type block))
+    (when-not (contains? #{:code :math} (:logseq.property.node/display-type block))
       (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
         (when (and (not block-ref-with-title?)
                    (seq body)
@@ -2546,12 +2530,12 @@
     (when (seq properties)
       (case position
         :block-below
-        [:div.positioned-properties.block-below.flex.flex-row.gap-1.item-center.flex-wrap.text-sm.overflow-x-hidden.max-h-6
+        [:div.positioned-properties.block-below.flex.flex-row.gap-2.item-center.flex-wrap.text-sm.overflow-x-hidden
          (for [pid properties]
            (let [property (db/entity pid)
                  v (get block pid)]
              [:div.flex.flex-row.items-center.gap-2.hover:bg-secondary.rounded
-              [:div.flex.flex-row.opacity-50.hover:opacity-100
+              [:div.flex.flex-row.opacity-50.hover:opacity-100.items-center
                (property-component/property-key-cp block property opts)
                [:div.select-none ":"]]
               (pv/property-value block property v opts)]))]
@@ -2563,14 +2547,14 @@
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
-  (let [repo (state/get-current-repo)
+  (let [collapsed? (:collapsed? config)
+        repo (state/get-current-repo)
         content (if (config/db-based-graph? (state/get-current-repo))
                   (:block/raw-title block)
                   (property-util/remove-built-in-properties format (:block/raw-title block)))
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         ast-body (:block.temp/ast-body block)
         ast-title (:block.temp/ast-title block)
-        collapsed? (util/collapsed? block)
         block (assoc block :block/title content)
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
         block-ref? (:block-ref? config)
@@ -2621,6 +2605,7 @@
                                             (block-content-on-pointer-down e block block-id content edit-input-id config))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
+              :key (str "block-content-" uuid)
               :on-pointer-up (fn [e]
                                (when (and
                                       (state/in-selection-mode?)
@@ -2640,17 +2625,17 @@
       [:div.flex.flex-row.justify-between.block-content-inner
        (when-not plugin-slotted?
          [:div.block-head-wrap
-          (build-block-title config block)])
+          (block-title config block)])
 
        (file-block/clock-summary-cp block ast-body)]
 
       (when deadline
         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
-          (timestamp-cp block "DEADLINE" deadline-ast)))
+          (file-block/timestamp-cp block "DEADLINE" deadline-ast)))
 
       (when scheduled
         (when-let [scheduled-ast (block-handler/get-scheduled-ast block)]
-          (timestamp-cp block "SCHEDULED" scheduled-ast)))
+          (file-block/timestamp-cp block "SCHEDULED" scheduled-ast)))
 
       (when-not (config/db-based-graph? repo)
         (when-let [invalid-properties (:block/invalid-properties block)]
@@ -2739,14 +2724,17 @@
         refs-count (if (seq (:block/_refs block))
                      (count (:block/_refs block))
                      (rum/react *refs-count))
-        table? (:table? config)]
+        table? (:table? config)
+        type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
+                                (not= (:db/id block) (:db/id (state/sub :editor/raw-mode-block))))
+        config (assoc config :block-parent-id block-id)]
     [:div.block-content-or-editor-wrap
      {:class (when (:page-title? config) "ls-page-title-container")
-      :data-node-type (some-> (:logseq.property.node/type block) name)}
+      :data-node-type (some-> (:logseq.property.node/display-type block) name)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
       [:div.flex.flex-1.flex-row.gap-1.items-center
-       (if (and edit? editor-box)
+       (if (and edit? editor-box (not type-block-editor?))
          [:div.editor-wrapper.flex.flex-1
           {:id editor-id
            :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
@@ -2767,7 +2755,8 @@
                                                           (:block/title block))]
                                           (editor-handler/clear-selection!)
                                           (editor-handler/unhighlight-blocks!)
-                                          (state/set-editing! edit-input-id content block "" {:container-id (:container-id config)}))}})
+                                          (state/set-editing! edit-input-id content block "" {:db (db/get-db)
+                                                                                              :container-id (:container-id config)}))}})
            (block-content config block edit-input-id block-id slide?))
 
           (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
@@ -3127,6 +3116,24 @@
       [block* result]
       [nil result])))
 
+(rum/defc query-property-cp < rum/reactive db-mixins/query
+  [block config collapsed?]
+  (let [block (db/entity (:db/id block))
+        query? (ldb/class-instance? (db/entity :logseq.class/Query) block)]
+    (when (and query? (not collapsed?))
+      (let [query-id (:db/id (:logseq.property/query block))
+            query (some-> query-id db/sub-block)
+            advanced-query? (= :code (:logseq.property.node/display-type query))]
+        (cond
+          (and advanced-query? (not collapsed?))
+          [:div.flex.flex-1.my-1 {:style {:margin-left 42}}
+           (src-cp (assoc config :block query)
+                   {:language "clojure"})]
+
+          (and (not advanced-query?) (not collapsed?))
+          [:div.my-1 {:style {:margin-left 42}}
+           (block-container (assoc config :property? true) query)])))))
+
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [*ref (atom nil)
@@ -3167,6 +3174,7 @@
 
                      :else
                      db-collapsed?)
+        config (assoc config :collapsed? collapsed?)
         breadcrumb-show? (:breadcrumb-show? config)
         *show-left-menu? (::show-block-left-menu? container-state)
         *show-right-menu? (::show-block-right-menu? container-state)
@@ -3299,7 +3307,8 @@
                    hide-block-refs-count? (or (and (:embed? config)
                                                    (= (:block/uuid block) (:embed-id config)))
                                               table?)]
-               (block-content-or-editor config block
+               (block-content-or-editor config
+                                        block
                                         {:edit-input-id edit-input-id
                                          :block-id block-id
                                          :edit? editing?
@@ -3311,14 +3320,20 @@
         (when (and @*show-right-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-right-menu config block editing?))])
 
+     (when-not (:table? config)
+       (query-property-cp block config collapsed?))
+
      (when (and db-based? (not collapsed?) (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])
 
-     (when (and db-based? (not collapsed?) (not (or table? property?)) (not (string/blank? (:block/title (:logseq.property/query block)))))
-       (let [query (:block/title (:logseq.property/query block))
+     (when (and db-based? (not collapsed?) (not (or table? property?))
+                (ldb/class-instance? (db/entity :logseq.class/Query) block))
+       (let [query-block (:logseq.property/query (db/entity (:db/id block)))
+             query-block (if query-block (db/sub-block (:db/id query-block)) query-block)
+             query (:block/title query-block)
              result (common-util/safe-read-string query)
-             advanced-query? (and (map? result) (:query result))]
+             advanced-query? (map? result)]
          [:div {:style {:padding-left 42}}
           (query/custom-query (wrap-query-components (assoc config
                                                             :dsl-query? (not advanced-query?)
@@ -3543,39 +3558,100 @@
 
 (declare ->hiccup)
 
+(defn- get-code-mode-by-lang
+  [lang]
+  (some (fn [m] (when (= (.-name m) lang) (.-mode m))) js/window.CodeMirror.modeInfo))
+
+(rum/defc src-lang-picker
+  [block on-select!]
+  (when-let [langs (map (fn [m] (.-name m)) js/window.CodeMirror.modeInfo)]
+    (let [options (map (fn [lang] {:label lang :value lang}) langs)]
+      (select/select {:items options
+                      :input-default-placeholder "Choose language"
+                      :on-chosen
+                      (fn [chosen _ _ e]
+                        (let [lang (:value chosen)]
+                          (when (and (= :code (:logseq.property.node/display-type block))
+                                     (not= lang (:logseq.property.code/lang block)))
+                            (on-select! lang e)))
+                        (shui/popup-hide!))}))))
+
 (rum/defc src-cp < rum/static
   [config options]
-  (when options
-    (let [html-export? (:html-export? config)
-          {:keys [lines language]} options
-          attr (when language
-                 {:data-lang language})
-          code (if lines (apply str lines) (:block/title (:block config)))
-          [inside-portal? set-inside-portal?] (rum/use-state nil)]
-      (cond
-        html-export?
-        (highlight/html-export attr code)
+  (let [block (:block config)
+        container-id (:container-id config)
+        *mode-ref (rum/use-ref nil)
+        *actions-ref (rum/use-ref nil)]
 
-        :else
-        (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
-          [:div.ui-fenced-code-editor.flex.flex-1
-           {:ref (fn [el]
-                   (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
-           (cond
-             (nil? inside-portal?) nil
+    (when options
+      (let [html-export? (:html-export? config)
+            {:keys [lines language]} options
+            attr (when language
+                   {:data-lang language})
+            code (if lines (apply str lines) (:block/title block))
+            [inside-portal? set-inside-portal?] (rum/use-state nil)]
+        (cond
+          html-export?
+          (highlight/html-export attr code)
 
-             (or (:slide? config) inside-portal?)
-             (highlight/highlight (str (random-uuid))
-                                  {:class     (str "language-" language)
-                                   :data-lang language}
-                                  code)
+          :else
+          (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
+            [:div.ui-fenced-code-editor.flex.flex-1
+             {:ref (fn [el]
+                     (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))
+              :on-mouse-over #(dom/add-class! (rum/deref *actions-ref) "opacity-100")
+              :on-mouse-leave (fn [e]
+                                (when (dom/has-class? (.-target e) "code-editor")
+                                  (dom/remove-class! (rum/deref *actions-ref) "opacity-100")))}
+             (cond
+               (nil? inside-portal?) nil
 
-             :else
-             [:<>
-              (lazy-editor/editor config (str (d/squuid)) attr code options)
-              (let [options (:options options) block (:block config)]
-                (when (and (= language "clojure") (contains? (set options) ":results"))
-                  (sci/eval-result code block)))])])))))
+               (or (:slide? config) inside-portal?)
+               (highlight/highlight (str (random-uuid))
+                                    {:class (str "language-" language)
+                                     :data-lang language}
+                                    code)
+
+               :else
+               [:div.ls-code-editor-wrap
+                [:div.code-block-actions.flex.flex-row.gap-1.opacity-0.transition-opacity.ease-in.duration-300
+                 {:ref *actions-ref}
+                 (shui/button
+                  {:variant :text
+                   :size :sm
+                   :class "select-language"
+                   :ref *mode-ref
+                   :containerid (str container-id)
+                   :blockid (str (:block/uuid block))
+                   :on-click (fn [^js e]
+                               (util/stop-propagation e)
+                               (let [target (.-target e)]
+                                 (shui/popup-show! target
+                                                   #(src-lang-picker block
+                                                                     (fn [lang ^js _e]
+                                                                       (when-let [^js cm (util/get-cm-instance (util/rec-get-node target "ls-block"))]
+                                                                         (if-let [mode (get-code-mode-by-lang lang)]
+                                                                           (.setOption cm "mode" mode)
+                                                                           (throw (ex-info "code mode not found"
+                                                                                           {:lang lang})))
+                                                                         (storage/set :latest-code-lang lang)
+                                                                         (db-property-handler/set-block-property!
+                                                                          (:db/id block) :logseq.property.code/lang lang))))
+                                                   {:align :end})))}
+                  (or language "Choose language")
+                  (ui/icon "chevron-down"))
+                 (shui/button
+                  {:variant :text
+                   :size :sm
+                   :on-click (fn [e]
+                               (util/stop-propagation e)
+                               (editor-handler/copy-block-content! block))}
+                  (ui/icon "copy")
+                  "Copy")]
+                (lazy-editor/editor config (str (d/squuid)) attr code options)
+                (let [options (:options options) block (:block config)]
+                  (when (and (= language "clojure") (contains? (set options) ":results"))
+                    (sci/eval-result code block)))])]))))))
 
 (defn ^:large-vars/cleanup-todo markup-element-cp
   [{:keys [html-export?] :as config} item]
@@ -3647,9 +3723,11 @@
       [:pre.pre-wrap-white-space
        (join-lines l)]
       ["Quote" l]
-      (->elem
-       :blockquote
-       (markup-elements-cp config l))
+      (if (config/db-based-graph? (state/get-current-repo))
+        [:div.warning "#+BEGIN_QUOTE is deprecated. Use '/Quote' command instead."]
+        (->elem
+         :blockquote
+         (markup-elements-cp config l)))
       ["Raw_Html" content]
       (when (not html-export?)
         [:div.raw_html {:dangerouslySetInnerHTML
@@ -3668,15 +3746,19 @@
       ["Export" "latex" _options content]
       (if html-export?
         (latex/html-export content true false)
-        (latex/latex (str (d/squuid)) content true false))
+        (if (config/db-based-graph? (state/get-current-repo))
+          [:div.warning "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command instead."]
+          (latex/latex (str (d/squuid)) content true false)))
 
       ["Custom" "query" _options _result content]
-      (try
-        (let [query (common-util/safe-read-map-string content)]
-          (query/custom-query (wrap-query-components config) query))
-        (catch :default e
-          (log/error :read-string-error e)
-          (ui/block-error "Invalid query:" {:content content})))
+      (if (config/db-based-graph? (state/get-current-repo))
+        [:div.warning "#+BEGIN_QUERY is deprecated. Use '/Advanced Query' command instead."]
+        (try
+          (let [query (common-util/safe-read-map-string content)]
+            (query/custom-query (wrap-query-components config) query))
+          (catch :default e
+            (log/error :read-string-error e)
+            (ui/block-error "Invalid query:" {:content content}))))
 
       ["Custom" "note" _options result _content]
       (ui/admonition "note" (markup-elements-cp config result))
