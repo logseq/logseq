@@ -450,6 +450,10 @@
           (asset-loader @src
                         #(audio-cp @src))
 
+          (contains? config/video-formats ext)
+          [:video {:src @src
+                   :controls true}]
+
           (contains? (common-config/img-formats) ext)
           (asset-loader @src
                         #(resizable-image config title @src metadata full_text true))
