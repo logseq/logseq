@@ -382,6 +382,34 @@
            :controls true
            :on-touch-start #(util/stop %)}])
 
+(defn- open-pdf-file
+  [e block href]
+  (when-let [s (or href (some-> (.-target e) (.-dataset) (.-href)))]
+    (let [load$ (fn []
+                  (p/let [href (or href
+                                   (if (or (mobile-util/native-platform?) (util/electron?))
+                                     s
+                                     (assets-handler/make-asset-url s)))]
+                    (when-let [current (pdf-assets/inflate-asset s {:block block
+                                                                    :href href})]
+                      (state/set-current-pdf! current)
+                      (util/stop e))))]
+      (-> (load$)
+          (p/catch
+           (fn [^js _e]
+             ;; load pdf asset to indexed db
+             (p/let [[handle] (js/window.showOpenFilePicker
+                               (bean/->js {:multiple false :startIn "documents" :types [{:accept {"application/pdf" [".pdf"]}}]}))
+                     file (.getFile handle)
+                     buffer (.arrayBuffer file)]
+               (when-let [content (some-> buffer (js/Uint8Array.))]
+                 (let [repo (state/get-current-repo)
+                       file-rpath (string/replace s #"^[.\/\\]*assets[\/\\]+" "assets/")
+                       dir (config/get-repo-dir repo)]
+                   (-> (fs/write-file! repo dir file-rpath content nil)
+                       (p/then load$)))))
+             (js/console.error _e)))))))
+
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
   [state config title href metadata full_text]
@@ -429,7 +457,9 @@
 
           (= ext :pdf)
           [:a.asset-ref.is-pdf {:href @src
-                                :on-click share-fn}
+                                :on-click (fn [e]
+                                            (util/stop e)
+                                            (open-pdf-file e (:asset-block config) @src))}
            title]
 
           :else
@@ -873,7 +903,8 @@
 (rum/defc asset-cp
   [config block]
   (let [asset-type (:logseq.property.asset/type block)]
-    (asset-link config (:block/title block)
+    (asset-link (assoc config :asset-block block)
+                (:block/title block)
                 (path/path-join (str "../" common-config/local-assets-dir) (str (:block/uuid block) "." asset-type))
                 nil
                 nil)))
@@ -1230,30 +1261,7 @@
       (= ext :pdf)
       [:a.asset-ref.is-pdf
        {:data-href s
-        :on-click (fn [^js e]
-                    (when-let [s (some-> (.-target e) (.-dataset) (.-href))]
-                      (let [load$ (fn []
-                                    (p/let [href (if (or (mobile-util/native-platform?) (util/electron?))
-                                                   s
-                                                   (assets-handler/make-asset-url s))]
-                                      (when-let [current (pdf-assets/inflate-asset s {:href href})]
-                                        (state/set-current-pdf! current)
-                                        (util/stop e))))]
-                        (-> (load$)
-                            (p/catch
-                             (fn [^js _e]
-                              ;; load pdf asset to indexed db
-                               (p/let [[handle] (js/window.showOpenFilePicker
-                                                 (bean/->js {:multiple false :startIn "documents" :types [{:accept {"application/pdf" [".pdf"]}}]}))
-                                       file (.getFile handle)
-                                       buffer (.arrayBuffer file)]
-                                 (when-let [content (some-> buffer (js/Uint8Array.))]
-                                   (let [repo (state/get-current-repo)
-                                         file-rpath (string/replace s #"^[.\/\\]*assets[\/\\]+" "assets/")
-                                         dir (config/get-repo-dir repo)]
-                                     (-> (fs/write-file! repo dir file-rpath content nil)
-                                         (p/then load$)))))
-                               (js/console.error _e)))))))
+        :on-click (fn [^js e] (open-pdf-file e (:asset-block config) nil))
         :draggable true
         :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" s)}
        (or label-text
