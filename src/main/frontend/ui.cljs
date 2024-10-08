@@ -747,7 +747,7 @@
                 (when-let [f (:init-collapsed (last (:rum/args state)))]
                   (f (::collapsed? state)))
                 state)}
-  [state header content {:keys [title-trigger? on-pointer-down class
+  [state header content {:keys [title-trigger? on-pointer-down class disable-on-pointer-down?
                                 _default-collapsed? _init-collapsed]}]
   (let [collapsed? (get state ::collapsed?)
         on-pointer-down (fn [e]
@@ -761,8 +761,9 @@
                       :header header
                       :title-trigger? title-trigger?
                       :collapsed? collapsed?})
-     [:div {:class (if @collapsed? "hidden" "initial")
-            :on-pointer-down (fn [e] (.stopPropagation e))}
+     [:div (cond-> {:class (if @collapsed? "hidden" "initial")}
+             (not disable-on-pointer-down?)
+             (assoc :on-pointer-down (fn [e] (.stopPropagation e))))
       (if (fn? content)
         (if (not @collapsed?) (content) nil)
         content)]]))
