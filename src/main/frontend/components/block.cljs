@@ -2513,12 +2513,12 @@
     (when (seq properties)
       (case position
         :block-below
-        [:div.positioned-properties.block-below.flex.flex-row.gap-1.item-center.flex-wrap.text-sm.overflow-x-hidden.max-h-6
+        [:div.positioned-properties.block-below.flex.flex-row.gap-1.item-center.flex-wrap.text-sm.overflow-x-hidden
          (for [pid properties]
            (let [property (db/entity pid)
                  v (get block pid)]
              [:div.flex.flex-row.items-center.gap-2.hover:bg-secondary.rounded
-              [:div.flex.flex-row.opacity-50.hover:opacity-100
+              [:div.flex.flex-row.opacity-50.hover:opacity-100.items-center
                (property-component/property-key-cp block property opts)
                [:div.select-none ":"]]
               (pv/property-value block property v opts)]))]
