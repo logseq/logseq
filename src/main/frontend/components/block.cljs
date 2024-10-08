@@ -2161,17 +2161,20 @@
   [config block]
   (let [collapsed? (:collapsed? config)
         block' (db/entity (:db/id block))
-        node-type (:logseq.property.node/display-type block')
+        node-display-type (:logseq.property.node/display-type block')
         query? (ldb/class-instance? (db/entity :logseq.class/Query) block')
         query (:logseq.property/query block')
-        advanced-query? (and query? (= :code node-type))]
+        advanced-query? (and query? (= :code node-display-type))]
     (cond
-      (= :code node-type)
+      (= "asset" (:block/type block))
+      (asset-cp config block)
+
+      (= :code node-display-type)
       [:div.flex.flex-1.w-full
        (src-cp (assoc config :block block) {:language (:logseq.property.code/lang block)})]
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
-      (= :math node-type)
+      (= :math node-display-type)
       (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
 
       (and query?

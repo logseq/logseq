@@ -290,6 +290,17 @@
         :where
         [?tag :block/type "class"]]))
 
+(defn <get-asset-with-checksum
+  [graph checksum]
+  (p/let [result (<q graph {:transact-db? true}
+                     '[:find [?b ...]
+                       :in $ ?checksum
+                       :where
+                       [?b :logseq.property.asset/checksum ?checksum]]
+                     checksum)]
+    (some-> (first result)
+            db/entity)))
+
 (comment
   (defn <fetch-all-pages
     [graph]

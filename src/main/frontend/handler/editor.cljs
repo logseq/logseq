@@ -1524,67 +1524,77 @@
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
 
-   Returns: [file-rpath file-obj file-fpath]"
+   Returns: asset entity"
   ([repo files]
    (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
      (db-based-save-assets! repo repo-dir assets-dir files)))
   ([repo repo-dir asset-dir-rpath files]
    (p/all
-    (for [[index ^js file] (map-indexed vector files)]
+    (for [[_index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
       (p/let [file-name (util/node-path.basename (.-name file))
               checksum (assets-handler/get-file-checksum file)
-              block-id (ldb/new-block-id)
-              ext (when file-name
-                    (string/lower-case (.substr (util/node-path.extname file-name) 1)))
-              _ (when (string/blank? ext)
-                  (throw (ex-info "File doesn't have a valid ext."
-                                  {:file-name file-name})))
-              file-path   (str block-id "." ext)
-              file-rpath  (str asset-dir-rpath "/" file-path)
-              dir repo-dir
-              asset (db/entity :logseq.class/Asset)
-              properties {:logseq.property.asset/type ext
-                          :logseq.property.asset/size (.-size file)
-                          :logseq.property.asset/checksum checksum
-                          :block/tags (:db/id asset)}
-              result (api-insert-new-block! file-name
-                                            {:page (:block/uuid asset)
-                                             :custom-uuid block-id
-                                             :edit-block? false
-                                             :properties properties})
-              new-entity (db/entity [:block/uuid (:block/uuid result)])]
-        (if (util/electron?)
-          (let [from (not-empty (.-path file))]
-            (js/console.debug "Debug: Copy Asset #" dir file-rpath from)
-            (-> (js/window.apis.copyFileToAssets dir file-rpath from)
-                (p/then
-                 (fn [_dest]
-                   new-entity))
-                (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
+              existing-asset (db-async/<get-asset-with-checksum repo checksum)]
+        (if existing-asset
+          existing-asset
+          (p/let [block-id (ldb/new-block-id)
+                  ext (when file-name
+                        (string/lower-case (.substr (util/node-path.extname file-name) 1)))
+                  _ (when (string/blank? ext)
+                      (throw (ex-info "File doesn't have a valid ext."
+                                      {:file-name file-name})))
+                  file-path   (str block-id "." ext)
+                  file-rpath  (str asset-dir-rpath "/" file-path)
+                  dir repo-dir
+                  asset (db/entity :logseq.class/Asset)
+                  properties {:block/type "asset"
+                              :logseq.property.asset/type ext
+                              :logseq.property.asset/size (.-size file)
+                              :logseq.property.asset/checksum checksum
+                              :block/tags (:db/id asset)}
+                  insert-opts {:custom-uuid block-id
+                               :edit-block? false
+                               :properties properties}
+                  edit-block (state/get-edit-block)
+                  insert-opts' (if (:block/uuid edit-block)
+                                 (assoc insert-opts
+                                        :block-uuid (:block/uuid edit-block)
+                                        :replace-empty-target? true
+                                        :sibling? true)
+                                 (assoc insert-opts :page (:block/uuid asset)))
+                  result (api-insert-new-block! file-name insert-opts')
+                  new-entity (db/entity [:block/uuid (:block/uuid result)])]
+            (if (util/electron?)
+              (let [from (not-empty (.-path file))]
+                (js/console.debug "Debug: Copy Asset #" dir file-rpath from)
+                (-> (js/window.apis.copyFileToAssets dir file-rpath from)
+                    (p/then
+                     (fn [_dest]
+                       new-entity))
+                    (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
-          (->
-           (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
-                  (cond
-                    (mobile-util/native-platform?)
+              (->
+               (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
+                      (cond
+                        (mobile-util/native-platform?)
                     ;; capacitor fs accepts Blob, File implements Blob
-                    (p/let [buffer (.arrayBuffer file)
-                            content (base64/encodeByteArray (js/Uint8Array. buffer))
-                            fpath (path/path-join dir file-rpath)]
-                      (capacitor-fs/<write-file-with-base64 fpath content))
+                        (p/let [buffer (.arrayBuffer file)
+                                content (base64/encodeByteArray (js/Uint8Array. buffer))
+                                fpath (path/path-join dir file-rpath)]
+                          (capacitor-fs/<write-file-with-base64 fpath content))
 
-                    (config/db-based-graph? repo) ;; memory-fs
-                    (p/let [buffer (.arrayBuffer file)
-                            content (js/Uint8Array. buffer)]
-                      (fs/write-file! repo dir file-rpath content nil))
+                        (config/db-based-graph? repo) ;; memory-fs
+                        (p/let [buffer (.arrayBuffer file)
+                                content (js/Uint8Array. buffer)]
+                          (fs/write-file! repo dir file-rpath content nil))
 
-                    :else
-                    (throw (ex-info "Paste failed"
-                                    {:file-name file-name})))
-                  new-entity)
-           (p/catch (fn [error]
-                      (prn :paste-file-error)
-                      (js/console.error error))))))))))
+                        :else
+                        (throw (ex-info "Paste failed"
+                                        {:file-name file-name})))
+                      new-entity)
+               (p/catch (fn [error]
+                          (prn :paste-file-error)
+                          (js/console.error error))))))))))))
 
 (defn db-upload-assets!
   "Paste asset and insert link to current editing block"
