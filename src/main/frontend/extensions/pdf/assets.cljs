@@ -184,7 +184,7 @@
   (p/let [blocks (db-async/<get-page-all-blocks (:block/uuid hls-page))]
     {:highlights (keep :logseq.property.pdf/hl-value blocks)}))
 
-(defn load-hls-data$
+(defn file-based-load-hls-data$
   [{:keys [hls-file]}]
   (when hls-file
     (let [repo (state/get-current-repo)
@@ -198,7 +198,7 @@
             (construct-highlights-from-hls-page hls-page))
           data)))))
 
-(defn persist-hls-data$
+(defn file-based-persist-hls-data$
   [{:keys [hls-file]} highlights extra]
   (when hls-file
     (let [repo-cur (state/get-current-repo)
@@ -206,11 +206,11 @@
           data     (with-out-str (pprint {:highlights highlights :extra extra}))]
       (fs/write-file! repo-cur repo-dir hls-file data {:skip-compare? true}))))
 
-(defn resolve-hls-data-by-key$
+(defn file-based-resolve-hls-data-by-key$
   [target-key]
   ;; TODO: fuzzy match
   (when-let [hls-file (and target-key (str common-config/local-assets-dir "/" target-key ".edn"))]
-    (load-hls-data$ {:hls-file hls-file})))
+    (file-based-load-hls-data$ {:hls-file hls-file})))
 
 (defn area-highlight?
   [hl]
@@ -308,7 +308,7 @@
         hl-value (pu/get-block-property-value block :logseq.property.pdf/hl-value)
         db-base? (config/db-based-graph? (state/get-current-repo))]
     (when-let [target-key (and page-name (subs page-name 5))]
-      (p/let [hls (resolve-hls-data-by-key$ target-key)
+      (p/let [hls (file-based-resolve-hls-data-by-key$ target-key)
               hls (and hls (:highlights hls))
               file-path (or file-path (str "../assets/" target-key ".pdf"))
               href (and db-base? (assets-handler/make-asset-url file-path))]
