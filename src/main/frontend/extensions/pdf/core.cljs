@@ -896,7 +896,7 @@
       (rum/use-effect!
        (fn []
          (when pdf-current
-           (pdf-assets/ensure-ref-page! pdf-current)))
+           (pdf-assets/file-based-ensure-ref-page! pdf-current)))
        [pdf-current]))
 
     ;; load highlights

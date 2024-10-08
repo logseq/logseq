@@ -69,7 +69,7 @@
     (-> (str common-config/local-assets-dir "/" key "/")
         (str (util/format "%s_%s_%s.png" page id img-stamp)))))
 
-(defn ensure-ref-page!
+(defn file-based-ensure-ref-page!
   [pdf-current]
   ;; db version doesn't need a page for highlights data
   (when-not (config/db-based-graph? (state/get-current-repo))
@@ -90,7 +90,7 @@
              (page-handler/<create! page-name {:redirect?        false :create-first-block? false
                                                :split-namespace? false
                                                :format           format
-                                               :properties       {(pu/get-pid :logseq.property.pdf/file)
+                                               :properties       {:file
                                                                   (case format
                                                                     :markdown
                                                                     (util/format "[%s](%s)" label url)
@@ -99,7 +99,7 @@
                                                                     (util/format "[[%s][%s]]" url label)
 
                                                                     url)
-                                                                  (pu/get-pid :logseq.property.pdf/file-path)
+                                                                  :file-path
                                                                   url}})
              (db-model/get-page page-name)))
 
@@ -107,14 +107,13 @@
           ;; try to update file path
             (when (nil? (some-> page
                                 (:block/properties)
-                                (get (pu/get-pid :logseq.property.pdf/file-path))))
-              (property-handler/add-page-property!
-               page-name (pu/get-pid :logseq.property.pdf/file-path) url))
+                                :file-path))
+              (property-handler/add-page-property! page-name :file-path url))
             page))))))
 
 (defn file-based-ensure-ref-block!
   [pdf-current {:keys [id content page properties] :as hl} insert-opts]
-  (p/let [ref-page (when pdf-current (ensure-ref-page! pdf-current))]
+  (p/let [ref-page (when pdf-current (file-based-ensure-ref-page! pdf-current))]
     (when ref-page
       (let [ref-block (db-model/query-block-by-uuid id)]
         (if-not (nil? (:block/title ref-block))
@@ -194,7 +193,7 @@
               res  (fs/read-file repo-dir hls-file)
               data (if res (reader/read-string res) {})]
         (if db-base?
-          (p/let [hls-page (ensure-ref-page! (state/get-current-pdf))]
+          (p/let [hls-page (file-based-ensure-ref-page! (state/get-current-pdf))]
             (construct-highlights-from-hls-page hls-page))
           data)))))
 
@@ -320,7 +319,7 @@
   (let [id (:block/uuid block)
         page (db/entity (:db/id (:block/page block)))
         page-name (:block/title page)
-        file-path (pu/get-block-property-value block :logseq.property.pdf/file-path)
+        file-path (get-in block [:block/properties :file-path])
         hl-page (pu/get-block-property-value block :logseq.property.pdf/hl-page)
         hl-value (pu/get-block-property-value block :logseq.property.pdf/hl-value)
         db-base? (config/db-based-graph? (state/get-current-repo))]

@@ -82,7 +82,8 @@
                                                     :hide? true}}
    :logseq.property/built-in?             {:schema {:type :checkbox
                                                     :hide? true}}
-   :logseq.property/asset   {:schema {:type :entity
+   :logseq.property/asset   {:title "Asset"
+                             :schema {:type :entity
                                       :hide? true}}
    :logseq.property/ls-type {:schema {:type :keyword
                                       :hide? true}}
@@ -91,10 +92,6 @@
    :logseq.property.pdf/hl-page {:schema {:type :number :hide? true}}
    :logseq.property.pdf/hl-image {:schema {:type :entity :hide? true}}
    :logseq.property.pdf/hl-value {:schema {:type :map :hide? true}}
-   :logseq.property.pdf/file
-   {:schema {:type :default :hide? true :public? true :view-context :page}}
-   :logseq.property.pdf/file-path
-   {:schema {:type :default :hide? true :public? true :view-context :page}}
    :logseq.property/order-list-type {:name :logseq.order-list-type
                                      :schema {:type :default
                                               :hide? true}}
