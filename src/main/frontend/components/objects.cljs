@@ -159,7 +159,7 @@
                                                       (set-data! (get-class-objects class))
                                                       (when-let [f (get-in table [:data-fns :set-row-selection!])]
                                                         (f {})))))})
-        {})])))
+        {:disable-on-pointer-down? true})])))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class]
@@ -241,7 +241,7 @@
                                                        (set-data! (get-property-related-objects (state/get-current-repo) property))
                                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
                                                          (f {}))))))})
-       {}))))
+       {:disable-on-pointer-down? true}))))
 
 ;; Show all nodes containing the given property
 (rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id

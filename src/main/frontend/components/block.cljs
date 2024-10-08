@@ -2747,16 +2747,19 @@
                      (count (:block/_refs block))
                      (rum/react *refs-count))
         table? (:table? config)
+        editor-block (state/sub :editor/block)
+        raw-mode-block (state/sub :editor/raw-mode-block)
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
-                                (not= (:db/id block) (:db/id (state/sub :editor/raw-mode-block))))
-        config (assoc config :block-parent-id block-id)]
+                                (not= (:db/id block) (:db/id raw-mode-block)))
+        config (assoc config :block-parent-id block-id)
+        editing-local? (or edit? (and editor-block (= (:db/id editor-block) (:db/id block))))]
     [:div.block-content-or-editor-wrap
      {:class (when (:page-title? config) "ls-page-title-container")
       :data-node-type (some-> (:logseq.property.node/display-type block) name)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
       [:div.flex.flex-1.flex-row.gap-1.items-center
-       (if (and edit? editor-box (not type-block-editor?))
+       (if (and editor-box editing-local? (not type-block-editor?))
          [:div.editor-wrapper.flex.flex-1
           {:id editor-id
            :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
