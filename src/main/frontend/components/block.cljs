@@ -295,7 +295,7 @@
                              (let [size (bean/->clj @size)]
                                (editor-handler/resize-image! block-id metadata full-text size))))
                          (when @*resizing-image?
-                              ;; TODO:​ need a better way to prevent the clicking to edit current block
+                           ;; TODO:​ need a better way to prevent the clicking to edit current block
                            (js/setTimeout #(reset! *resizing-image? false) 200)))
           :onClick (fn [e]
                      (when @*resizing-image? (util/stop e)))}
