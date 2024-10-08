@@ -1572,7 +1572,6 @@
                      (fn [_dest]
                        new-entity))
                     (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
-
               (->
                (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
                       (cond

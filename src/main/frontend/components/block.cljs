@@ -389,7 +389,7 @@
                   (p/let [href (or href
                                    (if (or (mobile-util/native-platform?) (util/electron?))
                                      s
-                                     (assets-handler/make-asset-url s)))]
+                                     (assets-handler/<make-asset-url s)))]
                     (when-let [current (pdf-assets/inflate-asset s {:block block
                                                                     :href href})]
                       (state/set-current-pdf! current)
@@ -421,7 +421,7 @@
                    (mobile-util/native-platform?)
                    (config/db-based-graph? (state/get-current-repo)))
                (nil? @src))
-      (p/then (assets-handler/make-asset-url href) #(reset! src %)))
+      (p/then (assets-handler/<make-asset-url href) #(reset! src %)))
 
     (when @src
       (let [ext (keyword (or (util/get-file-ext @src)
@@ -2127,7 +2127,8 @@
                        [:label.blank " "]]
 
                       (when (and area?
-                                 (pu/lookup properties :logseq.property.pdf/hl-stamp))
+                                 (or (:hl-stamp properties)
+                                     (:logseq.property.pdf/hl-image properties)))
                         (pdf-assets/area-display block))])]
        (remove-nils
         (concat

@@ -4,25 +4,25 @@
             [logseq.db.frontend.rules :as rules]
             [clojure.set :as set]
             [clojure.string :as string]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn ^:api get-area-block-asset-url
   "Returns asset url for an area block used by pdf assets. This lives in this ns
   because it is used by this dep and needs to be independent from the frontend app"
   [db block page]
-  (when-some [props (and block page (:block/properties block))]
-    ;; Can't use db-property-util/lookup b/c repo isn't available
-    (let [prop-lookup-fn (if (entity-util/db-based-graph? db)
-                           #(db-property/property-value-content (get %1 %2))
-                           #(get %1 (keyword (name %2))))]
-      (when-some [uuid' (:block/uuid block)]
-        (when-some [stamp (prop-lookup-fn props :logseq.property.pdf/hl-stamp)]
-          (let [group-key      (string/replace-first (:block/title page) #"^hls__" "")
-                hl-page        (prop-lookup-fn props :logseq.property.pdf/hl-page)
-                encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
-                group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
-            (str "./assets/" group-key "/" (str hl-page "_" uuid' "_" stamp ".png"))))))))
+  (let [db-based? (entity-util/db-based-graph? db)]
+    (when-some [uuid' (:block/uuid block)]
+      (if db-based?
+        (when-let [image (:logseq.property.pdf/hl-image block)]
+          (str "./assets/" (:block/uuid image) ".png"))
+        (let [props (and block page (:block/properties block))
+              prop-lookup-fn #(get %1 (keyword (name %2)))]
+          (when-some [stamp (:hl-stamp props)]
+            (let [group-key      (string/replace-first (:block/title page) #"^hls__" "")
+                  hl-page        (prop-lookup-fn props :logseq.property.pdf/hl-page)
+                  encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
+                  group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
+              (str "./assets/" group-key "/" (str hl-page "_" uuid' "_" stamp ".png")))))))))
 
 (defn- clean-asset-path-prefix
   [path]

@@ -22,7 +22,8 @@
             [frontend.ui :as ui]
             [frontend.db.async :as db-async]
             [goog.functions :refer [debounce]]
-            [frontend.handler.property :as property-handler]))
+            [frontend.handler.property :as property-handler]
+            [datascript.impl.entity :as de]))
 
 (declare pdf-container system-embed-playground)
 
@@ -174,11 +175,11 @@
                                (let [highlight (merge highlight
                                                       {:id         (pdf-utils/gen-uuid)
                                                        :properties properties})]
-                                 (add-hl! highlight)
-                                 (pdf-utils/clear-all-selection)
-                                 (pdf-assets/copy-hl-ref! highlight viewer))
+                                 (p/let [highlight' (add-hl! highlight)]
+                                   (pdf-utils/clear-all-selection)
+                                   (pdf-assets/copy-hl-ref! highlight' viewer)))
 
-                               ;; update highlight
+;; update highlight
                                (upd-hl! (assoc highlight :properties properties)))
 
                              (reset! *highlight-last-color (keyword action)))))
@@ -327,18 +328,21 @@
                                                   (let [hl' (assoc hl :position to-sc-pos)
                                                         hl' (assoc-in hl' [:content :image] (js/Date.now))]
 
-                                                    (p/then
-                                                     (pdf-assets/persist-hl-area-image$ viewer
-                                                                                        (:pdf/current @state/state)
-                                                                                        hl' hl (:bounding to-vw-pos))
-                                                     (fn [] (js/setTimeout
-                                                             #(do
-                                                                ;; reset dom effects
-                                                                (set! (.. target -style -transform) (str "translate(0, 0)"))
-                                                                (.removeAttribute target "data-x")
-                                                                (.removeAttribute target "data-y")
+                                                    (p/let [result (pdf-assets/persist-hl-area-image$ viewer
+                                                                                                      (:pdf/current @state/state)
+                                                                                                      hl' hl (:bounding to-vw-pos))]
 
-                                                                (update-hl! hl')) 200))))
+                                                      (js/setTimeout
+                                                       #(do
+                                                           ;; reset dom effects
+                                                          (set! (.. target -style -transform) (str "translate(0, 0)"))
+                                                          (.removeAttribute target "data-x")
+                                                          (.removeAttribute target "data-y")
+                                                          (let [hl' (if (de/entity? result)
+                                                                      (assoc-in hl' [:content :image] (:db/id result))
+                                                                      hl')]
+                                                            (update-hl! hl')))
+                                                       200)))
 
                                                   (js/setTimeout #(rum/set-ref! *dirty false))))
 
@@ -505,7 +509,7 @@
                                         hl          {:id         nil
                                                      :page       page-number
                                                      :position   sc-pos
-                                                     :content    {:text "[:span]" :image (js/Date.now)}
+                                                     :content    {:text "" :image (js/Date.now)}
                                                      :properties {}}]
 
                                      ;; ctx tips for area
@@ -557,15 +561,22 @@
         add-hl! (fn [hl]
                   (when (:id hl)
                     ;; fix js object
-                    (let [highlights (pdf-utils/fix-nested-js highlights)]
-                      (set-highlights! (conj highlights hl)))
+                    (let [highlights (pdf-utils/fix-nested-js highlights)
+                          highlights' (conj highlights hl)]
+                      (set-highlights! highlights')
 
-                    (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
-                                           (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
-                      ;; exceptions
-                      (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
-                                                         hl nil (:bounding vw-pos)))))
-
+                      (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
+                                             (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
+                        ;; exceptions
+                        (->
+                         (p/let [result (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
+                                                                           hl nil (:bounding vw-pos))]
+                           (when (de/entity? result)
+                             (let [hl' (assoc-in hl [:content :image] (:db/id result))]
+                               (set-highlights! (map (fn [hl] (if (= (:id hl) (:id hl')) hl' hl)) highlights'))
+                               hl')))
+                         (p/catch (fn [e]
+                                    (js/console.error e))))))))
         upd-hl! (fn [hl]
                   (let [highlights (pdf-utils/fix-nested-js highlights)]
                     (when-let [[target-idx] (medley/find-first
@@ -713,12 +724,11 @@
      (pdf-page-finder viewer)
 
      ;; area selection container
-     (when (pdf-utils/support-area?)
-       (pdf-highlight-area-selection
-        viewer
-        {:clear-ctx-menu! clear-ctx-menu!
-         :show-ctx-menu! show-ctx-menu!
-         :add-hl! add-hl!}))]))
+     (pdf-highlight-area-selection
+      viewer
+      {:clear-ctx-menu! clear-ctx-menu!
+       :show-ctx-menu! show-ctx-menu!
+       :add-hl! add-hl!})]))
 
 (rum/defc ^:large-vars/data-var pdf-viewer
   [_url ^js pdf-document {:keys [identity filename initial-hls initial-page initial-error]} ops]

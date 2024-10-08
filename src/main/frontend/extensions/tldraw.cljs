@@ -132,7 +132,7 @@
                          (model/whiteboard-page? entity)))
    :isMobile util/mobile?
    :saveAsset save-asset-handler
-   :makeAssetUrl assets-handler/make-asset-url
+   :makeAssetUrl assets-handler/<make-asset-url
    :inflateAsset (fn [src] (clj->js (pdf-assets/inflate-asset src)))
    :setCurrentPdf (fn [src] (state/set-current-pdf! (if src (pdf-assets/inflate-asset src) nil)))
    :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
