@@ -124,8 +124,8 @@
           (let [text       (:text content)
                 wrap-props #(if-let [stamp (:image content)]
                               (assoc %
-                                     (pu/get-pid :logseq.property/hl-type) :area
-                                     (pu/get-pid :logseq.property.pdf/hl-stamp) stamp)
+                                     :hl-type :area
+                                     :hl-stamp stamp)
                               %)
                 db-base? (config/db-based-graph? (state/get-current-repo))
                 props (cond->
@@ -164,7 +164,7 @@
                            :logseq.property.pdf/hl-value hl}
                            (:image content)
                            (assoc :logseq.property/hl-type :area
-                                  :logseq.property.pdf/hl-stamp (:image content)))]
+                                  :logseq.property.pdf/hl-image (:image content)))]
           (when (string? text)
             (editor-handler/api-insert-new-block!
              text (merge {:block-uuid (:block/uuid pdf-block)
@@ -216,6 +216,36 @@
   [hl]
   (and hl (not (nil? (get-in hl [:content :image])))))
 
+(defn- file-based-persist-hl-area-image
+  [repo-url repo-dir current new-hl old-hl png]
+  (p/let [_          (js/console.time :write-area-image)
+          ^js png    (.arrayBuffer png)
+          {:keys [key]} current
+                                  ;; dir
+          fstamp     (get-in new-hl [:content :image])
+          old-fstamp (and old-hl (get-in old-hl [:content :image]))
+          fname      (str (:page new-hl) "_" (:id new-hl))
+          fdir       (str common-config/local-assets-dir "/" key)
+          _          (fs/mkdir-if-not-exists (path/path-join repo-dir fdir))
+          new-fpath  (str fdir "/" fname "_" fstamp ".png")
+          old-fpath  (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
+          _          (and old-fpath (fs/rename! repo-url old-fpath new-fpath))
+          _          (fs/write-file! repo-url repo-dir new-fpath png {:skip-compare? true})]
+
+    (js/console.timeEnd :write-area-image)))
+
+(defn- db-based-persist-hl-area-image
+  [repo png]
+  (let [file (js/File. #js [png] "pdf area highlight.png")]
+    (editor-handler/db-based-save-assets! repo [file])))
+
+(defn- persist-hl-area-image
+  [repo-url repo-dir current new-hl old-hl png]
+  (if (config/db-based-graph?)
+    (p/let [result (db-based-persist-hl-area-image repo-url png)]
+      (first result))
+    (file-based-persist-hl-area-image repo-url repo-dir current new-hl old-hl png)))
+
 (defn persist-hl-area-image$
   "Save pdf highlight area image"
   [^js viewer current new-hl old-hl {:keys [top left width height]}]
@@ -238,40 +268,27 @@
          (* left dpr) (* top dpr) (* width dpr) (* height dpr)
          0 0 dw dh)
 
-        (let [callback (fn [^js png]
-                         ;; write image file
-                         (p/catch
-                          (p/let [_          (js/console.time :write-area-image)
-                                  ^js png    (.arrayBuffer png)
-                                  {:keys [key]} current
-                                  ;; dir
-                                  fstamp     (get-in new-hl [:content :image])
-                                  old-fstamp (and old-hl (get-in old-hl [:content :image]))
-                                  fname      (str (:page new-hl) "_" (:id new-hl))
-                                  fdir       (str common-config/local-assets-dir "/" key)
-                                  _          (fs/mkdir-if-not-exists (path/path-join repo-dir fdir))
-                                  new-fpath  (str fdir "/" fname "_" fstamp ".png")
-                                  old-fpath  (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
-                                  _          (and old-fpath (fs/rename! repo-url old-fpath new-fpath))
-                                  _          (fs/write-file! repo-url repo-dir new-fpath png {:skip-compare? true})]
-
-                            (js/console.timeEnd :write-area-image))
-
-                          (fn [err]
-                            (js/console.error "[write area image Error]" err))))]
-
-          (.toBlob canvas' callback))))))
+        (js/Promise.
+         (fn [resolve reject]
+           (.toBlob canvas'
+                    (fn [^js png]
+                      (p/catch
+                       (resolve (persist-hl-area-image repo-url repo-dir current new-hl old-hl png))
+                       (fn [err]
+                         (reject err)
+                         (js/console.error "[write area image Error]" err)))))))))))
 
 (defn update-hl-block!
   [highlight]
-  (when-let [block (db-model/get-block-by-uuid (:id highlight))]
-    (doseq [[k v] {(pu/get-pid :logseq.property.pdf/hl-stamp)
-                   (if (area-highlight? highlight)
-                     (get-in highlight [:content :image])
-                     (js/Date.now))
-                   (pu/get-pid :logseq.property/hl-color)
-                   (get-in highlight [:properties :color])}]
-      (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k v))))
+  (let [db-based? (config/db-based-graph?)]
+    (when-let [block (db-model/get-block-by-uuid (:id highlight))]
+      (doseq [[k v] {(if db-based? :logseq.property.pdf/hl-image :hl-stamp)
+                     (if (area-highlight? highlight)
+                       (get-in highlight [:content :image])
+                       (js/Date.now))
+                     (pu/get-pid :logseq.property/hl-color)
+                     (get-in highlight [:properties :color])}]
+        (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k v)))))
 
 (defn unlink-hl-area-image$
   [^js _viewer current hl]
@@ -311,7 +328,7 @@
       (p/let [hls (file-based-resolve-hls-data-by-key$ target-key)
               hls (and hls (:highlights hls))
               file-path (or file-path (str "../assets/" target-key ".pdf"))
-              href (and db-base? (assets-handler/make-asset-url file-path))]
+              href (and db-base? (assets-handler/<make-asset-url file-path))]
         (if-let [matched (or (and hls (medley/find-first #(= id (:id %)) hls))
                              (if hl-page {:page hl-page}
                                  (when-let [page (some-> hl-value :page)] {:page page})))]
@@ -328,7 +345,7 @@
         file-path (str "../assets/" (:block/uuid asset) ".pdf")]
     (if asset
       (->
-       (p/let [href (assets-handler/make-asset-url file-path)]
+       (p/let [href (assets-handler/<make-asset-url file-path)]
          (state/set-state! :pdf/ref-highlight hl-value)
         ;; open pdf viewer
          (state/set-current-pdf! (inflate-asset file-path {:href href :block asset})))
@@ -379,31 +396,36 @@
     (when (seq images)
       (lightbox/preview-images! images))))
 
-(rum/defc area-display
-  [block]
-  (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
-                                     (conn/get-db (state/get-current-repo))
-                                     block
-                                     (db-utils/pull (:db/id (:block/page block)))))]
-    (let [asset-path (assets-handler/make-asset-url asset-path')]
-      [:span.hl-area
-       [:span.actions
-        (when-not config/publishing?
+(rum/defcs area-display <
+  (rum/local nil ::src)
+  [state block]
+  (let [*src (::src state)]
+    (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
+                                       (conn/get-db (state/get-current-repo))
+                                       block
+                                       (db-utils/pull (:db/id (:block/page block)))))]
+      (when (nil? @*src)
+        (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
+          (reset! *src asset-path)))
+      (when @*src
+        [:span.hl-area
+         [:span.actions
+          (when-not config/publishing?
+            [:button.asset-action-btn.px-1
+             {:title         (t :asset/copy)
+              :tabIndex      "-1"
+              :on-pointer-down util/stop
+              :on-click      (fn [e]
+                               (util/stop e)
+                               (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol @*src))
+                                   (p/then #(notification/show! "Copied!" :success))))}
+             (ui/icon "copy")])
+
           [:button.asset-action-btn.px-1
-           {:title         (t :asset/copy)
+           {:title         (t :asset/maximize)
             :tabIndex      "-1"
             :on-pointer-down util/stop
-            :on-click      (fn [e]
-                             (util/stop e)
-                             (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol asset-path))
-                                 (p/then #(notification/show! "Copied!" :success))))}
-           (ui/icon "copy")])
+            :on-click      open-lightbox}
 
-        [:button.asset-action-btn.px-1
-         {:title         (t :asset/maximize)
-          :tabIndex      "-1"
-          :on-pointer-down util/stop
-          :on-click      open-lightbox}
-
-         (ui/icon "maximize")]]
-       [:img {:src asset-path}]])))
+           (ui/icon "maximize")]]
+         [:img {:src @*src}]]))))
