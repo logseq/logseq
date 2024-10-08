@@ -1556,7 +1556,8 @@
                                :edit-block? false
                                :properties properties}
                   edit-block (state/get-edit-block)
-                  insert-opts' (if (:block/uuid edit-block)
+                  insert-opts' (if (and (:block/uuid edit-block)
+                                        (string/blank? (:block/title edit-block)))
                                  (assoc insert-opts
                                         :block-uuid (:block/uuid edit-block)
                                         :replace-empty-target? true
@@ -1576,7 +1577,7 @@
                (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
                       (cond
                         (mobile-util/native-platform?)
-                    ;; capacitor fs accepts Blob, File implements Blob
+                        ;; capacitor fs accepts Blob, File implements Blob
                         (p/let [buffer (.arrayBuffer file)
                                 content (base64/encodeByteArray (js/Uint8Array. buffer))
                                 fpath (path/path-join dir file-rpath)]

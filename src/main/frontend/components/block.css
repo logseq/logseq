@@ -52,6 +52,10 @@
     transform: translate3d(0, 0, 0);
   }
 
+  .image-resize {
+    display: flex;
+  }
+
   .draw [aria-labelledby="shapes-title"] {
     position: absolute;
     left: 50%;
