@@ -104,7 +104,7 @@
         [view-entity set-view-entity!] (rum/use-state class)
         [views set-views!] (rum/use-state [class])
         [data set-data!] (rum/use-state objects)
-        columns (views/build-columns config properties)]
+        columns (views/build-columns (assoc config :class class) properties)]
 
     (rum/use-effect!
      (fn []

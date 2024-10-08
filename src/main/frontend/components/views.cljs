@@ -113,7 +113,8 @@
 (defn build-columns
   [config properties & {:keys [with-object-name?]
                         :or {with-object-name? true}}]
-  (let [properties (if (some #(= (:db/ident %) :block/tags) properties)
+  (let [asset-class? (= :logseq.class/Asset (:db/ident (:class config)))
+        properties (if (some #(= (:db/ident %) :block/tags) properties)
                      properties
                      (conj properties (db/entity :block/tags)))]
     (->> (concat
@@ -130,7 +131,16 @@
               :type :string
               :header header-cp
               :cell (fn [_table row _column]
-                      (block-title config row))
+                      (block-title (assoc config :raw-title? true) row))
+              :disable-hide? true})
+           (when asset-class?
+             {:id :file
+              :name "File"
+              :type :string
+              :header header-cp
+              :cell (fn [_table row _column]
+                      (when-let [asset-cp (state/get-component :block/asset-cp)]
+                        [:div.block-content (asset-cp config row)]))
               :disable-hide? true})]
           (keep
            (fn [property]

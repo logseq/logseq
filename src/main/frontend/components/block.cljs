@@ -2182,6 +2182,9 @@
         query (:logseq.property/query block')
         advanced-query? (and query? (= :code node-display-type))]
     (cond
+      (:raw-title? config)
+      (text-block-title (dissoc config :raw-title?) block)
+
       (= "asset" (:block/type block))
       (asset-cp config block)
 
