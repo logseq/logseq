@@ -774,21 +774,6 @@ input::-webkit-inner-spin-button {
   }
 }
 
-.asset-ref {
-  &.is-pdf {
-    &:before {
-      content: "[[📚";
-      opacity: .7;
-      margin-right: 4px;
-    }
-
-    &:after {
-      content: "]]";
-      opacity: .7;
-    }
-  }
-}
-
 .block-ref {
   &-wrap {
     &[data-hl-type=area] {
