@@ -1140,15 +1140,20 @@
                                  :level :error
                                  :ex-data {:error error}}))))))
 
-(defn- export-config-file
+(defn export-config-file
+  "Exports logseq/config.edn by saving to database and setting any properties related to config"
   [repo-or-conn config-file <read-file {:keys [<save-file notify-user default-config]
                                         :or {default-config {}
                                              <save-file default-save-file}}]
   (-> (<read-file config-file)
       (p/then #(p/do!
                 (<save-file repo-or-conn "logseq/config.edn" %)
-                ;; Return original config as import process depends on original config e.g. :hidden
-                (edn/read-string %)))
+                (let [config (edn/read-string %)]
+                  (when-let [title-format (or (:journal/page-title-format config) (:date-formatter config))]
+                    (ldb/transact! repo-or-conn [{:db/ident :logseq.class/Journal
+                                                  :logseq.property.journal/title-format title-format}]))
+                  ;; Return original config as import process depends on original config e.g. :hidden
+                  config)))
       (p/catch (fn [err]
                  (notify-user {:msg "Import may have mistakes due to an invalid config.edn. Recommend re-importing with a valid config.edn"
                                :level :error
