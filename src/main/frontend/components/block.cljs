@@ -2513,7 +2513,7 @@
     (when (seq properties)
       (case position
         :block-below
-        [:div.positioned-properties.block-below.flex.flex-row.gap-1.item-center.flex-wrap.text-sm.overflow-x-hidden
+        [:div.positioned-properties.block-below.flex.flex-row.gap-2.item-center.flex-wrap.text-sm.overflow-x-hidden
          (for [pid properties]
            (let [property (db/entity pid)
                  v (get block pid)]
