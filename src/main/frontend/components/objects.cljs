@@ -139,7 +139,9 @@
                                  :views-title (class-views class views view-entity {:set-view-entity! set-view-entity!
                                                                                     :set-views! set-views!})
                                  :columns columns
-                                 :add-new-object! #(add-new-class-object! class set-data!)
+                                 :add-new-object! (when-not (= :logseq.class/Asset (:db/ident class))
+                                                    ;; TODO: support multiple assets upload
+                                                    #(add-new-class-object! class set-data!))
                                  :show-add-property? true
                                  :add-property! (fn []
                                                   (state/pub-event! [:editor/new-property {:block class
