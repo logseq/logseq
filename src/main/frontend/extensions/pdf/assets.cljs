@@ -55,7 +55,6 @@
                         (if web-link?
                           (str filekey "__" (hash url))
                           filekey))]
-
       {:key           key
        :block         block
        :identity      (subs key (- (count key) 15))
@@ -160,6 +159,7 @@
               properties (cond->
                           {:logseq.property/ls-type  :annotation
                            :logseq.property/hl-color (:color properties)
+                           :logseq.property/asset (:db/id pdf-block)
                            :logseq.property.pdf/hl-page  page
                            :logseq.property.pdf/hl-value hl}
                            (:image content)
@@ -298,7 +298,7 @@
        (block-ref/->block-ref (:block/uuid ref-block))
        :owner-window (pdf-windows/resolve-own-window viewer)))))
 
-(defn open-block-ref!
+(defn file-based-open-block-ref!
   [block]
   (let [id (:block/uuid block)
         page (db/entity (:db/id (:block/page block)))
@@ -321,6 +321,27 @@
             (state/set-current-pdf! (inflate-asset file-path {:href href})))
           (js/console.debug "[Unmatched highlight ref]" block))))))
 
+(defn db-based-open-block-ref!
+  [block]
+  (let [hl-value (:logseq.property.pdf/hl-value block)
+        asset (:logseq.property/asset block)
+        file-path (str "../assets/" (:block/uuid asset) ".pdf")]
+    (if asset
+      (->
+       (p/let [href (assets-handler/make-asset-url file-path)]
+         (state/set-state! :pdf/ref-highlight hl-value)
+        ;; open pdf viewer
+         (state/set-current-pdf! (inflate-asset file-path {:href href :block asset})))
+       (p/catch (fn [error]
+                  (js/console.error error))))
+      (js/console.error "Pdf asset no longer exists"))))
+
+(defn open-block-ref!
+  [block]
+  (if (config/db-based-graph? (state/get-current-repo))
+    (db-based-open-block-ref! block)
+    (file-based-open-block-ref! block)))
+
 (defn goto-block-ref!
   [{:keys [id] :as hl}]
   (when id
@@ -332,8 +353,11 @@
 (defn goto-annotations-page!
   ([current] (goto-annotations-page! current nil))
   ([current id]
-   (when-let [e (some->> (:key current) (str "hls__") (db-model/get-page))]
-     (rfe/push-state :page {:name (str (:block/uuid e))} (if id {:anchor (str "block-content-" + id)} nil)))))
+   (when current
+     (if (config/db-based-graph?)
+       (rfe/push-state :page {:name (:block/uuid (:block current))} (if id {:anchor (str "block-content-" + id)} nil))
+       (when-let [e (some->> (:key current) (str "hls__") (db-model/get-page))]
+         (rfe/push-state :page {:name (str (:block/uuid e))} (if id {:anchor (str "block-content-" + id)} nil)))))))
 
 (defn open-lightbox
   [e]

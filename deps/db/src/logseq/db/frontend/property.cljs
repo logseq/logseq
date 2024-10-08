@@ -82,6 +82,8 @@
                                                     :hide? true}}
    :logseq.property/built-in?             {:schema {:type :checkbox
                                                     :hide? true}}
+   :logseq.property/asset   {:schema {:type :entity
+                                      :hide? true}}
    :logseq.property/ls-type {:schema {:type :keyword
                                       :hide? true}}
    :logseq.property/hl-type {:schema {:type :keyword :hide? true}}
