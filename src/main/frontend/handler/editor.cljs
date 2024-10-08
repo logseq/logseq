@@ -1455,23 +1455,27 @@
                       (js/console.error error))))))))))
 
 (defn delete-asset-of-block!
-  [{:keys [repo href full-text block-id local? delete-local?] :as _opts}]
+  [{:keys [repo asset-block href full-text block-id local? delete-local?] :as _opts}]
   (let [block (db-model/query-block-by-uuid block-id)
-        _ (or block (throw (str block-id " not exists")))
+        _ (or block (throw (ex-info (str block-id " not exists")
+                                    {:block-id block-id})))
         text (:block/title block)
-        content (string/replace text full-text "")]
+        content (if asset-block
+                  (string/replace text (page-ref/->page-ref (:block/uuid asset-block)) "")
+                  (string/replace text full-text ""))]
     (save-block! repo block content)
     (when (and local? delete-local?)
-      (when-let [href (if (util/electron?) href
-                          (second (re-find #"\((.+)\)$" full-text)))]
-        (let [block-file-rpath (db-model/get-block-file-path block)
-              asset-fpath (if (string/starts-with? href "assets://")
-                            (path/url-to-path href)
-                            (config/get-repo-fpath
-                             repo
-                             (path/resolve-relative-path block-file-rpath href)))]
-          (prn ::deleting-asset href asset-fpath)
-          (fs/unlink! repo asset-fpath nil))))))
+      (if asset-block
+        (delete-block-aux! asset-block)
+        (when-let [href (if (util/electron?) href
+                            (second (re-find #"\((.+)\)$" full-text)))]
+          (let [block-file-rpath (db-model/get-block-file-path block)
+                asset-fpath (if (string/starts-with? href "assets://")
+                              (path/url-to-path href)
+                              (config/get-repo-fpath
+                               repo
+                               (path/resolve-relative-path block-file-rpath href)))]
+            (fs/unlink! repo asset-fpath nil)))))))
 
 ;; assets/journals_2021_02_03_1612350230540_0.png
 (defn resolve-relative-path
@@ -1533,6 +1537,7 @@
     (for [[_index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
       (p/let [file-name (util/node-path.basename (.-name file))
+              file-name-without-ext (.-name (util/node-path.parse file-name))
               checksum (assets-handler/get-file-checksum file)
               existing-asset (db-async/<get-asset-with-checksum repo checksum)]
         (if existing-asset
@@ -1563,7 +1568,7 @@
                                         :replace-empty-target? true
                                         :sibling? true)
                                  (assoc insert-opts :page (:block/uuid asset)))
-                  result (api-insert-new-block! file-name insert-opts')
+                  result (api-insert-new-block! file-name-without-ext insert-opts')
                   new-entity (db/entity [:block/uuid (:block/uuid result)])]
             (if (util/electron?)
               (let [from (not-empty (.-path file))]

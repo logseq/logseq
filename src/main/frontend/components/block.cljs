@@ -275,7 +275,8 @@
                    state)}
   [state config title src metadata full-text local?]
   (let [size (get state ::size)
-        breadcrumb? (:breadcrumb? config)]
+        breadcrumb? (:breadcrumb? config)
+        asset-block (:asset-block config)]
     (ui/resize-provider
      (ui/resize-consumer
       (if (and (not (mobile-util/native-platform?))
@@ -326,7 +327,7 @@
                       (let [*local-selected? (atom local?)]
                         (-> (shui/dialog-confirm!
                              [:div.text-xs.opacity-60.-my-2
-                              (when local?
+                              (when (and local? (not= (:block/uuid asset-block) block-id))
                                 [:label.flex.gap-1.items-center
                                  (shui/checkbox
                                   {:default-checked @*local-selected?
@@ -338,6 +339,7 @@
                                       (shui/dialog-close!)
                                       (editor-handler/delete-asset-of-block!
                                        {:block-id block-id
+                                        :asset-block asset-block
                                         :local? local?
                                         :delete-local? @*local-selected?
                                         :repo (state/get-current-repo)
