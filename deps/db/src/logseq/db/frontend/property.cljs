@@ -248,6 +248,10 @@
                                     :schema {:type :string
                                              :hide? true
                                              :public? false}}
+   :logseq.property.asset/last-visit-page {:title "Last visit page"
+                                           :schema {:type :raw-number
+                                                    :hide? true
+                                                    :public? false}}
    :logseq.property.asset/remote-metadata {:schema
                                            {:type :map
                                             :hide? true
