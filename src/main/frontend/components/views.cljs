@@ -225,8 +225,14 @@
   [column sized-columns]
   (let [id (:id column)
         size (get sized-columns id)]
-    (if (number? size)
+    (cond
+      (number? size)
       size
+
+      (= id :logseq.property/query)
+      400
+
+      :else
       (case id
         :select 32
         :add-property 160

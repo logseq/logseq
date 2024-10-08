@@ -344,15 +344,15 @@
   (shui/button
    {:class "jtrigger !px-1 h-6 add-filter text-muted-foreground"
     :size :sm
-    :variant :ghost
-    :title "Add clause"
+    :variant :outline
     :on-pointer-down util/stop-propagation
     :on-click (fn [^js e]
                 (shui/popup-show! (.-target e)
                                   (fn [{:keys [id]}]
                                     (picker *find *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
                                   {:align :start}))}
-   (ui/icon "plus" {:size 12})))
+   (ui/icon "plus" {:size 14})
+   (when (= [0] loc) "Filter")))
 
 (declare clauses-group)
 
@@ -361,7 +361,7 @@
   (let [f (first clause)]
     (cond
       (string? clause)
-      (str "search: " clause)
+      (str "Search: " clause)
 
       (= (keyword f) :page-ref)
       (page-ref/->page-ref (second clause))
@@ -527,10 +527,17 @@
       q-str
       (str "\"" q-str "\""))))
 
+(defn- get-q
+  [block]
+  (sanitize-q (or (:file-version/query-macro-title block)
+                  (:block/title block)
+                  "")))
+
 (rum/defcs builder <
   (rum/local nil ::find)
   {:init (fn [state]
-           (let [q-str (sanitize-q (first (:rum/args state)))
+           (let [block (first (:rum/args state))
+                 q-str (get-q block)
                  query (common-util/safe-read-string
                         query-dsl/custom-readers
                         (query-dsl/pre-transform-query q-str))
@@ -544,10 +551,9 @@
                           :else
                           [:and])
                  tree (query-builder/from-dsl query')
-                 *tree (atom tree)
-                 config (last (:rum/args state))]
+                 *tree (atom tree)]
              (add-watch *tree :updated (fn [_ _ _old _new]
-                                         (when-let [block (:block config)]
+                                         (when block
                                            (let [q (if (= [:and] @*tree)
                                                      ""
                                                      (let [result (query-builder/->dsl @*tree)]
@@ -555,17 +561,16 @@
                                                          (util/format "\"%s\"" result)
                                                          (str result))))
                                                  repo (state/get-current-repo)
-                                                 block (db/pull [:block/uuid (:block/uuid block)])]
-                                             (when block
-                                               (if (:property config)
-                                                 (editor-handler/save-block! repo (:block/uuid block) q)
-                                                 (let [content (string/replace (:block/title block)
-                                                                               #"\{\{query[^}]+\}\}"
-                                                                               (util/format "{{query %s}}" q))]
-                                                   (editor-handler/save-block! repo (:block/uuid block) content))))))))
+                                                 block (db/entity [:block/uuid (:block/uuid block)])]
+                                             (if (config/db-based-graph? (state/get-current-repo))
+                                               (editor-handler/save-block! repo (:block/uuid block) q)
+                                               (let [content (string/replace (:block/title block)
+                                                                             #"\{\{query[^}]+\}\}"
+                                                                             (util/format "{{query %s}}" q))]
+                                                 (editor-handler/save-block! repo (:block/uuid block) content)))))))
              (assoc state ::tree *tree)))
    :will-mount (fn [state]
-                 (let [q-str (sanitize-q (first (:rum/args state)))
+                 (let [q-str (get-q (first (:rum/args state)))
                        blocks-query? (:blocks? (query-dsl/parse-query q-str))
                        find-mode (cond
                                    blocks-query?
@@ -576,7 +581,7 @@
                                    nil)]
                    (when find-mode (reset! (::find state) find-mode))
                    state))}
-  [state _query _config]
+  [state _block _option]
   (let [*find (::find state)
         *tree (::tree state)]
     [:div.cp__query-builder

@@ -16,6 +16,10 @@
   (contains? #{"page" "journal" "whiteboard" "class" "property" "hidden"}
              (:block/type block)))
 
+(defn internal-page?
+  [entity]
+  (= (:block/type entity) "page"))
+
 (defn class?
   [entity]
   (= (:block/type entity) "class"))

@@ -1216,16 +1216,17 @@
     "Use current time")])
 
 (rum/defc nlp-calendar
-  [{:keys [selected on-select] :as opts}]
-  (let [on-select' (if (:datetime? opts)
+  [{:keys [selected on-select on-day-click] :as opts}]
+  (let [default-on-select (or on-select on-day-click)
+        on-select' (if (:datetime? opts)
                      (fn [date value]
                        (let [value (or (and (string? value) value)
                                        (.-value (gdom/getElement "time-picker")))]
                          (let [[h m] (string/split value ":")]
                            (when selected
                              (.setHours date h m 0))
-                           (on-select date))))
-                     on-select)]
+                           (default-on-select date))))
+                     default-on-select)]
     [:div.flex.flex-col.gap-2
      (single-calendar (assoc opts :on-select on-select'))
      (when (:datetime? opts)
@@ -1248,10 +1249,11 @@
                       (when (= "Enter" (util/ekey e))
                         (let [value (util/evalue e)]
                           (when-not (string/blank? value)
-                            (when-let [result (date/nld-parse value)]
-                              (when-let [date (doto (goog.date.DateTime.) (.setTime (.getTime result)))]
+                            (let [result (date/nld-parse value)]
+                              (if-let [date (and result (doto (goog.date.DateTime.) (.setTime (.getTime result))))]
                                 (let [on-select' (or (:on-select opts) (:on-day-click opts))]
-                                  (on-select' date))))))))})]))
+                                  (on-select' date))
+                                (notification/show! (str (pr-str value) " is not a valid date. Please try again") :warning)))))))})]))
 
 (comment
   (rum/defc emoji-picker

@@ -12,16 +12,16 @@
 ;; FIXME: what if users want to query other attributes than block-attrs?
 (defn- replace-star-with-block-attrs!
   [l]
-  (let [block-attrs (butlast model/block-attrs)]
+  (let [block-attrs (butlast model/file-graph-block-attrs)]
     (walk/postwalk
-    (fn [f]
-      (if (and (list? f)
-               (= 'pull (first f))
-               (= '?b (second f))
-               (= '[*] (nth f 2)))
-        `(~'pull ~'?b ~block-attrs)
-        f))
-    l)))
+     (fn [f]
+       (if (and (list? f)
+                (= 'pull (first f))
+                (= '?b (second f))
+                (= '[*] (nth f 2)))
+         `(~'pull ~'?b ~block-attrs)
+         f))
+     l)))
 
 (defn- add-rules-to-query
   "Searches query's :where for rules and adds them to query if used"
@@ -60,9 +60,9 @@
                     (fn [rules]
                       (into (or rules [])
                             (rules/extract-rules query-dsl-rules
-                                                   rules-found
-                                                   (when db-graph?
-                                                     {:deps rules/rules-dependencies})))))))
+                                                 rules-found
+                                                 (when db-graph?
+                                                   {:deps rules/rules-dependencies})))))))
       query-m)))
 
 (defn custom-query
@@ -73,12 +73,13 @@
   ([query query-opts]
    (custom-query (state/get-current-repo) query query-opts))
   ([repo query query-opts]
-   (let [query' (replace-star-with-block-attrs! query)
+   (let [db-graph? (config/db-based-graph? repo)
+         query' (if db-graph? query (replace-star-with-block-attrs! query))
          query-opts (if (:query-string query-opts) query-opts
                         (assoc query-opts :query-string (str query)))]
      (if (or (list? (:query query'))
              (not= :find (first (:query query')))) ; dsl query
        (query-dsl/custom-query repo query' query-opts)
        (query-react/react-query repo
-                                (add-rules-to-query query' {:db-graph? (config/db-based-graph? repo)})
+                                (add-rules-to-query query' {:db-graph? db-graph?})
                                 query-opts)))))

@@ -38,12 +38,12 @@
                                    :cardinality :many
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
-   :logseq.property.node/type {:title "Node type"
-                               :schema {:type :keyword
-                                        :public? false
-                                        :hide? true
-                                        :view-context :block}}
-   :logseq.property.code/mode {:title "Code mode"
+   :logseq.property.node/display-type {:title "Node Display Type"
+                                       :schema {:type :keyword
+                                                :public? false
+                                                :hide? true
+                                                :view-context :block}}
+   :logseq.property.code/lang {:title "Code mode"
                                :schema {:type :string
                                         :public? false
                                         :hide? true
@@ -61,10 +61,11 @@
                                           :schema {:type :checkbox
                                                    :public? true
                                                    :view-context :class}}
-   :logseq.property/query {:title "Query"
-                           :schema {:type :default
-                                    :public? true
-                                    :view-context :block}}
+   :logseq.property/query       {:title "Query"
+                                 :schema {:type :default
+                                          :public? true
+                                          :hide? true
+                                          :view-context :block}}
    :logseq.property/page-tags {:title "Page Tags"
                                :schema {:type :page
                                         :public? true

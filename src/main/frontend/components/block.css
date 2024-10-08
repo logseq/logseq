@@ -888,6 +888,12 @@ html.is-mac {
   }
 }
 
+.positioned-properties.block-below {
+  .block-content.inline {
+    @apply flex;
+  }
+}
+
 .block-tags {
   @apply flex flex-row flex-wrap self-start items-center;
   min-height: 24px;
@@ -936,10 +942,25 @@ html.is-mac {
   margin-top: 8px;
 }
 
-.ls-page-title .positioned-properties {
-  height: 54px;
-}
-
 .ls-page-title .block-tags {
   @apply relative -right-1 min-h-full;
+}
+
+.ls-code-editor-wrap {
+  @apply relative w-full;
+
+  .extensions__code-lang {
+    @apply hidden;
+  }
+
+  > .code-block-actions {
+    @apply absolute right-1 top-1 select-none z-[1] text-xs;
+    button {
+        @apply !py-0 h-4 text-muted-foreground hover:text-foreground text-xs px-1;
+    }
+    svg {
+      width: 14px;
+      height: 14px;
+    }
+  }
 }

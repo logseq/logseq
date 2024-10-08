@@ -21,4 +21,5 @@
 @import "pdfjs-dist/web/pdf_viewer.css";
 @import "resources/css/tabler-extension.css";
 @import "resources/css/codemirror.lsradix.css";
+@import "@tabler/icons-webfont/tabler-icons.min.css";
 @import-glob "src/main/frontend/**/[!_]*.css";

@@ -98,6 +98,8 @@
                               "block/name"
                               ;; anything org mode
                               "org"
+                              "#+BEGIN_"
+                              "#+END_"
                               "pre-block"
                               "db/get-page"
                               "/page-name-sanity-lc"]))

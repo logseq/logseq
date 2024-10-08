@@ -7,7 +7,8 @@
    * Delete empty property parent"
   (:require [datascript.core :as d]
             [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.db :as ldb]))
 
 (defn- rebuild-block-refs
   [{:keys [db-after]} blocks]
@@ -27,13 +28,13 @@
   (when (not (get-in tx-report [:tx-meta :pipeline-replace?]))
     (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
           refs-tx-report (when-let [refs-tx (and (seq blocks) (rebuild-block-refs tx-report blocks))]
-                           (d/transact! conn refs-tx {:pipeline-replace? true}))
+                           (ldb/transact! conn refs-tx {:pipeline-replace? true}))
           blocks' (if refs-tx-report
                     (keep (fn [b] (d/entity (:db-after refs-tx-report) (:db/id b))) blocks)
                     blocks)
           block-path-refs-tx (distinct (outliner-pipeline/compute-block-path-refs-tx tx-report blocks'))]
       (when (seq block-path-refs-tx)
-        (d/transact! conn block-path-refs-tx {:pipeline-replace? true})))))
+        (ldb/transact! conn block-path-refs-tx {:pipeline-replace? true})))))
 
 (defn ^:api add-listener
   "Adds a listener to the datascript connection to add additional changes from outliner.pipeline"

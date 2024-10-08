@@ -81,7 +81,7 @@
   [repo cards-id]
   (let [now-inst-ms (inst-ms (js/Date.))
         cards (when (and cards-id (not= (keyword cards-id) :global)) (db/entity cards-id))
-        query (:block/title (:logseq.property/query cards))
+        query (:block/title cards)
         result (query-dsl/parse query {:db-graph? true})
         q '[:find [?b ...]
             :in $ ?now-inst-ms %
