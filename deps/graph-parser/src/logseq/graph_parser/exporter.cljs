@@ -380,7 +380,7 @@
         (seq excludes)
         (conj [:logseq.property.linked-references/excludes excludes])))
     (catch :default e
-        (js/console.error "Translating linked reference filters failed with: " e))))
+      (js/console.error "Translating linked reference filters failed with: " e))))
 
 (defn- update-built-in-property-values
   [props page-names-to-uuids {:keys [ignored-properties all-idents]} {:block/keys [title name]} options]
@@ -794,11 +794,43 @@
       (dissoc :block/whiteboard?)
       (update-page-tags db tag-classes page-names-to-uuids all-idents)))
 
+(defn- get-all-existing-page-ents
+  [db]
+  (->> db
+       ;; don't fetch built-in as that would give the wrong entity if a user used
+       ;; a db-only built-in property name e.g. description
+       (d/q '[:find [?b ...]
+              :where [?b :block/name] [(missing? $ ?b :logseq.property/built-in?)]])
+       (map #(d/entity db %))
+       (map (juxt :block/name identity))
+       (into {})))
+
+(defn- build-existing-page [m db page-uuid page-names-to-uuids {:keys [tag-classes notify-user import-state]}]
+  (let [;; These attributes are not allowed to be transacted because they must not change across files
+        disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
+                               :block/created-at :block/updated-at]
+        allowed-attributes (into [:block/tags :block/alias :logseq.property/parent :block/type :db/ident]
+                                 (keep #(when (db-malli-schema/user-property? (key %)) (key %))
+                                       m))
+        block-changes (cond-> (select-keys m allowed-attributes)
+                        ;; disallow any type -> "page" but do allow any conversion to a non-page type
+                        (ldb/internal-page? m)
+                        (dissoc :block/type))]
+    (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
+      (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
+                              ignored-attrs)}))
+    (when (seq block-changes)
+      (cond-> (merge block-changes {:block/uuid page-uuid})
+        (seq (:block/alias m))
+        (update-page-alias page-names-to-uuids)
+        (:block/tags m)
+        (update-page-tags db tag-classes page-names-to-uuids (:all-idents import-state))))))
+
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
   all non-whiteboard pages to be transacted, pages' properties and additional
   data for subsequent steps"
-  [conn pages blocks {:keys [tag-classes property-classes property-parent-classes notify-user import-state]
+  [conn pages blocks {:keys [tag-classes property-classes property-parent-classes import-state]
                       :as options}]
   (let [all-pages* (->> (extract/with-ref-pages pages blocks)
                         ;; remove unused property pages unless the page has content
@@ -807,14 +839,7 @@
                         ;; remove file path relative
                         (map #(dissoc % :block/file)))
         ;; Fetch all named ents once per import file to speed up named lookups
-        all-existing-page-ents (->> @conn
-                                    ;; don't fetch built-in as that would give the wrong entity if a user used
-                                    ;; a db-only built-in property name e.g. description
-                                    (d/q '[:find [?b ...]
-                                           :where [?b :block/name] [(missing? $ ?b :logseq.property/built-in?)]])
-                                    (map #(d/entity @conn %))
-                                    (map (juxt :block/name identity))
-                                    (into {}))
+        all-existing-page-ents (get-all-existing-page-ents @conn)
         ;; map of existing pages in current parsed file, indexed by name
         existing-pages-by-name (into {}
                                      (keep #(when-let [ent (all-existing-page-ents (:block/name %))]
@@ -834,26 +859,7 @@
                           all-pages)
         pages-tx (keep (fn [m]
                          (if-let [page-uuid (existing-pages-by-name (:block/name m))]
-                           (let [;; These attributes are not allowed to be transacted because they must not change across files
-                                 disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
-                                                        :block/created-at :block/updated-at]
-                                 allowed-attributes (into [:block/tags :block/alias :logseq.property/parent :block/type :db/ident]
-                                                          (keep #(when (db-malli-schema/user-property? (key %)) (key %))
-                                                                m))
-                                 block-changes (cond-> (select-keys m allowed-attributes)
-                                                 ;; disallow any type -> "page" but do allow any conversion to a non-page type
-                                                 (ldb/internal-page? m)
-                                                 (dissoc :block/type))]
-                             (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
-                               (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
-                                                       ignored-attrs)}))
-                             (when (seq block-changes)
-                               (cond-> (merge block-changes {:block/uuid page-uuid})
-                                 (seq (:block/alias m))
-                                 (update-page-alias page-names-to-uuids)
-                                 (:block/tags m)
-                                 (update-page-tags @conn tag-classes page-names-to-uuids (:all-idents import-state)))))
-
+                           (build-existing-page m @conn page-uuid page-names-to-uuids options)
                            (when (or (= "class" (:block/type m))
                                      ;; Don't build a new page if it overwrites an existing class
                                      (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
