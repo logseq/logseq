@@ -130,49 +130,48 @@
    *result]
   (let [collapsed?' (:collapsed? config)
         result' (rum/react *result)]
-    (when (seq result')
-      (let [result (when *result (query-result/transform-query-result config q result'))
-            ;; Args for displaying query header and results
-            view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
-            view-f (and view-fn (sci/eval-string (pr-str view-fn)))
-            page-list? (and (seq result) (some? (:block/name (first result))))
-            opts {:query-error-atom *query-error
-                  :current-block current-block
-                  :table? table?
-                  :view-f view-f
-                  :page-list? page-list?
-                  :result result
-                  :group-by-page? (query-result/get-group-by-page q {:table? table?})}]
-        (if (:custom-query? config)
+    (let [result (when *result (query-result/transform-query-result config q result'))
+          ;; Args for displaying query header and results
+          view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
+          view-f (and view-fn (sci/eval-string (pr-str view-fn)))
+          page-list? (and (seq result) (some? (:block/name (first result))))
+          opts {:query-error-atom *query-error
+                :current-block current-block
+                :table? table?
+                :view-f view-f
+                :page-list? page-list?
+                :result result
+                :group-by-page? (query-result/get-group-by-page q {:table? table?})}]
+      (if (:custom-query? config)
       ;; Don't display recursive results when query blocks are a query result
-          [:code (if dsl-query? (str "Results for " (pr-str query)) "Advanced query results")]
-          (when-not (and built-in-query? (empty? result))
-            [:div.custom-query (get config :attr {})
-             (when (and (not db-graph?) (not built-in-query?))
-               (file-query/custom-query-header config
-                                               q
-                                               {:query-error-atom *query-error
-                                                :current-block current-block
-                                                :table? table?
-                                                :view-f view-f
-                                                :page-list? page-list?
-                                                :result result
-                                                :collapsed? collapsed?'}))
+        [:code (if dsl-query? (str "Results for " (pr-str query)) "Advanced query results")]
+        (when-not (and built-in-query? (empty? result))
+          [:div.custom-query (get config :attr {})
+           (when (and (not db-graph?) (not built-in-query?))
+             (file-query/custom-query-header config
+                                             q
+                                             {:query-error-atom *query-error
+                                              :current-block current-block
+                                              :table? table?
+                                              :view-f view-f
+                                              :page-list? page-list?
+                                              :result result
+                                              :collapsed? collapsed?'}))
 
-             (when (and dsl-query? builder) builder)
+           (when (and dsl-query? builder) builder)
 
-             (if built-in-query?
-               [:div {:style {:margin-left 2}}
-                (ui/foldable
-                 (query-title config (:title q) {:result-count (count result)})
-                 (fn []
-                   (custom-query-inner config q opts))
-                 {:default-collapsed? collapsed?
-                  :title-trigger? true})]
-               (when-not (:table? config)
-                 [:div.bd
-                  (when-not collapsed?'
-                    (custom-query-inner config q opts))]))]))))))
+           (if built-in-query?
+             [:div {:style {:margin-left 2}}
+              (ui/foldable
+               (query-title config (:title q) {:result-count (count result)})
+               (fn []
+                 (custom-query-inner config q opts))
+               {:default-collapsed? collapsed?
+                :title-trigger? true})]
+             (when-not (:table? config)
+               [:div.bd
+                (when-not collapsed?'
+                  (custom-query-inner config q opts))]))])))))
 
 (rum/defc trigger-custom-query
   [config q]
