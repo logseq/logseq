@@ -51,28 +51,30 @@
 
 (defn <db-based-get-all-properties
   "Return seq of all property names except for private built-in properties."
-  [graph]
+  [graph & {:keys [remove-built-in-property?]
+            :or {remove-built-in-property? true}}]
   (p/let [result (<q graph
                      {:transact-db? false}
                      '[:find [(pull ?e [:block/uuid :db/ident :block/title :block/schema]) ...]
                        :where
                        [?e :block/type "property"]
                        [?e :block/title]])]
-    (->> result
+    (cond->> result
+      remove-built-in-property?
          ;; remove private built-in properties
-         (remove #(and (:db/ident %)
-                       (db-property/logseq-property? (:db/ident %))
-                       (not (ldb/public-built-in-property? %))
-                       (not= (:db/ident %) :logseq.property/icon))))))
+      (remove #(and (:db/ident %)
+                    (db-property/logseq-property? (:db/ident %))
+                    (not (ldb/public-built-in-property? %))
+                    (not= (:db/ident %) :logseq.property/icon))))))
 
 (defn <get-all-properties
   "Returns all public properties as property maps including their
   :block/title and :db/ident. For file graphs the map only contains
   :block/title"
-  []
+  [& {:keys [remove-built-in-property?]}]
   (when-let [graph (state/get-current-repo)]
     (if (config/db-based-graph? graph)
-      (<db-based-get-all-properties graph)
+      (<db-based-get-all-properties graph {:remove-built-in-property? remove-built-in-property?})
       (p/let [properties (file-async/<file-based-get-all-properties graph)
               hidden-properties (set (map name (property-util/hidden-properties)))]
         (remove #(hidden-properties (:block/title %)) properties)))))
