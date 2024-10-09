@@ -16,7 +16,8 @@
                            {:type :notification
                             :payload {:message "Page name can't include \"#\"."
                                       :type :warning}}))))
-  (when (string/includes? page-title ns-util/parent-char)
+  (when (and (string/includes? page-title ns-util/parent-char)
+             (not (common-date/normalize-date page-title nil)))
     (throw (ex-info "Page name can't include \"/\"."
                     (merge meta-m
                            {:type :notification
@@ -138,8 +139,8 @@
   (when (or (and (ldb/class? parent-ent) (not (every? ldb/class? child-ents)))
             (and (ldb/internal-page? parent-ent) (not (every? ldb/internal-page? child-ents)))
             (not ((some-fn ldb/class? ldb/internal-page?) parent-ent)))
-   (throw (ex-info "Can't set this page as a parent because the child page is a different type"
-                   {:type :notification
-                    :payload {:message "Can't set this page as a parent because the child page is a different type"
-                              :type :warning}
-                    :blocks (map #(select-keys % [:db/id :block/title]) (remove ldb/class? child-ents))}))))
+    (throw (ex-info "Can't set this page as a parent because the child page is a different type"
+                    {:type :notification
+                     :payload {:message "Can't set this page as a parent because the child page is a different type"
+                               :type :warning}
+                     :blocks (map #(select-keys % [:db/id :block/title]) (remove ldb/class? child-ents))}))))
