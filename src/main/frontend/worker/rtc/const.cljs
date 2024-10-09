@@ -193,7 +193,8 @@
       [:req-id :string]
       [:action :string]
       [:s3-key :string]
-      [:graph-name :string]]]
+      [:graph-name :string]
+      [:public-key-jwk :string]]]
     ["download-graph"
      [:map
       [:req-id :string]
