@@ -28,7 +28,9 @@
 (defonce *device-private-key (atom nil :validator #(instance? js/CryptoKey %)))
 
 (defn <ensure-device-metadata!
-  "Generate new device entity if not exists"
+  "Generate new device items if not exists.
+  Store in indexeddb.
+  Import to `*device-id`, `*device-public-key`, `*device-private-key`"
   []
   (p/let [device-uuid (<get-item item-key-device-id)]
     (when-not device-uuid
