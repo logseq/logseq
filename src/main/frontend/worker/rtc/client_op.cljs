@@ -48,9 +48,18 @@
                                   (ma/-fail! ::ops-schema %))))
 
 (def schema-in-db
+  "TODO: rename this db-name from client-op to client-metadata+op.
+  and move it to its own namespace."
   {:block/uuid {:db/unique :db.unique/identity}
    :local-tx {:db/index true}
-   :graph-uuid {:db/index true}})
+   :graph-uuid {:db/index true}
+   :public-key-jwk {}
+   :private-key-jwk {}
+
+   ;; device
+   :device/uuid {:db/unique :db.unique/identity}
+   :device/public-key-jwk {}
+   :device/private-key-jwk {}})
 
 (defn update-graph-uuid
   [repo graph-uuid]
