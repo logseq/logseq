@@ -169,11 +169,11 @@
   (when-let [page (some-> page-name (db-model/get-page))]
     (when-let [^Object worker @db-browser/*worker]
       (p/let [result (.get-block-and-children worker
-                       (state/get-current-repo)
-                       (str (:block/uuid page))
-                       (ldb/write-transit-str
-                         {:children? true
-                          :nested-children? false}))]
+                                              (state/get-current-repo)
+                                              (str (:block/uuid page))
+                                              (ldb/write-transit-str
+                                               {:children? true
+                                                :nested-children? false}))]
         (some-> result (ldb/read-transit-str) (:children))))))
 
 (defn <get-block-refs
@@ -286,7 +286,7 @@
 (defn <get-tags
   [graph]
   (<q graph {:transact-db? false}
-      '[:find [(pull ?tag [:db/id :block/title])]
+      '[:find [(pull ?tag [:db/id :block/title]) ...]
         :where
         [?tag :block/type "class"]]))
 

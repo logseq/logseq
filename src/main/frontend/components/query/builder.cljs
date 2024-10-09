@@ -202,10 +202,11 @@
 
 (rum/defc tags
   [repo *tree opts loc]
-  (let [[values set-values!] (rum/use-state nil)]
+  (let [[values set-values!] (rum/use-state nil)
+        db-based? (config/db-based-graph? repo)]
     (rum/use-effect!
      (fn []
-       (p/let [result (db-async/<get-tags repo)]
+       (let [result (db-model/get-all-classes repo {:except-root-class? true})]
          (set-values! result)))
      [])
     (let [items (->> values
@@ -213,9 +214,86 @@
                      sort)]
       (select items
               (fn [{:keys [value]}]
-                (append-tree! *tree opts loc [:page-tags value]))))))
+                (append-tree! *tree opts loc [(if db-based? :tags :page-tags) value]))))))
 
-(defn- query-filter-picker
+(defn- db-based-query-filter-picker
+  [state *find *tree loc clause opts]
+  (let [*mode (::mode state)
+        *property (::property state)
+        repo (state/get-current-repo)]
+    [:div
+     (case @*mode
+       "property"
+       (property-select *mode *property)
+
+       "property-value"
+       (property-value-select repo *property *find *tree opts loc)
+
+       "sample"
+       (select (range 1 101)
+               (fn [{:keys [value]}]
+                 (append-tree! *tree opts loc [:sample (util/safe-parse-int value)])))
+
+       "tags"
+       (tags repo *tree opts loc)
+
+       "task"
+       (let [items (let [values (:property/closed-values (db/entity :logseq.task/status))]
+                     (mapv db-property/property-value-content values))]
+         (select items
+                 (constantly nil)
+                 {:multiple-choices? true
+                ;; Need the existing choices later to improve the UX
+                  :selected-choices #{}
+                  :extract-chosen-fn :value
+                  :prompt-key :select/default-select-multiple
+                  :close-modal? false
+                  :on-apply (fn [choices]
+                              (when (seq choices)
+                                (append-tree! *tree opts loc (vec (cons :task choices)))))}))
+
+       "priority"
+       (select (if (config/db-based-graph? repo)
+                 (let [values (:property/closed-values (db/entity :logseq.task/priority))]
+                   (mapv db-property/property-value-content values))
+                 gp-db/built-in-priorities)
+               (constantly nil)
+               {:multiple-choices? true
+                :selected-choices #{}
+                :extract-chosen-fn :value
+                :prompt-key :select/default-select-multiple
+                :close-modal? false
+                :on-apply (fn [choices]
+                            (when (seq choices)
+                              (append-tree! *tree opts loc (vec (cons :priority choices)))))})
+
+       "page"
+       (let [pages (sort (db-model/get-all-page-titles repo))]
+         (select pages
+                 (fn [{:keys [value]}]
+                   (append-tree! *tree opts loc [:page value]))))
+
+       ;; TODO: replace with node reference
+       "page reference"
+       (let [pages (sort (db-model/get-all-page-titles repo))]
+         (select pages
+                 (fn [{:keys [value]}]
+                   (append-tree! *tree opts loc [:page-ref value]))
+                 {}))
+
+       "full text search"
+       (search (fn [v] (append-tree! *tree opts loc v))
+               (:toggle-fn opts))
+
+       "between"
+       (between (merge opts
+                       {:tree *tree
+                        :loc loc
+                        :clause clause}))
+
+       nil)]))
+
+(defn- file-based-query-filter-picker
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
         *property (::property state)
@@ -307,24 +385,28 @@
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
         db-based? (config/db-based-graph? (state/get-current-repo))
-        filters (if (= :page @*find)
-                  (if db-based?
-                    (remove #{"namespace"} query-builder/page-filters)
-                    query-builder/page-filters)
-                  query-builder/block-filters)
+        filters (if db-based?
+                  query-builder/db-based-block-filters
+                  (if (= :page @*find)
+                    query-builder/page-filters
+                    query-builder/block-filters))
         filters-and-ops (concat filters query-builder/operators)
         operator? #(contains? query-builder/operators-set (keyword %))]
     [:div.query-builder-picker
      (if @*mode
        (when-not (operator? @*mode)
-         (query-filter-picker state *find *tree loc clause opts))
+         (if db-based?
+           (db-based-query-filter-picker state *find *tree loc clause opts)
+           (file-based-query-filter-picker state *find *tree loc clause opts)))
        [:div
-        (when-not @*find
-          [:div.flex.flex-row.items-center.p-2.justify-between
-           [:div.ml-2 "Find: "]
-           (page-block-selector *find)])
-        (when-not @*find
-          [:hr.m-0])
+        (when-not db-based?
+          [:<>
+           (when-not @*find
+             [:div.flex.flex-row.items-center.p-2.justify-between
+              [:div.ml-2 "Find: "]
+              (page-block-selector *find)])
+           (when-not @*find
+             [:hr.m-0])])
         (select
          (map name filters-and-ops)
          (fn [{:keys [value]}]
@@ -366,7 +448,7 @@
       (= (keyword f) :page-ref)
       (page-ref/->page-ref (second clause))
 
-      (= (keyword f) :page-tags)
+      (contains? #{:tags :page-tags} (keyword f))
       (cond
         (string? (second clause))
         (str "#" (second clause))
