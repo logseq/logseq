@@ -129,11 +129,9 @@
       (c.m/<? (http/put url {:body all-blocks-str :with-credentials? false}))
       (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
                                                   :message "requesting upload-graph"})
-      (let [{:keys [publicKey privateKey]} (m/? (c.m/await-promise (crypt/<gen-key-pair)))
-            public-key-jwk (ldb/write-transit-str
-                            (m/? (c.m/await-promise (crypt/<export-key publicKey))))
-            private-key-jwk (ldb/write-transit-str
-                             (m/? (c.m/await-promise (crypt/<export-key privateKey))))
+      (let [{:keys [publicKey privateKey]} (c.m/<? (crypt/<gen-key-pair))
+            public-key-jwk (ldb/write-transit-str (c.m/<?  (crypt/<export-key publicKey)))
+            private-key-jwk (ldb/write-transit-str (c.m/<? (crypt/<export-key privateKey)))
             upload-resp
             (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
                                                         :s3-key key
@@ -148,7 +146,7 @@
             (crypt/store-graph-keys-jwk repo graph-uuid public-key-jwk private-key-jwk)
             (when-not rtc-const/RTC-E2E-TEST
               (let [^js worker-obj (:worker/object @worker-state/*state)]
-                (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))))
+                (c.m/<? (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid})))))
             (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-completed
                                                         :message "upload-graph completed"})
             {:graph-uuid graph-uuid})
@@ -238,7 +236,6 @@
        [schema-blocks (conj normal-blocks block)]))
    [[] []] blocks))
 
-
 (defn- create-graph-for-rtc-test
   "it's complex to setup db-worker related stuff, when I only want to test rtc related logic"
   [repo init-tx-data other-tx-data]
@@ -264,9 +261,9 @@
   (let [{:keys [t blocks]} all-blocks
         card-one-attrs (blocks->card-one-attrs blocks)
         blocks (worker-util/profile :convert-card-one-value-from-value-coll
-                 (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
+                                    (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
         blocks (worker-util/profile :normalize-remote-blocks
-                 (normalized-remote-blocks-coercer blocks))
+                                    (normalized-remote-blocks-coercer blocks))
         ;;TODO: remove this, client/schema already converted to :db/cardinality, :db/valueType by remote,
         ;; and :client/schema should be removed by remote too
         blocks (map #(dissoc % :client/schema) blocks)
@@ -284,20 +281,19 @@
       (rtc-log-and-state/update-remote-t graph-uuid t)
       (if rtc-const/RTC-E2E-TEST
         (create-graph-for-rtc-test repo init-tx-data tx-data)
-        (m/?
-         (c.m/await-promise
-          (p/do!
-            (.createOrOpenDB worker-obj repo (ldb/write-transit-str {:close-other-db? false}))
-            (.exportDB worker-obj repo)
-            (.transact worker-obj repo init-tx-data {:rtc-download-graph? true
-                                                     :gen-undo-ops? false
+        (c.m/<?
+         (p/do!
+          (.createOrOpenDB worker-obj repo (ldb/write-transit-str {:close-other-db? false}))
+          (.exportDB worker-obj repo)
+          (.transact worker-obj repo init-tx-data {:rtc-download-graph? true
+                                                   :gen-undo-ops? false
                                                      ;; only transact db schema, skip validation to avoid warning
-                                                     :skip-validate-db? true
-                                                     :persist-op? false} (worker-state/get-context))
-            (.transact worker-obj repo tx-data {:rtc-download-graph? true
-                                                :gen-undo-ops? false
-                                                :persist-op? false} (worker-state/get-context))
-            (transact-block-refs! repo)))))
+                                                   :skip-validate-db? true
+                                                   :persist-op? false} (worker-state/get-context))
+          (.transact worker-obj repo tx-data {:rtc-download-graph? true
+                                              :gen-undo-ops? false
+                                              :persist-op? false} (worker-state/get-context))
+          (transact-block-refs! repo))))
       (worker-util/post-message :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -362,7 +358,7 @@
             (m/? (new-task--transact-remote-all-blocks all-blocks repo graph-uuid))
             (client-op/update-graph-uuid repo graph-uuid)
             (when-not rtc-const/RTC-E2E-TEST
-              (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid})))))
+              (c.m/<? (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
             (worker-state/set-rtc-downloading-graph! false)
             (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed
                                                           :message "download completed"

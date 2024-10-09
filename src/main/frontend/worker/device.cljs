@@ -5,7 +5,8 @@
             [frontend.worker.state :as worker-state]
             [promesa.core :as p]))
 
-(defn <gen-device-metadata!
+(defn <ensure-device-metadata!
+  "Generate new device entity if not exists"
   [repo]
   (let [conn (worker-state/get-client-ops-conn repo)]
     (assert (some? conn) repo)

@@ -1,7 +1,8 @@
 (ns frontend.common.missionary-util
   "Utils based on missionary. Used by frontend and worker namespaces"
   (:require-macros [frontend.common.missionary-util])
-  (:require [clojure.core.async :as a]
+  (:require [cljs.core.async.impl.channels]
+            [clojure.core.async :as a]
             [missionary.core :as m])
   ;; (:import [missionary Cancelled])
   )
@@ -71,14 +72,21 @@
   completing with true when put is accepted, or false if port was closed."
     [c x] (doto (m/dfv) (->> (a/put! c x)))))
 
-(defn <!
-  "Return a task that takes from given channel,
-  completing with value when take is accepted, or nil if port was closed."
-  [c] (doto (m/dfv) (->> (a/take! c))))
+(comment
+  (defn await-promise
+    "Returns a task completing with the result of given promise"
+    [p]
+    (let [v (m/dfv)]
+      (.then p #(v (fn [] %)) #(v (fn [] (throw %))))
+      (m/absolve v))))
 
-(defn await-promise
-  "Returns a task completing with the result of given promise"
-  [p]
-  (let [v (m/dfv)]
-    (.then p #(v (fn [] %)) #(v (fn [] (throw %))))
-    (m/absolve v)))
+(defn <!
+  "Return a task.
+  if arg is a channel, takes from given channel, completing with value when take is accepted, or nil if port was closed.
+  if arg is a promise, completing with the result of given promise."
+  [chan-or-promise]
+  (if (instance? cljs.core.async.impl.channels/ManyToManyChannel chan-or-promise)
+    (doto (m/dfv) (->> (a/take! chan-or-promise)))
+    (let [v (m/dfv)]
+      (.then chan-or-promise #(v (fn [] %)) #(v (fn [] (throw %))))
+      (m/absolve v))))
