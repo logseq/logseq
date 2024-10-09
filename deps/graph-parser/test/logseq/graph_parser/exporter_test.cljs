@@ -120,7 +120,8 @@
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [files conn options]
-  (p/let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge default-export-options options))
+  (p/let [doc-options (gp-exporter/build-doc-options (merge {:macros {}} (:user-config options))
+                                                     (merge default-export-options options))
           files' (mapv #(hash-map :path %) files)
           _ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
     {:import-state (:import-state doc-options)}))
@@ -524,3 +525,11 @@
         "Existing page correctly set as class parent")
     (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:logseq.property/parent :block/title]))
         "New page correctly set as class parent")))
+
+(deftest-async export-config-file-sets-title-format
+  (p/let [conn (db-test/create-conn)
+          read-file #(p/do! (pr-str {:journal/page-title-format "yyyy-MM-dd"}))
+          _ (gp-exporter/export-config-file conn "logseq/config.edn" read-file {})]
+    (is (= "yyyy-MM-dd"
+           (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal)))
+        "title format set correctly by config")))
