@@ -66,8 +66,9 @@
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-medium (t :linked-references/reference-count (when (or (seq (:included filters))
-                                                                       (seq (:excluded filters))) filter-n) total)]
+      [:div.font-medium.opacity-50
+       (t :linked-references/reference-count (when (or (seq (:included filters))
+                                                       (seq (:excluded filters))) filter-n) total)]
       [:a.filter.fade-link
        {:title (t :linked-references/filter-heading)
         :on-mouse-over (fn [_e]
@@ -219,7 +220,8 @@
       [:div.references.page-unlinked.mt-6.flex-1.flex-row.faster.fade-in
        [:div.content.flex-1
         (ui/foldable
-         [:h2.font-medium (t :unlinked-references/reference-count @n-ref)]
+         [:div.font-medium.opacity-50
+          (t :unlinked-references/reference-count @n-ref)]
          (fn [] (unlinked-references-aux page n-ref))
          {:default-collapsed? true
           :title-trigger? true})]])))

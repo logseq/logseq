@@ -218,37 +218,38 @@
           db-based? (config/db-based-graph? repo)]
       [:<>
        (when (and db-based? (or (ldb/class? block) (ldb/property? block)))
-         [:div.font-medium.mt-8.ml-1.pb-3.opacity-50
+         [:div.font-medium.mt-8.pb-3.opacity-50.ml-2
           "Notes"])
 
-       (cond
-         loading?
-         nil
+       [:div.ml-1
+        (cond
+          loading?
+          nil
 
-         (and
-          (not loading?)
-          (not block?)
-          (empty? children) page-e)
-         (dummy-block page-e)
+          (and
+           (not loading?)
+           (not block?)
+           (empty? children) page-e)
+          (dummy-block page-e)
 
-         :else
-         (let [document-mode? (state/sub :document/mode?)
-               hiccup-config (merge
-                              {:id (if block? (str block-id) page-name)
-                               :db/id (:db/id block)
-                               :block? block?
-                               :editor-box editor/box
-                               :document/mode? document-mode?}
-                              config)
-               config (common-handler/config-with-document-mode hiccup-config)
-               blocks (if block? [block] (db/sort-by-order children block))]
-           [:div
-            (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
-            (when-not config/publishing?
-              (let [args (if block-id
-                           {:block-uuid block-id}
-                           {:page page-name})]
-                (add-button args)))]))])))
+          :else
+          (let [document-mode? (state/sub :document/mode?)
+                hiccup-config (merge
+                               {:id (if block? (str block-id) page-name)
+                                :db/id (:db/id block)
+                                :block? block?
+                                :editor-box editor/box
+                                :document/mode? document-mode?}
+                               config)
+                config (common-handler/config-with-document-mode hiccup-config)
+                blocks (if block? [block] (db/sort-by-order children block))]
+            [:div
+             (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
+             (when-not config/publishing?
+               (let [args (if block-id
+                            {:block-uuid block-id}
+                            {:page page-name})]
+                 (add-button args)))]))]])))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
