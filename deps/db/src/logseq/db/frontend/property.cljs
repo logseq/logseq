@@ -253,6 +253,10 @@
                                            {:type :map
                                             :hide? true
                                             :public? false}}
+   :logseq.property.asset/resize-metadata {:title "Asset resize metadata"
+                                           :schema {:type :map
+                                                    :hide? true
+                                                    :public? false}}
    :logseq.property.fsrs/due {:title "Due"
                               :schema
                               {:type :datetime

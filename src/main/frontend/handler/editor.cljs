@@ -1908,14 +1908,20 @@
     (state/clear-editor-action!)))
 
 (defn resize-image!
-  [block-id metadata full_text size]
-  (let [new-meta (merge metadata size)
-        image-part (first (string/split full_text #"\{"))
-        new-full-text (str image-part (pr-str new-meta))
-        block (db/entity [:block/uuid block-id])
-        value (:block/title block)
-        new-value (string/replace value full_text new-full-text)]
-    (save-block-aux! block new-value {})))
+  [config block-id metadata full_text size]
+  (let [asset (:asset-block config)]
+    (if (and asset (config/db-based-graph?))
+      (property-handler/set-block-property! (state/get-current-repo)
+                                            (:db/id asset)
+                                            :logseq.property.asset/resize-metadata
+                                            size)
+      (let [new-meta (merge metadata size)
+            image-part (first (string/split full_text #"\{"))
+            new-full-text (str image-part (pr-str new-meta))
+            block (db/entity [:block/uuid block-id])
+            value (:block/title block)
+            new-value (string/replace value full_text new-full-text)]
+        (save-block-aux! block new-value {})))))
 
 (defonce *auto-save-timeout (atom nil))
 (defn edit-box-on-change!

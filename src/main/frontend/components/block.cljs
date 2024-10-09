@@ -351,8 +351,21 @@
                                                 (if local?
                                                   (ipc/ipc "openFileInFolder" image-src)
                                                   (js/window.apis.openExternal image-src)))}
-                                   (shui/tabler-icon "folder-pin")])]])])]]
-    (if (config/db-based-graph?)
+                                   (shui/tabler-icon "folder-pin")])]])])]
+        width (or (get-in asset-block [:logseq.property.asset/resize-metadata :width])
+                  (:width metadata))
+        height (or (get-in asset-block [:logseq.property.asset/resize-metadata :height])
+                   (:height metadata))
+        style (when-not (util/mobile?)
+                (cond (and width height)
+                      {:width width :height height}
+                      width
+                      {:width width}
+                      height
+                      {:height height}
+                      :else
+                      {}))]
+    (if (:disable-resize? config)
       asset-container
       (ui/resize-provider
        (ui/resize-consumer
@@ -370,14 +383,14 @@
                            (when (and @size @*resizing-image?)
                              (when-let [block-id (:block/uuid config)]
                                (let [size (bean/->clj @size)]
-                                 (editor-handler/resize-image! block-id metadata full-text size))))
+                                 (editor-handler/resize-image! config block-id metadata full-text size))))
                            (when @*resizing-image?
                            ;; TODO:​ need a better way to prevent the clicking to edit current block
                              (js/setTimeout #(reset! *resizing-image? false) 200)))
             :onClick (fn [e]
                        (when @*resizing-image? (util/stop e)))}
-            (and (:width metadata) (not (util/mobile?)))
-            (assoc :style {:width (:width metadata)}))
+            style
+            (assoc :style style))
           {})
         asset-container)))))
 
