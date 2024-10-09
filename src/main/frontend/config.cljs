@@ -505,8 +505,7 @@
 
 (defn get-current-repo-assets-root
   []
-  (when-let [repo-dir (and (local-file-based-graph? (state/get-current-repo))
-                           (get-repo-dir (state/get-current-repo)))]
+  (when-let [repo-dir (get-repo-dir (state/get-current-repo))]
     (path/path-join repo-dir "assets")))
 
 (defn get-custom-js-path

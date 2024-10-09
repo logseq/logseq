@@ -209,3 +209,12 @@
       (.then (fn [buf] (js/crypto.subtle.digest "SHA-256" buf)))
       (.then (fn [dig] (js/Uint8Array. dig)))
       (.then decode-digest)))
+
+(defn <get-all-assets
+  []
+  (when-let [path (config/get-current-repo-assets-root)]
+    (p/let [result (fs/readdir path {:path-only? true})]
+      (p/all (map (fn [path]
+                    (p/let [data (fs/read-file path "" {})]
+                      (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
+                        [path' data]))) result)))))

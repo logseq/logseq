@@ -40,8 +40,8 @@
           :title "Change backup folder"
           :on-click (fn []
                       (p/do!
-                        (db/transact! [[:db/retractEntity :logseq.kv/graph-backup-folder]])
-                        (reset! *backup-folder nil)))
+                       (db/transact! [[:db/retractEntity :logseq.kv/graph-backup-folder]])
+                       (reset! *backup-folder nil)))
           :size :sm}
          (ui/icon "edit"))]
        (shui/button
@@ -68,7 +68,6 @@
                        (export/auto-db-backup! repo {:backup-now? false})))}
         "Backup now"))]))
 
-
 (rum/defc export
   []
   (when-let [current-repo (state/get-current-repo)]
@@ -85,11 +84,15 @@
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-json! current-repo)}
             (t :export-json)]])
-        (when (config/db-based-graph? current-repo)
+        (when db-based?
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
             (t :export-sqlite-db)]])
-        (when (config/db-based-graph? current-repo)
+        (when db-based?
+          [:div
+           [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
+            (t :export-zip)]])
+        (when db-based?
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-debug-json! current-repo)}
             "Export debug JSON"]
@@ -128,7 +131,6 @@
        [:a#export-as-markdown.hidden]
        [:a#export-as-opml.hidden]
        [:a#convert-markdown-to-unordered-list-or-heading.hidden]])))
-
 
 (def *export-block-type (atom :text))
 
