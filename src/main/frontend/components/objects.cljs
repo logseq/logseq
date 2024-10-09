@@ -18,7 +18,8 @@
             [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.ui :as ui]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [frontend.components.filepicker :as filepicker]))
 
 (defn- get-class-objects
   [class]
@@ -140,8 +141,15 @@
                                   :views-title (class-views class views view-entity {:set-view-entity! set-view-entity!
                                                                                      :set-views! set-views!})
                                   :columns columns
-                                  :add-new-object! (when-not (= :logseq.class/Asset (:db/ident class))
-                                                    ;; TODO: support multiple assets upload
+                                  :add-new-object! (if (= :logseq.class/Asset (:db/ident class))
+                                                     (fn [_e]
+                                                       (shui/dialog-open!
+                                                        (fn []
+                                                          [:div.flex.flex-col.gap-2
+                                                           [:div.font-medium "Add assets"]
+                                                           (filepicker/picker
+                                                            {:on-change (fn [_e files]
+                                                                          (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true))})])))
                                                      #(add-new-class-object! class set-data!))
                                   :show-add-property? true
                                   :add-property! (fn []
