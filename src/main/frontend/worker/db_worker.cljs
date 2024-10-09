@@ -12,6 +12,7 @@
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.db.migrate :as db-migrate]
+            [frontend.worker.device :as worker-device]
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
             [frontend.worker.handler.page :as worker-page]
@@ -24,6 +25,7 @@
             [frontend.worker.state :as worker-state] ;; [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.undo-redo2 :as undo-redo]
             [frontend.worker.util :as worker-util]
+            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -32,7 +34,6 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.op :as outliner-op]
-            [goog.object :as gobj]
             [promesa.core :as p]
             [shadow.cljs.modern :refer [defclass]]
             [logseq.db.frontend.schema :as db-schema]
@@ -429,7 +430,8 @@
   (init
    [_this rtc-ws-url]
    (reset! worker-state/*rtc-ws-url rtc-ws-url)
-   (init-sqlite-module!))
+   (p/do (worker-device/<ensure-device-metadata!)
+         (init-sqlite-module!)))
 
   (storeMetadata
    [_this repo metadata-str]
