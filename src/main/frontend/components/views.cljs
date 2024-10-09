@@ -23,7 +23,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mixins :as mixins]))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!]}]
@@ -104,11 +105,11 @@
       (reduce + (filter number? col))
       (string/join ", " col))))
 
-(rum/defc block-title < rum/static
+(rum/defc block-container < rum/static
   [config row]
-  (let [block-container (state/get-component :block/container)]
+  (let [container (state/get-component :block/container)]
     [:div.relative.w-full
-     (block-container (assoc config :table? true) row)]))
+     (container config row)]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name?]
@@ -131,7 +132,9 @@
               :type :string
               :header header-cp
               :cell (fn [_table row _column]
-                      (block-title (assoc config :raw-title? true) row))
+                      (block-container (assoc config
+                                              :raw-title? true
+                                              :table? true) row))
               :disable-hide? true})
            (when asset-class?
              {:id :file
@@ -1048,7 +1051,7 @@
            (shui/table-footer (add-new-row table)))]]))))
 
 (rum/defc list-view < rum/static
-  [view-entity result config]
+  [config view-entity result]
   (when-let [->hiccup (state/get-component :block/->hiccup)]
     (let [group-by-page? (not (every? db/page? result))
           result (if group-by-page?
@@ -1062,6 +1065,16 @@
                        :breadcrumb-show? (if group-by-page? true false)
                        :group-by-page? group-by-page?
                        :ref? true)))))
+
+(rum/defcs card-view < rum/static mixins/container-id
+  [state config view-entity result]
+  (let [config' (assoc config :container-id (:container-id state))]
+    [:div.ls-cards
+     (for [block result]
+       [:div.ls-card-item
+        {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
+        [:div.-ml-4
+         (block-container (assoc config' :id (str (:block/uuid block))) block)]])]))
 
 (rum/defc view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
@@ -1157,7 +1170,10 @@
 
      (case display-type
        :logseq.property.view/type.list
-       (list-view view-entity (:rows table) (:config option))
+       (list-view (:config option) view-entity (:rows table))
+
+       :logseq.property.view/type.card
+       (card-view (:config option) view-entity (:rows table))
 
        (table-view table option row-selection add-new-object! ready?))]))
 
