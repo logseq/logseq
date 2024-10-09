@@ -193,7 +193,6 @@
     :has-property
     '[(has-property ?b ?prop)
       [?b ?prop _]
-      [(missing? $ ?b :block/name)]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]
 
@@ -211,8 +210,7 @@
        (and
         [?prop-e :db/valueType :db.type/ref]
         (or [?pv :block/title ?val]
-            [?pv :property.value/content ?val])))
-      [(missing? $ ?b :block/name)]]
+            [?pv :property.value/content ?val])))]
 
     :task
     '[(task ?b ?statuses)

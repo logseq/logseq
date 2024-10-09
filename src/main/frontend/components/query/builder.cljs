@@ -140,7 +140,7 @@
   (let [[properties set-properties!] (rum/use-state nil)]
     (rum/use-effect!
      (fn []
-       (p/let [properties (db-async/<get-all-properties)]
+       (p/let [properties (db-async/<get-all-properties {:remove-built-in-property? false})]
          (set-properties! properties)))
      [])
     (select (map #(hash-map :db/ident (:db/ident %)
@@ -162,7 +162,7 @@
         values' (if db-graph?
                   (if ref-property?
                     (map #(db-property/property-value-content (db/entity repo %)) values)
-                    (if (contains? #{:checkbox} property-type)
+                    (if (contains? #{:checkbox :keyword :raw-number :string} property-type)
                       values
                       ;; Don't display non-ref property values as they don't have display and query support
                       []))
@@ -570,8 +570,7 @@
 
 (rum/defc clauses-group
   [*tree *find loc kind clauses]
-  (let [parens? (and (= loc [0])
-                     (> (count clauses) 1))]
+  (let [parens? (and (= loc [0]) (or (not= kind :and) (> (count clauses) 1)))]
     [:div.clauses-group
      (when parens? [:div.clause-bracket "("])
      (when-not (and (= loc [0])
