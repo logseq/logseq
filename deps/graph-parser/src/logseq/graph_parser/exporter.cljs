@@ -359,34 +359,58 @@
         (js/console.error "Translating query properties failed with:" e)
         []))))
 
+(defn- translate-linked-ref-filters
+  [prop-value page-names-to-uuids]
+  (try
+    (let [filters (edn/read-string prop-value)
+          filter-by (group-by val filters)
+          includes (->> (filter-by true)
+                        (map first)
+                        (keep #(or (page-names-to-uuids %)
+                                   (js/console.error (str "No uuid found for linked reference filter page " (pr-str %)))))
+                        (mapv #(vector :block/uuid %)))
+          excludes (->> (filter-by false)
+                        (map first)
+                        (keep #(or (page-names-to-uuids %)
+                                   (js/console.error (str "No uuid found for linked reference filter page " (pr-str %)))))
+                        (mapv #(vector :block/uuid %)))]
+      (cond-> []
+        (seq includes)
+        (conj [:logseq.property.linked-references/includes includes])
+        (seq excludes)
+        (conj [:logseq.property.linked-references/excludes excludes])))
+    (catch :default e
+        (js/console.error "Translating linked reference filters failed with: " e))))
+
 (defn- update-built-in-property-values
-  [props {:keys [ignored-properties all-idents]} {:block/keys [title name]} options]
+  [props page-names-to-uuids {:keys [ignored-properties all-idents]} {:block/keys [title name]} options]
   (let [m
         (->> props
-             (keep (fn [[prop prop-value]]
-                     ;; FIXME: Migrate :filters to :logseq.property.linked-references/* properties
-                     (if (#{:icon :filters} prop)
-                       (do (swap! ignored-properties
-                                  conj
-                                  {:property prop :value prop-value :location (if name {:page name} {:block title})})
-                           nil)
-                       (case prop
-                         :query-properties
-                         (when-let [cols (not-empty (translate-query-properties prop-value all-idents options))]
-                           [:logseq.property.table/ordered-columns cols])
-                         :query-table
-                         [:logseq.property.view/type
-                          (if prop-value :logseq.property.view/type.table :logseq.property.view/type.list)]
-                         :query-sort-by
-                         [:logseq.property.table/sorting
-                          [{:id (or (query-table-special-keys (keyword prop-value))
-                                    (get-ident @all-idents (keyword prop-value)))
-                            :asc? true}]]
-                         ;; ignore to handle below
-                         :query-sort-desc
-                         nil
-                         ;; else
-                         [(built-in-property-name-to-idents prop) prop-value]))))
+             (mapcat (fn [[prop prop-value]]
+                       (if (#{:icon} prop)
+                         (do (swap! ignored-properties
+                                    conj
+                                    {:property prop :value prop-value :location (if name {:page name} {:block title})})
+                             nil)
+                         (case prop
+                           :query-properties
+                           (when-let [cols (not-empty (translate-query-properties prop-value all-idents options))]
+                             [[:logseq.property.table/ordered-columns cols]])
+                           :query-table
+                           [[:logseq.property.view/type
+                             (if prop-value :logseq.property.view/type.table :logseq.property.view/type.list)]]
+                           :query-sort-by
+                           [[:logseq.property.table/sorting
+                             [{:id (or (query-table-special-keys (keyword prop-value))
+                                       (get-ident @all-idents (keyword prop-value)))
+                               :asc? true}]]]
+                           ;; ignore to handle below
+                           :query-sort-desc
+                           nil
+                           :filters
+                           (translate-linked-ref-filters prop-value page-names-to-uuids)
+                           ;; else
+                           [[(built-in-property-name-to-idents prop) prop-value]]))))
              (into {}))]
     (cond-> m
       (and (contains? props :query-sort-desc) (:query-sort-by props))
@@ -505,6 +529,7 @@
       {}
       (let [props' (-> (update-built-in-property-values
                         (select-keys props file-built-in-property-names)
+                        page-names-to-uuids
                         (select-keys import-state [:ignored-properties :all-idents])
                         (select-keys block [:block/name :block/title])
                         (select-keys options [:property-classes]))
@@ -781,17 +806,21 @@
                                       (not (:block/file %))))
                         ;; remove file path relative
                         (map #(dissoc % :block/file)))
-        existing-pages (keep #(first
-                               ;; don't fetch built-in as that would give the wrong entity if a user used
-                               ;; a db-only built-in property name e.g. description
-                               (d/q '[:find [(pull ?b [*]) ...]
-                                      :in $ ?name
-                                      :where [?b :block/name ?name] [(missing? $ ?b :logseq.property/built-in?)]]
-                                    @conn
-                                    (:block/name %)))
-                             all-pages*)
-        existing-page-names-to-uuids (into {} (map (juxt :block/name :block/uuid) existing-pages))
-        existing-page? #(contains? existing-page-names-to-uuids (:block/name %))
+        ;; Fetch all named ents once per import file to speed up named lookups
+        all-existing-page-ents (->> @conn
+                                    ;; don't fetch built-in as that would give the wrong entity if a user used
+                                    ;; a db-only built-in property name e.g. description
+                                    (d/q '[:find [?b ...]
+                                           :where [?b :block/name] [(missing? $ ?b :logseq.property/built-in?)]])
+                                    (map #(d/entity @conn %))
+                                    (map (juxt :block/name identity))
+                                    (into {}))
+        ;; map of existing pages in current parsed file, indexed by name
+        existing-pages-by-name (into {}
+                                     (keep #(when-let [ent (all-existing-page-ents (:block/name %))]
+                                              [(:block/name ent) (:block/uuid ent)])
+                                           all-pages*))
+        existing-page? #(contains? existing-pages-by-name (:block/name %))
         ;; fix extract incorrectly assigning new user pages built-in uuids
         all-pages (map #(if (and (not (existing-page? %))
                                  (contains? all-built-in-names (keyword (:block/name %))))
@@ -799,12 +828,12 @@
                           %)
                        all-pages*)
         new-pages (remove existing-page? all-pages)
-        page-names-to-uuids (merge existing-page-names-to-uuids
+        page-names-to-uuids (merge (update-vals all-existing-page-ents :block/uuid)
                                    (into {} (map (juxt :block/name :block/uuid) new-pages)))
         all-pages-m (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
                           all-pages)
         pages-tx (keep (fn [m]
-                         (if-let [page-uuid (existing-page-names-to-uuids (:block/name m))]
+                         (if-let [page-uuid (existing-pages-by-name (:block/name m))]
                            (let [;; These attributes are not allowed to be transacted because they must not change across files
                                  disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                                         :block/created-at :block/updated-at]
@@ -840,7 +869,7 @@
                        (map :block all-pages-m))]
     {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
-     :existing-pages existing-page-names-to-uuids
+     :existing-pages existing-pages-by-name
      :page-names-to-uuids page-names-to-uuids}))
 
 (defn- build-upstream-properties-tx-for-default

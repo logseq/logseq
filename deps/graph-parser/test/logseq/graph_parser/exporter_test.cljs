@@ -173,8 +173,8 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 18 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
-      (is (= 18 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 19 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 19 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
@@ -186,7 +186,7 @@
                          (filter ldb/internal-page?))))
           "Correct number of pages with block content")
       (is (= 4 (count (d/datoms @conn :avet :block/type "whiteboard"))))
-      (is (= 1 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
+      (is (= 0 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
       (is (= 1 (count @assets))))
 
     (testing "logseq files"
@@ -293,7 +293,14 @@
           "numered block has correct property")
 
       (is (= #{"gpt"}
-             (:block/alias (readable-properties @conn (find-page-by-name @conn "chat-gpt")))))
+             (:block/alias (readable-properties @conn (find-page-by-name @conn "chat-gpt"))))
+          "alias set correctly")
+
+      (is (= {:logseq.property.linked-references/includes #{"Oct 9th, 2024"}
+              :logseq.property.linked-references/excludes #{"ref2"}}
+             (select-keys (readable-properties @conn (find-page-by-name @conn "chat-gpt"))
+                          [:logseq.property.linked-references/excludes :logseq.property.linked-references/includes]))
+          "linked ref filters set correctly")
 
       ;; Queries
       (is (= {:logseq.property.table/sorting [{:id :user.property/prop-num, :asc? false}]
