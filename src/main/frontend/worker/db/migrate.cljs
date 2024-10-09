@@ -10,7 +10,10 @@
             [cljs-bean.core :as bean]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db.frontend.property.build :as db-property-build]
+            [logseq.db.frontend.order :as db-order]
+            [logseq.common.uuid :as common-uuid]))
 
 ;; TODO: fixes/rollback
 
@@ -231,6 +234,23 @@
             query-id (:db/id query)]
         [[:db/add query-id :logseq.property.class/properties :logseq.property/query]]))))
 
+(defn- add-card-view
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [ident :logseq.property.view/type.card
+            uuid' (common-uuid/gen-uuid :db-ident-block-uuid ident)
+            property (d/entity db :logseq.property.view/type)
+            m (cond->
+               (db-property-build/build-closed-value-block
+                uuid'
+                "Card view"
+                property
+                {:db-ident :logseq.property.view/type.card})
+                true
+                (assoc :block/order (db-order/gen-key)))]
+        [m]))))
+
 (defn- add-addresses-in-kvs-table
   [^Object sqlite-db]
   (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
@@ -307,7 +327,8 @@
    [31 {:properties [:logseq.property/asset]}]
    [32 {:properties [:logseq.property.asset/last-visit-page]}]
    [33 {:properties [:logseq.property.pdf/hl-image]}]
-   [34 {:properties [:logseq.property.asset/resize-metadata]}]])
+   [34 {:properties [:logseq.property.asset/resize-metadata]}]
+   [35 {:fix add-card-view}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
