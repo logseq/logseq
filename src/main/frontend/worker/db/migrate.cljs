@@ -306,7 +306,8 @@
         :properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]}]
    [31 {:properties [:logseq.property/asset]}]
    [32 {:properties [:logseq.property.asset/last-visit-page]}]
-   [33 {:properties [:logseq.property.pdf/hl-image]}]])
+   [33 {:properties [:logseq.property.pdf/hl-image]}]
+   [34 {:properties [:logseq.property.asset/resize-metadata]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
