@@ -53,7 +53,7 @@
                  data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
            (set-data! data))))
      [])
-    [:div.ls-all-pages.w-full
+    [:div.ls-all-pages.w-full.mx-auto
      (views/view view-entity {:data data
                               :set-data! set-data!
                               :title-key :all-pages/table-title
