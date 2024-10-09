@@ -946,16 +946,12 @@
           show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
           block-uuid (:block/uuid config)
           contents-page? (= "contents" (string/lower-case (str id)))
-          block (db/get-page s)
-          asset? (some? (:logseq.property.asset/type block))]
+          block (db/get-page s)]
       (cond
         (string/ends-with? s ".excalidraw")
         [:div.draw {:on-click (fn [e]
                                 (.stopPropagation e))}
          (excalidraw s block-uuid)]
-
-        asset?
-        (asset-cp config block)
 
         (or (ldb/page? block) (:block/tags block))
         [:span.page-reference
@@ -1115,16 +1111,13 @@
               block-type (keyword (pu/lookup properties :logseq.property/ls-type))
               hl-type (pu/lookup properties :logseq.property/hl-type)
               repo (state/get-current-repo)
-              stop-inner-events? (= block-type :whiteboard-shape)
-              asset? (some? (:logseq.property.asset/type block))]
+              stop-inner-events? (= block-type :whiteboard-shape)]
           (if (and block (:block/title block))
             (let [title [:span.block-ref
                          (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                         block nil (:block/uuid block)
                                         (:slide? config))]
                   inner (cond
-                          asset?
-                          (asset-cp config block)
                           label
                           (->elem
                            :span.block-ref
