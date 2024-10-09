@@ -5,6 +5,7 @@
             [clojure.set :as set]
             [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
+            [frontend.worker.crypt :as crypt]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
@@ -128,16 +129,23 @@
       (c.m/<? (http/put url {:body all-blocks-str :with-credentials? false}))
       (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
                                                   :message "requesting upload-graph"})
-      (let [upload-resp
+      (let [{:keys [publicKey privateKey]} (m/? (c.m/await-promise (crypt/<gen-key-pair)))
+            public-key-jwk (ldb/write-transit-str
+                            (m/? (c.m/await-promise (crypt/<export-key publicKey))))
+            private-key-jwk (ldb/write-transit-str
+                             (m/? (c.m/await-promise (crypt/<export-key privateKey))))
+            upload-resp
             (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
                                                         :s3-key key
-                                                        :graph-name remote-graph-name}))]
+                                                        :graph-name remote-graph-name
+                                                        :public-key-jwk public-key-jwk}))]
         (if-let [graph-uuid (:graph-uuid upload-resp)]
           (do
             (ldb/transact! conn
                            [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
                             {:db/ident :logseq.kv/graph-local-tx :kv/value "0"}])
             (client-op/update-graph-uuid repo graph-uuid)
+            (crypt/store-graph-keys-jwk repo graph-uuid public-key-jwk private-key-jwk)
             (when-not rtc-const/RTC-E2E-TEST
               (let [^js worker-obj (:worker/object @worker-state/*state)]
                 (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))))
