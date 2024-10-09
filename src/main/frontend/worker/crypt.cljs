@@ -44,12 +44,12 @@
 
 (defn <import-public-key
   [jwk]
-  (assert (map? jwk) jwk)
+  (assert (instance? js/Object jwk) jwk)
   (js/crypto.subtle.importKey "jwk" jwk key-algorithm true #js["encrypt"]))
 
 (defn <import-private-key
   [jwk]
-  (assert (map? jwk) jwk)
+  (assert (instance? js/Object jwk) jwk)
   (js/crypto.subtle.importKey "jwk" jwk key-algorithm true #js["decrypt"]))
 
 (comment
