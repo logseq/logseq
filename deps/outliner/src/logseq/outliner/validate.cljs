@@ -16,7 +16,8 @@
                            {:type :notification
                             :payload {:message "Page name can't include \"#\"."
                                       :type :warning}}))))
-  (when (string/includes? page-title ns-util/parent-char)
+  (when (and (string/includes? page-title ns-util/parent-char)
+             (not (common-date/normalize-date page-title nil)))
     (throw (ex-info "Page name can't include \"/\"."
                     (merge meta-m
                            {:type :notification
