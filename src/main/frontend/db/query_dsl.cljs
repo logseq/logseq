@@ -351,6 +351,17 @@
       {:query (list 'has-page-property '?p k')
        :rules [:has-page-property]})))
 
+(defn- build-tags
+  [e]
+  (let [tags (if (coll? (first (rest e)))
+               (first (rest e))
+               (rest e))
+        tags (map (comp string/lower-case name) tags)]
+    (when (seq tags)
+      (let [tags (set (map (comp page-ref/get-page-name! string/lower-case name) tags))]
+        {:query (list 'tags '?p tags)
+         :rules [:tags]}))))
+
 (defn- build-page-tags
   [e]
   (let [tags (if (coll? (first (rest e)))
@@ -479,6 +490,9 @@ Some bindings in this fn:
 
        (= 'page-property fe)
        (build-page-property e env)
+
+       (= 'tags fe)
+       (build-tags e)
 
        (= 'page-tags fe)
        (build-page-tags e)

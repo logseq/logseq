@@ -153,7 +153,13 @@
   "Rules used by frontend.query.dsl for db graphs"
   (merge
    (dissoc query-dsl-rules :namespace)
-   {:page-tags
+   {:tags
+    '[(tags ?b ?tags)
+      [?b :block/tags ?t]
+      [?t :block/name ?tag]
+      [(missing? $ ?b :block/link)]
+      [(contains? ?tags ?tag)]]
+    :page-tags
     '[(page-tags ?p ?tags)
       [?p :block/tags ?t]
       [?t :block/name ?tag]
