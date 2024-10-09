@@ -279,15 +279,10 @@
 
 (defn update-hl-block!
   [highlight]
-  (let [db-based? (config/db-based-graph?)]
-    (when-let [block (db-model/get-block-by-uuid (:id highlight))]
-      (doseq [[k v] {(if db-based? :logseq.property.pdf/hl-image :hl-stamp)
-                     (if (area-highlight? highlight)
-                       (get-in highlight [:content :image])
-                       (js/Date.now))
-                     (pu/get-pid :logseq.property/hl-color)
-                     (get-in highlight [:properties :color])}]
-        (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k v)))))
+  (when-let [block (db-model/get-block-by-uuid (:id highlight))]
+    (when-let [color (get-in highlight [:properties :color])]
+      (let [k (pu/get-pid :logseq.property/hl-color)]
+        (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k color)))))
 
 (defn unlink-hl-area-image$
   [^js _viewer current hl]
