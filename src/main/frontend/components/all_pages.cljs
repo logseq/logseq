@@ -17,7 +17,7 @@
   (->> [{:id :block/title
          :name (t :block/name)
          :cell (fn [_table row _column]
-                 (component-block/page-cp {} row))
+                 (component-block/page-cp {:show-icon? true} row))
          :type :string}
         {:id :block/type
          :name "Type"
