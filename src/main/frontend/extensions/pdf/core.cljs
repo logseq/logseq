@@ -565,8 +565,8 @@
                           highlights' (conj highlights hl)]
                       (set-highlights! highlights')
 
-                      (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
-                                             (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
+                      (if-let [vw-pos (and (pdf-assets/area-highlight? hl)
+                                           (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
                         ;; exceptions
                         (->
                          (p/let [result (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
@@ -576,7 +576,8 @@
                                (set-highlights! (map (fn [hl] (if (= (:id hl) (:id hl')) hl' hl)) highlights'))
                                hl')))
                          (p/catch (fn [e]
-                                    (js/console.error e))))))))
+                                    (js/console.error e))))
+                        hl))))
         upd-hl! (fn [hl]
                   (let [highlights (pdf-utils/fix-nested-js highlights)]
                     (when-let [[target-idx] (medley/find-first
