@@ -462,7 +462,8 @@
           (swap! ignored-properties conj {:property prop :value val :schema (get property-changes prop)})
           nil)
         (do
-          (swap! upstream-properties assoc prop {:schema {:type :default}})
+          (swap! upstream-properties assoc prop {:schema {:type :default}
+                                                 :from-type (:from type-change)})
           (swap! property-schemas assoc prop {:type :default})
           (get properties-text-values prop)))
 
@@ -880,7 +881,7 @@
 
 (defn- build-upstream-properties-tx-for-default
   "Builds upstream-properties-tx for properties that change to :default type"
-  [db prop property-ident block-properties-text-values]
+  [db prop property-ident from-prop-type block-properties-text-values]
   (let [get-pvalue-content (fn get-pvalue-content [block-uuid prop']
                              (or (get-in block-properties-text-values [block-uuid prop'])
                                  (throw (ex-info (str "No :block/text-properties-values found when changing property values: " (pr-str block-uuid))
@@ -898,11 +899,16 @@
         existing-blocks-tx
         (mapcat (fn [m]
                   (let [prop-value (get m property-ident)
+                        ;; Don't delete property values from these types b/c those pages are needed
+                        ;; for refs and may have content
+                        retract-tx (if (#{:node :date} from-prop-type)
+                                     [[:db/retract (:db/id m) property-ident]]
+                                     (mapv #(vector :db/retractEntity (:db/id %))
+                                           (if (sequential? prop-value) prop-value [prop-value])))
                         prop-value-content (get-pvalue-content (:block/uuid m) prop)
                         new-value (db-property-build/build-property-value-block
                                    m {:db/ident property-ident} prop-value-content)]
-                    (into (mapv #(vector :db/retractEntity (:db/id %))
-                                (if (sequential? prop-value) prop-value [prop-value]))
+                    (into retract-tx
                           [new-value
                            {:block/uuid (:block/uuid m)
                             property-ident [:block/uuid (:block/uuid new-value)]}])))
@@ -921,11 +927,11 @@
           _ (log-fn :props-upstream-to-change upstream-properties)
           txs
           (mapcat
-           (fn [[prop {:keys [schema]}]]
+           (fn [[prop {:keys [schema from-type]}]]
              (let [prop-ident (get-ident all-idents prop)
                    upstream-tx
                    (when (= :default (:type schema))
-                     (build-upstream-properties-tx-for-default db prop prop-ident block-properties-text-values))
+                     (build-upstream-properties-tx-for-default db prop prop-ident from-type block-properties-text-values))
                    property-pages-tx [{:db/ident prop-ident :block/schema schema}]]
                ;; If we handle cardinality changes we would need to return these separately
                ;; as property-pages would need to be transacted separately

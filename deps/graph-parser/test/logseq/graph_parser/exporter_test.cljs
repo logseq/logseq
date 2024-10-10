@@ -41,7 +41,13 @@
               db)
          first)))
 
-(defn- find-block-by-property [db property property-value]
+(defn- find-block-by-property [db property]
+  (d/q '[:find [(pull ?b [*]) ...]
+         :in $ ?prop %
+         :where (has-property ?b ?prop)]
+       db property (rules/extract-rules rules/db-query-dsl-rules [:has-property])))
+
+(defn- find-block-by-property-value [db property property-value]
   (->> (d/q '[:find [(pull ?b [*]) ...]
               :in $ ?prop ?prop-value %
               :where (property ?b ?prop ?prop-value)]
@@ -308,7 +314,7 @@
               :logseq.property.table/ordered-columns [:block/title :user.property/prop-string :user.property/prop-num]
               :logseq.property/query "(property :prop-string)"
               :block/tags [:logseq.class/Query]}
-             (readable-properties @conn (find-block-by-property @conn :logseq.property/query "(property :prop-string)")))
+             (readable-properties @conn (find-block-by-property-value @conn :logseq.property/query "(property :prop-string)")))
           "simple query block has correct query properties")
       (is (= "For example, here's a query with title text:"
              (:block/title (find-block-by-content @conn #"query with title text")))
@@ -359,7 +365,11 @@
             "existing :node property value correctly saved as :default with full text")
         (is (= #{"[[Gabriel]] [[Jakob]]"}
                (:user.property/people (readable-properties @conn (find-block-by-content @conn #"pending block for :node"))))
-            "pending :node property value correctly saved as :default with full text")))
+            "pending :node property value correctly saved as :default with full text")
+        (is (some? (find-page-by-name @conn "Jakob"))
+            "Previous :node property value still exists")
+        (is (= 3 (count (find-block-by-property @conn :user.property/people)))
+            "Converted property has correct number of property values")))
 
     (testing "replacing refs in :block/title"
       (is (= 2

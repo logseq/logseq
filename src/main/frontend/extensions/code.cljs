@@ -390,7 +390,7 @@
   [config]
   (p/do!
    (code-handler/save-code-editor!)
-   (when-let [block (:block config)]
+   (when-let [block (or (:code-block config) (:block config))]
      (let [block (db/entity [:block/uuid (:block/uuid block)])]
        (state/set-state! :editor/raw-mode-block block)
        (editor-handler/edit-block! block :max {:save-code-editor? false})))))
@@ -399,10 +399,8 @@
   [state]
   (let [[config id attr _code theme user-options] (:rum/args state)
         edit-block (:block config)
+        code-block (:code-block config)
         config-file? (= (:file-path config) "logseq/config.edn")
-        default-open? (and (:editor/code-mode? @state/state)
-                           (= (:block/uuid edit-block)
-                              (get-in config [:block :block/uuid])))
         _ (state/set-state! :editor/code-mode? false)
         original-mode (get attr :data-lang)
         *editor-ref (get attr :editor-ref)
@@ -449,13 +447,16 @@
             *cursor-prev (volatile! nil)
             *cursor-curr (volatile! nil)
             update-cursor-state! (fn []
-                                   (let [pos (.getCursor editor)
-                                         pos (bean/->clj (js/JSON.parse (js/JSON.stringify pos)))
-                                         pos (select-keys pos [:line :ch])]
+                                   (let [start-pos (.getCursor editor true)
+                                         end-pos (.getCursor editor false)
+                                         start-pos' (bean/->clj (js/JSON.parse (js/JSON.stringify start-pos)))
+                                         end-pos' (bean/->clj (js/JSON.parse (js/JSON.stringify end-pos)))
+                                         range {:start (select-keys start-pos' [:line :ch])
+                                                :end (select-keys end-pos' [:line :ch])}]
                                      (if (not @*cursor-prev)
-                                       (vreset! *cursor-prev pos)
+                                       (vreset! *cursor-prev range)
                                        (vreset! *cursor-prev @*cursor-curr))
-                                     (vreset! *cursor-curr pos)))]
+                                     (vreset! *cursor-curr range)))]
         (gobj/set textarea-ref codemirror-ref-name editor)
         (when (= mode "calc")
           (.on editor "change" (fn [_cm _e]
@@ -473,9 +474,9 @@
                              (vreset! *cursor-prev nil)))
         (.on editor "focus" (fn [_e]
                               (when (and
-                                     (contains? #{:code} (:logseq.property.node/display-type edit-block))
+                                     (contains? #{:code} (:logseq.property.node/display-type code-block))
                                      (not= (:block/uuid edit-block) (:block/uuid (state/get-edit-block))))
-                                (editor-handler/edit-block! edit-block :max))
+                                (editor-handler/edit-block! (or code-block edit-block) :max {:container-id (:container-id config)}))
                               (state/set-editing-block-dom-id! (:block-parent-id config))
                               (state/set-block-component-editing-mode! true)
                               (state/set-state! :editor/code-block-context
@@ -489,31 +490,31 @@
                                                      shifted? (.-shiftKey e)]
                                                  (cond
                                                    (contains? #{"ArrowLeft" "ArrowRight"} key-code)
-                                                   (let [direction (if (= "ArrowLeft" key-code) :left :right)
-                                                         line (when-let [line (:line @*cursor-curr)]
-                                                                (.getLine (.-doc editor) line))]
+                                                   (let [direction (if (= "ArrowLeft" key-code) :left :right)]
                                                      (when (and (= @*cursor-prev @*cursor-curr)
                                                                 (or (and direction (nil? @*cursor-curr))
                                                                     (case direction
-                                                                      :left (and (zero? (:line @*cursor-curr))
-                                                                                 (zero? (:ch  @*cursor-curr)))
-                                                                      :right (and (= (:line @*cursor-curr) (.lastLine editor))
-                                                                                  (= (count line) (:ch @*cursor-curr)))
+                                                                      :left (and (zero? (:line (:start @*cursor-curr)))
+                                                                                 (zero? (:ch  (:start @*cursor-curr))))
+                                                                      :right (let [line (when-let [line (:line (:end @*cursor-curr))]
+                                                                                          (.getLine (.-doc editor) line))]
+                                                                               (and (= (:line (:end @*cursor-curr)) (.lastLine editor))
+                                                                                    (= (:ch (:end @*cursor-curr)) (count line))))
                                                                       false)))
                                                        (editor-handler/move-to-block-when-cross-boundary direction {}))
                                                      (update-cursor-state!))
 
                                                    (contains? #{"ArrowUp" "ArrowDown"} key-code)
-                                                   (let [direction (if (= "ArrowUp" key-code) :up :down)
-                                                         line (when-let [line (:line @*cursor-curr)]
-                                                                (.getLine (.-doc editor) line))]
+                                                   (let [direction (if (= "ArrowUp" key-code) :up :down)]
                                                      (when (and (= @*cursor-prev @*cursor-curr)
                                                                 (or (and direction (nil? @*cursor-curr))
                                                                     (case direction
-                                                                      :up (and (zero? (:line @*cursor-curr))
-                                                                               (zero? (:ch  @*cursor-curr)))
-                                                                      :down (and (= (:line @*cursor-curr) (.lastLine editor))
-                                                                                 (= (count line) (:ch @*cursor-curr)))
+                                                                      :up (and (zero? (:line (:start @*cursor-curr)))
+                                                                               (zero? (:ch  (:start @*cursor-curr))))
+                                                                      :down (let [line (when-let [line (:line (:end @*cursor-curr))]
+                                                                                         (.getLine (.-doc editor) line))]
+                                                                              (and (= (:line (:end @*cursor-curr)) (.lastLine editor))
+                                                                                   (= (:ch (:end @*cursor-curr)) (count line))))
                                                                       false)))
                                                        (editor-handler/move-cross-boundary-up-down
                                                         direction {:input textarea
@@ -547,9 +548,7 @@
                            (fn [e]
                              (.stopPropagation e)))
         (.save editor)
-        (.refresh editor)
-        (when default-open?
-          (.focus editor))))
+        (.refresh editor)))
     editor))
 
 (defn- load-and-render!
