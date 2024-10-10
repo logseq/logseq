@@ -76,25 +76,17 @@ input::-webkit-inner-spin-button {
 
       > .r {
         a.button {
-          user-select: none;
-          display: flex;
-          align-items: center;
-          margin-left: 8px;
-          margin-right: 8px;
-          padding: 4px 2px;
-          color: var(--ls-icon-color);
-          background-color: transparent;
-          transition: none;
-          word-break: normal;
+          @apply select-none flex items-center mx-2 py-1 px-0.5 bg-transparent
+          transition-none break-normal hover:opacity-80;
 
           &.is-active {
-            opacity: 1;
+            @apply opacity-100 rounded-none;
+
             border-bottom: 2px solid #969494;
-            border-radius: 0;
           }
 
           &:active {
-            opacity: .6;
+            @apply opacity-60;
           }
         }
       }
@@ -728,7 +720,7 @@ input::-webkit-inner-spin-button {
   }
 
   &[data-theme=light] {
-    background-color: #FFFFFF;
+    @apply bg-white;
   }
 
   &[data-theme=dark] {
@@ -768,7 +760,17 @@ input::-webkit-inner-spin-button {
 
     .extensions__pdf-toolbar {
       .buttons {
-        background-color: #f6efdf;
+        @apply bg-[#f6efdf];
+      }
+    }
+  }
+}
+
+html[data-theme=dark] {
+  .extensions__pdf-container[data-theme=warm] {
+    .extensions__pdf-toolbar {
+      .buttons {
+        @apply bg-background;
       }
     }
   }
