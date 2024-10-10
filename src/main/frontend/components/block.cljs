@@ -1118,61 +1118,64 @@
               repo (state/get-current-repo)
               stop-inner-events? (= block-type :whiteboard-shape)]
           (if (and block (:block/title block))
-            (let [title [:span.block-ref
-                         (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
-                                        block nil (:block/uuid block)
-                                        (:slide? config))]
-                  inner (cond
-                          label
-                          (->elem
-                           :span.block-ref
-                           (map-inline config label))
-                          :else
-                          title)]
-              [:div.block-ref-wrap.inline
-               {:data-type    (name (or block-type :default))
-                :data-hl-type hl-type
-                :on-pointer-down
-                (fn [^js/MouseEvent e]
-                  (if (util/right-click? e)
-                    (state/set-state! :block-ref/context {:block (:block config)
-                                                          :block-ref block-id})
-                    (when (and
-                           (or (gobj/get e "shiftKey")
-                               (not (.. e -target (closest ".blank"))))
-                           (not (util/right-click? e)))
-                      (util/stop e)
+            (let [content-cp (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
+                                            block nil (:block/uuid block)
+                                            (:slide? config))
+                  display-type (:logseq.property.node/display-type block)]
+              (if (and display-type (not (contains? #{:quote :math} display-type)))
+                content-cp
+                (let [title [:span.block-ref content-cp]
+                      inner (cond
+                              label
+                              (->elem
+                               :span.block-ref
+                               (map-inline config label))
+                              :else
+                              title)]
+                  [:div.block-ref-wrap.inline
+                   {:data-type    (name (or block-type :default))
+                    :data-hl-type hl-type
+                    :on-pointer-down
+                    (fn [^js/MouseEvent e]
+                      (if (util/right-click? e)
+                        (state/set-state! :block-ref/context {:block (:block config)
+                                                              :block-ref block-id})
+                        (when (and
+                               (or (gobj/get e "shiftKey")
+                                   (not (.. e -target (closest ".blank"))))
+                               (not (util/right-click? e)))
+                          (util/stop e)
 
-                      (cond
-                        (gobj/get e "shiftKey")
-                        (state/sidebar-add-block!
-                         (state/get-current-repo)
-                         (:db/id block)
-                         :block-ref)
+                          (cond
+                            (gobj/get e "shiftKey")
+                            (state/sidebar-add-block!
+                             (state/get-current-repo)
+                             (:db/id block)
+                             :block-ref)
 
-                        (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
-                        (whiteboard-handler/add-new-block-portal-shape!
-                         (:block/uuid block)
-                         (whiteboard-handler/closest-shape (.-target e)))
+                            (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
+                            (whiteboard-handler/add-new-block-portal-shape!
+                             (:block/uuid block)
+                             (whiteboard-handler/closest-shape (.-target e)))
 
-                        :else
-                        (match [block-type (util/electron?)]
+                            :else
+                            (match [block-type (util/electron?)]
                           ;; pdf annotation
-                          [:annotation true] (pdf-assets/open-block-ref! block)
+                              [:annotation true] (pdf-assets/open-block-ref! block)
 
-                          [:whiteboard-shape true] (route-handler/redirect-to-page!
-                                                    (get-in block [:block/page :block/uuid]) {:block-id block-id})
+                              [:whiteboard-shape true] (route-handler/redirect-to-page!
+                                                        (get-in block [:block/page :block/uuid]) {:block-id block-id})
 
                           ;; default open block page
-                          :else (route-handler/redirect-to-page! id))))))}
+                              :else (route-handler/redirect-to-page! id))))))}
 
-               (if (and (not (util/mobile?))
-                        (not (:preview? config))
-                        (not (:modal/show? @state/state))
-                        (nil? block-type))
-                 (block-reference-preview inner
-                                          {:repo repo :config config :id block-id})
-                 inner)])
+                   (if (and (not (util/mobile?))
+                            (not (:preview? config))
+                            (not (:modal/show? @state/state))
+                            (nil? block-type))
+                     (block-reference-preview inner
+                                              {:repo repo :config config :id block-id})
+                     inner)])))
             (invalid-node-ref id))))
       (invalid-node-ref id))))
 
@@ -1798,7 +1801,7 @@
     ["Latex_Fragment" [display s]] ;display can be "Displayed" or "Inline"
     (if html-export?
       (latex/html-export s false true)
-      (latex/latex (str (d/squuid)) s false (not= display "Inline")))
+      (latex/latex s false (not= display "Inline")))
 
     [(:or "Target" "Radio_Target") s]
     [:a {:id s} s]
@@ -2203,7 +2206,7 @@
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
       (= :math node-display-type)
-      (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
+      (latex/latex (:block/title block) true false)
 
       (and query?
            collapsed?
@@ -3753,7 +3756,7 @@
       ["Math" s]
       (if html-export?
         (latex/html-export s true true)
-        (latex/latex (str (d/squuid)) s true true))
+        (latex/latex s true true))
       ["Example" l]
       [:pre.pre-wrap-white-space
        (join-lines l)]
@@ -3783,7 +3786,7 @@
         (latex/html-export content true false)
         (if (config/db-based-graph? (state/get-current-repo))
           [:div.warning "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command instead."]
-          (latex/latex (str (d/squuid)) content true false)))
+          (latex/latex content true false)))
 
       ["Custom" "query" _options _result content]
       (if (config/db-based-graph? (state/get-current-repo))
@@ -3832,12 +3835,12 @@
       (let [content (latex-environment-content name option content)]
         (if html-export?
           (latex/html-export content true true)
-          (latex/latex (str (d/squuid)) content true true)))
+          (latex/latex content true true)))
 
       ["Displayed_Math" content]
       (if html-export?
         (latex/html-export content true true)
-        (latex/latex (str (d/squuid)) content true true))
+        (latex/latex content true true))
 
       ["Footnote_Definition" name definition]
       (let [id (util/url-encode name)]

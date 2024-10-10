@@ -16,7 +16,8 @@
 
 (defn render!
   [state]
-  (let [[id s _ display?] (:rum/args state)]
+  (let [[s _ display?] (:rum/args state)
+        id (:id state)]
     (try
       (when-let [elem (gdom/getElement id)]
         (js/katex.render s elem
@@ -56,11 +57,14 @@
   (js/setTimeout #(load-and-render! state) 10)
   state)
 
-(rum/defc latex < rum/reactive
-  {:did-mount  state-&-load-and-render!
+(rum/defcs latex < rum/reactive
+  {:init (fn [state]
+           (assoc state :id (str (random-uuid))))
+   :did-mount  state-&-load-and-render!
    :did-update state-&-load-and-render!}
-  [id s block? _display?]
-  (let [loading? (rum/react *loading?)]
+  [state s block? _display?]
+  (let [id (:id state)
+        loading? (rum/react *loading?)]
     (if loading?
       (ui/loading)
       (let [element (if block?
