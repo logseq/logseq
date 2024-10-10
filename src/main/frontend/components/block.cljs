@@ -480,7 +480,9 @@
 
           (= ext :pdf)
           [:a.asset-ref.is-pdf
-           {:href @src
+           {:data-href href
+            :draggable true
+            :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" href)
             :on-click (fn [e]
                         (util/stop e)
                         (open-pdf-file e (:asset-block config) @src))}
@@ -1279,15 +1281,6 @@
     (cond
       (contains? config/audio-formats ext)
       (audio-link config url s label metadata full_text)
-
-      (= ext :pdf)
-      [:a.asset-ref.is-pdf
-       {:data-href s
-        :on-click (fn [^js e] (open-pdf-file e (:asset-block config) nil))
-        :draggable true
-        :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" s)}
-       (or label-text
-           (->elem :span (map-inline config label)))]
 
       (contains? config/doc-formats ext)
       (asset-link config label-text s metadata full_text)
