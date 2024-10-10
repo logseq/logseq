@@ -100,7 +100,6 @@
         (path/path-join "file://" (common-util/safe-decode-uri-component path))
         (path/path-join "file://" path))
 
-
       :else ;; relative path or alias path
       (resolve-asset-real-path-url (state/get-current-repo) path))))
 
@@ -153,7 +152,7 @@
 
 (defonce *assets-url-cache (atom {}))
 
-(defn make-asset-url
+(defn <make-asset-url
   "Make asset URL for UI element, to fill img.src"
   [path] ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)
   (if config/publishing?
@@ -197,3 +196,25 @@
                 (p/let [url (js/URL.createObjectURL file)]
                   (swap! *assets-url-cache assoc (keyword handle-path) url)
                   url)))))))))
+
+(defn- decode-digest
+  [^js/Uint8Array digest]
+  (.. (js/Array.from digest)
+      (map (fn [s] (.. s (toString 16) (padStart 2 "0"))))
+      (join "")))
+
+(defn get-file-checksum
+  [^js/Blob file]
+  (-> (.arrayBuffer file)
+      (.then (fn [buf] (js/crypto.subtle.digest "SHA-256" buf)))
+      (.then (fn [dig] (js/Uint8Array. dig)))
+      (.then decode-digest)))
+
+(defn <get-all-assets
+  []
+  (when-let [path (config/get-current-repo-assets-root)]
+    (p/let [result (fs/readdir path {:path-only? true})]
+      (p/all (map (fn [path]
+                    (p/let [data (fs/read-file path "" {})]
+                      (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
+                        [path' data]))) result)))))

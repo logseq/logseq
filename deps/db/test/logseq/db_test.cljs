@@ -5,7 +5,6 @@
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
-
 ;;; datoms
 ;;; - 1 <----+
 ;;;   - 2    |
