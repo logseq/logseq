@@ -2198,7 +2198,10 @@
       (text-block-title (dissoc config :raw-title?) block)
 
       (= "asset" (:block/type block))
-      (asset-cp config block)
+      [:div.grid.grid-cols-1.justify-items-center
+       (asset-cp config block)
+       [:div.text-xs.opacity-60.mt-1
+        (text-block-title (dissoc config :raw-title?) block)]]
 
       (= :code node-display-type)
       [:div.flex.flex-1.w-full
