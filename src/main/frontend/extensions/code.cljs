@@ -475,7 +475,7 @@
                               (when (and
                                      (contains? #{:code} (:logseq.property.node/display-type edit-block))
                                      (not= (:block/uuid edit-block) (:block/uuid (state/get-edit-block))))
-                                (editor-handler/edit-block! edit-block :max))
+                                (editor-handler/edit-block! edit-block :max {:container-id (:container-id config)}))
                               (state/set-editing-block-dom-id! (:block-parent-id config))
                               (state/set-block-component-editing-mode! true)
                               (state/set-state! :editor/code-block-context
