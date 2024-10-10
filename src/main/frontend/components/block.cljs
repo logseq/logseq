@@ -2202,7 +2202,7 @@
 
       (= :code node-display-type)
       [:div.flex.flex-1.w-full
-       (src-cp (assoc config :block block) {:language (:logseq.property.code/lang block)})]
+       (src-cp (assoc config :code-block block) {:language (:logseq.property.code/lang block)})]
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
       (= :math node-display-type)
@@ -3162,7 +3162,7 @@
         (cond
           (and advanced-query? (not collapsed?))
           [:div.flex.flex-1.my-1 {:style {:margin-left 42}}
-           (src-cp (assoc config :block query)
+           (src-cp (assoc config :code-block query)
                    {:language "clojure"})]
 
           (and (not advanced-query?) (not collapsed?))
@@ -3616,7 +3616,7 @@
 
 (rum/defc src-cp < rum/static
   [config options]
-  (let [block (:block config)
+  (let [block (or (:code-block config) (:block config))
         container-id (:container-id config)
         *mode-ref (rum/use-ref nil)
         *actions-ref (rum/use-ref nil)]
