@@ -942,6 +942,13 @@
                 nil
                 nil)))
 
+(defn- img-audio-video?
+  [block]
+  (let [asset-type (some-> (:logseq.property.asset/type block) keyword)]
+    (or (contains? (common-config/img-formats) asset-type)
+        (contains? config/audio-formats asset-type)
+        (contains? config/video-formats asset-type))))
+
 (rum/defc page-reference < rum/reactive
   "Component for page reference"
   [html-export? s {:keys [nested-link? show-brackets? id] :as config} label]
@@ -957,8 +964,12 @@
           config' (assoc config
                          :label (mldoc/plain->text label)
                          :contents-page? contents-page?
-                         :show-icon? true?)]
+                         :show-icon? true?)
+          asset? (some? (:logseq.property.asset/type block))]
       (cond
+        (and asset? (img-audio-video? block))
+        (asset-cp config block)
+
         (string/ends-with? s ".excalidraw")
         [:div.draw {:on-click (fn [e]
                                 (.stopPropagation e))}
@@ -2200,8 +2211,9 @@
       (= "asset" (:block/type block))
       [:div.grid.grid-cols-1.justify-items-center
        (asset-cp config block)
-       [:div.text-xs.opacity-60.mt-1
-        (text-block-title (dissoc config :raw-title?) block)]]
+       (when (img-audio-video? block)
+         [:div.text-xs.opacity-60.mt-1
+          (text-block-title (dissoc config :raw-title?) block)])]
 
       (= :code node-display-type)
       [:div.flex.flex-1.w-full
