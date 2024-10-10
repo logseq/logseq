@@ -88,11 +88,12 @@
   {:will-unmount (fn [state]
                    (swap! *between-dates dissoc (first (:rum/args state)))
                    state)}
-  [state id placeholder {:keys [auto-focus]}]
+  [state id placeholder {:keys [auto-focus on-select]}]
   (let [*input-value (::input-value state)]
     [:div.ml-4
      [:input.query-builder-datepicker.form-input.block.sm:text-sm.sm:leading-5
       {:auto-focus (or auto-focus false)
+       :data-key (name id)
        :placeholder placeholder
        :aria-label placeholder
        :value (some-> @*input-value (first))
@@ -104,17 +105,14 @@
                                                                     journal-date (date/js-date->journal-title gd)]
                                                                 (reset! *input-value [journal-date d])
                                                                 (swap! *between-dates assoc id journal-date))
+                                                              (some-> on-select (apply []))
                                                               (shui/popup-hide!))]
-                                         (shui/calendar
-                                          {:mode "single"
-                                           :initial-focus true
+                                         (ui/single-calendar
+                                          {:initial-focus true
                                            :selected (some-> @*input-value (second))
-                                           :on-select select-handle!
-                                           :on-day-key-down (fn [^js d _ ^js e]
-                                                              (when (= "Enter" (.-key e))
-                                                                (select-handle! d)
-                                                                (util/stop e)))}))
+                                           :on-select select-handle!}))
                                        {:id :query-datepicker
+                                        :content-props {:class "p-0"}
                                         :align :start}) 16))}]]))
 
 (rum/defcs between <
@@ -124,7 +122,12 @@
   [:div.between-date.p-4 {:on-pointer-down (fn [e] (util/stop-propagation e))}
    [:div.flex.flex-row
     [:div.font-medium.mt-2 "Between: "]
-    (datepicker :start "Start date" (merge opts {:auto-focus true}))
+    (datepicker :start "Start date"
+      (merge opts {:auto-focus true
+                   :on-select (fn []
+                                (when-let [^js end-input (js/document.querySelector ".query-builder-datepicker[data-key=end]")]
+                                  (when (string/blank? (.-value end-input))
+                                    (.focus end-input))))}))
     (datepicker :end "End date" opts)]
    [:p.pt-2
     (ui/button "Submit"
