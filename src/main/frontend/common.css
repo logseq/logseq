@@ -469,7 +469,7 @@ a.tag {
 }
 
 .preview-ref-link {
-  @apply inline-block;
+  @apply inline-flex;
 
   & + &, & + a.tag, a.tag + & {
     @apply mx-[3px];
@@ -477,12 +477,6 @@ a.tag {
 
   .block-title-wrap.as-heading {
     @apply my-0 pb-0;
-  }
-
-  .page-ref {
-    .ui__icon.ti {
-      @apply relative left-[2px] top-[5px];
-    }
   }
 }
 

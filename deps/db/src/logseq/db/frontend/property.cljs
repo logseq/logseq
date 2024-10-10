@@ -82,17 +82,16 @@
                                                     :hide? true}}
    :logseq.property/built-in?             {:schema {:type :checkbox
                                                     :hide? true}}
+   :logseq.property/asset   {:title "Asset"
+                             :schema {:type :entity
+                                      :hide? true}}
    :logseq.property/ls-type {:schema {:type :keyword
                                       :hide? true}}
    :logseq.property/hl-type {:schema {:type :keyword :hide? true}}
    :logseq.property/hl-color {:schema {:type :default :hide? true}}
    :logseq.property.pdf/hl-page {:schema {:type :number :hide? true}}
-   :logseq.property.pdf/hl-stamp {:schema {:type :number :hide? true}}
+   :logseq.property.pdf/hl-image {:schema {:type :entity :hide? true}}
    :logseq.property.pdf/hl-value {:schema {:type :map :hide? true}}
-   :logseq.property.pdf/file
-   {:schema {:type :default :hide? true :public? true :view-context :page}}
-   :logseq.property.pdf/file-path
-   {:schema {:type :default :hide? true :public? true :view-context :page}}
    :logseq.property/order-list-type {:name :logseq.order-list-type
                                      :schema {:type :default
                                               :hide? true}}
@@ -202,7 +201,8 @@
              :value value
              :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
           [[:logseq.property.view/type.table "Table View"]
-           [:logseq.property.view/type.list "List View"]])}
+           [:logseq.property.view/type.list "List View"]
+           [:logseq.property.view/type.card "Card View"]])}
 
    :logseq.property.table/sorting {:schema
                                    {:type :coll
@@ -234,10 +234,30 @@
                               {:type :node
                                :hide? true
                                :public? false}}
+   :logseq.property.asset/type {:title "File type"
+                                :schema {:type :string
+                                         :hide? true
+                                         :public? false}}
+   :logseq.property.asset/size {:title "File size"
+                                :schema {:type :raw-number
+                                         :hide? true
+                                         :public? false}}
+   :logseq.property.asset/checksum {:title "File checksum"
+                                    :schema {:type :string
+                                             :hide? true
+                                             :public? false}}
+   :logseq.property.asset/last-visit-page {:title "Last visit page"
+                                           :schema {:type :raw-number
+                                                    :hide? true
+                                                    :public? false}}
    :logseq.property.asset/remote-metadata {:schema
                                            {:type :map
                                             :hide? true
                                             :public? false}}
+   :logseq.property.asset/resize-metadata {:title "Asset resize metadata"
+                                           :schema {:type :map
+                                                    :hide? true
+                                                    :public? false}}
    :logseq.property.fsrs/due {:title "Due"
                               :schema
                               {:type :datetime

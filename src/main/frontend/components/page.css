@@ -141,6 +141,10 @@ html.is-native-iphone-without-notch {
   cursor: e-resize;
 }
 
+.ls-all-pages {
+  max-width: 1400px;
+}
+
 .add-button-link {
   opacity: 0;
   color: var(--ls-primary-text-color);

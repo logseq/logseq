@@ -14,14 +14,14 @@
   [l]
   (let [block-attrs (butlast model/file-graph-block-attrs)]
     (walk/postwalk
-    (fn [f]
-      (if (and (list? f)
-               (= 'pull (first f))
-               (= '?b (second f))
-               (= '[*] (nth f 2)))
-        `(~'pull ~'?b ~block-attrs)
-        f))
-    l)))
+     (fn [f]
+       (if (and (list? f)
+                (= 'pull (first f))
+                (= '?b (second f))
+                (= '[*] (nth f 2)))
+         `(~'pull ~'?b ~block-attrs)
+         f))
+     l)))
 
 (defn- add-rules-to-query
   "Searches query's :where for rules and adds them to query if used"
@@ -60,9 +60,9 @@
                     (fn [rules]
                       (into (or rules [])
                             (rules/extract-rules query-dsl-rules
-                                                   rules-found
-                                                   (when db-graph?
-                                                     {:deps rules/rules-dependencies})))))))
+                                                 rules-found
+                                                 (when db-graph?
+                                                   {:deps rules/rules-dependencies})))))))
       query-m)))
 
 (defn custom-query

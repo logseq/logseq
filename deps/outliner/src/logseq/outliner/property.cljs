@@ -12,6 +12,7 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.validate :as outliner-validate]
@@ -251,15 +252,15 @@
   (let [block-eid (->eid block-eid)
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (d/entity @conn block-eid)
-        property (d/entity @conn property-id)
-        _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-        property-type (get-in property [:block/schema :type] :default)
-        db-attribute? (contains? db-property/db-attribute-properties property-id)]
+        db-attribute? (some? (db-schema/schema-for-db-based-graph property-id))]
     (if db-attribute?
       (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
         (ldb/transact! conn [{:db/id (:db/id block) property-id v}]
                        {:outliner-op :save-block}))
-      (let [new-value (if (db-property-type/user-ref-property-types property-type)
+      (let [property (d/entity @conn property-id)
+            _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
+            property-type (get-in property [:block/schema :type] :default)
+            new-value (if (db-property-type/user-ref-property-types property-type)
                         (convert-ref-property-value conn property-id v property-type)
                         v)
             existing-value (get block property-id)]
