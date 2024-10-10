@@ -1,4 +1,10 @@
 .ls-table {
+  img {
+    max-height: 48px;
+    min-width: 120px;
+    overflow-y: hidden;
+  }
+
   .ls-block {
     @apply w-full py-0;
   }

@@ -23,7 +23,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mixins :as mixins]))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!]}]
@@ -104,81 +105,96 @@
       (reduce + (filter number? col))
       (string/join ", " col))))
 
-(rum/defc block-title < rum/static
+(rum/defc block-container < rum/static
   [config row]
-  (let [block-container (state/get-component :block/container)]
+  (let [container (state/get-component :block/container)]
     [:div.relative.w-full
-     (block-container (assoc config :table? true) row)]))
+     (container config row)]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name?]
                         :or {with-object-name? true}}]
-  (->> (concat
-        [{:id :select
-          :name "Select"
-          :header (fn [table _column] (header-checkbox table))
-          :cell (fn [table row column]
-                  (row-checkbox table row column))
-          :column-list? false
-          :resizable? false}
-         (when with-object-name?
-           {:id :block/title
-            :name "Name"
-            :type :string
-            :header header-cp
-            :cell (fn [_table row _column]
-                    (block-title config row))
-            :disable-hide? true})]
-        (keep
-         (fn [property]
-           (let [ident (or (:db/ident property) (:id property))]
-             (when-not (or (contains? #{:logseq.property/built-in?} ident)
-                           (contains? #{:map :entity} (get-in property [:block/schema :type])))
-               (let [property (if (de/entity? property)
-                                property
-                                (or (db/entity ident) property))
-                     get-value (or (:get-value property)
-                                   (when (de/entity? property)
-                                     (fn [row] (get-property-value-for-search row property))))
-                     closed-values (seq (:property/closed-values property))
-                     closed-value->sort-number (when closed-values
-                                                 (->> (zipmap (map :db/id closed-values) (range 0 (count closed-values)))
-                                                      (into {})))
-                     get-value-for-sort (fn [row]
-                                          (cond
-                                            (= (:db/ident property) :logseq.task/deadline)
-                                            (:block/journal-day (get row :logseq.task/deadline))
-                                            closed-values
-                                            (closed-value->sort-number (:db/id (get row (:db/ident property))))
-                                            :else
-                                            (if (fn? get-value)
-                                              (get-value row)
-                                              (get row ident))))]
-                 {:id ident
-                  :name (or (:name property)
-                            (:block/title property))
-                  :header (or (:header property)
-                              header-cp)
-                  :cell (or (:cell property)
-                            (when (de/entity? property)
-                              (fn [_table row _column]
-                                (pv/property-value row property (get row (:db/ident property)) {}))))
-                  :get-value get-value
-                  :get-value-for-sort get-value-for-sort
-                  :type (:type property)}))))
-         properties)
+  (let [asset-class? (= :logseq.class/Asset (:db/ident (:class config)))
+        properties (if (some #(= (:db/ident %) :block/tags) properties)
+                     properties
+                     (conj properties (db/entity :block/tags)))]
+    (->> (concat
+          [{:id :select
+            :name "Select"
+            :header (fn [table _column] (header-checkbox table))
+            :cell (fn [table row column]
+                    (row-checkbox table row column))
+            :column-list? false
+            :resizable? false}
+           (when with-object-name?
+             {:id :block/title
+              :name "Name"
+              :type :string
+              :header header-cp
+              :cell (fn [_table row _column]
+                      (block-container (assoc config
+                                              :raw-title? true
+                                              :table? true) row))
+              :disable-hide? true})
+           (when asset-class?
+             {:id :file
+              :name "File"
+              :type :string
+              :header header-cp
+              :cell (fn [_table row _column]
+                      (when-let [asset-cp (state/get-component :block/asset-cp)]
+                        [:div.block-content (asset-cp (assoc config :disable-resize? true) row)]))
+              :disable-hide? true})]
+          (keep
+           (fn [property]
+             (let [ident (or (:db/ident property) (:id property))]
+               (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum} ident)
+                             (contains? #{:map :entity} (get-in property [:block/schema :type])))
+                 (let [property (if (de/entity? property)
+                                  property
+                                  (or (db/entity ident) property))
+                       get-value (or (:get-value property)
+                                     (when (de/entity? property)
+                                       (fn [row] (get-property-value-for-search row property))))
+                       closed-values (seq (:property/closed-values property))
+                       closed-value->sort-number (when closed-values
+                                                   (->> (zipmap (map :db/id closed-values) (range 0 (count closed-values)))
+                                                        (into {})))
+                       get-value-for-sort (fn [row]
+                                            (cond
+                                              (= (:db/ident property) :logseq.task/deadline)
+                                              (:block/journal-day (get row :logseq.task/deadline))
+                                              closed-values
+                                              (closed-value->sort-number (:db/id (get row (:db/ident property))))
+                                              :else
+                                              (if (fn? get-value)
+                                                (get-value row)
+                                                (get row ident))))]
+                   {:id ident
+                    :name (or (:name property)
+                              (:block/title property))
+                    :header (or (:header property)
+                                header-cp)
+                    :cell (or (:cell property)
+                              (when (de/entity? property)
+                                (fn [_table row _column]
+                                  (pv/property-value row property (get row (:db/ident property)) {}))))
+                    :get-value get-value
+                    :get-value-for-sort get-value-for-sort
+                    :type (:type property)}))))
+           properties)
 
-        [{:id :block/created-at
-          :name (t :page/created-at)
-          :type :datetime
-          :header header-cp
-          :cell timestamp-cell-cp}
-         {:id :block/updated-at
-          :name (t :page/updated-at)
-          :type :datetime
-          :header header-cp
-          :cell timestamp-cell-cp}])
-       (remove nil?)))
+          [{:id :block/created-at
+            :name (t :page/created-at)
+            :type :datetime
+            :header header-cp
+            :cell timestamp-cell-cp}
+           {:id :block/updated-at
+            :name (t :page/updated-at)
+            :type :datetime
+            :header header-cp
+            :cell timestamp-cell-cp}])
+         (remove nil?))))
 
 (defn- sort-columns
   [columns ordered-column-ids]
@@ -1035,7 +1051,7 @@
            (shui/table-footer (add-new-row table)))]]))))
 
 (rum/defc list-view < rum/static
-  [view-entity result config]
+  [config view-entity result]
   (when-let [->hiccup (state/get-component :block/->hiccup)]
     (let [group-by-page? (not (every? db/page? result))
           result (if group-by-page?
@@ -1049,6 +1065,16 @@
                        :breadcrumb-show? (if group-by-page? true false)
                        :group-by-page? group-by-page?
                        :ref? true)))))
+
+(rum/defcs card-view < rum/static mixins/container-id
+  [state config view-entity result]
+  (let [config' (assoc config :container-id (:container-id state))]
+    [:div.ls-cards
+     (for [block result]
+       [:div.ls-card-item
+        {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
+        [:div.-ml-4
+         (block-container (assoc config' :id (str (:block/uuid block))) block)]])]))
 
 (rum/defc view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
@@ -1144,7 +1170,10 @@
 
      (case display-type
        :logseq.property.view/type.list
-       (list-view view-entity (:rows table) (:config option))
+       (list-view (:config option) view-entity (:rows table))
+
+       :logseq.property.view/type.card
+       (card-view (:config option) view-entity (:rows table))
 
        (table-view table option row-selection add-new-object! ready?))]))
 

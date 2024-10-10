@@ -52,6 +52,10 @@
     transform: translate3d(0, 0, 0);
   }
 
+  .image-resize {
+    display: flex;
+  }
+
   .draw [aria-labelledby="shapes-title"] {
     position: absolute;
     left: 50%;
@@ -81,7 +85,13 @@
   @apply justify-between items-center;
 }
 
+.page-ref {
+    @apply inline-flex items-center;
+}
+
 .breadcrumb {
+  @apply flex flex-row items-center;
+
   .asset-container > img {
     height: 18px;
     width: unset !important;
@@ -94,11 +104,6 @@
   }
 
   &.block-parents {
-    .ui__icon {
-      position: relative;
-      top: 4px;
-    }
-
     a {
       color: var(--ls-primary-text-color);
 
@@ -106,10 +111,6 @@
         opacity: 1;
       }
     }
-  }
-
-  .page-ref {
-    @apply inline-flex items-baseline;
   }
 }
 
@@ -345,7 +346,7 @@
 }
 
 .page-reference {
-  @apply rounded transition-[background];
+  @apply inline-flex items-center rounded transition-[background];
 
   .bracket {
     @apply opacity-30;
@@ -357,15 +358,10 @@
 }
 
 .page-ref {
-  @apply inline;
   color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)));
 
   &:hover {
     color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary))));
-  }
-
-  .ui__icon.ti {
-    @apply relative top-[3px] left-0;
   }
 }
 
@@ -933,7 +929,7 @@ html.is-mac {
   height: 38px;
 }
 
-.ls-page-title .positioned-properties svg {
+.ls-page-title .positioned-properties svg, .page-ref svg {
   width: 16px;
   height: 16px;
 }

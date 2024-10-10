@@ -122,8 +122,8 @@
                          ;; use explicit call to be nbb compatible
                          [(let [closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
                             (cond-> (assoc (select-keys property [:db/ident :db/valueType :db/cardinality])
-                                    :block/schema
-                                    (select-keys (:block/schema property) [:type]))
+                                           :block/schema
+                                           (select-keys (:block/schema property) [:type]))
                               (seq closed-values)
                               (assoc :property/closed-values closed-values)))
                           v])
@@ -253,7 +253,6 @@
      [:db/ident class-ident]]
     page-attrs
     page-or-block-attrs)))
-
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
@@ -400,11 +399,6 @@
    [:file/created-at inst?]
    [:file/last-modified-at inst?]])
 
-(def asset-block
-  [:map
-   [:asset/uuid :uuid]
-   [:asset/meta :map]])
-
 (def db-ident-key-val
   "A key value map with :db/ident and :kv/value"
   [:map
@@ -435,8 +429,6 @@
                           :file-block
                           (:block/uuid d)
                           :block
-                          (:asset/uuid d)
-                          :asset-block
                           (= (:db/ident d) :logseq.property/empty-placeholder)
                           :property-value-placeholder
                           (:db/ident d)
@@ -448,7 +440,6 @@
     :block block
     :file-block file-block
     :db-ident-key-value db-ident-key-val
-    :asset-block asset-block
     :property-value-placeholder property-value-placeholder}))
 
 (def DB
@@ -480,7 +471,7 @@
                     {}))))
 
 (let [malli-non-ref-attrs (->> (concat property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
-                               (concat (rest file-block) (rest asset-block) (rest property-value-block)
+                               (concat (rest file-block) (rest property-value-block)
                                        (rest db-ident-key-val) (rest class-page))
                                (remove #(= (last %) [:set :int]))
                                (map first)

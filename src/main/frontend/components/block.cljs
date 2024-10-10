@@ -275,106 +275,124 @@
                    state)}
   [state config title src metadata full-text local?]
   (let [size (get state ::size)
-        breadcrumb? (:breadcrumb? config)]
-    (ui/resize-provider
-     (ui/resize-consumer
-      (if (and (not (mobile-util/native-platform?))
-               (not breadcrumb?))
-        (cond->
-         {:className "resize image-resize"
-          :onSizeChanged (fn [value]
-                           (when (and (not @*resizing-image?)
-                                      (some? @size)
-                                      (not= value @size))
-                             (reset! *resizing-image? true))
-                           (reset! size value))
-          :onPointerUp (fn []
-                         (when (and @size @*resizing-image?)
-                           (when-let [block-id (:block/uuid config)]
-                             (let [size (bean/->clj @size)]
-                               (editor-handler/resize-image! block-id metadata full-text size))))
-                         (when @*resizing-image?
-                              ;; TODO: need a better way to prevent the clicking to edit current block
-                           (js/setTimeout #(reset! *resizing-image? false) 200)))
-          :onClick (fn [e]
-                     (when @*resizing-image? (util/stop e)))}
-          (and (:width metadata) (not (util/mobile?)))
-          (assoc :style {:width (:width metadata)}))
-        {})
-      [:div.asset-container {:key "resize-asset-container"}
-       [:img.rounded-sm.relative
-        (merge
-         {:loading "lazy"
-          :referrerPolicy "no-referrer"
-          :src src
-          :title title}
-         metadata)]
-       (when-not breadcrumb?
-         [:<>
-          (let [image-src (fs/asset-path-normalize src)]
-            [:.asset-action-bar {:aria-hidden "true"}
-             [:.flex
-              (when-not config/publishing?
-                [:button.asset-action-btn
-                 {:title (t :asset/delete)
-                  :tabIndex "-1"
-                  :on-pointer-down util/stop
-                  :on-click
-                  (fn [e]
-                    (util/stop e)
-                    (when-let [block-id (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
-                      (let [*local-selected? (atom local?)]
-                        (-> (shui/dialog-confirm!
-                              [:div.text-xs.opacity-60.-my-2
-                               (when local?
-                                 [:label.flex.gap-1.items-center
-                                  (shui/checkbox
-                                    {:default-checked @*local-selected?
-                                     :on-checked-change #(reset! *local-selected? %)})
-                                  (t :asset/physical-delete)])]
-                              {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                               :outside-cancel? true})
-                          (p/then (fn []
-                                    (shui/dialog-close!)
-                                    (editor-handler/delete-asset-of-block!
-                                      {:block-id block-id
-                                       :local? local?
-                                       :delete-local? @*local-selected?
-                                       :repo (state/get-current-repo)
-                                       :href src
-                                       :title title
-                                       :full-text full-text})))))))}
-                 (ui/icon "trash")])
+        breadcrumb? (:breadcrumb? config)
+        asset-block (:asset-block config)
+        asset-container [:div.asset-container {:key "resize-asset-container"}
+                         [:img.rounded-sm.relative
+                          (merge
+                           {:loading "lazy"
+                            :referrerPolicy "no-referrer"
+                            :src src
+                            :title title}
+                           metadata)]
+                         (when-not breadcrumb?
+                           [:<>
+                            (let [image-src (fs/asset-path-normalize src)]
+                              [:.asset-action-bar {:aria-hidden "true"}
+                               [:.flex
+                                (when-not config/publishing?
+                                  [:button.asset-action-btn
+                                   {:title (t :asset/delete)
+                                    :tabIndex "-1"
+                                    :on-pointer-down util/stop
+                                    :on-click
+                                    (fn [e]
+                                      (util/stop e)
+                                      (when-let [block-id (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
+                                        (let [*local-selected? (atom local?)]
+                                          (-> (shui/dialog-confirm!
+                                               [:div.text-xs.opacity-60.-my-2
+                                                (when (and local? (not= (:block/uuid asset-block) block-id))
+                                                  [:label.flex.gap-1.items-center
+                                                   (shui/checkbox
+                                                    {:default-checked @*local-selected?
+                                                     :on-checked-change #(reset! *local-selected? %)})
+                                                   (t :asset/physical-delete)])]
+                                               {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                                :outside-cancel? true})
+                                              (p/then (fn []
+                                                        (shui/dialog-close!)
+                                                        (editor-handler/delete-asset-of-block!
+                                                         {:block-id block-id
+                                                          :asset-block asset-block
+                                                          :local? local?
+                                                          :delete-local? @*local-selected?
+                                                          :repo (state/get-current-repo)
+                                                          :href src
+                                                          :title title
+                                                          :full-text full-text})))))))}
+                                   (ui/icon "trash")])
 
-              [:button.asset-action-btn
-               {:title (t :asset/copy)
-                :tabIndex "-1"
-                :on-pointer-down util/stop
-                :on-click (fn [e]
-                            (util/stop e)
-                            (-> (util/copy-image-to-clipboard image-src)
-                                (p/then #(notification/show! "Copied!" :success))))}
-               (ui/icon "copy")]
+                                [:button.asset-action-btn
+                                 {:title (t :asset/copy)
+                                  :tabIndex "-1"
+                                  :on-pointer-down util/stop
+                                  :on-click (fn [e]
+                                              (util/stop e)
+                                              (-> (util/copy-image-to-clipboard image-src)
+                                                  (p/then #(notification/show! "Copied!" :success))))}
+                                 (ui/icon "copy")]
 
-              [:button.asset-action-btn
-               {:title (t :asset/maximize)
-                :tabIndex "-1"
-                :on-pointer-down util/stop
-                :on-click open-lightbox}
+                                [:button.asset-action-btn
+                                 {:title (t :asset/maximize)
+                                  :tabIndex "-1"
+                                  :on-pointer-down util/stop
+                                  :on-click open-lightbox}
 
-               (ui/icon "maximize")]
+                                 (ui/icon "maximize")]
 
-              (when (util/electron?)
-                [:button.asset-action-btn
-                 {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
-                  :tabIndex "-1"
-                  :on-pointer-down util/stop
-                  :on-click (fn [e]
-                              (util/stop e)
-                              (if local?
-                                (ipc/ipc "openFileInFolder" image-src)
-                                (js/window.apis.openExternal image-src)))}
-                 (shui/tabler-icon "folder-pin")])]])])]))))
+                                (when (util/electron?)
+                                  [:button.asset-action-btn
+                                   {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
+                                    :tabIndex "-1"
+                                    :on-pointer-down util/stop
+                                    :on-click (fn [e]
+                                                (util/stop e)
+                                                (if local?
+                                                  (ipc/ipc "openFileInFolder" image-src)
+                                                  (js/window.apis.openExternal image-src)))}
+                                   (shui/tabler-icon "folder-pin")])]])])]
+        width (or (get-in asset-block [:logseq.property.asset/resize-metadata :width])
+                  (:width metadata))
+        height (or (get-in asset-block [:logseq.property.asset/resize-metadata :height])
+                   (:height metadata))
+        style (when-not (util/mobile?)
+                (cond (and width height)
+                      {:width width :height height}
+                      width
+                      {:width width}
+                      height
+                      {:height height}
+                      :else
+                      {}))]
+    (if (:disable-resize? config)
+      asset-container
+      (ui/resize-provider
+       (ui/resize-consumer
+        (if (and (not (mobile-util/native-platform?))
+                 (not breadcrumb?))
+          (cond->
+           {:className "resize image-resize"
+            :onSizeChanged (fn [value]
+                             (when (and (not @*resizing-image?)
+                                        (some? @size)
+                                        (not= value @size))
+                               (reset! *resizing-image? true))
+                             (reset! size value))
+            :onPointerUp (fn []
+                           (when (and @size @*resizing-image?)
+                             (when-let [block-id (:block/uuid config)]
+                               (let [size (bean/->clj @size)]
+                                 (editor-handler/resize-image! config block-id metadata full-text size))))
+                           (when @*resizing-image?
+                           ;; TODO:​ need a better way to prevent the clicking to edit current block
+                             (js/setTimeout #(reset! *resizing-image? false) 200)))
+            :onClick (fn [e]
+                       (when @*resizing-image? (util/stop e)))}
+            style
+            (assoc :style style))
+          {})
+        asset-container)))))
 
 (rum/defc audio-cp [src]
   ;; Change protocol to allow media fragment uris to play
@@ -382,18 +400,47 @@
            :controls true
            :on-touch-start #(util/stop %)}])
 
+(defn- open-pdf-file
+  [e block href]
+  (when-let [s (or href (some-> (.-target e) (.-dataset) (.-href)))]
+    (let [load$ (fn []
+                  (p/let [href (or href
+                                   (if (or (mobile-util/native-platform?) (util/electron?))
+                                     s
+                                     (assets-handler/<make-asset-url s)))]
+                    (when-let [current (pdf-assets/inflate-asset s {:block block
+                                                                    :href href})]
+                      (state/set-current-pdf! current)
+                      (util/stop e))))]
+      (-> (load$)
+          (p/catch
+           (fn [^js _e]
+             ;; load pdf asset to indexed db
+             (p/let [[handle] (js/window.showOpenFilePicker
+                               (bean/->js {:multiple false :startIn "documents" :types [{:accept {"application/pdf" [".pdf"]}}]}))
+                     file (.getFile handle)
+                     buffer (.arrayBuffer file)]
+               (when-let [content (some-> buffer (js/Uint8Array.))]
+                 (let [repo (state/get-current-repo)
+                       file-rpath (string/replace s #"^[.\/\\]*assets[\/\\]+" "assets/")
+                       dir (config/get-repo-dir repo)]
+                   (-> (fs/write-file! repo dir file-rpath content nil)
+                       (p/then load$)))))
+             (js/console.error _e)))))))
+
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
   [state config title href metadata full_text]
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
-        href (config/get-local-asset-absolute-path href)]
+        href (config/get-local-asset-absolute-path href)
+        db-based? (config/db-based-graph? (state/get-current-repo))]
     (when (and (or granted?
                    (util/electron?)
                    (mobile-util/native-platform?)
-                   (config/db-based-graph? (state/get-current-repo)))
+                   db-based?)
                (nil? @src))
-      (p/then (assets-handler/make-asset-url href) #(reset! src %)))
+      (p/then (assets-handler/<make-asset-url href) #(reset! src %)))
 
     (when @src
       (let [ext (keyword (or (util/get-file-ext @src)
@@ -416,6 +463,10 @@
           (asset-loader @src
                         #(audio-cp @src))
 
+          (contains? config/video-formats ext)
+          [:video {:src @src
+                   :controls true}]
+
           (contains? (common-config/img-formats) ext)
           (asset-loader @src
                         #(resizable-image config title @src metadata full_text true))
@@ -428,9 +479,16 @@
            title]
 
           (= ext :pdf)
-          [:a.asset-ref.is-pdf {:href @src
-                                :on-click share-fn}
-           title]
+          [:a.asset-ref.is-pdf
+           {:data-href href
+            :draggable true
+            :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" href)
+            :on-click (fn [e]
+                        (util/stop e)
+                        (open-pdf-file e (:asset-block config) @src))}
+           (if db-based?
+             title
+             [:span [:span.opacity-70 "[[📚"] title [:span.opacity-70 "]]"]])]
 
           :else
           [:a.asset-ref.is-doc {:href @src
@@ -560,7 +618,8 @@
                     (util/page-name-sanity-lc (:block/title page-entity)))
         breadcrumb? (:breadcrumb? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
-        untitled? (when page-name (model/untitled-page? (:block/title page-entity)))]
+        untitled? (when page-name (model/untitled-page? (:block/title page-entity)))
+        show-icon? (:show-icon? config)]
     [:a.relative
      {:tabIndex "0"
       :class (cond->
@@ -598,6 +657,10 @@
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not meta-click?))
                            (state/clear-edit!)
                            (open-page-ref config page-entity e page-name contents-page?)))}
+     (when show-icon?
+       (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true :not-text-or-page? true})]
+         [:span.mr-1
+          icon]))
      [:span
       (if (and (coll? children) (seq children))
         (for [child children]
@@ -623,7 +686,7 @@
                                      s (cond untitled?
                                              (t :untitled)
 
-                        ;; The page-name-in-block generated by the auto-complete is not page-name-sanitized
+                                             ;; The page-name-in-block generated by the auto-complete is not page-name-sanitized
                                              (pdf-utils/hls-file? page-name)
                                              (pdf-utils/fix-local-asset-pagename page-name)
 
@@ -870,6 +933,15 @@
     (when draw-component
       (draw-component {:file file :block-uuid block-uuid}))))
 
+(rum/defc asset-cp
+  [config block]
+  (let [asset-type (:logseq.property.asset/type block)]
+    (asset-link (assoc config :asset-block block)
+                (:block/title block)
+                (path/path-join (str "../" common-config/local-assets-dir) (str (:block/uuid block) "." asset-type))
+                nil
+                nil)))
+
 (rum/defc page-reference < rum/reactive
   "Component for page reference"
   [html-export? s {:keys [nested-link? show-brackets? id] :as config} label]
@@ -881,7 +953,11 @@
           show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
           block-uuid (:block/uuid config)
           contents-page? (= "contents" (string/lower-case (str id)))
-          block (db/get-page s)]
+          block (db/get-page s)
+          config' (assoc config
+                         :label (mldoc/plain->text label)
+                         :contents-page? contents-page?
+                         :show-icon? true?)]
       (cond
         (string/ends-with? s ".excalidraw")
         [:div.draw {:on-click (fn [e]
@@ -895,20 +971,14 @@
                     (not html-export?)
                     (not contents-page?))
            [:span.text-gray-500.bracket page-ref/left-brackets])
-         (page-cp (assoc config
-                         :label (mldoc/plain->text label)
-                         :contents-page? contents-page?)
-                  {:block/name s})
+         (page-cp config' {:block/name s})
          (when (and (or show-brackets? nested-link?)
                     (not html-export?)
                     (not contents-page?))
            [:span.text-gray-500.bracket page-ref/right-brackets])]
 
         :else
-        (page-cp (assoc config
-                        :label (mldoc/plain->text label)
-                        :contents-page? contents-page?)
-                 {:block/name s})))))
+        (page-cp config' {:block/name s})))))
 
 (defn- latex-environment-content
   [name option content]
@@ -1052,10 +1122,12 @@
                          (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                         block nil (:block/uuid block)
                                         (:slide? config))]
-                  inner (if label
+                  inner (cond
+                          label
                           (->elem
                            :span.block-ref
                            (map-inline config label))
+                          :else
                           title)]
               [:div.block-ref-wrap.inline
                {:data-type    (name (or block-type :default))
@@ -1209,38 +1281,6 @@
     (cond
       (contains? config/audio-formats ext)
       (audio-link config url s label metadata full_text)
-
-      (= ext :pdf)
-      [:a.asset-ref.is-pdf
-       {:data-href s
-        :on-click (fn [^js e]
-                    (when-let [s (some-> (.-target e) (.-dataset) (.-href))]
-                      (let [load$ (fn []
-                                    (p/let [href (if (or (mobile-util/native-platform?) (util/electron?))
-                                                   s
-                                                   (assets-handler/make-asset-url s))]
-                                      (when-let [current (pdf-assets/inflate-asset s {:href href})]
-                                        (state/set-current-pdf! current)
-                                        (util/stop e))))]
-                        (-> (load$)
-                            (p/catch
-                             (fn [^js _e]
-                              ;; load pdf asset to indexed db
-                               (p/let [[handle] (js/window.showOpenFilePicker
-                                                 (bean/->js {:multiple false :startIn "documents" :types [{:accept {"application/pdf" [".pdf"]}}]}))
-                                       file (.getFile handle)
-                                       buffer (.arrayBuffer file)]
-                                 (when-let [content (some-> buffer (js/Uint8Array.))]
-                                   (let [repo (state/get-current-repo)
-                                         file-rpath (string/replace s #"^[.\/\\]*assets[\/\\]+" "assets/")
-                                         dir (config/get-repo-dir repo)]
-                                     (-> (fs/write-file! repo dir file-rpath content nil)
-                                         (p/then load$)))))
-                               (js/console.error _e)))))))
-        :draggable true
-        :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" s)}
-       (or label-text
-           (->elem :span (map-inline config label)))]
 
       (contains? config/doc-formats ext)
       (asset-link config label-text s metadata full_text)
@@ -1977,7 +2017,8 @@
                                (or (db/page? block)
                                    (:logseq.property/icon block)
                                    link?
-                                   (some :logseq.property/icon (:block/tags block))))
+                                   (some :logseq.property/icon (:block/tags block))
+                                   (contains? #{"pdf"} (:logseq.property.asset/type block))))
                           icon
 
                           :else
@@ -2102,7 +2143,8 @@
                        [:label.blank " "]]
 
                       (when (and area?
-                                 (pu/lookup properties :logseq.property.pdf/hl-stamp))
+                                 (or (:hl-stamp properties)
+                                     (:logseq.property.pdf/hl-image properties)))
                         (pdf-assets/area-display block))])]
        (remove-nils
         (concat
@@ -2144,17 +2186,23 @@
   [config block]
   (let [collapsed? (:collapsed? config)
         block' (db/entity (:db/id block))
-        node-type (:logseq.property.node/display-type block')
+        node-display-type (:logseq.property.node/display-type block')
         query? (ldb/class-instance? (db/entity :logseq.class/Query) block')
         query (:logseq.property/query block')
-        advanced-query? (and query? (= :code node-type))]
+        advanced-query? (and query? (= :code node-display-type))]
     (cond
-      (= :code node-type)
+      (:raw-title? config)
+      (text-block-title (dissoc config :raw-title?) block)
+
+      (= "asset" (:block/type block))
+      (asset-cp config block)
+
+      (= :code node-display-type)
       [:div.flex.flex-1.w-full
        (src-cp (assoc config :block block) {:language (:logseq.property.code/lang block)})]
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
-      (= :math node-type)
+      (= :math node-display-type)
       (latex/latex (str (:container-id config) "-" (:db/id block)) (:block/title block) true false)
 
       (and query?
@@ -2708,19 +2756,17 @@
                      (count (:block/_refs block))
                      (rum/react *refs-count))
         table? (:table? config)
-        editor-block (state/sub :editor/block)
         raw-mode-block (state/sub :editor/raw-mode-block)
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
-        config (assoc config :block-parent-id block-id)
-        editing-local? (or edit? (and editor-block (= (:db/id editor-block) (:db/id block))))]
+        config (assoc config :block-parent-id block-id)]
     [:div.block-content-or-editor-wrap
      {:class (when (:page-title? config) "ls-page-title-container")
       :data-node-type (some-> (:logseq.property.node/display-type block) name)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
       [:div.flex.flex-1.flex-row.gap-1.items-center
-       (if (and editor-box editing-local? (not type-block-editor?))
+       (if (and editor-box edit? (not type-block-editor?))
          [:div.editor-wrapper.flex.flex-1
           {:id editor-id
            :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
@@ -2986,7 +3032,7 @@
               (when (and (config/local-file-based-graph? repo) (not (state/editing?)))
                 ;; Basically the same logic as editor-handler/upload-asset,
                 ;; does not require edting
-                (-> (editor-handler/save-assets! repo (js->clj files))
+                (-> (editor-handler/file-based-save-assets! repo (js->clj files))
                     (p/then
                      (fn [res]
                        (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (and (seq res) (first res))]
@@ -3276,7 +3322,7 @@
                                                               (:db/id block)
                                                               (pu/get-pid :logseq.property/icon)
                                                               (select-keys icon [:id :type :color]))
-                             ;; del
+                                                             ;; del
                                                              (db-property-handler/remove-block-property!
                                                               (:db/id block)
                                                               (pu/get-pid :logseq.property/icon))))
@@ -3386,7 +3432,10 @@
        (rum/with-key
          (block-container-inner state repo config' block
                                 {:navigating-block navigating-block :navigated? navigated?})
-         (str "block-inner" (:block/uuid block)))))))
+         (str "block-inner-"
+              (:container-id config)
+              "-"
+              (:block/uuid block)))))))
 
 (defn divide-lists
   [[f & l]]
