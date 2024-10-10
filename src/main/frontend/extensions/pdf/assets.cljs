@@ -316,20 +316,18 @@
         page-name (:block/title page)
         file-path (get-in block [:block/properties :file-path])
         hl-page (pu/get-block-property-value block :logseq.property.pdf/hl-page)
-        hl-value (pu/get-block-property-value block :logseq.property.pdf/hl-value)
-        db-base? (config/db-based-graph? (state/get-current-repo))]
+        hl-value (pu/get-block-property-value block :logseq.property.pdf/hl-value)]
     (when-let [target-key (and page-name (subs page-name 5))]
       (p/let [hls (file-based-resolve-hls-data-by-key$ target-key)
               hls (and hls (:highlights hls))
-              file-path (or file-path (str "../assets/" target-key ".pdf"))
-              href (and db-base? (assets-handler/<make-asset-url file-path))]
+              file-path (or file-path (str "../assets/" target-key ".pdf"))]
         (if-let [matched (or (and hls (medley/find-first #(= id (:id %)) hls))
                              (if hl-page {:page hl-page}
                                  (when-let [page (some-> hl-value :page)] {:page page})))]
           (do
             (state/set-state! :pdf/ref-highlight matched)
             ;; open pdf viewer
-            (state/set-current-pdf! (inflate-asset file-path {:href href})))
+            (state/set-current-pdf! (inflate-asset file-path)))
           (js/console.debug "[Unmatched highlight ref]" block))))))
 
 (defn db-based-open-block-ref!
