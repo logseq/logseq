@@ -205,7 +205,27 @@
 
 ;; build-query fns
 ;; ===============
-(defn- build-between-two-arg
+(defn- resolve-timestamp-property
+  [e]
+  (let [k (-> (second e)
+              (name)
+              (string/lower-case)
+              (string/replace "_" "-")
+              keyword)]
+    (case k
+      :created-at
+      :block/created-at
+      :updated-at
+      :block/updated-at
+      k)))
+
+(defn get-timestamp-property
+  [e]
+  (let [k (resolve-timestamp-property e)]
+    (when (contains? #{:block/created-at :block/updated-at} k)
+      k)))
+
+(defn- build-journal-between-two-arg
   [e]
   (let [start (->journal-day-int (nth e 1))
         end (->journal-day-int (nth e 2))
@@ -213,32 +233,49 @@
     {:query (list 'between '?b start end)
      :rules [:between]}))
 
-(defn- build-between-three-arg
+(defn- file-based-build-between-three-arg
   [e]
-  (let [k (-> (second e)
-              (name)
-              (string/lower-case)
-              (string/replace "-" "_"))]
-    (when (contains? #{"created_at" "last_modified_at"} k)
-      (let [start (->timestamp (nth e 2))
-            end (->timestamp (nth e 3))]
-        (when (and start end)
-          (let [[start end] (sort [start end])
-                sym '?v]
-            {:query [['?b :block/properties '?prop]
-                     [(list 'get '?prop k) sym]
-                     [(list '>= sym start)]
-                     [(list '< sym end)]]}))))))
+  (when-let [k (get-timestamp-property e)]
+    (let [start (->timestamp (nth e 2))
+          end (->timestamp (nth e 3))]
+      (when (and start end)
+        (let [[start end] (sort [start end])
+              sym '?v]
+          {:query [['?b :block/properties '?prop]
+                   [(list 'get '?prop k) sym]
+                   [(list '>= sym start)]
+                   [(list '< sym end)]]})))))
+
+(defn- db-based-build-between-three-arg
+  [e]
+  (when-let [k (get-timestamp-property e)]
+    (let [start (->timestamp (nth e 2))
+          end (->timestamp (nth e 3))]
+      (when (and start end)
+        (let [[start end] (sort [start end])
+              sym '?v]
+          {:query [['?b k sym]
+                   [(list '>= sym start)]
+                   [(list '< sym end)]]})))))
+
+(defn- db-based-build-between-two-arg
+  [e]
+  (db-based-build-between-three-arg (concat e ['now])))
 
 (defn- build-between
-  [e]
+  [e db-graph?]
   (cond
     (= 3 (count e))
-    (build-between-two-arg e)
+    (let [k (get-timestamp-property e)]
+      (if (and db-graph? k)
+        (db-based-build-between-two-arg e)
+        (build-journal-between-two-arg e)))
 
     ;; (between created_at -1d today)
     (= 4 (count e))
-    (build-between-three-arg e)))
+    (if db-graph?
+      (db-based-build-between-three-arg e)
+      (file-based-build-between-three-arg e))))
 
 (defn ->file-property-value
   "Parses property values for file graphs and handles non-string values or any page-ref like values"
@@ -467,7 +504,7 @@ Some bindings in this fn:
        (build-and-or-not e env level fe)
 
        (= 'between fe)
-       (build-between e)
+       (build-between e (:db-graph? env))
 
        (= 'property fe)
        (build-property e env)

@@ -473,6 +473,26 @@
              :else
              (last clause)))
 
+      ;; between timestamp start (optional end)
+      (and (= (keyword f) :between) (query-dsl/get-timestamp-property clause))
+      (let [k (query-dsl/get-timestamp-property clause)
+            [_ _property start end] clause
+            start (if (or (keyword? start)
+                          (symbol? start))
+                    (name start)
+                    (second start))
+            end (if (or (keyword? end)
+                        (symbol? end))
+                  (name end)
+                  (second end))]
+        (str (if (= k :block/created-at)
+               "Created"
+               "Updated")
+             " " start
+             (when end
+               (str " ~ " end))))
+
+      ;; between journal start end
       (= (keyword f) :between)
       (let [start (if (or (keyword? (second clause))
                           (symbol? (second clause)))
