@@ -207,17 +207,19 @@
 ;; ===============
 (defn- resolve-timestamp-property
   [e]
-  (let [k (-> (second e)
-              (name)
-              (string/lower-case)
-              (string/replace "_" "-")
-              keyword)]
-    (case k
-      :created-at
-      :block/created-at
-      :updated-at
-      :block/updated-at
-      k)))
+  (let [k' (second e)]
+    (when (or (keyword? k') (symbol? k') (string? k'))
+      (let [k (-> k'
+                  (name)
+                  (string/lower-case)
+                  (string/replace "_" "-")
+                  keyword)]
+        (case k
+          :created-at
+          :block/created-at
+          :updated-at
+          :block/updated-at
+          k)))))
 
 (defn get-timestamp-property
   [e]
