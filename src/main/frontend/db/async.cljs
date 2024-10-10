@@ -292,6 +292,28 @@
         :where
         [?tag :block/type "class"]]))
 
+(defn <get-asset-with-checksum
+  [graph checksum]
+  (p/let [result (<q graph {:transact-db? true}
+                     '[:find [(pull ?b [*]) ...]
+                       :in $ ?checksum
+                       :where
+                       [?b :logseq.property.asset/checksum ?checksum]]
+                     checksum)]
+    (some-> (first result)
+            :db/id
+            db/entity)))
+
+(defn <get-pdf-annotations
+  [graph pdf-id]
+  (p/let [result (<q graph {:transact-db? true}
+                     '[:find [(pull ?b [*]) ...]
+                       :in $ ?pdf-id
+                       :where
+                       [?b :logseq.property/asset ?pdf-id]]
+                     pdf-id)]
+    result))
+
 (comment
   (defn <fetch-all-pages
     [graph]

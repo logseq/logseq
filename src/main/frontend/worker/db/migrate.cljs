@@ -10,7 +10,10 @@
             [cljs-bean.core :as bean]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db.frontend.property.build :as db-property-build]
+            [logseq.db.frontend.order :as db-order]
+            [logseq.common.uuid :as common-uuid]))
 
 ;; TODO: fixes/rollback
 
@@ -231,6 +234,23 @@
             query-id (:db/id query)]
         [[:db/add query-id :logseq.property.class/properties :logseq.property/query]]))))
 
+(defn- add-card-view
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [ident :logseq.property.view/type.card
+            uuid' (common-uuid/gen-uuid :db-ident-block-uuid ident)
+            property (d/entity db :logseq.property.view/type)
+            m (cond->
+               (db-property-build/build-closed-value-block
+                uuid'
+                "Card view"
+                property
+                {:db-ident :logseq.property.view/type.card})
+                true
+                (assoc :block/order (db-order/gen-key)))]
+        [m]))))
+
 (defn- add-addresses-in-kvs-table
   [^Object sqlite-db]
   (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
@@ -301,7 +321,14 @@
    [26 {:properties [:logseq.property.node/type]}]
    [27 {:properties [:logseq.property.code/mode]}]
    [28 {:fix (rename-properties {:logseq.property.node/type :logseq.property.node/display-type})}]
-   [29 {:properties [:logseq.property.code/lang]}]])
+   [29 {:properties [:logseq.property.code/lang]}]
+   [30 {:classes [:logseq.class/Asset]
+        :properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]}]
+   [31 {:properties [:logseq.property/asset]}]
+   [32 {:properties [:logseq.property.asset/last-visit-page]}]
+   [33 {:properties [:logseq.property.pdf/hl-image]}]
+   [34 {:properties [:logseq.property.asset/resize-metadata]}]
+   [35 {:fix add-card-view}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
@@ -333,7 +360,7 @@
                             schema-version->updates)
               properties (mapcat :properties updates)
               new-properties (->> (select-keys db-property/built-in-properties properties)
-                                ;; property already exists, this should never happen
+                                  ;; property already exists, this should never happen
                                   (remove (fn [[k _]]
                                             (when (d/entity db k)
                                               (assert (str "DB migration: property already exists " k)))))
@@ -342,12 +369,12 @@
                                   (map (fn [b] (assoc b :logseq.property/built-in? true))))
               classes (mapcat :classes updates)
               new-classes (->> (select-keys db-class/built-in-classes classes)
-                             ;; class already exists, this should never happen
+                               ;; class already exists, this should never happen
                                (remove (fn [[k _]]
                                          (when (d/entity db k)
                                            (assert (str "DB migration: class already exists " k)))))
                                (into {})
-                               (#(sqlite-create-graph/build-initial-classes* % {}))
+                               (#(sqlite-create-graph/build-initial-classes* % (zipmap properties properties)))
                                (map (fn [b] (assoc b :logseq.property/built-in? true))))
               fixes (mapcat
                      (fn [update']

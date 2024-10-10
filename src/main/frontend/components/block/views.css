@@ -1,0 +1,8 @@
+.ls-cards {
+  @apply grid grid-cols-[repeat(auto-fill,18rem)] gap-4 content;
+
+  .ls-card-item {
+    @apply shadow-md rounded p-2 overflow-y-scroll;
+    height: 15rem;
+  }
+}

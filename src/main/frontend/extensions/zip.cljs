@@ -10,10 +10,10 @@
     (aset args "lastModified" last-modified)
     (js/File. blob-content file-name args)))
 
-(defn make-zip [zip-filename file-name->content _repo]
+(defn make-zip [zip-filename file-name-content _repo]
   (let [zip (JSZip.)
         folder (.folder zip zip-filename)]
-    (doseq [[file-name content] file-name->content]
+    (doseq [[file-name content] file-name-content]
       (when-not (string/blank? content)
         (.file folder (-> file-name
                           (string/replace #"^/+" ""))

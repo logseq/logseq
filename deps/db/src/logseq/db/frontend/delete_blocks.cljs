@@ -10,7 +10,9 @@
 
 (defn- replace-ref-with-deleted-block-title
   [block ref-raw-title]
-  (let [block-content (:block/title block)]
+  (let [block-content (if (= "asset" (:block/type block))
+                        ""
+                        (:block/title block))]
     (some-> ref-raw-title
             (string/replace (re-pattern (common-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
                             block-content)

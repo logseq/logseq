@@ -13,29 +13,25 @@
             [logseq.shui.ui :as shui]))
 
 (defn- columns
-  [db]
-  (let [db-based? (ldb/db-based-graph? db)]
-    (->> [{:id :block/title
-           :name (t :block/name)
-           :cell (fn [_table row _column]
-                   (component-block/page-cp {} row))
-           :type :string}
-          {:id :block/type
-           :name "Type"
-           :cell (fn [_table row _column]
-                   (let [type (get row :block/type)]
-                     [:div.capitalize (if (= type "class") "tag" type)]))
-           :get-value (fn [row] (get row :block/type))
-           :type :string}
-          (when db-based?
-            {:id :block/tags
-             :name "Tags"})
-          {:id :block.temp/refs-count
-           :name (t :page/backlinks)
-           :cell (fn [_table row _column] (:block.temp/refs-count row))
-           :type :number}]
-         (remove nil?)
-         vec)))
+  []
+  (->> [{:id :block/title
+         :name (t :block/name)
+         :cell (fn [_table row _column]
+                 (component-block/page-cp {:show-icon? true} row))
+         :type :string}
+        {:id :block/type
+         :name "Type"
+         :cell (fn [_table row _column]
+                 (let [type (get row :block/type)]
+                   [:div.capitalize (if (= type "class") "tag" type)]))
+         :get-value (fn [row] (get row :block/type))
+         :type :string}
+        {:id :block.temp/refs-count
+         :name (t :page/backlinks)
+         :cell (fn [_table row _column] (:block.temp/refs-count row))
+         :type :number}]
+       (remove nil?)
+       vec))
 
 (defn- get-all-pages
   []
@@ -46,7 +42,7 @@
   []
   (let [db (db/get-db)
         [data set-data!] (rum/use-state (get-all-pages))
-        columns' (views/build-columns {} (columns db)
+        columns' (views/build-columns {} (columns)
                                       {:with-object-name? false})
         view-entity (first (ldb/get-all-pages-views db))]
     (rum/use-effect!
@@ -57,7 +53,7 @@
                  data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
            (set-data! data))))
      [])
-    [:div.ls-all-pages.w-full
+    [:div.ls-all-pages.w-full.mx-auto
      (views/view view-entity {:data data
                               :set-data! set-data!
                               :title-key :all-pages/table-title
