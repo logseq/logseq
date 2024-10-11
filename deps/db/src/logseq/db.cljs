@@ -84,6 +84,7 @@
 (def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
 (def object? entity-util/object?)
+(def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
 
 (defn sort-by-order

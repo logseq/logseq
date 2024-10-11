@@ -4,15 +4,15 @@
             [frontend.common.schema-register :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.asset :as r.asset]
-            [frontend.worker.rtc.client-op :as client-op]))
+            [frontend.worker.rtc.client-op :as client-op]
+            [logseq.db :as ldb]))
 
 (defn entity-datoms=>action+asset-uuid
   [db-after entity-datoms]
   (when-let [e (ffirst entity-datoms)]
     (let [ent (d/entity db-after e)
-          block-uuid (:block/uuid ent)
-          block-type (:block/type ent)]
-      (when (and block-uuid (= block-type "asset"))
+          block-uuid (:block/uuid ent)]
+      (when (and block-uuid (ldb/asset? ent))
         (when-let [action (r.asset/asset-block->upload+download-action ent)]
           [action block-uuid])))))
 

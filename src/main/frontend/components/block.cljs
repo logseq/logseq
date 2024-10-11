@@ -471,7 +471,14 @@
           (asset-loader @src
                         #(resizable-image config title @src metadata full_text true))
 
-          (contains? (common-config/text-formats) ext)
+          (and db-based? (contains? (common-config/text-formats) ext) (:asset-block config))
+          (let [file-name (str (:block/title (:asset-block config)) "." (name ext))]
+            [:a.asset-ref.is-plaintext
+             {:href @src
+              :download file-name}
+             file-name])
+
+          (and (not db-based?) (contains? (common-config/text-formats) ext))
           [:a.asset-ref.is-plaintext {:href (rfe/href :file {:path path})
                                       :on-click (fn [_event]
                                                   (p/let [result (fs/read-file repo-dir path)]
@@ -2208,7 +2215,7 @@
       (:raw-title? config)
       (text-block-title (dissoc config :raw-title?) block)
 
-      (= "asset" (:block/type block))
+      (ldb/asset? block)
       [:div.grid.grid-cols-1.justify-items-center
        (asset-cp config block)
        (when (img-audio-video? block)
