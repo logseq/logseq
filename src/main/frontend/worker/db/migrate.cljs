@@ -244,7 +244,7 @@
             m (cond->
                (db-property-build/build-closed-value-block
                 uuid'
-                "Card view"
+                "Card View"
                 property
                 {:db-ident :logseq.property.view/type.card})
                 true
