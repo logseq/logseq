@@ -3,6 +3,8 @@
   (:require ["/frontend/idbkv" :as idb-keyval]
             [datascript.core :as d]
             [frontend.worker.crypt :as crypt]
+            [frontend.worker.rtc.ws-util :as ws-util]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 ;;; TODO: move frontend.idb to deps/, then we can use it in both frontend and db-worker
@@ -50,3 +52,30 @@
       (reset! *device-id (uuid device-uuid-str))
       (reset! *device-public-key device-public-key)
       (reset! *device-private-key device-private-key))))
+
+(defn new-task--get-user-devices
+  [get-ws-create-task]
+  (ws-util/send&recv get-ws-create-task {:action "get-user-devices"}))
+
+(defn new-task--add-user-device
+  [get-ws-create-task device-name]
+  (ws-util/send&recv get-ws-create-task {:action "add-user-device"
+                                         :device-name device-name}))
+
+(defn new-task--remove-user-device
+  [get-ws-create-task device-uuid]
+  (ws-util/send&recv get-ws-create-task {:action "remove-user-device"
+                                         :device-uuid device-uuid}))
+
+(defn new-task--add-device-public-key
+  [get-ws-create-task device-uuid key-name public-key-jwk]
+  (ws-util/send&recv get-ws-create-task {:action "add-device-public-key"
+                                         :device-uuid device-uuid
+                                         :key-name key-name
+                                         :public-key (ldb/write-transit-str public-key-jwk)}))
+
+(defn new-task--remove-device-public-key
+  [get-ws-create-task device-uuid key-name]
+  (ws-util/send&recv get-ws-create-task {:action "remove-device-public-key"
+                                         :device-uuid device-uuid
+                                         :key-name key-name}))
