@@ -478,7 +478,7 @@
               :download file-name}
              file-name])
 
-          (and (not db-based?) (contains? (common-config/text-formats) ext))
+          (contains? (common-config/text-formats) ext)
           [:a.asset-ref.is-plaintext {:href (rfe/href :file {:path path})
                                       :on-click (fn [_event]
                                                   (p/let [result (fs/read-file repo-dir path)]

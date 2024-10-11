@@ -100,6 +100,11 @@ default = false")
                       (when (d/entity @conn page-id)
                         (file/sync-to-file repo page-id tx-meta)))))
               deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
+              deleted-assets (keep (fn [id]
+                                     (let [e (d/entity (:db-before tx-report) [:block/uuid id])]
+                                       (when (ldb/asset? e)
+                                         {:block/uuid (:block/uuid e)
+                                          :ext (:logseq.property.asset/type e)}))) deleted-block-uuids)
               blocks' (remove (fn [b] (deleted-block-uuids (:block/uuid b))) blocks)
               block-refs (when (seq blocks')
                            (rebuild-block-refs repo tx-report blocks'))
@@ -137,5 +142,6 @@ default = false")
           {:tx-report final-tx-report
            :affected-keys affected-query-keys
            :deleted-block-uuids deleted-block-uuids
+           :deleted-assets deleted-assets
            :pages pages
            :blocks blocks})))))
