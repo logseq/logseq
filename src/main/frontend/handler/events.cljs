@@ -14,6 +14,7 @@
             [frontend.components.block :as block]
             [frontend.components.settings :as settings]
             [frontend.components.diff :as diff]
+            [frontend.components.select :as select]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.git :as git-component]
@@ -783,6 +784,15 @@
    {:id :new-db-graph
     :title [:h2 "Create a new graph"]
     :style {:max-width "500px"}}))
+
+(defmethod handle :dialog-select/graph-open []
+  (select/dialog-select! :graph-open))
+
+(defmethod handle :dialog-select/graph-remove []
+  (select/dialog-select! :graph-remove))
+
+(defmethod handle :dialog-select/db-graph-replace []
+  (select/dialog-select! :db-graph-replace))
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
   (persist-db/export-current-graph! {:succ-notification? true}))

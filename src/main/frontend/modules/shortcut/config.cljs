@@ -444,12 +444,12 @@
 
    :graph/open                              {:fn      #(do
                                                          (editor-handler/escape-editing)
-                                                         (state/set-state! :ui/open-select :graph-open))
+                                                         (state/pub-event! [:dialog-select/graph-open]))
                                              :binding "alt+shift+g"}
 
    :graph/remove                            {:fn      #(do
                                                          (editor-handler/escape-editing)
-                                                         (state/set-state! :ui/open-select :graph-remove))
+                                                         (state/pub-event! [:dialog-select/graph-remove]))
                                              :binding []}
 
    :graph/add                               {:fn      (fn [] (route-handler/redirect! {:to :graphs}))

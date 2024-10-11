@@ -1621,8 +1621,7 @@ Similar to re-frame subscriptions"
              :modal/show? false
              :modal/fullscreen? false
              :modal/panel-content nil
-             :modal/dropdowns {}
-             :ui/open-select nil))))
+             :modal/dropdowns {}))))
 
 (defn get-reactive-custom-queries-chan
   []

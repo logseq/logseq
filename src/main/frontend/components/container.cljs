@@ -966,7 +966,6 @@
       (shui-dialog/install-modals)
       (shui-popup/install-popups)
 
-      (select/select-modal)
       (custom-context-menu)
       (plugins/custom-js-installer
        {:t t

@@ -59,7 +59,7 @@
                        (reset! (::selected-choices new-state) choices))
                      new-state))
    :will-unmount (fn [state]
-                   (state/set-state! [:ui/open-select] nil)
+                   (shui/dialog-close! :ls-select-modal)
                    state)}
   [state {:keys [items limit on-chosen empty-placeholder
                  prompt-key input-default-placeholder close-modal?
@@ -234,9 +234,9 @@
                                :original-graph original-graph})))))
     :on-chosen #(dev-common-handler/import-chosen-graph (:graph %))}})
 
-(rum/defc select-modal < rum/reactive
-  []
-  (when-let [select-type (state/sub [:ui/open-select])]
+(defn dialog-select!
+  [select-type]
+  (when select-type
     (let [select-type-config (get (select-config) select-type)
           on-chosen' (:on-chosen select-type-config)]
       (shui/dialog-open!
@@ -249,5 +249,4 @@
        {:id :ls-select-modal
         :close-btn?  false
         :align :top
-        :content-props {:class "ls-dialog-select"}}))
-    nil))
+        :content-props {:class "ls-dialog-select"}}))))
