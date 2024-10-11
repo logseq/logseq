@@ -2,12 +2,6 @@
   @apply grid grid-cols-[repeat(auto-fill,18rem)] gap-4 content;
 
   .ls-card-item {
-    @apply shadow-xl rounded-md p-2 overflow-y-scroll h-[15rem];
-  }
-}
-
-.dark-theme {
-  .ls-card-item {
-    @apply border;
+    @apply dark:shadow-gray-700 shadow-md rounded-md p-2 overflow-y-scroll h-[15rem];
   }
 }
