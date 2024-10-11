@@ -10,13 +10,14 @@
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton]
             [frontend.worker.rtc.ws :as ws]
-            [frontend.worker.rtc.ws-util :as ws-util]
+            [frontend.worker.rtc.ws-util :as ws-util :refer [new-task--get-ws-create--memoized]]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [malli.core :as ma]
-            [missionary.core :as m])
+            [missionary.core :as m]
+            [frontend.worker.device :as worker-device])
   (:import [missionary Cancelled]))
 
 (def ^:private rtc-state-schema
@@ -90,28 +91,6 @@
                                   (create-local-updates-check-flow repo *auto-push? 2000))
         mix-flow (m/stream (c.m/mix remote-updates-flow local-updates-check-flow))]
     (c.m/mix mix-flow (create-pull-remote-updates-flow 60000 mix-flow))))
-
-(defn- new-task--get-ws-create
-  "Return a map with atom *current-ws and a task
-  that get current ws, create one if needed(closed or not created yet)"
-  [url & {:keys [retry-count open-ws-timeout]
-          :or {retry-count 10 open-ws-timeout 10000}}]
-  (let [*current-ws (atom nil)
-        ws-create-task (ws/mws-create url {:retry-count retry-count :open-ws-timeout open-ws-timeout})]
-    {:*current-ws *current-ws
-     :get-ws-create-task
-     (m/sp
-       (let [ws @*current-ws]
-         (if (and ws
-                  (not (ws/closed? ws)))
-           ws
-           (let [ws (m/? ws-create-task)]
-             (reset! *current-ws ws)
-             ws))))}))
-
-(def new-task--get-ws-create--memoized
-  "Return a memoized task to reuse the same websocket."
-  (memoize new-task--get-ws-create))
 
 (defn- create-ws-state-flow
   [*current-ws]
@@ -232,6 +211,8 @@
 (defn new-task--rtc-start
   [repo token]
   (m/sp
+   ;; ensure device metadata existing first
+    (m/? (worker-device/new-task--ensure-device-metadata! token))
     (if-let [conn (worker-state/get-datascript-conn repo)]
       (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
         (let [user-uuid (:sub (worker-util/parse-jwt token))
