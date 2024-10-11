@@ -312,3 +312,15 @@ html.is-mobile {
 input[type='range'] {
   accent-color: var(--lx-accent-10, var(--rx-blue-10));
 }
+
+.ls-dialog-select {
+  @apply w-auto !max-w-fit p-0;
+
+  .cp__select-main {
+    @apply m-0;
+  }
+
+  .item-results-wrap {
+    @apply px-2;
+  }
+}
