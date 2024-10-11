@@ -387,7 +387,7 @@
   (let [m
         (->> props
              (mapcat (fn [[prop prop-value]]
-                       (if (#{:icon} prop)
+                       (if (#{:icon :file :file-path :hl-stamp} prop)
                          (do (swap! ignored-properties
                                     conj
                                     {:property prop :value prop-value :location (if name {:page name} {:block title})})
@@ -409,6 +409,8 @@
                            nil
                            :filters
                            (translate-linked-ref-filters prop-value page-names-to-uuids)
+                           :ls-type
+                           [[:logseq.property/ls-type (keyword prop-value)]]
                            ;; else
                            [[(built-in-property-name-to-idents prop) prop-value]]))))
              (into {}))]
