@@ -57,7 +57,8 @@
                                (swap! closed-values assoc % (:value val))
                                [:block/uuid (:uuid val)])
         object-uuid (random-uuid)
-        get-closed-value #(get @closed-values %)]
+        get-closed-value #(get @closed-values %)
+        timestamp (common-util/time-ms)]
     {:pages-and-blocks
      (vec
       (concat
@@ -102,7 +103,7 @@
           {:block/title "date property block" :build/properties {:date [:page (date-journal-title today)]}}
           {:block/title "date-many property block" :build/properties {:date-many #{[:page (date-journal-title today)]
                                                                                    [:page (date-journal-title yesterday)]}}}
-          {:block/title "datetime property block" :build/properties {:datetime (common-util/time-ms)}}]}
+          {:block/title "datetime property block" :build/properties {:datetime timestamp}}]}
         {:page {:block/title "Block Property Queries"}
          :blocks
          [(query "(property default \"haha\")")
@@ -119,7 +120,8 @@
           (query "(property node-without-classes [[Page 1]])")
           (query "(property node-many [[Page object]])")
           (query (str "(property date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")"))
-          (query (str "(property date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")"))]}
+          (query (str "(property date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")"))
+          (query (str "(property datetime "  timestamp ")"))]}
 
         ;; Page property pages and queries
         {:page {:block/title "default page" :build/properties {:default "yolo"}}}
@@ -138,7 +140,7 @@
         {:page {:block/title "date page" :build/properties {:date [:page (date-journal-title today)]}}}
         {:page {:block/title "date-many page" :build/properties {:date-many #{[:page (date-journal-title today)]
                                                                               [:page (date-journal-title yesterday)]}}}}
-        {:page {:block/title "datetime page" :build/properties {:datetime (common-util/time-ms)}}}
+        {:page {:block/title "datetime page" :build/properties {:datetime timestamp}}}
 
         {:page {:block/title "Page Property Queries"}
          :blocks
@@ -156,7 +158,8 @@
           (query "(page-property node-without-classes [[Page 1]])")
           (query "(page-property node-many [[Page object]])")
           (query (str "(page-property date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")"))
-          (query (str "(page-property date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")"))]}]))
+          (query (str "(page-property date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")"))
+          (query (str "(page-property datetime "  timestamp ")"))]}]))
 
      :classes {:TestClass {}}
 
