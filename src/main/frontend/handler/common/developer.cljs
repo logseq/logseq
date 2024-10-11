@@ -95,4 +95,4 @@
     (state/pub-event! [:graph/switch repo])))
 
 (defn ^:export replace-graph-with-db-file []
-  (state/set-state! :ui/open-select :db-graph-replace))
+  (state/pub-event! [:dialog-select/db-graph-replace]))
