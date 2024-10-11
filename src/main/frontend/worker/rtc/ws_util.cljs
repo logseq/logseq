@@ -59,3 +59,25 @@
 (defn get-ws-url
   [token]
   (gstring/format @worker-state/*rtc-ws-url token))
+
+(defn- new-task--get-ws-create
+  "Return a map with atom *current-ws and a task
+  that get current ws, create one if needed(closed or not created yet)"
+  [url & {:keys [retry-count open-ws-timeout]
+          :or {retry-count 10 open-ws-timeout 10000}}]
+  (let [*current-ws (atom nil)
+        ws-create-task (ws/mws-create url {:retry-count retry-count :open-ws-timeout open-ws-timeout})]
+    {:*current-ws *current-ws
+     :get-ws-create-task
+     (m/sp
+       (let [ws @*current-ws]
+         (if (and ws
+                  (not (ws/closed? ws)))
+           ws
+           (let [ws (m/? ws-create-task)]
+             (reset! *current-ws ws)
+             ws))))}))
+
+(def new-task--get-ws-create--memoized
+  "Return a memoized task to reuse the same websocket."
+  (memoize new-task--get-ws-create))

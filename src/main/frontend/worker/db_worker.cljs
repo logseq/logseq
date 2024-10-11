@@ -430,8 +430,7 @@
   (init
    [_this rtc-ws-url]
    (reset! worker-state/*rtc-ws-url rtc-ws-url)
-   (p/do (worker-device/<ensure-device-metadata!)
-         (init-sqlite-module!)))
+   (init-sqlite-module!))
 
   (storeMetadata
    [_this repo metadata-str]
