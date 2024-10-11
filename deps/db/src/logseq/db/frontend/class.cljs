@@ -33,7 +33,8 @@
    {:title "Asset"
     :properties {;; :logseq.property/icon {:type :tabler-icon :id "file"}
                  :logseq.property.class/hide-from-node true}
-    :schema {:properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]}}
+    :schema {:properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]
+             :required-properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]}}
 
    ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project
    })
