@@ -149,7 +149,9 @@
                                                            [:div.font-medium "Add assets"]
                                                            (filepicker/picker
                                                             {:on-change (fn [_e files]
-                                                                          (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true))})])))
+                                                                          (p/do!
+                                                                           (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)
+                                                                           (shui/dialog-close!)))})])))
                                                      #(add-new-class-object! class set-data!))
                                   :show-add-property? true
                                   :add-property! (fn []
