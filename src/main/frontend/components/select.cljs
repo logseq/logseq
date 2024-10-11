@@ -8,6 +8,7 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [rum.core :as rum]
@@ -236,11 +237,17 @@
 (rum/defc select-modal < rum/reactive
   []
   (when-let [select-type (state/sub [:ui/open-select])]
-    (let [select-type-config (get (select-config) select-type)]
-      (state/set-modal!
+    (let [select-type-config (get (select-config) select-type)
+          on-chosen' (:on-chosen select-type-config)]
+      (shui/dialog-open!
        #(select (-> select-type-config
+                    (assoc :on-chosen (fn [it]
+                                        (on-chosen' it)
+                                        (shui/dialog-close! :ls-select-modal)))
                     (select-keys [:on-chosen :empty-placeholder :prompt-key])
                     (assoc :items ((:items-fn select-type-config)))))
-       {:fullscreen? false
-        :close-btn?  false}))
+       {:id :ls-select-modal
+        :close-btn?  false
+        :align :top
+        :content-props {:class "ls-dialog-select"}}))
     nil))
