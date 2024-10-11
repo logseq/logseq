@@ -1552,8 +1552,7 @@
                   file-rpath  (str asset-dir-rpath "/" file-path)
                   dir repo-dir
                   asset (db/entity :logseq.class/Asset)
-                  properties {:block/type "asset"
-                              :logseq.property.asset/type ext
+                  properties {:logseq.property.asset/type ext
                               :logseq.property.asset/size (.-size file)
                               :logseq.property.asset/checksum checksum
                               :block/tags (:db/id asset)}

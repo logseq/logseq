@@ -1,7 +1,7 @@
 (ns frontend.worker.rtc.asset
   "Fns to sync assets.
   some notes:
-  - block/type contains \"asset\"
+  - has :logseq.property.asset/type
   - block/content, store the asset name
   - an asset-block not having :file/path indicates need to download asset from server
   - an asset-block not having :logseq.property.asset/remote-metadata
@@ -25,7 +25,7 @@
           :in $
           :where
           [?asset :block/uuid]
-          [?asset :block/type "asset"]]
+          [?asset :logseq.property.asset/type]]
         db)
        (apply concat)))
 

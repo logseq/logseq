@@ -42,6 +42,11 @@
   [page]
   (= (:block/type page) "journal"))
 
+(defn asset?
+  "Given an entity or map, check if it is an asset block"
+  [entity]
+  (contains? entity :logseq.property.asset/type))
+
 (defn hidden?
   [page]
   (when page
