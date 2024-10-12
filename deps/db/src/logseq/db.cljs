@@ -447,12 +447,12 @@
   [db]
   (->>
    (d/datoms db :avet :block/name)
-   (distinct)
-   (map #(d/entity db (:e %)))
-   (filter page?)
-   (remove hidden?)
-   (remove (fn [page]
-             (common-util/uuid-string? (:block/name page))))))
+   (keep (fn [d]
+           (let [e (d/entity db (:e d))]
+             (when (and (page? e)
+                        (not (hidden? e))
+                        (not (common-util/uuid-string? (:block/name e))))
+               e))))))
 
 (defn built-in?
   "Built-in page or block"
