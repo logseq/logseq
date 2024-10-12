@@ -5,8 +5,6 @@
             [frontend.components.journal :as journal]
             [frontend.components.page :as page]
             [frontend.components.all-pages :as all-pages]
-            ;; [frontend.components.all-pages2 :as all-pages]
-            [frontend.charlie.db-playground :as db-playground]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.settings :as settings]
@@ -98,8 +96,4 @@
    (when config/dev?
      ["/ui"
       {:name :ui
-       :view shui/page}])
-   (when config/dev?
-     ["/db"
-      {:name :db
-       :view db-playground/page}])])
+       :view shui/page}])])
