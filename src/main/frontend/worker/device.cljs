@@ -122,5 +122,16 @@
   (m/sp
     (let [get-ws-create-task (new-get-ws-create-task token)
           devices (m/? (new-task--get-user-devices get-ws-create-task))]
+      (when ;; check current device has been synced to remote
+       (and @*device-id @*device-name @*device-public-key
+            (not (some
+                  (fn [device]
+                    (let [{:keys [device-id]} device]
+                      (when (= device-id @*device-id)
+                        true)))
+                  devices)))
+        (m/? (new-task--add-user-device get-ws-create-task @*device-name))
+        (m/? (new-task--add-device-public-key
+              get-ws-create-task @*device-id "default-public-key" @*device-public-key)))
       (prn :debug-devices devices)
       devices)))
