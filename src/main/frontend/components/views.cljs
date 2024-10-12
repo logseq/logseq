@@ -13,18 +13,17 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.property :as property-handler]
-            [frontend.common.search-fuzzy :as fuzzy]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
             [dommy.core :as dom]
-            [goog.functions :refer [debounce]]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]
-            [frontend.mixins :as mixins]))
+            [frontend.mixins :as mixins]
+            [logseq.shui.table.core :as table-core]))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!]}]
@@ -865,11 +864,6 @@
               (ui/icon "x"))]))
         filters)])))
 
-(defn- fuzzy-matched?
-  [input s]
-  (pos? (fuzzy/score (string/lower-case (str input))
-                     (string/lower-case (str s)))))
-
 (defn- row-matched?
   [row input filters]
   (and
@@ -877,7 +871,8 @@
    (if (string/blank? input)
      true
      (when row
-       (fuzzy-matched? input (:block/title row))))
+       ;; fuzzy search is too slow
+       (string/includes? (string/lower-case (:block/title row)) (string/lower-case input))))
    ;; filters check
    (every?
     (fn [[property-ident operator match]]
@@ -916,7 +911,7 @@
                     (boolean (empty? (set/intersection (set value') match))))))
 
               :text-contains
-              (some #(fuzzy-matched? match (get-property-value-content %)) value')
+              (some #(string/includes? (string/lower-case (get-property-value-content %)) (string/lower-case match)) value')
 
               :text-not-contains
               (not-any? #(string/includes? (str (get-property-value-content %)) match) value')
@@ -1025,13 +1020,12 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc table-view < rum/static
-  [table option row-selection add-new-object! ready?]
+  [table option row-selection add-new-object!]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))]
     (shui/table
      (let [columns' (:columns table)
            rows (:rows table)]
        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
-        {:class (when (not ready?) "invisible")}
         [:div.relative
          (table-header table columns' option selected-rows)
 
@@ -1100,7 +1094,7 @@
                         (fn [row]
                           (row-matched? row input filters)))
         [row-filter set-row-filter!] (rum/use-state row-filter-fn)
-        debounced-set-row-filter! (debounce set-row-filter! 200)
+        [input-filters set-input-filters!] (rum/use-state [input filters])
         [row-selection set-row-selection!] (rum/use-state {})
         columns (sort-columns columns ordered-columns)
         table (shui/table-option {:data data
@@ -1120,18 +1114,26 @@
                                              :set-sized-columns! set-sized-columns!
                                              :set-row-selection! set-row-selection!
                                              :add-new-object! add-new-object!}})
-
-        [ready?, set-ready!] (rum/use-state false)
         *view-ref (rum/use-ref nil)
         display-type (or (:db/ident (get view-entity :logseq.property.view/type))
                          :logseq.property.view/type.table)]
 
     (rum/use-effect!
-     (fn [] (debounced-set-row-filter!
-             (fn []
-               (fn [row]
-                 (row-matched? row input filters)))))
+     (fn []
+       (let [new-input-filters [input filters]]
+         (when-not (= input-filters new-input-filters)
+           (set-input-filters! [input filters])
+           (set-row-filter!
+            (fn []
+              (fn [row]
+                (row-matched? row input filters)))))))
      [input filters])
+
+    (rum/use-effect!
+     (fn []
+       (let [data' (table-core/table-sort-rows data sorting columns)]
+         (set-data! data')))
+     [sorting])
 
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
@@ -1160,14 +1162,6 @@
 
      (filters-row table)
 
-     (rum/use-effect! #(js/setTimeout (fn [] (set-ready! true)) 16) [])
-     (rum/use-effect!
-      (fn []
-        (when-let [^js cnt (and ready? (some-> (rum/deref *view-ref) (.closest ".is-node-page")))]
-          (.setAttribute cnt "data-ready" true)
-          #(.removeAttribute cnt "data-ready")))
-      [ready?])
-
      (case display-type
        :logseq.property.view/type.list
        (list-view (:config option) view-entity (:rows table))
@@ -1175,7 +1169,7 @@
        :logseq.property.view/type.card
        (card-view (:config option) view-entity (:rows table))
 
-       (table-view table option row-selection add-new-object! ready?))]))
+       (table-view table option row-selection add-new-object!))]))
 
 (rum/defc view
   "Provides a view for data like query results and tagged objects, multiple
