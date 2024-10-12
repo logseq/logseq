@@ -117,7 +117,7 @@
                      :icon (ui/icon "apps")})
 
                   {:title (t :appearance)
-                   :options {:on-click #(state/pub-event! [:modal/toggle-appearance-modal])}
+                   :options {:on-click #(state/pub-event! [:ui/toggle-appearance])}
                    :icon (ui/icon "color-swatch")}
 
                   (when current-repo
@@ -153,7 +153,7 @@
                                :class "w-full"}})]
                  (concat page-menu-and-hr)
                  (remove nil?)))]
-    [:button.button.icon.toolbar-dots-btn
+    [:button#dots-menu.button.icon.toolbar-dots-btn
      {:title (t :header/more)
       :on-pointer-down (fn [^js e]
                          (shui/popup-show! (.-target e)

@@ -310,15 +310,16 @@
     (plugin/open-select-theme!)
     (route-handler/go-to-search! :themes)))
 
-(defmethod handle :modal/toggle-appearance-modal [_]
-  (let [label "customize-appearance"]
-    (if (shui/dialog-get label)
-      (shui/dialog-close! label)
-      (shui/dialog-open!
-       #(settings/modal-appearance-inner)
-       {:id      label
-        :overlay-props {:label label}
-        :label   label}))))
+(defmethod handle :ui/toggle-appearance [_]
+  (let [popup-id "appearance_settings"]
+    (if (gdom/getElement popup-id)
+      (shui/popup-hide! popup-id)
+      (shui/popup-show!
+       (gdom/getElement "dots-menu")
+       (fn []
+         (settings/appearance))
+       {:id popup-id
+        :align :end}))))
 
 (defmethod handle :modal/set-git-username-and-email [[_ _content]]
   (shui/dialog-open! git-component/set-git-username-and-email))
@@ -396,11 +397,11 @@
 
 (defmethod handle :go/search [_]
   (shui/dialog-open!
-    cmdk/cmdk-modal
-    {:id :ls-dialog-cmdk
-     :align :top
-     :content-props {:class "ls-dialog-cmdk"}
-     :close-btn? false}))
+   cmdk/cmdk-modal
+   {:id :ls-dialog-cmdk
+    :align :top
+    :content-props {:class "ls-dialog-cmdk"}
+    :close-btn? false}))
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
