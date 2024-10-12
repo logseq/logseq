@@ -457,8 +457,6 @@
                             (notification/show!
                              [:div (t :settings-page/custom-date-format-notification)]
                              :warning false)))
-
-                        (state/close-modal!)
                         (shui/dialog-close-all!)
                         (when-not db-based? (route-handler/redirect! {:to :graphs})))))}
       (for [format (sort (date/journal-title-formatters))]

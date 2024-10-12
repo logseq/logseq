@@ -22,6 +22,7 @@
             [frontend.rum :as r]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.shui.ui :as shui]
+            [logseq.shui.dialog.core :as shui-dialog]
             [clojure.set :as set]
             [frontend.db.conn-state :as db-conn-state]
             [datascript.core :as d]
@@ -70,14 +71,6 @@
       ;; modals
       :modal/dropdowns                       {}
       :modal/id                              nil
-      :modal/label                           ""
-      :modal/show?                           false
-      :modal/panel-content                   nil
-      :modal/payload                         nil
-      :modal/fullscreen?                     false
-      :modal/close-btn?                      nil
-      :modal/close-backdrop?                 true
-      :modal/subsets                         []
 
       ;; ui
       :ui/viewport                           {}
@@ -1519,60 +1512,10 @@ Similar to re-frame subscriptions"
 
 (defn modal-opened?
   []
-  (:modal/show? @state))
+  (shui-dialog/has-modal?))
 
-(declare set-modal!)
-(declare close-modal!)
-
-(defn set-modal!
-  ([modal-panel-content]
-   (set-modal! modal-panel-content
-               {:fullscreen? false
-                :close-btn?  true}))
-  ([modal-panel-content {:keys [id label payload fullscreen? close-btn? close-backdrop? center? panel?
-                                container-overflow-visible? style]}]
-   (let [opened? (modal-opened?)
-         style (if container-overflow-visible?
-                 (merge style {:overflow "visible"})
-                 style)]
-     (when opened?
-       (close-modal!))
-     (async/go
-       (when opened?
-         (<! (async/timeout 100)))
-       (swap! state assoc
-              :modal/id id
-              :modal/label (if label (name label) "")
-              :modal/class (if center? "as-center" "")
-              :modal/show? (boolean modal-panel-content)
-              :modal/panel-content modal-panel-content
-              :modal/payload payload
-              :modal/fullscreen? fullscreen?
-              :modal/panel? (if (boolean? panel?) panel? true)
-              :modal/close-btn? close-btn?
-              :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)
-              :modal/style style)))
-   nil))
-
-(defn close-dropdowns!
-  []
-  (let [close-fns (vals (:modal/dropdowns @state))]
-    (doseq [f close-fns]
-      (try (f) (catch :default _e nil)))))
-
-(defn close-modal!
-  [& {:keys [force?]
-      :or {force? false}}]
-  (when (or force? (not (:error/multiple-tabs-access-opfs? @state)))
-    (close-dropdowns!)
-    (swap! state assoc
-      :modal/id nil
-      :modal/label ""
-      :modal/payload nil
-      :modal/show? false
-      :modal/fullscreen? false
-      :modal/panel-content nil
-      :modal/dropdowns {})))
+(defn close-modal! []
+  (shui/dialog-close!))
 
 (defn get-reactive-custom-queries-chan
   []
@@ -2165,7 +2108,7 @@ Similar to re-frame subscriptions"
 
 (defn get-modal-id
   []
-  (:modal/id @state))
+  (shui-dialog/get-last-modal-id))
 
 (defn set-auth-id-token
   [id-token]

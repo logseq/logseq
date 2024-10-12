@@ -831,9 +831,7 @@
   []
   nil)
 
-(rum/defcs ^:large-vars/cleanup-todo root-container <
-  (mixins/modal :modal/show?)
-  rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo root-container < rum/reactive
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "pointerdown" hide-context-menu-and-clear-selection)
@@ -959,7 +957,6 @@
        [:div#app-single-container]]
 
       (ui/notification)
-      (ui/modal)
 
       (shui-toaster/install-toaster)
       (shui-dialog/install-modals)

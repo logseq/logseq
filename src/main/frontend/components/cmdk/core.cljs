@@ -381,7 +381,7 @@
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
     (editor-handler/copy-block-ref! block-uuid block-ref/->block-ref)
-    (state/close-modal!)))
+    (shui/dialog-close! :ls-dialog-cmdk)))
 
 (defmulti handle-action (fn [action _state _event] action))
 
@@ -395,7 +395,7 @@
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]
     (let [page (db/get-page page-name)]
       (route-handler/redirect-to-page! (:block/uuid page)))
-    (state/close-modal!)))
+    (shui/dialog-close! :ls-dialog-cmdk)))
 
 (defmethod handle-action :open-block [_ state _event]
   (when-let [block-id (some-> state state->highlighted-item :source-block :block/uuid)]
@@ -421,21 +421,21 @@
               (route-handler/redirect-to-page! block-id)
               :else
               (route-handler/redirect-to-page! (:block/uuid page) {:anchor (str "ls-block-" block-id)}))
-            (state/close-modal!)))))))
+            (shui/dialog-close! :ls-dialog-cmdk)))))))
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]
     (let [page (db/get-page page-name)]
       (when page
         (editor-handler/open-block-in-sidebar! (:block/uuid page))))
-    (state/close-modal!)))
+    (shui/dialog-close! :ls-dialog-cmdk)))
 
 (defmethod handle-action :open-block-right [_ state _event]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
     (p/let [repo (state/get-current-repo)
             _ (db-async/<get-block repo block-uuid :children? false)]
       (editor-handler/open-block-in-sidebar! block-uuid)
-      (state/close-modal!))))
+      (shui/dialog-close! :ls-dialog-cmdk))))
 
 (defn- open-file
   [file-path]
@@ -466,7 +466,7 @@
       (cond
         (:file-path item) (do
                             (open-file (:file-path item))
-                            (state/close-modal!))
+                            (shui/dialog-close! :ls-dialog-cmdk))
         (and graph-view? page? (not shift?)) (do
                                                (state/add-graph-search-filter! @(::input state))
                                                (reset! (::input state) ""))
@@ -485,7 +485,7 @@
     (when-let [action (:action command)]
       (action)
       (when-not (contains? #{:graph/open :graph/remove :dev/replace-graph-with-db-file :ui/toggle-settings :go/flashcards} (:id command))
-        (state/close-modal!)))))
+        (shui/dialog-close! :ls-dialog-cmdk)))))
 
 (defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
@@ -501,7 +501,7 @@
                                                       :create-first-block? false})
                      create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
                      create-page? (page-handler/<create! @!input {:redirect? true}))]
-      (state/close-modal!)
+      (shui/dialog-close! :ls-dialog-cmdk)
       (when (and create-class? result)
         (state/pub-event! [:class/configure result])))))
 
@@ -527,7 +527,7 @@
 (defmethod handle-action :theme [_ state]
   (when-let [item (some-> state state->highlighted-item)]
     (js/LSPluginCore.selectTheme (bean/->js (:source-theme item)))
-    (state/close-modal!)))
+    (shui/dialog-close!)))
 
 (defmethod handle-action :default [_ state event]
   (when-let [action (state->action state)]
@@ -726,7 +726,7 @@
     (cond
       (and meta? enter?)
       (let [repo (state/get-current-repo)]
-        (state/close-modal!)
+        (shui/dialog-close! :ls-dialog-cmdk)
         (state/sidebar-add-block! repo input :search))
       as-keydown? (if meta?
                     (show-more)

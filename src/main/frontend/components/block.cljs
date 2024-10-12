@@ -1189,7 +1189,7 @@
 
                    (if (and (not (util/mobile?))
                             (not (:preview? config))
-                            (not (:modal/show? @state/state))
+                            (not (shui-dialog/has-modal?))
                             (nil? block-type))
                      (block-reference-preview inner
                                               {:repo repo :config config :id block-id})

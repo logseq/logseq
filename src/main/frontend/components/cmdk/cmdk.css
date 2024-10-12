@@ -4,3 +4,7 @@
     bg-gray-03 border-t border-gray-05;
   }
 }
+
+.ls-dialog-cmdk {
+  @apply p-0 w-auto !max-w-fit overflow-hidden;
+}

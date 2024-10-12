@@ -108,6 +108,10 @@
   []
   (some-> (last @*modals) (:id)))
 
+(defn get-first-modal-id
+  []
+  (some-> (first @*modals) (:id)))
+
 (defn close!
   ([] (close! (get-last-modal-id)))
   ([id] (update-modal! id :open? false)))

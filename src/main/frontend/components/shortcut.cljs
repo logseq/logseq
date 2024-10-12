@@ -13,6 +13,7 @@
             [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
+            [logseq.shui.dialog.core :as shui-dialog]
             [frontend.util :as util]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.modules.shortcut.config :as shortcut-config])
@@ -237,8 +238,8 @@
     ;; TODO: back interaction for the shui dialog
     (rum/use-effect!
      (fn []
-       (let [mid (state/sub :modal/id)
-             mid' (some-> (state/sub :modal/subsets) (last) (:modal/id))
+       (let [mid (shui-dialog/get-first-modal-id)
+             mid' (shui-dialog/get-last-modal-id)
              el (rum/deref *ref-el)]
          (when (or (and (not mid') (= mid modal-id))
                    (= mid' modal-id))
