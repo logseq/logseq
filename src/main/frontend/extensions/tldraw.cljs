@@ -28,6 +28,7 @@
             [cljs-bean.core :as bean]
             [frontend.db.async :as db-async]
             [logseq.common.util :as common-util]
+            [logseq.shui.ui :as shui]
             [frontend.util.text :as text-util]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
@@ -126,7 +127,8 @@
                           (str (:block/uuid (db/get-page block-id-str)))))
    :exportToImage (fn [page-uuid-str options]
                     (assert (common-util/uuid-string? page-uuid-str))
-                    (state/set-modal! #(export/export-blocks (uuid page-uuid-str) (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
+                    (shui/dialog-open!
+                      #(export/export-blocks (uuid page-uuid-str) (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
    :isWhiteboardPage (fn [page-name]
                        (when-let [entity (db/get-page page-name)]
                          (model/whiteboard-page? entity)))

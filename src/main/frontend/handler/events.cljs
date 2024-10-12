@@ -395,11 +395,12 @@
     (shui/dialog-open! shell/shell)))
 
 (defmethod handle :go/search [_]
-  (state/set-modal! cmdk/cmdk-modal
-                    {:fullscreen? true
-                     :close-btn?  false
-                     :panel?      false
-                     :label "ls-modal-search"}))
+  (shui/dialog-open!
+    cmdk/cmdk-modal
+    {:id :ls-dialog-cmdk
+     :align :top
+     :content-props {:class "ls-dialog-cmdk"}
+     :close-btn? false}))
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
