@@ -1524,50 +1524,6 @@ Similar to re-frame subscriptions"
 (declare set-modal!)
 (declare close-modal!)
 
-(defn get-sub-modals
-  []
-  (:modal/subsets @state))
-
-(defn set-sub-modal!
-  ([panel-content]
-   (set-sub-modal! panel-content
-                   {:close-btn? true}))
-  ([panel-content {:keys [id label payload close-btn? close-backdrop? show? center?] :as opts}]
-   (if (not (modal-opened?))
-     (set-modal! panel-content opts)
-     (let [modals (:modal/subsets @state)
-           idx (and id (first (keep-indexed #(when (= (:modal/id %2) id) %1)
-                                            modals)))
-           input (medley/filter-vals
-                  #(not (nil? %1))
-                  {:modal/id            id
-                   :modal/label         (if label (name label) "")
-                   :modal/class         (if center? "as-center" "")
-                   :modal/payload       payload
-                   :modal/show?         (if (boolean? show?) show? true)
-                   :modal/panel-content panel-content
-                   :modal/close-btn?    close-btn?
-                   :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)})]
-       (swap! state update-in
-              [:modal/subsets (or idx (count modals))]
-              merge input)
-       (:modal/subsets @state)))))
-
-(defn close-sub-modal!
-  ([] (close-sub-modal! nil))
-  ([all?-a-id]
-   (if (true? all?-a-id)
-     (swap! state assoc :modal/subsets [])
-     (let [id     all?-a-id
-           mid    (:modal/id @state)
-           modals (:modal/subsets @state)]
-       (if (and id (not (string/blank? mid)) (= id mid))
-         (close-modal!)
-         (when-let [idx (if id (first (keep-indexed #(when (= (:modal/id %2) id) %1) modals))
-                            (dec (count modals)))]
-           (swap! state assoc :modal/subsets (into [] (medley/remove-nth idx modals)))))))
-   (:modal/subsets @state)))
-
 (defn set-modal!
   ([modal-panel-content]
    (set-modal! modal-panel-content
@@ -1581,9 +1537,6 @@ Similar to re-frame subscriptions"
                  style)]
      (when opened?
        (close-modal!))
-     (when (seq (get-sub-modals))
-       (close-sub-modal! true))
-
      (async/go
        (when opened?
          (<! (async/timeout 100)))
@@ -1612,16 +1565,14 @@ Similar to re-frame subscriptions"
       :or {force? false}}]
   (when (or force? (not (:error/multiple-tabs-access-opfs? @state)))
     (close-dropdowns!)
-    (if (seq (get-sub-modals))
-      (close-sub-modal!)
-      (swap! state assoc
-             :modal/id nil
-             :modal/label ""
-             :modal/payload nil
-             :modal/show? false
-             :modal/fullscreen? false
-             :modal/panel-content nil
-             :modal/dropdowns {}))))
+    (swap! state assoc
+      :modal/id nil
+      :modal/label ""
+      :modal/payload nil
+      :modal/show? false
+      :modal/fullscreen? false
+      :modal/panel-content nil
+      :modal/dropdowns {})))
 
 (defn get-reactive-custom-queries-chan
   []

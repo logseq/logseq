@@ -960,7 +960,7 @@
 
       (ui/notification)
       (ui/modal)
-      (ui/sub-modal)
+
       (shui-toaster/install-toaster)
       (shui-dialog/install-modals)
       (shui-popup/install-popups)
