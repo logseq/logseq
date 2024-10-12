@@ -667,34 +667,6 @@
       (fn [state]
         (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn? style)))]))
 
-(rum/defc sub-modal < rum/reactive
-  []
-  (when-let [modals (seq (state/sub :modal/subsets))]
-    (for [[idx modal'] (medley/indexed modals)]
-      (let [id (:modal/id modal')
-            modal-panel-content (:modal/panel-content modal')
-            close-btn? (:modal/close-btn? modal')
-            close-backdrop? (:modal/close-backdrop? modal')
-            show? (:modal/show? modal')
-            label (:modal/label modal')
-            style (:modal/style modal')
-            class (:modal/class modal')
-            close-fn (fn []
-                       (state/close-sub-modal! id))
-            modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
-        [:div.ui__modal.is-sub-modal
-         {:style {:z-index (if show? (+ 999 idx) -1)}
-          :label label
-          :class class}
-         (css-transition
-          {:in show? :timeout 0}
-          (fn [state]
-            (modal-overlay state close-fn close-backdrop?)))
-         (css-transition
-          {:in show? :timeout 0}
-          (fn [state]
-            (modal-panel show? modal-panel-content state close-fn false close-btn? style)))]))))
-
 (defn loading
   ([] (loading (t :loading)))
   ([content] (loading content nil))

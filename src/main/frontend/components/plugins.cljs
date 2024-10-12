@@ -122,7 +122,7 @@
                           [{:is-selected current-selected?
                             :is-active   (= idx @*cursor)}])
               :on-click #(do (js/LSPluginCore.selectTheme (bean/->js opt))
-                             (state/close-modal!))}
+                             (shui/dialog-close!))}
              [:div.flex.items-center.text-xs
               [:div.opacity-60 (str (or (:name plg) "Logseq") " •")]
               [:div.name.ml-1 (:name opt)]]
@@ -473,8 +473,7 @@
        (ui/button (t :save)
                   :on-click (fn []
                               (p/let [_ (ipc/ipc :setProxy opts)]
-                                (state/set-state! [:electron/user-cfgs :settings/agent] opts)
-                                (state/close-sub-modal! :https-proxy-panel))))]]]))
+                                (state/set-state! [:electron/user-cfgs :settings/agent] opts))))]]]))
 
 (rum/defc auto-check-for-updates-control
   []
@@ -991,7 +990,8 @@
 
 (defn open-select-theme!
   []
-  (state/set-sub-modal! installed-themes))
+  (shui/dialog-open! installed-themes
+    {:align :top}))
 
 (rum/defc hook-ui-slot
   ([type payload] (hook-ui-slot type payload nil #(plugin-handler/hook-plugin-app type % nil)))
