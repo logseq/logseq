@@ -32,9 +32,9 @@
       (or
        (get (.-kv e) k)
        (let [result (lookup-entity e k default-value)
-             result' (if (string? result)
-                       (db-content/special-id-ref->page-ref result
-                                                            (:block/refs e))
+             refs (:block/refs e)
+             result' (if (and (string? result) refs)
+                       (db-content/special-id-ref->page-ref result refs)
                        result)]
          (or result' default-value))))))
 
@@ -59,8 +59,13 @@
                                  (into {})))
              (lookup-entity e :block/properties nil)))
 
+         ;; cache :block/title
          :block/title
-         (get-block-title e k default-value)
+         (or (:block.temp/cached-title @(.-cache e))
+             (let [title (get-block-title e k default-value)]
+               (vreset! (.-cache e) (assoc @(.-cache e)
+                                           :block.temp/cached-title title))
+               title))
 
          :block/_parent
          (->> (lookup-entity e k default-value)
