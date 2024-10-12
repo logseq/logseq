@@ -852,8 +852,7 @@
                     (fn [_e]
                       (state/set-state! :editor/latest-shortcut nil)))))
   [state route-match main-content']
-  (let [{:keys [open-fn]} state
-        current-repo (state/sub :git/current-repo)
+  (let [current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
         accent-color (some-> (state/sub :ui/radix-color) (name))
@@ -926,8 +925,7 @@
       [:div.#app-container
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
-        (header/header {:open-fn        open-fn
-                        :light?         light?
+        (header/header {:light?         light?
                         :current-repo   current-repo
                         :logged?        logged?
                         :page?          page?
