@@ -60,7 +60,7 @@
   [token]
   (gstring/format @worker-state/*rtc-ws-url token))
 
-(defn- new-task--get-ws-create
+(defn- gen-get-ws-create-map
   "Return a map with atom *current-ws and a task
   that get current ws, create one if needed(closed or not created yet)"
   [url & {:keys [retry-count open-ws-timeout]
@@ -78,6 +78,6 @@
              (reset! *current-ws ws)
              ws))))}))
 
-(def new-task--get-ws-create--memoized
+(def gen-get-ws-create-map--memoized
   "Return a memoized task to reuse the same websocket."
-  (memoize new-task--get-ws-create))
+  (memoize gen-get-ws-create-map))
