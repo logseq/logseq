@@ -37,38 +37,42 @@
 (defonce *device-public-key (atom nil :validator #(instance? js/CryptoKey %)))
 (defonce *device-private-key (atom nil :validator #(instance? js/CryptoKey %)))
 
-(defn new-task--get-user-devices
+(defn- new-task--get-user-devices
   [get-ws-create-task]
   (m/join :devices (ws-util/send&recv get-ws-create-task {:action "get-user-devices"})))
 
-(defn new-task--add-user-device
+(defn- new-task--add-user-device
   [get-ws-create-task device-name]
   (m/join :device (ws-util/send&recv get-ws-create-task {:action "add-user-device"
                                                          :device-name device-name})))
 
-(defn new-task--remove-user-device
+(defn- new-task--remove-user-device
   [get-ws-create-task device-uuid]
   (ws-util/send&recv get-ws-create-task {:action "remove-user-device"
                                          :device-uuid device-uuid}))
 
-(defn new-task--update-user-device-name
+(defn- new-task--update-user-device-name
   [get-ws-create-task device-uuid device-name]
   (ws-util/send&recv get-ws-create-task {:action "update-user-device-name"
                                          :device-uuid device-uuid
                                          :device-name device-name}))
 
-(defn new-task--add-device-public-key
+(defn- new-task--add-device-public-key
   [get-ws-create-task device-uuid key-name public-key-jwk]
   (ws-util/send&recv get-ws-create-task {:action "add-device-public-key"
                                          :device-uuid device-uuid
                                          :key-name key-name
                                          :public-key (ldb/write-transit-str public-key-jwk)}))
 
-(defn new-task--remove-device-public-key
+(defn- new-task--remove-device-public-key
   [get-ws-create-task device-uuid key-name]
   (ws-util/send&recv get-ws-create-task {:action "remove-device-public-key"
                                          :device-uuid device-uuid
                                          :key-name key-name}))
+
+(defn- new-get-ws-create-task
+  [token]
+  (:get-ws-create-task (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))))
 
 (defn new-task--ensure-device-metadata!
   "Generate new device items if not exists.
@@ -78,8 +82,7 @@
   (m/sp
     (let [device-uuid (c.m/<? (<get-item item-key-device-id))]
       (when-not device-uuid
-        (let [{:keys [get-ws-create-task]}
-              (ws-util/new-task--get-ws-create--memoized (ws-util/get-ws-url token))
+        (let [get-ws-create-task (new-get-ws-create-task token)
               agent-data (js->clj (.toJSON js/navigator.userAgentData) :keywordize-keys true)
               generated-device-name (string/join
                                      "-"
@@ -100,13 +103,24 @@
           (c.m/<? (<set-item! item-key-device-private-key-jwk private-key-jwk))
           (m/? (new-task--add-device-public-key
                 get-ws-create-task device-id "default-public-key" public-key-jwk))))
-      (p/let [device-uuid-str (<get-item item-key-device-id)
-              device-name (<get-item item-key-device-name)
-              device-public-key-jwk (<get-item item-key-device-public-key-jwk)
-              device-public-key (crypt/<import-public-key device-public-key-jwk)
-              device-private-key-jwk (<get-item item-key-device-private-key-jwk)
-              device-private-key (crypt/<import-private-key device-private-key-jwk)]
-        (reset! *device-id (uuid device-uuid-str))
-        (reset! *device-name device-name)
-        (reset! *device-public-key device-public-key)
-        (reset! *device-private-key device-private-key)))))
+      (c.m/<?
+       (p/let [device-uuid-str (<get-item item-key-device-id)
+               device-name (<get-item item-key-device-name)
+               device-public-key-jwk (<get-item item-key-device-public-key-jwk)
+               device-public-key (crypt/<import-public-key device-public-key-jwk)
+               device-private-key-jwk (<get-item item-key-device-private-key-jwk)
+               device-private-key (crypt/<import-private-key device-private-key-jwk)]
+         (reset! *device-id (uuid device-uuid-str))
+         (reset! *device-name device-name)
+         (reset! *device-public-key device-public-key)
+         (reset! *device-private-key device-private-key))))))
+
+(defn new-task--list-devices
+  "Return device list.
+  Also sync local device metadata to remote if not exists in remote side"
+  [token]
+  (m/sp
+    (let [get-ws-create-task (new-get-ws-create-task token)
+          devices (m/? (new-task--get-user-devices get-ws-create-task))]
+      (prn :debug-devices devices)
+      devices)))
