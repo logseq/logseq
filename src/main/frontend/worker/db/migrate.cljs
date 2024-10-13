@@ -328,7 +328,13 @@
    [32 {:properties [:logseq.property.asset/last-visit-page]}]
    [33 {:properties [:logseq.property.pdf/hl-image]}]
    [34 {:properties [:logseq.property.asset/resize-metadata]}]
-   [35 {:fix add-card-view}]])
+   [35 {:fix add-card-view}]
+   [36 {:properties [:kv/value :block/type :block/schema :block/parent
+                     :block/order :block/collapsed? :block/page
+                     :block/refs :block/path-refs :block/link
+                     :block/title :block/closed-value-property
+                     :block/created-at :block/updated-at
+                     :property/schema.classes :property.value/content]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
