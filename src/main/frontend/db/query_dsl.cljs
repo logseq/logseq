@@ -477,7 +477,7 @@
    (coll? e)
    (or
     (list? (first e))
-    (and (= 3 (count e))
+    (and (>= (count e) 2)
          (string/starts-with? (str (first e)) "?")))))
 
 (defn build-query
