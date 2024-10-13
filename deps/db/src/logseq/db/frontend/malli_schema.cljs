@@ -117,8 +117,8 @@
                                       ;; This allows block types like property-value-block to require properties in
                                       ;; their schema that they depend on
                                       (not= :logseq.property/created-from-property k)
-                                      (d/entity db k)
-                                      (not (db-property/db-attribute-properties k)))]
+                                      (not (db-property/db-attribute-properties k))
+                                      (d/entity db k))]
                  (update m :block/properties (fnil conj [])
                          ;; use explicit call to be nbb compatible
                          [(let [closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
