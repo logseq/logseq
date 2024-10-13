@@ -123,11 +123,11 @@
    [:div.flex.flex-row
     [:div.font-medium.mt-2 "Between: "]
     (datepicker :start "Start date"
-      (merge opts {:auto-focus true
-                   :on-select (fn []
-                                (when-let [^js end-input (js/document.querySelector ".query-builder-datepicker[data-key=end]")]
-                                  (when (string/blank? (.-value end-input))
-                                    (.focus end-input))))}))
+                (merge opts {:auto-focus true
+                             :on-select (fn []
+                                          (when-let [^js end-input (js/document.querySelector ".query-builder-datepicker[data-key=end]")]
+                                            (when (string/blank? (.-value end-input))
+                                              (.focus end-input))))}))
     (datepicker :end "End date" opts)]
    [:p.pt-2
     (ui/button "Submit"
@@ -445,6 +445,9 @@
   [clause]
   (let [f (first clause)]
     (cond
+      (string/starts-with? (str f) "?") ; variable
+      (str clause)
+
       (string? clause)
       (str "Search: " clause)
 
@@ -583,7 +586,8 @@
   [*tree *find loc clauses]
   (when (seq clauses)
     [:div.query-builder-clause
-     (let [kind (keyword (first clauses))]
+     (let [operator (first clauses)
+           kind (keyword operator)]
        (if (query-builder/operators-set kind)
          [:div.operator-clause.flex.flex-row.items-center {:data-level (count loc)}
           [:div.clause-bracket "("]
@@ -627,7 +631,8 @@
     ""
     (if (or (common-util/wrapped-by-parens? q-str)
             (common-util/wrapped-by-quotes? q-str)
-            (page-ref/page-ref? q-str))
+            (page-ref/page-ref? q-str)
+            (string/starts-with? q-str "[?"))
       q-str
       (str "\"" q-str "\""))))
 

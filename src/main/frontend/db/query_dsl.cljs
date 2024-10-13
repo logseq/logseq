@@ -471,6 +471,15 @@
   {:query (list 'block-content '?b e)
    :rules [:block-content]})
 
+(defn- datalog-clause?
+  [e]
+  (and
+   (coll? e)
+   (or
+    (list? (first e))
+    (and (= 3 (count e))
+         (string/starts-with? (str (first e)) "?")))))
+
 (defn build-query
   "This fn converts a form/list in a query e.g. `(operator arg1 arg2)` to its datalog
   equivalent. This fn is called recursively on sublists for boolean operators
@@ -485,7 +494,10 @@ Some bindings in this fn:
   ([e {:keys [sort-by blocks? sample] :as env :or {blocks? (atom nil)}} level]
    ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
-         fe (when fe (symbol (string/lower-case (name fe))))
+         fe (when fe
+              (if (list? fe)
+                fe
+                (symbol (string/lower-case (name fe)))))
          page-ref? (page-ref/page-ref? e)]
      (when (or (and page-ref?
                     (not (contains? #{'page-property 'page-tags} (:current-filter env))))
@@ -495,6 +507,9 @@ Some bindings in this fn:
      (cond
        (nil? e)
        nil
+
+       (and (:db-graph? env) (datalog-clause? e))
+       {:query [e]}
 
        page-ref?
        (build-page-ref e)
@@ -704,16 +719,17 @@ Some bindings in this fn:
    (query repo query-string {}))
   ([repo query-string query-opts]
    (when (and (string? query-string) (not= "\"\"" query-string))
-     (let [{query* :query :keys [rules sort-by blocks? sample]} (parse-query query-string {:cards? (:cards? query-opts)})
+     (let [db-graph? (config/db-based-graph? repo)
+           {query* :query :keys [rules sort-by blocks? sample]} (parse-query query-string {:cards? (:cards? query-opts)})
            query* (if (:cards? query-opts)
                     (let [card-id (:db/id (db-utils/entity :logseq.class/Card))]
                       (util/concat-without-nil
                        [['?b :block/tags card-id]]
                        (if (coll? (first query*)) query* [query*])))
-                    query*)]
+                    query*)
+           blocks? (if db-graph? true blocks?)]
        (when-let [query' (some-> query* (query-wrapper {:blocks? blocks?
-                                                        :block-attrs (when (config/db-based-graph? repo)
-                                                                       db-block-attrs)}))]
+                                                        :block-attrs (when db-graph? db-block-attrs)}))]
          (let [random-samples (if @sample
                                 (fn [col]
                                   (take @sample (shuffle col)))
