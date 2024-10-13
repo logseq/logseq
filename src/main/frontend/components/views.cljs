@@ -146,13 +146,16 @@
                         [:div.block-content (asset-cp (assoc config :disable-resize? true) row)]))
               :disable-hide? true})]
           (keep
-           (fn [property]
-             (let [ident (or (:db/ident property) (:id property))]
-               (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties} ident)
-                             (contains? #{:map :entity} (get-in property [:block/schema :type])))
-                 (let [property (if (de/entity? property)
-                                  property
-                                  (or (db/entity ident) property))
+           (fn [column]
+             (let [ident (or (:db/ident column) (:id column))]
+               (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
+                                          :block/created-at :block/updated-at :block/order}
+                                        ident)
+                             (and with-object-name? (= :block/title ident))
+                             (contains? #{:map :entity} (get-in column [:block/schema :type])))
+                 (let [property (if (de/entity? column)
+                                  column
+                                  (or (db/entity ident) column))
                        get-value (or (:get-value property)
                                      (when (de/entity? property)
                                        (fn [row] (get-property-value-for-search row property))))
@@ -171,7 +174,7 @@
                                                 (get-value row)
                                                 (get row ident))))]
                    {:id ident
-                    :name (or (:name property)
+                    :name (or (:name column)
                               (:block/title property))
                     :header (or (:header property)
                                 header-cp)
