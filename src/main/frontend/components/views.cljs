@@ -149,7 +149,7 @@
            (fn [column]
              (let [ident (or (:db/ident column) (:id column))]
                (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
-                                          :block/created-at :block/updated-at :block/order}
+                                          :block/created-at :block/updated-at :block/order :block/collapsed?}
                                         ident)
                              (and with-object-name? (= :block/title ident))
                              (contains? #{:map :entity} (get-in column [:block/schema :type])))
