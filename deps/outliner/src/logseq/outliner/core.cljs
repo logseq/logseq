@@ -208,12 +208,16 @@
 (defn- fix-tag-ids
   "Fix or remove tags related when entered via `Escape`"
   [m db {:keys [db-graph?]}]
-  (let [refs (set (map :block/name (seq (:block/refs m))))
+  (let [refs (set (keep :block/name (seq (:block/refs m))))
         tags (seq (:block/tags m))]
-    (if (and refs tags)
+    (if (and (seq refs) tags)
       (update m :block/tags
               (fn [tags]
-                (let [tags (map (fn [tag] (or (and (:db/id tag) (d/entity db (:db/id tag))) tag)) tags)]
+                (let [tags (map (fn [tag] (or (and (:db/id tag)
+                                                   (let [e (d/entity db (:db/id tag))]
+                                                     (select-keys e [:db/id :block/uuid :block/title :block/name])))
+                                              tag))
+                                tags)]
                   (cond->>
                    ;; Update :block/tag to reference ids from :block/refs
                    (map (fn [tag]
