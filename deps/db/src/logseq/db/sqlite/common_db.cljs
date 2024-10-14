@@ -164,9 +164,9 @@
                         (with-parent db)
                         (with-block-refs db)
                         (with-block-link db))
-            block' (if (and page? (not (or children? nested-children?)))
-                     block'
-                     (mark-block-fully-loaded block'))]
+            block' (if (or children? nested-children?)
+                     (mark-block-fully-loaded block')
+                     block')]
         (cond->
          {:block block'
           :properties (property-with-values db block)}
@@ -217,8 +217,7 @@
             (->> (d/datoms db :avet :block/type type')
                  (mapcat (fn [d]
                            (d/datoms db :eavt (:e d))))))
-          [
-           ;; property and class pages are pulled from `get-all-pages` already
+          [;; property and class pages are pulled from `get-all-pages` already
            ;; "property" "class"
            "closed value"]))
 
@@ -298,10 +297,10 @@
         (string/replace ":" "+3A+")
         (string/replace "/" "++"))
     (-> db-name
-       (string/replace sqlite-util/db-version-prefix "")
-       (string/replace "/" "_")
-       (string/replace "\\" "_")
-       (string/replace ":" "_"))));; windows
+        (string/replace sqlite-util/db-version-prefix "")
+        (string/replace "/" "_")
+        (string/replace "\\" "_")
+        (string/replace ":" "_"))));; windows
 
 (defn get-db-full-path
   [graphs-dir db-name]
