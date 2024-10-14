@@ -354,6 +354,24 @@
                :icon "calendar"
                :shortcut :go/journals})))
 
+         (when db-based?
+           (let [tag-uuid (:block/uuid (db/entity :logseq.class/Task))]
+             (sidebar-item
+              {:class "task-view-nav"
+               :title (t :left-side-bar/tasks)
+               :href (rfe/href :page {:name tag-uuid})
+               :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
+               :icon "hash"})))
+
+         (when db-based?
+           (let [tag-uuid (:block/uuid (db/entity :logseq.class/Asset))]
+             (sidebar-item
+              {:class "asset-view-nav"
+               :title (t :left-side-bar/assets)
+               :href (rfe/href :page {:name tag-uuid})
+               :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
+               :icon "hash"})))
+
          (when enable-whiteboards?
            (when (or config/dev? (not db-based?))
              (sidebar-item
