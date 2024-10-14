@@ -130,16 +130,6 @@
               :toggle-fn (fn []
                            (swap! open? not)))))))
 
-(def component-editing-mode
-  {:will-mount
-   (fn [state]
-     (state/set-block-component-editing-mode! true)
-     state)
-   :will-unmount
-   (fn [state]
-     (state/set-block-component-editing-mode! false)
-     state)})
-
 (def container-id
   "Notice: the first parameter needs to be a `config` with `id`, optional `sidebar?`, `whiteboard?`"
   {:init (fn [state]

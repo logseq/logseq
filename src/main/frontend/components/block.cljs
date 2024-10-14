@@ -89,8 +89,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]
-            [frontend.storage :as storage]))
+            [shadow.loader :as loader]))
 
 ;; local state
 (defonce *dragging?
@@ -3707,7 +3706,7 @@
                                                                            (.setOption cm "mode" mode)
                                                                            (throw (ex-info "code mode not found"
                                                                                            {:lang lang})))
-                                                                         (storage/set :latest-code-lang lang)
+                                                                         (db/transact! [(ldb/kv :logseq.kv/latest-code-lang lang)])
                                                                          (db-property-handler/set-block-property!
                                                                           (:db/id block) :logseq.property.code/lang lang))))
                                                    {:align :end})))}

@@ -2,12 +2,17 @@
   "Provides main application state, fns associated to set and state based rum
   cursors"
   (:require [cljs-bean.core :as bean]
-            [cljs.core.async :as async :refer [<! >!]]
+            [cljs.core.async :as async :refer [>!]]
             [cljs.spec.alpha :as s]
+            [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.db.conn-state :as db-conn-state]
+            [frontend.db.transact :as db-transact]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rum :as r]
             [frontend.spec.storage :as storage-spec]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -15,18 +20,12 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
-            [frontend.db.transact :as db-transact]
-            [medley.core :as medley]
-            [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.rum :as r]
+            [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.shui.ui :as shui]
             [logseq.shui.dialog.core :as shui-dialog]
-            [clojure.set :as set]
-            [frontend.db.conn-state :as db-conn-state]
-            [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce *profile-state
   (atom {}))

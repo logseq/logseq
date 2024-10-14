@@ -258,11 +258,7 @@
       (let [datoms (d/datoms db :avet :logseq.property.node/display-type)]
         (map
          (fn [d]
-           (when-let [tag-id (case (:v d)
-                               :code (:db/id (d/entity db :logseq.class/Code-block))
-                               :math (:db/id (d/entity db :logseq.class/Math-block))
-                               :quote (:db/id (d/entity db :logseq.class/Quote-block))
-                               nil)]
+           (when-let [tag-id (ldb/get-class-ident-by-display-type (:v d))]
              [:db/add (:e d) :block/tags tag-id]))
          datoms)))))
 
