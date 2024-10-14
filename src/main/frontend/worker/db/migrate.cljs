@@ -1,5 +1,5 @@
 (ns frontend.worker.db.migrate
-  "DB migration"
+  "Handles SQLite and datascript migrations for DB graphs"
   (:require [datascript.core :as d]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.property :as db-property]
@@ -16,6 +16,8 @@
             [logseq.common.uuid :as common-uuid]))
 
 ;; TODO: fixes/rollback
+;; Frontend migrations
+;; ===================
 
 (defn- replace-original-name-content-with-title
   [conn search-db]
@@ -262,36 +264,17 @@
              [:db/add (:e d) :block/tags tag-id]))
          datoms)))))
 
-(defn- add-addresses-in-kvs-table
-  [^Object sqlite-db]
-  (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
-                                           :rowMode "array"})
-                     bean/->clj
-                     (map first)
-                     set)]
-    (when-not (contains? columns "addresses")
-      (let [data (some->> (.exec sqlite-db #js {:sql "select addr, content from kvs"
-                                                :rowMode "array"})
-                          bean/->clj
-                          (map (fn [[addr content]]
-                                 (let [content' (sqlite-util/transit-read content)
-                                       [content' addresses] (if (map? content')
-                                                              [(dissoc content' :addresses)
-                                                               (when-let [addresses (:addresses content')]
-                                                                 (js/JSON.stringify (bean/->js addresses)))]
-                                                              [content' nil])
-                                       content' (sqlite-util/transit-write content')]
-                                   #js {:$addr addr
-                                        :$content content'
-                                        :$addresses addresses}))))]
-        (.exec sqlite-db #js {:sql "alter table kvs add column addresses JSON"})
-        (.transaction sqlite-db
-                      (fn [tx]
-                        (doseq [item data]
-                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
-                                         :bind item}))))))))
+(defn- rename-card-view-to-gallery-view
+  [conn _search-db]
+  (when (ldb/db-based-graph? @conn)
+    [{:db/id (:db/id (d/entity @conn :logseq.property.view/type.card))
+      :db/ident :logseq.property.view/type.gallery
+      :block/title "Gallery View"}]))
 
 (def schema-version->updates
+  "A vec of tuples defining datascript migrations. Each tuple consists of the
+   schema version integer and a migration map. A migration map can have keys of :properties, :classes
+   and :fix."
   [[3 {:properties [:logseq.property/table-sorting :logseq.property/table-filters
                     :logseq.property/table-hidden-columns :logseq.property/table-ordered-columns]
        :classes    []}]
@@ -342,18 +325,17 @@
    [35 {:fix add-card-view}]
    [37 {:classes [:logseq.class/Code-block :logseq.class/Quote-block :logseq.class/Math-block]
         :properties [:logseq.property.node/display-type :logseq.property.code/lang]}]
-   [38 {:fix add-tags-for-typed-display-blocks}]])
+   [38 {:fix add-tags-for-typed-display-blocks}]
+   [39 {:fix rename-card-view-to-gallery-view}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
   (when (< db-schema/version max-schema-version)
     (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-version is " max-schema-version))))
 
-(defn migrate-sqlite-db
-  [db]
-  (add-addresses-in-kvs-table db))
-
 (defn migrate
+  "Migrate 'frontend' datascript schema and data. To add a new migration,
+  add an entry to schema-version->updates and bump db-schema/version"
   [conn search-db]
   (let [db @conn
         version-in-db (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0)]
@@ -403,3 +385,40 @@
         (catch :default e
           (prn :error "DB migration failed:")
           (js/console.error e))))))
+
+;; Backend migrations
+;; ==================
+
+(defn- add-addresses-in-kvs-table
+  [^Object sqlite-db]
+  (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
+                                           :rowMode "array"})
+                     bean/->clj
+                     (map first)
+                     set)]
+    (when-not (contains? columns "addresses")
+      (let [data (some->> (.exec sqlite-db #js {:sql "select addr, content from kvs"
+                                                :rowMode "array"})
+                          bean/->clj
+                          (map (fn [[addr content]]
+                                 (let [content' (sqlite-util/transit-read content)
+                                       [content' addresses] (if (map? content')
+                                                              [(dissoc content' :addresses)
+                                                               (when-let [addresses (:addresses content')]
+                                                                 (js/JSON.stringify (bean/->js addresses)))]
+                                                              [content' nil])
+                                       content' (sqlite-util/transit-write content')]
+                                   #js {:$addr addr
+                                        :$content content'
+                                        :$addresses addresses}))))]
+        (.exec sqlite-db #js {:sql "alter table kvs add column addresses JSON"})
+        (.transaction sqlite-db
+                      (fn [tx]
+                        (doseq [item data]
+                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
+                                         :bind item}))))))))
+
+(defn migrate-sqlite-db
+  "Migrate sqlite db schema"
+  [db]
+  (add-addresses-in-kvs-table db))
