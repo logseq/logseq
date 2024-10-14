@@ -381,18 +381,19 @@
                              (reset! size value))
             :onPointerUp (fn []
                            (when (and @size @*resizing-image?)
-                             (when-let [block-id (:block/uuid config)]
+                             (when-let [block-id (or (:block/uuid config)
+                                                   (some-> config :block (:block/uuid)))]
                                (let [size (bean/->clj @size)]
                                  (editor-handler/resize-image! config block-id metadata full-text size))))
                            (when @*resizing-image?
-                           ;; TODO:​ need a better way to prevent the clicking to edit current block
+                             ;; TODO:​ need a better way to prevent the clicking to edit current block
                              (js/setTimeout #(reset! *resizing-image? false) 200)))
             :onClick (fn [e]
                        (when @*resizing-image? (util/stop e)))}
             style
             (assoc :style style))
           {})
-        asset-container)))))
+         asset-container)))))
 
 (rum/defc audio-cp [src]
   ;; Change protocol to allow media fragment uris to play
@@ -405,8 +406,8 @@
   (when-let [s (or href (some-> (.-target e) (.-dataset) (.-href)))]
     (let [load$ (fn []
                   (p/let [href (or href
-                                   (if (or (mobile-util/native-platform?) (util/electron?))
-                                     s
+                                 (if (or (mobile-util/native-platform?) (util/electron?))
+                                   s
                                      (assets-handler/<make-asset-url s)))]
                     (when-let [current (pdf-assets/inflate-asset s {:block block
                                                                     :href href})]
@@ -2216,7 +2217,7 @@
       (text-block-title (dissoc config :raw-title?) block)
 
       (ldb/asset? block)
-      [:div.grid.grid-cols-1.justify-items-center
+      [:div.grid.grid-cols-1.justify-items-start
        (asset-cp config block)
        (when (img-audio-video? block)
          [:div.text-xs.opacity-60.mt-1
