@@ -382,7 +382,7 @@
             :onPointerUp (fn []
                            (when (and @size @*resizing-image?)
                              (when-let [block-id (or (:block/uuid config)
-                                                   (some-> config :block (:block/uuid)))]
+                                                     (some-> config :block (:block/uuid)))]
                                (let [size (bean/->clj @size)]
                                  (editor-handler/resize-image! config block-id metadata full-text size))))
                            (when @*resizing-image?
@@ -393,7 +393,7 @@
             style
             (assoc :style style))
           {})
-         asset-container)))))
+        asset-container)))))
 
 (rum/defc audio-cp [src]
   ;; Change protocol to allow media fragment uris to play
@@ -406,8 +406,8 @@
   (when-let [s (or href (some-> (.-target e) (.-dataset) (.-href)))]
     (let [load$ (fn []
                   (p/let [href (or href
-                                 (if (or (mobile-util/native-platform?) (util/electron?))
-                                   s
+                                   (if (or (mobile-util/native-platform?) (util/electron?))
+                                     s
                                      (assets-handler/<make-asset-url s)))]
                     (when-let [current (pdf-assets/inflate-asset s {:block block
                                                                     :href href})]
@@ -838,21 +838,30 @@
      (->ref id)]))
 
 (rum/defcs page-cp-inner < db-mixins/query rum/reactive
+  {:init (fn [state]
+           (let [page (last (:rum/args state))
+                 *result (atom nil)]
+             (p/let [result (if (e/entity? page)
+                              page
+                              (p/let [page-name (or (:block/uuid page)
+                                                    (when-let [s (:block/name page)]
+                                                      (let [s (string/trim s)
+                                                            s (if (string/starts-with? s db-content/page-ref-special-chars)
+                                                                (common-util/safe-subs s 2)
+                                                                s)]
+                                                        s)))
+                                      query-result (db-async/<get-block (state/get-current-repo) page-name {:children? false})]
+                                (if (e/entity? query-result)
+                                  query-result
+                                  (:block query-result))))]
+               (reset! *result result))
+             (assoc state :*entity *result)))}
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [state {:keys [label children preview? disable-preview? show-non-exists-page? tag?] :as config} page]
-  (let [entity (if (e/entity? page)
-                 page
-                 ;; Use uuid when available to uniquely identify case sensitive contexts
-                 (db/get-page (or (:block/uuid page)
-                                  (when-let [s (:block/name page)]
-                                    (let [s (string/trim s)
-                                          s (if (string/starts-with? s db-content/page-ref-special-chars)
-                                              (common-util/safe-subs s 2)
-                                              s)]
-                                      s)))))]
-    (let [entity (when entity (db/sub-block (:db/id entity)))]
+  (when-let [entity' (rum/react (:*entity state))]
+    (let [entity (db/sub-block (:db/id entity'))]
       (cond
         entity
         (if (or (ldb/page? entity) (:block/tags entity))
