@@ -1,8 +1,8 @@
 (ns frontend.components.select
   "Generic component for fuzzy searching items to select an item. See
   select-config to add a new use or select-type for this component. To use the
-  new select-type, set :ui/open-select to the select-type. See
-  :graph/open command for an example."
+  new select-type, create an event that calls `select/dialog-select!` with the
+  select-type. See the :graph/open command for a full example."
   (:require [frontend.modules.shortcut.core :as shortcut]
             [frontend.context.i18n :refer [t]]
             [frontend.search :as search]
@@ -243,7 +243,7 @@
        #(select (-> select-type-config
                     (assoc :on-chosen (fn [it]
                                         (on-chosen' it)
-                                        (shui/dialog-close! :ls-select-modal)))
+                                        (shui/dialog-close-all!)))
                     (select-keys [:on-chosen :empty-placeholder :prompt-key])
                     (assoc :items ((:items-fn select-type-config)))))
        {:id :ls-select-modal
