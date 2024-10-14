@@ -129,6 +129,8 @@
  :right-side-bar/pane-more "More"
  :left-side-bar/switch "Switch to:"
  :left-side-bar/journals "Journals"
+ :left-side-bar/assets "Assets"
+ :left-side-bar/tasks "Tasks"
  :left-side-bar/nav-favorites "Favorites"
  :left-side-bar/nav-recent-pages "Recent"
  :page/something-went-wrong "Something went wrong"
