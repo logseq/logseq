@@ -348,10 +348,11 @@
        ["Quote"
         (quote-block-steps)
         "Create a quote block"
-        :icon/quote-block]
+        :icon/quote]
        ["Math block"
         (math-block-steps)
-        "Create a latex block"]]
+        "Create a latex block"
+        :icon/math]]
 
       (headings)
 
