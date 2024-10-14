@@ -818,33 +818,29 @@
         (property-file/goto-properties-end-when-file-based format current-input)
         (cursor/move-cursor-backward current-input 3)))))
 
-(defonce markdown-heading-pattern #"^#+\s+")
-(defn set-markdown-heading
+(defn file-based-set-markdown-heading
   [content heading]
   (let [heading-str (apply str (repeat heading "#"))]
-    (if (util/safe-re-find markdown-heading-pattern content)
+    (if (util/safe-re-find common-util/clear-markdown-heading content)
       (string/replace-first content
-                            markdown-heading-pattern
+                            common-util/clear-markdown-heading
                             (str heading-str " "))
       (str heading-str " " (string/triml content)))))
 
-(defn clear-markdown-heading
-  [content]
-  [:pre (string? content)]
-  (string/replace-first content
-                        markdown-heading-pattern
-                        ""))
+(def clear-markdown-heading common-util/clear-markdown-heading)
 
 (defmethod handle-step :editor/set-heading [[_ heading]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [current-block (state/get-edit-block)
             format (:block/format current-block)]
-        (if (= format :markdown)
-          (let [edit-content (gobj/get current-input "value")
-                new-content (set-markdown-heading edit-content heading)]
-            (state/set-edit-content! input-id new-content))
-          (state/pub-event! [:editor/set-org-mode-heading current-block heading]))))))
+        (if (config/db-based-graph?)
+          (state/pub-event! [:editor/set-heading current-block heading])
+          (if (= format :markdown)
+            (let [edit-content (gobj/get current-input "value")
+                  new-content (file-based-set-markdown-heading edit-content heading)]
+              (state/set-edit-content! input-id new-content))
+            (state/pub-event! [:editor/set-heading current-block heading])))))))
 
 (defmethod handle-step :editor/search-page [_]
   (state/set-editor-action! :page-search))
