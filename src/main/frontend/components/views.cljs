@@ -1155,7 +1155,7 @@
 
        [:div.text-muted-foreground.text-sm
         (pv/property-value view-entity (db/entity :logseq.property.view/type)
-                           (get view-entity :logseq.property.view/type) {})]
+                           (db/entity display-type) {})]
 
        (more-actions columns table)
 
