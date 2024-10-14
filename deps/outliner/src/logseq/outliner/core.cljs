@@ -274,7 +274,7 @@
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
           page? (ldb/page? block-entity)
-          m* (if (:block/title m*)
+          m* (if (and db-based? (:block/title m*))
                (update m* :block/title common-util/clear-markdown-heading)
                m*)
           block-title (:block/title m*)
