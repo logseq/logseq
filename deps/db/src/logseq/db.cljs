@@ -628,3 +628,22 @@
   (assert (string? block-raw-title) "block-raw-title should be a string")
   (or (string/includes? block-raw-title (str "#" (db-content/block-id->special-id-ref (:block/uuid tag))))
       (string/includes? block-raw-title (str "#" db-content/page-ref-special-chars (:block/uuid tag)))))
+
+(defonce node-display-classes
+  #{:logseq.class/Code-block :logseq.class/Math-block :logseq.class/Quote-block})
+
+(defn get-class-ident-by-display-type
+  [display-type]
+  (case display-type
+    :code :logseq.class/Code-block
+    :math :logseq.class/Math-block
+    :quote :logseq.class/Quote-block
+    nil))
+
+(defn get-display-type-by-class-ident
+  [class-ident]
+  (case class-ident
+    :logseq.class/Code-block :code
+    :logseq.class/Math-block :math
+    :logseq.class/Quote-block :quote
+    nil))

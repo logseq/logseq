@@ -255,6 +255,7 @@
                          (when-let [e (d/entity db id)]
                            (d/datoms db :eavt (:db/id e))))
                        [:logseq.kv/db-type :logseq.kv/graph-uuid :logseq.property/empty-placeholder
+                        :logseq.kv/latest-code-lang
                         :logseq.kv/graph-backup-folder])
         favorites (when db-graph? (get-favorites db))
         views (when db-graph? (get-views-data db))
