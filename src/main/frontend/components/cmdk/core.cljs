@@ -484,6 +484,7 @@
   (let [command (some-> state state->highlighted-item :source-command)]
     (when-let [action (:action command)]
       (action)
+      (prn :trigger (:id command))
       (when-not (contains? #{:graph/open :graph/remove :dev/replace-graph-with-db-file :ui/toggle-settings :go/flashcards} (:id command))
         (shui/dialog-close! :ls-dialog-cmdk)))))
 
