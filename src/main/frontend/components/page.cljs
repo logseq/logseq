@@ -532,14 +532,6 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
-  (rum/local false ::main-ready?)
-  {:did-mount (fn [state]
-                (assoc state ::main-ready-timer
-                       (js/setTimeout #(reset! (::main-ready? state) true) 32)))
-   :will-unmount (fn [state]
-                   (some-> (::main-ready-timer state)
-                           (js/clearTimeout))
-                   state)}
   [state {:keys [repo page-name preview? sidebar? linked-refs? unlinked-refs? config] :as option}]
   (when-let [path-page-name (get-path-page-name state page-name)]
     (let [current-repo (state/sub :git/current-repo)
@@ -620,8 +612,8 @@
                                                       :container-id (:container-id state)
                                                       :whiteboard? whiteboard?}))]])
 
-         (when (and (not preview?) @(::main-ready? state))
-           [:div.ls-page-appendix-els {:style {:padding-left 9}}
+         (when (not preview?)
+           [:div {:style {:padding-left 9}}
             (when today?
               (today-queries repo today? sidebar?))
 
