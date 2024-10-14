@@ -202,7 +202,7 @@
              :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
           [[:logseq.property.view/type.table "Table View"]
            [:logseq.property.view/type.list "List View"]
-           [:logseq.property.view/type.card "Card View"]])}
+           [:logseq.property.view/type.gallery "Gallery View"]])}
 
    :logseq.property.table/sorting {:schema
                                    {:type :coll
