@@ -606,6 +606,8 @@
              (state/get-left-sidebar-open?))
     (ui-handler/close-left-sidebar!)))
 
+(declare block-title)
+
 (rum/defcs ^:large-vars/cleanup-todo page-inner <
   (rum/local false ::mouse-down?)
   (rum/local false ::hover?)
@@ -665,7 +667,7 @@
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not meta-click?))
                            (state/clear-edit!)
                            (open-page-ref config page-entity e page-name contents-page?)))}
-     (when show-icon?
+     (when (and show-icon? (not tag?))
        (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true :not-text-or-page? true})]
          [:span.mr-1
           icon]))
@@ -723,9 +725,7 @@
                                      s (if tag? (str "#" s) s)]
                                  (if (ldb/page? page-entity)
                                    s
-                                   (let [inline-list (gp-mldoc/inline->edn (first (string/split-lines s))
-                                                                           (mldoc/get-default-config (get page-entity :block/format :markdown)))]
-                                     (->elem :span (map-inline config inline-list))))))]
+                                   (block-title config page-entity))))]
           page-component))]]))
 
 (rum/defc popup-preview-impl
@@ -2109,11 +2109,14 @@
 (declare block-content)
 
 (declare src-cp)
-(declare block-title)
 
 (rum/defc ^:large-vars/cleanup-todo text-block-title
-  [config {:block/keys [marker pre-block? properties] :as block}]
-  (let [block-ast-title (:block.temp/ast-title block)
+  [config {:block/keys [format marker pre-block? properties] :as block}]
+  (let [block (if-not (:block.temp/ast-title block)
+                (merge block (block/parse-title-and-body uuid format pre-block?
+                                                         (:block/title block)))
+                block)
+        block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
         level (:level config)
         slide? (boolean (:slide? config))
