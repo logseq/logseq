@@ -414,7 +414,7 @@
   {:properties {:icon :layout-distribute-horizontal :title "Block properties"}
    :block-left {:icon :layout-align-right :title "Beginning of the block"}
    :block-right {:icon :layout-align-left :title "End of the block"}
-   :block-below {:icon :layout-align-top :title "Below of the block"}})
+   :block-below {:icon :layout-align-top :title "Below the block"}})
 
 (rum/defc ui-position-sub-pane
   [property {:keys [id set-sub-open! _position]}]
