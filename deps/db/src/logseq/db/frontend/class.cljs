@@ -36,6 +36,21 @@
     :schema {:properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]
              :required-properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]}}
 
+   :logseq.class/Code-block
+   {:title "Code"
+    :properties {:logseq.property.class/hide-from-node true}
+    :schema {:properties [:logseq.property.node/display-type :logseq.property.code/lang]}}
+
+   :logseq.class/Quote-block
+   {:title "Quote"
+    :properties {:logseq.property.class/hide-from-node true}
+    :schema {:properties [:logseq.property.node/display-type]}}
+
+   :logseq.class/Math-block
+   {:title "Math"
+    :properties {:logseq.property.class/hide-from-node true}
+    :schema {:properties [:logseq.property.node/display-type]}}
+
    ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project
    })
 

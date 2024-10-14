@@ -23,7 +23,8 @@
             [logseq.shui.ui :as shui]
             [rum.core :as rum]
             [frontend.mixins :as mixins]
-            [logseq.shui.table.core :as table-core]))
+            [logseq.shui.table.core :as table-core]
+            [logseq.db :as ldb]))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!]}]
@@ -132,7 +133,7 @@
               :header header-cp
               :cell (fn [_table row _column]
                       (block-container (assoc config
-                                              :raw-title? true
+                                              :raw-title? (ldb/asset? row)
                                               :table? true) row))
               :disable-hide? true})
            (when asset-class?
