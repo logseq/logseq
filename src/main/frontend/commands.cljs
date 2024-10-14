@@ -821,10 +821,8 @@
 (defn file-based-set-markdown-heading
   [content heading]
   (let [heading-str (apply str (repeat heading "#"))]
-    (if (util/safe-re-find common-util/clear-markdown-heading content)
-      (string/replace-first content
-                            common-util/clear-markdown-heading
-                            (str heading-str " "))
+    (if (util/safe-re-find common-util/markdown-heading-pattern content)
+      (common-util/clear-markdown-heading content)
       (str heading-str " " (string/triml content)))))
 
 (def clear-markdown-heading common-util/clear-markdown-heading)
