@@ -182,7 +182,7 @@
              (number? heading))
         (let [block' (set-block-property-aux! block :heading nil)
               properties (assoc (:block/properties block) :heading heading)
-              content (commands/set-markdown-heading (:block/title block') heading)]
+              content (commands/file-based-set-markdown-heading (:block/title block') heading)]
           (merge block' {:block/title content :block/properties properties}))
 
         ;; heading-num1 -> heading-num2
@@ -191,7 +191,7 @@
               content (-> block
                           :block/title
                           commands/clear-markdown-heading
-                          (commands/set-markdown-heading heading))]
+                          (commands/file-based-set-markdown-heading heading))]
           {:block/uuid (:block/uuid block)
            :block/properties properties
            :block/title content}))

@@ -271,6 +271,9 @@
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
           page? (ldb/page? block-entity)
+          m* (if (:block/title m*)
+               (update m* :block/title common-util/clear-markdown-heading)
+               m*)
           block-title (:block/title m*)
           page-title-changed? (and page? block-title
                                    (not= block-title (:block/title block-entity)))
@@ -327,11 +330,6 @@
                              (vec (concat txs other-tx)))))
         (swap! txs-state conj
                (dissoc m :db/other-tx)))
-
-      ;; delete heading property for db-based-graphs
-      (when (and db-based? (integer? (:logseq.property/heading block-entity))
-                 (not (some-> (:block/title data) (string/starts-with? "#"))))
-        (swap! txs-state (fn [txs] (conj (vec txs) [:db/retract (:db/id block-entity) :logseq.property/heading]))))
 
       ;; delete tags when title changed
       (when (and db-based? (:block/tags block-entity) block-entity)

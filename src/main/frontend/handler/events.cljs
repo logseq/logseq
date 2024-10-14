@@ -669,7 +669,7 @@
            template
            {:target page}))))))
 
-(defmethod handle :editor/set-org-mode-heading [[_ block heading]]
+(defmethod handle :editor/set-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]
     (editor-handler/set-heading! id heading)))
 
