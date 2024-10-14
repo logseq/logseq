@@ -2945,7 +2945,8 @@
           pos (cursor/pos input)
           hashtag? (or (surround-by? input "#" " ")
                        (surround-by? input "#" :end)
-                       (= key "#"))]
+                       (= key "#"))
+          db-based? (config/db-based-graph? (state/get-current-repo))]
       (when (or (not @(:editor/start-pos @state/state))
                 (and key (string/starts-with? key "Arrow")))
         (state/set-state! :editor/start-pos pos))
@@ -3032,7 +3033,7 @@
 
         ; `;;` to add or change property for db graphs
         (let [sym ";"]
-          (and (config/db-based-graph? (state/get-current-repo)) (double-chars-typed? value pos key sym)))
+          (and db-based? (double-chars-typed? value pos key sym)))
         (state/pub-event! [:editor/new-property])
 
         (let [sym "$"]
@@ -3112,7 +3113,8 @@
   [_state input]
   (fn [e key-code]
     (when-not (util/goog-event-is-composing? e)
-      (let [current-pos (cursor/pos input)
+      (let [db-based? (config/db-based-graph?)
+            current-pos (cursor/pos input)
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
             [key-code k code is-processed?]
@@ -3140,6 +3142,13 @@
                 ;; #3440
                (util/goog-event-is-composing? e true)])]
         (cond
+          (and db-based? (= value "``````")) ; turn this block into a code block
+          (do
+            (state/set-edit-content! (.-id input) "")
+            (state/pub-event! [:editor/upsert-type-block {:block (assoc (state/get-edit-block) :block/title "")
+                                                          :type :code
+                                                          :update-current-block? true}]))
+
           ;; When you type something after /
           (and (= :commands (state/get-editor-action)) (not= k commands/command-trigger))
           (if (= commands/command-trigger (second (re-find #"(\S+)\s+$" value)))
