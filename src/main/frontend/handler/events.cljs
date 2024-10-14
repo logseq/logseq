@@ -976,10 +976,12 @@
                               {:id :property-dialog
                                :align "start"})))))))
 
-(defmethod handle :editor/upsert-type-block [[_ {:keys [block type lang]}]]
+(defmethod handle :editor/upsert-type-block [[_ {:keys [block type lang update-current-block?]}]]
   (p/do!
-   (editor-handler/save-current-block!)
-   (p/delay 16)
+   (when-not update-current-block?
+     (editor-handler/save-current-block!))
+   (when-not update-current-block?
+     (p/delay 16))
    (let [block (db/entity (:db/id block))
          block-type (:logseq.property.node/display-type block)
          block-title (:block/title block)
@@ -992,7 +994,7 @@
                        (db-property-handler/set-block-property!
                         (:block/uuid %) :logseq.property.node/display-type (keyword type)))]
      (p/let [block (if (or (not (nil? block-type))
-                           (not (string/blank? block-title)))
+                           (and (not update-current-block?) (not (string/blank? block-title))))
                      (p/let [result (ui-outliner-tx/transact!
                                      {:outliner-op :insert-blocks}
                                      ;; insert a new block
