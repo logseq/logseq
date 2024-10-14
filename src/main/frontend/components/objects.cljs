@@ -130,7 +130,8 @@
              (set-loading? false)))))
      [])
 
-    (when (false? loading?)
+    (if loading?
+      (ui/skeleton)
       [:div.flex.flex-col.gap-2.mt-2
 
        (ui/foldable

@@ -10,7 +10,8 @@
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.ui :as ui]))
 
 (defn- columns
   []
@@ -58,10 +59,7 @@
      [])
     [:div.ls-all-pages.w-full.mx-auto
      (if loading?
-       [:div.space-y-2
-        (shui/skeleton {:class "h-8 w-1/3 mb-8"})
-        (shui/skeleton {:class "h-6 w-full"})
-        (shui/skeleton {:class "h-6 w-full"})]
+       (ui/skeleton)
        (views/view view-entity {:data data
                                 :set-data! set-data!
                                 :title-key :all-pages/table-title
