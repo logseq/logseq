@@ -54,7 +54,7 @@
     :properties {:logseq.property.class/hide-from-node true}
     :schema {:properties [:logseq.property.node/display-type]}}
 
-   :logseq.class/pdf-annotation
+   :logseq.class/Pdf-annotation
    {:title "PDF Annotation"
     :properties {:logseq.property.class/hide-from-node true}
     :schema {:properties [:logseq.property/ls-type :logseq.property/hl-color :logseq.property/asset
