@@ -271,6 +271,16 @@
       :db/ident :logseq.property.view/type.gallery
       :block/title "Gallery View"}]))
 
+(defn- add-pdf-annotation-class
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [datoms (d/datoms db :avet :logseq.property/ls-type :annotation)]
+        (map
+         (fn [d]
+           [:db/add (:e d) :block/tags :logseq.class/pdf-annotation])
+         datoms)))))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -326,7 +336,12 @@
    [37 {:classes [:logseq.class/Code-block :logseq.class/Quote-block :logseq.class/Math-block]
         :properties [:logseq.property.node/display-type :logseq.property.code/lang]}]
    [38 {:fix add-tags-for-typed-display-blocks}]
-   [39 {:fix rename-card-view-to-gallery-view}]])
+   [39 {:fix rename-card-view-to-gallery-view}]
+   [40 {:classes [:logseq.class/pdf-annotation]
+        :properties [:logseq.property/ls-type :logseq.property/hl-color :logseq.property/asset
+                     :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value
+                     :logseq.property/hl-type :logseq.property.pdf/hl-image]
+        :fix add-pdf-annotation-class}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
