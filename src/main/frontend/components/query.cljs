@@ -59,7 +59,7 @@
            (util/hiccup-keywordize result))
 
          (and db-graph? (not (:built-in-query? config)))
-         (query-view/query-result (assoc config :id (:db/id current-block))
+         (query-view/query-result (assoc config :id (str (:block/uuid current-block)))
                                   current-block result)
 
          (and (not db-graph?)
