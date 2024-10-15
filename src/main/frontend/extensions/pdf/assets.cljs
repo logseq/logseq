@@ -156,7 +156,7 @@
           ref-block)
         (let [text       (:text content)
               properties (cond->
-                          {:block/tags :logseq.class/pdf-annotation
+                          {:block/tags :logseq.class/Pdf-annotation
                            :logseq.property/ls-type  :annotation
                            :logseq.property/hl-color (:color properties)
                            :logseq.property/asset (:db/id pdf-block)

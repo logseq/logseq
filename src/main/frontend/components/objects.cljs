@@ -119,7 +119,7 @@
         [data set-data!] (rum/use-state objects)
         columns* (views/build-columns config properties {:add-tags-column? false})
         columns (cond
-                  (= (:db/ident class) :logseq.class/pdf-annotation)
+                  (= (:db/ident class) :logseq.class/Pdf-annotation)
                   (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
                   (= (:db/ident class) :logseq.class/Asset)
                   (remove #(contains? #{:logseq.property.asset/checksum} (:id %)) columns*)
