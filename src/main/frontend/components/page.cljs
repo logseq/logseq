@@ -47,7 +47,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.rum :as frontend-rum]))
+            [frontend.rum :as frontend-rum]
+            [dommy.core :as dom]))
 
 (defn- get-page-name
   [state]
@@ -171,20 +172,26 @@
           "Click here to edit..."]]]))))
 
 (rum/defc add-button
-  [args]
-  [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
-   {:on-click (fn [] (editor-handler/api-insert-new-block! "" args))
-    :on-key-down (fn [e]
-                   (when (= "Enter" (util/ekey e))
-                     (editor-handler/api-insert-new-block! "" args))
-                   (util/stop e))
-    :tab-index 0}
-   [:div.flex.flex-row
-    [:div.block {:style {:height      20
-                         :width       20
-                         :margin-left 2}}
-     [:a.add-button-link.block
-      (ui/icon "circle-plus")]]]])
+  [args container-id]
+  (let [*bullet-ref (rum/use-ref nil)]
+    [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
+     {:on-click (fn [e]
+                  (util/stop e)
+                  (state/set-state! :editor/container-id container-id)
+                  (editor-handler/api-insert-new-block! "" args))
+      :on-mouse-over #(dom/add-class! (rum/deref *bullet-ref) "opacity-100")
+      :on-mouse-leave #(dom/remove-class! (rum/deref *bullet-ref) "opacity-100")
+      :on-key-down (fn [e]
+                     (util/stop e)
+                     (when (= "Enter" (util/ekey e))
+                       (state/set-state! :editor/container-id container-id)
+                       (editor-handler/api-insert-new-block! "" args)))
+      :tab-index 0}
+     [:div.flex.flex-row
+      [:div.flex.items-center {:style {:height 28
+                                       :margin-left 2}}
+       [:span.bullet-container.cursor.opacity-0.transition-opacity.ease-in.duration-100 {:ref *bullet-ref}
+        [:span.bullet]]]]]))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
@@ -249,7 +256,7 @@
                (let [args (if block-id
                             {:block-uuid block-id}
                             {:page page-name})]
-                 (add-button args)))]))]])))
+                 (add-button args (:container-id config))))]))]])))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
