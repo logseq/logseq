@@ -166,8 +166,10 @@
 
 .ui__dialog-content {
   &[label=flashcards__cp] {
+    @apply px-5 pt-6 pb-4;
+
     .ui__dialog-main-content {
-      @apply max-h-[85vh] min-h-[65vh] overflow-auto;
+      @apply max-h-[85vh] min-h-[65vh] overflow-auto p-1;
     }
   }
 }
