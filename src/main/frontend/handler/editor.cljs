@@ -3150,6 +3150,13 @@
                                                           :type :code
                                                           :update-current-block? true}]))
 
+          (and db-based? (= value ">")) ; turn this block into a quote block
+          (do
+            (state/set-edit-content! (.-id input) "")
+            (state/pub-event! [:editor/upsert-type-block {:block (assoc (state/get-edit-block) :block/title "")
+                                                          :type :quote
+                                                          :update-current-block? true}]))
+
           ;; When you type something after /
           (and (= :commands (state/get-editor-action)) (not= k commands/command-trigger))
           (if (= commands/command-trigger (second (re-find #"(\S+)\s+$" value)))
