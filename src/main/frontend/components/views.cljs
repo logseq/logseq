@@ -58,7 +58,7 @@
        :class (str "flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
-(defn- header-cp
+(defn header-cp
   [{:keys [column-toggle-sorting! state]} column]
   (let [sorting (:sorting state)
         [asc?] (some (fn [item] (when (= (:id item) (:id column))
@@ -112,10 +112,10 @@
      (container config row)]))
 
 (defn build-columns
-  [config properties & {:keys [with-object-name?]
-                        :or {with-object-name? true}}]
-  (let [asset-class? (= :logseq.class/Asset (:db/ident (:class config)))
-        properties (if (some #(= (:db/ident %) :block/tags) properties)
+  [config properties & {:keys [with-object-name? add-tags-column?]
+                        :or {with-object-name? true
+                             add-tags-column? true}}]
+  (let [properties (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
                      properties
                      (conj properties (db/entity :block/tags)))]
     (->> (concat
@@ -135,21 +135,13 @@
                       (block-container (assoc config
                                               :raw-title? (ldb/asset? row)
                                               :table? true) row))
-              :disable-hide? true})
-           (when asset-class?
-             {:id :file
-              :name "File"
-              :type :string
-              :header header-cp
-              :cell (fn [_table row _column]
-                      (when-let [asset-cp (state/get-component :block/asset-cp)]
-                        [:div.block-content (asset-cp (assoc config :disable-resize? true) row)]))
               :disable-hide? true})]
           (keep
            (fn [property]
              (let [ident (or (:db/ident property) (:id property))]
-               (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum} ident)
-                             (contains? #{:map :entity} (get-in property [:block/schema :type])))
+               ;; Hide properties that shouldn't ever be editable or that do not display well in a table
+               (when-not (or (contains? #{:logseq.property/built-in? :logseq.property/created-from-property} ident)
+                             (contains? #{:map} (get-in property [:block/schema :type])))
                  (let [property (if (de/entity? property)
                                   property
                                   (or (db/entity ident) property))

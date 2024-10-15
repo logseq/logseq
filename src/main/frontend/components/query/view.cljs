@@ -12,7 +12,7 @@
        distinct
        (map db/entity)
        (ldb/sort-by-order)
-       (views/build-columns config)))
+       ((fn [cs] (views/build-columns config cs {:add-tags-column? false})))))
 
 (defn- result->entities
   [result]

@@ -880,7 +880,7 @@
        (and (= type :default) (nil? (:block/title value)))
        [:div.jtrigger (property-empty-btn-value property)]
 
-       (= type :default)
+       (#{:default :entity} type)
        (property-block-value value block property page-cp)
 
        :else
