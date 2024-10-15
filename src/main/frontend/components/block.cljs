@@ -967,16 +967,17 @@
 
 (rum/defc page-reference < rum/reactive
   "Component for page reference"
-  [html-export? s {:keys [nested-link? show-brackets? id] :as config} label]
-  (when s
-    (let [s (string/trim s)
-          s (if (string/starts-with? s db-content/page-ref-special-chars)
-              (common-util/safe-subs s 2)
-              s)
+  [html-export? uuid-or-title* {:keys [nested-link? show-brackets? id] :as config} label]
+  (when uuid-or-title*
+    (let [uuid-or-title (if (string? uuid-or-title*)
+              (as-> (string/trim uuid-or-title*) s
+                (if (string/starts-with? s db-content/page-ref-special-chars)
+                  (common-util/safe-subs s 2)
+                  s))
+              uuid-or-title*)
           show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
-          block-uuid (:block/uuid config)
           contents-page? (= "contents" (string/lower-case (str id)))
-          block (db/get-page s)
+          block (db/get-page uuid-or-title)
           config' (assoc config
                          :label (mldoc/plain->text label)
                          :contents-page? contents-page?
@@ -986,26 +987,30 @@
         (and asset? (img-audio-video? block))
         (asset-cp config block)
 
-        (string/ends-with? s ".excalidraw")
-        [:div.draw {:on-click (fn [e]
-                                (.stopPropagation e))}
-         (excalidraw s block-uuid)]
-
         (or (ldb/page? block) (:block/tags block))
         [:span.page-reference
-         {:data-ref s}
+         {:data-ref (str uuid-or-title)}
          (when (and (or show-brackets? nested-link?)
                     (not html-export?)
                     (not contents-page?))
            [:span.text-gray-500.bracket page-ref/left-brackets])
-         (page-cp config' {:block/name s})
+         (page-cp config' (if (uuid? uuid-or-title)
+                            {:block/uuid uuid-or-title}
+                            {:block/name uuid-or-title}))
          (when (and (or show-brackets? nested-link?)
                     (not html-export?)
                     (not contents-page?))
            [:span.text-gray-500.bracket page-ref/right-brackets])]
 
+        (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
+        [:div.draw {:on-click (fn [e]
+                                (.stopPropagation e))}
+         (excalidraw uuid-or-title (:block/uuid config))]
+
         :else
-        (page-cp config' {:block/name s})))))
+        (page-cp config' (if (uuid? uuid-or-title)
+                            {:block/uuid uuid-or-title}
+                            {:block/name uuid-or-title}))))))
 
 (defn- latex-environment-content
   [name option content]
