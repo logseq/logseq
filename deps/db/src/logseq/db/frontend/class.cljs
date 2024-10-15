@@ -54,7 +54,16 @@
     :properties {:logseq.property.class/hide-from-node true}
     :schema {:properties [:logseq.property.node/display-type]}}
 
-   ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project)
+   :logseq.class/pdf-annotation
+   {:title "PDF Annotation"
+    :properties {:logseq.property.class/hide-from-node true}
+    :schema {:properties [:logseq.property/ls-type :logseq.property/hl-color :logseq.property/asset
+                          :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value
+                          :logseq.property/hl-type :logseq.property.pdf/hl-image]
+             :required-properties [:logseq.property/ls-type :logseq.property/hl-color :logseq.property/asset
+                                   :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value]}}
+
+;; TODO: Add more classes such as :book, :paper, :movie, :music, :project)
    ))
 
 (defn create-user-class-ident-from-name
