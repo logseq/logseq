@@ -39,5 +39,6 @@
      (views/view view-entity
                  {:title-key :views.table/live-query-title
                   :data result'
-                  :set-data! #(reset! *result %)
+                  :set-data! (fn [data]
+                               (when (seq data) (reset! *result data)))
                   :columns columns'})]))
