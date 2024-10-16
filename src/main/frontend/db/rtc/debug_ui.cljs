@@ -26,6 +26,7 @@
 (rum/defcs ^:large-vars/cleanup-todo rtc-debug-ui < rum/reactive
   (rum/local nil ::logs)
   (rum/local nil ::sub-log-canceler)
+  (rum/local nil ::keys-state)
   {:will-mount (fn [state]
                  (let [canceler
                        (c.m/run-task
@@ -248,14 +249,24 @@
            (shui/select-item {:value graph-uuid :disabled (some? graph-status)} graph-uuid)))))]
 
      [:hr.my-2]
-     ;; [:div.pb-2.flex.flex-row.items-center.gap-2
-     ;;  ]
-     [:div.pb-4
-      [:pre.select-text
-       (-> {:devices
-            []
-            :graph-public-key-jwk nil
-            :graph-private-key-jwk nil}
-           (fipp/pprint {:width 20})
-           with-out-str)]]
-     ]))
+
+     (let [keys-state @(get state ::keys-state)]
+       [:div
+        [:div.pb-2.flex.flex-row.items-center.gap-2
+         (shui/button
+          {:size :sm
+           :on-click (fn [_]
+                       (let [^object worker @db-browser/*worker]
+                         (p/let [result1 (.rtc-get-graph-keys worker (state/get-current-repo))
+                                 graph-keys (ldb/read-transit-str result1)
+                                 result2 (some->> (state/get-auth-id-token) (.device-list-devices worker))
+                                 devices (ldb/read-transit-str result2)]
+                           (swap! (get state ::keys-state) #(merge % graph-keys {:devices devices})))))}
+          (shui/tabler-icon "refresh") "keys-state")]
+        [:div.pb-4
+         [:pre.select-text
+          (-> {:devices (:devices keys-state)
+               :graph-public-key-jwk (:public-key-jwk keys-state)
+               :graph-private-key-jwk (:private-key-jwk keys-state)}
+              (fipp/pprint {:width 20})
+              with-out-str)]]])]))
