@@ -269,7 +269,16 @@
   [conn _search-db]
   (let [db @conn]
     (when (ldb/db-based-graph? db)
-      (let [datoms (d/datoms db :avet :logseq.property.node/display-type)]
+      (let [property (d/entity db :logseq.property.node/display-type)
+            ;; fix property
+            _ (when-not (ldb/property? property)
+                (let [fix-tx-data (->>
+                                   (select-keys db-property/built-in-properties [:logseq.property.node/display-type])
+                                   (sqlite-create-graph/build-initial-properties*)
+                                   (map (fn [m]
+                                          (assoc m :db/id (:db/id property)))))]
+                  (d/transact! conn fix-tx-data)))
+            datoms (d/datoms @conn :avet :logseq.property.node/display-type)]
         (map
          (fn [d]
            (when-let [tag-id (ldb/get-class-ident-by-display-type (:v d))]
