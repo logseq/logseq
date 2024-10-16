@@ -157,7 +157,6 @@
 (defn- get-all-op-datoms
   [conn]
   (->> (d/datoms @conn :eavt)
-       (remove (fn [datom] (contains? #{:graph-uuid :local-tx} (:a datom))))
        (group-by :e)))
 
 (defn- get-all-ops*
