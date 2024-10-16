@@ -10,7 +10,7 @@
 
 (defn- replace-ref-with-deleted-block-title
   [block ref-raw-title]
-  (let [block-content (if (= "asset" (:block/type block))
+  (let [block-content (if (entity-util/asset? block)
                         ""
                         (:block/title block))]
     (some-> ref-raw-title

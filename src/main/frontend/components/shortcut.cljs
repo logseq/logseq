@@ -1,34 +1,34 @@
 (ns frontend.components.shortcut
-  (:require [clojure.string :as string]
-            [rum.core :as rum]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
-            [cljs-bean.core :as bean]
-            [frontend.state :as state]
-            [frontend.search :as search]
-            [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
-            [frontend.rum :as r]
-            [goog.events :as events]
-            [promesa.core :as p]
             [frontend.handler.notification :as notification]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
-            [frontend.util :as util]
             [frontend.modules.shortcut.utils :as shortcut-utils]
-            [frontend.modules.shortcut.config :as shortcut-config])
+            [frontend.rum :as r]
+            [frontend.search :as search]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [goog.events :as events]
+            [logseq.shui.dialog.core :as shui-dialog]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum])
   (:import [goog.events KeyHandler]))
 
 (defonce categories
-         (vector :shortcut.category/basics
-                 :shortcut.category/navigating
-                 :shortcut.category/block-editing
-                 :shortcut.category/block-command-editing
-                 :shortcut.category/block-selection
-                 :shortcut.category/formatting
-                 :shortcut.category/toggle
-                 :shortcut.category/whiteboard
-                 :shortcut.category/plugins
-                 :shortcut.category/others))
+  (vector :shortcut.category/basics
+          :shortcut.category/navigating
+          :shortcut.category/block-editing
+          :shortcut.category/block-command-editing
+          :shortcut.category/block-selection
+          :shortcut.category/formatting
+          :shortcut.category/toggle
+          :shortcut.category/whiteboard
+          :shortcut.category/plugins
+          :shortcut.category/others))
 
 (defonce *refresh-sentry (atom 0))
 (defn refresh-shortcuts-list! [] (reset! *refresh-sentry (inc @*refresh-sentry)))
@@ -47,24 +47,24 @@
   (let [keypressed? (not= "" keystroke)]
 
     (rum/use-effect!
-      (fn []
-        (let [key-handler (KeyHandler. js/document)]
+     (fn []
+       (let [key-handler (KeyHandler. js/document)]
           ;; setup
-          (util/profile
-            "[shortcuts] unlisten*"
-            (shortcut/unlisten-all! true))
-          (events/listen key-handler "key"
-                         (fn [^js e]
-                           (.preventDefault e)
-                           (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
+         (util/profile
+          "[shortcuts] unlisten*"
+          (shortcut/unlisten-all! true))
+         (events/listen key-handler "key"
+                        (fn [^js e]
+                          (.preventDefault e)
+                          (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
 
           ;; teardown
-          #(do
-             (util/profile
-               "[shortcuts] listen*"
-               (shortcut/listen-all!))
-             (.dispose key-handler))))
-      [])
+         #(do
+            (util/profile
+             "[shortcuts] listen*"
+             (shortcut/listen-all!))
+            (.dispose key-handler))))
+     [])
 
     [:div.keyboard-filter-record
      [:h2
@@ -118,36 +118,36 @@
 
      ;; keyboard filter
      (ui/dropdown
-       (fn [{:keys [toggle-fn]}]
-         [:a.flex.items-center.icon-link
-          {:on-click toggle-fn} (ui/icon "keyboard")
+      (fn [{:keys [toggle-fn]}]
+        [:a.flex.items-center.icon-link
+         {:on-click toggle-fn} (ui/icon "keyboard")
 
-          (when-not (string/blank? keystroke)
-            (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
-       (fn [{:keys [close-fn]}]
-         (keyboard-filter-record-inner keystroke set-keystroke! close-fn))
-       {:outside?      true
-        :trigger-class "keyboard-filter"})
+         (when-not (string/blank? keystroke)
+           (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
+      (fn [{:keys [close-fn]}]
+        (keyboard-filter-record-inner keystroke set-keystroke! close-fn))
+      {:outside?      true
+       :trigger-class "keyboard-filter"})
 
      ;; other filter
      (ui/dropdown-with-links
-       (fn [{:keys [toggle-fn]}]
-         [:a.flex.items-center.icon-link.relative
-          {:on-click toggle-fn}
-          (ui/icon "filter")
+      (fn [{:keys [toggle-fn]}]
+        [:a.flex.items-center.icon-link.relative
+         {:on-click toggle-fn}
+         (ui/icon "filter")
 
-          (when (seq filters)
-            (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
+         (when (seq filters)
+           (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
 
-       (for [k [:All :Disabled :Unset :Custom]
-             :let [all? (= k :All)
-                   checked? (or (contains? filters k) (and all? (nil? (seq filters))))]]
+      (for [k [:All :Disabled :Unset :Custom]
+            :let [all? (= k :All)
+                  checked? (or (contains? filters k) (and all? (nil? (seq filters))))]]
 
-         {:title   (if all? (t :keymap/all) (t (keyword :keymap (string/lower-case (name k)))))
-          :icon    (ui/icon (if checked? "checkbox" "square"))
-          :options {:on-click #(set-filters! (if all? #{} (let [f (if checked? disj conj)] (f filters k))))}})
+        {:title   (if all? (t :keymap/all) (t (keyword :keymap (string/lower-case (name k)))))
+         :icon    (ui/icon (if checked? "checkbox" "square"))
+         :options {:on-click #(set-filters! (if all? #{} (let [f (if checked? disj conj)] (f filters k))))}})
 
-       nil)]))
+      nil)]))
 
 (rum/defc shortcut-desc-label
   [id binding-map]
@@ -170,10 +170,10 @@
                 {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-shortcuts-list!)))
                  :modal-id modal-id}]]
       (shui/dialog-open!
-        (fn [] (apply customize-shortcut-dialog-inner args))
-        {:id      modal-id
-         :class "w-auto md:max-w-2xl"
-         :payload args}))))
+       (fn [] (apply customize-shortcut-dialog-inner args))
+       {:id      modal-id
+        :class "w-auto md:max-w-2xl"
+        :payload args}))))
 
 (rum/defc shortcut-conflicts-display
   [_k conflicts-map]
@@ -237,8 +237,8 @@
     ;; TODO: back interaction for the shui dialog
     (rum/use-effect!
      (fn []
-       (let [mid (state/sub :modal/id)
-             mid' (some-> (state/sub :modal/subsets) (last) (:modal/id))
+       (let [mid (shui-dialog/get-first-modal-id)
+             mid' (shui-dialog/get-last-modal-id)
              el (rum/deref *ref-el)]
          (when (or (and (not mid') (= mid modal-id))
                    (= mid' modal-id))
@@ -269,7 +269,7 @@
                           (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
 
           ;; active
-          (js/setTimeout #(.focus el) 128)
+         (js/setTimeout #(.focus el) 128)
 
           ;; teardown
          #(do (some-> teardown-global! (apply nil))
@@ -374,10 +374,10 @@
           (->> categories-list-map
                (map (fn [[c binding-map]]
                       [c (search/fuzzy-search
-                           binding-map q
-                           :extract-fn
-                           #(let [[id m] %]
-                              (str (name id) " " (dh/get-shortcut-desc (assoc m :id id)))))]))))
+                          binding-map q
+                          :extract-fn
+                          #(let [[id m] %]
+                             (str (name id) " " (dh/get-shortcut-desc (assoc m :id id)))))]))))
 
         result-list-map (or matched-list-map categories-list-map)
         toggle-categories! #(if (= folded-categories all-categories)
@@ -385,9 +385,9 @@
                               (set-folded-categories! all-categories))]
 
     (rum/use-effect!
-      (fn []
-        (js/setTimeout #(set-ready! true) 100))
-      [])
+     (fn []
+       (js/setTimeout #(set-ready! true) 100))
+     [])
 
     [:div.cp__shortcut-page-x
      [:header.relative
@@ -470,12 +470,12 @@
                                 (if disabled?
                                   (t :keymap/disabled)
                                   (bean/->js
-                                    (map #(if (false? %)
-                                            (t :keymap/disabled)
-                                            (shortcut-utils/decorate-binding %)) user-binding)))))]
+                                   (map #(if (false? %)
+                                           (t :keymap/disabled)
+                                           (shortcut-utils/decorate-binding %)) user-binding)))))]
 
                         (not unset?)
                         [:code.flex.items-center.bg-transparent
                          (shui/shortcut
-                           (string/join " | " (map #(dh/binding-for-display id %) binding))
-                           {:size :md :interactive? true})])]]))))])])]]))
+                          (string/join " | " (map #(dh/binding-for-display id %) binding))
+                          {:size :md :interactive? true})])]]))))])])]]))

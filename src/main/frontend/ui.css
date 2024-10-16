@@ -166,8 +166,10 @@
 
 .ui__dialog-content {
   &[label=flashcards__cp] {
+    @apply px-5 pt-6 pb-4;
+
     .ui__dialog-main-content {
-      @apply max-h-[85vh] min-h-[65vh] overflow-auto;
+      @apply max-h-[85vh] min-h-[65vh] overflow-auto p-1;
     }
   }
 }
@@ -311,4 +313,16 @@ html.is-mobile {
 
 input[type='range'] {
   accent-color: var(--lx-accent-10, var(--rx-blue-10));
+}
+
+.ls-dialog-select {
+  @apply w-auto !max-w-fit p-0;
+
+  .cp__select-main {
+    @apply m-0;
+  }
+
+  .item-results-wrap {
+    @apply px-2;
+  }
 }

@@ -10,39 +10,47 @@
             [clojure.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.components.cmdk.core :as cmdk]
             [frontend.components.block :as block]
-            [frontend.components.settings :as settings]
+            [frontend.components.cmdk.core :as cmdk]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.git :as git-component]
             [frontend.components.plugins :as plugin]
-            [frontend.components.shell :as shell]
-            [frontend.components.whiteboard :as whiteboard]
-            [frontend.components.user.login :as login]
-            [frontend.components.repo :as repo]
             [frontend.components.property.dialog :as property-dialog]
+            [frontend.components.repo :as repo]
+            [frontend.components.select :as select]
+            [frontend.components.settings :as settings]
+            [frontend.components.shell :as shell]
+            [frontend.components.user.login :as login]
+            [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [logseq.shui.ui :as shui]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.persist :as db-persist]
             [frontend.db.transact :as db-transact]
+            [frontend.extensions.fsrs :as fsrs]
             [frontend.extensions.srs :as srs]
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as fs-watcher]
+            [frontend.handler.code :as code-handler]
+            [frontend.handler.common.page :as page-common-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.export :as export]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
@@ -51,39 +59,31 @@
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.file-based.nfs :as nfs-handler]
-            [frontend.handler.code :as code-handler]
-            [frontend.handler.db-based.rtc :as rtc-handler]
-            [frontend.handler.graph :as graph-handler]
-            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.instrumentation.sentry :as sentry-event]
+            [frontend.modules.outliner.pipeline :as pipeline]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.shortcut.core :as st]
+            [frontend.persist-db :as persist-db]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.quick-capture :as quick-capture]
+            [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]
-            [lambdaisland.glogi :as log]
-            [rum.core :as rum]
-            [frontend.rum :as r]
-            [frontend.persist-db.browser :as db-browser]
-            [frontend.modules.outliner.pipeline :as pipeline]
-            [frontend.date :as date]
             [logseq.db :as ldb]
-            [frontend.persist-db :as persist-db]
-            [frontend.handler.export :as export]
-            [frontend.extensions.fsrs :as fsrs]
-            [frontend.storage :as storage]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; TODO: should we move all events here?
 
@@ -309,15 +309,16 @@
     (plugin/open-select-theme!)
     (route-handler/go-to-search! :themes)))
 
-(defmethod handle :modal/toggle-appearance-modal [_]
-  (let [label "customize-appearance"]
-    (if (shui/dialog-get label)
-      (shui/dialog-close! label)
-      (shui/dialog-open!
-       #(settings/modal-appearance-inner)
-       {:id      label
-        :overlay-props {:label label}
-        :label   label}))))
+(defmethod handle :ui/toggle-appearance [_]
+  (let [popup-id "appearance_settings"]
+    (if (gdom/getElement popup-id)
+      (shui/popup-hide! popup-id)
+      (shui/popup-show!
+       (gdom/getElement "dots-menu")
+       (fn []
+         (settings/appearance))
+       {:id popup-id
+        :align :end}))))
 
 (defmethod handle :modal/set-git-username-and-email [[_ _content]]
   (shui/dialog-open! git-component/set-git-username-and-email))
@@ -394,11 +395,12 @@
     (shui/dialog-open! shell/shell)))
 
 (defmethod handle :go/search [_]
-  (state/set-modal! cmdk/cmdk-modal
-                    {:fullscreen? true
-                     :close-btn?  false
-                     :panel?      false
-                     :label "ls-modal-search"}))
+  (shui/dialog-open!
+   cmdk/cmdk-modal
+   {:id :ls-dialog-cmdk
+    :align :top
+    :content-props {:class "ls-dialog-cmdk"}
+    :close-btn? false}))
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
@@ -666,7 +668,7 @@
            template
            {:target page}))))))
 
-(defmethod handle :editor/set-org-mode-heading [[_ block heading]]
+(defmethod handle :editor/set-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]
     (editor-handler/set-heading! id heading)))
 
@@ -783,6 +785,15 @@
    {:id :new-db-graph
     :title [:h2 "Create a new graph"]
     :style {:max-width "500px"}}))
+
+(defmethod handle :dialog-select/graph-open []
+  (select/dialog-select! :graph-open))
+
+(defmethod handle :dialog-select/graph-remove []
+  (select/dialog-select! :graph-remove))
+
+(defmethod handle :dialog-select/db-graph-replace []
+  (select/dialog-select! :db-graph-replace))
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
   (persist-db/export-current-graph! {:succ-notification? true}))
@@ -964,14 +975,17 @@
                               {:id :property-dialog
                                :align "start"})))))))
 
-(defmethod handle :editor/upsert-type-block [[_ {:keys [block type lang]}]]
+(defmethod handle :editor/upsert-type-block [[_ {:keys [block type lang update-current-block?]}]]
   (p/do!
-   (editor-handler/save-current-block!)
-   (p/delay 16)
+   (when-not update-current-block?
+     (editor-handler/save-current-block!))
+   (when-not update-current-block?
+     (p/delay 16))
    (let [block (db/entity (:db/id block))
          block-type (:logseq.property.node/display-type block)
          block-title (:block/title block)
-         latest-code-lang (or lang (storage/get :latest-code-lang))
+         latest-code-lang (or lang
+                              (:kv/value (db/entity :logseq.kv/latest-code-lang)))
          turn-type! #(if (and (= (keyword type) :code) latest-code-lang)
                        (db-property-handler/set-block-properties!
                         (:block/uuid %)
@@ -980,7 +994,7 @@
                        (db-property-handler/set-block-property!
                         (:block/uuid %) :logseq.property.node/display-type (keyword type)))]
      (p/let [block (if (or (not (nil? block-type))
-                           (not (string/blank? block-title)))
+                           (and (not update-current-block?) (not (string/blank? block-title))))
                      (p/let [result (ui-outliner-tx/transact!
                                      {:outliner-op :insert-blocks}
                                      ;; insert a new block

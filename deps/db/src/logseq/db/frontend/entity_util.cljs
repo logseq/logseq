@@ -42,6 +42,12 @@
   [page]
   (= (:block/type page) "journal"))
 
+(defn asset?
+  "Given an entity or map, check if it is an asset block"
+  [entity]
+  ;; Can't use :block/tags because this is used in some perf sensitive fns like ldb/transact!
+  (some? (:logseq.property.asset/type entity)))
+
 (defn hidden?
   [page]
   (when page

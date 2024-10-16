@@ -8,7 +8,6 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as right-sidebar]
-            [frontend.components.select :as select]
             [frontend.components.theme :as theme]
             [frontend.components.dnd :as dnd-component]
             [frontend.components.icon :as icon]
@@ -354,6 +353,24 @@
                                      (route-handler/go-to-journals!)))
                :icon "calendar"
                :shortcut :go/journals})))
+
+         (when db-based?
+           (let [tag-uuid (:block/uuid (db/entity :logseq.class/Task))]
+             (sidebar-item
+              {:class "task-view-nav"
+               :title (t :left-side-bar/tasks)
+               :href (rfe/href :page {:name tag-uuid})
+               :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
+               :icon "hash"})))
+
+         (when db-based?
+           (let [tag-uuid (:block/uuid (db/entity :logseq.class/Asset))]
+             (sidebar-item
+              {:class "asset-view-nav"
+               :title (t :left-side-bar/assets)
+               :href (rfe/href :page {:name tag-uuid})
+               :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
+               :icon "hash"})))
 
          (when enable-whiteboards?
            (when (or config/dev? (not db-based?))
@@ -832,9 +849,7 @@
   []
   nil)
 
-(rum/defcs ^:large-vars/cleanup-todo root-container <
-  (mixins/modal :modal/show?)
-  rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo root-container < rum/reactive
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "pointerdown" hide-context-menu-and-clear-selection)
@@ -855,8 +870,7 @@
                     (fn [_e]
                       (state/set-state! :editor/latest-shortcut nil)))))
   [state route-match main-content']
-  (let [{:keys [open-fn]} state
-        current-repo (state/sub :git/current-repo)
+  (let [current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
         accent-color (some-> (state/sub :ui/radix-color) (name))
@@ -929,8 +943,7 @@
       [:div.#app-container
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
-        (header/header {:open-fn        open-fn
-                        :light?         light?
+        (header/header {:light?         light?
                         :current-repo   current-repo
                         :logged?        logged?
                         :page?          page?
@@ -960,13 +973,11 @@
        [:div#app-single-container]]
 
       (ui/notification)
-      (ui/modal)
-      (ui/sub-modal)
+
       (shui-toaster/install-toaster)
       (shui-dialog/install-modals)
       (shui-popup/install-popups)
 
-      (select/select-modal)
       (custom-context-menu)
       (plugins/custom-js-installer
        {:t t

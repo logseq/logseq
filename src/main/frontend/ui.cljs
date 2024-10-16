@@ -576,125 +576,6 @@
       (first binding)
       (shortcut-utils/decorate-binding binding))))
 
-(rum/defc modal-overlay
-  [state close-fn close-backdrop?]
-  [:div.ui__modal-overlay
-   {:class    (case state
-                "entering" "ease-out duration-300 opacity-0"
-                "entered" "ease-out duration-300 opacity-100"
-                "exiting" "ease-in duration-200 opacity-100"
-                "exited" "ease-in duration-200 opacity-0")
-    :on-click #(when close-backdrop? (close-fn))}
-   [:div.absolute.inset-0.opacity-75]])
-
-(rum/defc modal-panel-content-cp <
-  mixins/component-editing-mode
-  [panel-content close-fn]
-  (panel-content close-fn))
-
-(rum/defc modal-panel
-  [show? panel-content transition-state close-fn fullscreen? close-btn? style]
-  [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm
-   (cond->
-    {:class (case transition-state
-              "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
-              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
-              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
-     (seq style)
-     (assoc :style style))
-   [:div.ui__modal-close-wrap
-    (when-not (false? close-btn?)
-      [:a.ui__modal-close
-       {:aria-label "Close"
-        :type       "button"
-        :on-click   close-fn}
-       [:svg.h-6.w-6
-        {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
-        [:path
-         {:d               "M6 18L18 6M6 6l12 12"
-          :stroke-width    "2"
-          :stroke-linejoin "round"
-          :stroke-linecap  "round"}]]])]
-   (when show?
-     [:div (cond-> {:class (if fullscreen? "" "panel-content")}
-             (seq style)
-             (assoc :style style))
-      (modal-panel-content-cp panel-content close-fn)])])
-
-(rum/defc modal < rum/reactive
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/hide-when-esc-or-outside
-      state
-      :on-hide (fn []
-                 (some->
-                  (.querySelector (rum/dom-node state) "button.ui__modal-close")
-                  (.click)))
-      :outside? false)
-     (mixins/on-key-down
-      state
-      {;; enter
-       13 (fn [state e]
-            (when-let [^js enter-el (some-> (rum/dom-node state)
-                                            (.querySelector "button.ui__modal-enter"))]
-              (.preventDefault e)
-              (.click enter-el)))})))
-  []
-  (let [modal-panel-content (state/sub :modal/panel-content)
-        fullscreen? (state/sub :modal/fullscreen?)
-        close-btn? (state/sub :modal/close-btn?)
-        close-backdrop? (state/sub :modal/close-backdrop?)
-        show? (state/sub :modal/show?)
-        label (state/sub :modal/label)
-        style (state/sub :modal/style)
-        class (state/sub :modal/class)
-        close-fn (fn []
-                   (state/close-modal!)
-                   (state/close-settings!))
-        modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
-    [:div.ui__modal
-     {:style {:z-index (if show? 999 -1)
-              :display (if show? "flex" "none")}
-      :label label
-      :class class}
-     (css-transition
-      {:in show? :timeout 0}
-      (fn [state]
-        (modal-overlay state close-fn close-backdrop?)))
-     (css-transition
-      {:in show? :timeout 0}
-      (fn [state]
-        (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn? style)))]))
-
-(rum/defc sub-modal < rum/reactive
-  []
-  (when-let [modals (seq (state/sub :modal/subsets))]
-    (for [[idx modal'] (medley/indexed modals)]
-      (let [id (:modal/id modal')
-            modal-panel-content (:modal/panel-content modal')
-            close-btn? (:modal/close-btn? modal')
-            close-backdrop? (:modal/close-backdrop? modal')
-            show? (:modal/show? modal')
-            label (:modal/label modal')
-            style (:modal/style modal')
-            class (:modal/class modal')
-            close-fn (fn []
-                       (state/close-sub-modal! id))
-            modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
-        [:div.ui__modal.is-sub-modal
-         {:style {:z-index (if show? (+ 999 idx) -1)}
-          :label label
-          :class class}
-         (css-transition
-          {:in show? :timeout 0}
-          (fn [state]
-            (modal-overlay state close-fn close-backdrop?)))
-         (css-transition
-          {:in show? :timeout 0}
-          (fn [state]
-            (modal-panel show? modal-panel-content state close-fn false close-btn? style)))]))))
-
 (defn loading
   ([] (loading (t :loading)))
   ([content] (loading content nil))
@@ -1255,6 +1136,13 @@
                                 (let [on-select' (or (:on-select opts) (:on-day-click opts))]
                                   (on-select' date))
                                 (notification/show! (str (pr-str value) " is not a valid date. Please try again") :warning)))))))})]))
+
+(rum/defc skeleton
+  []
+  [:div.space-y-2
+   (shui/skeleton {:class "h-8 w-1/3 mb-8"})
+   (shui/skeleton {:class "h-6 w-full"})
+   (shui/skeleton {:class "h-6 w-full"})])
 
 (comment
   (rum/defc emoji-picker

@@ -117,7 +117,7 @@
                      :icon (ui/icon "apps")})
 
                   {:title (t :appearance)
-                   :options {:on-click #(state/pub-event! [:modal/toggle-appearance-modal])}
+                   :options {:on-click #(state/pub-event! [:ui/toggle-appearance])}
                    :icon (ui/icon "color-swatch")}
 
                   (when current-repo
@@ -153,7 +153,7 @@
                                :class "w-full"}})]
                  (concat page-menu-and-hr)
                  (remove nil?)))]
-    [:button.button.icon.toolbar-dots-btn
+    [:button#dots-menu.button.icon.toolbar-dots-btn
      {:title (t :header/more)
       :on-pointer-down (fn [^js e]
                          (shui/popup-show! (.-target e)
@@ -203,8 +203,8 @@
   [t]
   (let [[downloaded, set-downloaded] (rum/use-state nil)
         _ (rum/use-effect!
-            (fn []
-              (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
+           (fn []
+             (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
                (let [callback (fn [_ args]
                                 (js/console.debug "[new-version downloaded] args:" args)
                                 (let [args (bean/->clj args)]
@@ -223,11 +223,10 @@
          (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
 
 (rum/defc ^:large-vars/cleanup-todo header < rum/reactive
-  [{:keys [open-fn current-repo default-home new-block-mode]}]
+  [{:keys [current-repo default-home new-block-mode]}]
   (let [_ (state/sub [:user/info :UserGroups])
         electron-mac? (and util/mac? (util/electron?))
         left-menu (left-menu-button {:on-click (fn []
-                                                 (open-fn)
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)

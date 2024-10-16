@@ -1,5 +1,5 @@
 (ns frontend.worker.db.migrate
-  "DB migration"
+  "Handles SQLite and datascript migrations for DB graphs"
   (:require [datascript.core :as d]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.property :as db-property]
@@ -16,6 +16,8 @@
             [logseq.common.uuid :as common-uuid]))
 
 ;; TODO: fixes/rollback
+;; Frontend migrations
+;; ===================
 
 (defn- replace-original-name-content-with-title
   [conn search-db]
@@ -121,6 +123,18 @@
                                  [[:db/retract id old]
                                   [:db/add id new prop-value]]))))
                 props-to-rename)))))
+
+(defn- rename-classes
+  [classes-to-rename]
+  (fn [conn _search-db]
+    (when (ldb/db-based-graph? @conn)
+      (mapv (fn [[old new]]
+              (merge {:db/id (:db/id (d/entity @conn old))
+                      :db/ident new}
+                     (when-let [new-title (get-in db-class/built-in-classes [new :title])]
+                       {:block/title new-title
+                        :block/name (common-util/page-name-sanity-lc new-title)})))
+            classes-to-rename))))
 
 (defn- update-block-type-many->one
   [conn _search-db]
@@ -244,43 +258,54 @@
             m (cond->
                (db-property-build/build-closed-value-block
                 uuid'
-                "Card view"
+                "Card View"
                 property
                 {:db-ident :logseq.property.view/type.card})
                 true
                 (assoc :block/order (db-order/gen-key)))]
         [m]))))
 
-(defn- add-addresses-in-kvs-table
-  [^Object sqlite-db]
-  (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
-                                           :rowMode "array"})
-                     bean/->clj
-                     (map first)
-                     set)]
-    (when-not (contains? columns "addresses")
-      (let [data (some->> (.exec sqlite-db #js {:sql "select addr, content from kvs"
-                                                :rowMode "array"})
-                          bean/->clj
-                          (map (fn [[addr content]]
-                                 (let [content' (sqlite-util/transit-read content)
-                                       [content' addresses] (if (map? content')
-                                                              [(dissoc content' :addresses)
-                                                               (when-let [addresses (:addresses content')]
-                                                                 (js/JSON.stringify (bean/->js addresses)))]
-                                                              [content' nil])
-                                       content' (sqlite-util/transit-write content')]
-                                   #js {:$addr addr
-                                        :$content content'
-                                        :$addresses addresses}))))]
-        (.exec sqlite-db #js {:sql "alter table kvs add column addresses JSON"})
-        (.transaction sqlite-db
-                      (fn [tx]
-                        (doseq [item data]
-                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
-                                         :bind item}))))))))
+(defn- add-tags-for-typed-display-blocks
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [property (d/entity db :logseq.property.node/display-type)
+            ;; fix property
+            _ (when-not (ldb/property? property)
+                (let [fix-tx-data (->>
+                                   (select-keys db-property/built-in-properties [:logseq.property.node/display-type])
+                                   (sqlite-create-graph/build-initial-properties*)
+                                   (map (fn [m]
+                                          (assoc m :db/id (:db/id property)))))]
+                  (d/transact! conn fix-tx-data)))
+            datoms (d/datoms @conn :avet :logseq.property.node/display-type)]
+        (map
+         (fn [d]
+           (when-let [tag-id (ldb/get-class-ident-by-display-type (:v d))]
+             [:db/add (:e d) :block/tags tag-id]))
+         datoms)))))
+
+(defn- rename-card-view-to-gallery-view
+  [conn _search-db]
+  (when (ldb/db-based-graph? @conn)
+    [{:db/id (:db/id (d/entity @conn :logseq.property.view/type.card))
+      :db/ident :logseq.property.view/type.gallery
+      :block/title "Gallery View"}]))
+
+(defn- add-pdf-annotation-class
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [datoms (d/datoms db :avet :logseq.property/ls-type :annotation)]
+        (map
+         (fn [d]
+           [:db/add (:e d) :block/tags :logseq.class/pdf-annotation])
+         datoms)))))
 
 (def schema-version->updates
+  "A vec of tuples defining datascript migrations. Each tuple consists of the
+   schema version integer and a migration map. A migration map can have keys of :properties, :classes
+   and :fix."
   [[3 {:properties [:logseq.property/table-sorting :logseq.property/table-filters
                     :logseq.property/table-hidden-columns :logseq.property/table-ordered-columns]
        :classes    []}]
@@ -329,7 +354,17 @@
    [33 {:properties [:logseq.property.pdf/hl-image]}]
    [34 {:properties [:logseq.property.asset/resize-metadata]}]
    [35 {:fix add-card-view}]
-   [36 {:properties [:kv/value :block/type :block/schema :block/parent
+   [37 {:classes [:logseq.class/Code-block :logseq.class/Quote-block :logseq.class/Math-block]
+        :properties [:logseq.property.node/display-type :logseq.property.code/lang]}]
+   [38 {:fix add-tags-for-typed-display-blocks}]
+   [39 {:fix rename-card-view-to-gallery-view}]
+   [40 {:classes [:logseq.class/pdf-annotation]
+        :properties [:logseq.property/ls-type :logseq.property/hl-color :logseq.property/asset
+                     :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value
+                     :logseq.property/hl-type :logseq.property.pdf/hl-image]
+        :fix add-pdf-annotation-class}]
+   [41 {:fix (rename-classes {:logseq.class/pdf-annotation :logseq.class/Pdf-annotation})}]
+   [42 {:properties [:kv/value :block/type :block/schema :block/parent
                      :block/order :block/collapsed? :block/page
                      :block/refs :block/path-refs :block/link
                      :block/title :block/closed-value-property
@@ -341,11 +376,9 @@
   (when (< db-schema/version max-schema-version)
     (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-version is " max-schema-version))))
 
-(defn migrate-sqlite-db
-  [db]
-  (add-addresses-in-kvs-table db))
-
 (defn migrate
+  "Migrate 'frontend' datascript schema and data. To add a new migration,
+  add an entry to schema-version->updates and bump db-schema/version"
   [conn search-db]
   (let [db @conn
         version-in-db (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0)]
@@ -393,5 +426,42 @@
               (ldb/transact! conn tx-data' {:db-migrate? true}))
             (println "DB schema migrated to " db-schema/version " from " version-in-db ".")))
         (catch :default e
-          (prn :error "DB migration failed:")
+          (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))
           (js/console.error e))))))
+
+;; Backend migrations
+;; ==================
+
+(defn- add-addresses-in-kvs-table
+  [^Object sqlite-db]
+  (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
+                                           :rowMode "array"})
+                     bean/->clj
+                     (map first)
+                     set)]
+    (when-not (contains? columns "addresses")
+      (let [data (some->> (.exec sqlite-db #js {:sql "select addr, content from kvs"
+                                                :rowMode "array"})
+                          bean/->clj
+                          (map (fn [[addr content]]
+                                 (let [content' (sqlite-util/transit-read content)
+                                       [content' addresses] (if (map? content')
+                                                              [(dissoc content' :addresses)
+                                                               (when-let [addresses (:addresses content')]
+                                                                 (js/JSON.stringify (bean/->js addresses)))]
+                                                              [content' nil])
+                                       content' (sqlite-util/transit-write content')]
+                                   #js {:$addr addr
+                                        :$content content'
+                                        :$addresses addresses}))))]
+        (.exec sqlite-db #js {:sql "alter table kvs add column addresses JSON"})
+        (.transaction sqlite-db
+                      (fn [tx]
+                        (doseq [item data]
+                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
+                                         :bind item}))))))))
+
+(defn migrate-sqlite-db
+  "Migrate sqlite db schema"
+  [db]
+  (add-addresses-in-kvs-table db))
