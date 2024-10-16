@@ -274,10 +274,21 @@
                                 (:block/title card-entity)))))))
 
         [:span.text-sm.opacity-50 (str (min (inc @*card-index) (count @*block-ids)) "/" (count @*block-ids))]]
-       (if-let [block-id (nth block-ids @*card-index nil)]
-         [:div.flex.flex-col
-          (card-view repo block-id *card-index *phase)]
-         [:p (t :flashcards/modal-finished)])])))
+       (let [block-id (nth block-ids @*card-index nil)]
+         (cond
+           block-id
+           [:div.flex.flex-col
+            (card-view repo block-id *card-index *phase)]
+
+           (empty? block-ids)
+           [:div.ls-card.content.ml-2
+            [:h2.font-medium (t :flashcards/modal-welcome-title)]
+
+            [:div
+             [:p (t :flashcards/modal-welcome-desc-1)]]]
+
+           :else
+           [:p (t :flashcards/modal-finished)]))])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
 (def ^:private new-task--update-due-cards-count
