@@ -106,7 +106,7 @@
   [db]
   (if (entity-util/db-based-graph? db)
     (fn [datom]
-      (and (= :logseq.property/hl-type (:a datom))
+      (and (= :logseq.property.pdf/hl-type (:a datom))
            (= (keyword (:v datom)) :area)))
     (fn [datom]
       (and
