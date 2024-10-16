@@ -2,6 +2,7 @@
   "All pages"
   (:require [frontend.components.block :as component-block]
             [frontend.components.page :as component-page]
+            [frontend.components.icon :as icon-component]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -18,7 +19,9 @@
   (->> [{:id :block/title
          :name (t :block/name)
          :cell (fn [_table row _column]
-                 (component-block/page-cp {:show-icon? true} row))
+                 [:div.flex.flex-row.items-center.gap-1
+                  [:span.opacity-50 (icon-component/get-node-icon-cp row {:color? true})]
+                  (component-block/page-cp {} row)])
          :type :string}
         {:id :block/type
          :name "Type"
