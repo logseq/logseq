@@ -160,21 +160,23 @@
        (remove (fn [datom] (contains? #{:graph-uuid :local-tx} (:a datom))))
        (group-by :e)))
 
-(defn get-all-ops*
+(defn- get-all-ops*
+  "Return e->op-map"
   [conn]
   (let [e->datoms (get-all-op-datoms conn)]
-    (map (fn [same-ent-datoms]
-           (into {} (map (juxt :a :v)) same-ent-datoms))
-         (vals e->datoms))))
+    (into {}
+          (keep (fn [[e same-ent-datoms]]
+                  (let [op-map (into {} (map (juxt :a :v)) same-ent-datoms)]
+                    (when (:block/uuid op-map)
+                      [e op-map])))
+                e->datoms))))
 
 (defn get&remove-all-ops*
   [conn]
-  (let [e->datoms (get-all-op-datoms conn)
-        retract-all-tx-data (map (fn [e] [:db.fn/retractEntity e]) (keys e->datoms))]
+  (let [e->op-map (get-all-ops* conn)
+        retract-all-tx-data (map (fn [e] [:db.fn/retractEntity e]) (keys e->op-map))]
     (d/transact! conn retract-all-tx-data)
-    (map (fn [same-ent-datoms]
-           (into {} (map (juxt :a :v)) same-ent-datoms))
-         (vals e->datoms))))
+    (vals e->op-map)))
 
 (defn get-all-ops
   "Return coll of
@@ -189,7 +191,7 @@
        (keep (fn [[k v]]
                (when (not= :block/uuid k) v))
              m))
-     (get-all-ops* conn))))
+     (vals (get-all-ops* conn)))))
 
 (defn get&remove-all-ops
   "Return coll of
