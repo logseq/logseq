@@ -205,7 +205,29 @@
 
 ;; build-query fns
 ;; ===============
-(defn- build-between-two-arg
+(defn- resolve-timestamp-property
+  [e]
+  (let [k' (second e)]
+    (when (or (keyword? k') (symbol? k') (string? k'))
+      (let [k (-> k'
+                  (name)
+                  (string/lower-case)
+                  (string/replace "_" "-")
+                  keyword)]
+        (case k
+          :created-at
+          :block/created-at
+          :updated-at
+          :block/updated-at
+          k)))))
+
+(defn get-timestamp-property
+  [e]
+  (let [k (resolve-timestamp-property e)]
+    (when (contains? #{:block/created-at :block/updated-at} k)
+      k)))
+
+(defn- build-journal-between-two-arg
   [e]
   (let [start (->journal-day-int (nth e 1))
         end (->journal-day-int (nth e 2))
@@ -213,32 +235,49 @@
     {:query (list 'between '?b start end)
      :rules [:between]}))
 
-(defn- build-between-three-arg
+(defn- file-based-build-between-three-arg
   [e]
-  (let [k (-> (second e)
-              (name)
-              (string/lower-case)
-              (string/replace "-" "_"))]
-    (when (contains? #{"created_at" "last_modified_at"} k)
-      (let [start (->timestamp (nth e 2))
-            end (->timestamp (nth e 3))]
-        (when (and start end)
-          (let [[start end] (sort [start end])
-                sym '?v]
-            {:query [['?b :block/properties '?prop]
-                     [(list 'get '?prop k) sym]
-                     [(list '>= sym start)]
-                     [(list '< sym end)]]}))))))
+  (when-let [k (get-timestamp-property e)]
+    (let [start (->timestamp (nth e 2))
+          end (->timestamp (nth e 3))]
+      (when (and start end)
+        (let [[start end] (sort [start end])
+              sym '?v]
+          {:query [['?b :block/properties '?prop]
+                   [(list 'get '?prop k) sym]
+                   [(list '>= sym start)]
+                   [(list '< sym end)]]})))))
+
+(defn- db-based-build-between-three-arg
+  [e]
+  (when-let [k (get-timestamp-property e)]
+    (let [start (->timestamp (nth e 2))
+          end (->timestamp (nth e 3))]
+      (when (and start end)
+        (let [[start end] (sort [start end])
+              sym '?v]
+          {:query [['?b k sym]
+                   [(list '>= sym start)]
+                   [(list '< sym end)]]})))))
+
+(defn- db-based-build-between-two-arg
+  [e]
+  (db-based-build-between-three-arg (concat e ['now])))
 
 (defn- build-between
-  [e]
+  [e db-graph?]
   (cond
     (= 3 (count e))
-    (build-between-two-arg e)
+    (let [k (get-timestamp-property e)]
+      (if (and db-graph? k)
+        (db-based-build-between-two-arg e)
+        (build-journal-between-two-arg e)))
 
     ;; (between created_at -1d today)
     (= 4 (count e))
-    (build-between-three-arg e)))
+    (if db-graph?
+      (db-based-build-between-three-arg e)
+      (file-based-build-between-three-arg e))))
 
 (defn ->file-property-value
   "Parses property values for file graphs and handles non-string values or any page-ref like values"
@@ -351,6 +390,17 @@
       {:query (list 'has-page-property '?p k')
        :rules [:has-page-property]})))
 
+(defn- build-tags
+  [e]
+  (let [tags (if (coll? (first (rest e)))
+               (first (rest e))
+               (rest e))
+        tags (map (comp string/lower-case name) tags)]
+    (when (seq tags)
+      (let [tags (set (map (comp page-ref/get-page-name! string/lower-case name) tags))]
+        {:query (list 'tags '?p tags)
+         :rules [:tags]}))))
+
 (defn- build-page-tags
   [e]
   (let [tags (if (coll? (first (rest e)))
@@ -421,6 +471,15 @@
   {:query (list 'block-content '?b e)
    :rules [:block-content]})
 
+(defn- datalog-clause?
+  [e]
+  (and
+   (coll? e)
+   (or
+    (list? (first e))
+    (and (>= (count e) 2)
+         (string/starts-with? (str (first e)) "?")))))
+
 (defn build-query
   "This fn converts a form/list in a query e.g. `(operator arg1 arg2)` to its datalog
   equivalent. This fn is called recursively on sublists for boolean operators
@@ -435,7 +494,10 @@ Some bindings in this fn:
   ([e {:keys [sort-by blocks? sample] :as env :or {blocks? (atom nil)}} level]
    ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
-         fe (when fe (symbol (string/lower-case (name fe))))
+         fe (when fe
+              (if (list? fe)
+                fe
+                (symbol (string/lower-case (name fe)))))
          page-ref? (page-ref/page-ref? e)]
      (when (or (and page-ref?
                     (not (contains? #{'page-property 'page-tags} (:current-filter env))))
@@ -445,6 +507,9 @@ Some bindings in this fn:
      (cond
        (nil? e)
        nil
+
+       (and (:db-graph? env) (datalog-clause? e))
+       {:query [e]}
 
        page-ref?
        (build-page-ref e)
@@ -456,7 +521,7 @@ Some bindings in this fn:
        (build-and-or-not e env level fe)
 
        (= 'between fe)
-       (build-between e)
+       (build-between e (:db-graph? env))
 
        (= 'property fe)
        (build-property e env)
@@ -479,6 +544,9 @@ Some bindings in this fn:
 
        (= 'page-property fe)
        (build-page-property e env)
+
+       (= 'tags fe)
+       (build-tags e)
 
        (= 'page-tags fe)
        (build-page-tags e)
@@ -651,16 +719,17 @@ Some bindings in this fn:
    (query repo query-string {}))
   ([repo query-string query-opts]
    (when (and (string? query-string) (not= "\"\"" query-string))
-     (let [{query* :query :keys [rules sort-by blocks? sample]} (parse-query query-string {:cards? (:cards? query-opts)})
+     (let [db-graph? (config/db-based-graph? repo)
+           {query* :query :keys [rules sort-by blocks? sample]} (parse-query query-string {:cards? (:cards? query-opts)})
            query* (if (:cards? query-opts)
                     (let [card-id (:db/id (db-utils/entity :logseq.class/Card))]
                       (util/concat-without-nil
                        [['?b :block/tags card-id]]
                        (if (coll? (first query*)) query* [query*])))
-                    query*)]
+                    query*)
+           blocks? (if db-graph? true blocks?)]
        (when-let [query' (some-> query* (query-wrapper {:blocks? blocks?
-                                                        :block-attrs (when (config/db-based-graph? repo)
-                                                                       db-block-attrs)}))]
+                                                        :block-attrs (when db-graph? db-block-attrs)}))]
          (let [random-samples (if @sample
                                 (fn [col]
                                   (take @sample (shuffle col)))

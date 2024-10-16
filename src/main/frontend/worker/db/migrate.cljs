@@ -363,7 +363,13 @@
                      :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value
                      :logseq.property/hl-type :logseq.property.pdf/hl-image]
         :fix add-pdf-annotation-class}]
-   [41 {:fix (rename-classes {:logseq.class/pdf-annotation :logseq.class/Pdf-annotation})}]])
+   [41 {:fix (rename-classes {:logseq.class/pdf-annotation :logseq.class/Pdf-annotation})}]
+   [42 {:properties [:kv/value :block/type :block/schema :block/parent
+                     :block/order :block/collapsed? :block/page
+                     :block/refs :block/path-refs :block/link
+                     :block/title :block/closed-value-property
+                     :block/created-at :block/updated-at
+                     :property/schema.classes :property.value/content]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

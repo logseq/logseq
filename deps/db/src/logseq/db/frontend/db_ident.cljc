@@ -70,7 +70,8 @@
     ;; So that we don't have to change :user.{property|class} in our tests
     (keyword user-namespace (string/replace name-string "/" "-"))
     (keyword user-namespace
-             (str (rand-nth non-int-char-range)
-                  (nano-id 20)
-                  "-"
-                  (->> (filter #(re-find #"[0-9a-zA-Z-]{1}" %) (seq name-string)) (apply str))))))
+             (str
+              (->> (filter #(re-find #"[0-9a-zA-Z-]{1}" %) (seq name-string)) (apply str))
+              "-"
+              (rand-nth non-int-char-range)
+              (nano-id 7)))))

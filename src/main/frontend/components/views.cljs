@@ -143,14 +143,18 @@
                                               :table? true) row))
               :disable-hide? true})]
           (keep
-           (fn [property]
-             (let [ident (or (:db/ident property) (:id property))]
+           (fn [column]
+             (let [ident (or (:db/ident column) (:id column))]
                ;; Hide properties that shouldn't ever be editable or that do not display well in a table
-               (when-not (or (contains? #{:logseq.property/built-in? :logseq.property/created-from-property} ident)
-                             (contains? #{:map} (get-in property [:block/schema :type])))
-                 (let [property (if (de/entity? property)
-                                  property
-                                  (or (db/entity ident) property))
+               (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
+                                          :block/created-at :block/updated-at :block/order :block/collapsed?
+                                          :logseq.property/created-from-property}
+                                        ident)
+                             (and with-object-name? (= :block/title ident))
+                             (contains? #{:map :entity} (get-in column [:block/schema :type])))
+                 (let [property (if (de/entity? column)
+                                  column
+                                  (or (db/entity ident) column))
                        get-value (if-let [f (:get-value property)]
                                    (fn [row]
                                      (f (get-latest-entity row)))
@@ -172,7 +176,7 @@
                                                   (get-value row)
                                                   (get row ident)))))]
                    {:id ident
-                    :name (or (:name property)
+                    :name (or (:name column)
                               (:block/title property))
                     :header (or (:header property)
                                 header-cp)

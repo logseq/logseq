@@ -30,7 +30,7 @@
                  (not (re-matches template/template-re (string/trim q))))
             nil
 
-            (re-matches #"\".*\"" q) ; full-text search
+            (re-matches #"^\".*\"$" q) ; full-text search
             (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
               (when (seq blocks)
                 (let [result (->> blocks

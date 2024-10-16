@@ -153,7 +153,13 @@
   "Rules used by frontend.query.dsl for db graphs"
   (merge
    (dissoc query-dsl-rules :namespace)
-   {:page-tags
+   {:tags
+    '[(tags ?b ?tags)
+      [?b :block/tags ?t]
+      [?t :block/name ?tag]
+      [(missing? $ ?b :block/link)]
+      [(contains? ?tags ?tag)]]
+    :page-tags
     '[(page-tags ?p ?tags)
       [?p :block/tags ?t]
       [?t :block/name ?tag]
@@ -187,7 +193,6 @@
     :has-property
     '[(has-property ?b ?prop)
       [?b ?prop _]
-      [(missing? $ ?b :block/name)]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]
 
@@ -205,8 +210,7 @@
        (and
         [?prop-e :db/valueType :db.type/ref]
         (or [?pv :block/title ?val]
-            [?pv :property.value/content ?val])))
-      [(missing? $ ?b :block/name)]]
+            [?pv :property.value/content ?val])))]
 
     :task
     '[(task ?b ?statuses)

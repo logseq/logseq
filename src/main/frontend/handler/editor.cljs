@@ -1576,8 +1576,8 @@
                     (p/catch #(js/console.error "Debug: Copy Asset Error#" %)))
                 (-> (p/let [buffer (.arrayBuffer file)]
                       (fs/write-file! repo dir file-rpath buffer {:skip-compare? false}))
-                  (p/then (fn [_] new-entity))
-                  (p/catch #(js/console.error "Debug: Writing Asset #" %))))
+                    (p/then (fn [_] new-entity))
+                    (p/catch #(js/console.error "Debug: Writing Asset #" %))))
               (->
                (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
                       (cond

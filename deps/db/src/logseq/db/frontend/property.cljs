@@ -38,6 +38,90 @@
                                    :cardinality :many
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
+   :kv/value             {:title "KV value"
+                          :attribute :kv/value
+                          :schema {:type :any
+                                   :public? false
+                                   :hide? true}}
+   :block/type           {:title "Node type"
+                          :attribute :block/type
+                          :schema {:type :string
+                                   :public? false
+                                   :hide? true}}
+   :block/schema         {:title "Node schema"
+                          :attribute :block/schema
+                          :schema {:type :map
+                                   :public? false
+                                   :hide? true}}
+   :block/parent         {:title "Node parent"
+                          :attribute :block/parent
+                          :schema {:type :entity
+                                   :public? false
+                                   :hide? true}}
+   :block/order          {:title "Node order"
+                          :attribute :block/order
+                          :schema {:type :string
+                                   :public? false
+                                   :hide? true}}
+   :block/collapsed?     {:title "Node collapsed?"
+                          :attribute :block/collapsed?
+                          :schema {:type :checkbox
+                                   :public? false
+                                   :hide? true}}
+   :block/page           {:title "Node page"
+                          :attribute :block/page
+                          :schema {:type :entity
+                                   :public? false
+                                   :hide? true}}
+   :block/refs           {:title "Node references"
+                          :attribute :block/refs
+                          :schema {:type :entity
+                                   :cardinality :many
+                                   :public? false
+                                   :hide? true}}
+   :block/path-refs      {:title "Node path references"
+                          :attribute :block/path-refs
+                          :schema {:type :entity
+                                   :cardinality :many
+                                   :public? false
+                                   :hide? true}}
+   :block/link           {:title "Node links to"
+                          :attribute :block/link
+                          :schema {:type :entity
+                                   :public? false
+                                   :hide? true}}
+   :block/title          {:title "Node title"
+                          :attribute :block/title
+                          :schema {:type :string
+                                   :public? false
+                                   :hide? true}}
+   :block/closed-value-property  {:title "Closed value property"
+                                  :attribute :block/closed-value-property
+                                  :schema {:type :entity
+                                           :public? false
+                                           :hide? true}}
+   :block/created-at     {:title "Node created at"
+                          :attribute :block/created-at
+                          :schema {:type :datetime
+                                   :public? false
+                                   :hide? true}}
+   :block/updated-at     {:title "Node updated at"
+                          :attribute :block/updated-at
+                          :schema {:type :datetime
+                                   :public? false
+                                   :hide? true}}
+   :property/schema.classes      {:title "Property classes"
+                                  :attribute :property/schema.classes
+                                  :schema {:type :entity
+                                           :cardinality :many
+                                           :public? false
+                                           :hide? true}}
+   :property.value/content       {:title "Property value"
+                                  :attribute :property.value/content
+                                  :schema {:type :any
+                                           :public? false
+                                           :hide? true}}
+
    :logseq.property.node/display-type {:title "Node Display Type"
                                        :schema {:type :keyword
                                                 :public? false
@@ -282,7 +366,12 @@
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"
-  #{:block/alias :block/tags})
+  #{:block/alias :block/tags :kv/value :block/type :block/schema :block/parent
+    :block/order :block/collapsed? :block/page
+    :block/refs :block/path-refs :block/link
+    :block/title :block/closed-value-property
+    :block/created-at :block/updated-at
+    :property/schema.classes :property.value/content})
 
 (def read-only-properties
   "Property values that shouldn't be updated"
