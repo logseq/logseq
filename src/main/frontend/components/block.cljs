@@ -1148,7 +1148,7 @@
               block (when db-id (db/sub-block db-id))
               properties (:block/properties block)
               block-type (keyword (pu/lookup properties :logseq.property/ls-type))
-              hl-type (pu/lookup properties :logseq.property/hl-type)
+              hl-type (pu/lookup properties :logseq.property.pdf/hl-type)
               repo (state/get-current-repo)
               stop-inner-events? (= block-type :whiteboard-shape)]
           (if (and block (:block/title block))
@@ -2145,7 +2145,7 @@
     (->elem
      elem
      (merge
-      {:data-hl-type (pu/lookup properties :logseq.property/hl-type)}
+      {:data-hl-type (pu/lookup properties :logseq.property.pdf/hl-type)}
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
@@ -2159,7 +2159,7 @@
            :class "px-1 with-bg-color"})))
 
      ;; children
-     (let [area?  (= :area (keyword (pu/lookup properties :logseq.property/hl-type)))
+     (let [area?  (= :area (keyword (pu/lookup properties :logseq.property.pdf/hl-type)))
            hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
                      [:div.prefix-link
                       {:on-pointer-down
@@ -2652,9 +2652,9 @@
                         :pointer-events (when stop-events? "none")}}
 
                 (not (string/blank?
-                      (pu/lookup properties :logseq.property/hl-color)))
+                      (pu/lookup properties :logseq.property.pdf/hl-color)))
                 (assoc :data-hl-color
-                       (pu/lookup properties :logseq.property/hl-color))
+                       (pu/lookup properties :logseq.property.pdf/hl-color))
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]

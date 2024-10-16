@@ -85,10 +85,12 @@
    :logseq.property/asset   {:title "Asset"
                              :schema {:type :entity
                                       :hide? true}}
+   ;; used by pdf and whiteboard
    :logseq.property/ls-type {:schema {:type :keyword
                                       :hide? true}}
-   :logseq.property/hl-type {:schema {:type :keyword :hide? true}}
-   :logseq.property/hl-color {:schema {:type :default :hide? true}}
+
+   :logseq.property.pdf/hl-type {:schema {:type :keyword :hide? true}}
+   :logseq.property.pdf/hl-color {:schema {:type :default :hide? true}}
    :logseq.property.pdf/hl-page {:schema {:type :number :hide? true}}
    :logseq.property.pdf/hl-image {:schema {:type :entity :hide? true}}
    :logseq.property.pdf/hl-value {:schema {:type :map :hide? true}}
