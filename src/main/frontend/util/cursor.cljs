@@ -47,7 +47,6 @@
             :left js/Number.MAX_SAFE_INTEGER
             :top js/Number.MAX_SAFE_INTEGER}))))))
 
-
 (defn pos [input]
   (when input
     (util/get-selection-start input)))
@@ -66,10 +65,11 @@
 (defn move-cursor-to
   ([input n] (move-cursor-to input n false))
   ([input n delay?']
-   (.setSelectionRange input n n)
-   (when-not (= js/document.activeElement input)
-     (let [focus #(.focus input)]
-       (if delay?' (js/setTimeout focus 16) (focus))))))
+   (when (number? n)
+     (.setSelectionRange input n n)
+     (when-not (= js/document.activeElement input)
+       (let [focus #(.focus input)]
+         (if delay?' (js/setTimeout focus 16) (focus)))))))
 
 (defn move-cursor-forward
   ([input]
@@ -118,8 +118,8 @@
   (let [[content pos'] (get-input-content&pos input)]
     (when content
       (or (zero? pos')
-         (when-let [pre-char (subs content (dec pos') pos')]
-           (= pre-char \newline))))))
+          (when-let [pre-char (subs content (dec pos') pos')]
+            (= pre-char \newline))))))
 
 (defn move-cursor-to-line-end
   [input]
@@ -185,8 +185,8 @@
 
 (defn textarea-cursor-rect-first-row? [cursor]
   (let [elms   (some-> (gdom/getElement "mock-text")
-                   gdom/getChildren
-                   array-seq)
+                       gdom/getChildren
+                       array-seq)
         tops   (->> elms
                     (map mock-char-pos)
                     (map :top)
@@ -196,11 +196,10 @@
 (defn textarea-cursor-first-row? [input]
   (textarea-cursor-rect-first-row? (get-caret-pos input)))
 
-
 (defn textarea-cursor-rect-last-row? [cursor]
   (let [elms   (some-> (gdom/getElement "mock-text")
-                   gdom/getChildren
-                   array-seq)
+                       gdom/getChildren
+                       array-seq)
         tops   (->> elms
                     (map mock-char-pos)
                     (map :top)
@@ -215,8 +214,8 @@
                   gdom/getChildren
                   array-seq)
         chars' (->> elms
-                   (map mock-char-pos)
-                   (group-by :top))
+                    (map mock-char-pos)
+                    (group-by :top))
         tops  (sort (keys chars'))
         tops-p (partition-by #(== (:top cursor) %) tops)
         line-next

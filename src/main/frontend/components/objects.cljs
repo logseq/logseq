@@ -19,7 +19,8 @@
             [frontend.util :as util]
             [frontend.ui :as ui]
             [logseq.common.config :as common-config]
-            [frontend.components.filepicker :as filepicker]))
+            [frontend.components.filepicker :as filepicker]
+            [clojure.string :as string]))
 
 (defn- get-class-objects
   [class]
@@ -99,18 +100,36 @@
      :on-click (fn [] (create-view! class "" views set-view-entity! set-views!))}
     (ui/icon "plus" {}))])
 
+(defn- build-asset-file-column
+  [config]
+  {:id :file
+   :name "File"
+   :type :string
+   :header views/header-cp
+   :cell (fn [_table row _column]
+           (when-let [asset-cp (state/get-component :block/asset-cp)]
+             [:div.block-content (asset-cp (assoc config :disable-resize? true) row)]))
+   :disable-hide? true})
+
 (rum/defc class-objects-inner < rum/static
   [config class objects properties]
   (let [[loading? set-loading?] (rum/use-state nil)
         [view-entity set-view-entity!] (rum/use-state class)
         [views set-views!] (rum/use-state [class])
         [data set-data!] (rum/use-state objects)
-        columns (views/build-columns (assoc config :class class) properties)]
-
-    (rum/use-effect!
-     (fn []
-       (set-data! objects))
-     [objects])
+        columns* (views/build-columns config properties {:add-tags-column? (= (:db/ident class) :logseq.class/Root)})
+        columns (cond
+                  (= (:db/ident class) :logseq.class/Pdf-annotation)
+                  (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
+                  (= (:db/ident class) :logseq.class/Asset)
+                  (remove #(contains? #{:logseq.property.asset/checksum} (:id %)) columns*)
+                  :else
+                  columns*)
+        columns (if (= (:db/ident class) :logseq.class/Asset)
+                  ;; Insert in front of tag's properties
+                  (let [[before-cols after-cols] (split-with #(not (string/starts-with? (str (namespace (:id %))) "logseq.property")) columns)]
+                    (concat before-cols [(build-asset-file-column config)] after-cols))
+                  columns)]
 
     (rum/use-effect!
      (fn []
@@ -130,7 +149,8 @@
              (set-loading? false)))))
      [])
 
-    (when (false? loading?)
+    (if loading?
+      (ui/skeleton)
       [:div.flex.flex-col.gap-2.mt-2
 
        (ui/foldable
@@ -149,7 +169,9 @@
                                                            [:div.font-medium "Add assets"]
                                                            (filepicker/picker
                                                             {:on-change (fn [_e files]
-                                                                          (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true))})])))
+                                                                          (p/do!
+                                                                           (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)
+                                                                           (shui/dialog-close!)))})])))
                                                      #(add-new-class-object! class set-data!))
                                   :show-add-property? true
                                   :add-property! (fn []
@@ -177,9 +199,7 @@
   (when class
     (let [class (db/sub-block (:db/id class))
           config {:container-id (:container-id state)}
-          properties (cond->> (outliner-property/get-class-properties class)
-                       (= :logseq.class/Root (:db/ident class))
-                       (concat [(db/entity :block/tags)]))
+          properties (outliner-property/get-class-properties class)
           repo (state/get-current-repo)
           objects (->> (db-model/sub-class-objects repo (:db/id class))
                        (map (fn [row] (assoc row :id (:db/id row)))))]
@@ -205,11 +225,6 @@
         [view-entity set-view-entity!] (rum/use-state property)
         [data set-data!] (rum/use-state objects)
         columns (views/build-columns config properties)]
-
-    (rum/use-effect!
-     (fn []
-       (set-data! objects))
-     [objects])
 
     (rum/use-effect!
      (fn []

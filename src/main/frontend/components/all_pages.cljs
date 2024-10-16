@@ -2,22 +2,26 @@
   "All pages"
   (:require [frontend.components.block :as component-block]
             [frontend.components.page :as component-page]
+            [frontend.components.icon :as icon-component]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [logseq.db :as ldb]
-            [frontend.db :as db]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.shui.ui :as shui]))
+            [frontend.ui :as ui]))
 
 (defn- columns
   []
   (->> [{:id :block/title
          :name (t :block/name)
          :cell (fn [_table row _column]
-                 (component-block/page-cp {:show-icon? true} row))
+                 [:div.flex.flex-row.items-center.gap-1
+                  [:span.opacity-50 (icon-component/get-node-icon-cp row {:color? true})]
+                  (component-block/page-cp {} row)])
          :type :string}
         {:id :block/type
          :name "Type"
@@ -41,7 +45,8 @@
 (rum/defc all-pages < rum/static
   []
   (let [db (db/get-db)
-        [data set-data!] (rum/use-state (get-all-pages))
+        [data set-data!] (rum/use-state nil)
+        [loading? set-loading!] (rum/use-state true)
         columns' (views/build-columns {} (columns)
                                       {:with-object-name? false})
         view-entity (first (ldb/get-all-pages-views db))]
@@ -50,19 +55,23 @@
        (when-let [^js worker @state/*db-worker]
          (p/let [result-str (.get-page-refs-count worker (state/get-current-repo))
                  result (ldb/read-transit-str result-str)
+                 data (get-all-pages)
                  data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
-           (set-data! data))))
+           (set-data! data)
+           (set-loading! false))))
      [])
     [:div.ls-all-pages.w-full.mx-auto
-     (views/view view-entity {:data data
-                              :set-data! set-data!
-                              :title-key :all-pages/table-title
-                              :columns columns'
-                              :on-delete-rows (fn [table selected-rows]
-                                                (shui/dialog-open!
-                                                 (component-page/batch-delete-dialog
-                                                  selected-rows false
-                                                  (fn []
-                                                    (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                                      (f {}))
-                                                    (set-data! (get-all-pages))))))})]))
+     (if loading?
+       (ui/skeleton)
+       (views/view view-entity {:data data
+                                :set-data! set-data!
+                                :title-key :all-pages/table-title
+                                :columns columns'
+                                :on-delete-rows (fn [table selected-rows]
+                                                  (shui/dialog-open!
+                                                   (component-page/batch-delete-dialog
+                                                    selected-rows false
+                                                    (fn []
+                                                      (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                                        (f {}))
+                                                      (set-data! (get-all-pages))))))}))]))

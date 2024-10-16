@@ -4,10 +4,13 @@
             [frontend.state :as state]
             [datascript.core :as d]
             [frontend.handler.ui :as ui-handler]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.fs :as fs]
+            [logseq.common.path :as path]
+            [frontend.config :as config]))
 
 (defn invoke-hooks
-  [{:keys [_request-id repo tx-meta tx-data deleted-block-uuids affected-keys blocks]}]
+  [{:keys [_request-id repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
   ;; (prn :debug
   ;;      :request-id request-id
   ;;      :tx-meta tx-meta
@@ -45,6 +48,10 @@
                               tx-data))]
               (d/transact! conn tx-data' tx-meta))
 
+            (when (seq deleted-assets)
+              (doseq [asset deleted-assets]
+                (fs/unlink! repo (path/path-join (config/get-current-repo-assets-root) (str (:block/uuid asset) "." (:ext asset))) {})))
+
             (state/set-state! :editor/start-pos nil)
 
             (when-not (:graph/importing @state/state)
@@ -55,6 +62,7 @@
                          (<= (count blocks) 1000))
                 (state/pub-event! [:plugin/hook-db-tx
                                    {:blocks  blocks
+                                    :deleted-assets deleted-assets
                                     :deleted-block-uuids deleted-block-uuids
                                     :tx-data (:tx-data tx-report)
                                     :tx-meta (:tx-meta tx-report)}])))))))

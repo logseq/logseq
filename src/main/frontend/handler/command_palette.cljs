@@ -56,7 +56,6 @@
 
 (defn invoke-command [{:keys [id action] :as cmd}]
   (add-history cmd)
-  (state/close-modal!)
   (plugin-handler/hook-lifecycle-fn! id action))
 
 (defn top-commands [limit]

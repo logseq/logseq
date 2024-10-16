@@ -156,7 +156,8 @@
           ref-block)
         (let [text       (:text content)
               properties (cond->
-                          {:logseq.property/ls-type  :annotation
+                          {:block/tags :logseq.class/Pdf-annotation
+                           :logseq.property/ls-type  :annotation
                            :logseq.property/hl-color (:color properties)
                            :logseq.property/asset (:db/id pdf-block)
                            :logseq.property.pdf/hl-page  page
@@ -170,7 +171,7 @@
                           :sibling? false
                           :custom-uuid id
                           :properties properties}
-                         insert-opts))))))))
+                         (assoc insert-opts :edit-block? false)))))))))
 
 (defn ensure-ref-block!
   [pdf-current hl insert-opts]

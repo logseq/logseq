@@ -285,13 +285,6 @@
         [?b :logseq.property/view-for ?class-id]]
       class-id))
 
-(defn <get-tags
-  [graph]
-  (<q graph {:transact-db? false}
-      '[:find [(pull ?tag [:db/id :block/title]) ...]
-        :where
-        [?tag :block/type "class"]]))
-
 (defn <get-asset-with-checksum
   [graph checksum]
   (p/let [result (<q graph {:transact-db? true}

@@ -1,13 +1,14 @@
 (ns frontend.components.select
   "Generic component for fuzzy searching items to select an item. See
   select-config to add a new use or select-type for this component. To use the
-  new select-type, set :ui/open-select to the select-type. See
-  :graph/open command for an example."
+  new select-type, create an event that calls `select/dialog-select!` with the
+  select-type. See the :graph/open command for a full example."
   (:require [frontend.modules.shortcut.core :as shortcut]
             [frontend.context.i18n :refer [t]]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [rum.core :as rum]
@@ -58,7 +59,7 @@
                        (reset! (::selected-choices new-state) choices))
                      new-state))
    :will-unmount (fn [state]
-                   (state/set-state! [:ui/open-select] nil)
+                   (shui/dialog-close! :ls-select-modal)
                    state)}
   [state {:keys [items limit on-chosen empty-placeholder
                  prompt-key input-default-placeholder close-modal?
@@ -233,14 +234,19 @@
                                :original-graph original-graph})))))
     :on-chosen #(dev-common-handler/import-chosen-graph (:graph %))}})
 
-(rum/defc select-modal < rum/reactive
-  []
-  (when-let [select-type (state/sub [:ui/open-select])]
-    (let [select-type-config (get (select-config) select-type)]
-      (state/set-modal!
+(defn dialog-select!
+  [select-type]
+  (when select-type
+    (let [select-type-config (get (select-config) select-type)
+          on-chosen' (:on-chosen select-type-config)]
+      (shui/dialog-open!
        #(select (-> select-type-config
+                    (assoc :on-chosen (fn [it]
+                                        (on-chosen' it)
+                                        (shui/dialog-close-all!)))
                     (select-keys [:on-chosen :empty-placeholder :prompt-key])
                     (assoc :items ((:items-fn select-type-config)))))
-       {:fullscreen? false
-        :close-btn?  false}))
-    nil))
+       {:id :ls-select-modal
+        :close-btn?  false
+        :align :top
+        :content-props {:class "ls-dialog-select"}}))))

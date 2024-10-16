@@ -2,12 +2,17 @@
   "Provides main application state, fns associated to set and state based rum
   cursors"
   (:require [cljs-bean.core :as bean]
-            [cljs.core.async :as async :refer [<! >!]]
+            [cljs.core.async :as async :refer [>!]]
             [cljs.spec.alpha :as s]
+            [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.db.conn-state :as db-conn-state]
+            [frontend.db.transact :as db-transact]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rum :as r]
             [frontend.spec.storage :as storage-spec]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -15,17 +20,12 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
-            [frontend.db.transact :as db-transact]
-            [medley.core :as medley]
-            [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.rum :as r]
+            [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
-            [clojure.set :as set]
-            [frontend.db.conn-state :as db-conn-state]
-            [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce *profile-state
   (atom {}))
@@ -70,14 +70,6 @@
       ;; modals
       :modal/dropdowns                       {}
       :modal/id                              nil
-      :modal/label                           ""
-      :modal/show?                           false
-      :modal/panel-content                   nil
-      :modal/payload                         nil
-      :modal/fullscreen?                     false
-      :modal/close-btn?                      nil
-      :modal/close-backdrop?                 true
-      :modal/subsets                         []
 
       ;; ui
       :ui/viewport                           {}
@@ -1519,110 +1511,10 @@ Similar to re-frame subscriptions"
 
 (defn modal-opened?
   []
-  (:modal/show? @state))
+  (shui-dialog/has-modal?))
 
-(declare set-modal!)
-(declare close-modal!)
-
-(defn get-sub-modals
-  []
-  (:modal/subsets @state))
-
-(defn set-sub-modal!
-  ([panel-content]
-   (set-sub-modal! panel-content
-                   {:close-btn? true}))
-  ([panel-content {:keys [id label payload close-btn? close-backdrop? show? center?] :as opts}]
-   (if (not (modal-opened?))
-     (set-modal! panel-content opts)
-     (let [modals (:modal/subsets @state)
-           idx (and id (first (keep-indexed #(when (= (:modal/id %2) id) %1)
-                                            modals)))
-           input (medley/filter-vals
-                  #(not (nil? %1))
-                  {:modal/id            id
-                   :modal/label         (if label (name label) "")
-                   :modal/class         (if center? "as-center" "")
-                   :modal/payload       payload
-                   :modal/show?         (if (boolean? show?) show? true)
-                   :modal/panel-content panel-content
-                   :modal/close-btn?    close-btn?
-                   :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)})]
-       (swap! state update-in
-              [:modal/subsets (or idx (count modals))]
-              merge input)
-       (:modal/subsets @state)))))
-
-(defn close-sub-modal!
-  ([] (close-sub-modal! nil))
-  ([all?-a-id]
-   (if (true? all?-a-id)
-     (swap! state assoc :modal/subsets [])
-     (let [id     all?-a-id
-           mid    (:modal/id @state)
-           modals (:modal/subsets @state)]
-       (if (and id (not (string/blank? mid)) (= id mid))
-         (close-modal!)
-         (when-let [idx (if id (first (keep-indexed #(when (= (:modal/id %2) id) %1) modals))
-                            (dec (count modals)))]
-           (swap! state assoc :modal/subsets (into [] (medley/remove-nth idx modals)))))))
-   (:modal/subsets @state)))
-
-(defn set-modal!
-  ([modal-panel-content]
-   (set-modal! modal-panel-content
-               {:fullscreen? false
-                :close-btn?  true}))
-  ([modal-panel-content {:keys [id label payload fullscreen? close-btn? close-backdrop? center? panel?
-                                container-overflow-visible? style]}]
-   (let [opened? (modal-opened?)
-         style (if container-overflow-visible?
-                 (merge style {:overflow "visible"})
-                 style)]
-     (when opened?
-       (close-modal!))
-     (when (seq (get-sub-modals))
-       (close-sub-modal! true))
-
-     (async/go
-       (when opened?
-         (<! (async/timeout 100)))
-       (swap! state assoc
-              :modal/id id
-              :modal/label (if label (name label) "")
-              :modal/class (if center? "as-center" "")
-              :modal/show? (boolean modal-panel-content)
-              :modal/panel-content modal-panel-content
-              :modal/payload payload
-              :modal/fullscreen? fullscreen?
-              :modal/panel? (if (boolean? panel?) panel? true)
-              :modal/close-btn? close-btn?
-              :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)
-              :modal/style style)))
-   nil))
-
-(defn close-dropdowns!
-  []
-  (let [close-fns (vals (:modal/dropdowns @state))]
-    (doseq [f close-fns]
-      (try (f) (catch :default _e nil)))))
-
-(defn close-modal!
-  [& {:keys [force?]
-      :or {force? false}}]
-  (when (or force? (not (:error/multiple-tabs-access-opfs? @state)))
-    (close-dropdowns!)
-    (if (seq (get-sub-modals))
-      (close-sub-modal!)
-      (swap! state assoc
-             :modal/id nil
-             :modal/label ""
-             :modal/payload nil
-             :modal/show? false
-             :modal/fullscreen? false
-             :modal/panel-content nil
-             :modal/dropdowns {}
-             :ui/open-select nil))))
+(defn close-modal! []
+  (shui/dialog-close!))
 
 (defn get-reactive-custom-queries-chan
   []
@@ -2215,7 +2107,7 @@ Similar to re-frame subscriptions"
 
 (defn get-modal-id
   []
-  (:modal/id @state))
+  (shui-dialog/get-last-modal-id))
 
 (defn set-auth-id-token
   [id-token]

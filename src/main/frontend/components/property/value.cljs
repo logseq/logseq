@@ -880,7 +880,7 @@
        (and (= type :default) (nil? (:block/title value)))
        [:div.jtrigger (property-empty-btn-value property)]
 
-       (= type :default)
+       (#{:default :entity} type)
        (property-block-value value block property page-cp)
 
        :else
@@ -906,14 +906,10 @@
       (icon-row block editing?)
       (if (and select-type?'
                (not (and (not closed-values?) (= type :date))))
-        (let [value (if (and (nil? value) (= :logseq.property.view/type (:db/ident property)))
-                      ;; TODO: remove this hack once default value is supported
-                      (db/entity :logseq.property.view/type.table)
-                      value)]
-          (single-value-select block property value
-                               (fn [] (select-item property type value opts))
-                               select-opts
-                               (assoc opts :editing? editing?)))
+        (single-value-select block property value
+                             (fn [] (select-item property type value opts))
+                             select-opts
+                             (assoc opts :editing? editing?))
         (case type
           (:date :datetime)
           (property-value-date-picker block property value (merge opts {:editing? editing?}))

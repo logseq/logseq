@@ -40,11 +40,11 @@
                    (.sync-app-state worker (ldb/write-transit-str new-state)))))))
 
 (defn get-route-data
-    [route-match]
-    (when (seq route-match)
-      {:to (get-in route-match [:data :name])
-       :path-params (:path-params route-match)
-       :query-params (:query-params route-match)}))
+  [route-match]
+  (when (seq route-match)
+    {:to (get-in route-match [:data :name])
+     :path-params (:path-params route-match)
+     :query-params (:query-params route-match)}))
 
 (defn- sync-ui-state!
   [^js worker]
@@ -133,7 +133,9 @@
 (defn- sqlite-error-handler
   [error]
   (if (= "NoModificationAllowedError"  (.-name error))
-    (state/pub-event! [:show/multiple-tabs-error-dialog])
+    (do
+      (js/console.error error)
+      (state/pub-event! [:show/multiple-tabs-error-dialog]))
     (notification/show! [:div (str "SQLiteDB error: " error)] :error)))
 
 (defrecord InBrowser []

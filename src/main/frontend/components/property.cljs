@@ -580,8 +580,7 @@
         {:keys [all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))
         classes-properties-set (set classes-properties)
         block-own-properties (->> properties
-                                  (remove (fn [[id _]] (classes-properties-set id)))
-                                  remove-built-in-or-other-position-properties)
+                                  (remove (fn [[id _]] (classes-properties-set id))))
         root-block? (= (:id opts) (str (:block/uuid block)))
         state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))
         ;; This section produces own-properties and full-hidden-properties
@@ -619,8 +618,7 @@
                              (let [cur-properties (->> (db-property/get-class-ordered-properties class)
                                                        (map :db/ident)
                                                        (remove properties)
-                                                       (remove hide-with-property-id)
-                                                       remove-built-in-or-other-position-properties)]
+                                                       (remove hide-with-property-id))]
                                (recur (rest classes)
                                       (set/union properties (set cur-properties))
                                       (if (seq cur-properties)

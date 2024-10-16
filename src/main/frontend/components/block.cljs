@@ -89,8 +89,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]
-            [frontend.storage :as storage]))
+            [shadow.loader :as loader]))
 
 ;; local state
 (defonce *dragging?
@@ -381,11 +380,12 @@
                              (reset! size value))
             :onPointerUp (fn []
                            (when (and @size @*resizing-image?)
-                             (when-let [block-id (:block/uuid config)]
+                             (when-let [block-id (or (:block/uuid config)
+                                                     (some-> config :block (:block/uuid)))]
                                (let [size (bean/->clj @size)]
                                  (editor-handler/resize-image! config block-id metadata full-text size))))
                            (when @*resizing-image?
-                           ;; TODO:​ need a better way to prevent the clicking to edit current block
+                             ;; TODO:​ need a better way to prevent the clicking to edit current block
                              (js/setTimeout #(reset! *resizing-image? false) 200)))
             :onClick (fn [e]
                        (when @*resizing-image? (util/stop e)))}
@@ -470,6 +470,13 @@
           (contains? (common-config/img-formats) ext)
           (asset-loader @src
                         #(resizable-image config title @src metadata full_text true))
+
+          (and db-based? (contains? (common-config/text-formats) ext) (:asset-block config))
+          (let [file-name (str (:block/title (:asset-block config)) "." (name ext))]
+            [:a.asset-ref.is-plaintext
+             {:href @src
+              :download file-name}
+             file-name])
 
           (contains? (common-config/text-formats) ext)
           [:a.asset-ref.is-plaintext {:href (rfe/href :file {:path path})
@@ -598,6 +605,8 @@
              (state/get-left-sidebar-open?))
     (ui-handler/close-left-sidebar!)))
 
+(declare block-title)
+
 (rum/defcs ^:large-vars/cleanup-todo page-inner <
   (rum/local false ::mouse-down?)
   (rum/local false ::hover?)
@@ -657,10 +666,12 @@
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not meta-click?))
                            (state/clear-edit!)
                            (open-page-ref config page-entity e page-name contents-page?)))}
-     (when show-icon?
-       (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true :not-text-or-page? true})]
-         [:span.mr-1
-          icon]))
+     (when (and show-icon? (not tag?))
+       (let [own-icon (get page-entity (pu/get-pid :logseq.property/icon))
+             emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
+         (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true :not-text-or-page? true})]
+           [:span {:class (when emoji? "mr-1")}
+            icon])))
      [:span
       (if (and (coll? children) (seq children))
         (for [child children]
@@ -715,9 +726,7 @@
                                      s (if tag? (str "#" s) s)]
                                  (if (ldb/page? page-entity)
                                    s
-                                   (let [inline-list (gp-mldoc/inline->edn (first (string/split-lines s))
-                                                                           (mldoc/get-default-config (get page-entity :block/format :markdown)))]
-                                     (->elem :span (map-inline config inline-list))))))]
+                                   (block-title config page-entity))))]
           page-component))]]))
 
 (rum/defc popup-preview-impl
@@ -830,21 +839,30 @@
      (->ref id)]))
 
 (rum/defcs page-cp-inner < db-mixins/query rum/reactive
+  {:init (fn [state]
+           (let [page (last (:rum/args state))
+                 *result (atom nil)]
+             (p/let [result (if (e/entity? page)
+                              page
+                              (p/let [page-name (or (:block/uuid page)
+                                                    (when-let [s (:block/name page)]
+                                                      (let [s (string/trim s)
+                                                            s (if (string/starts-with? s db-content/page-ref-special-chars)
+                                                                (common-util/safe-subs s 2)
+                                                                s)]
+                                                        s)))
+                                      query-result (db-async/<get-block (state/get-current-repo) page-name {:children? false})]
+                                (if (e/entity? query-result)
+                                  query-result
+                                  (:block query-result))))]
+               (reset! *result result))
+             (assoc state :*entity *result)))}
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [state {:keys [label children preview? disable-preview? show-non-exists-page? tag?] :as config} page]
-  (let [entity (if (e/entity? page)
-                 page
-                 ;; Use uuid when available to uniquely identify case sensitive contexts
-                 (db/get-page (or (:block/uuid page)
-                                  (when-let [s (:block/name page)]
-                                    (let [s (string/trim s)
-                                          s (if (string/starts-with? s db-content/page-ref-special-chars)
-                                              (common-util/safe-subs s 2)
-                                              s)]
-                                      s)))))]
-    (let [entity (when entity (db/sub-block (:db/id entity)))]
+  (when-let [entity' (rum/react (:*entity state))]
+    (let [entity (db/sub-block (:db/id entity'))]
       (cond
         entity
         (if (or (ldb/page? entity) (:block/tags entity))
@@ -951,16 +969,17 @@
 
 (rum/defc page-reference < rum/reactive
   "Component for page reference"
-  [html-export? s {:keys [nested-link? show-brackets? id] :as config} label]
-  (when s
-    (let [s (string/trim s)
-          s (if (string/starts-with? s db-content/page-ref-special-chars)
-              (common-util/safe-subs s 2)
-              s)
+  [html-export? uuid-or-title* {:keys [nested-link? show-brackets? id] :as config} label]
+  (when uuid-or-title*
+    (let [uuid-or-title (if (string? uuid-or-title*)
+                          (as-> (string/trim uuid-or-title*) s
+                            (if (string/starts-with? s db-content/page-ref-special-chars)
+                              (common-util/safe-subs s 2)
+                              s))
+                          uuid-or-title*)
           show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
-          block-uuid (:block/uuid config)
           contents-page? (= "contents" (string/lower-case (str id)))
-          block (db/get-page s)
+          block (db/get-page uuid-or-title)
           config' (assoc config
                          :label (mldoc/plain->text label)
                          :contents-page? contents-page?
@@ -970,26 +989,30 @@
         (and asset? (img-audio-video? block))
         (asset-cp config block)
 
-        (string/ends-with? s ".excalidraw")
-        [:div.draw {:on-click (fn [e]
-                                (.stopPropagation e))}
-         (excalidraw s block-uuid)]
-
         (or (ldb/page? block) (:block/tags block))
         [:span.page-reference
-         {:data-ref s}
+         {:data-ref (str uuid-or-title)}
          (when (and (or show-brackets? nested-link?)
                     (not html-export?)
                     (not contents-page?))
            [:span.text-gray-500.bracket page-ref/left-brackets])
-         (page-cp config' {:block/name s})
+         (page-cp config' (if (uuid? uuid-or-title)
+                            {:block/uuid uuid-or-title}
+                            {:block/name uuid-or-title}))
          (when (and (or show-brackets? nested-link?)
                     (not html-export?)
                     (not contents-page?))
            [:span.text-gray-500.bracket page-ref/right-brackets])]
 
+        (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
+        [:div.draw {:on-click (fn [e]
+                                (.stopPropagation e))}
+         (excalidraw uuid-or-title (:block/uuid config))]
+
         :else
-        (page-cp config' {:block/name s})))))
+        (page-cp config' (if (uuid? uuid-or-title)
+                           {:block/uuid uuid-or-title}
+                           {:block/name uuid-or-title}))))))
 
 (defn- latex-environment-content
   [name option content]
@@ -1182,7 +1205,7 @@
 
                    (if (and (not (util/mobile?))
                             (not (:preview? config))
-                            (not (:modal/show? @state/state))
+                            (not (shui-dialog/has-modal?))
                             (nil? block-type))
                      (block-reference-preview inner
                                               {:repo repo :config config :id block-id})
@@ -2092,11 +2115,14 @@
 (declare block-content)
 
 (declare src-cp)
-(declare block-title)
 
 (rum/defc ^:large-vars/cleanup-todo text-block-title
-  [config {:block/keys [marker pre-block? properties] :as block}]
-  (let [block-ast-title (:block.temp/ast-title block)
+  [config {:block/keys [format marker pre-block? properties] :as block}]
+  (let [block (if-not (:block.temp/ast-title block)
+                (merge block (block/parse-title-and-body uuid format pre-block?
+                                                         (:block/title block)))
+                block)
+        block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
         level (:level config)
         slide? (boolean (:slide? config))
@@ -2208,7 +2234,7 @@
       (:raw-title? config)
       (text-block-title (dissoc config :raw-title?) block)
 
-      (= "asset" (:block/type block))
+      (ldb/asset? block)
       [:div.grid.grid-cols-1.justify-items-center
        (asset-cp config block)
        (when (img-audio-video? block)
@@ -3687,7 +3713,7 @@
                                                                            (.setOption cm "mode" mode)
                                                                            (throw (ex-info "code mode not found"
                                                                                            {:lang lang})))
-                                                                         (storage/set :latest-code-lang lang)
+                                                                         (db/transact! [(ldb/kv :logseq.kv/latest-code-lang lang)])
                                                                          (db-property-handler/set-block-property!
                                                                           (:db/id block) :logseq.property.code/lang lang))))
                                                    {:align :end})))}

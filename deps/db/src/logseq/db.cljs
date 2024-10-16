@@ -84,6 +84,7 @@
 (def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
 (def object? entity-util/object?)
+(def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
 
 (defn sort-by-order
@@ -446,12 +447,12 @@
   [db]
   (->>
    (d/datoms db :avet :block/name)
-   (distinct)
-   (map #(d/entity db (:e %)))
-   (filter page?)
-   (remove hidden?)
-   (remove (fn [page]
-             (common-util/uuid-string? (:block/name page))))))
+   (keep (fn [d]
+           (let [e (d/entity db (:e d))]
+             (when (and (page? e)
+                        (not (hidden? e))
+                        (not (common-util/uuid-string? (:block/name e))))
+               e))))))
 
 (defn built-in?
   "Built-in page or block"
@@ -627,3 +628,22 @@
   (assert (string? block-raw-title) "block-raw-title should be a string")
   (or (string/includes? block-raw-title (str "#" (db-content/block-id->special-id-ref (:block/uuid tag))))
       (string/includes? block-raw-title (str "#" db-content/page-ref-special-chars (:block/uuid tag)))))
+
+(defonce node-display-classes
+  #{:logseq.class/Code-block :logseq.class/Math-block :logseq.class/Quote-block})
+
+(defn get-class-ident-by-display-type
+  [display-type]
+  (case display-type
+    :code :logseq.class/Code-block
+    :math :logseq.class/Math-block
+    :quote :logseq.class/Quote-block
+    nil))
+
+(defn get-display-type-by-class-ident
+  [class-ident]
+  (case class-ident
+    :logseq.class/Code-block :code
+    :logseq.class/Math-block :math
+    :logseq.class/Quote-block :quote
+    nil))

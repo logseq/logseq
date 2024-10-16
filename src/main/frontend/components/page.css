@@ -1,13 +1,4 @@
 .cp__page {
-  &-inner-wrap {
-    &.is-node-page:not([data-ready]) {
-      .ls-page-blocks,
-      .ls-page-appendix-els {
-        @apply invisible;
-      }
-    }
-  }
-
   &-publish-actions {
     background-color: var(--ls-primary-background-color);
     padding: 50px 0;

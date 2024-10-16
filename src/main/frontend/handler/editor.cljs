@@ -1552,8 +1552,7 @@
                   file-rpath  (str asset-dir-rpath "/" file-path)
                   dir repo-dir
                   asset (db/entity :logseq.class/Asset)
-                  properties {:block/type "asset"
-                              :logseq.property.asset/type ext
+                  properties {:logseq.property.asset/type ext
                               :logseq.property.asset/size (.-size file)
                               :logseq.property.asset/checksum checksum
                               :block/tags (:db/id asset)}
@@ -1571,13 +1570,14 @@
                   result (api-insert-new-block! file-name-without-ext insert-opts')
                   new-entity (db/entity [:block/uuid (:block/uuid result)])]
             (if (util/electron?)
-              (let [from (not-empty (.-path file))]
-                (js/console.debug "Debug: Copy Asset #" dir file-rpath from)
+              (if-let [from (not-empty (.-path file))]
                 (-> (js/window.apis.copyFileToAssets dir file-rpath from)
-                    (p/then
-                     (fn [_dest]
-                       new-entity))
-                    (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
+                    (p/then (fn [_dest] new-entity))
+                    (p/catch #(js/console.error "Debug: Copy Asset Error#" %)))
+                (-> (p/let [buffer (.arrayBuffer file)]
+                      (fs/write-file! repo dir file-rpath buffer {:skip-compare? false}))
+                    (p/then (fn [_] new-entity))
+                    (p/catch #(js/console.error "Debug: Writing Asset #" %))))
               (->
                (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
                       (cond
@@ -2946,7 +2946,8 @@
           pos (cursor/pos input)
           hashtag? (or (surround-by? input "#" " ")
                        (surround-by? input "#" :end)
-                       (= key "#"))]
+                       (= key "#"))
+          db-based? (config/db-based-graph? (state/get-current-repo))]
       (when (or (not @(:editor/start-pos @state/state))
                 (and key (string/starts-with? key "Arrow")))
         (state/set-state! :editor/start-pos pos))
@@ -3033,7 +3034,7 @@
 
         ; `;;` to add or change property for db graphs
         (let [sym ";"]
-          (and (config/db-based-graph? (state/get-current-repo)) (double-chars-typed? value pos key sym)))
+          (and db-based? (double-chars-typed? value pos key sym)))
         (state/pub-event! [:editor/new-property])
 
         (let [sym "$"]
@@ -3113,7 +3114,8 @@
   [_state input]
   (fn [e key-code]
     (when-not (util/goog-event-is-composing? e)
-      (let [current-pos (cursor/pos input)
+      (let [db-based? (config/db-based-graph?)
+            current-pos (cursor/pos input)
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
             [key-code k code is-processed?]
@@ -3141,6 +3143,20 @@
                 ;; #3440
                (util/goog-event-is-composing? e true)])]
         (cond
+          (and db-based? (= value "``````")) ; turn this block into a code block
+          (do
+            (state/set-edit-content! (.-id input) "")
+            (state/pub-event! [:editor/upsert-type-block {:block (assoc (state/get-edit-block) :block/title "")
+                                                          :type :code
+                                                          :update-current-block? true}]))
+
+          (and db-based? (= value ">")) ; turn this block into a quote block
+          (do
+            (state/set-edit-content! (.-id input) "")
+            (state/pub-event! [:editor/upsert-type-block {:block (assoc (state/get-edit-block) :block/title "")
+                                                          :type :quote
+                                                          :update-current-block? true}]))
+
           ;; When you type something after /
           (and (= :commands (state/get-editor-action)) (not= k commands/command-trigger))
           (if (= commands/command-trigger (second (re-find #"(\S+)\s+$" value)))

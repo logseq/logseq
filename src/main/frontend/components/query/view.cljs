@@ -12,7 +12,7 @@
        distinct
        (map db/entity)
        (ldb/sort-by-order)
-       (views/build-columns config)))
+       ((fn [cs] (views/build-columns config cs {:add-tags-column? false})))))
 
 (defn- result->entities
   [result]
@@ -39,5 +39,6 @@
      (views/view view-entity
                  {:title-key :views.table/live-query-title
                   :data result'
-                  :set-data! #(reset! *result %)
+                  :set-data! (fn [data]
+                               (when (seq data) (reset! *result data)))
                   :columns columns'})]))
