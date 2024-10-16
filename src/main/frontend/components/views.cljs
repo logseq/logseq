@@ -877,81 +877,87 @@
      ;; filters check
      (every?
       (fn [[property-ident operator match]]
-        (let [value (get row property-ident)
-              value' (cond
-                       (set? value) value
-                       (nil? value) #{}
-                       :else #{value})
-              entity? (de/entity? (first value'))
-              result
-              (case operator
-                :is
-                (if (boolean? match)
-                  (= (boolean (get-property-value-content (get row property-ident))) match)
-                  (cond
-                    (empty? match)
-                    true
-                    (and (empty? match) (empty? value'))
-                    true
-                    :else
-                    (if entity?
-                      (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
-                      (boolean (seq (set/intersection (set value') match))))))
+        (if (nil? match)
+          true
+          (let [value (get row property-ident)
+                value' (cond
+                         (set? value) value
+                         (nil? value) #{}
+                         :else #{value})
+                entity? (de/entity? (first value'))
+                result
+                (case operator
+                  :is
+                  (if (boolean? match)
+                    (= (boolean (get-property-value-content (get row property-ident))) match)
+                    (cond
+                      (empty? match)
+                      true
+                      (and (empty? match) (empty? value'))
+                      true
+                      :else
+                      (if entity?
+                        (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
+                        (boolean (seq (set/intersection (set value') match))))))
 
-                :is-not
-                (if (boolean? match)
-                  (not= (boolean (get-property-value-content (get row property-ident))) match)
-                  (cond
-                    (and (empty? match) (seq value'))
-                    true
-                    (and (seq match) (empty? value'))
-                    true
-                    :else
-                    (if entity?
-                      (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
-                      (boolean (empty? (set/intersection (set value') match))))))
+                  :is-not
+                  (if (boolean? match)
+                    (not= (boolean (get-property-value-content (get row property-ident))) match)
+                    (cond
+                      (and (empty? match) (seq value'))
+                      true
+                      (and (seq match) (empty? value'))
+                      true
+                      :else
+                      (if entity?
+                        (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
+                        (boolean (empty? (set/intersection (set value') match))))))
 
-                :text-contains
-                (some #(string/includes? (string/lower-case (get-property-value-content %)) (string/lower-case match)) value')
+                  :text-contains
+                  (some (fn [v]
+                          (if-let [property-value (get-property-value-content v)]
+                            (string/includes? (string/lower-case property-value) (string/lower-case match))
+                            false))
+                        value')
 
-                :text-not-contains
-                (not-any? #(string/includes? (str (get-property-value-content %)) match) value')
+                  :text-not-contains
+                  (not-any? #(string/includes? (str (get-property-value-content %)) match) value')
 
-                :number-gt
-                (if match (some #(> (get-property-value-content %) match) value') true)
-                :number-gte
-                (if match (some #(>= (get-property-value-content %) match) value') true)
-                :number-lt
-                (if match (some #(< (get-property-value-content %) match) value') true)
-                :number-lte
-                (if match (some #(<= (get-property-value-content %) match) value') true)
+                  :number-gt
+                  (if match (some #(> (get-property-value-content %) match) value') true)
+                  :number-gte
+                  (if match (some #(>= (get-property-value-content %) match) value') true)
+                  :number-lt
+                  (if match (some #(< (get-property-value-content %) match) value') true)
+                  :number-lte
+                  (if match (some #(<= (get-property-value-content %) match) value') true)
 
-                :between
-                (if (seq match)
-                  (some (fn [value-entity]
-                          (let [[start end] match
-                                value (get-property-value-content value-entity)
-                                conditions [(if start (<= start value) true)
-                                            (if end (<= value end) true)]]
-                            (if (seq match) (every? true? conditions) true))) value')
-                  true)
+                  :between
+                  (if (seq match)
+                    (some (fn [value-entity]
+                            (let [[start end] match
+                                  value (get-property-value-content value-entity)
+                                  conditions [(if start (<= start value) true)
+                                              (if end (<= value end) true)]]
+                              (if (seq match) (every? true? conditions) true))) value')
+                    true)
 
-                :date-before
-                (if match (some #(< (:block/journal-day %) (:block/journal-day match)) value') true)
+                  :date-before
+                  (if match (some #(< (:block/journal-day %) (:block/journal-day match)) value') true)
 
-                :date-after
-                (if match (some #(> (:block/journal-day %) (:block/journal-day match)) value') true)
+                  :date-after
+                  (if match (some #(> (:block/journal-day %) (:block/journal-day match)) value') true)
 
-                :before
-                (let [search-value (get-timestamp match)]
-                  (if search-value (<= (get row property-ident) search-value) true))
+                  :before
+                  (let [search-value (get-timestamp match)]
+                    (if search-value (<= (get row property-ident) search-value) true))
 
-                :after
-                (let [search-value (get-timestamp match)]
-                  (if search-value (>= (get row property-ident) search-value) true))
+                  :after
+                  (let [search-value (get-timestamp match)]
+                    (if search-value (>= (get row property-ident) search-value) true))
 
-                true)]
-          result))
+                  true)]
+            result)))
       filters))))
 
 (rum/defc new-record-button < rum/static
