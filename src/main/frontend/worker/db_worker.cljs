@@ -9,6 +9,7 @@
             [datascript.core :as d]
             [datascript.storage :refer [IStorage] :as storage]
             [frontend.common.file.core :as common-file]
+            [frontend.worker.crypt :as worker-crypt]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.db.migrate :as db-migrate]
@@ -810,6 +811,16 @@
    [this token graph-uuid]
    (with-write-transit-str
      (js/Promise. (rtc-core/new-task--snapshot-list token graph-uuid))))
+
+  (rtc-get-graph-keys
+   [this repo]
+   (with-write-transit-str
+     (worker-crypt/get-graph-keys-jwk repo)))
+
+  (device-list-devices
+   [this token]
+   (with-write-transit-str
+     (js/Promise. (worker-device/new-task--list-devices token))))
 
   (undo
    [_this repo _page-block-uuid-str]
