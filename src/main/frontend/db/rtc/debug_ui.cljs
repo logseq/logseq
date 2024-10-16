@@ -245,4 +245,17 @@
        (shui/select-content
         (shui/select-group
          (for [{:keys [graph-uuid graph-status]} (:remote-graphs debug-state*)]
-           (shui/select-item {:value graph-uuid :disabled (some? graph-status)} graph-uuid)))))]]))
+           (shui/select-item {:value graph-uuid :disabled (some? graph-status)} graph-uuid)))))]
+
+     [:hr.my-2]
+     ;; [:div.pb-2.flex.flex-row.items-center.gap-2
+     ;;  ]
+     [:div.pb-4
+      [:pre.select-text
+       (-> {:devices
+            []
+            :graph-public-key-jwk nil
+            :graph-private-key-jwk nil}
+           (fipp/pprint {:width 20})
+           with-out-str)]]
+     ]))
