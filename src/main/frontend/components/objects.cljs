@@ -117,7 +117,7 @@
         [view-entity set-view-entity!] (rum/use-state class)
         [views set-views!] (rum/use-state [class])
         [data set-data!] (rum/use-state objects)
-        columns* (views/build-columns config properties {:add-tags-column? false})
+        columns* (views/build-columns config properties {:add-tags-column? (= (:db/ident class) :logseq.class/Root)})
         columns (cond
                   (= (:db/ident class) :logseq.class/Pdf-annotation)
                   (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
@@ -199,9 +199,7 @@
   (when class
     (let [class (db/sub-block (:db/id class))
           config {:container-id (:container-id state)}
-          properties (cond->> (outliner-property/get-class-properties class)
-                       (= :logseq.class/Root (:db/ident class))
-                       (concat [(db/entity :block/tags)]))
+          properties (outliner-property/get-class-properties class)
           repo (state/get-current-repo)
           objects (->> (db-model/sub-class-objects repo (:db/id class))
                        (map (fn [row] (assoc row :id (:db/id row)))))]
