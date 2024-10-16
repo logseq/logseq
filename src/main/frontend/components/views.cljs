@@ -815,7 +815,7 @@
 
       (:text-contains :text-not-contains :number-gt :number-lt :number-gte :number-lte)
       (shui/input
-       {:auto-focus true
+       {:auto-focus false
         :value (or value "")
         :onChange (fn [e]
                     (let [value (util/evalue e)
