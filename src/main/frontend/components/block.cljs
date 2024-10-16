@@ -667,9 +667,11 @@
                            (state/clear-edit!)
                            (open-page-ref config page-entity e page-name contents-page?)))}
      (when (and show-icon? (not tag?))
-       (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true :not-text-or-page? true})]
-         [:span.mr-1
-          icon]))
+       (let [own-icon (get page-entity (pu/get-pid :logseq.property/icon))
+             emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
+         (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true :not-text-or-page? true})]
+           [:span {:class (when emoji? "mr-1")}
+            icon])))
      [:span
       (if (and (coll? children) (seq children))
         (for [child children]
@@ -970,11 +972,11 @@
   [html-export? uuid-or-title* {:keys [nested-link? show-brackets? id] :as config} label]
   (when uuid-or-title*
     (let [uuid-or-title (if (string? uuid-or-title*)
-              (as-> (string/trim uuid-or-title*) s
-                (if (string/starts-with? s db-content/page-ref-special-chars)
-                  (common-util/safe-subs s 2)
-                  s))
-              uuid-or-title*)
+                          (as-> (string/trim uuid-or-title*) s
+                            (if (string/starts-with? s db-content/page-ref-special-chars)
+                              (common-util/safe-subs s 2)
+                              s))
+                          uuid-or-title*)
           show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
           contents-page? (= "contents" (string/lower-case (str id)))
           block (db/get-page uuid-or-title)
@@ -1009,8 +1011,8 @@
 
         :else
         (page-cp config' (if (uuid? uuid-or-title)
-                            {:block/uuid uuid-or-title}
-                            {:block/name uuid-or-title}))))))
+                           {:block/uuid uuid-or-title}
+                           {:block/name uuid-or-title}))))))
 
 (defn- latex-environment-content
   [name option content]

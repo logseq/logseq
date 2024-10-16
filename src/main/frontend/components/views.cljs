@@ -28,7 +28,9 @@
 
 (defn- get-latest-entity
   [e]
-  (assoc (db/entity (:db/id e)) :id (:id e)))
+  (assoc (db/entity (:db/id e))
+         :id (:id e)
+         :block.temp/refs-count (:block.temp/refs-count e)))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!]}]
