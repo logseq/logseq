@@ -26,6 +26,10 @@
             [logseq.shui.table.core :as table-core]
             [logseq.db :as ldb]))
 
+(defn- get-latest-entity
+  [e]
+  (assoc (db/entity (:db/id e)) :id (:id e)))
+
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!]}]
   (let [[show? set-show!] (rum/use-state false)]
@@ -145,23 +149,26 @@
                  (let [property (if (de/entity? property)
                                   property
                                   (or (db/entity ident) property))
-                       get-value (or (:get-value property)
-                                     (when (de/entity? property)
-                                       (fn [row] (get-property-value-for-search row property))))
+                       get-value (if-let [f (:get-value property)]
+                                   (fn [row]
+                                     (f (get-latest-entity row)))
+                                   (when (de/entity? property)
+                                     (fn [row] (get-property-value-for-search (get-latest-entity row) property))))
                        closed-values (seq (:property/closed-values property))
                        closed-value->sort-number (when closed-values
                                                    (->> (zipmap (map :db/id closed-values) (range 0 (count closed-values)))
                                                         (into {})))
                        get-value-for-sort (fn [row]
-                                            (cond
-                                              (= (:db/ident property) :logseq.task/deadline)
-                                              (:block/journal-day (get row :logseq.task/deadline))
-                                              closed-values
-                                              (closed-value->sort-number (:db/id (get row (:db/ident property))))
-                                              :else
-                                              (if (fn? get-value)
-                                                (get-value row)
-                                                (get row ident))))]
+                                            (let [row (get-latest-entity row)]
+                                              (cond
+                                                (= (:db/ident property) :logseq.task/deadline)
+                                                (:block/journal-day (get row :logseq.task/deadline))
+                                                closed-values
+                                                (closed-value->sort-number (:db/id (get row (:db/ident property))))
+                                                :else
+                                                (if (fn? get-value)
+                                                  (get-value row)
+                                                  (get row ident)))))]
                    {:id ident
                     :name (or (:name property)
                               (:block/title property))
@@ -474,7 +481,7 @@
   [rows property]
   (let [property-ident (:db/ident property)
         block-type? (= property-ident :block/type)
-        values (->> (mapcat (fn [e] (let [e' (if (de/entity? e) e (db/entity (:db/id e)))
+        values (->> (mapcat (fn [e] (let [e' (db/entity (:db/id e))
                                           v (get e' property-ident)]
                                       (if (set? v) v #{v}))) rows)
                     (remove nil?)
@@ -859,92 +866,93 @@
 
 (defn- row-matched?
   [row input filters]
-  (and
-   ;; full-text-search match
-   (if (string/blank? input)
-     true
-     (when row
+  (let [row (get-latest-entity row)]
+    (and
+     ;; full-text-search match
+     (if (string/blank? input)
+       true
+       (when row
        ;; fuzzy search is too slow
-       (string/includes? (string/lower-case (:block/title row)) (string/lower-case input))))
-   ;; filters check
-   (every?
-    (fn [[property-ident operator match]]
-      (let [value (get row property-ident)
-            value' (cond
-                     (set? value) value
-                     (nil? value) #{}
-                     :else #{value})
-            entity? (de/entity? (first value'))
-            result
-            (case operator
-              :is
-              (if (boolean? match)
-                (= (boolean (get-property-value-content (get row property-ident))) match)
-                (cond
-                  (empty? match)
-                  true
-                  (and (empty? match) (empty? value'))
-                  true
-                  :else
-                  (if entity?
-                    (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
-                    (boolean (seq (set/intersection (set value') match))))))
+         (string/includes? (string/lower-case (:block/title row)) (string/lower-case input))))
+     ;; filters check
+     (every?
+      (fn [[property-ident operator match]]
+        (let [value (get row property-ident)
+              value' (cond
+                       (set? value) value
+                       (nil? value) #{}
+                       :else #{value})
+              entity? (de/entity? (first value'))
+              result
+              (case operator
+                :is
+                (if (boolean? match)
+                  (= (boolean (get-property-value-content (get row property-ident))) match)
+                  (cond
+                    (empty? match)
+                    true
+                    (and (empty? match) (empty? value'))
+                    true
+                    :else
+                    (if entity?
+                      (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
+                      (boolean (seq (set/intersection (set value') match))))))
 
-              :is-not
-              (if (boolean? match)
-                (not= (boolean (get-property-value-content (get row property-ident))) match)
-                (cond
-                  (and (empty? match) (seq value'))
-                  true
-                  (and (seq match) (empty? value'))
-                  true
-                  :else
-                  (if entity?
-                    (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
-                    (boolean (empty? (set/intersection (set value') match))))))
+                :is-not
+                (if (boolean? match)
+                  (not= (boolean (get-property-value-content (get row property-ident))) match)
+                  (cond
+                    (and (empty? match) (seq value'))
+                    true
+                    (and (seq match) (empty? value'))
+                    true
+                    :else
+                    (if entity?
+                      (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
+                      (boolean (empty? (set/intersection (set value') match))))))
 
-              :text-contains
-              (some #(string/includes? (string/lower-case (get-property-value-content %)) (string/lower-case match)) value')
+                :text-contains
+                (some #(string/includes? (string/lower-case (get-property-value-content %)) (string/lower-case match)) value')
 
-              :text-not-contains
-              (not-any? #(string/includes? (str (get-property-value-content %)) match) value')
+                :text-not-contains
+                (not-any? #(string/includes? (str (get-property-value-content %)) match) value')
 
-              :number-gt
-              (if match (some #(> (get-property-value-content %) match) value') true)
-              :number-gte
-              (if match (some #(>= (get-property-value-content %) match) value') true)
-              :number-lt
-              (if match (some #(< (get-property-value-content %) match) value') true)
-              :number-lte
-              (if match (some #(<= (get-property-value-content %) match) value') true)
+                :number-gt
+                (if match (some #(> (get-property-value-content %) match) value') true)
+                :number-gte
+                (if match (some #(>= (get-property-value-content %) match) value') true)
+                :number-lt
+                (if match (some #(< (get-property-value-content %) match) value') true)
+                :number-lte
+                (if match (some #(<= (get-property-value-content %) match) value') true)
 
-              :between
-              (if (seq match)
-                (some (fn [value-entity]
-                        (let [[start end] match
-                              value (get-property-value-content value-entity)
-                              conditions [(if start (<= start value) true)
-                                          (if end (<= value end) true)]]
-                          (if (seq match) (every? true? conditions) true))) value')
-                true)
+                :between
+                (if (seq match)
+                  (some (fn [value-entity]
+                          (let [[start end] match
+                                value (get-property-value-content value-entity)
+                                conditions [(if start (<= start value) true)
+                                            (if end (<= value end) true)]]
+                            (if (seq match) (every? true? conditions) true))) value')
+                  true)
 
-              :date-before
-              (if match (some #(< (:block/journal-day %) (:block/journal-day match)) value') true)
+                :date-before
+                (if match (some #(< (:block/journal-day %) (:block/journal-day match)) value') true)
 
-              :date-after
-              (if match (some #(> (:block/journal-day %) (:block/journal-day match)) value') true)
+                :date-after
+                (if match (some #(> (:block/journal-day %) (:block/journal-day match)) value') true)
 
-              :before
-              (let [search-value (get-timestamp match)]
-                (if search-value (<= (get row property-ident) search-value) true))
+                :before
+                (let [search-value (get-timestamp match)]
+                  (if search-value (<= (get row property-ident) search-value) true))
 
-              :after
-              (let [search-value (get-timestamp match)]
-                (if search-value (>= (get row property-ident) search-value) true))
+                :after
+                (let [search-value (get-timestamp match)]
+                  (if search-value (>= (get row property-ident) search-value) true))
 
-              true)]
-        result))
-    filters)))
+                true)]
+          result))
+      filters))))
 
 (rum/defc new-record-button < rum/static
   [table]
@@ -1124,7 +1132,9 @@
 
     (rum/use-effect!
      (fn []
-       (let [data' (table-core/table-sort-rows data sorting columns)]
+       ;; Entities might be outdated
+       (let [new-data (map get-latest-entity data)
+             data' (table-core/table-sort-rows new-data sorting columns)]
          (set-data! data')))
      [sorting])
 

@@ -127,14 +127,9 @@
                   columns*)
         columns (if (= (:db/ident class) :logseq.class/Asset)
                   ;; Insert in front of tag's properties
-                  (let [[before-cols after-cols] (split-with #(not (string/starts-with? (str (namespace (:id %))) "logseq.property") ) columns)]
+                  (let [[before-cols after-cols] (split-with #(not (string/starts-with? (str (namespace (:id %))) "logseq.property")) columns)]
                     (concat before-cols [(build-asset-file-column config)] after-cols))
                   columns)]
-
-    (rum/use-effect!
-     (fn []
-       (set-data! objects))
-     [objects])
 
     (rum/use-effect!
      (fn []
@@ -232,11 +227,6 @@
         [view-entity set-view-entity!] (rum/use-state property)
         [data set-data!] (rum/use-state objects)
         columns (views/build-columns config properties)]
-
-    (rum/use-effect!
-     (fn []
-       (set-data! objects))
-     [objects])
 
     (rum/use-effect!
      (fn []
