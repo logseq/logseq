@@ -1079,6 +1079,29 @@
         [:div.-ml-4
          (block-container (assoc config' :id (str (:block/uuid block))) block)]])]))
 
+(defn- run-effects!
+  [{:keys [data columns state data-fns]} input input-filters set-input-filters!]
+  (let [{:keys [filters sorting]} state
+        {:keys [set-row-filter! set-data!]} data-fns]
+    (rum/use-effect!
+     (fn []
+       (let [new-input-filters [input filters]]
+         (when-not (= input-filters new-input-filters)
+           (set-input-filters! [input filters])
+           (set-row-filter!
+            (fn []
+              (fn [row]
+                (row-matched? row input filters)))))))
+     [input filters])
+
+    (rum/use-effect!
+     (fn []
+       ;; Entities might be outdated
+       (let [new-data (map get-latest-entity data)
+             data' (table-core/table-sort-rows new-data sorting columns)]
+         (set-data! data')))
+     [sorting])))
+
 (rum/defc view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
                 :or {render-empty-title? false}}]
@@ -1106,45 +1129,30 @@
         [input-filters set-input-filters!] (rum/use-state [input filters])
         [row-selection set-row-selection!] (rum/use-state {})
         columns (sort-columns columns ordered-columns)
-        table (shui/table-option {:data data
-                                  :columns columns
-                                  :state {:sorting sorting
-                                          :filters filters
-                                          :row-filter row-filter
-                                          :row-selection row-selection
-                                          :visible-columns visible-columns
-                                          :sized-columns sized-columns
-                                          :ordered-columns ordered-columns}
-                                  :data-fns {:set-data! set-data!
-                                             :set-filters! set-filters!
-                                             :set-sorting! set-sorting!
-                                             :set-visible-columns! set-visible-columns!
-                                             :set-ordered-columns! set-ordered-columns!
-                                             :set-sized-columns! set-sized-columns!
-                                             :set-row-selection! set-row-selection!
-                                             :add-new-object! add-new-object!}})
+        table-map {:data data
+                   :columns columns
+                   :state {:sorting sorting
+                           :filters filters
+                           :row-filter row-filter
+                           :row-selection row-selection
+                           :visible-columns visible-columns
+                           :sized-columns sized-columns
+                           :ordered-columns ordered-columns}
+                   :data-fns {:set-data! set-data!
+                              :set-row-filter! set-row-filter!
+                              :set-filters! set-filters!
+                              :set-sorting! set-sorting!
+                              :set-visible-columns! set-visible-columns!
+                              :set-ordered-columns! set-ordered-columns!
+                              :set-sized-columns! set-sized-columns!
+                              :set-row-selection! set-row-selection!
+                              :add-new-object! add-new-object!}}
+        table (shui/table-option table-map)
         *view-ref (rum/use-ref nil)
         display-type (or (:db/ident (get view-entity :logseq.property.view/type))
                          :logseq.property.view/type.table)]
 
-    (rum/use-effect!
-     (fn []
-       (let [new-input-filters [input filters]]
-         (when-not (= input-filters new-input-filters)
-           (set-input-filters! [input filters])
-           (set-row-filter!
-            (fn []
-              (fn [row]
-                (row-matched? row input filters)))))))
-     [input filters])
-
-    (rum/use-effect!
-     (fn []
-       ;; Entities might be outdated
-       (let [new-data (map get-latest-entity data)
-             data' (table-core/table-sort-rows new-data sorting columns)]
-         (set-data! data')))
-     [sorting])
+    (run-effects! table-map input input-filters set-input-filters!)
 
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
