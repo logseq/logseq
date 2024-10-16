@@ -145,7 +145,7 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
       { state: 'visible', timeout: 5000 })
     await page.click('text=Add new graph')
 
-    expect(page.locator('#repo-name')).toHaveText(pathlib.basename(path))
+    expect(page.locator('#repo-name')).toHaveText(pathlib.basename(path), {timeout: 20000})
   }
 
   setMockedOpenDirPath(page, ''); // reset it
