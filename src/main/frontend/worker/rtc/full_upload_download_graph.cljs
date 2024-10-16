@@ -143,7 +143,7 @@
                            [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
                             {:db/ident :logseq.kv/graph-local-tx :kv/value "0"}])
             (client-op/update-graph-uuid repo graph-uuid)
-            (crypt/store-graph-keys-jwk repo graph-uuid public-key-jwk private-key-jwk)
+            (crypt/store-graph-keys-jwk repo public-key-jwk private-key-jwk)
             (when-not rtc-const/RTC-E2E-TEST
               (let [^js worker-obj (:worker/object @worker-state/*state)]
                 (c.m/<? (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid})))))

@@ -61,13 +61,20 @@
         (prn :plaintxt plaintxt)))))
 
 (defn store-graph-keys-jwk
-  [repo graph-uuid public-key-jwk private-key-jwk]
-  (assert (some? graph-uuid))
+  [repo public-key-jwk private-key-jwk]
   (let [conn (worker-state/get-client-ops-conn repo)]
     (assert (some? conn) repo)
-    (let [graph-entity (d/entity @conn [:graph-uuid graph-uuid])]
-      (assert (and (nil? (:public-key-jwk graph-entity))
-                   (nil? (:private-key-jwk graph-entity))) graph-entity)
-      (d/transact conn {:graph-uuid graph-uuid
-                        :public-key-jwk public-key-jwk
-                        :private-key-jwk private-key-jwk}))))
+    (let [public-key-datom (first (d/datoms @conn :avet :public-key-jwk))
+          private-key-datom (first (d/datoms @conn :avet :private-key-jwk))]
+      (assert (and (nil? public-key-datom) (nil? private-key-datom)) public-key-datom)
+      (d/transact! conn [[:db/add "e1" :public-key-jwk public-key-jwk]
+                         [:db/add "e2" :private-key-jwk private-key-jwk]]))))
+
+(defn get-graph-keys-jwk
+  [repo]
+  (let [conn (worker-state/get-client-ops-conn repo)]
+    (assert (some? conn) repo)
+    (let [public-key-datom (first (d/datoms @conn :avet :public-key-jwk))
+          private-key-datom (first (d/datoms @conn :avet :private-key-jwk))]
+      {:public-key-jwk (:v public-key-datom)
+       :private-key-jwk (:v private-key-datom)})))
