@@ -458,7 +458,7 @@
             :on-click (fn [e]
                         (state/pub-event! [:editor/new-property {:block page
                                                                  :target (.-target e)}]))}
-           "Set property")]])
+           "Set node property")]])
       (component-block/block-container {:page-title? true
                                         :hide-title? sidebar?
                                         :hide-children? true

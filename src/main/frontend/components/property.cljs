@@ -391,7 +391,10 @@
                                                                         :target (.-target e)})]))}
       [:div.flex.flex-row.items-center.shrink-0
        (ui/icon "plus" {:size 16})
-       [:div.ml-1 "Add property"]]]]))
+       [:div.ml-1
+        (if (:class-schema? opts)
+          "Add tag property"
+          "Add property")]]]]))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
@@ -431,7 +434,7 @@
                                                                     :page-cp page-cp))]
         [:div {:key (str "property-pair-" (:db/id block) "-" (:db/id property))
                :class (cond
-                        (and (= (:db/ident property) :logseq.property.class/properties) (seq v))
+                        (= (:db/ident property) :logseq.property.class/properties)
                         "property-pair !flex !flex-col"
                         (or date? datetime? checkbox?)
                         "property-pair items-center"
