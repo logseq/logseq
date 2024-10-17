@@ -250,7 +250,8 @@
 
      [:hr.my-2]
 
-     (let [keys-state @(get state ::keys-state)]
+     (let [*keys-state (get state ::keys-state)
+           keys-state @*keys-state]
        [:div
         [:div.pb-2.flex.flex-row.items-center.gap-2
          (shui/button
@@ -269,4 +270,39 @@
                :graph-public-key-jwk (:public-key-jwk keys-state)
                :graph-private-key-jwk (:private-key-jwk keys-state)}
               (fipp/pprint {:width 20})
-              with-out-str)]]])]))
+              with-out-str)]]
+        (shui/button
+         {:size :sm
+          :on-click (fn [_]
+                      (let [^object worker @db-browser/*worker]
+                        (when-let [device-uuid (:remove-device-device-uuid keys-state)]
+                          (when-let [token (state/get-auth-id-token)]
+                            (.device-remove-device worker token device-uuid)))))}
+         "Remove device:")
+        [:input.form-input.my-2.py-1.w-32
+         {:on-change (fn [e] (swap! *keys-state assoc :remove-device-device-uuid (util/evalue e)))
+          :on-focus (fn [e] (let [v (.-value (.-target e))]
+                              (when (= v "device-uuid here")
+                                (set! (.-value (.-target e)) ""))))
+          :placeholder "device-uuid here"}]
+        (shui/button
+         {:size :sm
+          :on-click (fn [_]
+                      (let [^object worker @db-browser/*worker]
+                        (when-let [device-uuid (:remove-public-key-device-uuid keys-state)]
+                          (when-let [key-name (:remove-public-key-key-name keys-state)]
+                            (when-let [token (state/get-auth-id-token)]
+                              (.device-remove-device-public-key worker token device-uuid key-name))))))}
+         "Remove public-key:")
+        [:input.form-input.my-2.py-1.w-32
+         {:on-change (fn [e] (swap! *keys-state assoc :remove-public-key-device-uuid (util/evalue e)))
+          :on-focus (fn [e] (let [v (.-value (.-target e))]
+                              (when (= v "device-uuid here")
+                                (set! (.-value (.-target e)) ""))))
+          :placeholder "device-uuid here"}]
+        [:input.form-input.my-2.py-1.w-32
+         {:on-change (fn [e] (swap! *keys-state assoc :remove-public-key-key-name (util/evalue e)))
+          :on-focus (fn [e] (let [v (.-value (.-target e))]
+                              (when (= v "key-name here")
+                                (set! (.-value (.-target e)) ""))))
+          :placeholder "key-name here"}]])]))
