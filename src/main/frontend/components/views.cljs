@@ -1074,7 +1074,9 @@
   [:div.ls-card-item
    {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
    [:div.-ml-4
-    (block-container (assoc config :id (str (:block/uuid block))) block)]])
+    (block-container (assoc config
+                            :id (str (:block/uuid block))
+                            :gallery-view? true) block)]])
 
 (rum/defcs gallery-view < rum/static mixins/container-id
   [state config view-entity blocks]
@@ -1082,12 +1084,11 @@
     [:div.ls-cards
      (when (seq blocks)
        (ui/virtualized-grid
-         {:total-count (count blocks)
-          :custom-scroll-parent (gdom/getElement "main-content-container")
-          :item-content (fn [idx]
-                          (when-let [block (nth blocks idx)]
-                            (gallery-card-item view-entity block config')))})
-       )]))
+        {:total-count (count blocks)
+         :custom-scroll-parent (gdom/getElement "main-content-container")
+         :item-content (fn [idx]
+                         (when-let [block (nth blocks idx)]
+                           (gallery-card-item view-entity block config')))}))]))
 
 (defn- run-effects!
   [{:keys [data columns state data-fns]} input input-filters set-input-filters!]
