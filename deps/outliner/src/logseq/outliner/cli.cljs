@@ -17,7 +17,8 @@
 
 (defn- setup-init-data
   "Setup initial data same as frontend.handler.repo/create-db"
-  [conn {:keys [additional-config classpath]}]
+  [conn {:keys [additional-config classpath import-type]
+         :or {import-type :cli/default}}]
   (let [config-content
         (cond-> (or (some-> (find-on-classpath classpath "templates/config.edn") fs/readFileSync str)
                     (do (println "Setting graph's config to empty since no templates/config.edn was found.")
@@ -27,7 +28,7 @@
           (string/replace-first #"(:file/name-format :triple-lowbar)"
                                 (str "$1 "
                                      (string/replace-first (str additional-config) #"^\{(.*)\}$" "$1"))))]
-    (d/transact! conn (sqlite-create-graph/build-db-initial-data config-content))))
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data config-content {:import-type import-type}))))
 
 (defn init-conn
   "Create sqlite DB, initialize datascript connection and sync listener and then
