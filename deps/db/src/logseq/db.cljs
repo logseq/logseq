@@ -449,9 +449,7 @@
    (d/datoms db :avet :block/name)
    (keep (fn [d]
            (let [e (d/entity db (:e d))]
-             (when (and (page? e)
-                        (not (hidden? e))
-                        (not (common-util/uuid-string? (:block/name e))))
+             (when-not (hidden? e)
                e))))))
 
 (defn built-in?
