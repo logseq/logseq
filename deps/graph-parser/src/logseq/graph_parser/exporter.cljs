@@ -27,7 +27,8 @@
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.block :as gp-block]))
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.common.util.namespace :as ns-util]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -624,6 +625,7 @@
       (update :block dissoc :block/properties :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
 (defn- handle-page-properties
+  "Adds page properties and handles converting :block/namespace since it involves properties"
   [{:block/keys [properties] :as block*} db page-names-to-uuids refs
    {:keys [property-parent-classes log-fn import-state] :as options}]
   (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
@@ -645,8 +647,17 @@
                               (if-let [existing-tag-uuid (get page-names-to-uuids (common-util/page-name-sanity-lc new-class))]
                                 {:block/uuid existing-tag-uuid}
                                 {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))}))))))
-          (dissoc block* :block/properties))]
-    {:block block' :properties-tx properties-tx}))
+          (dissoc block* :block/properties))
+        block'' (if (:block/namespace block')
+                  (let [new-title (ns-util/get-last-part (:block/title block'))]
+                    (-> (dissoc block' :block/namespace)
+                        (merge {:logseq.property/parent
+                                {:block/uuid (get-page-uuid page-names-to-uuids (get-in block' [:block/namespace :block/name]))}
+                                ;; DB graphs only have child name of namespace
+                                :block/title new-title
+                                :block/name (common-util/page-name-sanity-lc new-title)})))
+                  block')]
+    {:block block'' :properties-tx properties-tx}))
 
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
@@ -798,6 +809,9 @@
       (update-page-tags db tag-classes page-names-to-uuids all-idents)))
 
 (defn- get-all-existing-page-ents
+  "Returns a map of unique page names mapped to their entities. The page names
+   are in a format that is compatible with extract/extract e.g. namespace pages have
+   their full hierarchy in the name"
   [db]
   (->> db
        ;; don't fetch built-in as that would give the wrong entity if a user used
@@ -805,7 +819,10 @@
        (d/q '[:find [?b ...]
               :where [?b :block/name] [(missing? $ ?b :logseq.property/built-in?)]])
        (map #(d/entity db %))
-       (map (juxt :block/name identity))
+       (map #(if-let [parents (and (ldb/internal-page? %) (ldb/get-page-parents %))]
+               ;; Build a :block/name for namespace pages that matches data from extract/extract
+               [(string/join ns-util/namespace-char (conj (mapv :block/name parents) (:block/name %))) %]
+               [(:block/name %) %]))
        (into {})))
 
 (defn- build-existing-page [m db page-uuid page-names-to-uuids {:keys [tag-classes notify-user import-state]}]
@@ -844,20 +861,32 @@
         ;; Fetch all named ents once per import file to speed up named lookups
         all-existing-page-ents (get-all-existing-page-ents @conn)
         ;; map of existing pages in current parsed file, indexed by name
-        existing-pages-by-name (into {}
-                                     (keep #(when-let [ent (all-existing-page-ents (:block/name %))]
-                                              [(:block/name ent) (:block/uuid ent)])
-                                           all-pages*))
+        existing-pages-by-name
+        (into {}
+              (keep #(when-let [ent (all-existing-page-ents (:block/name %))]
+                       ;; Use :block/name from all-pages* to be compatible with all-existing-page-ents format
+                       [(:block/name %) (:block/uuid ent)])
+                    all-pages*))
         existing-page? #(contains? existing-pages-by-name (:block/name %))
-        ;; fix extract incorrectly assigning new user pages built-in uuids
-        all-pages (map #(if (and (not (existing-page? %))
-                                 (contains? all-built-in-names (keyword (:block/name %))))
-                          (assoc % :block/uuid (d/squuid))
-                          %)
+        existing-page-uuids (update-vals all-existing-page-ents :block/uuid)
+        ;; Fix page uuids
+        all-pages (map #(if (existing-page? %)
+                          (cond-> %
+                            (:block/namespace %)
+                            ;; Fix uuid for existing pages as graph-parser's :block/name is different than
+                            ;; the DB graph's version e.g. 'b/c/d' vs 'd'
+                            (assoc :block/uuid
+                                   (or (existing-page-uuids (:block/name %))
+                                       (throw (ex-info (str "No uuid found for existing namespace page " (:block/name %))
+                                                       (select-keys % [:block/name :block/namespace]))))))
+                          ;; fix extract incorrectly assigning new user pages built-in uuids
+                          (cond-> %
+                            (contains? all-built-in-names (keyword (:block/name %)))
+                            (assoc :block/uuid (d/squuid))))
                        all-pages*)
-        new-pages (remove existing-page? all-pages)
         page-names-to-uuids (merge (update-vals all-existing-page-ents :block/uuid)
-                                   (into {} (map (juxt :block/name :block/uuid) new-pages)))
+                                   (into {} (map (juxt :block/name :block/uuid)
+                                                 (remove existing-page? all-pages))))
         all-pages-m (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
                           all-pages)
         pages-tx (keep (fn [m]
@@ -1022,6 +1051,7 @@
        blocks))
 
 (defn- extract-pages-and-blocks
+  "Main fn which calls graph-parser to convert markdown into data"
   [db file content {:keys [extract-options notify-user]}]
   (let [format (common-util/get-format file)
         extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
@@ -1321,26 +1351,36 @@
   [repo-or-conn conn config-file *files {:keys [<read-file <copy-asset rpath-key log-fn]
                                          :or {rpath-key :path log-fn println}
                                          :as options}]
-  (p/let [config (export-config-file
-                  repo-or-conn config-file <read-file
-                  (-> (select-keys options [:notify-user :default-config :<save-config-file])
-                      (set/rename-keys {:<save-config-file :<save-file})))]
-    (let [files (common-config/remove-hidden-files *files config rpath-key)
-          logseq-file? #(string/starts-with? (get % rpath-key) "logseq/")
-          doc-files (->> files
-                         (remove logseq-file?)
-                         (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
-          asset-files (filter #(string/starts-with? (get % rpath-key) "assets/") files)
-          doc-options (build-doc-options config options)]
-      (log-fn "Importing" (count files) "files ...")
-      ;; These export* fns are all the major export/import steps
-      (p/do!
-       (export-logseq-files repo-or-conn (filter logseq-file? files) <read-file
-                            (-> (select-keys options [:notify-user :<save-logseq-file])
-                                (set/rename-keys {:<save-logseq-file :<save-file})))
-       (export-asset-files asset-files <copy-asset (select-keys options [:notify-user :set-ui-state]))
-       (export-doc-files conn doc-files <read-file doc-options)
-       (export-favorites-from-config-edn conn repo-or-conn config {})
-       (export-class-properties conn repo-or-conn)
-       {:import-state (:import-state doc-options)
-        :files files}))))
+  (reset! gp-block/*export-to-db-graph? true)
+  (->
+   (p/let [config (export-config-file
+                   repo-or-conn config-file <read-file
+                   (-> (select-keys options [:notify-user :default-config :<save-config-file])
+                       (set/rename-keys {:<save-config-file :<save-file})))]
+     (let [files (common-config/remove-hidden-files *files config rpath-key)
+           logseq-file? #(string/starts-with? (get % rpath-key) "logseq/")
+           doc-files (->> files
+                          (remove logseq-file?)
+                          (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
+           asset-files (filter #(string/starts-with? (get % rpath-key) "assets/") files)
+           doc-options (build-doc-options config options)]
+       (log-fn "Importing" (count files) "files ...")
+       ;; These export* fns are all the major export/import steps
+       (p/do!
+        (export-logseq-files repo-or-conn (filter logseq-file? files) <read-file
+                             (-> (select-keys options [:notify-user :<save-logseq-file])
+                                 (set/rename-keys {:<save-logseq-file :<save-file})))
+        (export-asset-files asset-files <copy-asset (select-keys options [:notify-user :set-ui-state]))
+        (export-doc-files conn doc-files <read-file doc-options)
+        (export-favorites-from-config-edn conn repo-or-conn config {})
+        (export-class-properties conn repo-or-conn)
+        {:import-state (:import-state doc-options)
+         :files files})))
+   (p/finally (fn [_]
+                (reset! gp-block/*export-to-db-graph? false)))
+   (p/catch (fn [e]
+              (reset! gp-block/*export-to-db-graph? false)
+              ((:notify-user options)
+               {:msg (str "Import has unexpected error:\n" (.-message e))
+                :level :error
+                :ex-data {:error e}})))))
