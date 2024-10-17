@@ -7,7 +7,7 @@
             [clojure.edn :as edn]
             [clojure.string :as string]
             [datascript.core :as d]
-            [datascript.storage :refer [IStorage]]
+            [datascript.storage :refer [IStorage] :as storage]
             [frontend.common.file.core :as common-file]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
@@ -34,7 +34,8 @@
             [logseq.outliner.op :as outliner-op]
             [goog.object :as gobj]
             [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]))
+            [shadow.cljs.modern :refer [defclass]]
+            [logseq.db.frontend.schema :as db-schema]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -46,7 +47,7 @@
 (defn- check-worker-scope!
   []
   (when (or (gobj/get js/self "React")
-          (gobj/get js/self "module$react"))
+            (gobj/get js/self "module$react"))
     (throw (js/Error. "[db-worker] React is forbidden in worker scope!"))))
 
 (defn- <get-opfs-pool
@@ -87,6 +88,37 @@
 (defn- <import-db
   [^js pool data]
   (.importDb ^js pool repo-path data))
+
+(defn- get-all-datoms-from-sqlite-db
+  [db]
+  (some->> (.exec db #js {:sql "select * from kvs"
+                          :rowMode "array"})
+           bean/->clj
+           (mapcat
+            (fn [[_addr content _addresses]]
+              (let [content' (sqlite-util/transit-read content)
+                    datoms (when (map? content')
+                             (:keys content'))]
+                datoms)))
+           distinct
+           (map (fn [[e a v t]]
+                  (d/datom e a v t)))))
+
+(defn- rebuild-db-from-datoms!
+  "Persistent-sorted-set has been broken, used addresses can't be found"
+  [datascript-conn sqlite-db]
+  (let [datoms (get-all-datoms-from-sqlite-db sqlite-db)
+        db (d/init-db [] db-schema/schema-for-db-based-graph
+                      {:storage (storage/storage @datascript-conn)})
+        db (d/db-with db
+                      (map (fn [d]
+                             [:db/add (:e d) (:a d) (:v d) (:t d)]) datoms))]
+    (prn :debug :rebuild-db-from-datoms :datoms-count (count datoms))
+    ;; export db first
+    (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
+    (worker-util/post-message :export-current-db [])
+    (.exec sqlite-db #js {:sql "delete from kvs"})
+    (d/reset-conn! datascript-conn db)))
 
 (comment
   (defn- gc-kvs-table!
@@ -250,7 +282,8 @@
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db] (get-dbs repo)
             storage (new-sqlite-storage repo {})
-            client-ops-storage (new-sqlite-client-ops-storage repo)]
+            client-ops-storage (new-sqlite-client-ops-storage repo)
+            db-based? (sqlite-util/db-based-graph? repo)]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
                                        :client-ops client-ops-db})
@@ -267,7 +300,7 @@
                                       (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type))))]
         (swap! *datascript-conns assoc repo conn)
         (swap! *client-ops-conns assoc repo client-ops-conn)
-        (when (and (sqlite-util/db-based-graph? repo) (not initial-data-exists?))
+        (when (and db-based? (not initial-data-exists?))
           (let [config (or config {})
                 initial-data (sqlite-create-graph/build-db-initial-data config)]
             (d/transact! conn initial-data {:initial-db? true})))
@@ -278,9 +311,13 @@
           (catch :default _e))
 
         ;; (gc-kvs-table! db)
-        (db-migrate/migrate conn search-db)
+        (try
+          (db-migrate/migrate conn search-db)
+          (catch :default _e
+            (when db-based?
+              (rebuild-db-from-datoms! conn db))))
 
-        (db-listener/listen-db-changes! repo conn)))))
+        (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 
 (defn- iter->vec [iter']
   (when iter'

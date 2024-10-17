@@ -1050,6 +1050,10 @@
 
     nil))
 
+(defmethod handle :db/export-sqlite [_]
+  (export/export-repo-as-sqlite-db! (state/get-current-repo))
+  nil)
+
 (defmethod handle :editor/run-query-command [_]
   (editor-handler/run-query-command!))
 
