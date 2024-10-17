@@ -3358,7 +3358,7 @@
                                        (when (ldb/property? block)
                                          {:type :tabler-icon
                                           :id "letter-p"})))]
-                [:div.ls-page-icon.flex.self-start3
+                [:div.ls-page-icon.flex.self-start
                  (icon-component/icon-picker icon
                                              {:on-chosen (fn [_e icon]
                                                            (if icon
