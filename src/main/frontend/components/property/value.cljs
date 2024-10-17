@@ -1056,7 +1056,7 @@
                           (interpose [:span.opacity-50.text-sm " > "]
                                      (concat
                                       (map (fn [{title :block/title :as ancestor}]
-                                             [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} title])
+                                             [:a.whitespace-nowrap {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} title])
                                            page-ancestors)
                                       [value-cp]))]
                          value-cp)))]]

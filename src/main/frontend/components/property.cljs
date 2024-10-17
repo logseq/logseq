@@ -78,7 +78,7 @@
                           (map (fn [type]
                                  {:label (property-config/property-type-label type)
                                   :value type})))]
-    [:div {:class "flex items-center col-span-1"}
+    [:div {:class "flex items-center"}
      (shui/select
       (cond->
        {:default-open (boolean default-open?)
@@ -266,17 +266,18 @@
                             :icon-value icon
                             :del-btn? (boolean icon)}))]
 
-         (shui/trigger-as
-          :button.property-m
-          (-> (when-not config/publishing?
-                {:on-click (fn [^js e]
-                             (shui/popup-show! (.-target e) content-fn
-                                               {:as-dropdown? true :auto-focus? true
-                                                :content-props {:onEscapeKeyDown #(.preventDefault %)}}))})
-              (assoc :class "flex items-center"))
-          (if icon
-            (icon-component/icon icon {:size 15 :color? true})
-            (property-icon property nil)))))
+         [:div.property-icon
+          (shui/trigger-as
+           :button.property-m
+           (-> (when-not config/publishing?
+                 {:on-click (fn [^js e]
+                              (shui/popup-show! (.-target e) content-fn
+                                                {:as-dropdown? true :auto-focus? true
+                                                 :content-props {:onEscapeKeyDown #(.preventDefault %)}}))})
+               (assoc :class "flex items-center"))
+           (if icon
+             (icon-component/icon icon {:size 15 :color? true})
+             (property-icon property nil)))]))
 
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger
@@ -338,13 +339,13 @@
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      {:ref #(reset! *ref %)}
      (if property-key
-       [:div.ls-property-add.grid.grid-cols-4.gap-1.flex.flex-1.flex-row.items-center
-        [:div.flex.flex-row.items-center.col-span-1.property-key.gap-1
+       [:div.ls-property-add.gap-1.flex.flex-1.flex-row.items-center
+        [:div.flex.flex-row.items-center.property-key.gap-1
          (when-not (:db/id property) (property-icon property (:type @*property-schema)))
          (if (:db/id property)                              ; property exists already
            (property-key-cp block property opts)
            [:div property-key])]
-        [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
+        [:div.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
          (when (not= @*show-new-property-config? :adding-property)
            (cond
              @*show-new-property-config?
@@ -388,7 +389,7 @@
        :on-click (fn [e]
                    (state/pub-event! [:editor/new-property (merge opts {:block block
                                                                         :target (.-target e)})]))}
-      [:div.flex.flex-row.items-center
+      [:div.flex.flex-row.items-center.shrink-0
        (ui/icon "plus" {:size 16})
        [:div.ml-1 "Add property"]]]]))
 
@@ -431,19 +432,19 @@
         [:div {:key (str "property-pair-" (:db/id block) "-" (:db/id property))
                :class (cond
                         (and (= (:db/ident property) :logseq.property.class/properties) (seq v))
-                        "property-pair !flex flex-col"
+                        "property-pair !flex !flex-col"
                         (or date? datetime? checkbox?)
                         "property-pair items-center"
                         :else
                         "property-pair items-start")}
          (if (seq sortable-opts)
-           (dnd/sortable-item (assoc sortable-opts :class "property-key col-span-1") property-key-cp')
-           [:div.property-key.col-span-1 property-key-cp'])
+           (dnd/sortable-item (assoc sortable-opts :class "property-key") property-key-cp')
+           [:div.property-key property-key-cp'])
 
          (let [class-properties? (= (:db/ident property) :logseq.property.class/properties)
                property-desc (when-not (= (:db/ident property) :logseq.property/description)
                                (:logseq.property/description property))]
-           [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
+           [:div.property-value-container.flex.flex-row.gap-1.items-center
             (cond-> {}
               class-properties? (assoc :class (if (:logseq.property.class/properties block)
                                                 "ml-2 -mt-1"
@@ -575,7 +576,10 @@
                           ;; other position
                           (when-not (or (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
                                         show-empty-and-hidden-properties?)
-                            (outliner-property/property-with-other-position? ent)))))))
+                            (outliner-property/property-with-other-position? ent))
+
+                          (and (:gallery-view? opts)
+                               (contains? #{:logseq.property.class/properties} (:db/ident ent))))))))
                   properties))
         {:keys [all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))
         classes-properties-set (set classes-properties)
