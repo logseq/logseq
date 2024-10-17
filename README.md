@@ -165,13 +165,6 @@ We want to express our sincere gratitude to our [Open Collective](https://openco
 <p align="center">
     <a href="https://opencollective.com/logseq#sponsor"> [Become a sponsor]</a>
 </p>
-<!-- Deta Logo -->
-<p align="center">
-    <a href="https://www.deta.sh/" alt="Deta">
-        <img src="https://uploads-ssl.webflow.com/5eb96efa78dc680fc15be3be/5ebd24f6cbf6e9ebd674656e_Logo.svg"
-        style="width: 200px; height: 100px;"/></a>
-</p>
-
 <p align="center">
     <a href="https://opencollective.com/logseq" alt="Sponsors on Open Collective">
         <img src="https://opencollective.com/logseq/tiers/sponsors.svg?avatarHeight=42&width=600"/></a>
