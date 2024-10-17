@@ -17,20 +17,21 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.web.nfs :as web-nfs]
+            [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
             [frontend.storage :as storage]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [goog.functions :refer [debounce]]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.util :as common-util]))
 
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
@@ -62,7 +63,7 @@
                                  nil)
                                (.then #(do
                                          (notification/show! (str "Cloned to => " dest-dir) :success)
-                                         (web-nfs/ls-dir-files-with-path! dest-dir)
+                                         (nfs-handler/ls-dir-files-with-path! dest-dir)
                                          (repo-handler/remove-repo! {:url repo})
                                          (close-fn)))
                                (.catch #(js/console.error %)))))]
@@ -79,7 +80,7 @@
 
      [:div.folder-tip.flex.flex-col.items-center
       [:h3
-       [:span (ui/icon "folder") [:label.pl-0.5 (gp-util/safe-decode-uri-component graph-name)]]]
+       [:span (ui/icon "folder") [:label.pl-0.5 (common-util/safe-decode-uri-component graph-name)]]]
       [:h4.px-6 (config/get-string-repo-dir repo)]
 
       (when (not (string/blank? selected-path))
@@ -184,7 +185,7 @@
                                    (state/get-current-file-sync-graph-uuid)
                                    :file-sync/last-synced-at])
         last-synced-at (if last-synced-at
-                         (util/time-ago (tc/from-long (* last-synced-at 1000)))
+                         (util/human-time (tc/from-long (* last-synced-at 1000)))
                          "just now")]
     [:div.cl
      [:span.opacity-60 "Last change was"]
@@ -359,10 +360,10 @@
                                          (js/decodeURI (util/node-path.basename current-repo))
 
                                          confirm-fn
-                                         (fn [close-fn]
-                                           (create-remote-graph-panel current-repo graph-name close-fn))]
+                                         (fn [{:keys [close]}]
+                                           (create-remote-graph-panel current-repo graph-name close))]
 
-                                     (state/set-modal! confirm-fn {:center? true :close-btn? false})))
+                                     (shui/dialog-open! confirm-fn {:center? true :close-btn? false})))
         turn-on                 (->
                                  (fn []
                                    (when-not (file-sync-handler/current-graph-sync-on?)
@@ -526,42 +527,42 @@
     (util/format "Sync graph \"%s\" to local" (:GraphName graph))]
 
    (ui/button
-     "Open a local directory"
-     :class "block w-full mt-4"
-     :size :lg
-     :on-click #(do
-                  (state/close-modal!)
-                  (fs-sync/<sync-stop)
-                  (->
-                    (page-handler/ls-dir-files!
-                      (fn [{:keys [url]}]
-                        (file-sync-handler/init-remote-graph url graph)
-                        (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+    "Open a local directory"
+    :class "block w-full mt-4"
+    :size :lg
+    :on-click #(do
+                 (state/close-modal!)
+                 (fs-sync/<sync-stop)
+                 (->
+                  (page-handler/ls-dir-files!
+                   (fn [{:keys [url]}]
+                     (file-sync-handler/init-remote-graph url graph)
+                     (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
-                      {:on-open-dir
-                       (fn [result]
-                         (prn ::on-open-dir result)
-                         (let [empty-dir? (not (seq (:files result)))
-                               root (:path result)]
-                           (cond
-                             (string/blank? root)
-                             (p/rejected (js/Error. nil))   ;; cancel pick a directory
+                   {:on-open-dir
+                    (fn [result]
+                      (prn ::on-open-dir result)
+                      (let [empty-dir? (not (seq (:files result)))
+                            root (:path result)]
+                        (cond
+                          (string/blank? root)
+                          (p/rejected (js/Error. nil))   ;; cancel pick a directory
 
-                             empty-dir?
-                             (p/resolved nil)
+                          empty-dir?
+                          (p/resolved nil)
 
-                             :else                          ; dir is not empty
-                             (-> (if (util/electron?)
-                                   (ipc/ipc :readGraphTxIdInfo root)
-                                   (fs-util/read-graphs-txid-info root))
-                               (p/then (fn [^js info]
-                                         (when (or (nil? info)
-                                                 (nil? (second info))
-                                                 (not= (second info) (:GraphUUID graph)))
-                                           (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
-                                             (p/resolved nil)
-                                             (p/rejected (js/Error. nil))))))))))}) ;; cancel pick a non-empty directory
-                    (p/catch (fn [])))))
+                          :else                          ; dir is not empty
+                          (-> (if (util/electron?)
+                                (ipc/ipc :readGraphTxIdInfo root)
+                                (fs-util/read-graphs-txid-info root))
+                              (p/then (fn [^js info]
+                                        (when (or (nil? info)
+                                                  (nil? (second info))
+                                                  (not= (second info) (:GraphUUID graph)))
+                                          (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
+                                            (p/resolved nil)
+                                            (p/rejected (js/Error. nil))))))))))}) ;; cancel pick a non-empty directory
+                  (p/catch (fn [])))))
 
    [:div.text-xs.opacity-50.px-1.flex-row.flex.items-center.p-2
     (ui/icon "alert-circle")
@@ -631,7 +632,7 @@
         [list-ready? set-list-ready?] (rum/use-state false)
         [content-ready? set-content-ready?] (rum/use-state false)
         *ref-contents      (rum/use-ref (atom {}))
-        original-page-name (or (:block/original-name page-entity) page-name)]
+        original-page-name (or (:block/title page-entity) page-name)]
 
     (rum/use-effect!
      #(when selected-page
@@ -644,23 +645,23 @@
               (js/setTimeout (fn [] (set-content-ready? true)) 100))
 
             ;; without cache
-            (let [load-file (fn [repo-url file]
-                              (-> (fs-util/read-repo-file repo-url file)
-                                  (p/then
-                                   (fn [content]
-                                     (set-version-content content)
-                                     (set-content-ready? true)
-                                     (swap! (rum/deref *ref-contents) assoc k content)))))]
+            (let [load-file' (fn [repo-url file]
+                               (-> (fs-util/read-repo-file repo-url file)
+                                   (p/then
+                                    (fn [content]
+                                      (set-version-content content)
+                                      (set-content-ready? true)
+                                      (swap! (rum/deref *ref-contents) assoc k content)))))]
               (if (and file-uuid version-uuid)
                 ;; read remote content
                 (async/go
                   (let [downloaded-path (async/<! (file-sync-handler/download-version-file graph-uuid file-uuid version-uuid true))]
                     (when downloaded-path
-                      (load-file repo-url downloaded-path))))
+                      (load-file' repo-url downloaded-path))))
 
                 ;; read local content
                 (when-let [relative-path (:relative-path selected-page)]
-                  (load-file repo-url relative-path)))))))
+                  (load-file' repo-url relative-path)))))))
      [selected-page])
 
     (rum/use-effect!
@@ -805,7 +806,6 @@
     ;;  [:li.it
     ;;   [:h1.dark:text-white "50G"]
     ;;   [:h2 "Total Storage"]]]
-    
 
    [:div.pt-6.flex.justify-end.space-x-2
     (ui/button "Done" :on-click close-fn)]])
@@ -814,43 +814,43 @@
   ([] (open-icloud-graph-clone-picker (state/get-current-repo)))
   ([repo]
    (when (and repo (mobile-util/in-iCloud-container-path? repo))
-     (state/set-modal!
+     (shui/dialog-open!
       (fn [close-fn]
         (clone-local-icloud-graph-panel repo (util/node-path.basename repo) close-fn))
-      {:close-btn? false :center? true}))))
+      {:close-btn? false}))))
 
 (defn make-onboarding-panel
   [type]
 
-  (fn [close-fn]
+  (fn [{:keys [close]}]
 
     (case type
       :welcome
-      (onboarding-welcome-logseq-sync close-fn)
+      (onboarding-welcome-logseq-sync close)
 
       :unavailable
-      (onboarding-unavailable-file-sync close-fn)
+      (onboarding-unavailable-file-sync close)
 
       :congrats
-      (onboarding-congrats-successful-sync close-fn)
+      (onboarding-congrats-successful-sync close)
 
       [:p
        [:h1.text-xl.font-bold "Not handled!"]
-       [:a.button {:on-click close-fn} "Got it!"]])))
+       [:a.button {:on-click close} "Got it!"]])))
 
 (defn maybe-onboarding-show
   [type]
   (when-not (get (state/sub :file-sync/onboarding-state) (keyword type))
     (try
       (let [current-repo (state/get-current-repo)
-            local-repo?  (= current-repo config/local-repo)
+            demo-repo?  (= current-repo config/demo-repo)
             login?       (boolean (state/sub :auth/id-token))]
 
         (when login?
           (case type
 
             :welcome
-            (when (or local-repo?
+            (when (or demo-repo?
                       (:GraphUUID (repo-handler/get-detail-graph-info current-repo)))
               (throw (js/Error. "current repo have been local or remote graph")))
 

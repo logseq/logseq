@@ -37,24 +37,13 @@ frontend.fs/readdir
 ;; Referenced in TODO
 frontend.handler.metadata/update-properties!
 ;; Referenced in comment
-frontend.handler.route/toggle-between-page-and-file!
-;; Referenced in comment
-frontend.handler.shell/run-pandoc-command!
-;; Referenced in comment
 frontend.image/get-orientation
 ;; For debugging
 frontend.mixins/perf-measure-mixin
 ;; Previously useful fn
 frontend.mobile.util/get-idevice-statusbar-height
-;; Used in macro
-frontend.modules.outliner.datascript/transact!
-frontend.modules.outliner.core/*transaction-opts*
-;; Referenced in comment
-frontend.page/route-view
 ;; placeholder fn
 frontend.publishing/stop
-;; Referenced in comment
-frontend.state/set-db-persisted!
 ;; Future use
 frontend.storage/get-transit
 ;; repl fn
@@ -74,7 +63,7 @@ frontend.util/trace!
 ;; Repl fn
 frontend.util.pool/terminate-pool!
 ;; Repl fn
-frontend.util.property/add-page-properties
+frontend.handler.file-based.property.util/add-page-properties
 ;; Test runners used by shadow
 frontend.test.node-test-runner/main
 frontend.test.frontend-node-test-runner/main
@@ -85,3 +74,19 @@ frontend.fs.sync/debug-print-sync-events-loop
 frontend.fs.sync/stop-debug-print-sync-events-loop
 ;; Used in macro
 frontend.state/get-current-edit-block-and-position
+;; For debugging
+frontend.db.model/get-all-classes
+;; Initial loaded
+frontend.ui/_emoji-init-data
+;; placeholder var for defonce
+frontend.worker.rtc.op-mem-layer/_sync-loop-canceler
+;; Used by shadow.cljs
+frontend.worker.db-worker/init
+;; WIP fn, remove when it's ready
+frontend.worker.rtc.asset-sync/<loop-for-assets-sync
+;; Future use?
+frontend.worker.rtc.hash/hash-blocks
+;; Repl fn
+frontend.rum/use-atom-in
+;; missionary utils
+frontend.common.missionary-util/<!

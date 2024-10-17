@@ -4,8 +4,8 @@
             [frontend.db.conn :as conn]
             [frontend.fs.diff-merge :as fs-diff]
             [frontend.handler.common.file :as file-common-handler]
-            [logseq.db :as ldb]
             [logseq.graph-parser :as graph-parser]
+            [logseq.graph-parser.db :as gp-db]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]))
 
@@ -44,7 +44,7 @@
       :level 1}]))
 
 (deftest db<->ast-diff-blocks-test
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         text                                    ":PROPERTIES:
 :ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
 :END:
@@ -285,7 +285,7 @@
       :uuid nil}]]]))
 
 (deftest db->diffblocks
-  (let [conn (ldb/start-conn)]
+  (let [conn (gp-db/start-conn)]
     (graph-parser/parse-file conn
                              "foo.md"
                              (str "- abc
@@ -364,7 +364,7 @@
 
 ;; Ensure diff-merge-uuids follows the id:: in the content
 (deftest diff-merge-uuid-extract-test
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         foo-content (str "- abc
   id:: 11451400-0000-0000-0000-000000000000\n"
                  "- def
@@ -397,7 +397,7 @@
 
 ;; Ensure diff-merge-uuids keeps the block uuids unchanged at best effort
 (deftest diff-merge-uuid-persist-test
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         foo-content (str "- abc\n"
                          "- def\n")
         bar-content (str "- ghi\n"
@@ -432,7 +432,7 @@
 
 (deftest diff-merge-error-capture-test
   ;; Any exception thrown in diff-merge-uuids-2ways should be captured and returned a nil
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         foo-content (str "- abc\n"
                          "- def\n")
         foo-new-content (str foo-content "- newline\n")]

@@ -36,7 +36,7 @@ http://ethanschoonover.com/lsradix/img/lsradix-palette.png
 }
 .cm-s-lsradix.cm-s-dark {
   background-color: var(--lx-gray-01, hsl(var(--secondary)/.7));
-  color: var(--lx-gray-10, hsl(var(--secondary-foreground)));
+  color: var(--ls-primary-text-color, var(--lx-gray-10, hsl(var(--secondary-foreground))));
 }
 
 .dark .cm-s-lsradix.cm-s-dark {

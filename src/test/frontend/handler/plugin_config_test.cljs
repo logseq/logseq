@@ -2,7 +2,7 @@
   (:require [clojure.test :refer [is use-fixtures testing deftest]]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [frontend.test.node-helper :as test-node-helper]
-            [frontend.test.fixtures :as fixtures]
+            [frontend.test.node-fixtures :as node-fixtures]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.schema.handler.plugin-config :as plugin-config-schema]
@@ -14,7 +14,7 @@
             [clojure.string :as string]
             [frontend.handler.notification :as notification]))
 
-(use-fixtures :once fixtures/redef-get-fs)
+(use-fixtures :once node-fixtures/redef-get-fs)
 
 (defn- create-global-config-dir
   []

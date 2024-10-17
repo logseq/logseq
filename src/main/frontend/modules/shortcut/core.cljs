@@ -11,8 +11,7 @@
             [frontend.util :as util]
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
-            [lambdaisland.glogi :as log]
-            [goog.functions :refer [debounce]])
+            [lambdaisland.glogi :as log])
   (:import [goog.events KeyCodes KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
@@ -119,7 +118,7 @@
     (map #(uninstall-shortcut-handler! % true))
     (doall))
 
-  (let [shortcut-map (dh/shortcut-map handler-id state)
+  (let [shortcut-map (dh/shortcuts-map-by-handler-id handler-id state)
         handler (new KeyboardShortcutHandler js/window)]
     ;; set arrows enter, tab to global
     (when set-global-keys?
@@ -134,8 +133,9 @@
 
     (let [f (fn [e]
               (let [id (keyword (.-identifier e))
-                    shortcut-map (dh/shortcut-map handler-id state) ;; required to get shortcut map dynamically
+                    shortcut-map (dh/shortcuts-map-by-handler-id handler-id state) ;; required to get shortcut map dynamically
                     dispatch-fn (get shortcut-map id)]
+                (state/set-state! :editor/latest-shortcut id)
                 ;; trigger fn
                 (when dispatch-fn
                   (plugin-handler/hook-lifecycle-fn! id dispatch-fn e))))
@@ -158,7 +158,8 @@
            [:shortcut.handler/misc
             :shortcut.handler/editor-global
             :shortcut.handler/global-non-editing-only
-            :shortcut.handler/global-prevent-default])
+            :shortcut.handler/global-prevent-default
+            :shortcut.handler/block-editing-only])
        (map #(install-shortcut-handler! % {}))
        doall))
 
@@ -238,7 +239,7 @@
      (listen-all!)
      state)})
 
-(defn refresh-internal!
+(defn refresh!
   "Always use this function to refresh shortcuts"
   []
   (when-not (:ui/shortcut-handler-refreshing? @state/state)
@@ -251,8 +252,6 @@
       (install-shortcuts! nil))
     (state/pub-event! [:shortcut-handler-refreshed])
     (state/set-state! :ui/shortcut-handler-refreshing? false)))
-
-(def refresh! (debounce refresh-internal! 1000))
 
 (defn- name-with-meta [e]
   (let [ctrl (.-ctrlKey e)
