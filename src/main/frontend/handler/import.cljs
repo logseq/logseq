@@ -26,7 +26,8 @@
             [medley.core :as medley]
             [frontend.persist-db :as persist-db]
             [promesa.core :as p]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn index-files!
   "Create file structure, then parse into DB (client only)"
@@ -236,6 +237,7 @@
       (repo-handler/restore-and-setup-repo! graph)
       (state/set-current-repo! graph)
       (persist-db/<export-db graph {})
+      (db/transact! graph (sqlite-util/import-tx :sqlite-db))
       (finished-ok-handler))
      (p/catch
       (fn [e]

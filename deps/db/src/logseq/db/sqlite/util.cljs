@@ -136,3 +136,10 @@
   {:pre [(= "logseq.kv" (namespace k))]}
   {:db/ident k
    :kv/value value})
+
+(defn import-tx
+  "Creates tx for an import given an import-type"
+  [import-type]
+  [(kv :logseq.kv/import-type import-type)
+   ;; Timestamp is useful as this can occur much later than :logseq.kv/graph-created-at
+   (kv :logseq.kv/imported-at (common-util/time-ms))])

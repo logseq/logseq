@@ -278,7 +278,7 @@
       [db search-db client-ops-db])))
 
 (defn- create-or-open-db!
-  [repo {:keys [config]}]
+  [repo {:keys [config import-type]}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db] (get-dbs repo)
             storage (new-sqlite-storage repo {})
@@ -302,7 +302,8 @@
         (swap! *client-ops-conns assoc repo client-ops-conn)
         (when (and db-based? (not initial-data-exists?))
           (let [config (or config {})
-                initial-data (sqlite-create-graph/build-db-initial-data config)]
+                initial-data (sqlite-create-graph/build-db-initial-data config
+                                                                        (when import-type {:import-type import-type}))]
             (d/transact! conn initial-data {:initial-db? true})))
 
         (try
@@ -429,12 +430,11 @@
 
   (createOrOpenDB
    [_this repo opts-str]
-   (let [{:keys [close-other-db? config]
-          :or {close-other-db? true}} (ldb/read-transit-str opts-str)]
+   (let [{:keys [close-other-db?] :or {close-other-db? true} :as opts} (ldb/read-transit-str opts-str)]
      (p/do!
       (when close-other-db?
         (close-other-dbs! repo))
-      (create-or-open-db! repo {:config config}))))
+      (create-or-open-db! repo (dissoc opts :close-other-db?)))))
 
   (getMaxTx
    [_this repo]

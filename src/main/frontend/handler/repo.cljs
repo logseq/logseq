@@ -184,7 +184,9 @@
 (defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
    (p/let [config (migrate-db-config config/config-default-content)
-           _ (persist-db/<new full-graph-name {:config config})
+           _ (persist-db/<new full-graph-name
+                              (cond-> {:config config}
+                                file-graph-import? (assoc :import-type :file-graph)))
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
            _ (restore-and-setup-repo! full-graph-name)
