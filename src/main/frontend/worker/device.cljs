@@ -25,6 +25,10 @@
   (when (and key' @store)
     (idb-keyval/set key' value @store)))
 
+(defn- <remove-item!
+  [key']
+  (idb-keyval/del key' @store))
+
 (def ^:private item-key-device-id "device-id")
 (def ^:private item-key-device-name "device-name")
 (def ^:private item-key-device-created-at "device-created-at")
@@ -46,16 +50,17 @@
   (m/join :device (ws-util/send&recv get-ws-create-task {:action "add-user-device"
                                                          :device-name device-name})))
 
-(defn- new-task--remove-user-device
+(defn- new-task--remove-user-device*
   [get-ws-create-task device-uuid]
   (ws-util/send&recv get-ws-create-task {:action "remove-user-device"
                                          :device-uuid device-uuid}))
 
-(defn- new-task--update-user-device-name
-  [get-ws-create-task device-uuid device-name]
-  (ws-util/send&recv get-ws-create-task {:action "update-user-device-name"
-                                         :device-uuid device-uuid
-                                         :device-name device-name}))
+(comment
+  (defn- new-task--update-user-device-name
+    [get-ws-create-task device-uuid device-name]
+    (ws-util/send&recv get-ws-create-task {:action "update-user-device-name"
+                                           :device-uuid device-uuid
+                                           :device-name device-name})))
 
 (defn- new-task--add-device-public-key
   [get-ws-create-task device-uuid key-name public-key-jwk]
@@ -122,7 +127,9 @@
   (m/sp
     (let [get-ws-create-task (new-get-ws-create-task token)
           devices (m/? (new-task--get-user-devices get-ws-create-task))]
-      (when ;; check current device has been synced to remote
+      (when
+          ;; check current device has been synced to remote
+          ;; if not exists in remote, remove local-metadata and recreate in local and remote
        (and @*device-id @*device-name @*device-public-key
             (not (some
                   (fn [device]
@@ -130,10 +137,13 @@
                       (when (= device-id (str @*device-id))
                         true)))
                   devices)))
-        (m/? (new-task--add-user-device get-ws-create-task @*device-name))
-        (let [public-key-jwk (c.m/<? (crypt/<export-key *device-public-key))]
-          (m/? (new-task--add-device-public-key
-                get-ws-create-task @*device-id "default-public-key" public-key-jwk))))
+        (c.m/<? (<remove-item! item-key-device-id))
+        (c.m/<? (<remove-item! item-key-device-name))
+        (c.m/<? (<remove-item! item-key-device-created-at))
+        (c.m/<? (<remove-item! item-key-device-updated-at))
+        (c.m/<? (<remove-item! item-key-device-public-key-jwk))
+        (c.m/<? (<remove-item! item-key-device-private-key-jwk))
+        (m/? (new-task--ensure-device-metadata! token)))
       devices)))
 
 (defn new-task--remove-device-public-key
@@ -143,3 +153,10 @@
     (when-let [device-uuid* (cond-> device-uuid (string? device-uuid) parse-uuid)]
       (let [get-ws-create-task (new-get-ws-create-task token)]
         (m/? (new-task--remove-device-public-key* get-ws-create-task device-uuid* key-name))))))
+
+(defn new-task--remove-device
+  [token device-uuid]
+  (m/sp
+    (when-let [device-uuid* (cond-> device-uuid (string? device-uuid) parse-uuid)]
+      (let [get-ws-create-task (new-get-ws-create-task token)]
+        (m/? (new-task--remove-user-device* get-ws-create-task device-uuid*))))))
