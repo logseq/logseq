@@ -1,27 +1,28 @@
 (ns frontend.worker.crypt
   "Fns to en/decrypt some block attrs"
-  (:require [promesa.core :as p]
+  (:require [datascript.core :as d]
             [frontend.worker.state :as worker-state]
-            [datascript.core :as d]))
+            [promesa.core :as p]))
 
-(defonce ^:private encoder (new js/TextEncoder "utf-8"))
-(defonce ^:private decoder (new js/TextDecoder "utf-8"))
+(comment
+  (defonce ^:private encoder (new js/TextEncoder "utf-8"))
+  (defonce ^:private decoder (new js/TextDecoder "utf-8"))
 
-(defn <encrypt
-  [message public-key]
-  (let [data (.encode encoder message)]
-    (js/crypto.subtle.encrypt
-     #js{:name "RSA-OAEP"}
-     public-key
-     data)))
+  (defn <encrypt
+    [message public-key]
+    (let [data (.encode encoder message)]
+      (js/crypto.subtle.encrypt
+       #js{:name "RSA-OAEP"}
+       public-key
+       data)))
 
-(defn <decrypt
-  [cipher-text private-key]
-  (p/let [result (js/crypto.subtle.decrypt
-                  #js{:name "RSA-OAEP"}
-                  private-key
-                  cipher-text)]
-    (.decode decoder result)))
+  (defn <decrypt
+    [cipher-text private-key]
+    (p/let [result (js/crypto.subtle.decrypt
+                    #js{:name "RSA-OAEP"}
+                    private-key
+                    cipher-text)]
+      (.decode decoder result))))
 
 (defonce ^:private key-algorithm
   #js{:name "RSA-OAEP"

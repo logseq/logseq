@@ -64,7 +64,7 @@
                                          :key-name key-name
                                          :public-key (ldb/write-transit-str public-key-jwk)}))
 
-(defn- new-task--remove-device-public-key
+(defn- new-task--remove-device-public-key*
   [get-ws-create-task device-uuid key-name]
   (ws-util/send&recv get-ws-create-task {:action "remove-device-public-key"
                                          :device-uuid device-uuid
@@ -91,7 +91,7 @@
                                       (:brand (first (:brands agent-data)))
                                       (tc/to-epoch (t/now))])
               {:keys [device-id device-name created-at updated-at]}
-              (new-task--add-user-device get-ws-create-task generated-device-name)
+              (m/? (new-task--add-user-device get-ws-create-task generated-device-name))
               {:keys [publicKey privateKey]} (c.m/<? (crypt/<gen-key-pair))
               public-key-jwk (c.m/<? (crypt/<export-key publicKey))
               private-key-jwk (c.m/<? (crypt/<export-key privateKey))]
@@ -127,11 +127,19 @@
             (not (some
                   (fn [device]
                     (let [{:keys [device-id]} device]
-                      (when (= device-id @*device-id)
+                      (when (= device-id (str @*device-id))
                         true)))
                   devices)))
         (m/? (new-task--add-user-device get-ws-create-task @*device-name))
-        (m/? (new-task--add-device-public-key
-              get-ws-create-task @*device-id "default-public-key" @*device-public-key)))
-      (prn :debug-devices devices)
+        (let [public-key-jwk (c.m/<? (crypt/<export-key *device-public-key))]
+          (m/? (new-task--add-device-public-key
+                get-ws-create-task @*device-id "default-public-key" public-key-jwk))))
       devices)))
+
+(defn new-task--remove-device-public-key
+  [token device-uuid key-name]
+  (assert (some? key-name))
+  (m/sp
+    (when-let [device-uuid* (cond-> device-uuid (string? device-uuid) parse-uuid)]
+      (let [get-ws-create-task (new-get-ws-create-task token)]
+        (m/? (new-task--remove-device-public-key* get-ws-create-task device-uuid* key-name))))))
