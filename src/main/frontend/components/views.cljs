@@ -1069,15 +1069,25 @@
                        :group-by-page? group-by-page?
                        :ref? true)))))
 
+(rum/defc gallery-card-item
+  [view-entity block config]
+  [:div.ls-card-item
+   {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
+   [:div.-ml-4
+    (block-container (assoc config :id (str (:block/uuid block))) block)]])
+
 (rum/defcs gallery-view < rum/static mixins/container-id
-  [state config view-entity result]
+  [state config view-entity blocks]
   (let [config' (assoc config :container-id (:container-id state))]
     [:div.ls-cards
-     (for [block result]
-       [:div.ls-card-item
-        {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
-        [:div.-ml-4
-         (block-container (assoc config' :id (str (:block/uuid block))) block)]])]))
+     (when (seq blocks)
+       (ui/virtualized-grid
+         {:total-count (count blocks)
+          :custom-scroll-parent (gdom/getElement "main-content-container")
+          :item-content (fn [idx]
+                          (when-let [block (nth blocks idx)]
+                            (gallery-card-item view-entity block config')))})
+       )]))
 
 (defn- run-effects!
   [{:keys [data columns state data-fns]} input input-filters set-input-filters!]
