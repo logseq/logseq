@@ -117,7 +117,7 @@
 
 (defn- calculate-collapsed?
   [current-block current-block-uuid {:keys [collapsed?]}]
-  (let [temp-collapsed? (state/sub-collapsed current-block-uuid)
+  (let [temp-collapsed? (state/sub-block-collapsed current-block-uuid)
         collapsed?' (if (some? temp-collapsed?)
                       temp-collapsed?
                       (or collapsed?

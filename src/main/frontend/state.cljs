@@ -2101,9 +2101,13 @@ Similar to re-frame subscriptions"
   (let [current-repo (get-current-repo)]
     (set-state! [:ui/collapsed-blocks current-repo block-id] value)))
 
-(defn sub-collapsed
+(defn sub-block-collapsed
   [block-id]
   (sub [:ui/collapsed-blocks (get-current-repo) block-id]))
+
+(defn get-block-collapsed
+  [block-id]
+  (get-in @state [:ui/collapsed-blocks (get-current-repo) block-id]))
 
 (defn get-modal-id
   []

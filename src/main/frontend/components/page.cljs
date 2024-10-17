@@ -638,7 +638,11 @@
               (when (and (not journal?) (not db-based?))
                 (hierarchy/structures (:block/title page))))
 
-            (when-not (or whiteboard? unlinked-refs? sidebar? home? (and block? (not db-based?)))
+            (when-not (or whiteboard? unlinked-refs?
+                          sidebar?
+                          home?
+                          (or class-page? property-page?)
+                          (and block? (not db-based?)))
               [:div {:key "page-unlinked-references"}
                (reference/unlinked-references page)])])]))))
 
