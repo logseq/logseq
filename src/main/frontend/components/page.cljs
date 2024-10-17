@@ -585,7 +585,7 @@
                    :on-mouse-leave (fn [e]
                                      (page-mouse-leave e *control-show?))}
                   (page-blocks-collapse-control title *control-show? *all-collapsed?)])
-               (when (and (not whiteboard?) (ldb/page? page))
+               (when (and (not whiteboard?) (not sidebar?) (ldb/page? page))
                  (if db-based?
                    (db-page-title page whiteboard-page? sidebar? (:container-id state))
                    (page-title-cp page {:journal? journal?
