@@ -838,10 +838,15 @@
    (with-write-transit-str
      (js/Promise. (worker-device/new-task--list-devices token))))
 
-  (device-add-remove-device-public-key
+  (device-remove-device-public-key
    [this token device-uuid key-name]
    (with-write-transit-str
      (js/Promise. (worker-device/new-task--remove-device-public-key token device-uuid key-name))))
+
+  (device-remove-device
+   [this token device-uuid]
+   (with-write-transit-str
+     (js/Promise. (worker-device/new-task--remove-device token device-uuid))))
 
   (undo
    [_this repo _page-block-uuid-str]

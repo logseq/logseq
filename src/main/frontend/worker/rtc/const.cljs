@@ -275,7 +275,7 @@
      [:map
       [:req-id :string]
       [:action :string]
-      [:device-uuid :string]]]
+      [:device-uuid :uuid]]]
     ["update-user-device-name"
      [:map
       [:req-id :string]
