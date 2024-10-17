@@ -230,19 +230,18 @@
 
 (defn get-all-pages
   [repo]
-  (let [graph-specific-hidden?
-        (if (config/db-based-graph? repo)
+  (let [db-based? (config/db-based-graph? repo)
+        graph-specific-hidden?
+        (if db-based?
           (fn [p]
             (and (ldb/property? p) (ldb/built-in? p)))
           (fn [p]
             (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
-    (->> (db/get-all-pages repo)
-         (remove (fn [p]
-                   (let [name (:block/name p)]
-                     (or (util/uuid-string? name)
-                         (common-config/draw? name)
-                         (graph-specific-hidden? p)))))
-         (common-handler/fix-pages-timestamps))))
+    (cond->>
+     (->> (db/get-all-pages repo)
+          (remove graph-specific-hidden?))
+      (not db-based?)
+      (common-handler/fix-pages-timestamps))))
 
 (defn get-filters
   [page]

@@ -153,24 +153,23 @@
                                   (or (db/entity ident) property))
                        get-value (if-let [f (:get-value property)]
                                    (fn [row]
-                                     (f (get-latest-entity row)))
+                                     (f row))
                                    (when (de/entity? property)
-                                     (fn [row] (get-property-value-for-search (get-latest-entity row) property))))
+                                     (fn [row] (get-property-value-for-search row property))))
                        closed-values (seq (:property/closed-values property))
                        closed-value->sort-number (when closed-values
                                                    (->> (zipmap (map :db/id closed-values) (range 0 (count closed-values)))
                                                         (into {})))
                        get-value-for-sort (fn [row]
-                                            (let [row (get-latest-entity row)]
-                                              (cond
-                                                (= (:db/ident property) :logseq.task/deadline)
-                                                (:block/journal-day (get row :logseq.task/deadline))
-                                                closed-values
-                                                (closed-value->sort-number (:db/id (get row (:db/ident property))))
-                                                :else
-                                                (if (fn? get-value)
-                                                  (get-value row)
-                                                  (get row ident)))))]
+                                            (cond
+                                              (= (:db/ident property) :logseq.task/deadline)
+                                              (:block/journal-day (get row :logseq.task/deadline))
+                                              closed-values
+                                              (closed-value->sort-number (:db/id (get row (:db/ident property))))
+                                              :else
+                                              (if (fn? get-value)
+                                                (get-value row)
+                                                (get row ident))))]
                    {:id ident
                     :name (or (:name property)
                               (:block/title property))
@@ -1108,7 +1107,9 @@
     (rum/use-effect!
      (fn []
        ;; Entities might be outdated
-       (let [new-data (map get-latest-entity data)
+       (let [;; TODO: should avoid this for better performance, 300ms for 40k pages
+             new-data (map get-latest-entity data)
+             ;; TODO: db support native order-by, limit, offset, 350ms for 40k pages
              data' (table-core/table-sort-rows new-data sorting columns)]
          (set-data! data')))
      [sorting])))
