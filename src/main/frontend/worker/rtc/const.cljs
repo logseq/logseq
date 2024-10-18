@@ -294,7 +294,14 @@
       [:req-id :string]
       [:action :string]
       [:device-uuid :uuid]
-      [:key-name :string]]]]))
+      [:key-name :string]]]
+    ["sync-encrypted-private-key"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:device-uuid->encrypted-private-key [:map-of :uuid :string]]
+      [:graph-uuid :uuid]]]]))
+
 (def data-to-ws-encoder (m/encoder data-to-ws-schema (mt/transformer
                                                       mt/string-transformer
                                                       (mt/key-transformer {:encode m/-keyword->string}))))
