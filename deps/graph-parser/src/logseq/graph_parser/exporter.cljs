@@ -655,6 +655,7 @@
                                 {:block/uuid (get-page-uuid page-names-to-uuids (get-in block' [:block/namespace :block/name]))}
                                 ;; DB graphs only have child name of namespace
                                 :block/title new-title
+                                ::original-name (:block/name block')
                                 :block/name (common-util/page-name-sanity-lc new-title)})))
                   block')]
     {:block block'' :properties-tx properties-tx}))
@@ -893,13 +894,15 @@
         all-pages-m (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
                           all-pages)
         pages-tx (keep (fn [m]
-                         (if-let [page-uuid (all-existing-page-uuids (:block/name m))]
-                           (build-existing-page m @conn page-uuid page-names-to-uuids options)
+                         (if-let [page-uuid (if (::original-name m)
+                                              (all-existing-page-uuids (::original-name m))
+                                              (all-existing-page-uuids (:block/name m)))]
+                           (build-existing-page (dissoc m ::original-name) @conn page-uuid page-names-to-uuids options)
                            (when (or (= "class" (:block/type m))
                                      ;; Don't build a new page if it overwrites an existing class
                                      (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
                                                   db-malli-schema/class?)))
-                             (build-new-page-or-class m @conn tag-classes page-names-to-uuids (:all-idents import-state)))))
+                             (build-new-page-or-class (dissoc m ::original-name) @conn tag-classes page-names-to-uuids (:all-idents import-state)))))
                        (map :block all-pages-m))]
     {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
@@ -1360,7 +1363,7 @@
                           (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
            asset-files (filter #(string/starts-with? (get % rpath-key) "assets/") files)
            doc-options (build-doc-options config options)]
-       (log-fn "Importing" (count files) "files ...")
+       (log-fn "Importing" (count doc-files) "files ...")
        ;; These export* fns are all the major export/import steps
        (p/do!
         (export-logseq-files repo-or-conn (filter logseq-file? files) <read-file
