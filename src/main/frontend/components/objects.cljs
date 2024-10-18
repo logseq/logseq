@@ -171,6 +171,7 @@
                                                             {:on-change (fn [_e files]
                                                                           (p/do!
                                                                            (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)
+                                                                           (set-data! (get-class-objects class))
                                                                            (shui/dialog-close!)))})])))
                                                      #(add-new-class-object! class set-data!))
                                   :show-add-property? true
