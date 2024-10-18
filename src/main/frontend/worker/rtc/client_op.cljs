@@ -68,6 +68,11 @@
     (assert (nil? (first (d/datoms @conn :avet :graph-uuid))))
     (d/transact! conn [[:db/add "e" :graph-uuid graph-uuid]])))
 
+(defn get-graph-uuid
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (first (d/datoms @conn :avet :graph-uuid))))
+
 (defn update-local-tx
   [repo t]
   {:pre [(some? t)]}

@@ -4,18 +4,18 @@
             [frontend.worker.state :as worker-state]
             [promesa.core :as p]))
 
+(defonce ^:private encoder (new js/TextEncoder "utf-8"))
+(comment (defonce ^:private decoder (new js/TextDecoder "utf-8")))
+
+(defn <encrypt
+  [message public-key]
+  (let [data (.encode encoder message)]
+    (js/crypto.subtle.encrypt
+     #js{:name "RSA-OAEP"}
+     public-key
+     data)))
+
 (comment
-  (defonce ^:private encoder (new js/TextEncoder "utf-8"))
-  (defonce ^:private decoder (new js/TextDecoder "utf-8"))
-
-  (defn <encrypt
-    [message public-key]
-    (let [data (.encode encoder message)]
-      (js/crypto.subtle.encrypt
-       #js{:name "RSA-OAEP"}
-       public-key
-       data)))
-
   (defn <decrypt
     [cipher-text private-key]
     (p/let [result (js/crypto.subtle.decrypt
