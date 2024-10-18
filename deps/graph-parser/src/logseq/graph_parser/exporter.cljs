@@ -846,6 +846,28 @@
         (:block/tags m)
         (update-page-tags db tag-classes page-names-to-uuids (:all-idents import-state))))))
 
+(defn- modify-page-tx
+  "Modifies page tx from graph-parser for use with DB graphs. Currently modifies
+  namespaces and blocks with built-in page names"
+  [page all-existing-page-uuids]
+  (if (contains? all-existing-page-uuids (:block/name page))
+     (cond-> page
+       (:block/namespace page)
+       ;; Fix uuid for existing pages as graph-parser's :block/name is different than
+       ;; the DB graph's version e.g. 'b/c/d' vs 'd'
+       (assoc :block/uuid
+              (or (all-existing-page-uuids (:block/name page))
+                  (throw (ex-info (str "No uuid found for existing namespace page " (pr-str (:block/name page)))
+                                  (select-keys page [:block/name :block/namespace]))))))
+     (cond-> page
+       ;; fix extract incorrectly assigning new user pages built-in uuids
+       (contains? all-built-in-names (keyword (:block/name page)))
+       (assoc :block/uuid (d/squuid))
+       ;; only happens for few file built-ins like tags and alias
+       (and (contains? all-built-in-names (keyword (:block/name page)))
+            (not (:block/type page)))
+       (assoc :block/type "page"))))
+
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
   all non-whiteboard pages to be transacted, pages' properties and additional
@@ -860,54 +882,28 @@
                         (map #(dissoc % :block/file)))
         ;; Fetch all named ents once per import file to speed up named lookups
         all-existing-page-ents (get-all-existing-page-ents @conn)
-        ;; map of existing pages in current parsed file, indexed by name
-        existing-pages-by-name
-        (into {}
-              (keep #(when-let [ent (all-existing-page-ents (:block/name %))]
-                       ;; Use :block/name from all-pages* to be compatible with all-existing-page-ents format
-                       [(:block/name %) (:block/uuid ent)])
-                    all-pages*))
-        existing-page? #(contains? existing-pages-by-name (:block/name %))
-        existing-page-uuids (update-vals all-existing-page-ents :block/uuid)
-        ;; Fix page uuids
-        all-pages (map #(if (existing-page? %)
-                          (cond-> %
-                            (:block/namespace %)
-                            ;; Fix uuid for existing pages as graph-parser's :block/name is different than
-                            ;; the DB graph's version e.g. 'b/c/d' vs 'd'
-                            (assoc :block/uuid
-                                   (or (existing-page-uuids (:block/name %))
-                                       (throw (ex-info (str "No uuid found for existing namespace page " (:block/name %))
-                                                       (select-keys % [:block/name :block/namespace]))))))
-                          ;; fix extract incorrectly assigning new user pages built-in uuids
-                          (cond-> %
-                            (contains? all-built-in-names (keyword (:block/name %)))
-                            (assoc :block/uuid (d/squuid))))
-                       all-pages*)
+        all-existing-page-uuids (update-vals all-existing-page-ents
+                                             #(or (:block/uuid %)
+                                                  (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name %)))
+                                                                  (select-keys % [:block/name :type])))))
+        all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
         page-names-to-uuids (merge (update-vals all-existing-page-ents :block/uuid)
                                    (into {} (map (juxt :block/name :block/uuid)
-                                                 (remove existing-page? all-pages))))
+                                                 (remove all-existing-page-uuids all-pages))))
         all-pages-m (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
                           all-pages)
         pages-tx (keep (fn [m]
-                         (if-let [page-uuid (existing-pages-by-name (:block/name m))]
+                         (if-let [page-uuid (all-existing-page-uuids (:block/name m))]
                            (build-existing-page m @conn page-uuid page-names-to-uuids options)
                            (when (or (= "class" (:block/type m))
                                      ;; Don't build a new page if it overwrites an existing class
                                      (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
                                                   db-malli-schema/class?)))
-                             (let [m' (if (contains? all-built-in-names (keyword (:block/name m)))
-                                        ;; Use fixed uuid from above
-                                        (cond-> (assoc m :block/uuid (get page-names-to-uuids (:block/name m)))
-                                          ;; only happens for few file built-ins like tags and alias
-                                          (not (:block/type m))
-                                          (assoc :block/type "page"))
-                                        m)]
-                               (build-new-page-or-class m' @conn tag-classes page-names-to-uuids (:all-idents import-state))))))
+                             (build-new-page-or-class m @conn tag-classes page-names-to-uuids (:all-idents import-state)))))
                        (map :block all-pages-m))]
     {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
-     :existing-pages existing-pages-by-name
+     :existing-pages (select-keys all-existing-page-uuids (map :block/name all-pages*))
      :page-names-to-uuids page-names-to-uuids}))
 
 (defn- build-upstream-properties-tx-for-default
