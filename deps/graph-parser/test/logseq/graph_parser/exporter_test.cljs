@@ -163,7 +163,7 @@
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")))
 
-(deftest-async ^:focus export-basic-graph
+(deftest-async export-basic-graph
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)

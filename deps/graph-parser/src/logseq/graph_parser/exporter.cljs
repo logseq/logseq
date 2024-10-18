@@ -526,7 +526,7 @@
       (swap! (:block-properties-text-values import-state)
              assoc
              ;; For pages, valid uuid is in page-names-to-uuids, not in block
-             (if (:block/name block) (get-page-uuid page-names-to-uuids (:block/name block)) (:block/uuid block))
+             (if (:block/name block) (get-page-uuid page-names-to-uuids ((some-fn ::original-name :block/name) block)) (:block/uuid block))
              properties-text-values))
     ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
     (if (contains? props :template)
@@ -609,7 +609,7 @@
               options' (assoc options :property-changes property-changes)
               {:keys [block-properties pvalues-tx]}
               (build-properties-and-values properties' db page-names-to-uuids
-                                           (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
+                                           (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid ::original-name])
                                            options')]
           {:block
            (cond-> block
@@ -625,7 +625,7 @@
       (update :block dissoc :block/properties :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
 (defn- handle-page-properties
-  "Adds page properties and handles converting :block/namespace since it involves properties"
+  "Adds page properties including special handling for :logseq.property/parent"
   [{:block/keys [properties] :as block*} db page-names-to-uuids refs
    {:keys [property-parent-classes log-fn import-state] :as options}]
   (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
@@ -649,14 +649,9 @@
                                 {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))}))))))
           (dissoc block* :block/properties))
         block'' (if (:block/namespace block')
-                  (let [new-title (ns-util/get-last-part (:block/title block'))]
-                    (-> (dissoc block' :block/namespace)
-                        (merge {:logseq.property/parent
-                                {:block/uuid (get-page-uuid page-names-to-uuids (get-in block' [:block/namespace :block/name]))}
-                                ;; DB graphs only have child name of namespace
-                                :block/title new-title
-                                ::original-name (:block/name block')
-                                :block/name (common-util/page-name-sanity-lc new-title)})))
+                  (-> (dissoc block' :block/namespace)
+                      (assoc :logseq.property/parent
+                             {:block/uuid (get-page-uuid page-names-to-uuids (get-in block' [:block/namespace :block/name]))}))
                   block')]
     {:block block'' :properties-tx properties-tx}))
 
@@ -809,8 +804,8 @@
       (dissoc :block/whiteboard?)
       (update-page-tags db tag-classes page-names-to-uuids all-idents)))
 
-(defn- get-all-existing-page-ents
-  "Returns a map of unique page names mapped to their entities. The page names
+(defn- get-all-existing-page-uuids
+  "Returns a map of unique page names mapped to their uuids. The page names
    are in a format that is compatible with extract/extract e.g. namespace pages have
    their full hierarchy in the name"
   [db]
@@ -820,10 +815,14 @@
        (d/q '[:find [?b ...]
               :where [?b :block/name] [(missing? $ ?b :logseq.property/built-in?)]])
        (map #(d/entity db %))
-       (map #(if-let [parents (and (ldb/internal-page? %) (ldb/get-page-parents %))]
-               ;; Build a :block/name for namespace pages that matches data from extract/extract
-               [(string/join ns-util/namespace-char (conj (mapv :block/name parents) (:block/name %))) %]
-               [(:block/name %) %]))
+       (map #(vector
+              (if-let [parents (and (ldb/internal-page? %) (ldb/get-page-parents %))]
+                ;; Build a :block/name for namespace pages that matches data from extract/extract
+                (string/join ns-util/namespace-char (conj (mapv :block/name parents) (:block/name %)))
+                (:block/name %))
+              (or (:block/uuid %)
+                  (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name %)))
+                                  (select-keys % [:block/name :type]))))))
        (into {})))
 
 (defn- build-existing-page [m db page-uuid page-names-to-uuids {:keys [tag-classes notify-user import-state]}]
@@ -851,23 +850,34 @@
   "Modifies page tx from graph-parser for use with DB graphs. Currently modifies
   namespaces and blocks with built-in page names"
   [page all-existing-page-uuids]
-  (if (contains? all-existing-page-uuids (:block/name page))
-     (cond-> page
-       (:block/namespace page)
-       ;; Fix uuid for existing pages as graph-parser's :block/name is different than
-       ;; the DB graph's version e.g. 'b/c/d' vs 'd'
-       (assoc :block/uuid
-              (or (all-existing-page-uuids (:block/name page))
-                  (throw (ex-info (str "No uuid found for existing namespace page " (pr-str (:block/name page)))
-                                  (select-keys page [:block/name :block/namespace]))))))
-     (cond-> page
-       ;; fix extract incorrectly assigning new user pages built-in uuids
-       (contains? all-built-in-names (keyword (:block/name page)))
-       (assoc :block/uuid (d/squuid))
-       ;; only happens for few file built-ins like tags and alias
-       (and (contains? all-built-in-names (keyword (:block/name page)))
-            (not (:block/type page)))
-       (assoc :block/type "page"))))
+  (let [page'
+        (if (contains? all-existing-page-uuids (:block/name page))
+          (cond-> page
+            (:block/namespace page)
+            ;; Fix uuid for existing pages as graph-parser's :block/name is different than
+            ;; the DB graph's version e.g. 'b/c/d' vs 'd'
+            (assoc :block/uuid
+                   (or (all-existing-page-uuids (:block/name page))
+                       (throw (ex-info (str "No uuid found for existing namespace page " (pr-str (:block/name page)))
+                                       (select-keys page [:block/name :block/namespace]))))))
+          (cond-> page
+            ;; fix extract incorrectly assigning new user pages built-in uuids
+            (contains? all-built-in-names (keyword (:block/name page)))
+            (assoc :block/uuid (d/squuid))
+            ;; only happens for few file built-ins like tags and alias
+            (and (contains? all-built-in-names (keyword (:block/name page)))
+                 (not (:block/type page)))
+            (assoc :block/type "page")))]
+    (cond-> page'
+      (:block/namespace page)
+      ((fn [block']
+         (let [new-title (ns-util/get-last-part (:block/title block'))]
+           (merge block'
+                  {;; DB graphs only have child name of namespace
+                   :block/title new-title
+                   ;; save original name b/c it's still used for a few name lookups
+                   ::original-name (:block/name block')
+                   :block/name (common-util/page-name-sanity-lc new-title)})))))))
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
@@ -882,14 +892,10 @@
                         ;; remove file path relative
                         (map #(dissoc % :block/file)))
         ;; Fetch all named ents once per import file to speed up named lookups
-        all-existing-page-ents (get-all-existing-page-ents @conn)
-        all-existing-page-uuids (update-vals all-existing-page-ents
-                                             #(or (:block/uuid %)
-                                                  (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name %)))
-                                                                  (select-keys % [:block/name :type])))))
+        all-existing-page-uuids (get-all-existing-page-uuids @conn)
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
-        page-names-to-uuids (merge (update-vals all-existing-page-ents :block/uuid)
-                                   (into {} (map (juxt :block/name :block/uuid)
+        page-names-to-uuids (merge all-existing-page-uuids
+                                   (into {} (map (juxt (some-fn ::original-name :block/name) :block/uuid)
                                                  (remove all-existing-page-uuids all-pages))))
         all-pages-m (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
                           all-pages)
