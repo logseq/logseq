@@ -310,6 +310,11 @@ html.is-native-iphone-without-notch {
   }
 }
 
+.add-button-link-wrap:focus .add-button-link {
+  opacity: .8 !important;
+  transform: scale(.9);
+}
+
 .cp__right-sidebar .add-button-link {
   margin-left: 21px;
 }

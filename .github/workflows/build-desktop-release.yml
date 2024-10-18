@@ -379,6 +379,7 @@ jobs:
           rm builds\*.exe
           mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
           mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.zip
+          mv static\out\make\wix\x64\Logseq.msi            builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.msi
           mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
 
       - name: Upload Artifact
@@ -389,7 +390,7 @@ jobs:
 
   build-macos-x64:
     needs: [ compile-cljs ]
-    runs-on: macos-11
+    runs-on: macos-12
 
     steps:
       - name: Download The Static Asset
@@ -465,7 +466,7 @@ jobs:
 
   build-macos-arm64:
     needs: [ compile-cljs ]
-    runs-on: macos-11
+    runs-on: macos-12
 
     steps:
       - name: Download The Static Asset
@@ -652,6 +653,7 @@ jobs:
             ./*.zip
             ./*.dmg
             ./*.exe
+            ./*.msi
             ./*.AppImage
             ./*.apk
 
@@ -742,6 +744,7 @@ jobs:
             ./*.zip
             ./*.dmg
             ./*.exe
+            ./*.msi
             ./*.nupkg
             ./RELEASES
             ./*.AppImage

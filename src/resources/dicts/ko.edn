@@ -430,7 +430,7 @@
  :command.editor/select-parent                    "부모 블록 선택"
  :command.go/all-graphs                           "모든 그래프로 이동"
  :command.go/electron-find-in-page                "페이지에서 검색"
- :command.go/electron-jump-to-the-next            "다음 검색 항목으로 디오"
+ :command.go/electron-jump-to-the-next            "다음 검색 항목으로 이동"
  :command.go/electron-jump-to-the-previous        "이전 검색 항목으로 이동"
  :command.go/whiteboards                          "화이트보드로 이동"
  :command.graph/export-as-html                    "그래프를 html로 내보내기"
@@ -438,4 +438,8 @@
  :command.pdf/find                                "PDF: 현재 PDF 문서에서 검색"
  :command.sidebar/close-top                       "우축 사이드바의 최상단 항목 닫기"
  :command.ui/clear-all-notifications              "모든 알람 제거"
- :command.ui/install-plugins-from-file            "plugins.edn에서 플러그인 설치"}
+ :command.ui/install-plugins-from-file            "plugins.edn에서 플러그인 설치"
+ :command.command-palette/toggle                  "명령어 검색"
+ :command.go/search-in-page                       "현재 페이지에서 블록 검색"
+ }
+  
