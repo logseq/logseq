@@ -66,8 +66,11 @@
 (defn resolve-area-image-file
   [img-stamp current {:keys [page id] :as _hl}]
   (when-let [key (:key current)]
-    (-> (str common-config/local-assets-dir "/" key "/")
-        (str (util/format "%s_%s_%s.png" page id img-stamp)))))
+    (-> common-config/local-assets-dir
+        (str (if (config/db-based-graph?)
+               (let [image-id (some-> id (db-utils/entity) :logseq.property.pdf/hl-image :block/uuid)]
+                 (util/format "/%s.png" image-id))
+               (util/format "/%s/%s_%s_%s.png" key page id img-stamp))))))
 
 (defn file-based-ensure-ref-page!
   [pdf-current]
