@@ -2842,6 +2842,7 @@
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
+        page-embed? (:page-embed? config)
         reference? (:reference? config)
         whiteboard-block? (gp-whiteboard/shape-block? block)
         block-id (str "ls-block-" blocks-container-id "-" uuid)
@@ -2879,7 +2880,7 @@
       (not slide?)
       (merge attrs)
 
-      (or reference? embed?)
+      (or reference? (and embed? (not page-embed?)))
       (assoc :data-transclude true)
 
       embed?

@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as string]
    [frontend.components.block :as block]
+   [frontend.extensions.pdf.utils :as pdf-utils]
    [frontend.context.i18n :refer [t]]
    [frontend.db :as db]
    [frontend.db.model :as model]
@@ -604,9 +605,15 @@
 
       [:div.search-results
        (for [item visible-items
-             :let [highlighted? (= item highlighted-item)]]
+             :let [highlighted? (= item highlighted-item)
+                   page? (= "page" (some-> item :icon))
+                   text (some-> item :text)
+                   source-page (some-> item :source-page)
+                   hls-page? (and page? (pdf-utils/hls-file? source-page))]]
          (let [item (shui/list-item (assoc item
                                            :query (when-not (= group :create) @(::input state))
+                                           :text (if hls-page? (pdf-utils/fix-local-asset-pagename text) text)
+                                           :hls-page? hls-page?
                                            :compact true
                                            :rounded false
                                            :hoverable @*mouse-active?
