@@ -874,6 +874,9 @@ html.is-mac {
   opacity: 1;
 }
 
+.positioned-properties {
+  @apply text-sm;
+}
 .positioned-properties.block-right {
   button {
     @apply whitespace-nowrap mr-0.5;

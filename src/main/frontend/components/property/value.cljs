@@ -50,9 +50,14 @@
                    text))))
 
 (rum/defc property-empty-text-value
-  [& {:as opts}]
+  [property {:keys [property-position]}]
   [:span.inline-flex.items-center.cursor-pointer
-   (merge {:class "empty-text-btn" :variant :text} opts) "Empty"])
+   (merge {:class "empty-text-btn" :variant :text})
+   (if property-position
+     (if-let [icon (:logseq.property/icon property)]
+       (icon-component/icon icon {:color? true})
+       (ui/icon "line-dashed"))
+     "Empty")])
 
 (rum/defc icon-row
   [block editing?]
@@ -851,13 +856,13 @@
                                          :auto-focus? true
                                          :trigger-id trigger-id}))))]
       (shui/trigger-as
-       (if (:other-position? opts) :div :div.jtrigger.flex.flex-1.w-full)
+       (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full)
        {:ref *el
         :id trigger-id
         :tabIndex 0
         :on-click show!}
        (if (string/blank? value)
-         (property-empty-text-value)
+         (property-empty-text-value property opts)
          (value-f))))))
 
 (defn- property-value-inner
@@ -981,7 +986,7 @@
                 [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
              (if date?
                (property-value-date-picker block property nil {:toggle-fn toggle-fn})
-               (property-empty-text-value))))]))))
+               (property-empty-text-value property opts))))]))))
 
 (rum/defc multiple-values < rum/reactive db-mixins/query
   [block property opts schema]

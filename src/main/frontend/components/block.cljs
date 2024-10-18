@@ -2356,8 +2356,7 @@
                                         :block-cp blocks-container
                                         :editor-box (state/get-component :editor/box)
                                         :container-id (or (:container-id config)
-                                                          (::initial-container-id state))
-                                        :id (:id config)}
+                                                          (::initial-container-id state))}
                                        opts)))
 
 (rum/defc invalid-properties-cp
@@ -2601,7 +2600,8 @@
                      :page-cp page-cp
                      :block-cp blocks-container
                      :inline-text inline-text
-                     :other-position? true})]
+                     :other-position? true
+                     :property-position position})]
     (when (seq properties)
       (case position
         :block-below
@@ -2609,10 +2609,10 @@
          (for [pid properties]
            (let [property (db/entity pid)
                  v (get block pid)]
-             [:div.flex.flex-row.items-center.gap-2.hover:bg-secondary.rounded
-              [:div.flex.flex-row.opacity-50.hover:opacity-100.items-center
+             [:div.flex.flex-row.items-center.opacity-50.hover:opacity-100.transition-opacity.duration-300.ease-in.gap-1
+              [:div.flex.flex-row.items-center
                (property-component/property-key-cp block property opts)
-               [:div.select-none ":"]]
+               ":"]
               (pv/property-value block property v opts)]))]
         [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6
          {:class (name position)}
@@ -2835,8 +2835,6 @@
                                                                                               :container-id (:container-id config)}))}})
            (block-content config block edit-input-id block-id slide?))
 
-          (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
-
           (when (and (not hide-block-refs-count?)
                      (not named?))
             [:div.flex.flex-row.items-center
@@ -2855,6 +2853,8 @@
                                     (util/stop e)
                                     (editor-handler/edit-block! block :max))}
                 svg/edit])])])
+
+       (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
 
        (when-not (or (:table? config) (:property? config) (:page-title? config))
          (block-refs-count block refs-count *hide-block-refs?))
@@ -3316,7 +3316,7 @@
        (dnd-separator-wrapper block children block-id slide? true false))
 
      (when-not (:hide-title? config)
-       [:div.block-main-container.flex.flex-row.pr-2.gap-1
+       [:div.block-main-container.flex.flex-row.gap-1
         {:style (when (and db-based? (:page-title? config))
                   {:margin-left -30})
          :data-has-heading (some-> block :block/properties (pu/lookup :logseq.property/heading))
