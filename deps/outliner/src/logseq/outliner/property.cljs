@@ -394,8 +394,7 @@
   (let [property (d/entity db property-id)
         schema (:block/schema property)]
     (and
-     (or (= (:position schema) position)
-         (contains? #{:checkbox} (:type schema)))
+     (= (:position schema) position)
      (not (get-in property [:block/schema :hide?]))
      (not (and
            (= (:position schema) :block-below)
