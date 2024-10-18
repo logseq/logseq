@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
+import {loadLocalE2eTestsPlugin } from './logseq-api.spec'
 import { callPageAPI } from './utils'
 
 test.skip('enabled plugin system default', async ({ page }) => {
@@ -58,5 +59,28 @@ test.skip('play a plugin<logseq-journals-calendar> from the Marketplace', async 
 
   // TODO: debug
   await expect(page.locator('body[data-page="page"]')).toBeVisible()
+})
+
+test(`play a plugin from local`, async ({ page }) => {
+  const callAPI = callPageAPI.bind(null, page)
+  const _pLoaded = await loadLocalE2eTestsPlugin(page)
+
+  const loc = page.locator('#a-plugin-for-e2e-tests')
+  await loc.waitFor({ state: 'visible' })
+
+  await callAPI(`push_state`, 'page', {name: 'contents'})
+
+  const b = await callAPI(`append_block_in_page`, 'Contents', 'target e2e block')
+
+  expect(typeof b?.uuid).toBe('string')
+  await expect(page.locator('text=[DB] hook: changed')).toBeVisible()
+
+  // 65a0beee-7e01-4e72-8d38-089d923a63de
+  await callAPI(`insert_block`, b.uuid,
+    'new custom uuid block', { customUUID: '65a0beee-7e01-4e72-8d38-089d923a63de' })
+
+  await expect(page.locator('text=[DB] hook: block changed')).toBeVisible()
+
+  // await page.waitForSelector('#test-pause')
 })
 

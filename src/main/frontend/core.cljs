@@ -1,25 +1,28 @@
 (ns frontend.core
   "Entry ns for the mobile, browser and electron frontend apps"
   {:dev/always true}
-  (:require [rum.core :as rum]
+  (:require [frontend.common-keywords]
+            [frontend.components.plugins :as plugins]
+            [frontend.config :as config]
+            [frontend.fs.sync :as sync]
             [frontend.handler :as handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.log]
             [frontend.page :as page]
             [frontend.routes :as routes]
+            [frontend.common.schema-register :as sr]
             [frontend.spec]
-            [frontend.log]
+            [logseq.api]
+            [malli.dev.cljs :as md]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
-            [logseq.api]
-            [frontend.fs.sync :as sync]
-            [frontend.config :as config]
-            [malli.dev.cljs :as md]))
+            [rum.core :as rum]))
 
 (defn set-router!
   []
   (rfe/start!
-   (rf/router routes/routes nil)
+   (rf/router (plugins/hook-custom-routes routes/routes) nil)
    (fn [route]
      (route-handler/set-route-match! route)
      (plugin-handler/hook-plugin-app
@@ -43,9 +46,10 @@
             \\/    /_____/     \\/     \\/   |__|
      "))
 
-(defn start []
+(defn ^:export start []
   (when config/dev?
     (md/start!))
+  (frontend.common.schema-register/init)
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
     (rum/mount (page/current-page) node)
@@ -62,10 +66,14 @@
   (plugin-handler/setup!
    #(handler/start! start)))
 
-(defn stop []
+(defn ^:export stop []
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
   (handler/stop!)
   (when config/dev?
     (sync/<sync-stop))
   (js/console.log "stop"))
+
+(defn ^:export delay-remount
+  [delay]
+  (js/setTimeout #(start) delay))

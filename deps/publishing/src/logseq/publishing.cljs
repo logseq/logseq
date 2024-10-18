@@ -16,6 +16,8 @@ can be passed:
 * :ui/radix-color - Accent color. See available values in Settings.
 * :html-options - A map of values that are inserted into index.html. Map keys
   can be icon, name, alias, title, description and url
+* :repo-config - A graph's configuration
+* :db-graph? - Boolean which indicates if graph is db based
 * :default-notification-fn - Configure how errors are reported when creating the export.
   Default is to throw an exception when it occurs."
   [db static-dir graph-dir output-dir {:keys [notification-fn dev?]

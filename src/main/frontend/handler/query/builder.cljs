@@ -1,7 +1,7 @@
 (ns frontend.handler.query.builder
   "DSL query builder handler"
   (:require [clojure.walk :as walk]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [lambdaisland.glogi :as log]
             [frontend.db.query-dsl :as query-dsl]))
 
@@ -9,6 +9,7 @@
 
 (def operators [:and :or :not])
 (def operators-set (set operators))
+
 (def page-filters ["all page tags"
                    "namespace"
                    "tags"
@@ -155,7 +156,7 @@
               (last f))]
       (into [(symbol (first f))] [(second f) l]))
 
-    (and (vector? f) (contains? #{:page :namespace :tags} (keyword (first f))))
+    (and (vector? f) (contains? #{:page :tags :namespace} (keyword (first f))))
     (into [(symbol (first f))] (map ->page-ref (rest f)))
 
     :else f))

@@ -1,11 +1,10 @@
 (ns frontend.extensions.pdf.utils
-  (:require [promesa.core :as p]
+  (:require ["/frontend/extensions/pdf/utils" :as js-utils]
             [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.util :as util]
-            ["/frontend/extensions/pdf/utils" :as js-utils]
-            [datascript.core :as d]
-            [logseq.publishing.db :as publish-db]
-            [clojure.string :as string]))
+            [logseq.common.uuid :as common-uuid]
+            [promesa.core :as p]))
 
 (defonce MAX-SCALE 5.0)
 (defonce MIN-SCALE 0.25)
@@ -14,8 +13,6 @@
 (defn hls-file?
   [filename]
   (and filename (string? filename) (string/starts-with? filename "hls__")))
-
-(def get-area-block-asset-url publish-db/get-area-block-asset-url)
 
 (defn get-bounding-rect
   [rects]
@@ -96,16 +93,16 @@
   [^js viewer]
   (when-let [^js doc (and viewer (.-pdfDocument viewer))]
     (p/create
-      (fn [resolve]
-        (p/catch
-          (p/then (.getMetadata doc)
-                  (fn [^js r]
-                    (js/console.debug "[metadata] " r)
-                    (when-let [^js info (and r (.-info r))]
-                      (resolve (bean/->clj info)))))
-          (fn [e]
-            (resolve nil)
-            (js/console.error e)))))))
+     (fn [resolve]
+       (p/catch
+        (p/then (.getMetadata doc)
+                (fn [^js r]
+                  (js/console.debug "[metadata] " r)
+                  (when-let [^js info (and r (.-info r))]
+                    (resolve (bean/->clj info)))))
+        (fn [e]
+          (resolve nil)
+          (js/console.error e)))))))
 
 (defn clear-all-selection
   []
@@ -113,15 +110,16 @@
 
 (def adjust-viewer-size!
   (util/debounce
-    200 (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))))
+   200 (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))))
 
 (defn fix-nested-js
   [its]
   (when (sequential? its)
     (mapv #(if (map? %) % (bean/->clj %)) its)))
 
-(defn gen-uuid []
-  (d/squuid))
+(defn gen-uuid
+  []
+  (common-uuid/gen-uuid))
 
 (defn load-base-assets$
   []
@@ -166,7 +164,7 @@
 
 (defn fix-local-asset-pagename
   [filename]
-  (when-not (string/blank? filename)
+  (if (and (string? filename) (not (string/blank? filename)))
     (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
           hls?         (hls-file? filename)
           len          (count filename)]
@@ -177,7 +175,8 @@
             (string/replace #"__[-\d]+$" "")
             (string/replace "_" " ")
             (string/trimr))
-        filename))))
+        filename))
+    filename))
 
 ;; TODO: which viewer instance?
 (defn next-page
@@ -200,8 +199,8 @@
     (catch js/Error _e nil)))
 
 (comment
- (fix-selection-text-breakline "this is a\ntest paragraph")
- (fix-selection-text-breakline "he is 1\n8 years old")
- (fix-selection-text-breakline "这是一个\n\n段落")
- (fix-selection-text-breakline "これ\n\nは、段落")
- (fix-selection-text-breakline "this is a te-\nst paragraph"))
+  (fix-selection-text-breakline "this is a\ntest paragraph")
+  (fix-selection-text-breakline "he is 1\n8 years old")
+  (fix-selection-text-breakline "这是一个\n\n段落")
+  (fix-selection-text-breakline "これ\n\nは、段落")
+  (fix-selection-text-breakline "this is a te-\nst paragraph"))

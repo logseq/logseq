@@ -1,61 +1,84 @@
 (ns ^:no-doc frontend.handler.history
   (:require [frontend.db :as db]
+            [frontend.db.transact :as db-transact]
             [frontend.handler.editor :as editor]
-            [frontend.modules.editor.undo-redo :as undo-redo]
+            [frontend.handler.route :as route-handler]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.handler.route :as route-handler]
-            [goog.dom :as gdom]))
+            [frontend.util.page :as page-util]
+            [logseq.db :as ldb]
+            [promesa.core :as p]
+            [goog.functions :refer [debounce]]))
 
-(defn restore-cursor!
-  [{:keys [last-edit-block container pos]}]
-  (when (and container last-edit-block)
-    #_:clj-kondo/ignore
-    (when-let [container (gdom/getElement container)]
-      (when-let [block-uuid (:block/uuid last-edit-block)]
-        (when-let [block (db/pull [:block/uuid block-uuid])]
-          (editor/edit-block! block pos
-                              (:block/uuid block)
-                              {:custom-content (:block/content block)}))))))
+(defn- restore-cursor!
+  [{:keys [editor-cursors block-content undo?]}]
+  (let [{:keys [block-uuid container-id start-pos end-pos]} (if undo? (first editor-cursors) (or (last editor-cursors) (first editor-cursors)))
+        pos (if undo? (or start-pos end-pos) (or end-pos start-pos))]
+    (when-let [block (db/pull [:block/uuid block-uuid])]
+      (editor/edit-block! block pos
+                          {:container-id container-id
+                           :custom-content block-content}))))
 
-(defn- get-route-data
-  [route-match]
-  (when (seq route-match)
-    {:to (get-in route-match [:data :name])
-     :path-params (:path-params route-match)
-     :query-params (:query-params route-match)}))
-
-(defn restore-app-state!
+(defn- restore-app-state!
   [state]
-  (when-not (:history/page-only-mode? @state/state)
-   (let [route-match (:route-match state)
-         current-route (:route-match @state/state)
-         prev-route-data (get-route-data route-match)
-         current-route-data (get-route-data current-route)]
-     (when (and (not= prev-route-data current-route-data)
-                prev-route-data)
-       (route-handler/redirect! prev-route-data))
-     (swap! state/state merge state))))
+  (let [route-data (:route-data state)
+        current-route (:route-match @state/state)
+        current-route-data (db-browser/get-route-data current-route)]
+    (when (and (not= route-data current-route-data) route-data
+               (contains? #{:home :page :page-block :all-journals} (:to route-data)))
+      (route-handler/redirect! route-data))
+    (swap! state/state merge (dissoc state :route-data))))
 
-(defn undo!
-  [e]
-  (util/stop e)
-  (state/set-editor-op! :undo)
-  (state/clear-editor-action!)
-  (state/set-block-op-type! nil)
-  (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
-  (editor/save-current-block!)
-  (let [{:keys [editor-cursor app-state]} (undo-redo/undo)]
-    (restore-cursor! editor-cursor)
-    (restore-app-state! app-state))
-  (state/set-editor-op! nil))
+(defn- restore-cursor-and-state!
+  [result]
+  (state/set-state! :history/paused? true)
+  (let [{:keys [ui-state-str undo?] :as data} (ldb/read-transit-str result)]
+    (if ui-state-str
+      (let [{:keys [old-state new-state]} (ldb/read-transit-str ui-state-str)]
+        (if undo? (restore-app-state! old-state) (restore-app-state! new-state)))
+      (restore-cursor! data)))
+  (state/set-state! :history/paused? false))
 
-(defn redo!
-  [e]
-  (util/stop e)
-  (state/set-editor-op! :redo)
-  (state/clear-editor-action!)
-  (let [{:keys [editor-cursor app-state]} (undo-redo/redo)]
-    (restore-cursor! editor-cursor)
-    (restore-app-state! app-state))
-  (state/set-editor-op! nil))
+(let [*last-request (atom nil)]
+  (defn- undo-aux!
+    [e]
+    (state/set-state! :editor/op :undo)
+    (p/do!
+     @*last-request
+     (when-let [repo (state/get-current-repo)]
+       (let [current-page-uuid-str (some->> (page-util/get-latest-edit-page-id)
+                                            db/entity
+                                            :block/uuid
+                                            str)]
+         (when (db-transact/request-finished?)
+           (util/stop e)
+           (p/do!
+            (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
+            (editor/save-current-block!)
+            (state/clear-editor-action!)
+            (let [^js worker @state/*db-worker]
+              (reset! *last-request (.undo worker repo current-page-uuid-str))
+              (p/let [result @*last-request]
+                (restore-cursor-and-state! result))))))))))
+(defonce undo! (debounce undo-aux! 20))
+
+(let [*last-request (atom nil)]
+  (defn- redo-aux!
+    [e]
+    (state/set-state! :editor/op :redo)
+    (p/do!
+     @*last-request
+     (when-let [repo (state/get-current-repo)]
+       (let [current-page-uuid-str (some->> (page-util/get-latest-edit-page-id)
+                                            db/entity
+                                            :block/uuid
+                                            str)]
+         (when (db-transact/request-finished?)
+           (util/stop e)
+           (state/clear-editor-action!)
+           (let [^js worker @state/*db-worker]
+             (reset! *last-request (.redo worker repo current-page-uuid-str))
+             (p/let [result @*last-request]
+               (restore-cursor-and-state! result)))))))))
+(defonce redo! (debounce redo-aux! 20))
