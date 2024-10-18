@@ -2612,7 +2612,7 @@
              [:div.flex.flex-row.items-center.opacity-50.hover:opacity-100.transition-opacity.duration-300.ease-in.gap-1
               [:div.flex.flex-row.items-center
                (property-component/property-key-cp block property opts)
-               ":"]
+               [:div.select-none ":"]]
               (pv/property-value block property v opts)]))]
         [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6
          {:class (name position)}
