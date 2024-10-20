@@ -681,6 +681,20 @@
        (ipc/ipc :userAppCfgs :feature/enable-automatic-chmod? (not enabled?)))
      [:span.text-sm.opacity-50 (t :settings-page/auto-chmod-desc)])))
 
+(rum/defcs file-watcher-switcher-row < rum/reactive
+  [state t]
+  (let [enabled? (if (= nil (state/sub [:electron/user-cfgs :feature/enable-file-watcher?]))
+                   true
+                   (state/sub [:electron/user-cfgs :feature/enable-file-watcher?]))]
+    (toggle
+     "file-watcher"
+     (t :settings-page/file-watcher)
+     enabled?
+     #(do
+       (state/set-state! [:electron/user-cfgs :feature/enable-file-watcher?] (not enabled?))
+       (ipc/ipc :userAppCfgs :feature/enable-file-watcher? (not enabled?)))
+     [:span.text-sm.opacity-50 (t :settings-page/file-watcher-desc)])))
+
 (defn filename-format-row []
   (row-with-button-action
    {:left-label (t :settings-page/filename-format)
@@ -789,6 +803,7 @@
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row t))
+     (when (util/electron?) (file-watcher-switcher-row t))
      (when (and (util/electron?) (not (config/demo-graph? current-repo))) (filename-format-row))
      (clear-cache-row t)
 
