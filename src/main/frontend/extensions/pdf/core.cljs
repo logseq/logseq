@@ -317,7 +317,7 @@
                                                                           :width to-w
                                                                           :height to-h)
 
-                                                      to-sc-pos   (pdf-utils/vw-to-scaled-pos viewer to-vw-pos)]
+                                                      to-sc-pos   (pdf-utils/vw-to-scaled-pos viewer to-vw-pos false)]
 
                                                   ;; TODO: exception
                                                   (let [hl' (assoc hl :position to-sc-pos)
@@ -386,7 +386,7 @@
 
   [:div.hls-region-container
    (for [hl page-hls]
-     (let [vw-hl (update-in hl [:position] #(pdf-utils/scaled-to-vw-pos viewer %))]
+     (let [vw-hl (update-in hl [:position] #(pdf-utils/scaled-to-vw-pos viewer % false))]
        (rum/with-key
          (if (get-in hl [:content :image])
            (pdf-highlight-area-region viewer vw-hl hl ops)
@@ -499,7 +499,7 @@
                                          page-pos    (merge rect {:top  (- (:top rect) (.-offsetTop page-el))
                                                                   :left (- (:left rect) (.-offsetLeft page-el))})
                                          vw-pos      {:bounding page-pos :rects [] :page page-number}
-                                         sc-pos      (pdf-utils/vw-to-scaled-pos viewer vw-pos)
+                                         sc-pos      (pdf-utils/vw-to-scaled-pos viewer vw-pos true)
 
                                          point       {:x (.-clientX e) :y (.-clientY e)}
                                          hl          {:id         nil
@@ -551,7 +551,7 @@
                          [ctx-menu-state])
 
         show-ctx-menu!  (fn [^js viewer hl point & ops]
-                          (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
+                          (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl) false)]
                             (set-ctx-menu-state! (apply merge (list* {:highlight hl :vw-pos vw-pos :point point} ops)))))
 
         add-hl! (fn [hl]
@@ -561,7 +561,7 @@
                       (set-highlights! (conj highlights hl)))
 
                     (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
-                                           (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
+                                           (pdf-utils/scaled-to-vw-pos viewer (:position hl) true))]
                       ;; exceptions
                       (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
                                                          hl nil (:bounding vw-pos)))))
@@ -650,7 +650,7 @@
                                             (let [page         (int (:page-number page-info))
                                                   ^js bounding (pdf-utils/get-bounding-rect sel-rects)
                                                   vw-pos       {:bounding bounding :rects sel-rects :page page}
-                                                  sc-pos       (pdf-utils/vw-to-scaled-pos viewer vw-pos)]
+                                                  sc-pos       (pdf-utils/vw-to-scaled-pos viewer vw-pos false)]
 
                                               {:id         nil
                                                :page       page
