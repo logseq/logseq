@@ -705,7 +705,7 @@
  :whiteboard/arrow-head "Punta della freccia"
  :whiteboard/auto-resize "Ridimensiona automaticamente"
  :whiteboard/bold "Grassetto"
- :whiteboard/cache-outdated "La cache è obsoleta. Clicca 'Re-indicizza' nel menù a discesa del grafo."
+ :whiteboard/cache-outdated "La cache è obsoleta. Clicca 'Re-indicizza nel menù a discesa del grafo."
  :whiteboard/circle "Cerchio"
  :whiteboard/collapse "Collassa"
  :whiteboard/color "Colore"
