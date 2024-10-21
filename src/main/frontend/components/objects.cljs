@@ -117,7 +117,8 @@
         [view-entity set-view-entity!] (rum/use-state class)
         [views set-views!] (rum/use-state [class])
         [data set-data!] (rum/use-state objects)
-        columns* (views/build-columns config properties {:add-tags-column? (= (:db/ident class) :logseq.class/Root)})
+        columns* (views/build-columns config properties {:add-tags-column? (or (= (:db/ident class) :logseq.class/Root)
+                                                                               (> (count (distinct (mapcat :block/tags objects))) 1))})
         columns (cond
                   (= (:db/ident class) :logseq.class/Pdf-annotation)
                   (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)

@@ -6,7 +6,6 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
-            [datascript.core :as d]
             [frontend.components.dnd :as dnd]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
