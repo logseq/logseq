@@ -6,6 +6,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
+            [datascript.core :as d]
             [frontend.components.dnd :as dnd]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
@@ -28,9 +29,12 @@
 
 (defn- get-latest-entity
   [e]
-  (assoc (db/entity (:db/id e))
-         :id (:id e)
-         :block.temp/refs-count (:block.temp/refs-count e)))
+  (let [transacted-ids (:updated-ids @(:db/latest-transacted-entity-uuids @state/state))]
+    (if (and transacted-ids (contains? transacted-ids (:block/uuid e)))
+      (assoc (db/entity (:db/id e))
+             :id (:id e)
+             :block.temp/refs-count (:block.temp/refs-count e))
+      e)))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!]}]
