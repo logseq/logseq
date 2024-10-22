@@ -282,20 +282,20 @@
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db] (get-dbs repo)
             storage (new-sqlite-storage repo {})
-            client-ops-storage (new-sqlite-client-ops-storage repo)
+            client-ops-storage (when-not @*publishing? (new-sqlite-client-ops-storage repo))
             db-based? (sqlite-util/db-based-graph? repo)]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
                                        :client-ops client-ops-db})
       (.exec db "PRAGMA locking_mode=exclusive")
       (sqlite-common-db/create-kvs-table! db)
-      (sqlite-common-db/create-kvs-table! client-ops-db)
+      (when-not @*publishing? (sqlite-common-db/create-kvs-table! client-ops-db))
       (db-migrate/migrate-sqlite-db db)
-      (db-migrate/migrate-sqlite-db client-ops-db)
+      (when-not @*publishing? (db-migrate/migrate-sqlite-db client-ops-db))
       (search/create-tables-and-triggers! search-db)
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)
-            client-ops-conn (sqlite-common-db/get-storage-conn client-ops-storage client-op/schema-in-db)
+            client-ops-conn (when-not @*publishing? (sqlite-common-db/get-storage-conn client-ops-storage client-op/schema-in-db))
             initial-data-exists? (and (d/entity @conn :logseq.class/Root)
                                       (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type))))]
         (swap! *datascript-conns assoc repo conn)
