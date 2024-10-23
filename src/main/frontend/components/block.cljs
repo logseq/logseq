@@ -384,7 +384,8 @@
         width (or @*width width)
         style (when-not (util/mobile?)
                 (cond width
-                  {:width width}
+                  {(if (:sidebar? config)
+                     :max-width :width) width}
                   :else
                   {}))
         resizable? (and (not (mobile-util/native-platform?))
