@@ -266,6 +266,34 @@
     (when (seq images)
       (lightbox/preview-images! images))))
 
+(rum/defc resize-image-handles
+  [dx-fn]
+  (let [handle-props {}
+        add-resizing-class! #(dom/add-class! js/document.documentElement "is-resizing-buf")
+        remove-resizing-class! #(dom/remove-class! js/document.documentElement "is-resizing-buf")
+        *handle-left (rum/use-ref nil)
+        *handle-right (rum/use-ref nil)]
+
+    (rum/use-effect!
+      (fn []
+        (doseq [el [(rum/deref *handle-left)
+                    (rum/deref *handle-right)]]
+          (-> (js/interact el)
+            (.draggable
+              (bean/->js
+                {:listeners
+                 {:start (fn [e] (dx-fn :start e))
+                  :move (fn [e] (dx-fn :move e))
+                  :end (fn [e] (dx-fn :end e))}}))
+            (.styleCursor false)
+            (.on "dragstart" add-resizing-class!)
+            (.on "dragend" remove-resizing-class!))))
+      [])
+
+    [:<>
+     [:span.handle-left.image-resize (assoc handle-props :ref *handle-left)]
+     [:span.handle-right.image-resize (assoc handle-props :ref *handle-right)]]))
+
 (defonce *resizing-image? (atom false))
 (rum/defcs ^:large-vars/cleanup-todo resizable-image <
   (rum/local nil ::size)
@@ -273,8 +301,7 @@
                    (reset! *resizing-image? false)
                    state)}
   [state config title src metadata full-text local?]
-  (let [size (get state ::size)
-        breadcrumb? (:breadcrumb? config)
+  (let [breadcrumb? (:breadcrumb? config)
         asset-block (:asset-block config)
         asset-container [:div.asset-container {:key "resize-asset-container"}
                          [:img.rounded-sm.relative
@@ -353,46 +380,41 @@
                                    (shui/tabler-icon "folder-pin")])]])])]
         width (or (get-in asset-block [:logseq.property.asset/resize-metadata :width])
                   (:width metadata))
-        height (or (get-in asset-block [:logseq.property.asset/resize-metadata :height])
-                   (:height metadata))
+        *width (get state ::size)
+        width (or @*width width)
         style (when-not (util/mobile?)
-                (cond (and width height)
-                      {:width width :height height}
-                      width
-                      {:width width}
-                      height
-                      {:height height}
-                      :else
-                      {}))]
-    (if (:disable-resize? config)
+                (cond width
+                  {:width width}
+                  :else
+                  {}))
+        resizable? (and (not (mobile-util/native-platform?))
+                     (not breadcrumb?))]
+    (if (or (:disable-resize? config)
+          (not resizable?))
       asset-container
-      (ui/resize-provider
-       (ui/resize-consumer
-        (if (and (not (mobile-util/native-platform?))
-                 (not breadcrumb?))
-          (cond->
-           {:className "resize image-resize"
-            :onSizeChanged (fn [value]
-                             (when (and (not @*resizing-image?)
-                                        (some? @size)
-                                        (not= value @size))
-                               (reset! *resizing-image? true))
-                             (reset! size value))
-            :onPointerUp (fn []
-                           (when (and @size @*resizing-image?)
-                             (when-let [block-id (or (:block/uuid config)
-                                                     (some-> config :block (:block/uuid)))]
-                               (let [size (bean/->clj @size)]
-                                 (editor-handler/resize-image! config block-id metadata full-text size))))
-                           (when @*resizing-image?
-                             ;; TODO:​ need a better way to prevent the clicking to edit current block
-                             (js/setTimeout #(reset! *resizing-image? false) 200)))
-            :onClick (fn [e]
-                       (when @*resizing-image? (util/stop e)))}
-            style
-            (assoc :style style))
-          {})
-        asset-container)))))
+      [:div.ls-resize-image.rounded-md
+       (when style {:style style})
+       asset-container
+       (resize-image-handles
+         (fn [k ^js event]
+           (let [dx (.-dx event)
+                 ^js target (.-target event)]
+
+             (case k
+               :start
+               (let [c (.closest target ".ls-resize-image")]
+                 (reset! *width (.-offsetWidth c))
+                 (reset! *resizing-image? true))
+               :move
+               (let [width' (+ @*width dx)]
+                 (reset! *width width'))
+               :end
+               (let [width' @*width]
+                 (when (and width' @*resizing-image?)
+                   (when-let [block-id (or (:block/uuid config)
+                                         (some-> config :block (:block/uuid)))]
+                     (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
+                 (reset! *resizing-image? false))))))])))
 
 (rum/defc audio-cp [src]
   ;; Change protocol to allow media fragment uris to play
