@@ -275,7 +275,7 @@
          {:size :sm
           :on-click (fn [_]
                       (let [^object worker @db-browser/*worker]
-                        (when-let [device-uuid (:remove-device-device-uuid keys-state)]
+                        (when-let [device-uuid (not-empty (:remove-device-device-uuid keys-state))]
                           (when-let [token (state/get-auth-id-token)]
                             (.device-remove-device worker token device-uuid)))))}
          "Remove device:")
@@ -289,8 +289,8 @@
          {:size :sm
           :on-click (fn [_]
                       (let [^object worker @db-browser/*worker]
-                        (when-let [device-uuid (:remove-public-key-device-uuid keys-state)]
-                          (when-let [key-name (:remove-public-key-key-name keys-state)]
+                        (when-let [device-uuid (not-empty (:remove-public-key-device-uuid keys-state))]
+                          (when-let [key-name (not-empty (:remove-public-key-key-name keys-state))]
                             (when-let [token (state/get-auth-id-token)]
                               (.device-remove-device-public-key worker token device-uuid key-name))))))}
          "Remove public-key:")
