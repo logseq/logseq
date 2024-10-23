@@ -1,15 +1,19 @@
 ## Description
 
-This library provides a minimal API for using a
-[datascript](https://github.com/tonsky/datascript) database from the Logseq app
-and the CLI. This library is compatible with ClojureScript and with
+This library provides an API to the
+frontend([datascript](https://github.com/tonsky/datascript)) and
+backend([SQLite](https://www.sqlite.org/index.html)) databases from the Logseq
+app and the CLI. The majority of this library is focused on supporting DB graphs
+but there are a few older namespaces that support file graphs. This library is
+compatible with ClojureScript and with
 [nbb-logseq](https://github.com/logseq/nbb-logseq) to respectively provide
 frontend and commandline functionality.
 
 ## API
 
-This library is under the parent namespace `logseq.db`. This library provides
-two main namespaces, `logseq.db` and `logseq.db.rules`.
+This library is under the parent namespace `logseq.db`. While `logseq.db` is the
+main entry point, this library also provides frontend namespaces under
+`logseq.db.frontend` and backend/sqlite namespaces under `logseq.db.sqlite`.
 
 ## Usage
 
@@ -24,22 +28,33 @@ file](/.github/workflows/db.yml) for linting examples.
 
 ### Setup
 
-To run linters, you'll want to install yarn dependencies once:
+To run linters and tests, you'll want to install yarn dependencies once:
 ```
 yarn install
 ```
 
 This step is not needed if you're just running the application.
 
-## Linting
+### Testing
 
+Testing is done with nbb-logseq and
+[nbb-test-runner](https://github.com/nextjournal/nbb-test-runner). Some basic
+usage:
+
+```
+# Run all tests
+$ yarn test
+# List available options
+$ yarn test -H
+# Run tests with :focus metadata flag
+$ yarn test -i focus
+```
 ### Datalog linting
 
-Our rules are linted through a script that also uses the datalog-parser. To run this linter:
+Datalog rules for the client are linted through a script that also uses the datalog-parser. To run this linter:
 ```
 bb lint:rules
 ```
-
 
 ### Managing dependencies
 

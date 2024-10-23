@@ -2,5 +2,10 @@
  :deps
  {logseq/graph-parser
   {:local/root "../deps/graph-parser"}
+  logseq/outliner
+  {:local/root "../deps/outliner"}
+  ;; for config.edn
+  logseq/common
+  {:local/root "../deps/common"}
   logseq/publishing
   {:local/root "../deps/publishing"}}}

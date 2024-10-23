@@ -7,6 +7,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.components.settings :as settings]
@@ -19,20 +20,22 @@
   []
   (let [*el (rum/use-ref nil)]
     (rum/use-effect!
-      (fn []
-        (when-let [el (rum/deref *el)]
-          (let [w (- (.-offsetWidth el) (.-clientWidth el))
-                c "custom-scrollbar"
-                l (.-classList js/document.documentElement)]
-            (if (or (not util/mac?) (> w 2))
-              (.add l c) (.remove l c)))))
-      [])
+     (fn []
+       (when-let [el (rum/deref *el)]
+         (let [w (- (.-offsetWidth el) (.-clientWidth el))
+               c "custom-scrollbar"
+               l (.-classList js/document.documentElement)]
+           (if (or (not util/mac?) (> w 2))
+             (.add l c) (.remove l c)))))
+     [])
     [:div.fixed.w-16.h-16.overflow-scroll.opacity-0
      {:ref   *el
       :class "top-1/2 -left-1/2 z-[-999]"}]))
 
-(rum/defc ^:large-vars/cleanup-todo container
-  [{:keys [route theme accent-color on-click current-repo nfs-granted? db-restoring?
+(defonce *once-theme-loaded? (volatile! false))
+
+(rum/defc ^:large-vars/cleanup-todo container < rum/static
+  [{:keys [route theme accent-color editor-font on-click current-repo nfs-granted? db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len onboarding-state preferred-language]} child]
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
@@ -52,17 +55,25 @@
 
     ;; theme color
     (rum/use-effect!
-      #(some-> js/document.documentElement
-         (.setAttribute "data-color"
-           (or accent-color "logseq")))
-      [accent-color])
+     #(some-> js/document.documentElement
+              (.setAttribute "data-color"
+                             (or accent-color "logseq")))
+     [accent-color])
+
+    (rum/use-effect!
+     #(some-> js/document.documentElement
+              (.setAttribute "data-font" (or editor-font "default")))
+     [editor-font])
 
     (rum/use-effect!
      #(let [doc js/document.documentElement]
         (.setAttribute doc "lang" preferred-language)))
 
     (rum/use-effect!
-     #(js/setTimeout (fn [] (ipc/ipc "theme-loaded")) 100) ; Wait for the theme to be applied
+     #(js/setTimeout
+       (fn [] (when-not @*once-theme-loaded?
+                (ipc/ipc :theme-loaded)
+                (vreset! *once-theme-loaded? true))) 100) ; Wait for the theme to be applied
      [])
 
     (rum/use-effect!
@@ -101,14 +112,11 @@
        (when-not db-restoring?
          (let [repos (state/get-repos)]
            (if-not (or
-                    ;; demo graph only
-                    (and (= 1 (count repos)) (:example? (first repos))
-                         (not (util/mobile?)))
                     ;; not in publishing mode
                     config/publishing?
                     ;; other graphs exists
                     (seq repos))
-             (route-handler/redirect! {:to :repo-add})
+             (route-handler/redirect! {:to :graphs})
              (do
                (ui-handler/restore-right-sidebar-state!)
                (set-restored-sidebar? true))))))
@@ -120,17 +128,24 @@
      [system-theme?])
 
     (rum/use-effect!
-     #(state/set-modal!
-       (when settings-open?
-         (fn [] [:div.settings-modal (settings/settings settings-open?)])))
+     (fn []
+       (if settings-open?
+         (shui/dialog-open!
+          (fn [] [:div.settings-modal (settings/settings settings-open?)])
+          {:label "app-settings"
+           :align :top
+           :content-props {:onOpenAutoFocus #(.preventDefault %)}
+           :id :app-settings})
+         (shui/dialog-close! :app-settings)))
      [settings-open?])
 
     (rum/use-effect!
      #(storage/set :file-sync/onboarding-state onboarding-state)
      [onboarding-state])
 
-    [:div.theme-container
-     {:on-click on-click}
+    [:div#root-container.theme-container
+     {:on-click on-click
+      :tab-index -1}
      child
 
      (pdf/default-embed-playground)

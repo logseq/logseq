@@ -1,9 +1,9 @@
 (ns electron.core
   (:require [electron.handler :as handler]
-            [electron.search :as search]
+            [electron.db :as db]
             [electron.updater :refer [init-updater] :as updater]
             [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
-                                    decode-protected-assets-schema-path get-graph-name send-to-renderer]
+                                    decode-protected-assets-schema-path send-to-renderer]
              :as utils]
             [electron.url :refer [logseq-url-handler]]
             [electron.logger :as logger]
@@ -16,7 +16,6 @@
             ["os" :as os]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["electron-deeplink" :refer [Deeplink]]
-            [electron.state :as state]
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
@@ -59,8 +58,8 @@
     (when (= (str LSP_SCHEME ":") (.-protocol parsed-url))
       (logseq-url-handler win parsed-url))))
 
-(defn setup-interceptor! [^js app]
-  (.setAsDefaultProtocolClient app LSP_SCHEME)
+(defn setup-interceptor! [^js app']
+  (.setAsDefaultProtocolClient app' LSP_SCHEME)
 
   (.registerFileProtocol
    protocol FILE_ASSETS_SCHEME
@@ -186,9 +185,11 @@
                        {:role "fileMenu"
                         :submenu [{:label "New Window"
                                    :click (fn []
-                                            (p/let [graph-name (get-graph-name (state/get-active-window-graph-path))
-                                                    _ (handler/broadcast-persist-graph! graph-name)]
-                                              (handler/open-new-window!)))
+                                            ;; FIXME: Open a different graph for now
+                                            ;; (p/let [graph-name (get-graph-name (state/get-graph-path))
+                                            ;;         _ (handler/broadcast-persist-graph! graph-name)]
+                                            ;;   (handler/open-new-window!))
+                                            )
                                    :accelerator (if mac?
                                                   "CommandOrControl+N"
                                                   ;; Avoid conflict with `Control+N` shortcut to move down in the text editor on Windows/Linux
@@ -240,11 +241,76 @@
              (when-let [win @*win]
                (open-url-handler win url))))))
 
+(defn- on-app-ready!
+  [^js app']
+  (.on app' "ready"
+       (fn []
+         (logger/info (str "Logseq App(" (.getVersion app') ") Starting... "))
+
+         ;; Add React developer tool
+         (when-let [^js devtoolsInstaller (and dev? (js/require "electron-devtools-installer"))]
+           (-> (.default devtoolsInstaller (.-REACT_DEVELOPER_TOOLS devtoolsInstaller))
+             (.then #(js/console.log "Added Extension:" (.-REACT_DEVELOPER_TOOLS devtoolsInstaller)))))
+
+         (let [t0 (setup-interceptor! app')
+               ^js win (win/create-main-window!)
+               _ (reset! *win win)]
+
+           (utils/<restore-proxy-settings)
+
+           (js-utils/disableXFrameOptions win)
+
+           (db/ensure-graphs-dir!)
+
+           (git/configure-auto-commit!)
+
+           (vreset! *setup-fn
+                    (fn []
+                      (let [t1 (setup-updater! win)
+                            t2 (setup-app-manager! win)
+                            t3 (handler/set-ipc-handler! win)
+                            t4 (server/setup! win)
+                            tt (exceptions/setup-exception-listeners!)]
+
+                        (vreset! *teardown-fn
+                                 #(doseq [f [t0 t1 t2 t3 t4 tt]]
+                                    (and f (f)))))))
+
+           ;; setup effects
+           (@*setup-fn)
+
+           ;; main window events
+           (.on win "close" (fn [e]
+                                  (git/before-graph-close-hook!)
+                                  (when @*quit-dirty? ;; when not updating
+                                    (.preventDefault e)
+
+                                    (let [windows (win/get-all-windows)
+                                          window @*win
+                                          multiple-windows? (> (count windows) 1)]
+                                      (cond
+                                        (or multiple-windows? (not mac?) @win/*quitting?)
+                                        (when window
+                                          (win/close-handler win handler/close-watcher-when-orphaned! e)
+                                          (reset! *win nil))
+
+                                        (and mac? (not multiple-windows?))
+                                        ;; Just hiding - don't do any actual closing operation
+                                        (do (.preventDefault ^js/Event e)
+                                            (if (and mac? (.isFullScreen win))
+                                              (do (.once win "leave-full-screen" #(.hide win))
+                                                  (.setFullScreen win false))
+                                              (.hide win)))
+                                        :else
+                                        nil)))))
+           (.on app' "before-quit" (fn [_e]
+                                    (reset! win/*quitting? true)))
+
+           (.on app' "activate" #(when @*win (.show win)))))))
+
 (defn main []
   (if-not (.requestSingleInstanceLock app)
-    (do
-      (search/close!)
-      (.quit app))
+    (.quit app)
     (let [privileges {:standard        true
                       :secure          true
                       :bypassCSP       true
@@ -272,70 +338,10 @@
                                      (logger/debug "window-all-closed" "Quitting...")
                                      (try
                                        (fs-watcher/close-watcher!)
-                                       (search/close!)
                                        (catch :default e
                                          (logger/error "window-all-closed" e)))
                                      (.quit app)))
-      (.on app "ready"
-           (fn []
-             (let [t0 (setup-interceptor! app)
-                   ^js win (win/create-main-window!)
-                   _ (reset! *win win)]
-               (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
-
-               (utils/<restore-proxy-settings)
-
-               (js-utils/disableXFrameOptions win)
-
-               (search/ensure-search-dir!)
-
-               (search/open-dbs!)
-
-               (git/configure-auto-commit!)
-
-               (vreset! *setup-fn
-                        (fn []
-                          (let [t1 (setup-updater! win)
-                                t2 (setup-app-manager! win)
-                                t3 (handler/set-ipc-handler! win)
-                                t4 (server/setup! win)
-                                tt (exceptions/setup-exception-listeners!)]
-
-                            (vreset! *teardown-fn
-                                     #(doseq [f [t0 t1 t2 t3 t4 tt]]
-                                        (and f (f)))))))
-
-               ;; setup effects
-               (@*setup-fn)
-
-               ;; main window events
-               (.on win "close" (fn [e]
-                                  (git/before-graph-close-hook!)
-                                  (when @*quit-dirty? ;; when not updating
-                                    (.preventDefault e)
-
-                                    (let [windows (win/get-all-windows)
-                                          window @*win
-                                          multiple-windows? (> (count windows) 1)]
-                                      (cond
-                                        (or multiple-windows? (not mac?) @win/*quitting?)
-                                        (when window
-                                          (win/close-handler win handler/close-watcher-when-orphaned! e)
-                                          (reset! *win nil))
-
-                                        (and mac? (not multiple-windows?))
-                                        ;; Just hiding - don't do any actual closing operation
-                                        (do (.preventDefault ^js/Event e)
-                                            (if (and mac? (.isFullScreen win))
-                                              (do (.once win "leave-full-screen" #(.hide win))
-                                                  (.setFullScreen win false))
-                                              (.hide win)))
-                                        :else
-                                        nil)))))
-               (.on app "before-quit" (fn [_e]
-                                        (reset! win/*quitting? true)))
-
-               (.on app "activate" #(when @*win (.show win)))))))))
+      (on-app-ready! app))))
 
 (defn start []
   (logger/debug "Main - start")

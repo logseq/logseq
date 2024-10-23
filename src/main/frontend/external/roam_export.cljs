@@ -2,9 +2,9 @@
   (:require [clojure.set :as s]
             [clojure.string :as str]
             [clojure.walk :as walk]
-            [datascript.core :as d]
-            [frontend.db :as db]
-            [frontend.state :as state]))
+            [frontend.db.async :as db-async]
+            [frontend.state :as state]
+            [promesa.core :as p]))
 
 (def todo-marker-regex
   #"^(NOW|LATER|TODO|DOING|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS)")
@@ -20,17 +20,18 @@
   (->> (repeatedly 9 nano-id-char)
        (str/join)))
 
-(defn uuid->uid-map []
-  (let [db (db/get-db (state/get-current-repo))]
-    (->>
-     (d/q '[:find (pull ?r [:block/uuid])
-            :in $
-            :where
-            [?b :block/refs ?r]] db)
-     (map (comp :block/uuid first))
-     (distinct)
-     (map (fn [uuid] [uuid (nano-id)]))
-     (into {}))))
+(defn <uuid->uid-map []
+  (let [repo (state/get-current-repo)]
+    (p/let [result (db-async/<q repo {:transact-db? false}
+                                '[:find (pull ?r [:block/uuid])
+                                  :in $
+                                  :where
+                                  [?b :block/refs ?r]])]
+      (->> result
+           (map (comp :block/uuid first))
+           (distinct)
+           (map (fn [uuid] [uuid (nano-id)]))
+           (into {})))))
 
 (defn update-content [content uuid->uid-map]
   (when content                         ; page block doesn't have content
@@ -43,18 +44,18 @@
       content
       uuids))))
 
-(defn update-uid [{:block/keys [uuid content] :as b}
+(defn update-uid [{:block/keys [uuid title] :as b}
                   uuid->uid-map]
   (cond-> b
     (contains? uuid->uid-map uuid)
     (assoc :block/uid (get uuid->uid-map uuid))
 
-    (some (fn [id] (str/includes? (str content) (str id))) (keys uuid->uid-map))
-    (update :block/content #(update-content % uuid->uid-map))))
+    (some (fn [id] (str/includes? (str title) (str id))) (keys uuid->uid-map))
+    (update :block/title #(update-content % uuid->uid-map))))
 
-(defn update-todo [{:block/keys [content] :as block}]
-  (if content
-    (update block :block/content
+(defn update-todo [{:block/keys [title] :as block}]
+  (if title
+    (update block :block/title
             (fn [c]
               (-> c
                   (str/replace todo-marker-regex "{{[[TODO]]}}")
@@ -65,7 +66,7 @@
 
 (defn traverse
   [keyseq vec-tree]
-  (let [uuid->uid-map (uuid->uid-map)]
+  (p/let [uuid->uid-map (<uuid->uid-map)]
     (walk/postwalk
      (fn [x]
        (cond
@@ -76,8 +77,7 @@
 
              (update-todo)
 
-             (s/rename-keys {:block/original-name :page/title
-                             :block/content :block/string})
+             (s/rename-keys {:block/title :page/title})
 
              (select-keys keyseq))
 

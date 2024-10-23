@@ -1,7 +1,8 @@
 {:paths ["scripts/src" "src/main" "src/resources"]
  :deps
  {metosin/malli
-  {:mvn/version "0.10.0"}
+  {:mvn/version "0.16.1"}
+  borkdude/rewrite-edn {:mvn/version "0.4.8"}
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
@@ -12,7 +13,8 @@
   {:mvn/version "1.4.100"}}
  :pods
  {clj-kondo/clj-kondo {:version "2023.05.26"}
-  org.babashka/fswatcher {:version "0.0.3"}}
+  org.babashka/fswatcher {:version "0.0.3"}
+  org.babashka/go-sqlite3 {:version "0.1.0"}}
  :tasks
  {dev:desktop-watch
   logseq.tasks.dev.desktop/watch
@@ -58,6 +60,45 @@
            (run '-dev:publishing-dev {:parallel true})
            (run '-dev:publishing-release))}
 
+  dev:validate-db
+  {:doc "Validate a DB graph's datascript schema"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/validate_client_db.cljs"
+                *command-line-args*)}
+
+  dev:db-query
+  {:doc "Query a DB graph's datascript db"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/query.cljs" *command-line-args*)}
+
+  dev:db-transact
+  {:doc "Transact against a DB graph's datascript db"
+   :task (apply shell {:dir "deps/outliner"} "yarn -s nbb-logseq script/transact.cljs" *command-line-args*)}
+
+  dev:db-create
+  {:doc "Create a DB graph given a sqlite.build EDN file"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq -cp src:../outliner/src script/create_graph.cljs" *command-line-args*)}
+
+  dev:db-import
+  {:doc "Import a file graph to db graph"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/graph-parser" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq -cp src:../outliner/src script/db_import.cljs" *command-line-args*)}
+
+  dev:db-datoms
+  {:doc "Write db's datoms to a file"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/dump_datoms.cljs"
+                *command-line-args*)}
+
+  dev:diff-datoms
+  logseq.tasks.dev/diff-datoms
+
   dev:npx-cap-run-ios
   logseq.tasks.dev.mobile/npx-cap-run-ios
 
@@ -99,11 +140,23 @@
   dev:validate-ast
   logseq.tasks.malli/validate-ast
 
-  dev:lint
-  logseq.tasks.dev/lint
+  dev:test
+  logseq.tasks.dev/test
+
+  dev:lint-and-test
+  logseq.tasks.dev/lint-and-test
+
+  dev:rtc-e2e-test
+  logseq.tasks.dev/rtc-e2e-test
 
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config
+
+  lint:dev
+  logseq.tasks.dev.lint/dev
+
+  lint:kondo-git-changes
+  logseq.tasks.dev.lint/kondo-git-changes
 
   lint:large-vars
   logseq.bb-tasks.lint.large-vars/-main
@@ -113,6 +166,12 @@
 
   lint:ns-docstrings
   logseq.bb-tasks.lint.ns-docstrings/-main
+
+  lint:db-and-file-graphs-separate
+  logseq.tasks.dev.db-and-file-graphs/-main
+
+  lint:worker-and-frontend-separate
+  logseq.tasks.dev.lint/worker-and-frontend-separate
 
   nbb:watch
   logseq.bb-tasks.nbb.watch/watch

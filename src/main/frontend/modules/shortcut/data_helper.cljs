@@ -106,11 +106,17 @@
            (shortcut-config/get-category-shortcuts name))
          (mapv (fn [k] [k (assoc (get dict k) :category name)])))))
 
-(defn shortcut-map
+(defn shortcuts-map-full
+  []
+  (->> (vals @shortcut-config/*config)
+    (into {})))
+
+(defn shortcuts-map-by-handler-id
   ([handler-id]
-   (shortcut-map handler-id nil))
+   (shortcuts-map-by-handler-id handler-id nil))
   ([handler-id state]
    (let [raw (get @shortcut-config/*config handler-id)
+         raw' (into {} raw)
          handler-m (->> raw
                         (map (fn [[k {:keys [fn]}]]
                                {k fn}))
@@ -123,8 +129,8 @@
                                                     handle-fn)]
                                    (assoc r k (partial handle-fn' state))))
                                {})
-              before (reduce-kv (fn [r k v]
-                                  (assoc r k (before v)))
+              before (reduce-kv (fn [r k f]
+                                  (assoc r k (before f (get raw' k))))
                                 {})))))
 
 ;; if multiple bindings, gen seq for first binding only for now
@@ -133,8 +139,8 @@
     (if (false? bindings)
       []
       (-> bindings
-          first
-          (str/split #" |\+")))))
+        last
+        (str/split #" |\+")))))
 
 (defn binding-for-display [k binding]
   (let [tmp (cond
@@ -235,9 +241,7 @@
 
 (defn shortcut-data-by-id [id]
   (let [binding (shortcut-binding id)
-        data (->> (vals @shortcut-config/*config)
-                  (into {})
-                  id)]
+        data (-> (shortcuts-map-full) id)]
     (assoc
       data
       :binding

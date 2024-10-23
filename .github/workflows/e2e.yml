@@ -9,10 +9,11 @@ on:
     branches: [master]
     paths:
       - 'e2e-tests/**'
-  pull_request:
-    branches: [master]
-    paths:
-      - 'e2e-tests/**'
+  # TODO: Re-enable when ready to enable tests for file graphs
+  # pull_request:
+  #   branches: [master]
+  #   paths:
+  #     - 'e2e-tests/**'
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'

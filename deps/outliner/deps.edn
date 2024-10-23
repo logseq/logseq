@@ -1,0 +1,12 @@
+{:deps
+ ;; External deps should be kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
+ {datascript/datascript {:git/url "https://github.com/logseq/datascript" ;; fork
+                         :sha     "1f84d10df4970f054489b0ee78799f64b8dd4ee2"}
+  logseq/db             {:local/root "../db"}
+  logseq/graph-parser   {:local/root "../db"}
+  com.cognitect/transit-cljs {:mvn/version "0.8.280"}
+  metosin/malli {:mvn/version "0.16.1"}}
+ :aliases
+ {:clj-kondo
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
+   :main-opts  ["-m" "clj-kondo.main"]}}}

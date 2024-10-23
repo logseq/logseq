@@ -30,11 +30,11 @@
   [page-name]
   {:pre (string? page-name)}
   (let [walked (db-model/get-sorted-page-block-ids-and-levels page-name)
-        blocks (db-utils/pull-many [:block/uuid :block/content :block/level] (map :id walked))
+        blocks (db-utils/pull-many [:block/uuid :block/title :block/level] (map :id walked))
         levels (map :level walked)
         blocks (map (fn [block level]
                       {:uuid   (str (:block/uuid block)) ;; Force to be string
-                       :body   (:block/content block)
+                       :body   (:block/title block)
                        :level  level})
                     blocks levels)]
     blocks))

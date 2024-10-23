@@ -200,14 +200,16 @@
 (deftest-async editor-on-paste-with-copied-blocks
   (let [actual-blocks (atom nil)
         ;; Simplified version of block attributes that are copied
-        expected-blocks [{:block/content "Test node"}
-                         {:block/content "Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"}]
+        expected-blocks [{:block/title "Test node"}
+                         {:block/title "Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"}]
         clipboard "- Test node\n\t- Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"]
     (test-helper/with-reset
       reset
       [;; paste-copied-blocks-or-text mocks below
        util/stop (constantly nil)
-       paste-handler/get-copied-blocks (constantly (p/resolved expected-blocks))
+       state/get-current-repo (constantly "test")
+       paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
+                                                                :blocks expected-blocks}))
        editor-handler/paste-blocks (fn [blocks _] (reset! actual-blocks blocks))]
       (p/let [_ ((paste-handler/editor-on-paste! nil)
                  #js {:clipboardData #js {:getData (constantly clipboard)}})]
@@ -239,7 +241,7 @@
       reset
       [state/preferred-pasting-file? (constantly true)
        ;; paste-file-if-exists mocks below
-       editor-handler/upload-asset (fn [_id file & _]
+       editor-handler/upload-asset! (fn [_id file & _]
                                      (reset! pasted-file file))
        util/stop (constantly nil)
        state/get-edit-block (constantly {})]

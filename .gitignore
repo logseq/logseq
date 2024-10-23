@@ -36,7 +36,11 @@ strings.csv
 resources/electron.js
 .lsp/.cache
 .clj-kondo/.cache
-.clj-kondo/babashka/sci
+.clj-kondo/babashka
+.clj-kondo/http-kit
+.clj-kondo/metosin/malli
+.clj-kondo/rewrite-clj
+.clj-kondo/taoensso
 /libs/dist/
 charlie/
 .vscode
@@ -62,4 +66,4 @@ packages/ui/.storybook/cljs
 deps/shui/.lsp
 deps/shui/.lsp-cache
 deps/shui/.clj-kondo
-deps/shui/shui-graph/logseq/bak
+tx-log*
