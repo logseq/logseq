@@ -175,13 +175,13 @@
                                          [:dd "We got the answer wrong. Automatically means that we have forgotten the card. This is a lapse in memory."]]
                                         [:dl
                                          [:dt "Hard"]
-                                         [:dd "The answer was only partially correct and/or we took too long to recall it."]]
+                                         [:dd "The answer was correct but we were not confident about it and/or took too long to recall."]]
                                         [:dl
                                          [:dt "Good"]
-                                         [:dd "The answer was correct but we were not confident about it."]]
+                                         [:dd "The answer was correct but we took some mental effort to recall it."]]
                                         [:dl
                                          [:dt "Easy"]
-                                         [:dd "The answer was correct and we were confident and quick in our recall."]]])
+                                         [:dd "The answer was correct and we were confident and quick in our recall without mental effort."]]])
                                      {:align "start"}))}
       (ui/icon "info-circle"))]))
 
