@@ -5,9 +5,9 @@
             [promesa.core :as p]))
 
 (defonce ^:private encoder (new js/TextEncoder "utf-8"))
-(comment (defonce ^:private decoder (new js/TextDecoder "utf-8")))
+(defonce ^:private decoder (new js/TextDecoder "utf-8"))
 
-(defn <encrypt
+(defn <rsa-encrypt
   [message public-key]
   (let [data (.encode encoder message)]
     (js/crypto.subtle.encrypt
@@ -24,6 +24,26 @@
                     cipher-text)]
       (.decode decoder result))))
 
+(defn <aes-encrypt
+  [message aes-key]
+  (p/let [data (.encode encoder message)
+          iv (js/crypto.getRandomValues (js/Uint8Array. 12))
+          ciphertext (js/crypto.subtle.encrypt
+                      #js{:name "AES-GCM" :iv iv}
+                      aes-key
+                      data)]
+    {:ciphertext ciphertext
+     :iv iv}))
+
+(defn <aes-decrypt
+  [encrypted-data aes-key]
+  (p/let [{:keys [ciphertext iv]} encrypted-data
+          decrypted (js/crypto.subtle.decrypt
+                     #js{:name "AES-GCM" :iv iv}
+                     aes-key
+                     ciphertext)]
+    (.decode decoder decrypted)))
+
 (defonce ^:private key-algorithm
   #js{:name "RSA-OAEP"
       :modulusLength 4096
@@ -34,6 +54,18 @@
   []
   (p/let [result (js/crypto.subtle.generateKey
                   key-algorithm
+                  true
+                  #js["encrypt" "decrypt"])]
+    (js->clj result :keywordize-keys true)))
+
+(defonce ^:private aes-key-algorithm
+  #js{:name "AES-GCM"
+      :length 256})
+
+(defn <gen-aes-key
+  []
+  (p/let [result (js/crypto.subtle.generateKey
+                  aes-key-algorithm
                   true
                   #js["encrypt" "decrypt"])]
     (js->clj result :keywordize-keys true)))
@@ -59,7 +91,14 @@
       (p/let [encrypted (<encrypt msg publicKey)
               plaintxt (<decrypt encrypted privateKey)]
         (prn :encrypted msg)
-        (prn :plaintxt plaintxt)))))
+        (prn :plaintxt plaintxt))))
+
+  (p/let [k (<gen-aes-key)
+          kk (<export-key k)
+          encrypted (<aes-encrypt (apply str (repeat 1000 "x")) k)
+          plaintxt (<aes-decrypt encrypted k)]
+    (prn :encrypted encrypted)
+    (prn :plaintxt plaintxt)))
 
 (defn store-graph-keys-jwk
   [repo public-key-jwk private-key-jwk]
