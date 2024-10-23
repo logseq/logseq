@@ -420,7 +420,7 @@ DROP TRIGGER IF EXISTS blocks_au;
     (let [fuzzy-blocks-to-add (filter page-or-object? blocks-to-add)
           fuzzy-blocks-to-remove (filter page-or-object? blocks-to-remove)]
       (when (or (seq fuzzy-blocks-to-add) (seq fuzzy-blocks-to-remove))
-        (swap! fuzzy-search-indices update-in repo
+        (swap! fuzzy-search-indices update repo
                (fn [indice]
                  (when indice
                    (doseq [page-entity fuzzy-blocks-to-remove]
