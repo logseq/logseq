@@ -408,7 +408,8 @@
                  (reset! *resizing-image? true))
                :move
                (let [width' (+ @*width dx)]
-                 (reset! *width width'))
+                 (when (> width' 120)
+                   (reset! *width width')))
                :end
                (let [width' @*width]
                  (when (and width' @*resizing-image?)
