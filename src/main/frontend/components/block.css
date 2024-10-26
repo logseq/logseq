@@ -963,9 +963,9 @@ html.is-mac {
   @apply flex relative;
 
   .handle-left , .handle-right {
-    @apply absolute w-[6px] h-[15%] bg-black/30 hover:bg-black/70
+    @apply absolute w-[6px] h-[15%] min-h-[30px] bg-black/30 hover:bg-black/70
     top-[50%] left-[5px] rounded-full cursor-col-resize select-none
-    translate-y-[-50%] opacity-0;
+    translate-y-[-20%] opacity-0;
   }
 
   .handle-right {
