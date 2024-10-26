@@ -179,14 +179,14 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 19 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
-      (is (= 19 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 20 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 20 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 8
+      (is (= 9
              (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
                                 :where [?b :block/title] [_ :block/page ?b]] @conn)
                          (filter ldb/internal-page?))))
@@ -328,6 +328,23 @@
       (is (= "tasks with todo and doing"
              (:block/title (find-block-by-content @conn #"tasks with")))
           "Advanced query has custom title migrated"))
+
+    (testing "namespaces"
+      (let [expand-children (fn expand-children [ent parent]
+                              (if-let [children (:logseq.property/_parent ent)]
+                                (cons {:parent (:block/title parent) :child (:block/title ent)}
+                                      (mapcat #(expand-children % ent) children))
+                                [{:parent (:block/title parent) :child (:block/title ent)}]))]
+        (is (= [{:parent "n1" :child "x"}
+                {:parent "x" :child "z"}
+                {:parent "x" :child "y"}]
+               (rest (expand-children (d/entity @conn (:db/id (find-page-by-name @conn "n1"))) nil)))
+            "First namespace tests duplicate parent page name")
+        (is (= [{:parent "n2" :child "x"}
+                {:parent "x" :child "z"}
+                {:parent "n2" :child "alias"}]
+               (rest (expand-children (d/entity @conn (:db/id (find-page-by-name @conn "n2"))) nil)))
+            "First namespace tests duplicate child page name and built-in page name")))
 
     (testing "db attributes"
       (is (= true

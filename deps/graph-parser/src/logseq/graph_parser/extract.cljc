@@ -238,7 +238,7 @@
              (:block/properties-text-values (first blocks))]
             [properties [] {}])
           page-map (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
-          namespace-pages (when-not db-based?
+          namespace-pages (when (or (not db-based?) (:export-to-db-graph? options))
                             (let [page (:block/title page-map)]
                               (when (text/namespace-page? page)
                                 (->> (common-util/split-namespace-pages page)

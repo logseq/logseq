@@ -319,7 +319,8 @@
       :ui/select-query-cache                 (atom {})
       :favorites/updated?                    (atom 0)
       :db/async-query-loading                (atom #{})
-      :db/async-queries                      (atom {})})))
+      :db/async-queries                      (atom {})
+      :db/latest-transacted-entity-uuids     (atom {})})))
 
 ;; Block ast state
 ;; ===============

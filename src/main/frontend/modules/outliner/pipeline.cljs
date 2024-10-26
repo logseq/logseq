@@ -35,6 +35,9 @@
 
           :else
           (do
+            (state/set-state! :db/latest-updated-entity-uuids
+                              {:updated-ids (set (map :block/uuid blocks))
+                               :deleted-ids (set deleted-block-uuids)})
             (let [tx-data' (concat
                             (map
                              (fn [id]
