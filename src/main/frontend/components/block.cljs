@@ -302,6 +302,7 @@
                    state)}
   [state config title src metadata full-text local?]
   (let [breadcrumb? (:breadcrumb? config)
+        positioned? (:property-position config)
         asset-block (:asset-block config)
         asset-container [:div.asset-container {:key "resize-asset-container"}
                          [:img.rounded-sm.relative
@@ -311,7 +312,8 @@
                             :src src
                             :title title}
                            metadata)]
-                         (when-not breadcrumb?
+                         (when (and (not breadcrumb?)
+                                 (not positioned?))
                            [:<>
                             (let [image-src (fs/asset-path-normalize src)]
                               [:.asset-action-bar {:aria-hidden "true"}
@@ -389,7 +391,8 @@
                   :else
                   {}))
         resizable? (and (not (mobile-util/native-platform?))
-                     (not breadcrumb?))]
+                     (not breadcrumb?)
+                     (not positioned?))]
     (if (or (:disable-resize? config)
           (not resizable?))
       asset-container
