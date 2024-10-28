@@ -3992,9 +3992,9 @@
        (when virtualized?
          (when (:current-page? config)
            (let [ref (.-current *virtualized-ref)]
-             (ui-handler/scroll-to-anchor-block ref blocks)
+             (ui-handler/scroll-to-anchor-block ref blocks false)
              (state/set-state! :editor/virtualized-scroll-fn
-                               #(ui-handler/scroll-to-anchor-block ref blocks))))
+                               #(ui-handler/scroll-to-anchor-block ref blocks false))))
          ;; Try to fix virtuoso scrollable container blink for the block insertion at bottom
          (let [^js *ob (volatile! nil)]
            (js/setTimeout

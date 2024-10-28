@@ -274,7 +274,7 @@
                         (not show?))}))))
 
 (defn scroll-to-anchor-block
-  [ref blocks]
+  [ref blocks gallery?]
   (when ref
     (let [anchor (get-in (state/get-route-match) [:query-params :anchor])
           anchor-id (when (and anchor (string/starts-with? anchor "ls-block-"))
@@ -291,5 +291,11 @@
                             parents (map :block/uuid (db/get-block-parents (state/get-current-repo) (:block/uuid block) {}))]
                         (some find-idx parents)))]
           (when idx
-            (.scrollToIndex ref #js {:index idx})
-            (js/setTimeout #(highlight-element! anchor) 200)))))))
+            (js/setTimeout
+             (fn []
+               (.scrollToIndex ref #js {:index idx})
+               ;; wait until this block has been rendered.
+               (js/setTimeout #(highlight-element! anchor) 200))
+             ;; BUG: grid scrollToIndex not working in useEffect on first render
+             ;; https://github.com/petyosi/react-virtuoso/issues/757
+             (if gallery? 100 0))))))))

@@ -1075,7 +1075,7 @@
 
 (rum/defc gallery-card-item
   [view-entity block config]
-  [:div.ls-card-item
+  [:div.ls-card-item.content
    {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
    [:div.-ml-4
     (block-container (assoc config
@@ -1096,7 +1096,7 @@
                            (gallery-card-item view-entity block config')))}))]))
 
 (defn- run-effects!
-  [option {:keys [data columns state data-fns]} input input-filters set-input-filters! *scroller-ref]
+  [option {:keys [data columns state data-fns]} input input-filters set-input-filters! *scroller-ref gallery?]
   (let [{:keys [filters sorting]} state
         {:keys [set-row-filter! set-data!]} data-fns]
     (rum/use-effect!
@@ -1119,8 +1119,8 @@
              data' (table-core/table-sort-rows new-data sorting columns)]
          (set-data! data')
          (when (and (:current-page? (:config option)) (seq data) (map? (first data)) (:block/uuid (first data)))
-           (ui-handler/scroll-to-anchor-block @*scroller-ref data')
-           (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data')))))
+           (ui-handler/scroll-to-anchor-block @*scroller-ref data' gallery?)
+           (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data' gallery?)))))
      [sorting])))
 
 (rum/defc view-inner < rum/static
@@ -1172,9 +1172,10 @@
         table (shui/table-option table-map)
         *view-ref (rum/use-ref nil)
         display-type (or (:db/ident (get view-entity :logseq.property.view/type))
-                         :logseq.property.view/type.table)]
+                         :logseq.property.view/type.table)
+        gallery? (= display-type :logseq.property.view/type.gallery)]
 
-    (run-effects! option table-map input input-filters set-input-filters! *scroller-ref)
+    (run-effects! option table-map input input-filters set-input-filters! *scroller-ref gallery?)
 
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
