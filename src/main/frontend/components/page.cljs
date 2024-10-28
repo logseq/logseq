@@ -87,11 +87,12 @@
            (not sidebar?))
       (when (and (string/blank? (:block/title block))
                  (not preview?))
-        (editor-handler/edit-block! block :max))))
-  state)
+        (editor-handler/edit-block! block :max)))))
 
 (rum/defc page-blocks-inner <
-  {:did-mount open-root-block!}
+  {:did-mount (fn [state]
+                (open-root-block! state)
+                state)}
   [page-e blocks config sidebar? whiteboard? _block-uuid]
   (when page-e
     (let [hiccup (component-block/->hiccup blocks config {})]
@@ -597,10 +598,10 @@
               (db-page/configure-property page))
 
             (when (and db-based? class-page?)
-              (objects/class-objects page))
+              (objects/class-objects page (:current-page? option)))
 
             (when (and db-based? (ldb/property? page))
-              (objects/property-related-objects page))
+              (objects/property-related-objects page (:current-page? option)))
 
             (when (and block? (not sidebar?) (not whiteboard?))
               (let [config (merge config {:id "block-parent"
@@ -664,7 +665,10 @@
                      (route-handler/update-page-title-and-label! (state/get-route-match))))))
              (assoc state
                     ::page-name page-name'
-                    ::loading? *loading?)))}
+                    ::loading? *loading?)))
+   :will-unmount (fn [state]
+                   (state/set-state! :editor/virtualized-scroll-fn nil)
+                   state)}
   [state option]
   (when-not (rum/react (::loading? state))
     (page-inner option)))

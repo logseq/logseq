@@ -157,7 +157,8 @@
        (ui/foldable
         [:div.font-medium.opacity-50 "Tagged Nodes"]
         [:div.mt-2
-         (views/view view-entity {:data data
+         (views/view view-entity {:config config
+                                  :data data
                                   :set-data! set-data!
                                   :views-title (class-views class views view-entity {:set-view-entity! set-view-entity!
                                                                                      :set-views! set-views!})
@@ -197,10 +198,11 @@
         {:disable-on-pointer-down? true})])))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
-  [state class]
+  [state class current-page?]
   (when class
     (let [class (db/sub-block (:db/id class))
-          config {:container-id (:container-id state)}
+          config {:container-id (:container-id state)
+                  :current-page? current-page?}
           properties (outliner-property/get-class-properties class)
           repo (state/get-current-repo)
           objects (->> (db-model/sub-class-objects repo (:db/id class))
@@ -246,7 +248,8 @@
       (ui/foldable
        [:div.font-medium.opacity-50 "Nodes with Property"]
        [:div.mt-2
-        (views/view view-entity {:data data
+        (views/view view-entity {:config config
+                                 :data data
                                  :set-data! set-data!
                                  :title-key :views.table/property-nodes
                                  :columns columns
@@ -274,10 +277,11 @@
 
 ;; Show all nodes containing the given property
 (rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
-  [state property]
+  [state property current-page?]
   (when property
     (let [property' (db/sub-block (:db/id property))
-          config {:container-id (:container-id state)}
+          config {:container-id (:container-id state)
+                  :current-page? current-page?}
           ;; Show tags to help differentiate property rows
           properties [property' (db/entity :block/tags)]
           repo (state/get-current-repo)

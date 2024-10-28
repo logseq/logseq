@@ -243,8 +243,8 @@
   (when-not (= repo target-repo)        ; TODO: remove this once we support multi-tabs OPFS access
     (when target-repo
       (if (util/electron?)
-       (ipc/ipc "openNewWindow" target-repo)
-       (js/window.open (str config/app-website "#/?graph=" target-repo) "_blank")))))
+        (ipc/ipc "openNewWindow" target-repo)
+        (js/window.open (str config/app-website "#/?graph=" target-repo) "_blank")))))
 
 (defn toggle-show-empty-hidden-properties!
   []
@@ -258,17 +258,38 @@
     (if (seq block-ids)
       (let [block-ids' (set block-ids)]
         (reset! *state
-               {:mode :block
-                :ids block-ids'
-                :show? (cond
-                         (= mode :global)
-                         true
-                         (not= ids block-ids')
-                         true
-                         :else
-                         (not show?))}))
+                {:mode :block
+                 :ids block-ids'
+                 :show? (cond
+                          (= mode :global)
+                          true
+                          (not= ids block-ids')
+                          true
+                          :else
+                          (not show?))}))
       (reset! *state
               {:mode :global
                :show? (if (= mode :block)
                         true
                         (not show?))}))))
+
+(defn scroll-to-anchor-block
+  [ref blocks]
+  (when ref
+    (let [anchor (get-in (state/get-route-match) [:query-params :anchor])
+          anchor-id (when (and anchor (string/starts-with? anchor "ls-block-"))
+                      (let [id (subs anchor 9)]
+                        (when (util/uuid-string? id)
+                          (uuid id))))]
+      (when (and ref anchor-id)
+        (let [block-ids (map :block/uuid blocks)
+              find-idx (fn [anchor-id]
+                         (let [idx (.indexOf block-ids anchor-id)]
+                           (when (pos? idx) idx)))
+              idx (or (find-idx anchor-id)
+                      (let [block (db/entity [:block/uuid anchor-id])
+                            parents (map :block/uuid (db/get-block-parents (state/get-current-repo) (:block/uuid block) {}))]
+                        (some find-idx parents)))]
+          (when idx
+            (.scrollToIndex ref #js {:index idx})
+            (js/setTimeout #(highlight-element! anchor) 200)))))))

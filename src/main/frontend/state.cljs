@@ -157,6 +157,7 @@
       :editor/container-id                   (atom nil)
       :editor/next-edit-block                (atom nil)
       :editor/raw-mode-block                 (atom nil)
+      :editor/virtualized-scroll-fn          nil
 
       :selection/mode                        (atom false)
       ;; Warning: blocks order is determined when setting this attribute

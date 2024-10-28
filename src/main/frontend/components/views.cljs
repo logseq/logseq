@@ -13,6 +13,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -1031,7 +1032,7 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc table-view < rum/static
-  [table option row-selection add-new-object!]
+  [table option row-selection add-new-object! *scroller-ref]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))]
     (shui/table
      (let [columns' (:columns table)
@@ -1041,7 +1042,8 @@
          (table-header table columns' option selected-rows)
 
          (ui/virtualized-list
-          {:custom-scroll-parent (gdom/getElement "main-content-container")
+          {:ref #(reset! *scroller-ref %)
+           :custom-scroll-parent (gdom/getElement "main-content-container")
            :increase-viewport-by 128
            :overscan 128
            :compute-item-key (fn [idx]
@@ -1081,19 +1083,20 @@
                             :gallery-view? true) block)]])
 
 (rum/defcs gallery-view < rum/static mixins/container-id
-  [state config view-entity blocks]
+  [state config view-entity blocks *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))]
     [:div.ls-cards
      (when (seq blocks)
        (ui/virtualized-grid
-        {:total-count (count blocks)
+        {:ref #(reset! *scroller-ref %)
+         :total-count (count blocks)
          :custom-scroll-parent (gdom/getElement "main-content-container")
          :item-content (fn [idx]
                          (when-let [block (nth blocks idx)]
                            (gallery-card-item view-entity block config')))}))]))
 
 (defn- run-effects!
-  [{:keys [data columns state data-fns]} input input-filters set-input-filters!]
+  [option {:keys [data columns state data-fns]} input input-filters set-input-filters! *scroller-ref]
   (let [{:keys [filters sorting]} state
         {:keys [set-row-filter! set-data!]} data-fns]
     (rum/use-effect!
@@ -1114,12 +1117,16 @@
              new-data (map get-latest-entity data)
              ;; TODO: db support native order-by, limit, offset, 350ms for 40k pages
              data' (table-core/table-sort-rows new-data sorting columns)]
-         (set-data! data')))
+         (set-data! data')
+         (when (and (:current-page? (:config option)) (seq data) (map? (first data)) (:block/uuid (first data)))
+           (ui-handler/scroll-to-anchor-block @*scroller-ref data')
+           (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data')))))
      [sorting])))
 
 (rum/defc view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
-                :or {render-empty-title? false}}]
+                :or {render-empty-title? false}}
+   *scroller-ref]
   (let [[input set-input!] (rum/use-state "")
         sorting (:logseq.property.table/sorting view-entity)
         [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
@@ -1167,7 +1174,7 @@
         display-type (or (:db/ident (get view-entity :logseq.property.view/type))
                          :logseq.property.view/type.table)]
 
-    (run-effects! table-map input input-filters set-input-filters!)
+    (run-effects! option table-map input input-filters set-input-filters! *scroller-ref)
 
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
@@ -1201,11 +1208,11 @@
        (list-view (:config option) view-entity (:rows table))
 
        :logseq.property.view/type.gallery
-       (gallery-view (:config option) view-entity (:rows table))
+       (gallery-view (:config option) view-entity (:rows table) *scroller-ref)
 
-       (table-view table option row-selection add-new-object!))]))
+       (table-view table option row-selection add-new-object! *scroller-ref))]))
 
-(rum/defc view
+(rum/defcs view
   "Provides a view for data like query results and tagged objects, multiple
    layouts such as table and list are supported. Args:
    * view-entity: a db Entity
@@ -1219,7 +1226,8 @@
      * add-property!: `fn` to add a new property (or column)
      * on-delete-rows: `fn` to trigger when deleting selected objects"
   < rum/reactive
-  [view-entity option]
+  (rum/local nil ::scroller-ref)
+  [state view-entity option]
   (let [view-entity' (db/sub-block (:db/id view-entity))]
-    (rum/with-key (view-inner view-entity' option)
+    (rum/with-key (view-inner view-entity' option (::scroller-ref state))
       (str "view-" (:db/id view-entity')))))
