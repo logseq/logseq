@@ -98,11 +98,10 @@
             "Export debug JSON"]
            [:p.text-sm.opacity-70 "Any sensitive data will be removed in the exported json file, you can send it to us for debugging."]])
 
-        (when-not db-based?
-          (when (util/electron?)
-            [:div
-             [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
-              (t :export-public-pages)]]))
+        (when (util/electron?)
+          [:div
+           [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
+            (t :export-public-pages)]])
         (when-not (or (mobile-util/native-platform?) db-based?)
           [:div
            [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
