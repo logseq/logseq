@@ -47,6 +47,7 @@
    :zh-CN   (edn-resource "dicts/zh-cn.edn")
    :zh-Hant (edn-resource "dicts/zh-hant.edn")
    :af      (edn-resource "dicts/af.edn")
+   :ca      (edn-resource "dicts/ca.edn")
    :es      (edn-resource "dicts/es.edn")
    :nb-NO   (edn-resource "dicts/nb-no.edn")
    :pt-BR   (edn-resource "dicts/pt-br.edn")
@@ -71,6 +72,7 @@
    {:label "简体中文" :value :zh-CN}
    {:label "繁體中文" :value :zh-Hant}
    {:label "Afrikaans" :value :af}
+   {:label "Català" :value :ca}
    {:label "Español" :value :es}
    {:label "Norsk (bokmål)" :value :nb-NO}
    {:label "Polski" :value :pl}
