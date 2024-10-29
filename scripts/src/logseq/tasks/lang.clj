@@ -183,7 +183,9 @@
             :settings-page/tab-editor :shortcut.category/whiteboard :whiteboard/medium
             :whiteboard/twitter-url :whiteboard/youtube-url :right-side-bar/history-global :linked-references/filter-heading}
    :tr #{:help/awesome-logseq}
-   :id #{:host :port :on-boarding/section-app :right-side-bar/history-global}})
+   :id #{:host :port :on-boarding/section-app :right-side-bar/history-global}
+   :cs #{:host :port :help/blog :settings-page/tab-editor :whiteboard/text}
+   })
 
 (defn- validate-languages-dont-have-duplicates
   "Looks up duplicates for all languages"
