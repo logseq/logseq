@@ -170,7 +170,7 @@
    :it #{:home :handbook/home :host :help/awesome-logseq :on-boarding/section-computer
          :settings-page/tab-account :settings-page/tab-editor :whiteboard/link}
    :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
-   :pl #{:port}
+   :pl #{:port :home :host :plugin/marketplace :whiteboard/link}
    :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards :page/backlinks
             :host :settings-page/tab-editor :shortcut.category/plugins :whiteboard/link :settings-of-plugins :whiteboard
             :whiteboards :on-boarding/quick-tour-journal-page-desc-2 :plugin/downloads :right-side-bar/history-global
