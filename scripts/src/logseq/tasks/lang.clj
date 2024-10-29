@@ -164,6 +164,8 @@
    :de #{:graph :host :plugins :port :right-side-bar/whiteboards
          :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
          :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
+   :ca #{:port :right-side-bar/history-global :settings-page/tab-editor :settings-page/tab-general 
+          :whiteboard/color :whiteboard/connector :whiteboard/text :whiteboard/triangle}      
    :es #{:settings-page/tab-general :settings-page/tab-editor :whiteboard/color :right-side-bar/history-global}
    :it #{:home :handbook/home :host :help/awesome-logseq :on-boarding/section-computer
          :settings-page/tab-account :settings-page/tab-editor :whiteboard/link}
@@ -181,7 +183,9 @@
             :settings-page/tab-editor :shortcut.category/whiteboard :whiteboard/medium
             :whiteboard/twitter-url :whiteboard/youtube-url :right-side-bar/history-global :linked-references/filter-heading}
    :tr #{:help/awesome-logseq}
-   :id #{:host :port :on-boarding/section-app :right-side-bar/history-global}})
+   :id #{:host :port :on-boarding/section-app :right-side-bar/history-global}
+   :cs #{:host :port :help/blog :settings-page/tab-editor :whiteboard/text}
+   })
 
 (defn- validate-languages-dont-have-duplicates
   "Looks up duplicates for all languages"
