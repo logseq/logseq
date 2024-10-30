@@ -199,7 +199,7 @@
    :de #{:graph :host :plugins :port :right-side-bar/whiteboards
          :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
          :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
-   :ca #{:port :right-side-bar/history-global :settings-page/tab-editor :settings-page/tab-general
+   :ca #{:port :settings-page/tab-editor :settings-page/tab-general
          :whiteboard/color :whiteboard/connector :whiteboard/text :whiteboard/triangle}
    :es #{:settings-page/tab-general :settings-page/tab-editor :whiteboard/color}
    :it #{:home :handbook/home :host :help/awesome-logseq

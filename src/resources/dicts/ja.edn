@@ -160,7 +160,6 @@
  :page/updated-at "更新日時 "
  :page/backlinks "バックリンク"
  :linked-references/filter-search "リンクされたページを検索"
- :linked-references/unexpected-error "リンクによる参照: 予期していないエラーです。先にグラフのインデックスを再構築してください。"
  :linked-references/filter-heading "絞り込む"
  :linked-references/filter-directions "クリックすると含むもの、Shiftを押しながらクリックすると含まないものを検索します。もう一度クリックすると取り消します。"
  :linked-references/filter-includes "含む: "
@@ -417,7 +416,6 @@
  :whiteboard/toggle-grid "格子の表示/非表示"
  :whiteboard/snap-to-grid "図形を格子に合わせる"
  :whiteboard/toggle-pen-mode "ペンモードを切り替える"
- :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "個の参照" "個の参照"))
  :flashcards/modal-welcome-title "フラッシュカードを作成する時間です！"
  :flashcards/modal-welcome-desc-1 "ブロックに「#card」を追加することでカードとすることができます。また、「/cloze」で穴埋めを追加できます。"
  :flashcards/modal-welcome-desc-2 "ドキュメントを見るには、"
@@ -738,9 +736,6 @@
  :command.ui/toggle-help "ヘルプの表示／非表示"
  :command.ui/toggle-theme "テーマの切り替え"
  :command.ui/toggle-contents "目次の開閉"
- :command.ui/accent-color-reset   "アクセントカラーをリセット"
- :command.ui/accent-colors-picker "アクセントカラーを選択する"
-
  :command.command/toggle-favorite "お気に入りへ追加／削除"
  :command.editor/open-file-in-default-app "ファイルを既定のアプリで開く"
  :command.editor/open-file-in-directory "ファイルをディレクトリで開く"
