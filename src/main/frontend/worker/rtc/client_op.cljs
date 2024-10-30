@@ -70,7 +70,7 @@
 (defn get-graph-uuid
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (first (d/datoms @conn :avet :graph-uuid))))
+    (:v (first (d/datoms @conn :avet :graph-uuid)))))
 
 (defn update-local-tx
   [repo t]

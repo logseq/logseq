@@ -9,6 +9,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
+            [goog.crypt.base64 :as base64]
             [logseq.db :as ldb]
             [missionary.core :as m]
             [promesa.core :as p]))
@@ -76,13 +77,6 @@
   (ws-util/send&recv get-ws-create-task {:action "remove-device-public-key"
                                          :device-uuid device-uuid
                                          :key-name key-name}))
-
-(defn- new-task--sync-encrypted-private-key*
-  [get-ws-create-task device-uuid->encrypted-private-key graph-uuid]
-  (ws-util/send&recv get-ws-create-task
-                     {:action "sync-encrypted-private-key"
-                      :device-uuid->encrypted-private-key device-uuid->encrypted-private-key
-                      :graph-uuid graph-uuid}))
 
 (defn- new-task--sync-encrypted-aes-key*
   [get-ws-create-task device-uuid->encrypted-aes-key graph-uuid]
@@ -206,7 +200,9 @@
                                               (ldb/read-transit-str
                                                (get-in device [:keys :default-public-key :public-key])))))]
                                        [(uuid (:device-id device))
-                                        (c.m/<? (crypt/<rsa-encrypt aes-key-jwk device-public-key))])))
+                                        (base64/encodeByteArray
+                                         (js/Uint8Array.
+                                          (c.m/<? (crypt/<rsa-encrypt aes-key-jwk device-public-key))))])))
                                  devices*)))]
                 (m/? (new-task--sync-encrypted-aes-key*
                       get-ws-create-task device-uuid->encrypted-aes-key graph-uuid))))))))))
