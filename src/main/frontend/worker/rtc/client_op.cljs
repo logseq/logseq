@@ -53,8 +53,7 @@
   {:block/uuid {:db/unique :db.unique/identity}
    :local-tx {:db/index true}
    :graph-uuid {:db/index true}
-   :public-key-jwk {:db/index true}
-   :private-key-jwk {:db/index true}
+   :aes-key-jwk {:db/index true}
 
    ;; device
    :device/uuid {:db/unique :db.unique/identity}

@@ -84,6 +84,13 @@
                       :device-uuid->encrypted-private-key device-uuid->encrypted-private-key
                       :graph-uuid graph-uuid}))
 
+(defn- new-task--sync-encrypted-aes-key*
+  [get-ws-create-task device-uuid->encrypted-aes-key graph-uuid]
+  (ws-util/send&recv get-ws-create-task
+                     {:action "sync-encrypted-aes-key"
+                      :device-uuid->encrypted-aes-key device-uuid->encrypted-aes-key
+                      :graph-uuid graph-uuid}))
+
 (defn- new-get-ws-create-task
   [token]
   (:get-ws-create-task (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))))
@@ -170,13 +177,14 @@
       (let [get-ws-create-task (new-get-ws-create-task token)]
         (m/? (new-task--remove-user-device* get-ws-create-task device-uuid*))))))
 
-(defn new-task--sync-current-graph-encrypted-private-key
-  [token device-uuids]
-  (assert (and (seq device-uuids) (every? uuid? device-uuids)))
-  (m/sp
-    (let [repo (worker-state/get-current-repo)]
+(defn new-task--sync-current-graph-encrypted-aes-key
+  [token device-uuids-transit-str]
+  (let [repo (worker-state/get-current-repo)
+        device-uuids (ldb/read-transit-str device-uuids-transit-str)]
+    (assert (and (seq device-uuids) (every? uuid? device-uuids)) device-uuids)
+    (m/sp
       (when-let [graph-uuid (client-op/get-graph-uuid repo)]
-        (when-let [{:keys [private-key-jwk]} (crypt/get-graph-keys-jwk repo)]
+        (when-let [{:keys [aes-key-jwk]} (crypt/get-graph-keys-jwk repo)]
           (let [device-uuids (set device-uuids)
                 get-ws-create-task (new-get-ws-create-task token)
                 devices (m/? (new-task--get-user-devices get-ws-create-task))]
@@ -186,19 +194,19 @@
                                     (and (contains? device-uuids (uuid (:device-id device)))
                                          (some? (get-in device [:keys :default-public-key]))))
                                   devices))]
-              (let [device-uuid->encrypted-private-key
+              (let [device-uuid->encrypted-aes-key
                     (m/?
                      (apply m/join (fn [& x] (into {} x))
-                            (map
-                             (fn [device]
-                               (m/sp
-                                 (let [device-public-key
-                                       (c.m/<?
-                                        (crypt/<import-public-key
-                                         (ldb/read-transit-str
-                                          (get-in device [:keys :default-public-key :public-key]))))]
-                                   [(uuid (:device-id device))
-                                    (c.m/<? (crypt/<encrypt private-key-jwk device-public-key))])))
-                             devices*)))]
-                (m/? (new-task--sync-encrypted-private-key*
-                      get-ws-create-task device-uuid->encrypted-private-key graph-uuid))))))))))
+                            (map (fn [device]
+                                   (m/sp
+                                     (let [device-public-key
+                                           (c.m/<?
+                                            (crypt/<import-public-key
+                                             (clj->js
+                                              (ldb/read-transit-str
+                                               (get-in device [:keys :default-public-key :public-key])))))]
+                                       [(uuid (:device-id device))
+                                        (c.m/<? (crypt/<rsa-encrypt aes-key-jwk device-public-key))])))
+                                 devices*)))]
+                (m/? (new-task--sync-encrypted-aes-key*
+                      get-ws-create-task device-uuid->encrypted-aes-key graph-uuid))))))))))
