@@ -269,7 +269,7 @@
           new-db' (update new-db :eavt (fn [^BTSet s]
                                          (set! (.-storage s) (.-storage (:eavt @conn)))
                                          s))]
-      (d/reset-conn! conn new-db')
+      (d/reset-conn! conn new-db' {:reset-conn! true})
       (d/reset-schema! conn (:schema new-db))
       nil)))
 
