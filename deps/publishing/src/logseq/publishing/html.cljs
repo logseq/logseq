@@ -5,8 +5,7 @@ necessary db filtering"
             [goog.string :as gstring]
             [goog.string.format]
             [datascript.transit :as dt]
-            [logseq.publishing.db :as db]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.publishing.db :as db]))
 
 ;; Copied from hiccup but tweaked for publish usage
 ;; Any changes here should also be made in frontend.publishing/unescape-html
@@ -136,7 +135,7 @@ necessary db filtering"
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the
 generated index.html string and assets used by the html"
-  [db* {:keys [app-state repo-config html-options db-graph?]}]
+  [db* {:keys [repo app-state repo-config html-options db-graph?]}]
   (let [all-pages-public? (if-let [value (:publishing/all-pages-public? repo-config)]
                             value
                             (:all-pages-public? repo-config))
@@ -146,11 +145,10 @@ generated index.html string and assets used by the html"
         asset-filenames (remove nil? asset-filenames')
 
         db-str (dt/write-transit-str db)
-        repo-name (if db-graph? (str sqlite-util/db-version-prefix "Demo") "Demo")
         ;; The repo-name is used by the client and thus determines whether
         ;; it's a db graph or not
         state (assoc app-state
-                     :config {repo-name repo-config})
+                     :config {repo repo-config})
         raw-html-str (publishing-html db-str state html-options)]
     {:html raw-html-str
      :asset-filenames asset-filenames}))
