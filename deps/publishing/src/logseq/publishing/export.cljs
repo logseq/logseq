@@ -8,7 +8,7 @@
 
 (def ^:api js-files
   "js files from publishing release build"
-  ["shared.js" "main.js" "code-editor.js" "excalidraw.js" "tldraw.js" "db-worker.js"])
+  ["shared.js" "shared.js.map" "main.js" "main.js.map" "code-editor.js" "excalidraw.js" "tldraw.js" "db-worker.js" "db-worker.js.map"])
 
 (def ^:api static-dirs
   "dirs under static dir to copy over"
@@ -97,8 +97,8 @@
                 custom-js (if (fs/existsSync custom-js-path) (str (fs/readFileSync custom-js-path)) "")
                 _ (fs/writeFileSync (node-path/join output-static-dir "js" "custom.js") custom-js)
                 _ (cleanup-js-dir output-static-dir static-dir options)]
-               (notification-fn {:type "success"
-                                 :payload (str "Export public pages and publish assets to " output-dir " successfully 🎉")}))
+          (notification-fn {:type "success"
+                            :payload (str "Export public pages and publish assets to " output-dir " successfully 🎉")}))
         (p/catch (fn [error]
                    (notification-fn {:type "error"
                                      :payload (str "Export public pages unexpectedly failed with: " error)}))))))

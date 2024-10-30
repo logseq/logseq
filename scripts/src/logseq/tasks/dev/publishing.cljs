@@ -6,8 +6,8 @@
             ["fs" :as fs]
             ["path" :as node-path]
             [clojure.edn :as edn]
-            [datascript.core :as d]))
-
+            [datascript.core :as d]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- get-db [graph-dir]
   (let [{:keys [conn]} (gp-cli/parse-graph graph-dir {:verbose false})] @conn))
@@ -18,7 +18,10 @@
                        static-dir
                        graph-dir
                        output-path
-                       (merge options {:repo-config repo-config :ui/theme "dark" :ui/radix-color :purple}))))
+                       (merge options {:repo (node-path/basename graph-dir)
+                                       :repo-config repo-config
+                                       :ui/theme "dark"
+                                       :ui/radix-color :purple}))))
 
 (defn- publish-db-graph [static-dir graph-dir output-path opts]
   (let [db-name (node-path/basename graph-dir)
@@ -32,7 +35,11 @@
                        static-dir
                        graph-dir
                        output-path
-                       (merge opts {:repo-config repo-config :db-graph? true :ui/theme "dark" :ui/radix-color :cyan}))))
+                       (merge opts {:repo (str sqlite-util/db-version-prefix db-name)
+                                    :repo-config repo-config
+                                    :db-graph? true
+                                    :ui/theme "dark"
+                                    :ui/radix-color :cyan}))))
 
 (defn -main
   [& args]

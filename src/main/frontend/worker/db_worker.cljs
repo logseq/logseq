@@ -35,7 +35,8 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [shadow.cljs.modern :refer [defclass]]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -258,8 +259,19 @@
 
 (defn close-db!
   [repo]
-  (let [{:keys [db search client-ops]} (@*sqlite-conns repo)]
+  (let [{:keys [db search client-ops]} (get @*sqlite-conns repo)]
     (close-db-aux! repo db search client-ops)))
+
+(defn reset-db!
+  [repo db-transit-str]
+  (when-let [conn (get @*datascript-conns repo)]
+    (let [new-db (ldb/read-transit-str db-transit-str)
+          new-db' (update new-db :eavt (fn [^BTSet s]
+                                         (set! (.-storage s) (.-storage (:eavt @conn)))
+                                         s))]
+      (d/reset-conn! conn new-db')
+      (d/reset-schema! conn (:schema new-db))
+      nil)))
 
 (defn- get-dbs
   [repo]
@@ -587,6 +599,10 @@
   (closeDB
    [_this repo]
    (close-db! repo))
+
+  (resetDB
+   [_this repo db-transit]
+   (reset-db! repo db-transit))
 
   (unsafeUnlinkDB
    [_this repo]
