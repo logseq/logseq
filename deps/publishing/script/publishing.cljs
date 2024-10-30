@@ -1,4 +1,4 @@
-(ns logseq.tasks.dev.publishing
+(ns publishing
   "Basic script for publishing from CLI"
   (:require [logseq.graph-parser.cli :as gp-cli]
             [logseq.publishing :as publishing]
@@ -7,7 +7,8 @@
             ["path" :as node-path]
             [clojure.edn :as edn]
             [datascript.core :as d]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [nbb.core :as nbb]))
 
 (defn- get-db [graph-dir]
   (let [{:keys [conn]} (gp-cli/parse-graph graph-dir {:verbose false})] @conn))
@@ -41,15 +42,23 @@
                                     :ui/theme "dark"
                                     :ui/radix-color :cyan}))))
 
+(defn- resolve-path
+  "If relative path, resolve with $ORIGINAL_PWD"
+  [path]
+  (if (node-path/isAbsolute path)
+    path
+    (node-path/join (or js/process.env.ORIGINAL_PWD ".") path)))
+
 (defn -main
-  [& args]
+  [args]
   (when (< (count args) 3)
     (println "Usage: $0 STATIC-DIR GRAPH-DIR OUT-DIR")
     (js/process.exit 1))
-  (let [[static-dir graph-dir output-path]
-        ;; Offset relative paths since they are run in a different directory than user is in
-        (map #(if (node-path/isAbsolute %) % (node-path/resolve ".." %)) args)
+  (let [[static-dir graph-dir output-path] (map resolve-path args)
         options {:dev? (contains? (set args) "--dev")}]
     (if (sqlite-cli/db-graph-directory? graph-dir)
       (publish-db-graph static-dir graph-dir output-path options)
       (publish-file-graph static-dir graph-dir output-path options))))
+
+(when (= nbb/*file* (:file (meta #'-main)))
+  (-main *command-line-args*))
