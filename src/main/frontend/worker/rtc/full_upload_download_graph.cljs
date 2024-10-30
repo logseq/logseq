@@ -129,21 +129,19 @@
       (c.m/<? (http/put url {:body all-blocks-str :with-credentials? false}))
       (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
                                                   :message "requesting upload-graph"})
-      (let [{:keys [publicKey privateKey]} (c.m/<? (crypt/<gen-key-pair))
-            public-key-jwk (ldb/write-transit-str (c.m/<?  (crypt/<export-key publicKey)))
-            private-key-jwk (ldb/write-transit-str (c.m/<? (crypt/<export-key privateKey)))
+      (let [aes-key (c.m/<? (crypt/<gen-aes-key))
+            aes-key-jwk (ldb/write-transit-str (c.m/<? (crypt/<export-key aes-key)))
             upload-resp
             (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
                                                         :s3-key key
-                                                        :graph-name remote-graph-name
-                                                        :public-key-jwk public-key-jwk}))]
+                                                        :graph-name remote-graph-name}))]
         (if-let [graph-uuid (:graph-uuid upload-resp)]
           (do
             (ldb/transact! conn
                            [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
                             {:db/ident :logseq.kv/graph-local-tx :kv/value "0"}])
             (client-op/update-graph-uuid repo graph-uuid)
-            (crypt/store-graph-keys-jwk repo public-key-jwk private-key-jwk)
+            (crypt/store-graph-keys-jwk repo aes-key-jwk)
             (when-not rtc-const/RTC-E2E-TEST
               (let [^js worker-obj (:worker/object @worker-state/*state)]
                 (c.m/<? (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid})))))
