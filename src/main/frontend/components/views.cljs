@@ -25,7 +25,8 @@
             [rum.core :as rum]
             [frontend.mixins :as mixins]
             [logseq.shui.table.core :as table-core]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.config :as config]))
 
 (defn- get-latest-entity
   [e]
@@ -125,9 +126,11 @@
   [config properties & {:keys [with-object-name? add-tags-column?]
                         :or {with-object-name? true
                              add-tags-column? true}}]
-  (let [properties (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
-                     properties
-                     (conj properties (db/entity :block/tags)))]
+  (let [;; FIXME: Shouldn't file graphs have :block/tags?
+        add-tags-column?' (and (config/db-based-graph? (state/get-current-repo)) add-tags-column?)
+        properties' (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
+                      properties
+                      (conj properties (db/entity :block/tags)))]
     (->> (concat
           [{:id :select
             :name "Select"
@@ -186,7 +189,7 @@
                     :get-value get-value
                     :get-value-for-sort get-value-for-sort
                     :type (:type property)}))))
-           properties)
+           properties')
 
           [{:id :block/created-at
             :name (t :page/created-at)
