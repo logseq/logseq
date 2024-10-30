@@ -5,6 +5,7 @@ necessary db filtering"
             [goog.string :as gstring]
             [goog.string.format]
             [datascript.transit :as dt]
+            [datascript.core :as d]
             [logseq.publishing.db :as db]))
 
 ;; Copied from hiccup but tweaked for publish usage
@@ -135,13 +136,15 @@ necessary db filtering"
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the
 generated index.html string and assets used by the html"
-  [db* {:keys [repo app-state repo-config html-options db-graph?]}]
+  [db* {:keys [repo app-state repo-config html-options db-graph? dev?]}]
   (let [all-pages-public? (if-let [value (:publishing/all-pages-public? repo-config)]
                             value
                             (:all-pages-public? repo-config))
         [db asset-filenames'] (if all-pages-public?
                                 (db/clean-export! db* {:db-graph? db-graph?})
                                 (db/filter-only-public-pages-and-blocks db* {:db-graph? db-graph?}))
+        _ (when dev?
+            (println "Exporting" (count (d/datoms db :eavt)) "of" (count (d/datoms db* :eavt)) "datoms..."))
         asset-filenames (remove nil? asset-filenames')
 
         db-str (dt/write-transit-str db)

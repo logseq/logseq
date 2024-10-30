@@ -4,7 +4,8 @@
             [logseq.db.frontend.rules :as rules]
             [clojure.set :as set]
             [clojure.string :as string]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]))
 
 (defn ^:api get-area-block-asset-url
   "Returns asset url for an area block used by pdf assets. This lives in this ns
@@ -179,6 +180,26 @@
     ;; (prn :datoms (count datoms) :assets (count assets))
     [@(d/conn-from-datoms datoms (:schema db)) assets]))
 
+(defn- file-filter-only-public
+  [public-pages db datom]
+  (let [ns' (namespace (:a datom))]
+    (and
+     (not (contains? #{:block/file} (:a datom)))
+     (not= ns' "file")
+     (or
+      (not (contains? #{"block" "recent"} ns'))
+      (and (= ns' "block")
+           (or
+            (contains? public-pages (:e datom))
+            (contains? public-pages (:db/id (:block/page (d/entity db (:e datom)))))))))))
+
+(defn- db-filter-only-public
+  [public-pages internal-ents db datom]
+  (or
+   (contains? internal-ents (:e datom))
+   (contains? public-pages (:e datom))
+   (contains? public-pages (:db/id (:block/page (d/entity db (:e datom)))))))
+
 (defn filter-only-public-pages-and-blocks
   "Prepares a database assuming all pages are private unless a page has a 'public:: true'"
   [db {:keys [db-graph?]}]
@@ -186,20 +207,20 @@
   (let [public-pages* (seq (if db-graph? (get-db-public-pages db) (get-public-pages db)))
         public-pages (set/union (set public-pages*)
                                 (get-aliases-for-page-ids db public-pages*))
-        exported-namespace? #(contains? #{"block" "recent"} %)
-        filtered-db (d/filter db
-                              (fn [db datom]
-                                (let [ns' (namespace (:a datom))]
-                                  (and
-                                   (not (contains? #{:block/file} (:a datom)))
-                                   (not= ns' "file")
-                                   (or
-                                    (not (exported-namespace? ns'))
-                                    (and (= ns' "block")
-                                         (or
-                                          (contains? public-pages (:e datom))
-                                          (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))))
+        internal-ents (when db-graph?
+                        (set/union
+                         (->> (d/datoms db :eavt)
+                              (keep #(when (and (= :db/ident (:a %)) (db-malli-schema/internal-ident? (:v %)))
+                                       (:e %)))
+                              set)
+                         (->> (d/datoms db :avet :logseq.property/built-in? true)
+                              (map :e)
+                              set)))
+        filter-fn (if db-graph?
+                    (partial db-filter-only-public public-pages internal-ents)
+                    (partial file-filter-only-public public-pages))
+        filtered-db (d/filter db filter-fn)
         datoms (d/datoms filtered-db :eavt)
         assets (get-assets db datoms)]
-    ;; (prn :datoms (count datoms) :assets (count assets))
+    ;; (prn :counts :internal (count internal-ents) :datoms (count datoms) :assets (count assets))
     [@(d/conn-from-datoms datoms (:schema db)) assets]))
