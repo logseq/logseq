@@ -5,11 +5,17 @@
             [promesa.core :as p]))
 
 (defonce ^:private encoder (new js/TextEncoder "utf-8"))
-(defonce ^:private decoder (new js/TextDecoder "utf-8"))
+(comment (defonce ^:private decoder (new js/TextDecoder "utf-8")))
+
+(defn string=>arraybuffer
+  [s]
+  (.encode encoder s))
 
 (defn <rsa-encrypt
+  "Return an arraybuffer"
   [message public-key]
-  (let [data (.encode encoder message)]
+  (assert (string? message))
+  (let [data (string=>arraybuffer message)]
     (js/crypto.subtle.encrypt
      #js{:name "RSA-OAEP"}
      public-key
@@ -24,25 +30,27 @@
                     cipher-text)]
       (.decode decoder result))))
 
-(defn <aes-encrypt
-  [message aes-key]
-  (p/let [data (.encode encoder message)
-          iv (js/crypto.getRandomValues (js/Uint8Array. 12))
-          ciphertext (js/crypto.subtle.encrypt
-                      #js{:name "AES-GCM" :iv iv}
-                      aes-key
-                      data)]
-    {:ciphertext ciphertext
-     :iv iv}))
+(comment
+  (defn <aes-encrypt
+    [message aes-key]
+    (p/let [data (.encode encoder message)
+            iv (js/crypto.getRandomValues (js/Uint8Array. 12))
+            ciphertext (js/crypto.subtle.encrypt
+                        #js{:name "AES-GCM" :iv iv}
+                        aes-key
+                        data)]
+      {:ciphertext ciphertext
+       :iv iv})))
 
-(defn <aes-decrypt
-  [encrypted-data aes-key]
-  (p/let [{:keys [ciphertext iv]} encrypted-data
-          decrypted (js/crypto.subtle.decrypt
-                     #js{:name "AES-GCM" :iv iv}
-                     aes-key
-                     ciphertext)]
-    (.decode decoder decrypted)))
+(comment
+  (defn <aes-decrypt
+    [encrypted-data aes-key]
+    (p/let [{:keys [ciphertext iv]} encrypted-data
+            decrypted (js/crypto.subtle.decrypt
+                       #js{:name "AES-GCM" :iv iv}
+                       aes-key
+                       ciphertext)]
+      (.decode decoder decrypted))))
 
 (defonce ^:private key-algorithm
   #js{:name "RSA-OAEP"
