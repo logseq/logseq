@@ -74,12 +74,23 @@
            ;; Shorten values
            (map #(update % :string-to-translate shorten 50) sorted-missing)))))))
 
+(defn- delete-invalid-non-default-languages
+  [invalid-keys-by-lang]
+  (doseq [[lang invalid-keys] invalid-keys-by-lang]
+    (let [path (fs/path "src/resources/dicts" (str (name lang) ".edn"))
+          result (r/parse-string (String. (fs/read-all-bytes path)))
+          new-content (str (reduce
+                            (fn [result k]
+                              (r/dissoc result k))
+                            result invalid-keys))]
+      (spit (fs/file path) new-content))))
+
 (defn- validate-non-default-languages
   "This validation finds any translation keys that don't exist in the default
   language English. Logseq needs to work out of the box with its default
   language. This catches mistakes where another language has accidentally typoed
   keys or added ones without updating :en"
-  []
+  [{:keys [fix?]}]
   (let [dicts (get-dicts)
         ;; For now defined as :en but clj-kondo analysis could be more thorough
         valid-keys (set (keys (dicts :en)))
@@ -95,6 +106,10 @@
       (do
         (println "\nThese translation keys are invalid because they don't exist in English:")
         (task-util/print-table invalid-dicts)
+        (when fix?
+          (delete-invalid-non-default-languages
+           (update-vals (group-by :language invalid-dicts) #(map :invalid-key %)))
+          (println "These invalid non-language keys have been removed."))
         (System/exit 1)))))
 
 ;; Command to check for manual entries:
@@ -173,7 +188,7 @@
           (task-util/print-table (map #(hash-map :invalid-key %) expected-only))
           (when fix?
             (delete-not-used-key-from-dict-file expected-only)
-            (println "These invalid keys have been removed.")))
+            (println "These invalid ui keys have been removed.")))
         (System/exit 1)))))
 
 (def allowed-duplicates
@@ -232,6 +247,6 @@
 (defn validate-translations
   "Runs multiple translation validations that fail fast if one of them is invalid"
   [& args]
-  (validate-non-default-languages)
+  (validate-non-default-languages {:fix? (contains? (set args) "--fix")})
   (validate-ui-translations-are-used {:fix? (contains? (set args) "--fix")})
   (validate-languages-dont-have-duplicates))
