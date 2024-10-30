@@ -101,20 +101,16 @@
     (prn :plaintxt plaintxt)))
 
 (defn store-graph-keys-jwk
-  [repo public-key-jwk private-key-jwk]
+  [repo aes-key-jwk]
   (let [conn (worker-state/get-client-ops-conn repo)]
     (assert (some? conn) repo)
-    (let [public-key-datom (first (d/datoms @conn :avet :public-key-jwk))
-          private-key-datom (first (d/datoms @conn :avet :private-key-jwk))]
-      (assert (and (nil? public-key-datom) (nil? private-key-datom)) public-key-datom)
-      (d/transact! conn [[:db/add "e1" :public-key-jwk public-key-jwk]
-                         [:db/add "e2" :private-key-jwk private-key-jwk]]))))
+    (let [aes-key-datom (first (d/datoms @conn :avet :aes-key-jwk))]
+      (assert (nil? aes-key-datom) aes-key-datom)
+      (d/transact! conn [[:db/add "e1" :aes-key-jwk aes-key-jwk]]))))
 
 (defn get-graph-keys-jwk
   [repo]
   (let [conn (worker-state/get-client-ops-conn repo)]
     (assert (some? conn) repo)
-    (let [public-key-datom (first (d/datoms @conn :avet :public-key-jwk))
-          private-key-datom (first (d/datoms @conn :avet :private-key-jwk))]
-      {:public-key-jwk (:v public-key-datom)
-       :private-key-jwk (:v private-key-datom)})))
+    (let [aes-key-datom (first (d/datoms @conn :avet :aes-key-jwk))]
+      {:aes-key-jwk (:v aes-key-datom)})))

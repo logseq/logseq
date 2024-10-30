@@ -833,6 +833,13 @@
    (with-write-transit-str
      (worker-crypt/get-graph-keys-jwk repo)))
 
+  (rtc-sync-current-graph-encrypted-aes-key
+   [this token device-uuids-transit-str]
+   (with-write-transit-str
+     (js/Promise.
+      (worker-device/new-task--sync-current-graph-encrypted-aes-key
+       token device-uuids-transit-str))))
+
   (device-list-devices
    [this token]
    (with-write-transit-str

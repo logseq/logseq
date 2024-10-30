@@ -267,8 +267,7 @@
         [:div.pb-4
          [:pre.select-text
           (-> {:devices (:devices keys-state)
-               :graph-public-key-jwk (:public-key-jwk keys-state)
-               :graph-private-key-jwk (:private-key-jwk keys-state)}
+               :graph-aes-key-jwk (:aes-key-jwk keys-state)}
               (fipp/pprint {:width 20})
               with-out-str)]]
         (shui/button
@@ -305,4 +304,19 @@
           :on-focus (fn [e] (let [v (.-value (.-target e))]
                               (when (= v "key-name here")
                                 (set! (.-value (.-target e)) ""))))
-          :placeholder "key-name here"}]])]))
+          :placeholder "key-name here"}]
+        (shui/button
+         {:size :sm
+          :on-click (fn [_]
+                      (let [^object worker @db-browser/*worker]
+                        (when-let [token (state/get-auth-id-token)]
+                          (when-let [device-uuid (not-empty (:sync-private-key-device-uuid keys-state))]
+                            (.rtc-sync-current-graph-encrypted-aes-key
+                             worker token (ldb/write-transit-str [(parse-uuid device-uuid)]))))))}
+         "Sync CurrentGraph EncryptedAesKey")
+        [:input.form-input.my-2.py-1.w-32
+         {:on-change (fn [e] (swap! *keys-state assoc :sync-private-key-device-uuid (util/evalue e)))
+          :on-focus (fn [e] (let [v (.-value (.-target e))]
+                              (when (= v "device-uuid here")
+                                (set! (.-value (.-target e)) ""))))
+          :placeholder "device-uuid here"}]])]))
