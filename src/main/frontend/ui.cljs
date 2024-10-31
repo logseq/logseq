@@ -2,11 +2,10 @@
   "Main ns for reusable components"
   (:require ["@logseq/react-tweet-embed" :as react-tweet-embed]
             ["react-intersection-observer" :as react-intersection-observer]
-            ["react-resize-context" :as Resize]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            ["react-virtuoso" :refer [Virtuoso]]
+            ["react-virtuoso" :refer [Virtuoso VirtuosoGrid]]
             ["@emoji-mart/data" :as emoji-data]
             ["emoji-mart" :as emoji-mart]
             [cljs-bean.core :as bean]
@@ -45,9 +44,8 @@
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 (defonce virtualized-list (r/adapt-class Virtuoso))
+(defonce virtualized-grid (r/adapt-class VirtuosoGrid))
 
-(def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
-(def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 (def useInView (gobj/get react-intersection-observer "useInView"))
@@ -321,7 +319,7 @@
             (button
              {:button-props {:aria-label "Close"}
               :variant :ghost
-              :class "hover:bg-transparent hover:text-foreground"
+              :class "hover:bg-transparent hover:text-foreground scale-90"
               :on-click (fn []
                           (notification/clear! uid))
               :icon "x"})]]]]]])))

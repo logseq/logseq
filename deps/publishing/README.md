@@ -14,7 +14,7 @@ provides two namespaces for node/CLI contexts, `logseq.publishing` and
 
 ## Usage
 
-See `logseq.tasks.dev.publishing` for a CLI example. See the frontend for cljs usage.
+See `script/publishing.cljs` for a CLI example. See the frontend for cljs usage.
 
 ## Dev
 

@@ -47,10 +47,10 @@
   [repos]
   (if-let [m (and (seq repos) (graph/get-metadata-local))]
     (->> repos
-      (map (fn [r] (merge r (get m (:url r)))))
-      (sort (fn [r1 r2]
-              (compare (or (:last-seen-at r2) (:created-at r2))
-                (or (:last-seen-at r1) (:created-at r1))))))
+         (map (fn [r] (merge r (get m (:url r)))))
+         (sort (fn [r1 r2]
+                 (compare (or (:last-seen-at r2) (:created-at r2))
+                          (or (:last-seen-at r1) (:created-at r1))))))
     repos))
 
 (defn- safe-locale-date
@@ -71,17 +71,17 @@
      [:div
       [:span.flex.items-center.gap-1
        (normalized-graph-label repo
-         (fn []
-           (when-not (state/sub :rtc/downloading-graph-uuid)
-             (cond
-               root                                         ; exists locally
-               (state/pub-event! [:graph/switch url])
+                               (fn []
+                                 (when-not (state/sub :rtc/downloading-graph-uuid)
+                                   (cond
+                                     root                                         ; exists locally
+                                     (state/pub-event! [:graph/switch url])
 
-               (and db-based? remote?)
-               (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
+                                     (and db-based? remote?)
+                                     (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
 
-               :else
-               (state/pub-event! [:graph/pull-down-remote-graph repo])))))]
+                                     :else
+                                     (state/pub-event! [:graph/pull-down-remote-graph repo])))))]
       (when-let [time (some-> (or last-seen-at created-at) (safe-locale-date))]
         [:small.text-gray-400.opacity-50 (str "Last opened at: " time)])]
 
@@ -109,11 +109,11 @@
              :on-click (fn []
                          (let [has-prompt? true
                                prompt-str (cond only-cloud?
-                                            (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")
-                                            db-based?
-                                            (str "Are you sure to permanently delete the graph \"" url "\" from Logseq?")
-                                            :else
-                                            (str "Are you sure to unlink the graph \"" url "\" from local folder?"))
+                                                (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")
+                                                db-based?
+                                                (str "Are you sure to permanently delete the graph \"" url "\" from Logseq?")
+                                                :else
+                                                (str "Are you sure to unlink the graph \"" url "\" from local folder?"))
                                unlink-or-remote-fn! (fn []
                                                       (repo-handler/remove-repo! repo)
                                                       (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))
@@ -125,19 +125,19 @@
                                                                              file-sync/<delete-graph)]
                                                           (state/set-state! [:file-sync/remote-graphs :loading] true)
                                                           (go (<! (delete-graph GraphUUID))
-                                                            (state/delete-repo! repo)
-                                                            (state/delete-remote-graph! repo)
-                                                            (state/set-state! [:file-sync/remote-graphs :loading] false)))))
+                                                              (state/delete-repo! repo)
+                                                              (state/delete-remote-graph! repo)
+                                                              (state/set-state! [:file-sync/remote-graphs :loading] false)))))
                                                     unlink-or-remote-fn!)
                                confirm-fn!
                                (fn []
                                  (-> (shui/dialog-confirm!
-                                       [:p.font-medium.-my-4 prompt-str
-                                        [:span.mt-1.flex.font-normal.opacity-70
-                                         (if (or db-based? only-cloud?)
-                                           [:small.text-red-rx-11 "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
-                                           [:small.opacity-70 "⚠️ It won't remove your local files!"])]])
-                                   (p/then #(action-confirm-fn!))))]
+                                      [:p.font-medium.-my-4 prompt-str
+                                       [:span.mt-1.flex.font-normal.opacity-70
+                                        (if (or db-based? only-cloud?)
+                                          [:small.text-red-rx-11 "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
+                                          [:small.opacity-70 "⚠️ It won't remove your local files!"])]])
+                                     (p/then #(action-confirm-fn!))))]
 
                            (if has-prompt?
                              (confirm-fn!)
@@ -272,18 +272,24 @@
                   (shui/tabler-icon "folder-plus")
                   [:span (t :new-graph)]))
 
-   (shui/button {:size :sm :variant :ghost
-                 :on-click #(state/pub-event! [:graph/new-db-graph])}
-     (shui/tabler-icon "database-plus") [:span (if util/electron? "Create db graph" "Create new graph")])
+   (when-not config/publishing?
+     (shui/button
+      {:size :sm :variant :ghost
+       :on-click #(state/pub-event! [:graph/new-db-graph])}
+      (shui/tabler-icon "database-plus")
+      [:span (if util/electron? "Create db graph" "Create new graph")]))
 
-   (shui/button {:size :sm :variant :ghost
-                 :on-click (fn [] (route-handler/redirect! {:to :import}))}
-                (shui/tabler-icon "database-import")
-                [:span (t :import-notes)])
+   (when-not config/publishing?
+     (shui/button
+      {:size :sm :variant :ghost
+       :on-click (fn [] (route-handler/redirect! {:to :import}))}
+      (shui/tabler-icon "database-import")
+      [:span (t :import-notes)]))
 
-   (shui/button {:size :sm :variant :ghost
-                 :on-click #(route-handler/redirect-to-all-graphs)}
-                (shui/tabler-icon "layout-2") [:span (t :all-graphs)])])
+   (when-not config/publishing?
+     (shui/button {:size :sm :variant :ghost
+                   :on-click #(route-handler/redirect-to-all-graphs)}
+                  (shui/tabler-icon "layout-2") [:span (t :all-graphs)]))])
 
 (rum/defcs repos-dropdown < rum/reactive
   (rum/local false ::electron-multiple-windows?)
@@ -375,40 +381,40 @@
 (defn invalid-graph-name-warning
   []
   (notification/show!
-    [:div
-     [:p "Graph name can't contain following reserved characters:"]
-     [:ul
-      [:li "< (less than)"]
-      [:li "> (greater than)"]
-      [:li ": (colon)"]
-      [:li "\" (double quote)"]
-      [:li "/ (forward slash)"]
-      [:li "\\ (backslash)"]
-      [:li "| (vertical bar or pipe)"]
-      [:li "? (question mark)"]
-      [:li "* (asterisk)"]
-      [:li "# (hash)"]
+   [:div
+    [:p "Graph name can't contain following reserved characters:"]
+    [:ul
+     [:li "< (less than)"]
+     [:li "> (greater than)"]
+     [:li ": (colon)"]
+     [:li "\" (double quote)"]
+     [:li "/ (forward slash)"]
+     [:li "\\ (backslash)"]
+     [:li "| (vertical bar or pipe)"]
+     [:li "? (question mark)"]
+     [:li "* (asterisk)"]
+     [:li "# (hash)"]
       ;; `+` is used to encode path that includes `:` or `/`
-      [:li "+ (plus)"]]]
-    :warning false))
+     [:li "+ (plus)"]]]
+   :warning false))
 
 (defn invalid-graph-name?
   "Returns boolean indicating if DB graph name is invalid. Must be kept in sync with invalid-graph-name-warning"
   [graph-name]
   (or (fs-util/include-reserved-chars? graph-name)
-    (string/includes? graph-name "+")
-    (string/includes? graph-name "/")))
+      (string/includes? graph-name "+")
+      (string/includes? graph-name "/")))
 
 (rum/defcs new-db-graph < rum/reactive
-                          (rum/local "" ::graph-name)
-                          (rum/local false ::cloud?)
-                          (rum/local false ::creating-db?)
-                          (rum/local (rum/create-ref) ::input-ref)
-                          {:did-mount (fn [s]
-                                        (when-let [^js input (some-> @(::input-ref s)
-                                                               (rum/deref))]
-                                          (js/setTimeout #(.focus input) 32))
-                                        s)}
+  (rum/local "" ::graph-name)
+  (rum/local false ::cloud?)
+  (rum/local false ::creating-db?)
+  (rum/local (rum/create-ref) ::input-ref)
+  {:did-mount (fn [s]
+                (when-let [^js input (some-> @(::input-ref s)
+                                             (rum/deref))]
+                  (js/setTimeout #(.focus input) 32))
+                s)}
   [state]
   (let [*creating-db? (::creating-db? state)
         *graph-name (::graph-name state)
@@ -440,22 +446,22 @@
                            (shui/dialog-close!))))))
         submit! (fn [^js e click?]
                   (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))
-                                     (util/trim-safe (.-value (rum/deref input-ref))))]
+                                        (util/trim-safe (.-value (rum/deref input-ref))))]
                     (reset! *graph-name value)
                     (new-db-f)))]
     [:div.new-graph.flex.flex-col.gap-4.p-1.pt-2
      (shui/input
-       {:default-value @*graph-name
-        :disabled @*creating-db?
-        :ref input-ref
-        :placeholder "your graph name"
-        :on-key-down submit!})
+      {:default-value @*graph-name
+       :disabled @*creating-db?
+       :ref input-ref
+       :placeholder "your graph name"
+       :on-key-down submit!})
      (when (user-handler/logged-in?)
        [:div.flex.flex-row.items-center.gap-1
         (shui/checkbox
-          {:id "rtc-sync"
-           :value @*cloud?
-           :on-checked-change #(swap! *cloud? not)})
+         {:id "rtc-sync"
+          :value @*cloud?
+          :on-checked-change #(swap! *cloud? not)})
         [:label.opacity-70.text-sm
          {:for "rtc-sync"}
          "Use Logseq Sync?"]])

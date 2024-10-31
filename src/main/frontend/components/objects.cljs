@@ -117,7 +117,10 @@
         [view-entity set-view-entity!] (rum/use-state class)
         [views set-views!] (rum/use-state [class])
         [data set-data!] (rum/use-state objects)
-        columns* (views/build-columns config properties {:add-tags-column? (= (:db/ident class) :logseq.class/Root)})
+        ;; Properties can be nil for published private graphs
+        properties' (remove nil? properties)
+        columns* (views/build-columns config properties' {:add-tags-column? (or (= (:db/ident class) :logseq.class/Root)
+                                                                                (> (count (distinct (mapcat :block/tags objects))) 1))})
         columns (cond
                   (= (:db/ident class) :logseq.class/Pdf-annotation)
                   (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
@@ -156,7 +159,8 @@
        (ui/foldable
         [:div.font-medium.opacity-50 "Tagged Nodes"]
         [:div.mt-2
-         (views/view view-entity {:data data
+         (views/view view-entity {:config config
+                                  :data data
                                   :set-data! set-data!
                                   :views-title (class-views class views view-entity {:set-view-entity! set-view-entity!
                                                                                      :set-views! set-views!})
@@ -171,6 +175,7 @@
                                                             {:on-change (fn [_e files]
                                                                           (p/do!
                                                                            (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)
+                                                                           (set-data! (get-class-objects class))
                                                                            (shui/dialog-close!)))})])))
                                                      #(add-new-class-object! class set-data!))
                                   :show-add-property? true
@@ -195,10 +200,11 @@
         {:disable-on-pointer-down? true})])))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
-  [state class]
+  [state class current-page?]
   (when class
     (let [class (db/sub-block (:db/id class))
-          config {:container-id (:container-id state)}
+          config {:container-id (:container-id state)
+                  :current-page? current-page?}
           properties (outliner-property/get-class-properties class)
           repo (state/get-current-repo)
           objects (->> (db-model/sub-class-objects repo (:db/id class))
@@ -244,7 +250,8 @@
       (ui/foldable
        [:div.font-medium.opacity-50 "Nodes with Property"]
        [:div.mt-2
-        (views/view view-entity {:data data
+        (views/view view-entity {:config config
+                                 :data data
                                  :set-data! set-data!
                                  :title-key :views.table/property-nodes
                                  :columns columns
@@ -272,10 +279,11 @@
 
 ;; Show all nodes containing the given property
 (rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
-  [state property]
+  [state property current-page?]
   (when property
     (let [property' (db/sub-block (:db/id property))
-          config {:container-id (:container-id state)}
+          config {:container-id (:container-id state)
+                  :current-page? current-page?}
           ;; Show tags to help differentiate property rows
           properties [property' (db/entity :block/tags)]
           repo (state/get-current-repo)

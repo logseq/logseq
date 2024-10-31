@@ -26,14 +26,13 @@
 
                        ;; new implementation
                        :undo/repo->ops (atom {})
-                       :redo/repo->ops (atom {})
-                       }))
+                       :redo/repo->ops (atom {})}))
 
 (defonce *rtc-ws-url (atom nil))
 
 (defonce *sqlite (atom nil))
 ;; repo -> {:db conn :search conn :client-ops conn}
-(defonce *sqlite-conns (atom nil))
+(defonce *sqlite-conns (atom {}))
 ;; repo -> conn
 (defonce *datascript-conns (atom nil))
 

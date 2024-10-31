@@ -34,7 +34,8 @@
   (when-let [db (db/get-db repo)]
     (let [{:keys [asset-filenames html]}
           (publish-html/build-html db
-                                   {:app-state (select-keys @state/state
+                                   {:repo repo
+                                    :app-state (select-keys @state/state
                                                             [:ui/theme
                                                              :ui/sidebar-collapsed-blocks])
                                     :repo-config (get-in @state/state [:config repo])

@@ -1,7 +1,8 @@
 (ns frontend.common.missionary-util
   "Utils based on missionary. Used by frontend and worker namespaces"
   (:require-macros [frontend.common.missionary-util])
-  (:require [clojure.core.async :as a]
+  (:require [cljs.core.async.impl.channels]
+            [clojure.core.async :as a]
             [missionary.core :as m])
   ;; (:import [missionary Cancelled])
   )
@@ -13,19 +14,19 @@
   "Retry task when it throw exception `(get ex-data :missionary/retry)`"
   [delays-seq task]
   (m/sp
-    (loop [[delay & rest-delays] (seq delays-seq)]
-      (let [r (try
-                (m/? task)
-                (catch :default e
-                  (if (and (some-> e ex-data :missionary/retry)
-                           (pos-int? delay))
-                    (do (m/? (m/sleep delay))
-                        (println :missionary/retry "after" delay "ms (" (ex-message e) ")")
-                        retry-sentinel)
-                    (throw e))))]
-        (if (identical? r retry-sentinel)
-          (recur rest-delays)
-          r)))))
+   (loop [[delay & rest-delays] (seq delays-seq)]
+     (let [r (try
+               (m/? task)
+               (catch :default e
+                 (if (and (some-> e ex-data :missionary/retry)
+                          (pos-int? delay))
+                   (do (m/? (m/sleep delay))
+                       (println :missionary/retry "after" delay "ms (" (ex-message e) ")")
+                       retry-sentinel)
+                   (throw e))))]
+       (if (identical? r retry-sentinel)
+         (recur rest-delays)
+         r)))))
 
 (defn mix
   "Return a flow which is mixed by `flows`"
@@ -39,10 +40,10 @@
   ([interval-ms value]
    (->>
     (m/ap
-      (loop []
-        (m/amb
-         (m/? (m/sleep interval-ms value))
-         (recur))))
+     (loop []
+       (m/amb
+        (m/? (m/sleep interval-ms value))
+        (recur))))
     (m/reductions {} value)
     (m/latest identity))))
 
@@ -50,10 +51,10 @@
   (defn debounce
     [duration-ms flow]
     (m/ap
-      (let [x (m/?< flow)]
-        (try (m/? (m/sleep duration-ms x))
-             (catch Cancelled _
-               (m/amb)))))))
+     (let [x (m/?< flow)]
+       (try (m/? (m/sleep duration-ms x))
+            (catch Cancelled _
+              (m/amb)))))))
 
 (defn run-task
   "Return the canceler"
@@ -71,14 +72,21 @@
   completing with true when put is accepted, or false if port was closed."
     [c x] (doto (m/dfv) (->> (a/put! c x)))))
 
-(defn <!
-  "Return a task that takes from given channel,
-  completing with value when take is accepted, or nil if port was closed."
-  [c] (doto (m/dfv) (->> (a/take! c))))
+(comment
+  (defn await-promise
+    "Returns a task completing with the result of given promise"
+    [p]
+    (let [v (m/dfv)]
+      (.then p #(v (fn [] %)) #(v (fn [] (throw %))))
+      (m/absolve v))))
 
-(defn await-promise
-  "Returns a task completing with the result of given promise"
-  [p]
-  (let [v (m/dfv)]
-    (.then p #(v (fn [] %)) #(v (fn [] (throw %))))
-    (m/absolve v)))
+(defn <!
+  "Return a task.
+  if arg is a channel, takes from given channel, completing with value when take is accepted, or nil if port was closed.
+  if arg is a promise, completing with the result of given promise."
+  [chan-or-promise]
+  (if (instance? cljs.core.async.impl.channels/ManyToManyChannel chan-or-promise)
+    (doto (m/dfv) (->> (a/take! chan-or-promise)))
+    (let [v (m/dfv)]
+      (.then chan-or-promise #(v (fn [] %)) #(v (fn [] (throw %))))
+      (m/absolve v))))

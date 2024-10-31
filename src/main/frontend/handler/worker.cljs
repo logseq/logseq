@@ -39,6 +39,9 @@
 (defmethod handle :rtc-log [_ _worker log]
   (state/pub-event! [:rtc/log log]))
 
+(defmethod handle :export-current-db [_]
+  (state/pub-event! [:db/export-sqlite]))
+
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))
 

@@ -39,7 +39,7 @@
                    whiteboard? (ldb/whiteboard? (db/get-page page-name))]
                (if whiteboard?
                  (whiteboard/whiteboard-route route-match)
-                 (page/page-cp route-match))))}]
+                 (page/page-cp (assoc route-match :current-page? true)))))}]
 
    ["/page/:name/block/:block-route-name"
     {:name :page-block

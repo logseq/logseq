@@ -3,6 +3,6 @@
   (:require [missionary.core :as m]))
 
 (defmacro <?
-  "Like m/?, but async channel as arg"
-  [c]
-  `(m/? (<! ~c)))
+  "Like m/?, but async channel or promise as arg"
+  [chan-or-promise]
+  `(m/? (<! ~chan-or-promise)))

@@ -5,6 +5,7 @@
             [clojure.set :as set]
             [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
+            [frontend.worker.crypt :as crypt]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
@@ -113,38 +114,41 @@
 (defn new-task--upload-graph
   [get-ws-create-task repo conn remote-graph-name]
   (m/sp
-    (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetch-presigned-put-url
-                                                :message "fetching presigned put-url"})
-    (let [[{:keys [url key]} all-blocks-str]
-          (m/?
-           (m/join
-            vector
-            (ws-util/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
-            (m/sp
-              (let [all-blocks (export-as-blocks @conn)]
-                (ldb/write-transit-str all-blocks)))))]
-      (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-data
-                                                  :message "uploading data"})
-      (c.m/<? (http/put url {:body all-blocks-str :with-credentials? false}))
-      (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
-                                                  :message "requesting upload-graph"})
-      (let [upload-resp
-            (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
-                                                        :s3-key key
-                                                        :graph-name remote-graph-name}))]
-        (if-let [graph-uuid (:graph-uuid upload-resp)]
-          (do
-            (ldb/transact! conn
-                           [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
-                            {:db/ident :logseq.kv/graph-local-tx :kv/value "0"}])
-            (client-op/update-graph-uuid repo graph-uuid)
-            (when-not rtc-const/RTC-E2E-TEST
-              (let [^js worker-obj (:worker/object @worker-state/*state)]
-                (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))))
-            (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-completed
-                                                        :message "upload-graph completed"})
-            {:graph-uuid graph-uuid})
-          (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
+   (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetch-presigned-put-url
+                                               :message "fetching presigned put-url"})
+   (let [[{:keys [url key]} all-blocks-str]
+         (m/?
+          (m/join
+           vector
+           (ws-util/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
+           (m/sp
+            (let [all-blocks (export-as-blocks @conn)]
+              (ldb/write-transit-str all-blocks)))))]
+     (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-data
+                                                 :message "uploading data"})
+     (c.m/<? (http/put url {:body all-blocks-str :with-credentials? false}))
+     (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
+                                                 :message "requesting upload-graph"})
+     (let [aes-key (c.m/<? (crypt/<gen-aes-key))
+           aes-key-jwk (ldb/write-transit-str (c.m/<? (crypt/<export-key aes-key)))
+           upload-resp
+           (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
+                                                       :s3-key key
+                                                       :graph-name remote-graph-name}))]
+       (if-let [graph-uuid (:graph-uuid upload-resp)]
+         (do
+           (ldb/transact! conn
+                          [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
+                           {:db/ident :logseq.kv/graph-local-tx :kv/value "0"}])
+           (client-op/update-graph-uuid repo graph-uuid)
+           (crypt/store-graph-keys-jwk repo aes-key-jwk)
+           (when-not rtc-const/RTC-E2E-TEST
+             (let [^js worker-obj (:worker/object @worker-state/*state)]
+               (c.m/<? (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid})))))
+           (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-completed
+                                                       :message "upload-graph completed"})
+           {:graph-uuid graph-uuid})
+         (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
 (def page-of-block
   (memoize
@@ -230,7 +234,6 @@
        [schema-blocks (conj normal-blocks block)]))
    [[] []] blocks))
 
-
 (defn- create-graph-for-rtc-test
   "it's complex to setup db-worker related stuff, when I only want to test rtc related logic"
   [repo init-tx-data other-tx-data]
@@ -256,9 +259,9 @@
   (let [{:keys [t blocks]} all-blocks
         card-one-attrs (blocks->card-one-attrs blocks)
         blocks (worker-util/profile :convert-card-one-value-from-value-coll
-                 (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
+                                    (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
         blocks (worker-util/profile :normalize-remote-blocks
-                 (normalized-remote-blocks-coercer blocks))
+                                    (normalized-remote-blocks-coercer blocks))
         ;;TODO: remove this, client/schema already converted to :db/cardinality, :db/valueType by remote,
         ;; and :client/schema should be removed by remote too
         blocks (map #(dissoc % :client/schema) blocks)
@@ -271,26 +274,25 @@
                              schema-blocks)
         ^js worker-obj (:worker/object @worker-state/*state)]
     (m/sp
-      (client-op/update-local-tx repo t)
-      (rtc-log-and-state/update-local-t graph-uuid t)
-      (rtc-log-and-state/update-remote-t graph-uuid t)
-      (if rtc-const/RTC-E2E-TEST
-        (create-graph-for-rtc-test repo init-tx-data tx-data)
-        (m/?
-         (c.m/await-promise
-          (p/do!
-            (.createOrOpenDB worker-obj repo (ldb/write-transit-str {:close-other-db? false}))
-            (.exportDB worker-obj repo)
-            (.transact worker-obj repo init-tx-data {:rtc-download-graph? true
-                                                     :gen-undo-ops? false
+     (client-op/update-local-tx repo t)
+     (rtc-log-and-state/update-local-t graph-uuid t)
+     (rtc-log-and-state/update-remote-t graph-uuid t)
+     (if rtc-const/RTC-E2E-TEST
+       (create-graph-for-rtc-test repo init-tx-data tx-data)
+       (c.m/<?
+        (p/do!
+         (.createOrOpenDB worker-obj repo (ldb/write-transit-str {:close-other-db? false}))
+         (.exportDB worker-obj repo)
+         (.transact worker-obj repo init-tx-data {:rtc-download-graph? true
+                                                  :gen-undo-ops? false
                                                      ;; only transact db schema, skip validation to avoid warning
-                                                     :skip-validate-db? true
-                                                     :persist-op? false} (worker-state/get-context))
-            (.transact worker-obj repo tx-data {:rtc-download-graph? true
-                                                :gen-undo-ops? false
-                                                :persist-op? false} (worker-state/get-context))
-            (transact-block-refs! repo)))))
-      (worker-util/post-message :add-repo {:repo repo}))))
+                                                  :skip-validate-db? true
+                                                  :persist-op? false} (worker-state/get-context))
+         (.transact worker-obj repo tx-data {:rtc-download-graph? true
+                                             :gen-undo-ops? false
+                                             :persist-op? false} (worker-state/get-context))
+         (transact-block-refs! repo))))
+     (worker-util/post-message :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; async download-graph ;;
@@ -315,48 +317,48 @@
   [get-ws-create-task download-info-uuid graph-uuid timeout-ms]
   (->
    (m/sp
-     (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :wait-remote-graph-data-ready
-                                                   :message "waiting for the remote to prepare the data"
-                                                   :graph-uuid graph-uuid})
-     (loop []
-       (m/? (m/sleep 3000))
-       (let [{:keys [download-info-list]}
-             (m/? (ws-util/send&recv get-ws-create-task {:action "download-info-list"
-                                                         :graph-uuid graph-uuid}))]
-         (if-let [found-download-info
-                  (some
-                   (fn [download-info]
-                     (when (and (= download-info-uuid (:download-info-uuid download-info))
-                                (:download-info-s3-url download-info))
-                       download-info))
-                   download-info-list)]
-           found-download-info
-           (recur)))))
+    (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :wait-remote-graph-data-ready
+                                                  :message "waiting for the remote to prepare the data"
+                                                  :graph-uuid graph-uuid})
+    (loop []
+      (m/? (m/sleep 3000))
+      (let [{:keys [download-info-list]}
+            (m/? (ws-util/send&recv get-ws-create-task {:action "download-info-list"
+                                                        :graph-uuid graph-uuid}))]
+        (if-let [found-download-info
+                 (some
+                  (fn [download-info]
+                    (when (and (= download-info-uuid (:download-info-uuid download-info))
+                               (:download-info-s3-url download-info))
+                      download-info))
+                  download-info-list)]
+          found-download-info
+          (recur)))))
    (m/timeout timeout-ms :timeout)))
 
 (defn new-task--download-graph-from-s3
   [graph-uuid graph-name s3-url]
   (m/sp
-    (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :downloading-graph-data
-                                                  :message "downloading graph data"
-                                                  :graph-uuid graph-uuid})
-    (let [^js worker-obj              (:worker/object @worker-state/*state)
-          {:keys [status body] :as r} (c.m/<? (http/get s3-url {:with-credentials? false}))
-          repo                        (str sqlite-util/db-version-prefix graph-name)]
-      (if (not= 200 status)
-        (throw (ex-info "download-graph from s3 failed" {:resp r}))
-        (do
-          (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db
-                                                        :message "transacting graph data to local db"
-                                                        :graph-uuid graph-uuid})
-          (let [all-blocks (ldb/read-transit-str body)]
-            (worker-state/set-rtc-downloading-graph! true)
-            (m/? (new-task--transact-remote-all-blocks all-blocks repo graph-uuid))
-            (client-op/update-graph-uuid repo graph-uuid)
-            (when-not rtc-const/RTC-E2E-TEST
-              (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid})))))
-            (worker-state/set-rtc-downloading-graph! false)
-            (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed
-                                                          :message "download completed"
-                                                          :graph-uuid graph-uuid})
-            nil))))))
+   (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :downloading-graph-data
+                                                 :message "downloading graph data"
+                                                 :graph-uuid graph-uuid})
+   (let [^js worker-obj              (:worker/object @worker-state/*state)
+         {:keys [status body] :as r} (c.m/<? (http/get s3-url {:with-credentials? false}))
+         repo                        (str sqlite-util/db-version-prefix graph-name)]
+     (if (not= 200 status)
+       (throw (ex-info "download-graph from s3 failed" {:resp r}))
+       (do
+         (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db
+                                                       :message "transacting graph data to local db"
+                                                       :graph-uuid graph-uuid})
+         (let [all-blocks (ldb/read-transit-str body)]
+           (worker-state/set-rtc-downloading-graph! true)
+           (m/? (new-task--transact-remote-all-blocks all-blocks repo graph-uuid))
+           (client-op/update-graph-uuid repo graph-uuid)
+           (when-not rtc-const/RTC-E2E-TEST
+             (c.m/<? (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
+           (worker-state/set-rtc-downloading-graph! false)
+           (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed
+                                                         :message "download completed"
+                                                         :graph-uuid graph-uuid})
+           nil))))))

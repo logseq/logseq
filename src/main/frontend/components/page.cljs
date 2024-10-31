@@ -87,11 +87,12 @@
            (not sidebar?))
       (when (and (string/blank? (:block/title block))
                  (not preview?))
-        (editor-handler/edit-block! block :max))))
-  state)
+        (editor-handler/edit-block! block :max)))))
 
 (rum/defc page-blocks-inner <
-  {:did-mount open-root-block!}
+  {:did-mount (fn [state]
+                (open-root-block! state)
+                state)}
   [page-e blocks config sidebar? whiteboard? _block-uuid]
   (when page-e
     (let [hiccup (component-block/->hiccup blocks config {})]
@@ -220,8 +221,6 @@
 
                      :else
                      children)
-          *loading? (:*loading? config)
-          loading? (when *loading? (rum/react *loading?))
           db-based? (config/db-based-graph? repo)]
       [:<>
        (when (and db-based? (or (ldb/class? block) (ldb/property? block)))
@@ -230,11 +229,7 @@
 
        [:div.ml-1
         (cond
-          loading?
-          nil
-
           (and
-           (not loading?)
            (not block?)
            (empty? children) page-e)
           (dummy-block page-e)
@@ -433,17 +428,25 @@
   [state page whiteboard-page? sidebar? container-id]
   (let [*hover? (::hover? state)
         hover? (rum/react *hover?)]
-    [:div.ls-page-title.flex.flex-1.w-full.content.items-start
+    [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)
-                                                                  :page-entity page})))}
+                                                                  :page-entity page})))
+      :on-click (fn [e]
+                  (when-not (= (.-nodeName (.-target e)) "INPUT")
+                    (.preventDefault e)
+                    (when (gobj/get e "shiftKey")
+                      (state/sidebar-add-block!
+                       (state/get-current-repo)
+                       (:db/id page)
+                       :page))))}
 
      [:div.w-full.relative {:on-mouse-over #(reset! *hover? true)
                             :on-mouse-leave (fn []
                                               (reset! *hover? false))}
-      (when hover?
+      (when (and hover? (not= (:db/id (state/get-edit-block)) (:db/id page)))
         [:div.absolute.-top-3.left-0.fade-in
          [:div.flex.flex-row.items-center.gap-2
           (when-not (:logseq.property/icon (db/entity (:db/id page)))
@@ -464,7 +467,7 @@
             :on-click (fn [e]
                         (state/pub-event! [:editor/new-property {:block page
                                                                  :target (.-target e)}]))}
-           "Set property")]])
+           "Set node property")]])
       (component-block/block-container {:page-title? true
                                         :hide-title? sidebar?
                                         :hide-children? true
@@ -591,7 +594,7 @@
                    :on-mouse-leave (fn [e]
                                      (page-mouse-leave e *control-show?))}
                   (page-blocks-collapse-control title *control-show? *all-collapsed?)])
-               (when (and (not whiteboard?) (ldb/page? page))
+               (when (and (not whiteboard?) (not sidebar?) (ldb/page? page))
                  (if db-based?
                    (db-page-title page whiteboard-page? sidebar? (:container-id state))
                    (page-title-cp page {:journal? journal?
@@ -603,10 +606,10 @@
               (db-page/configure-property page))
 
             (when (and db-based? class-page?)
-              (objects/class-objects page))
+              (objects/class-objects page (:current-page? option)))
 
             (when (and db-based? (ldb/property? page))
-              (objects/property-related-objects page))
+              (objects/property-related-objects page (:current-page? option)))
 
             (when (and block? (not sidebar?) (not whiteboard?))
               (let [config (merge config {:id "block-parent"
@@ -644,7 +647,11 @@
               (when (and (not journal?) (not db-based?))
                 (hierarchy/structures (:block/title page))))
 
-            (when-not (or whiteboard? unlinked-refs? sidebar? home? (and block? (not db-based?)))
+            (when-not (or whiteboard? unlinked-refs?
+                          sidebar?
+                          home?
+                          (or class-page? property-page?)
+                          (and block? (not db-based?)))
               [:div {:key "page-unlinked-references"}
                (reference/unlinked-references page)])])]))))
 
@@ -666,9 +673,13 @@
                      (route-handler/update-page-title-and-label! (state/get-route-match))))))
              (assoc state
                     ::page-name page-name'
-                    ::loading? *loading?)))}
+                    ::loading? *loading?)))
+   :will-unmount (fn [state]
+                   (state/set-state! :editor/virtualized-scroll-fn nil)
+                   state)}
   [state option]
-  (page-inner (assoc option :*loading? (::loading? state))))
+  (when-not (rum/react (::loading? state))
+    (page-inner option)))
 
 (rum/defcs page-cp
   [state option]

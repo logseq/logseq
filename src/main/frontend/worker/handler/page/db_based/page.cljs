@@ -26,9 +26,16 @@
                   (update :block/tags
                           (fnil into [])
                           (mapv (fn [tag]
-                                  (if (uuid? tag)
-                                    (d/entity @conn [:block/uuid tag])
-                                    tag))
+                                  (let [v (if (uuid? tag)
+                                            (d/entity @conn [:block/uuid tag])
+                                            tag)]
+                                    (cond
+                                      (de/entity? v)
+                                      (:db/id v)
+                                      (map? v)
+                                      (:db/id v)
+                                      :else
+                                      v)))
                                 tags)))
           property-vals-tx-m
           ;; Builds property values for built-in properties like logseq.property.pdf/file
