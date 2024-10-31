@@ -152,43 +152,15 @@
 (def ^:large-vars/data-var db-query-dsl-rules
   "Rules used by frontend.query.dsl for db graphs"
   (merge
-   (dissoc query-dsl-rules :namespace)
+   (dissoc query-dsl-rules :namespace
+           :page-property :has-page-property
+           :page-tags :all-page-tags)
    {:tags
     '[(tags ?b ?tags)
       [?b :block/tags ?t]
       [?t :block/name ?tag]
       [(missing? $ ?b :block/link)]
       [(contains? ?tags ?tag)]]
-    :page-tags
-    '[(page-tags ?p ?tags)
-      [?p :block/tags ?t]
-      [?t :block/name ?tag]
-      [(missing? $ ?p :block/link)]
-      [(contains? ?tags ?tag)]]
-
-    :has-page-property
-    '[(has-page-property ?p ?prop)
-      [?p :block/name]
-      [?p ?prop _]
-      [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]]
-
-    :page-property
-    '[(page-property ?p ?prop ?val)
-      [?p :block/name]
-      [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
-      [?p ?prop ?pv]
-      (or
-       ;; non-ref value
-       (and
-        [(missing? $ ?prop-e :db/valueType)]
-        [?p ?prop ?val])
-       ;; ref value
-       (and
-        [?prop-e :db/valueType :db.type/ref]
-        (or [?pv :block/title ?val]
-            [?pv :property.value/content ?val])))]
 
     :has-property
     '[(has-property ?b ?prop)
