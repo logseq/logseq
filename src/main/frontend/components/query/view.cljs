@@ -31,6 +31,11 @@
 
 (rum/defcs query-result < rum/static mixins/container-id
   (rum/local nil ::result)
+  {:did-update (fn [state]
+                 (let [*result (::result state)
+                       [_config view-entity result] (:rum/args state)]
+                   (reset! *result (init-result result view-entity)))
+                 state)}
   [state config view-entity result]
   (let [*result (::result state)
         result' (or @*result (init-result result view-entity))
