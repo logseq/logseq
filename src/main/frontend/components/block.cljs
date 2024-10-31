@@ -786,6 +786,8 @@
   (let [*timer (rum/use-ref nil)                            ;; show
         *timer1 (rum/use-ref nil)                           ;; hide
         *el-popup (rum/use-ref nil)
+        *el-wrap (rum/use-ref nil)
+        [in-popup? set-in-popup!] (rum/use-state nil)
         [visible? set-visible!] (rum/use-state nil)
         ;; set-visible! (fn debug-visible [v] (js/console.warn "debug: visible" v) (set-visible! v))
         _  #_:clj-kondo/ignore (rum/defc preview-render []
@@ -820,13 +822,24 @@
                                                 :sidebar? sidebar?
                                                 :preview? true}))]))]
 
-    (if (and (not (:preview? config))
+    (rum/use-effect!
+      (fn []
+        (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
+          (set-in-popup! true)
+          (set-in-popup! false)))
+      [])
+
+    [:span {:ref *el-wrap}
+     (if (boolean? in-popup?)
+       (if (and (not (:preview? config))
+             (not in-popup?)
              (or (not manual?) open?))
-      (popup-preview-impl children
-                          {:visible? visible? :set-visible! set-visible!
-                           :*timer *timer :*timer1 *timer1
-                           :render preview-render :*el-popup *el-popup})
-      children)))
+         (popup-preview-impl children
+           {:visible? visible? :set-visible! set-visible!
+            :*timer *timer :*timer1 *timer1
+            :render preview-render :*el-popup *el-popup})
+         children)
+       children)]))
 
 (declare block-reference)
 (declare block-reference-preview)
