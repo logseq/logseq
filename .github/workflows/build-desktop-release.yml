@@ -388,6 +388,72 @@ jobs:
           name: logseq-win64-builds
           path: builds
 
+  build-windows-arm64:
+    runs-on: windows-latest
+    needs: [ compile-cljs ]
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v3
+        with:
+          name: static
+          path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: echo "version=$(cat ./static/VERSION)" >> $env:GITHUB_OUTPUT
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v3
+      #   with:
+      #    path: |
+      #      **/node_modules
+      #    key: ${{ runner.os }}-node-modules
+
+      - name: Deps Electron app
+        run: yarn install
+        working-directory: ./static
+
+      - name: Fix Deps Electron app
+        run: yarn run postinstall
+        working-directory: ./static/node_modules/dugite/
+
+      - name: Build/Release Electron app
+        run: yarn electron:make --arch=arm64
+        working-directory: ./static
+        #env:
+        #  CODE_SIGN_CERTIFICATE_FILE: ../codesign.pfx
+        #  CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+
+      - name: Save Artifact for Code Signing
+        run: |
+          mkdir builds
+          mv static\out\make\squirrel.windows\arm64\*.exe    builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.exe
+
+      - name: Upload Artifact for Code Signing
+        uses: actions/upload-artifact@v3
+        with:
+          name: logseq-win-arm64-unsigned-builds
+          path: builds
+
+      - name: Save Artifact
+        run: |
+          rm builds\*.exe
+          mv static\out\make\squirrel.windows\arm64\*.nupkg  builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}-full.nupkg
+          mv static\out\make\zip\win32\arm64\*.zip           builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.zip
+          mv static\out\make\wix\arm64\Logseq.msi            builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.msi
+          mv static\out\make\squirrel.windows\arm64\RELEASES builds\RELEASES
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: logseq-win-arm64-builds
+          path: builds
+
   build-macos-x64:
     needs: [ compile-cljs ]
     runs-on: macos-12
@@ -556,13 +622,19 @@ jobs:
 
   codesign-windows:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta' }}
-    needs: [ build-windows ]
+    needs: [ build-windows, build-windows-arm64 ]
     runs-on: [self-hosted, macos, token]
     steps:
       - name: Download Windows Artifact
         uses: actions/download-artifact@v3
         with:
           name: logseq-win64-unsigned-builds
+          path: ./builds
+
+      - name: Download Windows Artifact (arm64)
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-win-arm64-unsigned-builds
           path: ./builds
 
       - name: Sign Windows Executable
@@ -576,7 +648,13 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: logseq-win64-signed-builds
-          path: builds
+          path: builds/*win-x64*.exe
+
+      - name: Upload Artifact (arm64)
+        uses: actions/upload-artifact@v3
+        with:
+          name: logseq-win-arm64-signed-builds
+          path: builds/*win-arm64*.exe
 
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
@@ -617,6 +695,18 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: logseq-win64-builds
+          path: ./
+
+      - name: Download The Windows Artifact (arm64 Signed)
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-win-arm64-signed-builds
+          path: ./
+
+      - name: Download The Windows Artifact (arm64)
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-win-arm64-builds
           path: ./
 
       - name: Download Android Artifacts
@@ -697,6 +787,18 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: logseq-win64-builds
+          path: ./
+
+      - name: Download The Windows Artifact (arm64 Signed)
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-win-arm64-signed-builds
+          path: ./
+
+      - name: Download The Windows Artifact (arm64)
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-win-arm64-builds
           path: ./
 
       - name: Download Android Artifacts
