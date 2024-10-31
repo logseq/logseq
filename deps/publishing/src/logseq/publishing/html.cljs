@@ -144,7 +144,8 @@ generated index.html string and assets used by the html"
                                 (db/clean-export! db* {:db-graph? db-graph?})
                                 (db/filter-only-public-pages-and-blocks db* {:db-graph? db-graph?}))
         _ (when dev?
-            (println "Exporting" (count (d/datoms db :eavt)) "of" (count (d/datoms db* :eavt)) "datoms..."))
+            (println "Exporting" (count (d/datoms db :eavt)) "of" (count (d/datoms db* :eavt)) "datoms and"
+                     (count asset-filenames') "asset(s)..."))
         asset-filenames (remove nil? asset-filenames')
 
         db-str (dt/write-transit-str db)
