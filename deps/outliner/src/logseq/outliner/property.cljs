@@ -27,11 +27,14 @@
                     {:property property-ident}))))
 
 (defn- build-property-value-tx-data
-  ([block property-id value]
-   (build-property-value-tx-data block property-id value (= property-id :logseq.task/status)))
-  ([block property-id value status?]
+  ([conn block property-id value]
+   (build-property-value-tx-data conn block property-id value (= property-id :logseq.task/status)))
+  ([conn block property-id value status?]
    (when (some? value)
      (let [old-value (get block property-id)
+           property (d/entity @conn property-id)
+           multiple-values? (= :db.cardinality/many (:db/cardinality property))
+           retract-multiple-values? (and multiple-values? (coll? value))
            multiple-values-empty? (and (coll? old-value)
                                        (= 1 (count old-value))
                                        (= :logseq.property/empty-placeholder (:db/ident (first old-value))))
@@ -42,6 +45,8 @@
                            (assoc :block/tags :logseq.class/Task))]
        [(when multiple-values-empty?
           [:db/retract (:db/id block) property-id :logseq.property/empty-placeholder])
+        (when retract-multiple-values?
+          [:db/retract (:db/id block) property-id])
         block-tx-data]))))
 
 (defn- get-property-value-schema
@@ -119,7 +124,7 @@
                         (when (seq properties)
                           (mapcat
                            (fn [[property-id v]]
-                             (build-property-value-tx-data property property-id v)) properties)))
+                             (build-property-value-tx-data conn property property-id v)) properties)))
         many->one? (and (db-property/many? property) (= :one (:cardinality schema)))]
     (when (and many->one? (seq (d/datoms @conn :avet db-ident)))
       (throw (ex-info "Disallowed many to one conversion"
@@ -185,7 +190,7 @@
                          :payload {:message msg'
                                    :type :warning}})))
       (let [status? (= :logseq.task/status (:db/ident property))
-            tx-data (build-property-value-tx-data block property-id new-value status?)]
+            tx-data (build-property-value-tx-data conn block property-id new-value status?)]
         (ldb/transact! conn tx-data {:outliner-op :save-block})))))
 
 (defn create-property-text-block!
@@ -289,7 +294,7 @@
         txs (mapcat
              (fn [eid]
                (if-let [block (d/entity @conn eid)]
-                 (build-property-value-tx-data block property-id v' status?)
+                 (build-property-value-tx-data conn block property-id v' status?)
                  (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
              block-eids)]
     (when (seq txs)
