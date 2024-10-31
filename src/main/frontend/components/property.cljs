@@ -453,8 +453,8 @@
                                                 "ml-2 -mt-1"
                                                 "-ml-1")))
             (when-not (or block? class-properties? property-desc)
-              [:div.opacity-30 {:style {:margin-left 5}}
-               [:span.bullet-container.cursor [:span.bullet]]])
+              [:div {:class "pl-1.5 -mr-[3px] opacity-60"}
+               [:span.bullet-container [:span.bullet]]])
             [:div.flex.flex-1
              [:div.property-value.flex.flex-1
               (cond-> {}
