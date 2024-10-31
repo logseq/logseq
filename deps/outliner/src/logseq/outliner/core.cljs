@@ -563,7 +563,6 @@
                      (d/entity db (:db/id target-block))
                      (when (:block/uuid target-block)
                        (d/entity db [:block/uuid (:block/uuid target-block)])))]
-    [block sibling?]
     (let [linked (:block/link block)
           up-down? (= outliner-op :move-blocks-up-down)
           [block sibling?] (cond
@@ -723,7 +722,6 @@
   "Delete blocks from the tree.
   `blocks` need to be sorted by left&parent(from top to bottom)"
   [conn blocks]
-  [:pre [(seq blocks)]]
   (let [top-level-blocks (filter-top-level-blocks @conn blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
         top-level-blocks (->> (get-top-level-blocks top-level-blocks non-consecutive?)

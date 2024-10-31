@@ -12,7 +12,7 @@
   org.clj-commons/digest
   {:mvn/version "1.4.100"}}
  :pods
- {clj-kondo/clj-kondo {:version "2023.05.26"}
+ {clj-kondo/clj-kondo {:version "2024.09.27"}
   org.babashka/fswatcher {:version "0.0.3"}
   org.babashka/go-sqlite3 {:version "0.1.0"}}
  :tasks

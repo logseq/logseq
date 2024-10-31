@@ -518,7 +518,7 @@
       ;; local
       (-> (p/let [content (invoke-exported-api "load_plugin_readme" url)
                   content (parse-user-md-content content item)]
-            (and (string/blank? (string/trim content)) (throw nil))
+            (and (string/blank? (string/trim content)) (throw (js/Error. "blank readme content")))
             (state/set-state! :plugin/active-readme [content item])
             (shui/dialog-open! (fn [_] (display)) {:label "plugin-readme"}))
         (p/catch #(do (js/console.warn %)
