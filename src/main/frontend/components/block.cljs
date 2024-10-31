@@ -823,21 +823,21 @@
                                                 :preview? true}))]))]
 
     (rum/use-effect!
-      (fn []
-        (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
-          (set-in-popup! true)
-          (set-in-popup! false)))
-      [])
+     (fn []
+       (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
+         (set-in-popup! true)
+         (set-in-popup! false)))
+     [])
 
     [:span {:ref *el-wrap}
      (if (boolean? in-popup?)
        (if (and (not (:preview? config))
-             (not in-popup?)
-             (or (not manual?) open?))
+                (not in-popup?)
+                (or (not manual?) open?))
          (popup-preview-impl children
-           {:visible? visible? :set-visible! set-visible!
-            :*timer *timer :*timer1 *timer1
-            :render preview-render :*el-popup *el-popup})
+                             {:visible? visible? :set-visible! set-visible!
+                              :*timer *timer :*timer1 *timer1
+                              :render preview-render :*el-popup *el-popup})
          children)
        children)]))
 
@@ -2699,7 +2699,6 @@
               :key (str "block-content-" uuid)
               :on-pointer-up (fn [e]
                                (when (and
-                                      (state/in-selection-mode?)
                                       (not (string/includes? content "```"))
                                       (not (gobj/get e "shiftKey"))
                                       (not (util/meta-key? e)))
@@ -3127,9 +3126,7 @@
       (let [node (.querySelector parent ".bullet-container")]
         (when doc-mode?
           (dom/remove-class! node "hide-inner-bullet"))))
-    (when (and
-           (state/in-selection-mode?)
-           (non-dragging? e))
+    (when (non-dragging? e)
       (when-let [container (gdom/getElement "app-container-wrapper")]
         (dom/add-class! container "blocks-selection-mode"))
       (editor-handler/highlight-selection-area! block-id {:append? true}))))
@@ -3140,10 +3137,7 @@
   (when doc-mode?
     (when-let [parent (gdom/getElement block-id)]
       (when-let [node (.querySelector parent ".bullet-container")]
-        (dom/add-class! node "hide-inner-bullet"))))
-  (when (and (non-dragging? e)
-             (not @*resizing-image?))
-    (state/into-selection-mode!)))
+        (dom/add-class! node "hide-inner-bullet")))))
 
 (defn- on-drag-and-mouse-attrs
   [block original-block uuid top? block-id *move-to']
