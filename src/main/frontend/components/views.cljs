@@ -169,7 +169,8 @@
                              (contains? #{:map} (get-in property [:block/schema :type])))
                  (let [property (if (de/entity? property)
                                   property
-                                  (or (db/entity ident) property))
+                                  (or (merge (db/entity ident) property) ; otherwise, :cell/:header/etc. will be removed
+                                      property))
                        get-value (if-let [f (:get-value property)]
                                    (fn [row]
                                      (f row))
