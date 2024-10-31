@@ -176,9 +176,13 @@
                       (cons "Select all" values'))]
     (select values''
             (fn [{:keys [original-value]}]
-              (let [x (if (= original-value "Select all")
-                        [(if (= @*find :page) :page-property :property) @*property]
-                        [(if (= @*find :page) :page-property :property) @*property original-value])]
+              (let [k (cond
+                        db-graph? :property
+                        (= @*find :page) :page-property
+                        :else :property)
+                    x (if (= original-value "Select all")
+                        [k @*property]
+                        [k @*property original-value])]
                 (reset! *property nil)
                 (append-tree! *tree opts loc x))))))
 
