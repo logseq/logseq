@@ -275,20 +275,20 @@
         *handle-right (rum/use-ref nil)]
 
     (rum/use-effect!
-      (fn []
-        (doseq [el [(rum/deref *handle-left)
-                    (rum/deref *handle-right)]]
-          (-> (js/interact el)
-            (.draggable
+     (fn []
+       (doseq [el [(rum/deref *handle-left)
+                   (rum/deref *handle-right)]]
+         (-> (js/interact el)
+             (.draggable
               (bean/->js
-                {:listeners
-                 {:start (fn [e] (dx-fn :start e))
-                  :move (fn [e] (dx-fn :move e))
-                  :end (fn [e] (dx-fn :end e))}}))
-            (.styleCursor false)
-            (.on "dragstart" add-resizing-class!)
-            (.on "dragend" remove-resizing-class!))))
-      [])
+               {:listeners
+                {:start (fn [e] (dx-fn :start e))
+                 :move (fn [e] (dx-fn :move e))
+                 :end (fn [e] (dx-fn :end e))}}))
+             (.styleCursor false)
+             (.on "dragstart" add-resizing-class!)
+             (.on "dragend" remove-resizing-class!))))
+     [])
 
     [:<>
      [:span.handle-left.image-resize (assoc handle-props :ref *handle-left)]
@@ -313,7 +313,7 @@
                             :title title}
                            metadata)]
                          (when (and (not breadcrumb?)
-                                 (not positioned?))
+                                    (not positioned?))
                            [:<>
                             (let [image-src (fs/asset-path-normalize src)]
                               [:.asset-action-bar {:aria-hidden "true"}
@@ -386,41 +386,41 @@
         width (or @*width width)
         style (when-not (util/mobile?)
                 (cond width
-                  {(if (:sidebar? config)
-                     :max-width :width) width}
-                  :else
-                  {}))
+                      {(if (:sidebar? config)
+                         :max-width :width) width}
+                      :else
+                      {}))
         resizable? (and (not (mobile-util/native-platform?))
-                     (not breadcrumb?)
-                     (not positioned?))]
+                        (not breadcrumb?)
+                        (not positioned?))]
     (if (or (:disable-resize? config)
-          (not resizable?))
+            (not resizable?))
       asset-container
       [:div.ls-resize-image.rounded-md
        (when style {:style style})
        asset-container
        (resize-image-handles
-         (fn [k ^js event]
-           (let [dx (.-dx event)
-                 ^js target (.-target event)]
+        (fn [k ^js event]
+          (let [dx (.-dx event)
+                ^js target (.-target event)]
 
-             (case k
-               :start
-               (let [c (.closest target ".ls-resize-image")]
-                 (reset! *width (.-offsetWidth c))
-                 (reset! *resizing-image? true))
-               :move
-               (let [width' (+ @*width dx)]
-                 (when (or (> width' 60)
-                         (not (neg? dx)))
-                   (reset! *width width')))
-               :end
-               (let [width' @*width]
-                 (when (and width' @*resizing-image?)
-                   (when-let [block-id (or (:block/uuid config)
-                                         (some-> config :block (:block/uuid)))]
-                     (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
-                 (reset! *resizing-image? false))))))])))
+            (case k
+              :start
+              (let [c (.closest target ".ls-resize-image")]
+                (reset! *width (.-offsetWidth c))
+                (reset! *resizing-image? true))
+              :move
+              (let [width' (+ @*width dx)]
+                (when (or (> width' 60)
+                          (not (neg? dx)))
+                  (reset! *width width')))
+              :end
+              (let [width' @*width]
+                (when (and width' @*resizing-image?)
+                  (when-let [block-id (or (:block/uuid config)
+                                          (some-> config :block (:block/uuid)))]
+                    (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
+                (reset! *resizing-image? false))))))])))
 
 (rum/defc audio-cp [src]
   ;; Change protocol to allow media fragment uris to play
@@ -3160,7 +3160,7 @@
       (editor-handler/highlight-selection-area! block-id {:append? true}))))
 
 (defn- block-mouse-leave
-  [e *control-show? block-id doc-mode?]
+  [*control-show? block-id doc-mode?]
   (reset! *control-show? false)
   (when doc-mode?
     (when-let [parent (gdom/getElement block-id)]
@@ -3369,8 +3369,8 @@
                             (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
          :on-mouse-enter (fn [e]
                            (block-mouse-over e *control-show? block-id doc-mode?))
-         :on-mouse-leave (fn [e]
-                           (block-mouse-leave e *control-show? block-id doc-mode?))}
+         :on-mouse-leave (fn [_e]
+                           (block-mouse-leave *control-show? block-id doc-mode?))}
 
         (when (and (not slide?) (not in-whiteboard?) (not property?))
           (let [edit? (or editing?
