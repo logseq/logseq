@@ -162,23 +162,21 @@
                                        table))
               :disable-hide? true})]
           (keep
-           (fn [column]
-             (let [ident (or (:db/ident column) (:id column))]
+           (fn [property]
+             (let [ident (or (:db/ident property) (:id property))]
                ;; Hide properties that shouldn't ever be editable or that do not display well in a table
                (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
                                           :block/created-at :block/updated-at :block/order :block/collapsed?
                                           :logseq.property/created-from-property}
                                         ident)
                              (and with-object-name? (= :block/title ident))
-                             (contains? #{:map :entity} (get-in column [:block/schema :type])))
-                 (let [property (if (de/entity? column)
-                                  column
-                                  (or (db/entity ident) column))
-                       get-value (if-let [f (:get-value property)]
-                                   (fn [row]
-                                     (f row))
-                                   (when (de/entity? property)
-                                     (fn [row] (get-property-value-for-search row property))))
+                             (contains? #{:map :entity} (get-in property [:block/schema :type])))
+                 (let [property (if (de/entity? property)
+                                  property
+                                  (or (merge (db/entity ident) property) property)) ; otherwise, :cell/:header/etc. will be removed
+                       get-value (or (:get-value property)
+                                     (when (de/entity? property)
+                                       (fn [row] (get-property-value-for-search row property))))
                        closed-values (seq (:property/closed-values property))
                        closed-value->sort-number (when closed-values
                                                    (->> (zipmap (map :db/id closed-values) (range 0 (count closed-values)))
@@ -194,7 +192,7 @@
                                                 (get-value row)
                                                 (get row ident))))]
                    {:id ident
-                    :name (or (:name column)
+                    :name (or (:name property)
                               (:block/title property))
                     :header (or (:header property)
                                 header-cp)
