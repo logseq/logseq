@@ -119,10 +119,11 @@
 (defn <get-block
   [graph name-or-uuid & {:keys [children? nested-children?]
                          :or {children? true
-                              nested-children? false}}]
+                              nested-children? false}
+                         :as opts}]
   (let [name' (str name-or-uuid)
         *async-queries (:db/async-queries @state/state)
-        async-requested? (get @*async-queries name')
+        async-requested? (get @*async-queries [name' opts])
         e (cond
             (number? name-or-uuid)
             (db/entity name-or-uuid)
@@ -136,7 +137,7 @@
     (if (or (:block.temp/fully-loaded? e) async-requested?)
       e
       (when-let [^Object sqlite @db-browser/*worker]
-        (swap! *async-queries assoc name' true)
+        (swap! *async-queries assoc [name' opts] true)
         (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
         (p/let [result (.get-block-and-children sqlite graph id (ldb/write-transit-str
                                                                  {:children? children?

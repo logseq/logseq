@@ -50,9 +50,14 @@
                    text))))
 
 (rum/defc property-empty-text-value
-  [& {:as opts}]
+  [property {:keys [property-position]}]
   [:span.inline-flex.items-center.cursor-pointer
-   (merge {:class "empty-text-btn" :variant :text} opts) "Empty"])
+   (merge {:class "empty-text-btn" :variant :text})
+   (if property-position
+     (if-let [icon (:logseq.property/icon property)]
+       (icon-component/icon icon {:color? true})
+       (ui/icon "line-dashed"))
+     "Empty")])
 
 (rum/defc icon-row
   [block editing?]
@@ -769,7 +774,7 @@
             (inline-text {} :markdown (str value'))))))))
 
 (rum/defc select-item
-  [property type value {:keys [page-cp inline-text other-position? _icon?] :as opts}]
+  [property type value {:keys [page-cp inline-text other-position? property-position _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
         inline-text-cp (fn [content]
@@ -794,6 +799,7 @@
          (rum/with-key
            (page-cp {:disable-preview? true
                      :tag? tag?
+                     :property-position property-position
                      :meta-click? other-position?} value)
            (:db/id value)))
 
@@ -851,13 +857,13 @@
                                          :auto-focus? true
                                          :trigger-id trigger-id}))))]
       (shui/trigger-as
-       (if (:other-position? opts) :div :div.jtrigger.flex.flex-1.w-full)
+       (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full)
        {:ref *el
         :id trigger-id
         :tabIndex 0
         :on-click show!}
        (if (string/blank? value)
-         (property-empty-text-value)
+         (property-empty-text-value property opts)
          (value-f))))))
 
 (defn- property-value-inner
@@ -981,7 +987,7 @@
                 [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
              (if date?
                (property-value-date-picker block property nil {:toggle-fn toggle-fn})
-               (property-empty-text-value))))]))))
+               (property-empty-text-value property opts))))]))))
 
 (rum/defc multiple-values < rum/reactive db-mixins/query
   [block property opts schema]
@@ -1056,7 +1062,7 @@
                           (interpose [:span.opacity-50.text-sm " > "]
                                      (concat
                                       (map (fn [{title :block/title :as ancestor}]
-                                             [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} title])
+                                             [:a.whitespace-nowrap {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} title])
                                            page-ancestors)
                                       [value-cp]))]
                          value-cp)))]]

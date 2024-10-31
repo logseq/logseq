@@ -103,14 +103,17 @@
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
-  [config-content]
-  (let [initial-data [(sqlite-util/kv :logseq.kv/db-type "db")
-                      (sqlite-util/kv :logseq.kv/schema-version db-schema/version)
-                      (sqlite-util/kv :logseq.kv/graph-initial-schema-version db-schema/version)
-                      (sqlite-util/kv :logseq.kv/graph-created-at (common-util/time-ms))
-                      ;; Empty property value used by db.type/ref properties
-                      {:db/ident :logseq.property/empty-placeholder}
-                      {:db/ident :logseq.class/Root}]
+  [config-content & {:keys [import-type]}]
+  (let [initial-data (cond->
+                      [(sqlite-util/kv :logseq.kv/db-type "db")
+                       (sqlite-util/kv :logseq.kv/schema-version db-schema/version)
+                       (sqlite-util/kv :logseq.kv/graph-initial-schema-version db-schema/version)
+                       (sqlite-util/kv :logseq.kv/graph-created-at (common-util/time-ms))
+                       ;; Empty property value used by db.type/ref properties
+                       {:db/ident :logseq.property/empty-placeholder}
+                       {:db/ident :logseq.class/Root}]
+                       import-type
+                       (into (sqlite-util/import-tx import-type)))
         initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content

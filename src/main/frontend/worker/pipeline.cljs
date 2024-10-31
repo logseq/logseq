@@ -49,7 +49,9 @@
   (when (and (not (:skip-validate-db? tx-meta false))
              (:dev? context)
              (not (:importing? context)) (sqlite-util/db-based-graph? repo))
-    (let [valid? (db-validate/validate-tx-report! tx-report (:validate-db-options context))]
+    (let [valid? (if (get-in tx-report [:tx-meta :reset-conn!])
+                   true
+                   (db-validate/validate-tx-report! tx-report (:validate-db-options context)))]
       (when (and (get-in context [:validate-db-options :fail-invalid?]) (not valid?))
         (worker-util/post-message :notification
                                   [["Invalid DB!"] :error]))))

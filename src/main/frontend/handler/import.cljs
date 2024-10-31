@@ -26,7 +26,8 @@
             [medley.core :as medley]
             [frontend.persist-db :as persist-db]
             [promesa.core :as p]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn index-files!
   "Create file structure, then parse into DB (client only)"
@@ -52,7 +53,7 @@
                                          ".md")]
                            {:file/path path
                             :file/content text}))))
-                files)
+                   files)
         files (remove nil? files)]
     (file-repo-handler/parse-files-and-load-to-db! repo files nil)
     (let [files (->> (map (fn [{:file/keys [path content]}] (when path [path content])) files)
@@ -63,15 +64,15 @@
                                             :finish-handler finish-handler}))
     (let [journal-pages-tx (let [titles (filter date/normalize-journal-title titles)]
                              (map
-                               (fn [title]
-                                 (let [day (date/journal-title->int title)
-                                       journal-title (date-time-util/int->journal-title day (state/get-date-formatter))]
-                                   (when journal-title
-                                     (let [page-name (util/page-name-sanity-lc journal-title)]
-                                       {:block/name page-name
-                                        :block/type "journal"
-                                        :block/journal-day day}))))
-                               titles))]
+                              (fn [title]
+                                (let [day (date/journal-title->int title)
+                                      journal-title (date-time-util/int->journal-title day (state/get-date-formatter))]
+                                  (when journal-title
+                                    (let [page-name (util/page-name-sanity-lc journal-title)]
+                                      {:block/name page-name
+                                       :block/type "journal"
+                                       :block/journal-day day}))))
+                              titles))]
       (when (seq journal-pages-tx)
         (db/transact! repo journal-pages-tx)))))
 
@@ -83,7 +84,6 @@
       (index-files! repo files
                     (fn []
                       (finished-ok-handler))))))
-
 
 ;;; import OPML files
 (defn import-from-opml!
@@ -183,7 +183,7 @@
   (let [imported-chan (async/promise-chan)]
     (try
       (let [blocks (->> (:blocks data)
-                        (mapv tree-translator-fn )
+                        (mapv tree-translator-fn)
                         (sort-by :title)
                         (medley/indexed))
             job-chan (async/to-chan! blocks)]
@@ -198,8 +198,8 @@
               (create-page-with-exported-tree! block)
               (recur))
             (let [result (async/<! (p->c (db-async/<get-all-referenced-blocks-uuid (state/get-current-repo))))]
-                (editor/set-blocks-id! result)
-                (async/offer! imported-chan true)))))
+              (editor/set-blocks-id! result)
+              (async/offer! imported-chan true)))))
 
       (catch :default e
         (notification/show! (str "Error happens when importing:\n" e) :error)
@@ -236,6 +236,7 @@
       (repo-handler/restore-and-setup-repo! graph)
       (state/set-current-repo! graph)
       (persist-db/<export-db graph {})
+      (db/transact! graph (sqlite-util/import-tx :sqlite-db))
       (finished-ok-handler))
      (p/catch
       (fn [e]
@@ -248,9 +249,9 @@
   [raw finished-ok-handler]
   (try
     (let [data (edn/read-string raw)]
-     (async/go
-       (async/<! (import-from-tree! data tree-vec-translate-edn))
-       (finished-ok-handler nil)))
+      (async/go
+        (async/<! (import-from-tree! data tree-vec-translate-edn))
+        (finished-ok-handler nil)))
     (catch :default e
       (js/console.error e)
       (notification/show!

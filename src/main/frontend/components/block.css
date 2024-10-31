@@ -27,7 +27,7 @@
   }
 
   .asset-container {
-    @apply relative inline-block mt-2;
+    @apply relative inline-block mt-2 w-full;
 
     .asset-action-bar {
       @apply top-0.5 right-0.5 absolute flex items-center
@@ -44,16 +44,11 @@
         @apply opacity-100;
       }
     }
-  }
 
-  .resize {
-    display: inline-flex;
-    /* Fix chrome missing resize handle issue https://bugs.chromium.org/p/chromium/issues/detail?id=1135676&q=css%20resize%20type%3DBug&can=2.*/
-    transform: translate3d(0, 0, 0);
-  }
-
-  .image-resize {
-    display: flex;
+    > img {
+      max-width: unset;
+      width: 100%;
+    }
   }
 
   .draw [aria-labelledby="shapes-title"] {
@@ -874,6 +869,20 @@ html.is-mac {
   opacity: 1;
 }
 
+.positioned-properties {
+  @apply text-sm;
+}
+
+.positioned-properties.block-left {
+  .asset-container {
+    @apply max-w-[120px];
+  }
+
+  .block-title-wrap {
+    @apply hidden;
+  }
+}
+
 .positioned-properties.block-right {
   button {
     @apply whitespace-nowrap mr-0.5;
@@ -894,7 +903,7 @@ html.is-mac {
   @apply flex flex-row flex-wrap self-start items-center;
   min-height: 24px;
   max-width: 256px;
-  margin-right: -28px;
+  margin-right: -16px;
 }
 
 .block-tag {
@@ -957,6 +966,26 @@ html.is-mac {
     svg {
       width: 14px;
       height: 14px;
+    }
+  }
+}
+
+.ls-resize-image {
+  @apply flex relative;
+
+  .handle-left , .handle-right {
+    @apply absolute w-[6px] h-[15%] min-h-[30px] bg-black/30 hover:bg-black/70
+    top-[50%] left-[5px] rounded-full cursor-col-resize select-none
+    translate-y-[-20%] opacity-0 border border-gray-200;
+  }
+
+  .handle-right {
+    @apply left-auto right-[5px]
+  }
+
+  &:hover {
+    .handle-left, .handle-right {
+      @apply opacity-100;
     }
   }
 }

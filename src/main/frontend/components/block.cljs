@@ -266,6 +266,34 @@
     (when (seq images)
       (lightbox/preview-images! images))))
 
+(rum/defc resize-image-handles
+  [dx-fn]
+  (let [handle-props {}
+        add-resizing-class! #(dom/add-class! js/document.documentElement "is-resizing-buf")
+        remove-resizing-class! #(dom/remove-class! js/document.documentElement "is-resizing-buf")
+        *handle-left (rum/use-ref nil)
+        *handle-right (rum/use-ref nil)]
+
+    (rum/use-effect!
+     (fn []
+       (doseq [el [(rum/deref *handle-left)
+                   (rum/deref *handle-right)]]
+         (-> (js/interact el)
+             (.draggable
+              (bean/->js
+               {:listeners
+                {:start (fn [e] (dx-fn :start e))
+                 :move (fn [e] (dx-fn :move e))
+                 :end (fn [e] (dx-fn :end e))}}))
+             (.styleCursor false)
+             (.on "dragstart" add-resizing-class!)
+             (.on "dragend" remove-resizing-class!))))
+     [])
+
+    [:<>
+     [:span.handle-left.image-resize (assoc handle-props :ref *handle-left)]
+     [:span.handle-right.image-resize (assoc handle-props :ref *handle-right)]]))
+
 (defonce *resizing-image? (atom false))
 (rum/defcs ^:large-vars/cleanup-todo resizable-image <
   (rum/local nil ::size)
@@ -273,8 +301,8 @@
                    (reset! *resizing-image? false)
                    state)}
   [state config title src metadata full-text local?]
-  (let [size (get state ::size)
-        breadcrumb? (:breadcrumb? config)
+  (let [breadcrumb? (:breadcrumb? config)
+        positioned? (:property-position config)
         asset-block (:asset-block config)
         asset-container [:div.asset-container {:key "resize-asset-container"}
                          [:img.rounded-sm.relative
@@ -284,7 +312,8 @@
                             :src src
                             :title title}
                            metadata)]
-                         (when-not breadcrumb?
+                         (when (and (not breadcrumb?)
+                                    (not positioned?))
                            [:<>
                             (let [image-src (fs/asset-path-normalize src)]
                               [:.asset-action-bar {:aria-hidden "true"}
@@ -353,46 +382,45 @@
                                    (shui/tabler-icon "folder-pin")])]])])]
         width (or (get-in asset-block [:logseq.property.asset/resize-metadata :width])
                   (:width metadata))
-        height (or (get-in asset-block [:logseq.property.asset/resize-metadata :height])
-                   (:height metadata))
+        *width (get state ::size)
+        width (or @*width width)
         style (when-not (util/mobile?)
-                (cond (and width height)
-                      {:width width :height height}
-                      width
-                      {:width width}
-                      height
-                      {:height height}
+                (cond width
+                      {(if (:sidebar? config)
+                         :max-width :width) width}
                       :else
-                      {}))]
-    (if (:disable-resize? config)
+                      {}))
+        resizable? (and (not (mobile-util/native-platform?))
+                        (not breadcrumb?)
+                        (not positioned?))]
+    (if (or (:disable-resize? config)
+            (not resizable?))
       asset-container
-      (ui/resize-provider
-       (ui/resize-consumer
-        (if (and (not (mobile-util/native-platform?))
-                 (not breadcrumb?))
-          (cond->
-           {:className "resize image-resize"
-            :onSizeChanged (fn [value]
-                             (when (and (not @*resizing-image?)
-                                        (some? @size)
-                                        (not= value @size))
-                               (reset! *resizing-image? true))
-                             (reset! size value))
-            :onPointerUp (fn []
-                           (when (and @size @*resizing-image?)
-                             (when-let [block-id (or (:block/uuid config)
-                                                     (some-> config :block (:block/uuid)))]
-                               (let [size (bean/->clj @size)]
-                                 (editor-handler/resize-image! config block-id metadata full-text size))))
-                           (when @*resizing-image?
-                             ;; TODO:​ need a better way to prevent the clicking to edit current block
-                             (js/setTimeout #(reset! *resizing-image? false) 200)))
-            :onClick (fn [e]
-                       (when @*resizing-image? (util/stop e)))}
-            style
-            (assoc :style style))
-          {})
-        asset-container)))))
+      [:div.ls-resize-image.rounded-md
+       (when style {:style style})
+       asset-container
+       (resize-image-handles
+        (fn [k ^js event]
+          (let [dx (.-dx event)
+                ^js target (.-target event)]
+
+            (case k
+              :start
+              (let [c (.closest target ".ls-resize-image")]
+                (reset! *width (.-offsetWidth c))
+                (reset! *resizing-image? true))
+              :move
+              (let [width' (+ @*width dx)]
+                (when (or (> width' 60)
+                          (not (neg? dx)))
+                  (reset! *width width')))
+              :end
+              (let [width' @*width]
+                (when (and width' @*resizing-image?)
+                  (when-let [block-id (or (:block/uuid config)
+                                          (some-> config :block (:block/uuid)))]
+                    (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
+                (reset! *resizing-image? false))))))])))
 
 (rum/defc audio-cp [src]
   ;; Change protocol to allow media fragment uris to play
@@ -786,6 +814,8 @@
   (let [*timer (rum/use-ref nil)                            ;; show
         *timer1 (rum/use-ref nil)                           ;; hide
         *el-popup (rum/use-ref nil)
+        *el-wrap (rum/use-ref nil)
+        [in-popup? set-in-popup!] (rum/use-state nil)
         [visible? set-visible!] (rum/use-state nil)
         ;; set-visible! (fn debug-visible [v] (js/console.warn "debug: visible" v) (set-visible! v))
         _  #_:clj-kondo/ignore (rum/defc preview-render []
@@ -820,13 +850,24 @@
                                                 :sidebar? sidebar?
                                                 :preview? true}))]))]
 
-    (if (and (not (:preview? config))
-             (or (not manual?) open?))
-      (popup-preview-impl children
-                          {:visible? visible? :set-visible! set-visible!
-                           :*timer *timer :*timer1 *timer1
-                           :render preview-render :*el-popup *el-popup})
-      children)))
+    (rum/use-effect!
+     (fn []
+       (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
+         (set-in-popup! true)
+         (set-in-popup! false)))
+     [])
+
+    [:span {:ref *el-wrap}
+     (if (boolean? in-popup?)
+       (if (and (not (:preview? config))
+                (not in-popup?)
+                (or (not manual?) open?))
+         (popup-preview-impl children
+                             {:visible? visible? :set-visible! set-visible!
+                              :*timer *timer :*timer1 *timer1
+                              :render preview-render :*el-popup *el-popup})
+         children)
+       children)]))
 
 (declare block-reference)
 (declare block-reference-preview)
@@ -837,6 +878,14 @@
         ->ref (if db-based? page-ref/->page-ref block-ref/->block-ref)]
     [:span.warning.mr-1 {:title "Node ref invalid"}
      (->ref id)]))
+
+(defn inline-text
+  ([format v]
+   (inline-text {} format v))
+  ([config format v]
+   (when (string? v)
+     (let [inline-list (gp-mldoc/inline->edn v (mldoc/get-default-config format))]
+       [:div.inline.mr-1 (map-inline config inline-list)]))))
 
 (rum/defcs page-cp-inner < db-mixins/query rum/reactive
   {:init (fn [state]
@@ -881,7 +930,10 @@
                                                 :config config
                                                 :id (:block/uuid entity)}))
               inner))
-          (block-reference config (:block/uuid entity) nil))
+          (block-reference config (:block/uuid entity)
+                           (if (string? label)
+                             (gp-mldoc/inline->edn label (mldoc/get-default-config :markdown))
+                             label)))
 
         (and (:block/name page) (util/uuid-string? (:block/name page)))
         (invalid-node-ref (:block/name page))
@@ -1148,7 +1200,7 @@
               block (when db-id (db/sub-block db-id))
               properties (:block/properties block)
               block-type (keyword (pu/lookup properties :logseq.property/ls-type))
-              hl-type (pu/lookup properties :logseq.property/hl-type)
+              hl-type (pu/lookup properties :logseq.property.pdf/hl-type)
               repo (state/get-current-repo)
               stop-inner-events? (= block-type :whiteboard-shape)]
           (if (and block (:block/title block))
@@ -1212,14 +1264,6 @@
                      inner)])))
             (invalid-node-ref id))))
       (invalid-node-ref id))))
-
-(defn inline-text
-  ([format v]
-   (inline-text {} format v))
-  ([config format v]
-   (when (string? v)
-     (let [inline-list (gp-mldoc/inline->edn v (mldoc/get-default-config format))]
-       [:div.inline.mr-1 (map-inline config inline-list)]))))
 
 (defn- render-macro
   [config name arguments macro-content format]
@@ -2145,7 +2189,7 @@
     (->elem
      elem
      (merge
-      {:data-hl-type (pu/lookup properties :logseq.property/hl-type)}
+      {:data-hl-type (pu/lookup properties :logseq.property.pdf/hl-type)}
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
@@ -2159,7 +2203,7 @@
            :class "px-1 with-bg-color"})))
 
      ;; children
-     (let [area?  (= :area (keyword (pu/lookup properties :logseq.property/hl-type)))
+     (let [area?  (= :area (keyword (pu/lookup properties :logseq.property.pdf/hl-type)))
            hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
                      [:div.prefix-link
                       {:on-pointer-down
@@ -2356,8 +2400,7 @@
                                         :block-cp blocks-container
                                         :editor-box (state/get-component :editor/box)
                                         :container-id (or (:container-id config)
-                                                          (::initial-container-id state))
-                                        :id (:id config)}
+                                                          (::initial-container-id state))}
                                        opts)))
 
 (rum/defc invalid-properties-cp
@@ -2601,7 +2644,8 @@
                      :page-cp page-cp
                      :block-cp blocks-container
                      :inline-text inline-text
-                     :other-position? true})]
+                     :other-position? true
+                     :property-position position})]
     (when (seq properties)
       (case position
         :block-below
@@ -2609,8 +2653,8 @@
          (for [pid properties]
            (let [property (db/entity pid)
                  v (get block pid)]
-             [:div.flex.flex-row.items-center.gap-2.hover:bg-secondary.rounded
-              [:div.flex.flex-row.opacity-50.hover:opacity-100.items-center
+             [:div.flex.flex-row.items-center.opacity-50.hover:opacity-100.transition-opacity.duration-300.ease-in.gap-1
+              [:div.flex.flex-row.items-center
                (property-component/property-key-cp block property opts)
                [:div.select-none ":"]]
               (pv/property-value block property v opts)]))]
@@ -2652,9 +2696,9 @@
                         :pointer-events (when stop-events? "none")}}
 
                 (not (string/blank?
-                      (pu/lookup properties :logseq.property/hl-color)))
+                      (pu/lookup properties :logseq.property.pdf/hl-color)))
                 (assoc :data-hl-color
-                       (pu/lookup properties :logseq.property/hl-color))
+                       (pu/lookup properties :logseq.property.pdf/hl-color))
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
@@ -2683,7 +2727,6 @@
               :key (str "block-content-" uuid)
               :on-pointer-up (fn [e]
                                (when (and
-                                      (state/in-selection-mode?)
                                       (not (string/includes? content "```"))
                                       (not (gobj/get e "shiftKey"))
                                       (not (util/meta-key? e)))
@@ -2835,8 +2878,6 @@
                                                                                               :container-id (:container-id config)}))}})
            (block-content config block edit-input-id block-id slide?))
 
-          (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
-
           (when (and (not hide-block-refs-count?)
                      (not named?))
             [:div.flex.flex-row.items-center
@@ -2855,6 +2896,8 @@
                                     (util/stop e)
                                     (editor-handler/edit-block! block :max))}
                 svg/edit])])])
+
+       (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
 
        (when-not (or (:table? config) (:property? config) (:page-title? config))
          (block-refs-count block refs-count *hide-block-refs?))
@@ -3079,7 +3122,7 @@
                 (-> (editor-handler/file-based-save-assets! repo (js->clj files))
                     (p/then
                      (fn [res]
-                       (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (and (seq res) (first res))]
+                       (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (first res)]
                          (let [image? (config/ext-of-image? asset-file-name)
                                link-content (assets-handler/get-asset-file-link format
                                                                                 (if matched-alias
@@ -3095,7 +3138,8 @@
                              :edit-block? false
                              :replace-empty-target? true
                              :sibling?   true
-                             :before?    false}))))))))
+                             :before?    false}))
+                         (recur (rest res))))))))
 
             :else
             (prn ::unhandled-drop-data-transfer-type transfer-types))))))
@@ -3110,23 +3154,18 @@
       (let [node (.querySelector parent ".bullet-container")]
         (when doc-mode?
           (dom/remove-class! node "hide-inner-bullet"))))
-    (when (and
-           (state/in-selection-mode?)
-           (non-dragging? e))
+    (when (non-dragging? e)
       (when-let [container (gdom/getElement "app-container-wrapper")]
         (dom/add-class! container "blocks-selection-mode"))
       (editor-handler/highlight-selection-area! block-id {:append? true}))))
 
 (defn- block-mouse-leave
-  [e *control-show? block-id doc-mode?]
+  [*control-show? block-id doc-mode?]
   (reset! *control-show? false)
   (when doc-mode?
     (when-let [parent (gdom/getElement block-id)]
       (when-let [node (.querySelector parent ".bullet-container")]
-        (dom/add-class! node "hide-inner-bullet"))))
-  (when (and (non-dragging? e)
-             (not @*resizing-image?))
-    (state/into-selection-mode!)))
+        (dom/add-class! node "hide-inner-bullet")))))
 
 (defn- on-drag-and-mouse-attrs
   [block original-block uuid top? block-id *move-to']
@@ -3245,8 +3284,9 @@
         *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
-                     (or ref-or-custom-query? (root-block? config block))
-                     (state/sub-collapsed uuid)
+                     (or ref-or-custom-query? (root-block? config block)
+                         (and (or (ldb/class? block) (ldb/property? block)) (:page-title? config)))
+                     (state/sub-block-collapsed uuid)
 
                      :else
                      db-collapsed?)
@@ -3257,6 +3297,7 @@
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
+        page-embed? (:page-embed? config)
         reference? (:reference? config)
         whiteboard-block? (pu/shape-block? block)
         block-id (str "ls-block-" uuid)
@@ -3296,7 +3337,7 @@
        (not slide?)
        (merge attrs)
 
-       (or reference? embed?)
+       (or reference? (and embed? (not page-embed?)))
        (assoc :data-transclude true)
 
        embed?
@@ -3315,7 +3356,7 @@
        (dnd-separator-wrapper block children block-id slide? true false))
 
      (when-not (:hide-title? config)
-       [:div.block-main-container.flex.flex-row.pr-2.gap-1
+       [:div.block-main-container.flex.flex-row.gap-1
         {:style (when (and db-based? (:page-title? config))
                   {:margin-left -30})
          :data-has-heading (some-> block :block/properties (pu/lookup :logseq.property/heading))
@@ -3328,8 +3369,8 @@
                             (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
          :on-mouse-enter (fn [e]
                            (block-mouse-over e *control-show? block-id doc-mode?))
-         :on-mouse-leave (fn [e]
-                           (block-mouse-leave e *control-show? block-id doc-mode?))}
+         :on-mouse-leave (fn [_e]
+                           (block-mouse-leave *control-show? block-id doc-mode?))}
 
         (when (and (not slide?) (not in-whiteboard?) (not property?))
           (let [edit? (or editing?
@@ -3358,7 +3399,7 @@
                                        (when (ldb/property? block)
                                          {:type :tabler-icon
                                           :id "letter-p"})))]
-                [:div.ls-page-icon.flex.self-start3
+                [:div.ls-page-icon.flex.self-start
                  (icon-component/icon-picker icon
                                              {:on-chosen (fn [_e icon]
                                                            (if icon
@@ -3437,6 +3478,10 @@
                  linked-block? (or (:block/link block)
                                    (:original-block config))]
              (cond
+               (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)))
+               (let [collapsed? (state/get-block-collapsed block-id)]
+                 (state/set-collapsed-block! block-id (if (some? collapsed?) collapsed? true)))
+
                (root-block? config block)
                (state/set-collapsed-block! block-id false)
 
@@ -3980,11 +4025,15 @@
                                                       {:top? top?
                                                        :bottom? bottom?})))})
         *wrap-ref (rum/use-ref nil)]
-
     (rum/use-effect!
      (fn []
-        ;; Try to fix virtuoso scrollable container blink for the block insertion at bottom
        (when virtualized?
+         (when (:current-page? config)
+           (let [ref (.-current *virtualized-ref)]
+             (ui-handler/scroll-to-anchor-block ref blocks false)
+             (state/set-state! :editor/virtualized-scroll-fn
+                               #(ui-handler/scroll-to-anchor-block ref blocks false))))
+         ;; Try to fix virtuoso scrollable container blink for the block insertion at bottom
          (let [^js *ob (volatile! nil)]
            (js/setTimeout
             (fn []

@@ -80,8 +80,8 @@
 (defn publishing-backend
   "Builds publishing backend and copies over supporting frontend assets"
   [& args]
-  (apply shell {:dir "scripts"}
-         "yarn -s nbb-logseq -cp src -m logseq.tasks.dev.publishing"
+  (apply shell {:dir "deps/publishing" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+         "yarn -s nbb-logseq -cp src:../graph-parser/src script/publishing.cljs"
          (into ["static"] args)))
 
 (defn watch-publishing-frontend

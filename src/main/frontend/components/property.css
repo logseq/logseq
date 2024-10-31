@@ -44,10 +44,8 @@
 }
 
 .ls-properties-area {
-  @apply grid;
-
   .property-pair {
-    @apply grid grid-cols-4 gap-1;
+    @apply flex flex-row flex-wrap space-x-1;
 
     .jtrigger {
       @apply relative;
@@ -179,7 +177,7 @@
 
 .positioned-properties, .property-value-inner {
   .select-item {
-    @apply flex items-center;
+    @apply flex items-center shrink-0;
   }
 
   .ls-icon-priorityLvlUrgent {
@@ -262,6 +260,8 @@ a.control-link {
 }
 
 .property-value-container {
+  @apply flex-1 shrink-0;
+  min-width: 100px;
   min-height: 29px;
 }
 
@@ -271,6 +271,7 @@ a.control-link {
 
 .property-key {
   /* Same height with one-line block container */
+  min-width: 160px;
   min-height: 29px;
 
   h1.title, h2.title {
@@ -287,8 +288,26 @@ a.control-link {
   }
 }
 
+.ls-card-item {
+    .property-key, .property-value-container {
+        min-width: initial;
+    }
+}
+
 .property-key-inner {
-  @apply flex flex-row items-center gap-1 relative;
+  @apply flex flex-row items-start gap-1 relative;
+
+  .property-icon {
+    @apply flex items-center;
+    height: 28px;
+
+    button {
+      margin-top: -1px;
+    }
+  }
+  .editor-inner {
+    width: 120px;
+  }
 }
 
 .property-select {
@@ -324,7 +343,7 @@ a.control-link {
   }
 
   .inner-wrap {
-    @apply flex items-center w-full justify-between;
+    @apply flex items-center w-full justify-between gap-1 flex-wrap;
 
     > strong {
       @apply flex items-center gap-1 font-normal opacity-90;

@@ -169,10 +169,12 @@
    :logseq.property/asset   {:title "Asset"
                              :schema {:type :entity
                                       :hide? true}}
+   ;; used by pdf and whiteboard
    :logseq.property/ls-type {:schema {:type :keyword
                                       :hide? true}}
-   :logseq.property/hl-type {:schema {:type :keyword :hide? true}}
-   :logseq.property/hl-color {:schema {:type :default :hide? true}}
+
+   :logseq.property.pdf/hl-type {:schema {:type :keyword :hide? true}}
+   :logseq.property.pdf/hl-color {:schema {:type :default :hide? true}}
    :logseq.property.pdf/hl-page {:schema {:type :number :hide? true}}
    :logseq.property.pdf/hl-image {:schema {:type :entity :hide? true}}
    :logseq.property.pdf/hl-value {:schema {:type :map :hide? true}}
@@ -214,6 +216,22 @@
    ;;                                :public? false}}
 
    ;; Task props
+   :logseq.task/priority
+   {:title "Priority"
+    :schema
+    {:type :default
+     :public? true
+     :position :block-left}
+    :closed-values
+    (mapv (fn [[db-ident value icon]]
+            {:db-ident db-ident
+             :value value
+             :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)
+             :icon {:type :tabler-icon :id icon}})
+          [[:logseq.task/priority.low "Low" "priorityLvlLow"]
+           [:logseq.task/priority.medium "Medium" "priorityLvlMedium"]
+           [:logseq.task/priority.high "High" "priorityLvlHigh"]
+           [:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]])}
    :logseq.task/status
    {:title "Status"
     :schema
@@ -232,22 +250,6 @@
            [:logseq.task/status.in-review "In Review" "InReview"]
            [:logseq.task/status.done "Done" "Done"]
            [:logseq.task/status.canceled "Canceled" "Cancelled"]])}
-   :logseq.task/priority
-   {:title "Priority"
-    :schema
-    {:type :default
-     :public? true
-     :position :block-left}
-    :closed-values
-    (mapv (fn [[db-ident value icon]]
-            {:db-ident db-ident
-             :value value
-             :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)
-             :icon {:type :tabler-icon :id icon}})
-          [[:logseq.task/priority.low "Low" "priorityLvlLow"]
-           [:logseq.task/priority.medium "Medium" "priorityLvlMedium"]
-           [:logseq.task/priority.high "High" "priorityLvlHigh"]
-           [:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]])}
    :logseq.task/deadline
    {:title "Deadline"
     :schema {:type :date

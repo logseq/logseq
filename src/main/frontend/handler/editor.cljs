@@ -1501,7 +1501,7 @@
           ;; FIXME: only the first asset is handled
         (p/then
          (fn [res]
-           (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (and (seq res) (first res))]
+           (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (first res)]
              (let [image? (config/ext-of-image? asset-file-name)]
                (insert-command!
                 id
@@ -1516,7 +1516,8 @@
                 format
                 {:last-pattern (if drop-or-paste? "" commands/command-trigger)
                  :restore?     true
-                 :command      :insert-asset})))))
+                 :command      :insert-asset})
+               (recur (rest res))))))
         (p/catch (fn [e]
                    (js/console.error e)))
         (p/finally
@@ -1560,6 +1561,13 @@
                                :edit-block? false
                                :properties properties}
                   edit-block (state/get-edit-block)
+                  _ (when (util/electron?)
+                      (if-let [from (not-empty (.-path file))]
+                        (-> (js/window.apis.copyFileToAssets dir file-rpath from)
+                            (p/catch #(js/console.error "Debug: Copy Asset Error#" %)))
+                        (-> (p/let [buffer (.arrayBuffer file)]
+                              (fs/write-file! repo dir file-rpath buffer {:skip-compare? false}))
+                            (p/catch #(js/console.error "Debug: Writing Asset #" %)))))
                   insert-opts' (if (and (:block/uuid edit-block)
                                         (string/blank? (:block/title edit-block)))
                                  (assoc insert-opts
@@ -1570,14 +1578,7 @@
                   result (api-insert-new-block! file-name-without-ext insert-opts')
                   new-entity (db/entity [:block/uuid (:block/uuid result)])]
             (if (util/electron?)
-              (if-let [from (not-empty (.-path file))]
-                (-> (js/window.apis.copyFileToAssets dir file-rpath from)
-                    (p/then (fn [_dest] new-entity))
-                    (p/catch #(js/console.error "Debug: Copy Asset Error#" %)))
-                (-> (p/let [buffer (.arrayBuffer file)]
-                      (fs/write-file! repo dir file-rpath buffer {:skip-compare? false}))
-                    (p/then (fn [_] new-entity))
-                    (p/catch #(js/console.error "Debug: Writing Asset #" %))))
+              new-entity
               (->
                (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
                       (cond

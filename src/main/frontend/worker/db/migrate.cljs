@@ -271,7 +271,8 @@
     (when (ldb/db-based-graph? db)
       (let [property (d/entity db :logseq.property.node/display-type)
             ;; fix property
-            _ (when-not (ldb/property? property)
+            _ (when-not (and (ldb/property? property)
+                             (true? (:db/index property)))
                 (let [fix-tx-data (->>
                                    (select-keys db-property/built-in-properties [:logseq.property.node/display-type])
                                    (sqlite-create-graph/build-initial-properties*)
@@ -288,9 +289,10 @@
 (defn- rename-card-view-to-gallery-view
   [conn _search-db]
   (when (ldb/db-based-graph? @conn)
-    [{:db/id (:db/id (d/entity @conn :logseq.property.view/type.card))
-      :db/ident :logseq.property.view/type.gallery
-      :block/title "Gallery View"}]))
+    (let [card (d/entity @conn :logseq.property.view/type.card)]
+      [{:db/id (:db/id card)
+        :db/ident :logseq.property.view/type.gallery
+        :block/title "Gallery View"}])))
 
 (defn- add-pdf-annotation-class
   [conn _search-db]
@@ -347,24 +349,27 @@
    [27 {:properties [:logseq.property.code/mode]}]
    [28 {:fix (rename-properties {:logseq.property.node/type :logseq.property.node/display-type})}]
    [29 {:properties [:logseq.property.code/lang]}]
+   [29.1 {:fix add-card-view}]
+   [29.2 {:fix rename-card-view-to-gallery-view}]
+   ;; Asset relies on :logseq.property.view/type.gallery
    [30 {:classes [:logseq.class/Asset]
         :properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]}]
    [31 {:properties [:logseq.property/asset]}]
    [32 {:properties [:logseq.property.asset/last-visit-page]}]
    [33 {:properties [:logseq.property.pdf/hl-image]}]
    [34 {:properties [:logseq.property.asset/resize-metadata]}]
-   [35 {:fix add-card-view}]
    [37 {:classes [:logseq.class/Code-block :logseq.class/Quote-block :logseq.class/Math-block]
         :properties [:logseq.property.node/display-type :logseq.property.code/lang]}]
    [38 {:fix add-tags-for-typed-display-blocks}]
-   [39 {:fix rename-card-view-to-gallery-view}]
    [40 {:classes [:logseq.class/pdf-annotation]
         :properties [:logseq.property/ls-type :logseq.property/hl-color :logseq.property/asset
                      :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value
                      :logseq.property/hl-type :logseq.property.pdf/hl-image]
         :fix add-pdf-annotation-class}]
    [41 {:fix (rename-classes {:logseq.class/pdf-annotation :logseq.class/Pdf-annotation})}]
-   [42 {:properties [:kv/value :block/type :block/schema :block/parent
+   [42 {:fix (rename-properties {:logseq.property/hl-color :logseq.property.pdf/hl-color
+                                 :logseq.property/hl-type :logseq.property.pdf/hl-type})}]
+   [43 {:properties [:kv/value :block/type :block/schema :block/parent
                      :block/order :block/collapsed? :block/page
                      :block/refs :block/path-refs :block/link
                      :block/title :block/closed-value-property
@@ -375,6 +380,34 @@
   (assert (<= db-schema/version max-schema-version))
   (when (< db-schema/version max-schema-version)
     (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-version is " max-schema-version))))
+
+(defn- upgrade-version!
+  [conn search-db db-based? version {:keys [properties classes fix]}]
+  (let [db @conn
+        new-properties (->> (select-keys db-property/built-in-properties properties)
+                                  ;; property already exists, this should never happen
+                            (remove (fn [[k _]]
+                                      (when (d/entity db k)
+                                        (assert (str "DB migration: property already exists " k)))))
+                            (into {})
+                            sqlite-create-graph/build-initial-properties*
+                            (map (fn [b] (assoc b :logseq.property/built-in? true))))
+        new-classes (->> (select-keys db-class/built-in-classes classes)
+                               ;; class already exists, this should never happen
+                         (remove (fn [[k _]]
+                                   (when (d/entity db k)
+                                     (assert (str "DB migration: class already exists " k)))))
+                         (into {})
+                         (#(sqlite-create-graph/build-initial-classes* % (zipmap properties properties)))
+                         (map (fn [b] (assoc b :logseq.property/built-in? true))))
+        fixes (when (fn? fix)
+                (fix conn search-db))
+        tx-data (if db-based? (concat new-properties new-classes fixes) fixes)
+        tx-data' (concat
+                  [(sqlite-util/kv :logseq.kv/schema-version version)]
+                  tx-data)]
+    (ldb/transact! conn tx-data' {:db-migrate? true})
+    (println "DB schema migrated to" version)))
 
 (defn migrate
   "Migrate 'frontend' datascript schema and data. To add a new migration,
@@ -395,39 +428,15 @@
         (let [db-based? (ldb/db-based-graph? @conn)
               updates (keep (fn [[v updates]]
                               (when (and (< version-in-db v) (<= v db-schema/version))
-                                updates))
-                            schema-version->updates)
-              properties (mapcat :properties updates)
-              new-properties (->> (select-keys db-property/built-in-properties properties)
-                                  ;; property already exists, this should never happen
-                                  (remove (fn [[k _]]
-                                            (when (d/entity db k)
-                                              (assert (str "DB migration: property already exists " k)))))
-                                  (into {})
-                                  sqlite-create-graph/build-initial-properties*
-                                  (map (fn [b] (assoc b :logseq.property/built-in? true))))
-              classes (mapcat :classes updates)
-              new-classes (->> (select-keys db-class/built-in-classes classes)
-                               ;; class already exists, this should never happen
-                               (remove (fn [[k _]]
-                                         (when (d/entity db k)
-                                           (assert (str "DB migration: class already exists " k)))))
-                               (into {})
-                               (#(sqlite-create-graph/build-initial-classes* % (zipmap properties properties)))
-                               (map (fn [b] (assoc b :logseq.property/built-in? true))))
-              fixes (mapcat
-                     (fn [update']
-                       (when-let [fix (:fix update')]
-                         (when (fn? fix)
-                           (fix conn search-db)))) updates)
-              tx-data' (if db-based? (concat new-properties new-classes fixes) fixes)]
-          (when (seq tx-data')
-            (let [tx-data' (concat tx-data' [(sqlite-util/kv :logseq.kv/schema-version db-schema/version)])]
-              (ldb/transact! conn tx-data' {:db-migrate? true}))
-            (println "DB schema migrated to " db-schema/version " from " version-in-db ".")))
+                                [v updates]))
+                            schema-version->updates)]
+          (println "DB schema migrated from" version-in-db)
+          (doseq [[v m] updates]
+            (upgrade-version! conn search-db db-based? v m)))
         (catch :default e
           (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))
-          (js/console.error e))))))
+          (js/console.error e)
+          (throw e))))))
 
 ;; Backend migrations
 ;; ==================
