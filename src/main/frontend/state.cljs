@@ -159,7 +159,6 @@
       :editor/raw-mode-block                 (atom nil)
       :editor/virtualized-scroll-fn          nil
 
-      :selection/mode                        (atom false)
       ;; Warning: blocks order is determined when setting this attribute
       :selection/blocks                      (atom [])
       :selection/start-block                 (atom nil)
@@ -1060,6 +1059,18 @@ Similar to re-frame subscriptions"
    (when block-id
      (sub :editor/content {:path-in-sub-atom block-id}))))
 
+(defn set-selection-start-block!
+  [start-block]
+  (set-state! :selection/start-block start-block))
+
+(defn get-selection-start-block
+  []
+  (or @(get @state :selection/start-block)
+      (when-let [edit-block (get-edit-block)]
+        (let [id (str "ls-block-" (:block/uuid edit-block))]
+          (set-selection-start-block! id)
+          id))))
+
 (defn get-cursor-range
   []
   @(:editor/cursor-range @state))
@@ -1128,14 +1139,6 @@ Similar to re-frame subscriptions"
   (when-let [input (get-input)]
     (util/get-selection-start input)))
 
-(defn get-selection-start-block
-  []
-  @(get @state :selection/start-block))
-
-(defn set-selection-start-block!
-  [start-block]
-  (set-state! :selection/start-block start-block))
-
 (defn get-selection-direction
   []
   @(:selection/direction @state))
@@ -1187,17 +1190,11 @@ Similar to re-frame subscriptions"
   ([blocks direction]
    (when (seq blocks)
      (let [blocks (vec (remove nil? blocks))]
-       (set-state! :selection/mode true)
        (set-selection-blocks-aux! blocks)
        (when direction (set-state! :selection/direction direction))))))
 
-(defn into-selection-mode!
-  []
-  (set-state! :selection/mode true))
-
 (defn state-clear-selection!
   []
-  (set-state! :selection/mode false)
   (set-state! :selection/blocks nil)
   (set-state! :selection/direction nil)
   (set-state! :selection/start-block nil)
@@ -1214,14 +1211,10 @@ Similar to re-frame subscriptions"
       (some-> (first (get-selection-blocks))
               (gobj/get "id"))))
 
-(defn in-selection-mode?
-  []
-  @(:selection/mode @state))
-
 (defn selection?
   "True sense of selection mode with valid selected block"
   []
-  (and (in-selection-mode?) (seq (get-selection-blocks))))
+  (seq (get-selection-blocks)))
 
 (defn conj-selection-block!
   [block-or-blocks direction]
@@ -1233,13 +1226,11 @@ Similar to re-frame subscriptions"
 
 (defn drop-selection-block!
   [block]
-  (set-state! :selection/mode true)
   (set-selection-blocks-aux! (-> (remove #(= block %) (get-unsorted-selection-blocks))
                                  vec)))
 
 (defn drop-selection-blocks-starts-with!
   [block]
-  (set-state! :selection/mode true)
   (let [blocks (get-unsorted-selection-blocks)
         blocks' (-> (take-while (fn [b] (not= (.-id b) (.-id block))) blocks)
                     vec
@@ -1250,7 +1241,6 @@ Similar to re-frame subscriptions"
   []
   (let [blocks @(:selection/blocks @state)
         blocks' (vec (butlast blocks))]
-    (set-state! :selection/mode true)
     (set-selection-blocks-aux! blocks')
     (last blocks)))
 
