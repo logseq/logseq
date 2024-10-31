@@ -137,6 +137,7 @@
                                   goog.debug.LOGGING_ENABLED true}
                :compiler-options {:infer-externs      :auto
                                   :output-feature-set :es-next
+                                  :source-map true
                                   :externs            ["datascript/externs.js"
                                                        "externs.js"]
                                   :warnings           {:fn-deprecated false
