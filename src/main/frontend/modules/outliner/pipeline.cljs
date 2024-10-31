@@ -19,6 +19,10 @@
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}]
     (when (= repo (state/get-current-repo))
+      (when (seq deleted-block-uuids)
+        (let [ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) deleted-block-uuids)]
+          (state/sidebar-remove-deleted-block! ids)))
+
       (let [conn (db/get-db repo false)]
         (cond
           initial-pages?

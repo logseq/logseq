@@ -37,9 +37,9 @@
   [repo idx block]
   (let [id (:block/uuid block)]
     (page/page-cp {:parameters  {:path {:name (str id)}}
-                :sidebar?    true
-                :sidebar/idx idx
-                :repo        repo})))
+                   :sidebar?    true
+                   :sidebar/idx idx
+                   :repo        repo})))
 
 (rum/defc page-cp < rum/reactive
   [repo page-name]
@@ -56,7 +56,6 @@
   [repo block idx sidebar-key ref?]
   (when-let [block-id (:block/uuid block)]
     [[:.flex.items-center {:class (when ref? "ml-2")}
-      (ui/icon "letter-n" {:class "text-md mr-2"})
       (block/breadcrumb {:id     "block-parent"
                          :block? true
                          :sidebar-key sidebar-key} repo block-id {:indent? false})]
@@ -349,11 +348,11 @@
      [])
 
     (rum/use-effect!
-      (fn []
+     (fn []
         ;; sidebar animation duration
-        (js/setTimeout
-          #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
-      [sidebar-open?])
+       (js/setTimeout
+        #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
+     [sidebar-open?])
 
     [:.resizer
      {:ref              el-ref

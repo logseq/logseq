@@ -26,7 +26,8 @@
             [frontend.mixins :as mixins]
             [logseq.shui.table.core :as table-core]
             [logseq.db :as ldb]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.db-mixins :as db-mixins]))
 
 (defn- get-latest-entity
   [e]
@@ -116,11 +117,20 @@
       (reduce + (filter number? col))
       (string/join ", " col))))
 
-(rum/defc block-container < rum/static
-  [config row]
-  (let [container (state/get-component :block/container)]
-    [:div.relative.w-full
-     (container config row)]))
+(rum/defcs block-container < rum/reactive db-mixins/query
+  (rum/local false ::deleted?)
+  [state config row table]
+  (let [*deleted? (::deleted? state)
+        container (state/get-component :block/container)
+        row' (db/sub-block (:db/id row))]
+    (if (nil? row')                    ; this row has been deleted
+      (when-not @*deleted?
+        (when-let [f (get-in table [:data-fns :set-data!])]
+          (f (remove (fn [r] (= (:id r) (:id row))) (:data table)))
+          (reset! *deleted? true)
+          nil))
+      [:div.relative.w-full
+       (container config row')])))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? add-tags-column?]
@@ -144,10 +154,12 @@
               :name "Name"
               :type :string
               :header header-cp
-              :cell (fn [_table row _column]
+              :cell (fn [table row _column]
                       (block-container (assoc config
                                               :raw-title? (ldb/asset? row)
-                                              :table? true) row))
+                                              :table? true)
+                                       row
+                                       table))
               :disable-hide? true})]
           (keep
            (fn [property]
@@ -1077,16 +1089,18 @@
                        :ref? true)))))
 
 (rum/defc gallery-card-item
-  [view-entity block config]
+  [table view-entity block config]
   [:div.ls-card-item.content
    {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
    [:div.-ml-4
     (block-container (assoc config
                             :id (str (:block/uuid block))
-                            :gallery-view? true) block)]])
+                            :gallery-view? true)
+                     block
+                     table)]])
 
 (rum/defcs gallery-view < rum/static mixins/container-id
-  [state config view-entity blocks *scroller-ref]
+  [state config table view-entity blocks *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))]
     [:div.ls-cards
      (when (seq blocks)
@@ -1096,7 +1110,7 @@
          :custom-scroll-parent (gdom/getElement "main-content-container")
          :item-content (fn [idx]
                          (when-let [block (nth blocks idx)]
-                           (gallery-card-item view-entity block config')))}))]))
+                           (gallery-card-item table view-entity block config')))}))]))
 
 (defn- run-effects!
   [option {:keys [data columns state data-fns]} input input-filters set-input-filters! *scroller-ref gallery?]
@@ -1212,7 +1226,7 @@
        (list-view (:config option) view-entity (:rows table))
 
        :logseq.property.view/type.gallery
-       (gallery-view (:config option) view-entity (:rows table) *scroller-ref)
+       (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
 
        (table-view table option row-selection add-new-object! *scroller-ref))]))
 

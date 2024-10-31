@@ -1297,6 +1297,15 @@ Similar to re-frame subscriptions"
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))
 
+(defn sidebar-remove-deleted-block!
+  [ids]
+  (let [ids-set (set ids)]
+    (update-state! :sidebar/blocks (fn [items]
+                                     (remove (fn [[repo id _]]
+                                               (and (= repo (get-current-repo)) (contains? ids-set id))) items)))
+    (when (empty? (:sidebar/blocks @state))
+      (hide-right-sidebar!))))
+
 (defn sidebar-remove-rest!
   [db-id]
   (update-state! :sidebar/blocks (fn [blocks]
