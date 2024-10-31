@@ -352,7 +352,7 @@
       "Add choices")]))
 
 (rum/defc choices-sub-pane < rum/reactive db-mixins/query
-  [property]
+  [property {:keys [disabled?]}]
   (let [values (:property/closed-values property)
         choices (doall
                  (keep (fn [value]
@@ -386,29 +386,30 @@
                                                    {:outliner-op :save-block})))})])
 
      ;; add choice
-     (dropdown-editor-menuitem
-      {:icon :plus :title "Add choice"
-       :item-props {:on-click
-                    (fn [^js e]
-                      (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))
-                              existing-values (seq (:property/closed-values property))
-                              values (if (seq existing-values)
-                                       (let [existing-ids (set (map :db/id existing-values))]
-                                         (remove (fn [id] (existing-ids id)) values))
-                                       values)]
-                        (shui/popup-show! (.-target e)
-                                          (fn [{:keys [id]}]
-                                            (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}
-                                                  values' (->> (if (contains? db-property-type/user-ref-property-types (get-in property [:block/schema :type]))
-                                                                 (map #(:block/uuid (db/entity %)) values)
-                                                                 values)
-                                                               (remove string/blank?)
-                                                               distinct)]
-                                              (if (seq values')
-                                                (add-existing-values property values' opts)
-                                                (choice-base-edit-form property {:create? true}))))
-                                          {:id :ls-base-edit-form
-                                           :align "start"})))}})]))
+     (when-not disabled?
+       (dropdown-editor-menuitem
+        {:icon :plus :title "Add choice"
+         :item-props {:on-click
+                      (fn [^js e]
+                        (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))
+                                existing-values (seq (:property/closed-values property))
+                                values (if (seq existing-values)
+                                         (let [existing-ids (set (map :db/id existing-values))]
+                                           (remove (fn [id] (existing-ids id)) values))
+                                         values)]
+                          (shui/popup-show! (.-target e)
+                                            (fn [{:keys [id]}]
+                                              (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}
+                                                    values' (->> (if (contains? db-property-type/user-ref-property-types (get-in property [:block/schema :type]))
+                                                                   (map #(:block/uuid (db/entity %)) values)
+                                                                   values)
+                                                                 (remove string/blank?)
+                                                                 distinct)]
+                                                (if (seq values')
+                                                  (add-existing-values property values' opts)
+                                                  (choice-base-edit-form property {:create? true}))))
+                                            {:id :ls-base-edit-form
+                                             :align "start"})))}}))]))
 
 (def position-labels
   {:properties {:icon :layout-distribute-horizontal :title "Block properties"}
@@ -530,7 +531,7 @@
        (let [values (:property/closed-values property)]
          (dropdown-editor-menuitem {:icon :list :title "Available choices"
                                     :desc (when (seq values) (str (count values) " choices"))
-                                    :submenu-content (fn [] (choices-sub-pane property))})))
+                                    :submenu-content (fn [] (choices-sub-pane property {:disabled? config/publishing?}))})))
 
      (let [many? (db-property/many? property)]
        (dropdown-editor-menuitem {:icon :checks :title "Multiple values"
@@ -555,10 +556,12 @@
                           (let [position (:position property-schema)]
                             (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
                                                        :item-props {:class "ui__position-trigger-item"}
+                                                       :disabled? config/publishing?
                                                        :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :position position)))})))
 
                         (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
                           (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
+                                                     :disabled? config/publishing?
                                                      :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
                                                                                                                       (assoc property-schema :hide? %) {})}))]
                        (remove nil?))]
