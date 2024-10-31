@@ -427,7 +427,7 @@
   (rum/local false ::hover?)
   [state page whiteboard-page? sidebar? container-id]
   (let [*hover? (::hover? state)
-        hover? (rum/react *hover?)]
+        hover? (and (rum/react *hover?) (not config/publishing?))]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
       :on-pointer-down (fn [e]

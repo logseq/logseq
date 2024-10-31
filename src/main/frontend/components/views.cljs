@@ -1248,5 +1248,9 @@
   (rum/local nil ::scroller-ref)
   [state view-entity option]
   (let [view-entity' (db/sub-block (:db/id view-entity))]
-    (rum/with-key (view-inner view-entity' option (::scroller-ref state))
+    (rum/with-key (view-inner view-entity'
+                              (cond-> option
+                                config/publishing?
+                                (dissoc :add-new-object!))
+                              (::scroller-ref state))
       (str "view-" (:db/id view-entity')))))
