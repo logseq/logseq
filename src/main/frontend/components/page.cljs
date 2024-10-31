@@ -428,17 +428,25 @@
   [state page whiteboard-page? sidebar? container-id]
   (let [*hover? (::hover? state)
         hover? (rum/react *hover?)]
-    [:div.ls-page-title.flex.flex-1.w-full.content.items-start
+    [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)
-                                                                  :page-entity page})))}
+                                                                  :page-entity page})))
+      :on-click (fn [e]
+                  (when-not (= (.-nodeName (.-target e)) "INPUT")
+                    (.preventDefault e)
+                    (when (gobj/get e "shiftKey")
+                      (state/sidebar-add-block!
+                       (state/get-current-repo)
+                       (:db/id page)
+                       :page))))}
 
      [:div.w-full.relative {:on-mouse-over #(reset! *hover? true)
                             :on-mouse-leave (fn []
                                               (reset! *hover? false))}
-      (when hover?
+      (when (and hover? (not= (:db/id (state/get-edit-block)) (:db/id page)))
         [:div.absolute.-top-3.left-0.fade-in
          [:div.flex.flex-row.items-center.gap-2
           (when-not (:logseq.property/icon (db/entity (:db/id page)))
