@@ -322,7 +322,7 @@
             (button
              {:button-props {:aria-label "Close"}
               :variant :ghost
-              :class "hover:bg-transparent hover:text-foreground"
+              :class "hover:bg-transparent hover:text-foreground scale-90"
               :on-click (fn []
                           (notification/clear! uid))
               :icon "x"})]]]]]])))
