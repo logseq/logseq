@@ -53,22 +53,20 @@
 }
 
 .ui__notifications {
-  position: fixed;
+  @apply fixed top-12 pointer-events-none w-full;
+
   z-index: var(--ls-z-index-level-4);
-  width: 100%;
-  top: 3.2em;
-  pointer-events: none;
 
   &-content {
-    @apply inset-0 flex items-end justify-center px-4 py-3
-    pointer-events-none sm:px-6 sm:py-3 sm:items-start
+    @apply inset-0 flex items-end justify-center px-4 py-2
+    pointer-events-none sm:px-6 sm:py-2 sm:items-start
     sm:justify-end;
   }
 
   .notification-area {
     @apply border;
 
-    background-color: or(--ls-notification-background, --lx-gray-03, --ls-tertiary-background-color, --rx-gray-03);
+    background-color: or(--ls-notification-background, --lx-gray-02, --ls-tertiary-background-color, --rx-gray-03);
     color: or(--ls-notification-text-color, --lx-gray-11, --ls-primary-text-color, --rx-gray-11);
 
     &:has(.ls-wrap-widen) {
