@@ -32,7 +32,8 @@
             "All default :db/ident namespaces start with logseq."))
 
       (testing "closed values"
-        (let [closed-value-ents (filter #(string/includes? (name (:db/ident %)) ".") ident-ents)
+        (let [closed-value-ents (filter #(and (string/includes? (name (:db/ident %)) ".")
+                                              (not (contains? #{:property/schema.classes} (:db/ident %)))) ident-ents)
               closed-value-properties (->> closed-value-ents
                                            (map :db/ident)
                                            (map #(keyword (namespace %) (string/replace (name %) #".[^.]+$" "")))
