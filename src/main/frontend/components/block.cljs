@@ -838,6 +838,14 @@
     [:span.warning.mr-1 {:title "Node ref invalid"}
      (->ref id)]))
 
+(defn inline-text
+  ([format v]
+   (inline-text {} format v))
+  ([config format v]
+   (when (string? v)
+     (let [inline-list (gp-mldoc/inline->edn v (mldoc/get-default-config format))]
+       [:div.inline.mr-1 (map-inline config inline-list)]))))
+
 (rum/defcs page-cp-inner < db-mixins/query rum/reactive
   {:init (fn [state]
            (let [page (last (:rum/args state))
@@ -881,7 +889,10 @@
                                                 :config config
                                                 :id (:block/uuid entity)}))
               inner))
-          (block-reference config (:block/uuid entity) nil))
+          (block-reference config (:block/uuid entity)
+                           (if (string? label)
+                             (gp-mldoc/inline->edn label (mldoc/get-default-config :markdown))
+                             label)))
 
         (and (:block/name page) (util/uuid-string? (:block/name page)))
         (invalid-node-ref (:block/name page))
@@ -1212,14 +1223,6 @@
                      inner)])))
             (invalid-node-ref id))))
       (invalid-node-ref id))))
-
-(defn inline-text
-  ([format v]
-   (inline-text {} format v))
-  ([config format v]
-   (when (string? v)
-     (let [inline-list (gp-mldoc/inline->edn v (mldoc/get-default-config format))]
-       [:div.inline.mr-1 (map-inline config inline-list)]))))
 
 (defn- render-macro
   [config name arguments macro-content format]
