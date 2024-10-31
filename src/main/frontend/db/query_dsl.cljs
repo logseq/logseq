@@ -391,14 +391,14 @@
        :rules [:has-page-property]})))
 
 (defn- build-tags
-  [e]
+  [db-graph? e]
   (let [tags (if (coll? (first (rest e)))
                (first (rest e))
                (rest e))
         tags (map (comp string/lower-case name) tags)]
     (when (seq tags)
       (let [tags (set (map (comp page-ref/get-page-name! string/lower-case name) tags))]
-        {:query (list 'tags '?p tags)
+        {:query (list 'tags (if db-graph? '?b '?p) tags)
          :rules [:tags]}))))
 
 (defn- build-page-tags
@@ -546,7 +546,7 @@ Some bindings in this fn:
        (build-page-property e env)
 
        (= 'tags fe)
-       (build-tags e)
+       (build-tags (:db-graph? env) e)
 
        (= 'page-tags fe)
        (build-page-tags e)
@@ -738,6 +738,7 @@ Some bindings in this fn:
                           #(sort-by % (fn [m prop] (get-in m [:block/properties prop])))
                           identity)
                transform-fn (comp sort-by' random-samples)]
+           (prn :debug :query query')
            (query-react/react-query repo
                                     {:query query'
                                      :query-string query-string
