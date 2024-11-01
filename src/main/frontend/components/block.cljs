@@ -2724,15 +2724,7 @@
                                             (block-content-on-pointer-down e block block-id content edit-input-id config))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
-              :key (str "block-content-" uuid)
-              :on-pointer-up (fn [e]
-                               (when (and
-                                      (not (string/includes? content "```"))
-                                      (not (gobj/get e "shiftKey"))
-                                      (not (util/meta-key? e)))
-                                 ;; clear highlighted text
-                                 (util/clear-selection!)))}
-
+              :key (str "block-content-" uuid)}
        (not slide?)
        (merge attrs))
 
