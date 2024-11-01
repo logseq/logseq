@@ -32,10 +32,19 @@
           (apply query-dsl/query args))))
     query-dsl/query))
 
+(defn- ->smart-query
+  "Updates to file version if js/process.env.DB_GRAPH is not set"
+  [query]
+  (if js/process.env.DB_GRAPH
+    (some-> query
+            (str/replace "(page-property" "(property")
+            (str/replace "(page-tags" "(tags"))
+    query))
+
 (defn- dsl-query
   [s]
   (db/clear-query-state!)
-  (when-let [result (dsl-query* test-helper/test-db s)]
+  (when-let [result (dsl-query* test-helper/test-db (->smart-query s))]
     (map first (deref result))))
 
 (defn- custom-query
@@ -202,57 +211,57 @@ prop-d:: [[nada]]"}])
                     {:file/path "pages/page4.md"
                      :file/content "parent:: [[child page 2]]\nfoo:: baz"}])
   (is (= ["page1" "page3" "page4"]
-         (map :block/name (dsl-query "(property parent)")))
+         (map :block/name (dsl-query "(page-property parent)")))
       "Pages have given property")
 
   (is (= #{"page1" "page3"}
-         (set (map :block/name (dsl-query "(property parent [[child page 1]])"))))
+         (set (map :block/name (dsl-query "(page-property parent [[child page 1]])"))))
       "Pages have property value that is a page and query is a page")
 
   (is (= #{"page1" "page3"}
-         (set (map :block/name (dsl-query "(property parent \"child page 1\")"))))
+         (set (map :block/name (dsl-query "(page-property parent \"child page 1\")"))))
       "Pages have property value that is a page and query is a string")
 
   (is (= ["page1"]
-         (map :block/name (dsl-query "(property parent [[child-no-space]])")))
+         (map :block/name (dsl-query "(page-property parent [[child-no-space]])")))
       "Pages have property value that is a page with no spaces")
 
   (is (= ["page3"]
          (map
           :block/name
-          (dsl-query "(and (property parent [[child page 1]]) (property parent [[child page 2]]))")))
+          (dsl-query "(and (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))")))
       "Page property queries ANDed")
 
   (is (= #{"page1" "page3" "page4"}
          (set
           (map
            :block/name
-           (dsl-query "(or (property parent [[child page 1]]) (property parent [[child page 2]]))"))))
+           (dsl-query "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"))))
       "Page property queries ORed")
 
   (is (= ["page1" "page3"]
          (map :block/name
-              (dsl-query "(and (property parent [[child page 1]]) (or (property foo baz) (property parent [[child page 2]])))"))))
+              (dsl-query "(and (page-property parent [[child page 1]]) (or (page-property foo baz) (page-property parent [[child page 2]])))"))))
 
   (is (= ["page4"]
          (map
           :block/name
-          (dsl-query "(and (property parent [[child page 2]]) (not (property foo bar)))")))
+          (dsl-query "(and (page-property parent [[child page 2]]) (not (page-property foo bar)))")))
       "Page property queries nested NOT in second clause")
 
   (is (= ["page4"]
          (map
           :block/name
-          (dsl-query "(and (not (property foo bar)) (property parent [[child page 2]]))")))
+          (dsl-query "(and (not (page-property foo bar)) (page-property parent [[child page 2]]))")))
       "Page property queries nested NOT in first clause")
 
   (testing "boolean values"
     (is (= ["page1"]
-           (map :block/name (dsl-query "(property interesting true)")))
+           (map :block/name (dsl-query "(page-property interesting true)")))
         "Boolean true")
 
     (is (= #{"page2" "page3"}
-           (set (map :block/name (dsl-query "(property interesting false)"))))
+           (set (map :block/name (dsl-query "(page-property interesting false)"))))
         "Boolean false")))
 
 (deftest page-property-queries
@@ -314,7 +323,7 @@ prop-d:: [[nada]]"}])
          (count (dsl-query "(and (task todo) (sample 1))")))
       "Correctly limits block results")
   (is (= 1
-         (count (dsl-query "(and (property foo) (sample 1))")))
+         (count (dsl-query "(and (page-property foo) (sample 1))")))
       "Correctly limits page results"))
 
 (deftest priority-queries
@@ -417,19 +426,19 @@ prop-d:: [[nada]]"}])
 
   (are [x y] (= (set y) (set (map :block/name (dsl-query x))))
 
-    "(tags [[page-tag-1]])"
+    "(page-tags [[page-tag-1]])"
     ["page1"]
 
-    "(tags page-tag-2)"
+    "(page-tags page-tag-2)"
     ["page1" "page2"]
 
-    "(tags page-tag-1 page-tag-2)"
+    "(page-tags page-tag-1 page-tag-2)"
     ["page1" "page2"]
 
-    "(tags page-TAG-1 page-tag-2)"
+    "(page-tags page-TAG-1 page-tag-2)"
     ["page1" "page2"]
 
-    "(tags [page-tag-1 page-tag-2])"
+    "(page-tags [page-tag-1 page-tag-2])"
     ["page1" "page2"]))
 
 (deftest block-content-query
@@ -631,7 +640,7 @@ created-at:: 1608968448116
 
       (testing "user page property rating"
         (is (= [10 8]
-               (->> (dsl-query "(and (property rating) (sort-by rating))")
+               (->> (dsl-query "(and (page-property rating) (sort-by rating))")
                     (map #(get-property-value % :rating)))))))))
 
 (deftest simplify-query
