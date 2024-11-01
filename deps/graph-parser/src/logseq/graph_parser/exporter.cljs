@@ -135,7 +135,7 @@
           (common-util/replace-ignore-case (str "#" tag) "")
           (common-util/replace-ignore-case (str "#" page-ref/left-brackets tag page-ref/right-brackets) "")))
     content
-    tags)
+    (sort > tags))
    (string/trim)))
 
 (defn- update-block-tags

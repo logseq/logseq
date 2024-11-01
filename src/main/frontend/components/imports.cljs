@@ -201,8 +201,9 @@
         [:span.text-sm.mr-2 "Import all tags"]
         (shui/checkbox {:default-checked convert-all-tags-input
                         :on-checked-change set-convert-all-tags-input!})]
-       [:div.text-sm
-        "Only import these tags. Tags are case insensitive and separated by commas"]]]
+       [:div
+        [:span.text-sm "Import only these tags. "]
+        [:span.text-xs "Tags are case insensitive and separated by commas"]]]]
      (shui/input
       {:class "my-2 mb-4"
        :default-value tag-classes-input
