@@ -168,11 +168,13 @@
   [initial-name on-graph-name-confirmed]
   (let [[graph-input set-graph-input!] (rum/use-state initial-name)
         [tag-classes-input set-tag-classes-input!] (rum/use-state "")
+        [convert-all-tags-input set-convert-all-tags-input!] (rum/use-state false)
         [property-classes-input set-property-classes-input!] (rum/use-state "")
         [property-parent-classes-input set-property-parent-classes-input!] (rum/use-state "")
         on-submit #(do (on-graph-name-confirmed
                         {:graph-name graph-input
                          :tag-classes tag-classes-input
+                         :convert-all-tags? convert-all-tags-input
                          :property-classes property-classes-input
                          :property-parent-classes property-parent-classes-input})
                        (shui/dialog-close!))]
@@ -195,11 +197,16 @@
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
         "(Optional) Tags to import as new tags:"]
-       [:span.text-xs
-        "Tags are case insensitive and separated by commas"]]]
+       [:div
+        [:span.text-sm.mr-2 "Import all tags"]
+        (shui/checkbox {:default-checked convert-all-tags-input
+                        :on-checked-change set-convert-all-tags-input!})]
+       [:div.text-sm
+        "Only import these tags. Tags are case insensitive and separated by commas"]]]
      (shui/input
       {:class "my-2 mb-4"
        :default-value tag-classes-input
+       :disabled convert-all-tags-input
        :on-change (fn [e]
                     (set-tag-classes-input! (util/evalue e)))
        :on-key-down (fn [e]
@@ -305,7 +312,7 @@
                    (fs/write-file! repo repo-dir (:path file) content {:skip-transact? true})))))))
 
 (defn- import-file-graph
-  [*files {:keys [graph-name tag-classes property-classes property-parent-classes]} config-file]
+  [*files {:keys [graph-name tag-classes convert-all-tags? property-classes property-parent-classes]} config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] "Config files")
   (p/let [start-time (t/now)
@@ -316,6 +323,7 @@
                    :tag-classes (set (string/split tag-classes #",\s*"))
                    :property-classes (set (string/split property-classes #",\s*"))
                    :property-parent-classes (set (string/split property-parent-classes #",\s*"))
+                   :convert-all-tags? convert-all-tags?
                    ;; common options
                    :notify-user show-notification
                    :set-ui-state state/set-state!

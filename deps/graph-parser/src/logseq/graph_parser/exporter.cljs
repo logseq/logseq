@@ -64,8 +64,10 @@
         new-uuid)))
 
 (defn- convert-tag? [tag-name {:keys [convert-all-tags? tag-classes]}]
-  (or convert-all-tags?
-      (contains? tag-classes tag-name)))
+  (and (or convert-all-tags?
+           (contains? tag-classes tag-name))
+       ;; Disallow tags as it breaks :block/tags
+       (not (contains? #{"tags"} tag-name))))
 
 (defn- convert-tag-to-class
   "Converts a tag block with class or returns nil if this tag should be removed
