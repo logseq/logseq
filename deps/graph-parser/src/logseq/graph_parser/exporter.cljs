@@ -1053,7 +1053,8 @@
         ;; transacted separately the property pages
         property-page-properties-tx (keep (fn [b]
                                             (when-let [page-properties (not-empty (db-property/properties b))]
-                                              (merge page-properties {:block/uuid (:block/uuid b)})))
+                                              (merge page-properties {:block/uuid (:block/uuid b)
+                                                                      :block/type "property"})))
                                           properties-tx)]
     {:pages-tx pages-tx'
      :property-pages-tx (concat property-pages-tx converted-property-pages-tx)
