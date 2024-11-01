@@ -138,9 +138,11 @@
                              add-tags-column? true}}]
   (let [;; FIXME: Shouldn't file graphs have :block/tags?
         add-tags-column?' (and (config/db-based-graph? (state/get-current-repo)) add-tags-column?)
-        properties' (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
-                      properties
-                      (conj properties (db/entity :block/tags)))]
+        properties' (->>
+                     (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
+                       properties
+                       (conj properties (db/entity :block/tags)))
+                     (remove nil?))]
     (->> (concat
           [{:id :select
             :name "Select"
@@ -163,7 +165,7 @@
               :disable-hide? true})]
           (keep
            (fn [property]
-             (let [ident (or (:db/ident property) (:id property))]
+             (when-let [ident (or (:db/ident property) (:id property))]
                ;; Hide properties that shouldn't ever be editable or that do not display well in a table
                (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
                                           :block/created-at :block/updated-at :block/order :block/collapsed?
