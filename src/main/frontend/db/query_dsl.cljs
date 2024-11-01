@@ -112,7 +112,7 @@
                  "h" t/hours
                  "n" t/minutes          ; min
                  t/days)]
-        (tc/to-long (t/plus (t/today) (tf duration)))))))
+        (tc/to-long (t/plus (t/now) (tf duration)))))))
 
 ;; Boolean operator utils: and, or, not
 ;; ======================
