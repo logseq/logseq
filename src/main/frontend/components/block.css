@@ -81,7 +81,19 @@
 }
 
 .page-ref {
-    @apply inline-flex items-center;
+  @apply inline;
+
+  .icon-emoji-wrap {
+    @apply relative top-[2px] pl-[1px];
+
+    &.as-emoji {
+      @apply top-0 pr-[1px];
+    }
+  }
+
+  .icon-cp-container {
+    @apply inline-flex items-center pr-0.5;
+  }
 }
 
 .breadcrumb {
@@ -341,7 +353,7 @@
 }
 
 .page-reference {
-  @apply inline-flex items-center rounded transition-[background];
+  @apply inline rounded transition-[background];
 
   .bracket {
     @apply opacity-30;
@@ -960,9 +972,11 @@ html.is-mac {
 
   > .code-block-actions {
     @apply absolute right-1 top-1 select-none z-[1] text-xs;
+
     button {
-        @apply !py-0 h-4 text-muted-foreground hover:text-foreground text-xs px-1;
+      @apply !py-0 h-4 text-muted-foreground hover:text-foreground text-xs px-1;
     }
+
     svg {
       width: 14px;
       height: 14px;
@@ -973,7 +987,7 @@ html.is-mac {
 .ls-resize-image {
   @apply flex relative;
 
-  .handle-left , .handle-right {
+  .handle-left, .handle-right {
     @apply absolute w-[6px] h-[15%] min-h-[30px] bg-black/30 hover:bg-black/70
     top-[50%] left-[5px] rounded-full cursor-col-resize select-none
     translate-y-[-20%] opacity-0 border border-gray-200;

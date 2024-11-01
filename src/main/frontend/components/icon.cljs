@@ -33,7 +33,7 @@
                (and (= :tabler-icon (:type icon')) (:id icon'))
                (ui/icon (:id icon') opts))]
     (if (:color? opts)
-      [:span.flex.items-center.ls-icon-color-wrap
+      [:span.inline-flex.items-center.ls-icon-color-wrap
        {:style {:color (or (some-> icon' :color) "inherit")}} item]
       item)))
 
@@ -63,8 +63,9 @@
   (let [opts' (assoc opts :size 14)
         node-icon (get-node-icon node-entity)]
     (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "page"} node-icon) (:not-text-or-page? opts)))
-      [:span.flex (merge {:style {:color (or (:color node-icon) "inherit")}}
-                         (select-keys opts [:class]))
+      [:span.icon-cp-container
+       (merge {:style {:color (or (:color node-icon) "inherit")}}
+         (select-keys opts [:class]))
        (icon node-icon opts')])))
 
 (defn- search-emojis
