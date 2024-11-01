@@ -941,8 +941,7 @@
         (map first
              (d/q '[:find (pull ?b [*])
                     :in $ ?p %
-                    :where (or (has-page-property ?b ?p)
-                               (has-property ?b ?p))]
+                    :where (has-property ?b ?p)]
                   db
                   property-ident
                   (rules/extract-rules rules/db-query-dsl-rules)))
