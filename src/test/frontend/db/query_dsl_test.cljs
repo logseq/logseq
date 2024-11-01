@@ -406,7 +406,7 @@ prop-d:: [[nada]]"}])
   ;        (dsl-query "(or (priority a) (not (priority c)))")))
   )
 
-(deftest page-tags-queries
+(deftest tags-queries
   (load-test-files
    [{:file/path "pages/page1.md"
      :file/content "tags:: [[page-tag-1]], [[page-tag-2]]"}
