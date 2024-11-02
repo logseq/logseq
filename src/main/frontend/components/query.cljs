@@ -14,7 +14,8 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [logseq.db :as ldb]))
 
 (defn- built-in-custom-query?
   [title]
@@ -131,6 +132,10 @@
   (let [collapsed?' (:collapsed? config)
         result' (rum/react *result)]
     (let [result (when *result (query-result/transform-query-result config q result'))
+          ;; Remove hidden pages from result
+          result (if (and (coll? result) (not (map? result)))
+                   (remove (fn [b] (when (and (map? b) (:block/title b)) (ldb/hidden? (:block/title b)))) result)
+                   result)
           ;; Args for displaying query header and results
           view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
           view-f (and view-fn (sci/eval-string (pr-str view-fn)))
