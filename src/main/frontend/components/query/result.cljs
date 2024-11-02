@@ -11,7 +11,8 @@
             [frontend.state :as state]
             [frontend.template :as template]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db :as ldb]))
 
 (defn trigger-custom-query!
   [config query *query-error set-result!]
@@ -36,7 +37,9 @@
                 (let [result (->> blocks
                                   (keep (fn [b]
                                           (when-not (= (:block/uuid b) current-block-uuid)
-                                            (db/entity [:block/uuid (:block/uuid b)])))))]
+                                            (let [entity (db/entity [:block/uuid (:block/uuid b)])]
+                                              (when-not (ldb/hidden? entity)
+                                                entity))))))]
                   (set-result! (atom result)))))
 
             :else
