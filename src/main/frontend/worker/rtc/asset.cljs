@@ -112,22 +112,6 @@
      (finally
        (reset! *assets-sync-lock nil)))))
 
-(def ^:private asset-change-event-schema
-  [:map-of
-   [:enum :download :upload
-    ;; Why don't need :delete event?
-    ;; when remove-block-op sync to server, server will know this asset need to be deleted
-    ;; :delete
-    ]
-   [:set :uuid]])
-
-(def ^:private asset-change-event-validator (ma/validator asset-change-event-schema))
-
-(defonce *global-asset-change-event (atom nil :validator asset-change-event-validator))
-
-(defonce ^:private global-asset-change-event-flow
-  (m/buffer 20 (m/watch *global-asset-change-event)))
-
 (defn create-assets-sync-loop
   [get-ws-create-task graph-uuid conn]
   (let [started-dfv         (m/dfv)
