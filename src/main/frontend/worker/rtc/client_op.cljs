@@ -40,7 +40,20 @@
      [:t :int]
      [:value [:map
               [:block-uuid :uuid]
-              [:av-coll [:sequential rtc-const/av-schema]]]]]]])
+              [:av-coll [:sequential rtc-const/av-schema]]]]]]
+
+   [:update-asset
+    [:catn
+     [:op :keyword]
+     [:t :int]
+     [:value [:map
+              [:block-uuid :uuid]]]]]
+   [:remove-asset
+    [:catn
+     [:op :keyword]
+     [:t :int]
+     [:value [:map
+              [:block-uuid :uuid]]]]]])
 
 (def ops-schema [:sequential op-schema])
 (def ops-coercer (ma/coercer ops-schema mt/json-transformer nil
@@ -232,3 +245,11 @@
           (emit! (datom-count @conn))
           (fn dtor []
             (d/unlisten! conn :create-pending-ops-count-flow))))))))
+
+;;; asset ops
+(defn add-asset-ops
+  [repo _asset-ops]
+  (let [conn (worker-state/get-client-ops-conn repo)]
+    (assert (some? conn) repo)
+    ;TODO
+    ))
