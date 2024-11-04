@@ -1212,7 +1212,7 @@
                 content-cp
                 (let [title [:span.block-ref content-cp]
                       inner (cond
-                              label
+                              (seq label)
                               (->elem
                                :span.block-ref
                                (map-inline config label))
