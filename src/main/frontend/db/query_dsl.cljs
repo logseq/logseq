@@ -478,7 +478,11 @@
    (or
     (list? (first e))
     (and (>= (count e) 2)
-         (string/starts-with? (str (first e)) "?")))))
+         (or
+          ;; variable
+          (string/starts-with? (str (first e)) "?")
+          ;; function
+          (list? (first e)))))))
 
 (defn build-query
   "This fn converts a form/list in a query e.g. `(operator arg1 arg2)` to its datalog
@@ -499,17 +503,20 @@ Some bindings in this fn:
                 fe
                 (symbol (string/lower-case (name fe)))))
          page-ref? (page-ref/page-ref? e)]
-     (when (or (and page-ref?
-                    (not (contains? #{'page-property 'page-tags} (:current-filter env))))
-               (contains? #{'between 'property 'todo 'task 'priority 'page} fe)
-               (and (not page-ref?) (string? e)))
+     (when (or
+            (:db-graph? env)
+            (and page-ref?
+                 (not (contains? #{'page-property 'page-tags} (:current-filter env))))
+            (contains? #{'between 'property 'todo 'task 'priority 'page} fe)
+            (and (not page-ref?) (string? e)))
        (reset! blocks? true))
      (cond
        (nil? e)
        nil
 
        (and (:db-graph? env) (datalog-clause? e))
-       {:query [e]}
+       {:query [e]
+        :rules []}
 
        page-ref?
        (build-page-ref e)
