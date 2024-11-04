@@ -170,8 +170,9 @@
   [:div.border.p-6.rounded.bg-gray-01.mt-4
    (let [form-ctx (form-core/use-form
                    {:defaultValues {:graph-name initial-name
-                                    :convert-all-tags false
+                                    :convert-all-tags? false
                                     :tag-classes ""
+                                    :remove-inline-tags? true
                                     :property-classes ""
                                     :property-parent-classes ""}
                     :yupSchema (-> (.object form-core/yup)
@@ -199,7 +200,7 @@
                               (shui/form-description
                                [:b.text-red-800 (:message error)])))))
 
-        (shui/form-field {:name "convert-all-tags"}
+        (shui/form-field {:name "convert-all-tags?"}
                          (fn [field]
                            (shui/form-item
                             {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
@@ -218,8 +219,17 @@
                             (shui/form-control
                              (shui/input (merge field
                                                 {:placeholder "tag 1, tag 2" :disabled convert-all-tags-input})))
-                            (shui/form-description
-                             "Tags are case insensitive"))))
+                            (shui/form-description "Tags are case insensitive"))))
+
+        (shui/form-field {:name "remove-inline-tags?"}
+                         (fn [field]
+                           (shui/form-item
+                            {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
+                            (shui/form-label "Remove inline tags")
+                            (shui/form-description "Default behavior for DB graphs")
+                            (shui/form-control
+                             (shui/checkbox {:checked (:value field)
+                                             :on-checked-change (:onChange field)})))))
 
         (shui/form-field {:name "property-classes"}
                          (fn [field _error]
@@ -310,7 +320,9 @@
                    (fs/write-file! repo repo-dir (:path file) content {:skip-transact? true})))))))
 
 (defn- import-file-graph
-  [*files {:keys [graph-name tag-classes convert-all-tags property-classes property-parent-classes]} config-file]
+  [*files
+   {:keys [graph-name tag-classes convert-all-tags? property-classes property-parent-classes remove-inline-tags?]}
+   config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] "Config files")
   (p/let [start-time (t/now)
@@ -321,7 +333,8 @@
                    :tag-classes (set (string/split tag-classes #",\s*"))
                    :property-classes (set (string/split property-classes #",\s*"))
                    :property-parent-classes (set (string/split property-parent-classes #",\s*"))
-                   :convert-all-tags? convert-all-tags
+                   :convert-all-tags? convert-all-tags?
+                   :remove-inline-tags? remove-inline-tags?
                    ;; common options
                    :notify-user show-notification
                    :set-ui-state state/set-state!
