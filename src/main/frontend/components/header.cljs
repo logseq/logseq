@@ -15,6 +15,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -100,9 +101,22 @@
 
 (rum/defc toolbar-dots-menu < rum/reactive
   [{:keys [current-repo t]}]
-  (let [page-menu (page-menu/page-menu (some-> (sidebar/get-current-page) (db/get-page)))
-        page-menu-and-hr (when (seq page-menu)
-                           (concat page-menu [{:hr true}]))
+  (let [page (some-> (sidebar/get-current-page) db/get-page)
+        page-menu (if (ldb/page? page)
+                    (page-menu/page-menu page)
+                    (when-not config/publishing?
+                      (when (config/db-based-graph?)
+                        (let [block-id-str (str (:block/uuid page))
+                              favorited? (page-handler/favorited? block-id-str)]
+                          [{:title   (if favorited?
+                                       (t :page/unfavorite)
+                                       (t :page/add-to-favorites))
+                            :options {:on-click
+                                      (fn []
+                                        (if favorited?
+                                          (page-handler/<unfavorite-page! block-id-str)
+                                          (page-handler/<favorite-page! block-id-str)))}}]))))
+        page-menu-and-hr (concat page-menu [{:hr true}])
         login? (and (state/sub :auth/id-token) (user-handler/logged-in?))
         items (fn []
                 (->>

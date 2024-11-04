@@ -210,6 +210,24 @@
     }
   }
 
+  &.is-with-icon {
+    &.bullet-closed {
+      .block-control .control-hide {}
+    }
+
+    .bullet-container {
+      .icon-cp-container {
+        @apply flex;
+      }
+
+      &.bullet-closed {
+        .ls-icon-color-wrap em-emoji {
+          @apply relative -top-[1px];
+        }
+      }
+    }
+  }
+
   &.bullet-hidden {
     padding-right: 2px;
   }
@@ -270,7 +288,7 @@
 }
 
 .block-control {
-  @apply decoration-0 text-sm cursor-default
+  @apply decoration-0 text-sm cursor-default mt-[1px]
   min-w-[22px] min-h-[22px] p-0.5 select-none opacity-40;
 
   .control-hide {

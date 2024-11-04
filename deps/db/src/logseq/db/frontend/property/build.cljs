@@ -34,6 +34,19 @@
     true
     sqlite-util/block-with-timestamps))
 
+(defn closed-values->blocks
+  [property]
+  (map (fn [{uuid' :uuid :keys [db-ident value icon]}]
+         (cond->
+          (build-closed-value-block
+           uuid'
+           value
+           property
+           {:db-ident db-ident :icon icon})
+           true
+           (assoc :block/order (db-order/gen-key))))
+       (:closed-values property)))
+
 (defn build-closed-values
   "Builds all the tx needed for property with closed values including
    the hidden page and closed value blocks as needed"
@@ -43,16 +56,7 @@
                                                                                      :ref-type? true})
                            property-attributes)]
     (into [property-tx]
-          (map (fn [{uuid' :uuid :keys [db-ident value icon]}]
-                 (cond->
-                  (build-closed-value-block
-                   uuid'
-                   value
-                   property
-                   {:db-ident db-ident :icon icon})
-                   true
-                   (assoc :block/order (db-order/gen-key))))
-               (:closed-values property)))))
+          (closed-values->blocks property))))
 
 (defn build-property-value-block
   "Builds a property value entity given a block map/entity, a property entity or
