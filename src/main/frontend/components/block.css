@@ -370,6 +370,12 @@
   &:hover {
     color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary))));
   }
+
+  &:has(.asset-ref.is-pdf) {
+    .asset-block-wrap {
+      @apply inline;
+    }
+  }
 }
 
 .asset-ref {
