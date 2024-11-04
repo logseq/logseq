@@ -698,7 +698,7 @@
        (let [own-icon (get page-entity (pu/get-pid :logseq.property/icon))
              emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
          (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true :not-text-or-page? true})]
-           [:span {:class (when emoji? "mr-1")}
+           [:span {:class (str "icon-emoji-wrap " (when emoji? "as-emoji"))}
             icon])))
      [:span
       (if (and (coll? children) (seq children))
@@ -2279,7 +2279,7 @@
       (text-block-title (dissoc config :raw-title?) block)
 
       (ldb/asset? block)
-      [:div.grid.grid-cols-1.justify-items-center
+      [:div.grid.grid-cols-1.justify-items-center.asset-block-wrap
        (asset-cp config block)
        (when (img-audio-video? block)
          [:div.text-xs.opacity-60.mt-1
@@ -2722,15 +2722,7 @@
                                             (block-content-on-pointer-down e block block-id content edit-input-id config))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
-              :key (str "block-content-" uuid)
-              :on-pointer-up (fn [e]
-                               (when (and
-                                      (not (string/includes? content "```"))
-                                      (not (gobj/get e "shiftKey"))
-                                      (not (util/meta-key? e)))
-                                 ;; clear highlighted text
-                                 (util/clear-selection!)))}
-
+              :key (str "block-content-" uuid)}
        (not slide?)
        (merge attrs))
 
@@ -3765,11 +3757,13 @@
                  (shui/button
                   {:variant :text
                    :size :sm
-                   :on-click (fn [e]
+                   :on-click (fn [^js e]
                                (util/stop-propagation e)
-                               (editor-handler/copy-block-content! block))}
-                  (ui/icon "copy")
-                  "Copy")]
+                               (when-let [^js cm (util/get-cm-instance (util/rec-get-node (.-target e) "ls-block"))]
+                                 (util/copy-to-clipboard! (.getValue cm))
+                                 (notification/show! "Copied!" :success)))}
+                   (ui/icon "copy")
+                   "Copy")]
                 (lazy-editor/editor config (str (d/squuid)) attr code options)
                 (let [options (:options options) block (:block config)]
                   (when (and (= language "clojure") (contains? (set options) ":results"))

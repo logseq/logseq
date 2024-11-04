@@ -75,7 +75,7 @@
   (string/replace input #"^#+" ""))
 
 (defn create-items [q]
-  (when-not (string/blank? q)
+  (when (and (not (string/blank? q)) (not config/publishing?))
     (let [class? (string/starts-with? q "#")]
       (->> [{:text (if class? "Create tag" "Create page")       :icon "new-page"
              :icon-theme :gray

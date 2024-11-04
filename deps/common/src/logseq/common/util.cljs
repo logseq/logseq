@@ -372,5 +372,5 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
 
 (defn clear-markdown-heading
   [content]
-  [:pre (string? content)]
+  {:pre [(string? content)]}
   (string/replace-first content markdown-heading-pattern ""))

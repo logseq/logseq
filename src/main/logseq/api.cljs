@@ -239,7 +239,7 @@
           sub-dir?       (string/starts-with? user-path path)
           _              (when-not sub-dir?
                            (log/info :debug user-path)
-                           (throw "write file denied"))
+                           (throw (js/Error. "write file denied")))
           user-path-root (util/node-path.dirname user-path)
           exist?         (fs/file-exists? user-path-root "")
           _              (when-not exist? (fs/mkdir-recur! user-path-root))
@@ -262,9 +262,9 @@
   (p/let [path      (util/node-path.join root-dir sub-root)
           user-path (util/node-path.join path file)
           sub-dir?  (string/starts-with? user-path path)
-          _         (when-not sub-dir? (log/info :debug user-path) (throw "read file denied"))
+          _         (when-not sub-dir? (log/info :debug user-path) (throw (js/Error. "read file denied")))
           exist?    (fs/file-exists? "" user-path)
-          _         (when-not exist? (log/info :debug user-path) (throw "file not existed"))
+          _         (when-not exist? (log/info :debug user-path) (throw (js/Error. "file not existed")))
           content   (fs/read-file "" user-path)]
     content))
 
@@ -284,9 +284,9 @@
           path      (util/node-path.join root-dir sub-root)
           user-path (util/node-path.join path file)
           sub-dir?  (string/starts-with? user-path path)
-          _         (when-not sub-dir? (log/info :debug user-path) (throw "access file denied"))
+          _         (when-not sub-dir? (log/info :debug user-path) (throw (js/Error. "access file denied")))
           exist?    (fs/file-exists? "" user-path)
-          _         (when-not exist? (log/info :debug user-path) (throw "file not existed"))
+          _         (when-not exist? (log/info :debug user-path) (throw (js/Error. "file not existed")))
           _         (fs/unlink! repo user-path {})]))
 
 (defn ^:private unlink_dotdir_file!
