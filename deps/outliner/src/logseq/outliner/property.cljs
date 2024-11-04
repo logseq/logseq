@@ -227,11 +227,21 @@
 (defn- find-or-create-property-value
   "Find or create a property value. Only to be used with properties that have ref types"
   [conn property-id v]
-  ;; FIXME: some properties should always create new values
-  (or (when-not (contains? #{:logseq.property/query} property-id)
-        (get-property-value-eid @conn property-id v))
+  (let [property (d/entity @conn property-id)
+        closed-values? (seq (:property/closed-values property))
+        default-type? (= :default (get-in property [:block/schema :type]))]
+    (cond
+      closed-values?
+      (get-property-value-eid @conn property-id v)
+
+      default-type?
       (let [v-uuid (create-property-text-block! conn nil property-id v {})]
-        (:db/id (d/entity @conn [:block/uuid v-uuid])))))
+        (:db/id (d/entity @conn [:block/uuid v-uuid])))
+
+      :else
+      (or (get-property-value-eid @conn property-id v)
+          (let [v-uuid (create-property-text-block! conn nil property-id v {})]
+            (:db/id (d/entity @conn [:block/uuid v-uuid])))))))
 
 (defn- convert-ref-property-value
   "Converts a ref property's value whether it's an integer or a string. Creates
