@@ -197,6 +197,7 @@
    :logseq.property.pdf/hl-page {:schema {:type :raw-number}}
    :logseq.property.pdf/hl-image {:schema {:type :entity :hide? true}}
    :logseq.property.pdf/hl-value {:schema {:type :map :hide? true}}
+   ;; FIXME: :logseq.property/order-list-type should updated to closed values
    :logseq.property/order-list-type {:name :logseq.order-list-type
                                      :schema {:type :default
                                               :hide? true}}
