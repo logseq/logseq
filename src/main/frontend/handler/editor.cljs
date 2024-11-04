@@ -906,11 +906,6 @@
     (set-blocks-id! [block-id])
     (util/copy-to-clipboard! (tap-clipboard block-id)))))
 
-(defn copy-block-content!
-  [block]
-  (util/copy-to-clipboard! (:block/title block))
-  (notification/show! "Copied!" :success))
-
 (defn select-block!
   [block-uuid]
   (block-handler/select-block! block-uuid))
@@ -1564,10 +1559,10 @@
                   _ (when (util/electron?)
                       (if-let [from (not-empty (.-path file))]
                         (-> (js/window.apis.copyFileToAssets dir file-rpath from)
-                          (p/catch #(js/console.error "Debug: Copy Asset Error#" %)))
+                            (p/catch #(js/console.error "Debug: Copy Asset Error#" %)))
                         (-> (p/let [buffer (.arrayBuffer file)]
                               (fs/write-file! repo dir file-rpath buffer {:skip-compare? false}))
-                          (p/catch #(js/console.error "Debug: Writing Asset #" %)))))
+                            (p/catch #(js/console.error "Debug: Writing Asset #" %)))))
                   insert-opts' (if (and (:block/uuid edit-block)
                                         (string/blank? (:block/title edit-block)))
                                  (assoc insert-opts
