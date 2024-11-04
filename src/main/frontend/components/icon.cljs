@@ -60,7 +60,7 @@
 
 (defn get-node-icon-cp
   [node-entity opts]
-  (let [opts' (assoc opts :size 14)
+  (let [opts' (merge {:size 14} opts)
         node-icon (get-node-icon node-entity)]
     (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "page"} node-icon) (:not-text-or-page? opts)))
       [:span.icon-cp-container
