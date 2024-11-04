@@ -1,26 +1,24 @@
 (ns logseq.outliner.property
   "Property related operations"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.db-ident :as db-ident]
-            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.validate :as outliner-validate]
             [malli.error :as me]
-            [malli.util :as mu]
-            [malli.core :as m]
-            [malli.error :as me]
-            [clojure.set :as set]))
+            [malli.util :as mu]))
 
 (defn- throw-error-if-read-only-property
   [property-ident]
