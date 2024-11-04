@@ -57,6 +57,10 @@
                                                :cardinality :many
                                                :public? true
                                                :view-context :never}}
+   :logseq.property/hide-empty-value {:title "Hide empty value"
+                                      :schema {:type :checkbox
+                                               :public? true
+                                               :view-context :property}}
    :logseq.property.class/hide-from-node {:title "Hide from Node"
                                           :schema {:type :checkbox
                                                    :public? true
@@ -147,7 +151,8 @@
           [[:logseq.task/priority.low "Low" "priorityLvlLow"]
            [:logseq.task/priority.medium "Medium" "priorityLvlMedium"]
            [:logseq.task/priority.high "High" "priorityLvlHigh"]
-           [:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]])}
+           [:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]])
+    :properties {:logseq.property/hide-empty-value true}}
    :logseq.task/status
    {:title "Status"
     :schema
@@ -165,12 +170,14 @@
            [:logseq.task/status.doing "Doing" "InProgress50"]
            [:logseq.task/status.in-review "In Review" "InReview"]
            [:logseq.task/status.done "Done" "Done"]
-           [:logseq.task/status.canceled "Canceled" "Cancelled"]])}
+           [:logseq.task/status.canceled "Canceled" "Cancelled"]])
+    :properties {:logseq.property/hide-empty-value true}}
    :logseq.task/deadline
    {:title "Deadline"
     :schema {:type :date
              :public? true
-             :position :block-below}}
+             :position :block-below}
+    :properties {:logseq.property/hide-empty-value true}}
 
    ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 

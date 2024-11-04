@@ -563,7 +563,13 @@
                           (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
                                                      :disabled? config/publishing?
                                                      :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
-                                                                                                                      (assoc property-schema :hide? %) {})}))]
+                                                                                                                      (assoc property-schema :hide? %) {})}))
+                        (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+                          (dropdown-editor-menuitem {:icon :eye-off :title "Hide empty value" :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
+                                                     :disabled? config/publishing?
+                                                     :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
+                                                                                                                         :logseq.property/hide-empty-value
+                                                                                                                         (not (:logseq.property/hide-empty-value property)))}))]
                        (remove nil?))]
        (when (> (count group') 0)
          (cons (shui/dropdown-menu-separator) group')))

@@ -136,6 +136,14 @@
                         :block/name (common-util/page-name-sanity-lc new-title)})))
             classes-to-rename))))
 
+(defn- set-hide-empty-value
+  [_conn _search-db]
+  (map
+   (fn [k]
+     {:db/ident k
+      :logseq.property/hide-empty-value true})
+   [:logseq.task/status :logseq.task/priority :logseq.task/deadline]))
+
 (defn- update-block-type-many->one
   [conn _search-db]
   (let [db @conn
@@ -368,7 +376,9 @@
         :fix add-pdf-annotation-class}]
    [41 {:fix (rename-classes {:logseq.class/pdf-annotation :logseq.class/Pdf-annotation})}]
    [42 {:fix (rename-properties {:logseq.property/hl-color :logseq.property.pdf/hl-color
-                                 :logseq.property/hl-type :logseq.property.pdf/hl-type})}]])
+                                 :logseq.property/hl-type :logseq.property.pdf/hl-type})}]
+   [43 {:properties [:logseq.property/hide-empty-value]
+        :fix set-hide-empty-value}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
