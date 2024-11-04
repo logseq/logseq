@@ -2052,9 +2052,18 @@
         order-list-idx     (:own-order-list-index config)
         collapsable?       (editor-handler/collapsable? uuid {:semantic? true
                                                               :ignore-children? (:page-title? config)})
-        link?              (boolean (:original-block config))]
+        link?              (boolean (:original-block config))
+        icon-size          (if collapsed? 12 14)
+        icon               (icon-component/get-node-icon-cp block {:size icon-size :color? true})
+        with-icon?          (and (some? icon)
+                             (or (db/page? block)
+                               (:logseq.property/icon block)
+                               link?
+                               (some :logseq.property/icon (:block/tags block))
+                               (contains? #{"pdf"} (:logseq.property.asset/type block))))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
      {:class (util/classnames [{:is-order-list order-list?
+                                :is-with-icon  with-icon?
                                 :bullet-closed collapsed?
                                 :bullet-hidden (:hide-bullet? config)}])}
      (when (and (or (not fold-button-right?) collapsable?) (not (:table? config)))
@@ -2092,25 +2101,15 @@
                                      " hide-inner-bullet")
                                    (when order-list? " as-order-list typed-list"))}
 
-                      (let [icon-size (if collapsed? 12 14)
-                            icon (icon-component/get-node-icon-cp block {:size icon-size :color? true})]
-                        (cond
-                          (and (some? icon)
-                               (or (db/page? block)
-                                   (:logseq.property/icon block)
-                                   link?
-                                   (some :logseq.property/icon (:block/tags block))
-                                   (contains? #{"pdf"} (:logseq.property.asset/type block))))
-                          icon
-
-                          :else
-                          [:span.bullet (cond->
-                                         {:blockid (str uuid)}
-                                          selected?
-                                          (assoc :class "selected"))
-                           (when
-                            order-list?
-                             [:label (str order-list-idx ".")])]))]]]
+                      (if with-icon?
+                        icon
+                        [:span.bullet (cond->
+                                        {:blockid (str uuid)}
+                                        selected?
+                                        (assoc :class "selected"))
+                         (when
+                           order-list?
+                           [:label (str order-list-idx ".")])])]]]
          (cond
            (and (or (mobile-util/native-platform?)
                     (:ui/show-empty-bullets? (state/get-config))
