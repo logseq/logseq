@@ -3759,11 +3759,13 @@
                  (shui/button
                   {:variant :text
                    :size :sm
-                   :on-click (fn [e]
+                   :on-click (fn [^js e]
                                (util/stop-propagation e)
-                               (editor-handler/copy-block-content! block))}
-                  (ui/icon "copy")
-                  "Copy")]
+                               (when-let [^js cm (util/get-cm-instance (util/rec-get-node (.-target e) "ls-block"))]
+                                 (util/copy-to-clipboard! (.getValue cm))
+                                 (notification/show! "Copied!" :success)))}
+                   (ui/icon "copy")
+                   "Copy")]
                 (lazy-editor/editor config (str (d/squuid)) attr code options)
                 (let [options (:options options) block (:block config)]
                   (when (and (= language "clojure") (contains? (set options) ":results"))
