@@ -906,11 +906,6 @@
     (set-blocks-id! [block-id])
     (util/copy-to-clipboard! (tap-clipboard block-id)))))
 
-(defn copy-block-content!
-  [block]
-  (util/copy-to-clipboard! (:block/title block))
-  (notification/show! "Copied!" :success))
-
 (defn select-block!
   [block-uuid]
   (block-handler/select-block! block-uuid))
