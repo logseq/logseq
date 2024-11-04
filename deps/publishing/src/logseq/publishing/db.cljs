@@ -114,7 +114,7 @@
        (= :block/properties (:a datom))
        (= (keyword (get (:v datom) :hl-type)) :area)))))
 
-(defn- get-assets
+(defn- get-file-assets
   [db datoms]
   (let [pull (fn [eid db]
                (d/pull db '[*] eid))
@@ -162,6 +162,13 @@
        (map first)
        set))
 
+(defn- get-db-assets
+  [db]
+  (->> (d/q '[:find [(pull ?b [:block/uuid :logseq.property.asset/type]) ...]
+              :where [?b :block/tags :logseq.class/Asset]]
+            db)
+       (map #(str (:block/uuid %) "." (:logseq.property.asset/type %)))))
+
 (defn clean-export!
   "Prepares a database assuming all pages are public unless a page has a 'public:: false'"
   [db {:keys [db-graph?]}]
@@ -176,7 +183,7 @@
                                        (not (contains? #{:block/file} (:a datom)))
                                        (not (contains? non-public-datom-ids (:e datom)))))))
         datoms (d/datoms filtered-db :eavt)
-        assets (get-assets db datoms)]
+        assets (if db-graph? (get-db-assets filtered-db) (get-file-assets db datoms))]
     ;; (prn :datoms (count datoms) :assets (count assets))
     [@(d/conn-from-datoms datoms (:schema db)) assets]))
 
@@ -221,6 +228,6 @@
                     (partial file-filter-only-public public-pages))
         filtered-db (d/filter db filter-fn)
         datoms (d/datoms filtered-db :eavt)
-        assets (get-assets db datoms)]
+        assets (if db-graph? (get-db-assets filtered-db) (get-file-assets db datoms))]
     ;; (prn :counts :internal (count internal-ents) :datoms (count datoms) :assets (count assets))
     [@(d/conn-from-datoms datoms (:schema db)) assets]))
