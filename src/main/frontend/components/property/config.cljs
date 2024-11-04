@@ -548,9 +548,11 @@
                                             (p/then update-cardinality-fn))
                                         (update-cardinality-fn))))}))
 
-     (let [group' (->> [(when (and (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+     (let [property-type (get-in property [:block/schema :type])
+           group' (->> [(when (and (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+                                   (contains? #{:default :number :date :checkbox :node} property-type)
                                    (not
-                                    (and (= :default (get-in property [:block/schema :type]))
+                                    (and (= :default property-type)
                                          (empty? (:property/closed-values property))
                                          (contains? #{nil :properties} (:position property-schema)))))
                           (let [position (:position property-schema)]
