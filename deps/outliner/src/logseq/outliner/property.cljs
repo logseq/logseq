@@ -241,7 +241,9 @@
       closed-values?
       (get-property-value-eid @conn property-id v)
 
-      default-type?
+      (and default-type?
+           ;; FIXME: remove this when :logseq.property/order-list-type updated to closed values
+           (not= property-id :logseq.property/order-list-type))
       (let [v-uuid (create-property-text-block! conn nil property-id v {})]
         (:db/id (d/entity @conn [:block/uuid v-uuid])))
 
