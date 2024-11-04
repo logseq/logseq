@@ -63,9 +63,9 @@
   (let [opts' (merge {:size 14} opts)
         node-icon (get-node-icon node-entity)]
     (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "page"} node-icon) (:not-text-or-page? opts)))
-      [:span.icon-cp-container
+      [:div.icon-cp-container.flex.items-center
        (merge {:style {:color (or (:color node-icon) "inherit")}}
-         (select-keys opts [:class]))
+              (select-keys opts [:class]))
        (icon node-icon opts')])))
 
 (defn- search-emojis
