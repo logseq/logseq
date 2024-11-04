@@ -104,7 +104,7 @@
 
 (defn- select-type?
   [property type]
-  (or (contains? #{:node :number :url :date :page :class :property} type)
+  (or (contains? #{:node :number :date :page :class :property} type)
     ;; closed values
       (seq (:property/closed-values property))))
 
@@ -779,12 +779,7 @@
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
         inline-text-cp (fn [content]
                          [:div.flex.flex-row.items-center
-                          (inline-text {} :markdown (macro-util/expand-value-if-macro content (state/get-macros)))
-                          (when (and (= type :url) other-position?)
-                            (shui/button {:variant :ghost
-                                          :size :sm
-                                          :class "px-0 py-0 h-4"}
-                                         (ui/icon "edit" {:size 14})))])]
+                          (inline-text {} :markdown (macro-util/expand-value-if-macro content (state/get-macros)))])]
     [:div.select-item.cursor-pointer
      (cond
        (= value :logseq.property/empty-placeholder)
@@ -835,7 +830,7 @@
           popup-content (fn content-fn [_]
                           [:div.property-select
                            (case type
-                             (:number :url :default)
+                             (:number :default)
                              (select block property select-opts' opts)
 
                              (:node :class :property :page :date)
@@ -883,10 +878,10 @@
                   (when (and (= type :default) (nil? value))
                     (<create-new-block! block property "")))}
      (cond
-       (and (= type :default) (nil? (:block/title value)))
+       (and (contains? #{:default :url} type) (nil? (:block/title value)))
        [:div.jtrigger (property-empty-btn-value property)]
 
-       (#{:default :entity} type)
+       (#{:default :url :entity} type)
        (property-block-value value block property page-cp)
 
        :else
@@ -1035,7 +1030,7 @@
                      (properties-cp {} block {:selected? false
                                               :class-schema? true})
 
-                     (and multiple-values? (= type :default) (not closed-values?))
+                     (and multiple-values? (contains? #{:default :url} type) (not closed-values?))
                      (property-normal-block-value block property v)
 
                      multiple-values?

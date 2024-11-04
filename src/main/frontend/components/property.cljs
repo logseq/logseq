@@ -112,7 +112,8 @@
                    (p/do!
                     (ui/hide-popups-until-preview-popup!)
                     (pv/<add-property! block (:db/ident property) false {:exit-edit? true}))
-                   (and block (= type :default)
+                   (and block
+                        (contains? #{:default :url} type)
                         (not (seq (:property/closed-values property))))
                    (pv/<create-new-block! block property "")))))))}
 
@@ -209,7 +210,7 @@
              (shui/dialog-close!)
              (pv/<add-property! block (:db/ident property) false {:exit-edit? true}))
 
-            (and (= :default type)
+            (and (contains? #{:default :url} type)
                  (not (seq (:property/closed-values property))))
             (pv/<create-new-block! block property "")
 
@@ -424,7 +425,7 @@
                             (and (coll? v)
                                  (map? (first v))
                                  (:block/page (first v))))
-                        (contains? #{:default} type))
+                        (contains? #{:default :url} type))
             date? (= type :date)
             datetime? (= type :datetime)
             checkbox? (= type :checkbox)
