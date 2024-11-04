@@ -2092,7 +2092,8 @@
                                      " hide-inner-bullet")
                                    (when order-list? " as-order-list typed-list"))}
 
-                      (let [icon (icon-component/get-node-icon-cp block {:size 16 :color? true})]
+                      (let [icon-size (if collapsed? 12 14)
+                            icon (icon-component/get-node-icon-cp block {:size icon-size :color? true})]
                         (cond
                           (and (some? icon)
                                (or (db/page? block)
