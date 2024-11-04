@@ -182,6 +182,28 @@
     ;; migrate data
     (concat color-update-tx page-update-tx)))
 
+(defn- store-url-value-in-block-title
+  [conn _search-db]
+  (let [db @conn
+        url-properties (->> (d/datoms db :avet :block/type "property")
+                            (keep (fn [datom]
+                                    (let [property (d/entity db (:e datom))
+                                          type (get-in property [:block/schema :type])]
+                                      (when (= type :url)
+                                        property)))))
+        datoms (mapcat
+                (fn [property]
+                  (d/datoms db :avet (:db/ident property)))
+                url-properties)]
+    (mapcat
+     (fn [datom]
+       (if-let [url-block (when (integer? (:v datom)) (d/entity db (:v datom)))]
+         (let [url-value (db-property/property-value-content url-block)]
+           [[:db/retract (:db/id url-block) :property.value/content]
+            [:db/add (:db/id url-block) :block/title url-value]])
+         [[:db/retract (:e datom) (:a datom)]]))
+     datoms)))
+
 (defn- update-block-type-many->one
   [conn _search-db]
   (let [db @conn
@@ -418,7 +440,8 @@
    [43 {:properties [:logseq.property/hide-empty-value]
         :fix set-hide-empty-value}]
    [44 {:fix update-hl-color-and-page}]
-   [45 {:properties [:kv/value :block/type :block/schema :block/parent
+   [45 {:fix store-url-value-in-block-title}]
+   [46 {:properties [:kv/value :block/type :block/schema :block/parent
                      :block/order :block/collapsed? :block/page
                      :block/refs :block/path-refs :block/link
                      :block/title :block/closed-value-property

@@ -2307,7 +2307,18 @@
       [:span.opacity-50 "Set query title"]
 
       :else
-      (text-block-title config block))))
+      [:span
+       (text-block-title config block)
+       (when-let [property (:logseq.property/created-from-property block)]
+         (when-let [message (when (= :url (get-in property [:block/schema :type]))
+                              (first (outliner-property/validate-property-value (db/get-db) property (:db/id block))))]
+           (ui/tooltip
+            (shui/button
+             {:size :sm
+              :variant :ghost
+              :class "ls-type-warning px-1 !py-0 h-4 ml-1"}
+             (ui/icon "alert-triangle"))
+            [:div.opacity-75 message])))])))
 
 (rum/defc span-comma
   []
