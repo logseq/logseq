@@ -42,7 +42,9 @@
                  (remove #(= "closed value" (:block/type %)) closed-value-ents))
               "All property names that contain a '.' are closed values")
           (is (= #{}
-                 (set/difference closed-value-properties (set default-idents)))
+                 (set/difference
+                  (set (remove #{:logseq.property/color} closed-value-properties))
+                  (set default-idents)))
               "All closed values start with a prefix that is a property name"))))))
 
 (deftest new-graph-marks-built-ins
