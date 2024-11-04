@@ -2279,7 +2279,7 @@
       (text-block-title (dissoc config :raw-title?) block)
 
       (ldb/asset? block)
-      [:div.grid.grid-cols-1.justify-items-center
+      [:div.grid.grid-cols-1.justify-items-center.asset-block-wrap
        (asset-cp config block)
        (when (img-audio-video? block)
          [:div.text-xs.opacity-60.mt-1
