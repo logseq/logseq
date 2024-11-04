@@ -185,6 +185,12 @@
   }
 }
 
+.property-value-inner {
+  .select-item {
+    @apply flex items-center shrink;
+  }
+}
+
 .block-main-container .ls-properties-area {
   margin-top: 0.25em;
 }

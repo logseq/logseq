@@ -592,15 +592,19 @@
         state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
-                                (cond
-                                  show-empty-and-hidden-properties?
-                                  false
-                                  root-block?
-                                  false
-                                  state-hide-empty-properties?
-                                  (nil? (get block property-id))
-                                  :else
-                                  (boolean (:hide? (:block/schema (db/entity property-id))))))
+                                (let [property (db/entity property-id)]
+                                  (cond
+                                    show-empty-and-hidden-properties?
+                                    false
+                                    root-block?
+                                    false
+                                    (and (:logseq.property/hide-empty-value property)
+                                         (nil? (get properties property-id)))
+                                    true
+                                    state-hide-empty-properties?
+                                    (nil? (get block property-id))
+                                    :else
+                                    (boolean (:hide? (:block/schema property))))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they

@@ -400,6 +400,8 @@
         schema (:block/schema property)]
     (and
      (= (:position schema) position)
+     (not (and (:logseq.property/hide-empty-value property)
+               (nil? (get block-properties property-id))))
      (not (get-in property [:block/schema :hide?]))
      (not (and
            (= (:position schema) :block-below)

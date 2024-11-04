@@ -136,6 +136,52 @@
                         :block/name (common-util/page-name-sanity-lc new-title)})))
             classes-to-rename))))
 
+(defn- set-hide-empty-value
+  [_conn _search-db]
+  (map
+   (fn [k]
+     {:db/ident k
+      :logseq.property/hide-empty-value true})
+   [:logseq.task/status :logseq.task/priority :logseq.task/deadline]))
+
+(defn- update-hl-color-and-page
+  [conn _search-db]
+  (let [db @conn
+        hl-color (d/entity db :logseq.property.pdf/hl-color)
+        hl-page (d/entity db :logseq.property.pdf/hl-page)
+        existing-colors (d/datoms db :avet :logseq.property.pdf/hl-color)
+        color-update-tx (mapcat
+                         (fn [datom]
+                           (let [block (d/entity db (:v datom))
+                                 color-ident (keyword "logseq.property" (str "color." (:block/title block)))]
+                             (if block
+                               [[:db/add (:e datom) :logseq.property.pdf/hl-color color-ident]
+                                [:db/retractEntity (:db/id block)]]
+                               [[:db/retract (:e datom) :logseq.property.pdf/hl-color]])))
+                         existing-colors)
+        page-datoms (d/datoms db :avet :logseq.property.pdf/hl-page)
+        page-update-tx (mapcat
+                        (fn [datom]
+                          (let [block (d/entity db (:v datom))
+                                value (db-property/property-value-content block)]
+                            (if (integer? value)
+                              [[:db/add (:e datom) :logseq.property.pdf/hl-page value]
+                               [:db/retractEntity (:db/id block)]]
+                              [[:db/retract (:e datom) :logseq.property.pdf/hl-page]])))
+                        page-datoms)]
+    ;; update schema first
+    (d/transact! conn
+                 (concat
+                  [{:db/ident :logseq.property.pdf/hl-page
+                    :block/schema {:type :raw-number}}
+                   [:db/retract (:db/id hl-page) :db/valueType]
+                   {:db/ident :logseq.property.pdf/hl-color
+                    :block/schema {:type :default}}]
+                  (db-property-build/closed-values->blocks
+                   (assoc hl-color :closed-values (get-in db-property/built-in-properties [:logseq.property.pdf/hl-color :closed-values])))))
+    ;; migrate data
+    (concat color-update-tx page-update-tx)))
+
 (defn- update-block-type-many->one
   [conn _search-db]
   (let [db @conn
@@ -369,7 +415,10 @@
    [41 {:fix (rename-classes {:logseq.class/pdf-annotation :logseq.class/Pdf-annotation})}]
    [42 {:fix (rename-properties {:logseq.property/hl-color :logseq.property.pdf/hl-color
                                  :logseq.property/hl-type :logseq.property.pdf/hl-type})}]
-   [43 {:properties [:kv/value :block/type :block/schema :block/parent
+   [43 {:properties [:logseq.property/hide-empty-value]
+        :fix set-hide-empty-value}]
+   [44 {:fix update-hl-color-and-page}]
+   [45 {:properties [:kv/value :block/type :block/schema :block/parent
                      :block/order :block/collapsed? :block/page
                      :block/refs :block/path-refs :block/link
                      :block/title :block/closed-value-property

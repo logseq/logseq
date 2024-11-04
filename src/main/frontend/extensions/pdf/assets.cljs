@@ -158,23 +158,27 @@
           (println "[existed ref block]" ref-block)
           ref-block)
         (let [text       (:text content)
-              properties (cond->
-                          {:block/tags :logseq.class/Pdf-annotation
-                           :logseq.property/ls-type  :annotation
-                           :logseq.property.pdf/hl-color (:color properties)
-                           :logseq.property/asset (:db/id pdf-block)
-                           :logseq.property.pdf/hl-page  page
-                           :logseq.property.pdf/hl-value hl}
-                           (:image content)
-                           (assoc :logseq.property.pdf/hl-type :area
-                                  :logseq.property.pdf/hl-image (:image content)))]
-          (when (string? text)
-            (editor-handler/api-insert-new-block!
-             text (merge {:block-uuid (:block/uuid pdf-block)
-                          :sibling? false
-                          :custom-uuid id
-                          :properties properties}
-                         (assoc insert-opts :edit-block? false)))))))))
+              colors     (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
+              color-id   (some (fn [color] (when (= (:block/title color) (:color properties))
+                                             (:db/id color))) colors)]
+          (when color-id
+            (let [properties (cond->
+                              {:block/tags :logseq.class/Pdf-annotation
+                               :logseq.property/ls-type  :annotation
+                               :logseq.property.pdf/hl-color color-id
+                               :logseq.property/asset (:db/id pdf-block)
+                               :logseq.property.pdf/hl-page  page
+                               :logseq.property.pdf/hl-value hl}
+                               (:image content)
+                               (assoc :logseq.property.pdf/hl-type :area
+                                      :logseq.property.pdf/hl-image (:image content)))]
+              (when (string? text)
+                (editor-handler/api-insert-new-block!
+                 text (merge {:block-uuid (:block/uuid pdf-block)
+                              :sibling? false
+                              :custom-uuid id
+                              :properties properties}
+                             (assoc insert-opts :edit-block? false)))))))))))
 
 (defn ensure-ref-block!
   [pdf-current hl insert-opts]
@@ -285,8 +289,13 @@
   [highlight]
   (when-let [block (db-model/get-block-by-uuid (:id highlight))]
     (when-let [color (get-in highlight [:properties :color])]
-      (let [k (pu/get-pid :logseq.property.pdf/hl-color)]
-        (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k color)))))
+      (let [k (pu/get-pid :logseq.property.pdf/hl-color)
+            color' (if (config/db-based-graph?)
+                     (let [colors     (:property/closed-values (db/entity :logseq.property.pdf/hl-color))]
+                       (some (fn [color-block] (when (= (:block/title color-block) color)
+                                                 (:db/id color-block))) colors))
+                     color)]
+        (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k color')))))
 
 (defn unlink-hl-area-image$
   [^js _viewer current hl]
