@@ -1135,11 +1135,12 @@
              new-data (map get-latest-entity data)
              ;; TODO: db support native order-by, limit, offset, 350ms for 40k pages
              data' (table-core/table-sort-rows new-data sorting columns)]
-         (set-data! data')
+         (when (not= data' data)
+           (set-data! data'))
          (when (and (:current-page? (:config option)) (seq data) (map? (first data)) (:block/uuid (first data)))
            (ui-handler/scroll-to-anchor-block @*scroller-ref data' gallery?)
            (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data' gallery?)))))
-     [sorting])))
+     [sorting data])))
 
 (rum/defc view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
