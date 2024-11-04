@@ -94,8 +94,19 @@
                                       :hide? true}}
 
    :logseq.property.pdf/hl-type {:schema {:type :keyword :hide? true}}
-   :logseq.property.pdf/hl-color {:schema {:type :default :hide? true}}
-   :logseq.property.pdf/hl-page {:schema {:type :number :hide? true}}
+   :logseq.property.pdf/hl-color
+   {:schema {:type :default}
+    :closed-values
+    (mapv (fn [[db-ident value]]
+            {:db-ident db-ident
+             :value value
+             :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
+          [[:logseq.property/color.yellow "yellow"]
+           [:logseq.property/color.red "red"]
+           [:logseq.property/color.green "green"]
+           [:logseq.property/color.blue "blue"]
+           [:logseq.property/color.purple "purple"]])}
+   :logseq.property.pdf/hl-page {:schema {:type :raw-number}}
    :logseq.property.pdf/hl-image {:schema {:type :entity :hide? true}}
    :logseq.property.pdf/hl-value {:schema {:type :map :hide? true}}
    :logseq.property/order-list-type {:name :logseq.order-list-type
