@@ -18,6 +18,8 @@
             [logseq.outliner.validate :as outliner-validate]
             [malli.error :as me]
             [malli.util :as mu]
+            [malli.core :as m]
+            [malli.error :as me]
             [clojure.set :as set]))
 
 (defn- throw-error-if-read-only-property
@@ -34,8 +36,8 @@
      (let [old-value (get block property-id)
            property (d/entity @conn property-id)
            multiple-values? (= :db.cardinality/many (:db/cardinality property))
-           retract-multiple-values? (and multiple-values? (coll? value))
-           multiple-values-empty? (and (coll? old-value)
+           retract-multiple-values? (and multiple-values? (sequential? value))
+           multiple-values-empty? (and (sequential? old-value)
                                        (= 1 (count old-value))
                                        (= :logseq.property/empty-placeholder (:db/ident (first old-value))))
            block (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
@@ -162,13 +164,20 @@
                        {:outliner-op :new-property})
         (d/entity @conn db-ident')))))
 
-(defn- validate-property-value
+(defn- validate-property-value-aux
   [schema value {:keys [many?]}]
   ;; normalize :many values since most components update them as a single value
-  (let [value' (if (and many? (not (coll? value)))
+  (let [value' (if (and many? (not (sequential? value)))
                  #{value}
                  value)]
     (me/humanize (mu/explain-data schema value'))))
+
+(defn validate-property-value
+  [db property value]
+  (let [property-type (get-in property [:block/schema :type])
+        many? (= :db.cardinality/many (:db/cardinality property))
+        schema (get-property-value-schema db property-type property)]
+    (validate-property-value-aux schema value {:many? many?})))
 
 (defn- ->eid
   [id]
@@ -183,7 +192,7 @@
         schema (get-property-value-schema @conn property-type property)]
     (if-let [msg (and
                   (not= new-value :logseq.property/empty-placeholder)
-                  (validate-property-value schema new-value {:many? (db-property/many? property)}))]
+                  (validate-property-value-aux schema new-value {:many? (db-property/many? property)}))]
       (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
         (throw (ex-info "Schema validation failed"
                         {:type :notification
@@ -323,7 +332,7 @@
                      (let [value (get block property-id)
                            entities (cond
                                       (de/entity? value) [value]
-                                      (and (coll? value) (every? de/entity? value)) value
+                                      (and (sequential? value) (every? de/entity? value)) value
                                       :else nil)
                            deleting-entities (filter
                                               (fn [value]
@@ -473,7 +482,7 @@
     (when (contains? db-property-type/closed-value-property-types property-type)
       (let [value' (if (string? value) (string/trim value) value)
             resolved-value (convert-property-input-string (:type property-schema) value')
-            validate-message (validate-property-value
+            validate-message (validate-property-value-aux
                               (get-property-value-schema @conn property-type property {:new-closed-value? true})
                               resolved-value
                               {:many? (db-property/many? property)})]
