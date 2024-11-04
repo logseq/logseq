@@ -139,7 +139,7 @@
    (string/trim)))
 
 (defn- update-block-tags
-  [block db user-options page-names-to-uuids all-idents]
+  [block db {:keys [remove-inline-tags?] :as user-options} page-names-to-uuids all-idents]
   (let [block'
         (if (seq (:block/tags block))
           (let [original-tags (remove #(or (:block.temp/new-class %)
@@ -147,23 +147,26 @@
                                            (logseq-class-ident? %))
                                       (:block/tags block))
                 convert-tag?' #(convert-tag? (:block/name %) user-options)]
-            (-> block
-                (update :block/title
-                        content-without-tags-ignore-case
-                        (->> original-tags
-                             (filter convert-tag?')
-                             (map :block/title)))
-                (update :block/title
-                        db-content/replace-tags-with-page-refs
-                        (->> original-tags
-                             (remove convert-tag?')
-                             (map #(add-uuid-to-page-map % page-names-to-uuids))))
-                (update :block/tags
-                        (fn [tags]
-                          (vec (keep #(if (logseq-class-ident? %)
-                                        %
-                                        (convert-tag-to-class db % page-names-to-uuids user-options all-idents))
-                                     tags))))))
+            (cond-> block
+              remove-inline-tags?
+              (update :block/title
+                      content-without-tags-ignore-case
+                      (->> original-tags
+                           (filter convert-tag?')
+                           (map :block/title)))
+              true
+              (update :block/title
+                      db-content/replace-tags-with-page-refs
+                      (->> original-tags
+                           (remove convert-tag?')
+                           (map #(add-uuid-to-page-map % page-names-to-uuids))))
+              true
+              (update :block/tags
+                      (fn [tags]
+                        (vec (keep #(if (logseq-class-ident? %)
+                                      %
+                                      (convert-tag-to-class db % page-names-to-uuids user-options all-idents))
+                                   tags))))))
           block)]
     block'))
 
@@ -784,7 +787,7 @@
                    (fix-pre-block-references pre-blocks page-names-to-uuids)
                    (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
-                   (update-block-tags db (select-keys options [:convert-all-tags? :tag-classes]) page-names-to-uuids (:all-idents import-state))
+                   (update-block-tags db (select-keys options [:convert-all-tags? :tag-classes :remove-inline-tags?]) page-names-to-uuids (:all-idents import-state))
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
@@ -1016,6 +1019,7 @@
     ;; Track per file changes to make to existing properties
     ;; Map of property names (keyword) and their changes (map)
     :upstream-properties (atom {})
+    :remove-inline-tags? (:remove-inline-tags? user-options)
     :convert-all-tags? (:convert-all-tags? user-options)
     :tag-classes (set (map string/lower-case (:tag-classes user-options)))
     :property-classes (set/difference
@@ -1381,7 +1385,9 @@
                          :filename-format (or (:file/name-format config) :legacy)
                          :verbose (:verbose options)}
        :user-config config
-       :user-options (select-keys options [:tag-classes :property-classes :property-parent-classes :convert-all-tags?])
+       :user-options (merge
+                      {:remove-inline-tags? true}
+                      (select-keys options [:tag-classes :property-classes :property-parent-classes :convert-all-tags? :remove-inline-tags?]))
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
       (merge (select-keys options [:set-ui-state :export-file :notify-user]))))
