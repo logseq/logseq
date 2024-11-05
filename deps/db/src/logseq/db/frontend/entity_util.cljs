@@ -1,8 +1,7 @@
 (ns logseq.db.frontend.entity-util
   "Lower level entity util fns used across db namespaces"
   (:require [datascript.core :as d]
-            [clojure.string :as string]
-            [logseq.common.config :as common-config])
+            [clojure.string :as string])
   (:refer-clojure :exclude [object?]))
 
 (defn db-based-graph?
@@ -13,7 +12,7 @@
 
 (defn page?
   [block]
-  (contains? #{"page" "journal" "whiteboard" "class" "property" "hidden"}
+  (contains? #{"page" "journal" "whiteboard" "class" "property"}
              (:block/type block)))
 
 (defn internal-page?
@@ -52,9 +51,9 @@
   [page]
   (when page
     (if (string? page)
-      (or (string/starts-with? page "$$$")
-          (= common-config/favorites-page-name page))
-      (= (:block/type page) "hidden"))))
+      (string/starts-with? page "$$$")
+      (when (map? page)
+        (false? (get-in page [:block/schema :public?]))))))
 
 (defn object?
   [node]

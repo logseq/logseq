@@ -17,8 +17,7 @@
             [logseq.db :as ldb]
             [frontend.util :as util]
             [frontend.handler.file-based.property.util :as property-util]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.property :as db-property]))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)

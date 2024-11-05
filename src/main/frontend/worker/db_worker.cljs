@@ -321,7 +321,7 @@
             (d/transact! conn initial-data {:initial-db? true})))
 
         (try
-          (when-not (ldb/page-exists? @conn common-config/views-page-name "hidden")
+          (when-not (ldb/page-exists? @conn common-config/views-page-name "page")
             (ldb/create-views-page! conn))
           (catch :default _e))
 

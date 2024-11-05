@@ -204,6 +204,17 @@
          [[:db/retract (:e datom) (:a datom)]]))
      datoms)))
 
+(defn- replace-hidden-type-with-schema
+  [conn _search-db]
+  (let [db @conn
+        datoms (d/datoms db :avet :block/type "hidden")]
+    (map
+     (fn [datom]
+       {:db/id (:e datom)
+        :block/type "page"
+        :block/schema {:public? false}})
+     datoms)))
+
 (defn- update-block-type-many->one
   [conn _search-db]
   (let [db @conn
@@ -446,7 +457,8 @@
                      :block/refs :block/path-refs :block/link
                      :block/title :block/closed-value-property
                      :block/created-at :block/updated-at
-                     :property/schema.classes :property.value/content]}]])
+                     :property/schema.classes :property.value/content]}]
+   [47 {:fix replace-hidden-type-with-schema}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
