@@ -23,7 +23,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.db-mixins :as db-mixins]))
+            [frontend.db-mixins :as db-mixins]
+            [logseq.db :as ldb]))
 
 (rum/defc page-block-selector
   [*find]
@@ -140,20 +141,34 @@
 
 (rum/defc property-select
   [*mode *property]
-  (let [[properties set-properties!] (rum/use-state nil)]
+  (let [[properties set-properties!] (rum/use-state nil)
+        [include-built-in? set-include-built-in!] (rum/use-state false)
+        properties (cond->> properties
+                     (not include-built-in?)
+                     (remove ldb/built-in?))]
     (rum/use-effect!
      (fn []
-       (p/let [properties (db-async/<get-all-properties {:remove-built-in-property? false})]
+       (p/let [properties (db-async/<get-all-properties {:remove-built-in-property? false
+                                                         :remove-non-queryable-built-in-property? true})]
          (set-properties! properties)))
      [])
-    (select (map #(hash-map :db/ident (:db/ident %)
-                            :value (:block/title %))
-                 properties)
-            (fn [{value :value db-ident :db/ident}]
-              (reset! *mode "property-value")
-              (reset! *property (if (config/db-based-graph? (state/get-current-repo))
-                                  db-ident
-                                  (keyword value)))))))
+    [:div.flex.flex-col.gap-1
+     [:div.flex.flex-row.justify-between.gap-1.items-center.px-1.pb-1.border-b
+      [:label.opacity-50.cursor.select-none.text-sm
+       {:for "built-in"}
+       "Show built in properties"]
+      (shui/checkbox
+       {:id "built-in"
+        :value include-built-in?
+        :on-checked-change #(set-include-built-in! (not include-built-in?))})]
+     (select (map #(hash-map :db/ident (:db/ident %)
+                             :value (:block/title %))
+                  properties)
+             (fn [{value :value db-ident :db/ident}]
+               (reset! *mode "property-value")
+               (reset! *property (if (config/db-based-graph? (state/get-current-repo))
+                                   db-ident
+                                   (keyword value)))))]))
 
 (rum/defc property-value-select-inner
   < rum/reactive db-mixins/query
