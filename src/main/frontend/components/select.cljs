@@ -127,7 +127,8 @@
                                                     (reset! input v)
                                                     (and (fn? on-input) (on-input v))))}
                                   input-opts')]])
-        results-container [:div.py-1
+        results-container [:div
+                           {:class (when (seq search-result) "py-1")}
                            [:div.item-results-wrap
                             (ui/auto-complete
                              search-result
