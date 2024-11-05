@@ -76,7 +76,7 @@
                             (and (contains? #{:block/title :block/name} a)
                                  (or
                                   ;; normal page or block
-                                  (not (contains? #{"class" "property" "journal" "closed value" "hidden"} type))
+                                  (not (contains? #{"class" "property" "journal" "closed value"} type))
                                   ;; class/property created by user
                                   (and ident
                                        (contains? #{"class" "property"} type)
