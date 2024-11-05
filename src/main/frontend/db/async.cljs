@@ -17,7 +17,8 @@
             [logseq.db :as ldb]
             [frontend.util :as util]
             [frontend.handler.file-based.property.util :as property-util]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.schema :as db-schema]))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
@@ -51,30 +52,34 @@
 
 (defn <db-based-get-all-properties
   "Return seq of all property names except for private built-in properties."
-  [graph & {:keys [remove-built-in-property?]
-            :or {remove-built-in-property? true}}]
-  (p/let [result (<q graph
-                     {:transact-db? false}
-                     '[:find [(pull ?e [:block/uuid :db/ident :block/title :block/schema]) ...]
-                       :where
-                       [?e :block/type "property"]
-                       [?e :block/title]])]
+  [graph & {:keys [remove-built-in-property? remove-non-queryable-built-in-property?]
+            :or {remove-built-in-property? true
+                 remove-non-queryable-built-in-property? false}}]
+  (let [result (->> (d/datoms (db/get-db graph) :avet :block/type "property")
+                    (map (fn [datom] (db/entity (:e datom))))
+                    (sort-by (juxt ldb/built-in? :block/title)))]
     (cond->> result
       remove-built-in-property?
-         ;; remove private built-in properties
-      (remove #(and (:db/ident %)
-                    (db-property/logseq-property? (:db/ident %))
-                    (not (ldb/public-built-in-property? %))
-                    (not= (:db/ident %) :logseq.property/icon))))))
+      ;; remove private built-in properties
+      (remove (fn [p]
+                (let [ident (:db/ident p)]
+                  (and (ldb/built-in? p)
+                       (not (ldb/public-built-in-property? p))
+                       (not= ident :logseq.property/icon)))))
+      remove-non-queryable-built-in-property?
+      (remove (fn [p]
+                (let [ident (:db/ident p)]
+                  (and (ldb/built-in? p)
+                       (not (:queryable? (db-property/built-in-properties ident))))))))))
 
 (defn <get-all-properties
   "Returns all public properties as property maps including their
   :block/title and :db/ident. For file graphs the map only contains
   :block/title"
-  [& {:keys [remove-built-in-property?]}]
+  [& {:as opts}]
   (when-let [graph (state/get-current-repo)]
     (if (config/db-based-graph? graph)
-      (<db-based-get-all-properties graph {:remove-built-in-property? remove-built-in-property?})
+      (<db-based-get-all-properties graph opts)
       (p/let [properties (file-async/<file-based-get-all-properties graph)
               hidden-properties (set (map name (property-util/hidden-properties)))]
         (remove #(hidden-properties (:block/title %)) properties)))))
