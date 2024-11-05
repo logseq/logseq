@@ -423,13 +423,45 @@
                                                                                            (:block/format page))))
                        :else title))])]])))))
 
-(rum/defcs db-page-title < rum/reactive
-  (rum/local false ::hover?)
-  [state page whiteboard-page? sidebar? container-id]
-  (let [*hover? (::hover? state)
-        hover? (and @*hover? (not config/publishing?))]
+(rum/defc db-page-title-actions
+  [page]
+  [:div.absolute.-top-3.left-0.opacity-0.db-page-title-actions
+   [:div.flex.flex-row.items-center.gap-2
+    (when-not (:logseq.property/icon (db/entity (:db/id page)))
+      (shui/button
+        {:variant :outline
+         :size :sm
+         :class "px-2 py-0 h-4 text-xs text-muted-foreground"
+         :on-click (fn [e]
+                     (state/pub-event! [:editor/new-property {:property-key "Icon"
+                                                              :block page
+                                                              :target (.-target e)}]))}
+        "Add icon"))
+
+    (shui/button
+      {:variant :outline
+       :size :sm
+       :class "px-2 py-0 h-4 text-xs text-muted-foreground"
+       :on-click (fn [e]
+                   (state/pub-event! [:editor/new-property {:block page
+                                                            :target (.-target e)}]))}
+      "Set node property")]])
+
+(rum/defc db-page-title
+  [page whiteboard-page? sidebar? container-id]
+  (let [[with-actions? set-with-actions!] (rum/use-state false)
+        *el (rum/use-ref nil)]
+
+    (rum/use-effect!
+      (fn []
+        (when (and (not config/publishing?)
+                (some-> (rum/deref *el) (.closest "#main-content-container")))
+          (set-with-actions! true)))
+      [])
+
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
+      :ref *el
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)
@@ -443,37 +475,15 @@
                        (:db/id page)
                        :page))))}
 
-     [:div.w-full.relative {:on-mouse-over (fn [^js e]
-                                             (when (some-> (.-target e) (.closest "#main-content-container"))
-                                               (reset! *hover? true)))
-                            :on-mouse-leave (fn [] (reset! *hover? false))}
-      (when (and hover? (not= (:db/id (state/get-edit-block)) (:db/id page)))
-        [:div.absolute.-top-3.left-0.fade-in
-         [:div.flex.flex-row.items-center.gap-2
-          (when-not (:logseq.property/icon (db/entity (:db/id page)))
-            (shui/button
-             {:variant :outline
-              :size :sm
-              :class "px-2 py-0 h-4 text-xs text-muted-foreground"
-              :on-click (fn [e]
-                          (state/pub-event! [:editor/new-property {:property-key "Icon"
-                                                                   :block page
-                                                                   :target (.-target e)}]))}
-             "Add icon"))
-
-          (shui/button
-           {:variant :outline
-            :size :sm
-            :class "px-2 py-0 h-4 text-xs text-muted-foreground"
-            :on-click (fn [e]
-                        (state/pub-event! [:editor/new-property {:block page
-                                                                 :target (.-target e)}]))}
-           "Set node property")]])
-      (component-block/block-container {:page-title? true
-                                        :hide-title? sidebar?
-                                        :hide-children? true
-                                        :container-id container-id
-                                        :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))} page)]]))
+     [:div.w-full.relative
+      (component-block/block-container
+        {:page-title? true
+         :page-title-actions-cp (when (and with-actions? (not= (:db/id (state/get-edit-block)) (:db/id page))) db-page-title-actions)
+         :hide-title? sidebar?
+         :hide-children? true
+         :container-id container-id
+         :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))}
+        page)]]))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
