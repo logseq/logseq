@@ -427,7 +427,7 @@
   (rum/local false ::hover?)
   [state page whiteboard-page? sidebar? container-id]
   (let [*hover? (::hover? state)
-        hover? (and (rum/react *hover?) (not config/publishing?))]
+        hover? (and @*hover? (not config/publishing?))]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
       :on-pointer-down (fn [e]
@@ -443,9 +443,10 @@
                        (:db/id page)
                        :page))))}
 
-     [:div.w-full.relative {:on-mouse-over #(reset! *hover? true)
-                            :on-mouse-leave (fn []
-                                              (reset! *hover? false))}
+     [:div.w-full.relative {:on-mouse-over (fn [^js e]
+                                             (when (some-> (.-target e) (.closest "#main-content-container"))
+                                               (reset! *hover? true)))
+                            :on-mouse-leave (fn [] (reset! *hover? false))}
       (when (and hover? (not= (:db/id (state/get-edit-block)) (:db/id page)))
         [:div.absolute.-top-3.left-0.fade-in
          [:div.flex.flex-row.items-center.gap-2
