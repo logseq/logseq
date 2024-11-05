@@ -94,6 +94,10 @@
   .icon-cp-container {
     @apply inline-flex items-center pr-0.5;
   }
+
+  .block-title-wrap.as-heading {
+    @apply inline text-[length:inherit];
+  }
 }
 
 .breadcrumb {
