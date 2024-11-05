@@ -508,6 +508,14 @@
   }
 }
 
+.block-main-content {
+  &:hover {
+    & > .db-page-title-actions {
+      @apply delay-300 transition-opacity opacity-100;
+    }
+  }
+}
+
 .ls-block {
   @apply relative py-0.5 transition-[background-color] mx-auto;
 

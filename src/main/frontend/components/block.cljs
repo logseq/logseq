@@ -3391,7 +3391,9 @@
           (block-left-menu config block))
 
         [:div.flex.flex-col.w-full
-         [:div.flex.flex-row.gap-2
+         [:div.block-main-content.flex.flex-row.gap-2
+          (when-let [actions-cp (:page-title-actions-cp config)]
+            (actions-cp block))
           (when (:page-title? config)
             (let [icon' (get block (pu/get-pid :logseq.property/icon))]
               (when-let [icon (and (ldb/page? block)
