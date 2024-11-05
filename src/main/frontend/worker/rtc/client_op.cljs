@@ -248,8 +248,29 @@
 
 ;;; asset ops
 (defn add-asset-ops
-  [repo _asset-ops]
-  (let [conn (worker-state/get-client-ops-conn repo)]
+  [repo asset-ops]
+  (let [conn (worker-state/get-client-ops-conn repo)
+        ops (ops-coercer asset-ops)]
     (assert (some? conn) repo)
-    ;TODO
-    ))
+    (letfn [(already-removed? [remove-op t]
+              (some-> remove-op second (> t)))
+            (update-after-remove? [update-op t]
+              (some-> update-op second (> t)))]
+      (doseq [op ops]
+        (let [[op-type t value] op
+              {:keys [block-uuid]} value
+              exist-block-ops-entity (d/entity @conn [:block/uuid block-uuid])
+              e (:db/id exist-block-ops-entity)]
+          (case op-type
+            :update-asset
+            (let [remove-asset-op (get exist-block-ops-entity :remove-asset)]
+              (when-not (already-removed? remove-asset-op t)
+                (cond-> [{:block/uuid block-uuid
+                          :update-asset op}]
+                  remove-asset-op (conj [:db.fn/retractAttribute e :remove-asset]))))
+            :remove-asset
+            (let [update-asset-op (get exist-block-ops-entity :update-asset)]
+              (when-not (update-after-remove? update-asset-op t)
+                (cond-> [{:block/uuid block-uuid
+                          :remove-asset op}]
+                  update-asset-op (conj [:db.fn/retractAttribute e :update-asset]))))))))))
