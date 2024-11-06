@@ -134,11 +134,14 @@
         conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
         directory? (.isDirectory (fs/statSync file-graph'))
         ;; coerce option collection into strings
-        options' (if (:tag-classes options) (update options :tag-classes (partial mapv str)) options)]
+        user-options (if (:tag-classes options) (update options :tag-classes (partial mapv str)) options)
+        options' (merge {:user-options (dissoc user-options :verbose :files :help)
+                         :graph-name db-name}
+                        (select-keys options [:files :verbose]))]
     (p/let [{:keys [import-state]}
             (if directory?
-              (import-file-graph-to-db file-graph' (node-path/join dir db-name) conn (merge options' {:graph-name db-name}))
-              (import-files-to-db file-graph' conn (merge options' {:graph-name db-name})))]
+              (import-file-graph-to-db file-graph' (node-path/join dir db-name) conn options')
+              (import-files-to-db file-graph' conn options'))]
 
       (when-let [ignored-props (seq @(:ignored-properties import-state))]
         (println "Ignored properties:" (pr-str ignored-props)))
