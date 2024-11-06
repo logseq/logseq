@@ -161,6 +161,7 @@
                              "bottom"
                              (if (> (- th bh) 100)
                                "top" "bottom"))))
+          auto-side? (if (boolean? auto-side?) auto-side? true)
           content-props (cond-> content-props
                           auto-side? (assoc :side (auto-side-fn)))
           hide (fn [] (hide! id 1))]
