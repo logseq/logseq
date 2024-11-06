@@ -12,7 +12,7 @@
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
             [frontend.components.user.login :as login]
-            [logseq.shui.demo2 :as shui]
+            [logseq.shui.demo :as shui]
             [frontend.components.imports :as imports]
             [frontend.config :as config]
             [logseq.db :as ldb]

@@ -562,6 +562,18 @@
              (:block/tags (readable-properties @conn (find-page-by-name @conn "url"))))
           "tagged page has configured tag imported as a class"))))
 
+(deftest-async export-files-with-remove-inline-tags
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md"])
+          conn (db-test/create-conn)
+          _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})]
+
+    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+        "Created graph has no validation errors")
+    (is (string/starts-with? (:block/title (find-block-by-content @conn #"Inception"))
+                             "Inception #Movie")
+        "block with tag preserves inline tag")))
+
 (deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["ignored/icon-page.md"])
