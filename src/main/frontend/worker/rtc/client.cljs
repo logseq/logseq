@@ -320,7 +320,7 @@
   "Return a task: push local updates"
   [repo conn graph-uuid date-formatter get-ws-create-task add-log-fn]
   (m/sp
-    (let [block-ops-map-coll (client-op/get&remove-all-ops repo)]
+    (let [block-ops-map-coll (client-op/get&remove-all-block-ops repo)]
       (when-let [block-uuid->remote-ops (not-empty (gen-block-uuid->remote-ops @conn block-ops-map-coll))]
         (when-let [ops-for-remote (rtc-const/to-ws-ops-decoder
                                    (sort-remote-ops
