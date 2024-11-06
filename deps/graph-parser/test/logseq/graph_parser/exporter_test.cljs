@@ -116,18 +116,18 @@
   (let [*files (build-graph-files file-graph-dir)
         config-file (first (filter #(string/ends-with? (:path %) "logseq/config.edn") *files))
         _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
-        options' (-> (merge default-export-options
-                            options
-                            ;; asset file options
-                            {:<copy-asset #(swap! assets conj %)})
-                     (dissoc :assets))]
+        options' (merge default-export-options
+                        {:user-options (dissoc options :assets)
+                        ;; asset file options
+                         :<copy-asset #(swap! assets conj %)})]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [files conn options]
   (p/let [doc-options (gp-exporter/build-doc-options (merge {:macros {}} (:user-config options))
-                                                     (merge default-export-options options))
+                                                     (merge default-export-options
+                                                            {:user-options (dissoc options :user-config)}))
           files' (mapv #(hash-map :path %) files)
           _ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
     {:import-state (:import-state doc-options)}))
@@ -463,11 +463,9 @@
                (:logseq.property/page-tags (readable-properties @conn (find-page-by-name @conn "chat-gpt"))))
             "tagged page has new page and other pages marked with '#' and '[[]]` imported as tags to page-tags")))))
 
-(deftest-async export-basic-graph-with-convert-all-tags
+(deftest-async export-basic-graph-with-convert-all-tags-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)
-          ;; Simulate frontend path-refs being calculated
-          _ (db-pipeline/add-listener conn)
           {:keys [import-state]}
           (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true})]
 
