@@ -294,27 +294,27 @@
 (def ^:private create-get-state-flow
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
-     (let [{rtc-lock :*rtc-lock :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *online-users]}
-           (m/?< rtc-loop-metadata-flow)]
-       (try
-         (when (and repo rtc-state-flow *rtc-auto-push? rtc-lock)
-           (m/?<
-            (m/latest
-             (fn [rtc-state rtc-auto-push? rtc-lock online-users pending-local-ops-count local-tx remote-tx]
-               {:graph-uuid graph-uuid
-                :user-uuid user-uuid
-                :unpushed-block-update-count pending-local-ops-count
-                :local-tx local-tx
-                :remote-tx remote-tx
-                :rtc-state rtc-state
-                :rtc-lock rtc-lock
-                :auto-push? rtc-auto-push?
-                :online-users online-users})
-             rtc-state-flow (m/watch *rtc-auto-push?) (m/watch rtc-lock) (m/watch *online-users)
-             (client-op/create-pending-ops-count-flow repo)
-             (rtc-log-and-state/create-local-t-flow graph-uuid)
-             (rtc-log-and-state/create-remote-t-flow graph-uuid))))
-         (catch Cancelled _))))))
+      (let [{rtc-lock :*rtc-lock :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *online-users]}
+            (m/?< rtc-loop-metadata-flow)]
+        (try
+          (when (and repo rtc-state-flow *rtc-auto-push? rtc-lock)
+            (m/?<
+             (m/latest
+              (fn [rtc-state rtc-auto-push? rtc-lock online-users pending-local-ops-count local-tx remote-tx]
+                {:graph-uuid graph-uuid
+                 :user-uuid user-uuid
+                 :unpushed-block-update-count pending-local-ops-count
+                 :local-tx local-tx
+                 :remote-tx remote-tx
+                 :rtc-state rtc-state
+                 :rtc-lock rtc-lock
+                 :auto-push? rtc-auto-push?
+                 :online-users online-users})
+              rtc-state-flow (m/watch *rtc-auto-push?) (m/watch rtc-lock) (m/watch *online-users)
+              (client-op/create-pending-block-ops-count-flow repo)
+              (rtc-log-and-state/create-local-t-flow graph-uuid)
+              (rtc-log-and-state/create-remote-t-flow graph-uuid))))
+          (catch Cancelled _))))))
 
 (defn new-task--get-debug-state
   []

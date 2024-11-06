@@ -115,7 +115,7 @@
 (defn create-assets-sync-loop
   [get-ws-create-task graph-uuid conn]
   (let [started-dfv         (m/dfv)
-        asset-change-event-flow global-asset-change-event-flow
+        asset-change-event-flow m/none
         add-log-fn (fn [type message]
                      (assert (map? message) message)
                      (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))]
