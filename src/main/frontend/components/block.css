@@ -94,6 +94,10 @@
   .icon-cp-container {
     @apply inline-flex items-center pr-0.5;
   }
+
+  .block-title-wrap.as-heading {
+    @apply inline text-[length:inherit];
+  }
 }
 
 .breadcrumb {
@@ -504,6 +508,14 @@
   }
 }
 
+.block-main-content {
+  &:hover {
+    & > .db-page-title-actions {
+      @apply delay-300 transition-opacity opacity-100;
+    }
+  }
+}
+
 .ls-block {
   @apply relative py-0.5 transition-[background-color] mx-auto;
 
@@ -514,38 +526,41 @@
 
 .ls-block h1,
 .editor-inner .h1.uniline-block {
-  font-size: 2em;
+  font-size: 2rem;
   min-height: 1.5em;
+  line-height: 1.38em;
 }
 
 .ls-block h2,
 .editor-inner .h2.uniline-block {
-  font-size: 1.5em;
+  font-size: 1.5rem;
   min-height: 1.5em;
+  line-height: 1.38em;
 }
 
 .ls-block h3,
 .editor-inner .h3.uniline-block {
-  font-size: 1.2em;
+  font-size: 1.2rem;
   min-height: 1.2em;
+  line-height: 1.15em;
 }
 
 .ls-block h4,
 .editor-inner .h4.uniline-block {
-  font-size: 1em;
+  font-size: 1rem;
   min-height: 1em;
 }
 
 .ls-block h5,
 .editor-inner .h5.uniline-block {
-  font-size: 0.83em;
+  font-size: 0.83rem;
   min-height: 0.83em;
 }
 
 .ls-block h6,
 .editor-inner .h6.uniline-block {
-  font-size: 0.75em;
-  min-height: 0.75em;
+  font-size: 0.75rem;
+  min-height: 0.75rem;
 }
 
 .ls-block :is(h1, h2, h3, h4, h5, h6),
@@ -557,6 +572,11 @@
 .ls-block :is(h1, h2),
 .editor-inner .uniline-block:is(.h1, .h2) {
   @apply border-b border-gray-06 mt-1 mb-2 pb-1;
+}
+
+.editor-inner textarea.uniline-block:is(.h1, .h2) {
+  border-bottom-style: solid;
+  border-bottom-color: transparent;
 }
 
 .block-ref .ls-block :is(h1, h2),
