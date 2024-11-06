@@ -542,6 +542,7 @@
 .editor-inner .h3.uniline-block {
   font-size: 1.2rem;
   min-height: 1.2em;
+  line-height: 1.15em;
 }
 
 .ls-block h4,
@@ -571,6 +572,11 @@
 .ls-block :is(h1, h2),
 .editor-inner .uniline-block:is(.h1, .h2) {
   @apply border-b border-gray-06 mt-1 mb-2 pb-1;
+}
+
+.editor-inner textarea.uniline-block:is(.h1, .h2) {
+  border-bottom-style: solid;
+  border-bottom-color: transparent;
 }
 
 .block-ref .ls-block :is(h1, h2),

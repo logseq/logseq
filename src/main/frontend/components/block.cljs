@@ -2309,7 +2309,7 @@
       [:span.opacity-50 "Set query title"]
 
       :else
-      [:span
+      [:span.w-full
        (text-block-title config block)
        (when-let [property (:logseq.property/created-from-property block)]
          (when-let [message (when (= :url (get-in property [:block/schema :type]))
