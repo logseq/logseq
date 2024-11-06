@@ -281,7 +281,7 @@
 
 (defn- get-all-asset-ops*
   [db]
-  (->> (d/datoms @conn :eavt)
+  (->> (d/datoms db :eavt)
        (group-by :e)
        (keep (fn [[e datoms]]
                (let [op-map (into {}
