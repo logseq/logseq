@@ -180,9 +180,15 @@
   (->> (d/datoms db :eavt)
        (group-by :e)
        (keep (fn [[e datoms]]
-               (let [op-map (into {} (map (juxt :a :v)) datoms)]
+               (let [op-map (into {}
+                                  (keep (fn [datom]
+                                          (let [a (:a datom)]
+                                            (when (or (= :block/uuid a) (contains? block-op-types a))
+                                              [a (:v datom)]))))
+                                  datoms)]
                  (when (and (:block/uuid op-map)
-                            (some #(contains? block-op-types %) (keys op-map)))
+                            ;; count>1 = contains some `block-op-types`
+                            (> (count op-map) 1))
                    [e op-map]))))
        (into {})))
 
@@ -195,11 +201,6 @@
     (vals e->op-map)))
 
 (defn get-all-block-ops
-  "Return coll of
-  {:block/uuid ...
-   :update ...
-   :move ...
-   ...}"
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (mapcat
@@ -261,35 +262,39 @@
               {:keys [block-uuid]} value
               exist-block-ops-entity (d/entity @conn [:block/uuid block-uuid])
               e (:db/id exist-block-ops-entity)]
-          (case op-type
-            :update-asset
-            (let [remove-asset-op (get exist-block-ops-entity :remove-asset)]
-              (when-not (already-removed? remove-asset-op t)
-                (cond-> [{:block/uuid block-uuid
-                          :update-asset op}]
-                  remove-asset-op (conj [:db.fn/retractAttribute e :remove-asset]))))
-            :remove-asset
-            (let [update-asset-op (get exist-block-ops-entity :update-asset)]
-              (when-not (update-after-remove? update-asset-op t)
-                (cond-> [{:block/uuid block-uuid
-                          :remove-asset op}]
-                  update-asset-op (conj [:db.fn/retractAttribute e :update-asset]))))))))))
-
-(defn- get-all-asset-op-datoms
-  [conn]
-  (->> (d/datoms @conn :eavt)
-       (filter (fn [datom] (contains? (conj asset-op-types :block/uuid) (:a datom))))
-       (group-by :e)))
+          (when-let [tx-data
+                     (not-empty
+                      (case op-type
+                        :update-asset
+                        (let [remove-asset-op (get exist-block-ops-entity :remove-asset)]
+                          (when-not (already-removed? remove-asset-op t)
+                            (cond-> [{:block/uuid block-uuid
+                                      :update-asset op}]
+                              remove-asset-op (conj [:db.fn/retractAttribute e :remove-asset]))))
+                        :remove-asset
+                        (let [update-asset-op (get exist-block-ops-entity :update-asset)]
+                          (when-not (update-after-remove? update-asset-op t)
+                            (cond-> [{:block/uuid block-uuid
+                                      :remove-asset op}]
+                              update-asset-op (conj [:db.fn/retractAttribute e :update-asset]))))))]
+            (d/transact! conn tx-data)))))))
 
 (defn- get-all-asset-ops*
-  [conn]
-  (let [e->datoms (get-all-asset-op-datoms conn)]
-    (into {}
-          (keep (fn [[e same-ent-datoms]]
-                  (let [op-map (into {} (map (juxt :a :v)) same-ent-datoms)]
-                    (when (:block/uuid op-map)
-                      [e op-map]))))
-          e->datoms)))
+  [db]
+  (->> (d/datoms @conn :eavt)
+       (group-by :e)
+       (keep (fn [[e datoms]]
+               (let [op-map (into {}
+                                  (keep (fn [datom]
+                                          (let [a (:a datom)]
+                                            (when (or (= :block/uuid a) (contains? asset-op-types a))
+                                              [a (:v datom)]))))
+                                  datoms)]
+                 (when (and (:block/uuid op-map)
+                            ;; count>1 = contains some `asset-op-types`
+                            (> (count op-map) 1))
+                   [e op-map]))))
+       (into {})))
 
 (defn get-all-asset-ops
   [repo]
@@ -299,4 +304,4 @@
        (keep (fn [[k v]]
                (when (not= :block/uuid k) v))
              m))
-     (vals (get-all-asset-ops* conn)))))
+     (vals (get-all-asset-ops* @conn)))))
