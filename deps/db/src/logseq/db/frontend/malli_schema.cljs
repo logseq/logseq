@@ -324,7 +324,10 @@
    (concat
     [:map
      ;; pages from :default property uses this but closed-value pages don't
-     [:block/order {:optional true} block-order]]
+     [:block/order {:optional true} block-order]
+     [:block/schema
+      [:map
+       [:public? {:optional true} :boolean]]]]
     page-attrs
     page-or-block-attrs)))
 
