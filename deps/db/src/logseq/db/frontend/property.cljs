@@ -23,8 +23,8 @@
    * :title - Property's :block/title
    * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
-   * :closed-values - Vec of closed-value maps for properties with choices. Map
    * :queryable? - Whether property can be queried in the query builder
+   * :closed-values - Vec of closed-value maps for properties with choices. Map
      has keys :value, :db-ident, :uuid and :icon"
   (ordered-map
    :block/alias           {:title "Alias"
@@ -76,22 +76,19 @@
                           :attribute :block/page
                           :schema {:type :entity
                                    :public? false
-                                   :hide? true}
-                          :queryable? true}
+                                   :hide? true}}
    :block/refs           {:title "Node references"
                           :attribute :block/refs
                           :schema {:type :entity
                                    :cardinality :many
                                    :public? false
-                                   :hide? true}
-                          :queryable? true}
+                                   :hide? true}}
    :block/path-refs      {:title "Node path references"
                           :attribute :block/path-refs
                           :schema {:type :entity
                                    :cardinality :many
                                    :public? false
-                                   :hide? true}
-                          :queryable? true}
+                                   :hide? true}}
    :block/link           {:title "Node links to"
                           :attribute :block/link
                           :schema {:type :entity
@@ -101,8 +98,7 @@
                           :attribute :block/title
                           :schema {:type :string
                                    :public? false
-                                   :hide? true}
-                          :queryable? true}
+                                   :hide? true}}
    :block/closed-value-property  {:title "Closed value property"
                                   :attribute :block/closed-value-property
                                   :schema {:type :entity
