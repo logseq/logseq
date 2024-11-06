@@ -31,7 +31,7 @@
 
     > article {
       @apply p-4 flex-1 min-h-[12rem] w-screen overflow-y-auto;
-      @apply md:max-h-[70vh] md:w-[44rem];
+      @apply md:h-[70vh] md:w-[44rem];
     }
 
     > aside > .cp__settings-header,
