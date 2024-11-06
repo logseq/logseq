@@ -535,7 +535,7 @@
   updated properties in :block-properties and any property values tx in :pvalues-tx"
   [props _db page-names-to-uuids
    {:block/keys [properties-text-values] :as block}
-   {:keys [import-state] :as options}]
+   {:keys [import-state user-options] :as options}]
   (let [{:keys [all-idents property-schemas]} import-state
         get-ident' #(get-ident @all-idents %)
         user-properties (apply dissoc props file-built-in-property-names)]
@@ -553,7 +553,7 @@
                         page-names-to-uuids
                         (select-keys import-state [:ignored-properties :all-idents])
                         (select-keys block [:block/name :block/title])
-                        (select-keys options [:property-classes]))
+                        (select-keys user-options [:property-classes]))
                        (merge (update-user-property-values user-properties page-names-to-uuids properties-text-values import-state options)))
             pvalue-tx-m (->property-value-tx-m block props' #(get-property-schema @property-schemas %) @all-idents)
             block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
@@ -605,7 +605,9 @@
   a property is updated. Only infers property schemas on user properties as
   built-in ones must not change"
   [{:block/keys [properties] :as block} db page-names-to-uuids refs
-   {:keys [import-state macros property-classes property-parent-classes] :as options}]
+   {{:keys [property-classes property-parent-classes]} :user-options
+    :keys [import-state macros]
+    :as options}]
   (-> (if (seq properties)
         (let [classes-from-properties (->> (select-keys properties property-classes)
                                            (mapcat (fn [[_k v]] (if (coll? v) v [v])))
@@ -644,11 +646,11 @@
 (defn- handle-page-properties
   "Adds page properties including special handling for :logseq.property/parent"
   [{:block/keys [properties] :as block*} db page-names-to-uuids refs
-   {:keys [property-parent-classes log-fn import-state] :as options}]
+   {:keys [user-options log-fn import-state] :as options}]
   (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
         block'
         (if (seq properties)
-          (let [parent-classes-from-properties (->> (select-keys properties property-parent-classes)
+          (let [parent-classes-from-properties (->> (select-keys properties (:property-parent-classes user-options))
                                                     (mapcat (fn [[_k v]] (if (coll? v) v [v])))
                                                     distinct)]
             (cond-> block
@@ -672,7 +674,9 @@
 
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
-  [{:block/keys [title] :as block*} db page-names-to-uuids refs {:keys [property-classes] :as options}]
+  [{:block/keys [title] :as block*}
+   db page-names-to-uuids refs
+   {{:keys [property-classes]} :user-options :as options}]
   (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
         advanced-query (some->> (second (re-find #"(?s)#\+BEGIN_QUERY(.*)#\+END_QUERY" title)) string/trim)
         additional-props (cond-> {}
@@ -787,7 +791,7 @@
                    (fix-pre-block-references pre-blocks page-names-to-uuids)
                    (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
-                   (update-block-tags db (select-keys options [:convert-all-tags? :tag-classes :remove-inline-tags?]) page-names-to-uuids (:all-idents import-state))
+                   (update-block-tags db (:user-options options) page-names-to-uuids (:all-idents import-state))
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
@@ -860,7 +864,7 @@
         (seq (:block/alias m))
         (update-page-alias page-names-to-uuids)
         (:block/tags m)
-        (update-page-tags db (select-keys options [:tag-classes :convert-all-tags?]) page-names-to-uuids (:all-idents import-state))))))
+        (update-page-tags db (:user-options options) page-names-to-uuids (:all-idents import-state))))))
 
 (defn- modify-page-tx
   "Modifies page tx from graph-parser for use with DB graphs. Currently modifies
@@ -899,11 +903,12 @@
   "Given all the pages and blocks parsed from a file, return a map containing
   all non-whiteboard pages to be transacted, pages' properties and additional
   data for subsequent steps"
-  [conn pages blocks {:keys [property-classes property-parent-classes import-state]
+  [conn pages blocks {:keys [import-state user-options]
                       :as options}]
   (let [all-pages* (->> (extract/with-ref-pages pages blocks)
                         ;; remove unused property pages unless the page has content
-                        (remove #(and (contains? (into property-classes property-parent-classes) (keyword (:block/name %)))
+                        (remove #(and (contains? (into (:property-classes user-options) (:property-parent-classes user-options))
+                                                 (keyword (:block/name %)))
                                       (not (:block/file %))))
                         ;; remove file path relative
                         (map #(dissoc % :block/file)))
@@ -925,9 +930,8 @@
                                      ;; Don't build a new page if it overwrites an existing class
                                      (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
                                                   db-malli-schema/class?)))
-                             (build-new-page-or-class (dissoc m ::original-name) @conn
-                                                      (select-keys options [:tag-classes :convert-all-tags?])
-                                                      page-names-to-uuids (:all-idents import-state)))))
+                             (build-new-page-or-class (dissoc m ::original-name)
+                                                      @conn user-options page-names-to-uuids (:all-idents import-state)))))
                        (map :block all-pages-m))]
     {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
@@ -1019,15 +1023,15 @@
     ;; Track per file changes to make to existing properties
     ;; Map of property names (keyword) and their changes (map)
     :upstream-properties (atom {})
-    :remove-inline-tags? (:remove-inline-tags? user-options)
-    :convert-all-tags? (:convert-all-tags? user-options)
-    :tag-classes (set (map string/lower-case (:tag-classes user-options)))
-    :property-classes (set/difference
-                       (set (map (comp keyword string/lower-case) (:property-classes user-options)))
-                       file-built-in-property-names)
-    :property-parent-classes (set/difference
-                              (set (map (comp keyword string/lower-case) (:property-parent-classes user-options)))
-                              file-built-in-property-names)}))
+    :user-options
+    (merge user-options
+           {:tag-classes (set (map string/lower-case (:tag-classes user-options)))
+            :property-classes (set/difference
+                               (set (map (comp keyword string/lower-case) (:property-classes user-options)))
+                               file-built-in-property-names)
+            :property-parent-classes (set/difference
+                                      (set (map (comp keyword string/lower-case) (:property-parent-classes user-options)))
+                                      file-built-in-property-names)})}))
 
 (defn- split-pages-and-properties-tx
   "Separates new pages from new properties tx in preparation for properties to
@@ -1143,7 +1147,8 @@
 
 * :extract-options - Options map to pass to extract/extract
 * :user-options - User provided options maps that alter how a file is converted to db graph. Current options
-   are :tag-classes (set) and :property-classes (set).
+   are: :tag-classes (set), :property-classes (set), :property-parent-classes (set), :convert-all-tags? (boolean)
+   and :remove-inline-tags? (boolean)
 * :import-state - useful import state to maintain across files e.g. property schemas or ignored properties
 * :macros - map of macros for use with macro expansion
 * :notify-user - Displays warnings to user without failing the import. Fn receives a map with :msg
@@ -1385,9 +1390,7 @@
                          :filename-format (or (:file/name-format config) :legacy)
                          :verbose (:verbose options)}
        :user-config config
-       :user-options (merge
-                      {:remove-inline-tags? true}
-                      (select-keys options [:tag-classes :property-classes :property-parent-classes :convert-all-tags? :remove-inline-tags?]))
+       :user-options (merge {:remove-inline-tags? true} (:user-options options))
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
       (merge (select-keys options [:set-ui-state :export-file :notify-user]))))
@@ -1404,6 +1407,7 @@
    * :rpath-key - keyword used to get relative path in file map. Default to :path
    * :<read-file - fn which reads a file across multiple steps
    * :default-config - default config if config is unable to be read
+   * :user-options - map of user specific options. See add-file-to-db-graph for more
    * :<save-config-file - fn which saves a config file
    * :<save-logseq-file - fn which saves a logseq file
    * :<copy-asset - fn which copies asset file
