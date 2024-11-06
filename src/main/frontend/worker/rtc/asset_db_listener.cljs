@@ -11,23 +11,28 @@
   (apply max (map (fn [[_e _a _v t]] t) entity-datoms)))
 
 (defn- entity-datoms=>ops
-  [db-after entity-datoms]
+  [db-before db-after entity-datoms]
   (when-let [e (ffirst entity-datoms)]
-    (let [ent (d/entity db-after e)]
-      (when (ldb/asset? ent)
-        [[:update-asset (max-t entity-datoms) {:block-uuid (:block/uuid ent)}]]))))
+    (let [ent-after (d/entity db-after e)
+          ent-before (d/entity db-before e)]
+      (cond
+        (some-> ent-after ldb/asset?)
+        [[:update-asset (max-t entity-datoms) {:block-uuid (:block/uuid ent-after)}]]
+
+        (some-> ent-before ldb/asset?)
+        [[:remove-asset (max-t entity-datoms) {:block-uuid (:block/uuid ent-before)}]]))))
 
 (defn generate-asset-ops
-  [repo db-after same-entity-datoms-coll]
-  (when-let [ops (not-empty (mapcat (partial entity-datoms=>ops db-after) same-entity-datoms-coll))]
+  [repo db-before db-after same-entity-datoms-coll]
+  (when-let [ops (not-empty (mapcat (partial entity-datoms=>ops db-before db-after) same-entity-datoms-coll))]
     (client-op/add-asset-ops repo ops)))
 
 (sr/defkeyword :generate-asset-change-events?
   "tx-meta option, generate events to notify asset-sync (default true)")
 
 (defmethod db-listener/listen-db-changes :gen-asset-change-events
-  [_ {:keys [_tx-data tx-meta _db-before db-after
+  [_ {:keys [_tx-data tx-meta db-before db-after
              repo _id->attr->datom _e->a->add?->v->t same-entity-datoms-coll]}]
   (when (and (client-op/rtc-db-graph? repo)
              (:generate-asset-change-events? tx-meta true))
-    (generate-asset-ops repo db-after same-entity-datoms-coll)))
+    (generate-asset-ops repo db-before db-after same-entity-datoms-coll)))
