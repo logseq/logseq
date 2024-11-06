@@ -28,8 +28,6 @@
 (defmethod db-listener/listen-db-changes :gen-asset-change-events
   [_ {:keys [_tx-data tx-meta _db-before db-after
              repo _id->attr->datom _e->a->add?->v->t same-entity-datoms-coll]}]
-  (def xx-db-after db-after)
-  (def xx same-entity-datoms-coll)
   (when (and (client-op/rtc-db-graph? repo)
              (:generate-asset-change-events? tx-meta true))
     (generate-asset-ops repo db-after same-entity-datoms-coll)))
