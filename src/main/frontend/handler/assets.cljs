@@ -231,3 +231,38 @@
   [filename]
   (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
     (path/path-join repo-dir assets-dir filename)))
+
+(defn <read-asset
+  [repo asset-block-id asset-type]
+  (let [asset-block-id-str (str asset-block-id)
+        repo-dir (config/get-repo-dir repo)
+        file-path (path/path-join common-config/local-assets-dir
+                                  (str asset-block-id-str "." asset-type))]
+    (fs/read-file repo-dir file-path {})))
+
+(defn <write-asset
+  [repo asset-block-id asset-type data]
+  (let [asset-block-id-str (str asset-block-id)
+        repo-dir (config/get-repo-dir repo)
+        file-path (path/path-join common-config/local-assets-dir
+                                  (str asset-block-id-str "." asset-type))]
+    (fs/write-file! repo repo-dir file-path data {})))
+
+(comment
+  ;; read asset
+  (p/let [repo "logseq_db_demo"
+          ;; Existing asset block's id
+          asset-block-id-str "672c5a1d-8171-4259-9f35-470c3c67e37f"
+          asset-type "png"
+          data (<read-asset repo asset-block-id-str asset-type)]
+    (js/console.dir data))
+
+  ;; write asset
+  (p/let [repo "logseq_db_demo"
+          ;; Existing asset block's id
+          asset-block-id-str "672c5a1d-8171-4259-9f35-470c3c67e37f"
+          asset-type "png"
+          data (<read-asset repo asset-block-id-str asset-type)
+          new-asset-id (random-uuid)
+          result (<write-asset repo new-asset-id asset-type data)]
+    (js/console.dir result)))
