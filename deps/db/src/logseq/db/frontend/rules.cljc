@@ -171,6 +171,13 @@
       [(get ?prop-schema :public? true) ?public]
       [(= true ?public)]]
 
+    ;; Same as has-property except it returns public and private properties like :block/title
+    :has-private-property
+    '[(has-private-property ?b ?prop)
+      [?b ?prop _]
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/type "property"]]
+
     :property
     '[(property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
@@ -178,6 +185,23 @@
       [?prop-e :block/schema ?prop-schema]
       [(get ?prop-schema :public? true) ?public]
       [(= true ?public)]
+      [?b ?prop ?pv]
+      (or
+       ;; non-ref value
+       (and
+        [(missing? $ ?prop-e :db/valueType)]
+        [?b ?prop ?val])
+       ;; ref value
+       (and
+        [?prop-e :db/valueType :db.type/ref]
+        (or [?pv :block/title ?val]
+            [?pv :property.value/content ?val])))]
+
+    ;; Same as property except it returns public and private properties like :block/title
+    :private-property
+    '[(private-property ?b ?prop ?val)
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/type "property"]
       [?b ?prop ?pv]
       (or
        ;; non-ref value

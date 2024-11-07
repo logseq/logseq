@@ -140,11 +140,10 @@
                                  (reset! *between-dates {}))))))]])
 
 (rum/defc property-select
-  [*mode *property]
+  [*mode *property *private-property?]
   (let [[properties set-properties!] (rum/use-state nil)
-        [include-built-in? set-include-built-in!] (rum/use-state false)
         properties (cond->> properties
-                     (not include-built-in?)
+                     (not @*private-property?)
                      (remove ldb/built-in?))]
     (rum/use-effect!
      (fn []
@@ -156,11 +155,11 @@
      [:div.flex.flex-row.justify-between.gap-1.items-center.px-1.pb-1.border-b
       [:label.opacity-50.cursor.select-none.text-sm
        {:for "built-in"}
-       "Show built in properties"]
+       "Show built-in properties"]
       (shui/checkbox
        {:id "built-in"
-        :value include-built-in?
-        :on-checked-change #(set-include-built-in! (not include-built-in?))})]
+        :value @*private-property?
+        :on-checked-change #(reset! *private-property? (not @*private-property?))})]
      (select (map #(hash-map :db/ident (:db/ident %)
                              :value (:block/title %))
                   properties)
@@ -172,7 +171,7 @@
 
 (rum/defc property-value-select-inner
   < rum/reactive db-mixins/query
-  [repo *property *find *tree opts loc values {:keys [db-graph? ref-property? property-type]}]
+  [repo *property *private-property? *find *tree opts loc values {:keys [db-graph? ref-property? property-type]}]
   (let [;; FIXME: lazy load property values consistently on first call
         ;; Guard against non ref properties like :logseq.property/icon
         _ (when (and db-graph? ref-property?)
@@ -192,7 +191,7 @@
     (select values''
             (fn [{:keys [original-value]}]
               (let [k (cond
-                        db-graph? :property
+                        db-graph? (if @*private-property? :private-property :property)
                         (= @*find :page) :page-property
                         :else :property)
                     x (if (= original-value "Select all")
@@ -202,7 +201,7 @@
                 (append-tree! *tree opts loc x))))))
 
 (rum/defc property-value-select
-  [repo *property *find *tree opts loc]
+  [repo *property *private-property? *find *tree opts loc]
   (let [db-graph? (sqlite-util/db-based-graph? repo)
         property-type (when db-graph? (get-in (db/entity repo @*property) [:block/schema :type]))
         ref-property? (and db-graph? (contains? db-property-type/all-ref-property-types property-type))
@@ -217,7 +216,7 @@
              (db-async/<get-block repo db-id :children? false)))
          (set-values! result)))
      [@*property])
-    (property-value-select-inner repo *property *find *tree opts loc values
+    (property-value-select-inner repo *property *private-property? *find *tree opts loc values
                                  {:db-graph? db-graph?
                                   :ref-property? ref-property?
                                   :property-type property-type})))
@@ -242,14 +241,15 @@
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
         *property (::property state)
+        *private-property? (::private-property? state)
         repo (state/get-current-repo)]
     [:div
      (case @*mode
        "property"
-       (property-select *mode *property)
+       (property-select *mode *property *private-property?)
 
        "property-value"
-       (property-value-select repo *property *find *tree opts loc)
+       (property-value-select repo *property *private-property? *find *tree opts loc)
 
        "sample"
        (select (range 1 101)
@@ -319,6 +319,7 @@
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
         *property (::property state)
+        *private-property? (::private-property? state)
         repo (state/get-current-repo)]
     [:div
      (case @*mode
@@ -332,10 +333,10 @@
        (tags repo *tree opts loc)
 
        "property"
-       (property-select *mode *property)
+       (property-select *mode *property *private-property?)
 
        "property-value"
-       (property-value-select repo *property *find *tree opts loc)
+       (property-value-select repo *property *private-property? *find *tree opts loc)
 
        "sample"
        (select (range 1 101)
@@ -404,6 +405,7 @@
                  state)}
   (rum/local nil ::mode)                ; pick mode
   (rum/local nil ::property)
+  (rum/local false ::private-property?)
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
         db-based? (config/db-based-graph? (state/get-current-repo))
@@ -482,7 +484,7 @@
         :else
         (str "#" (second (second clause))))
 
-      (contains? #{:property :page-property} (keyword f))
+      (contains? #{:property :private-property :page-property} (keyword f))
       (str (if (and (config/db-based-graph? (state/get-current-repo))
                     (qualified-keyword? (second clause)))
              (:block/title (db/entity (second clause)))
