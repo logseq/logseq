@@ -53,7 +53,7 @@
           (let [data (.-data event)]
             (if (= data "keepAliveResponse")
               (.postMessage worker "keepAliveRequest")
-              (when-not (= (.-type data) "RAW")
+              (when-not (contains? #{"RAW" "APPLY" "RELEASE"} (.-type data))
                 ;; Log thrown exceptions from comlink
                 ;; https://github.com/GoogleChromeLabs/comlink/blob/dffe9050f63b1b39f30213adeb1dd4b9ed7d2594/src/comlink.ts#L223-L236
                 (if (and (= "HANDLER" (.-type data)) (= "throw" (.-name data)))

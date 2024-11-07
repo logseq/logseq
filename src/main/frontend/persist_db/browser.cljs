@@ -14,7 +14,8 @@
             [frontend.handler.worker :as worker-handler]
             [logseq.db :as ldb]
             [frontend.db.transact :as db-transact]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [frontend.handler.assets :as assets-handler]))
 
 (defonce *worker state/*db-worker)
 
@@ -84,6 +85,15 @@
                  (ldb/write-transit-str context))
       (notification/show! "Latest change was not saved! Please restart the application." :error))))
 
+(deftype Main []
+  Object
+  (readAsset [_this repo asset-block-id asset-type]
+    (assets-handler/<read-asset repo asset-block-id asset-type))
+  (writeAsset [_this repo asset-block-id asset-type data]
+    (assets-handler/<write-asset repo asset-block-id asset-type data))
+  (testFn [_this]
+    (prn :debug :works)))
+
 (defn start-db-worker!
   []
   (when-not util/node-test?
@@ -93,6 +103,7 @@
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
           wrapped-worker (Comlink/wrap worker)
           t1 (util/time-ms)]
+      (Comlink/expose (Main.) worker)
       (worker-handler/handle-message! worker wrapped-worker)
       (reset! *worker wrapped-worker)
       (-> (p/let [_ (.init wrapped-worker config/RTC-WS-URL)
