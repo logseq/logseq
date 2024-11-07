@@ -184,10 +184,18 @@
         (datoms->entity-maps datoms)))
 
 (defn internal-ident?
-  "Determines if given ident is created by Logseq"
+  "Determines if given ident is created by Logseq. All Logseq internal idents
+   must start with 'block' or 'logseq' to keep Logseq internals from leaking
+   across namespaces and to allow for users and 3rd party plugins to choose
+   any other namespace"
   [ident]
   (or (contains? db-property/db-attribute-properties ident)
       (contains? logseq-ident-namespaces (namespace ident))))
+
+(assert (every? #(re-find #"^(block|logseq\.)" (namespace %)) db-property/db-attribute-properties)
+        "All db-attribute idents start with an internal namespace")
+(assert (every? #(re-find #"^logseq\." %) logseq-ident-namespaces)
+        "All logseq idents start with an internal namespace")
 
 ;; Main malli schemas
 ;; ==================
