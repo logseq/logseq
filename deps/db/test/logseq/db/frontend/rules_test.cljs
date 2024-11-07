@@ -10,10 +10,6 @@
        db
        (rules/extract-rules rules/db-query-dsl-rules)))
 
-(defn- remove-built-in-properties
-  [conn properties]
-  (remove (fn [k] (:logseq.property/built-in? (d/entity @conn k))) properties))
-
 (deftest has-property-rule
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:foo {:block/schema {:type :default}}
@@ -33,10 +29,9 @@
                 (map (comp :block/title first))))
         "has-property returns no result when block doesn't have property")
     (is (= [:user.property/foo]
-           (->> (q-with-rules '[:find [?p ...]
-                                :where (has-property ?b ?p) [?b :block/title "Page"]]
-                              @conn)
-                (remove-built-in-properties conn)))
+           (q-with-rules '[:find [?p ...]
+                           :where (has-property ?b ?p) [?b :block/title "Page"]]
+                         @conn))
         "has-property can bind to property arg")))
 
 (deftest property-rule
@@ -106,7 +101,6 @@
              (->> (q-with-rules '[:find [?p ...]
                                   :where (property ?b ?p _) [?b :block/title "Page"]]
                                 @conn)
-                  (remove-built-in-properties conn)
                   set))
           "property can bind to property arg with unbound property value")
       (is (= #{[:user.property/number-many 10]
@@ -116,7 +110,6 @@
              (->> (q-with-rules '[:find ?p ?v
                                   :where (property ?b ?p ?v) [?b :block/title "Page"]]
                                 @conn)
-                  (remove (fn [[k _v]] (:logseq.property/built-in? (d/entity @conn k))))
                   set))
           "property can bind to property and property value args")
       (is (= #{"Page"}
