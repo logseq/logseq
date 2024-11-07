@@ -166,12 +166,18 @@
     '[(has-property ?b ?prop)
       [?b ?prop _]
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]]
+      [?prop-e :block/type "property"]
+      [?prop-e :block/schema ?prop-schema]
+      [(get ?prop-schema :public? true) ?public]
+      [(= true ?public)]]
 
     :property
     '[(property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
+      [?prop-e :block/schema ?prop-schema]
+      [(get ?prop-schema :public? true) ?public]
+      [(= true ?public)]
       [?b ?prop ?pv]
       (or
        ;; non-ref value
