@@ -31,8 +31,8 @@
            (concat (mapcat val rules/rules)
                    ;; TODO: Update linter to handle false positive on ?str-val for :property
                    (rules/extract-rules (dissoc rules/query-dsl-rules :property))
-                   ;; TODO: Update linter to handle false positive on :task, :priority, :property and :page-property
-                   (rules/extract-rules (dissoc rules/db-query-dsl-rules :task :priority :property :page-property)))))}}
+                   ;; TODO: Update linter to handle false positive on :task, :priority, :property and :property-property
+                   (rules/extract-rules (dissoc rules/db-query-dsl-rules :task :priority :property :private-property)))))}}
 
  :tasks/config
  {:large-vars

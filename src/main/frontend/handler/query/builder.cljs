@@ -163,7 +163,7 @@
     (into [(symbol :between)] (map ->page-ref (rest f)))
 
     ;; property key value
-    (and (vector? f) (= 3 (count f)) (contains? #{:page-property :property} (keyword (first f))))
+    (and (vector? f) (= 3 (count f)) (contains? #{:page-property :property :private-property} (keyword (first f))))
     (let [l (if (page-ref/page-ref? (str (last f)))
               (symbol (last f))
               (last f))]

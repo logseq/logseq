@@ -265,7 +265,7 @@
   (db-based-build-between-three-arg (concat e ['now])))
 
 (defn- build-between
-  [e db-graph?]
+  [e {:keys [db-graph?]}]
   (cond
     (= 3 (count e))
     (let [k (get-timestamp-property e)]
@@ -330,18 +330,24 @@
         ::no-property-found)))
 
 (defn- build-property-two-arg
-  [e {:keys [db-graph?]}]
+  [e {:keys [db-graph? private-property?]}]
   (let [k (if db-graph? (->db-keyword-property (nth e 1)) (->file-keyword-property (nth e 1)))
         v (nth e 2)
         v' (if db-graph? (->db-property-value k v) (->file-property-value v))]
-    {:query (list 'property '?b k v')
-     :rules [:property]}))
+    (if private-property?
+      {:query (list 'private-property '?b k v')
+       :rules [:private-property]}
+      {:query (list 'property '?b k v')
+       :rules [:property]})))
 
 (defn- build-property-one-arg
-  [e {:keys [db-graph?]}]
+  [e {:keys [db-graph? private-property?]}]
   (let [k (if db-graph? (->db-keyword-property (nth e 1)) (->file-keyword-property (nth e 1)))]
-    {:query (list 'has-property '?b k)
-     :rules [:has-property]}))
+    (if private-property?
+      {:query (list 'has-private-property '?b k)
+       :rules [:has-private-property]}
+      {:query (list 'has-property '?b k)
+       :rules [:has-property]})))
 
 (defn- build-property [e env]
   (cond
@@ -391,7 +397,7 @@
        :rules [:has-page-property]})))
 
 (defn- build-tags
-  [db-graph? e]
+  [e {:keys [db-graph?]}]
   (let [tags (if (coll? (first (rest e)))
                (first (rest e))
                (rest e))
@@ -507,7 +513,7 @@ Some bindings in this fn:
             (:db-graph? env)
             (and page-ref?
                  (not (contains? #{'page-property 'page-tags} (:current-filter env))))
-            (contains? #{'between 'property 'todo 'task 'priority 'page} fe)
+            (contains? #{'between 'property 'private-property 'todo 'task 'priority 'page} fe)
             (and (not page-ref?) (string? e)))
        (reset! blocks? true))
      (cond
@@ -528,10 +534,13 @@ Some bindings in this fn:
        (build-and-or-not e env level fe)
 
        (= 'between fe)
-       (build-between e (:db-graph? env))
+       (build-between e env)
 
        (= 'property fe)
        (build-property e env)
+
+       (= 'private-property fe)
+       (build-property e (assoc env :private-property? true))
 
        ;; task is the new name and todo is the old one
        (or (= 'todo fe) (= 'task fe))
@@ -553,7 +562,7 @@ Some bindings in this fn:
        (build-page-property e env)
 
        (= 'tags fe)
-       (build-tags (:db-graph? env) e)
+       (build-tags e env)
 
        (= 'page-tags fe)
        (build-page-tags e)
@@ -745,7 +754,6 @@ Some bindings in this fn:
                           #(sort-by % (fn [m prop] (get-in m [:block/properties prop])))
                           identity)
                transform-fn (comp sort-by' random-samples)]
-           (prn :debug :query query')
            (query-react/react-query repo
                                     {:query query'
                                      :query-string query-string
