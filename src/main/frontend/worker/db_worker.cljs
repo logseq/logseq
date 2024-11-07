@@ -915,7 +915,9 @@
     (worker-state/set-worker-object! obj)
     (file/<ratelimit-file-writes!)
     (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
-    (Comlink/expose obj)))
+    (Comlink/expose obj)
+    (let [^js main (Comlink/wrap js/self)]
+      (.testFn main))))
 
 (comment
   (defn <remove-all-files!
