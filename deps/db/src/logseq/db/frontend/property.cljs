@@ -42,12 +42,12 @@
                                    :public? true
                                    :classes #{:logseq.class/Root}}
                           :queryable? true}
-   :kv/value             {:title "KV value"
-                          :attribute :kv/value
-                          :schema {:type :any
-                                   :public? false
-                                   :hide? true}}
-   :block/type           {:title "Node type"
+   :logseq.property.attribute/kv-value {:title "KV value"
+                                        :attribute :kv/value
+                                        :schema {:type :any
+                                                 :public? false
+                                                 :hide? true}}
+   :block/type           {:title "Node Type"
                           :attribute :block/type
                           :schema {:type :string
                                    :public? false
@@ -115,17 +115,19 @@
                           :schema {:type :datetime
                                    :public? false
                                    :hide? true}}
-   :property/schema.classes      {:title "Property classes"
-                                  :attribute :property/schema.classes
-                                  :schema {:type :entity
-                                           :cardinality :many
-                                           :public? false
-                                           :hide? true}}
-   :property.value/content       {:title "Property value"
-                                  :attribute :property.value/content
-                                  :schema {:type :any
-                                           :public? false
-                                           :hide? true}}
+   :logseq.property.attribute/property-schema-classes
+   {:title "Property classes"
+    :attribute :property/schema.classes
+    :schema {:type :entity
+             :cardinality :many
+             :public? false
+             :hide? true}}
+   :logseq.property.attribute/property-value-content
+   {:title "Property value"
+    :attribute :property.value/content
+    :schema {:type :any
+             :public? false
+             :hide? true}}
 
    :logseq.property.node/display-type {:title "Node Display Type"
                                        :schema {:type :keyword
@@ -133,7 +135,7 @@
                                                 :hide? true
                                                 :view-context :block}
                                        :queryable? true}
-   :logseq.property.code/lang {:title "Code mode"
+   :logseq.property.code/lang {:title "Code Mode"
                                :schema {:type :string
                                         :public? false
                                         :hide? true
@@ -376,12 +378,12 @@
                               {:type :node
                                :hide? true
                                :public? false}}
-   :logseq.property.asset/type {:title "File type"
+   :logseq.property.asset/type {:title "File Type"
                                 :schema {:type :string
                                          :hide? true
                                          :public? false}
                                 :queryable? true}
-   :logseq.property.asset/size {:title "File size"
+   :logseq.property.asset/size {:title "File Size"
                                 :schema {:type :raw-number
                                          :hide? true
                                          :public? false}
@@ -427,12 +429,12 @@
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"
-  #{:block/alias :block/tags :kv/value :block/type :block/schema :block/parent
+  #{:block/alias :block/tags :block/type :block/schema :block/parent
     :block/order :block/collapsed? :block/page
     :block/refs :block/path-refs :block/link
     :block/title :block/closed-value-property
     :block/created-at :block/updated-at
-    :property/schema.classes :property.value/content})
+    :logseq.property.attribute/kv-value :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content})
 
 (def read-only-properties
   "Property values that shouldn't be updated"
@@ -447,6 +449,8 @@
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs" "logseq.task"
     "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table" "logseq.property.node"
     "logseq.property.code"
+    ;; attribute ns is for db attributes that don't start with :block
+    "logseq.property.attribute"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"})
 
 (defn logseq-property?
