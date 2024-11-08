@@ -15,6 +15,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
+            [malli.core :as ma]
             [missionary.core :as m])
   (:import [missionary Cancelled]))
 
@@ -107,7 +108,16 @@
                 (filter (fn [v] (when (client-op/get-unpushed-asset-ops-count repo) v)))
                 merge-flow)))
 
-(defn remote-block-ops=>remote-asset-ops
+(def ^:private remote-asset-updates-schema
+  [:sequential
+   [:map {:closed true}
+    [:op [:enum :update-asset :remove-asset]]
+    [:malli.core/default [:map-of :keyword :any]]]])
+
+(def ^:private *remote-asset-updates (atom nil :validator (ma/validator remote-asset-updates-schema)))
+(def ^:private remote-asset-updates-flow (m/buffer 10 (m/watch *remote-asset-updates)))
+
+(defn- remote-block-ops=>remote-asset-ops
   [db update-ops remove-ops]
   {:update-asset-ops
    (keep
@@ -131,11 +141,21 @@
             {:block/uuid block-uuid}))))
     remove-ops)})
 
+(defn emit-remote-asset-updates!
+  [db update-ops remove-ops]
+  (let [{:keys [update-asset-ops remove-asset-ops]}
+        (remote-block-ops=>remote-asset-ops db update-ops remove-ops)]
+    (when-let [remote-asset-updates-ops (not-empty (concat update-asset-ops remove-asset-ops))]
+      (reset! *remote-asset-updates remote-asset-updates-ops))))
+
 (defn- create-mixed-flow
   "Return a flow that emits different events:
-  - `:local-update-check`: event to notify check if there're some new local-updates on assets"
+  - `:local-update-check`: event to notify check if there're some new local-updates on assets
+  - `:remote-updates`: remote asset updates "
   [repo *auto-push?]
-  (let [remote-update-flow m/none       ;TODO
+  (let [remote-update-flow (m/eduction
+                            (map (fn [v] {:type :remote-updates :value v}))
+                            remote-asset-updates-flow)
         local-update-check-flow (m/eduction
                                  (map (fn [v] {:type :local-update-check :value v}))
                                  (create-local-updates-check-flow repo *auto-push? 2500))]
