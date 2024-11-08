@@ -452,12 +452,12 @@
         :fix set-hide-empty-value}]
    [44 {:fix update-hl-color-and-page}]
    [45 {:fix store-url-value-in-block-title}]
-   [46 {:properties [:kv/value :block/type :block/schema :block/parent
+   [46 {:properties [:logseq.property.attribute/kv-value :block/type :block/schema :block/parent
                      :block/order :block/collapsed? :block/page
                      :block/refs :block/path-refs :block/link
                      :block/title :block/closed-value-property
                      :block/created-at :block/updated-at
-                     :property/schema.classes :property.value/content]}]
+                     :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content]}]
    [47 {:fix replace-hidden-type-with-schema}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
