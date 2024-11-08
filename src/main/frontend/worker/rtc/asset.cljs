@@ -107,6 +107,30 @@
                 (filter (fn [v] (when (client-op/get-unpushed-asset-ops-count repo) v)))
                 merge-flow)))
 
+(defn remote-block-ops=>remote-asset-ops
+  [db update-ops remove-ops]
+  {:update-asset-ops
+   (keep
+    (fn [update-op]
+      (let [block-uuid (:self update-op)
+            asset-checksum (:logseq.property.asset/checksum update-op)]
+        (when asset-checksum
+          (when-let [ent (d/entity db [:block/uuid block-uuid])]
+            (let [local-checksum (:logseq.property.asset/checksum ent)]
+              (when (or (and local-checksum (not= local-checksum asset-checksum))
+                        (nil? local-checksum))
+                (apply conj {:block/uuid block-uuid}
+                       (filter (fn [[k _v]] (= :logseq.property.asset (namespace k))) update-op))))))))
+    update-ops)
+   :remove-asset-ops
+   (keep
+    (fn [remove-op]
+      (let [block-uuid (:block-uuid remove-op)]
+        (when-let [ent (d/entity db [:block/uuid block-uuid])]
+          (when (:logseq.property.asset/checksum ent)
+            {:block/uuid block-uuid}))))
+    remove-ops)})
+
 (defn- create-mixed-flow
   "Return a flow that emits different events:
   - `:local-update-check`: event to notify check if there're some new local-updates on assets"
