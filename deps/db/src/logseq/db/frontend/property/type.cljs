@@ -38,7 +38,7 @@
   "Property value ref types where the refed entity stores its value in
   :property.value/content e.g. :number is stored as a number. new value-ref-property-types
   should default to this as it allows for more querying power"
-  #{:number :url})
+  #{:number})
 
 (def value-ref-property-types
   "Property value ref types where the refed entities either store their value in
