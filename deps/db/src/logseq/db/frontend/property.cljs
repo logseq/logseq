@@ -17,14 +17,14 @@
      * :cardinality - property cardinality. Default to one/single cardinality if not set
      * :hide? - Boolean which hides property when set on a block or exported e.g. slides
      * :public? - Boolean which allows property to be used by user: add and remove property to blocks/pages
-       and queryable via property/has-property rules
+       and queryable via property and has-property rules
      * :view-context - Keyword to indicate which view contexts a property can be
        seen in when :public? is set. Valid values are :page, :block and :never. Property can
        be viewed in any context if not set
    * :title - Property's :block/title
    * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
-   * :queryable? - Whether property can be queried in the query builder
+   * :queryable? - Boolean for whether property can be queried in the query builder
    * :closed-values - Vec of closed-value maps for properties with choices. Map
      has keys :value, :db-ident, :uuid and :icon"
   (ordered-map
@@ -309,7 +309,7 @@
 
    :logseq.property/icon {:title "Icon"
                           :schema {:type :map}}
-   :logseq.property/public {:title "Public?"
+   :logseq.property/public {:title "Publishing Public?"
                             :schema
                             {:type :checkbox
                              :hide? true
