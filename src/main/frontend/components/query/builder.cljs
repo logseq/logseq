@@ -23,7 +23,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.db-mixins :as db-mixins]))
+            [frontend.db-mixins :as db-mixins]
+            [logseq.db :as ldb]))
 
 (rum/defc page-block-selector
   [*find]
@@ -35,7 +36,7 @@
                 :value "page"
                 :selected (= @*find :page)}]
               (fn [e v]
-       ;; Prevent opening the current block's editor
+                ;; Prevent opening the current block's editor
                 (util/stop e)
                 (reset! *find (keyword v))))])
 
@@ -123,11 +124,11 @@
    [:div.flex.flex-row
     [:div.font-medium.mt-2 "Between: "]
     (datepicker :start "Start date"
-      (merge opts {:auto-focus true
-                   :on-select (fn []
-                                (when-let [^js end-input (js/document.querySelector ".query-builder-datepicker[data-key=end]")]
-                                  (when (string/blank? (.-value end-input))
-                                    (.focus end-input))))}))
+                (merge opts {:auto-focus true
+                             :on-select (fn []
+                                          (when-let [^js end-input (js/document.querySelector ".query-builder-datepicker[data-key=end]")]
+                                            (when (string/blank? (.-value end-input))
+                                              (.focus end-input))))}))
     (datepicker :end "End date" opts)]
    [:p.pt-2
     (ui/button "Submit"
@@ -139,25 +140,38 @@
                                  (reset! *between-dates {}))))))]])
 
 (rum/defc property-select
-  [*mode *property]
-  (let [[properties set-properties!] (rum/use-state nil)]
+  [*mode *property *private-property?]
+  (let [[properties set-properties!] (rum/use-state nil)
+        properties (cond->> properties
+                     (not @*private-property?)
+                     (remove ldb/built-in?))]
     (rum/use-effect!
      (fn []
-       (p/let [properties (db-async/<get-all-properties)]
+       (p/let [properties (db-async/<get-all-properties {:remove-built-in-property? false
+                                                         :remove-non-queryable-built-in-property? true})]
          (set-properties! properties)))
      [])
-    (select (map #(hash-map :db/ident (:db/ident %)
-                            :value (:block/title %))
-                 properties)
-            (fn [{value :value db-ident :db/ident}]
-              (reset! *mode "property-value")
-              (reset! *property (if (config/db-based-graph? (state/get-current-repo))
-                                  db-ident
-                                  (keyword value)))))))
+    [:div.flex.flex-col.gap-1
+     [:div.flex.flex-row.justify-between.gap-1.items-center.px-1.pb-1.border-b
+      [:label.opacity-50.cursor.select-none.text-sm
+       {:for "built-in"}
+       "Show built-in properties"]
+      (shui/checkbox
+       {:id "built-in"
+        :value @*private-property?
+        :on-checked-change #(reset! *private-property? (not @*private-property?))})]
+     (select (map #(hash-map :db/ident (:db/ident %)
+                             :value (:block/title %))
+                  properties)
+             (fn [{value :value db-ident :db/ident}]
+               (reset! *mode "property-value")
+               (reset! *property (if (config/db-based-graph? (state/get-current-repo))
+                                   db-ident
+                                   (keyword value)))))]))
 
 (rum/defc property-value-select-inner
   < rum/reactive db-mixins/query
-  [repo *property *find *tree opts loc values {:keys [db-graph? ref-property? property-type]}]
+  [repo *property *private-property? *find *tree opts loc values {:keys [db-graph? ref-property? property-type]}]
   (let [;; FIXME: lazy load property values consistently on first call
         ;; Guard against non ref properties like :logseq.property/icon
         _ (when (and db-graph? ref-property?)
@@ -165,7 +179,7 @@
         values' (if db-graph?
                   (if ref-property?
                     (map #(db-property/property-value-content (db/entity repo %)) values)
-                    (if (contains? #{:checkbox} property-type)
+                    (if (contains? #{:checkbox :keyword :raw-number :string} property-type)
                       values
                       ;; Don't display non-ref property values as they don't have display and query support
                       []))
@@ -176,14 +190,18 @@
                       (cons "Select all" values'))]
     (select values''
             (fn [{:keys [original-value]}]
-              (let [x (if (= original-value "Select all")
-                        [(if (= @*find :page) :page-property :property) @*property]
-                        [(if (= @*find :page) :page-property :property) @*property original-value])]
+              (let [k (cond
+                        db-graph? (if @*private-property? :private-property :property)
+                        (= (rum/react *find) :page) :page-property
+                        :else :property)
+                    x (if (= original-value "Select all")
+                        [k @*property]
+                        [k @*property original-value])]
                 (reset! *property nil)
                 (append-tree! *tree opts loc x))))))
 
 (rum/defc property-value-select
-  [repo *property *find *tree opts loc]
+  [repo *property *private-property? *find *tree opts loc]
   (let [db-graph? (sqlite-util/db-based-graph? repo)
         property-type (when db-graph? (get-in (db/entity repo @*property) [:block/schema :type]))
         ref-property? (and db-graph? (contains? db-property-type/all-ref-property-types property-type))
@@ -198,17 +216,18 @@
              (db-async/<get-block repo db-id :children? false)))
          (set-values! result)))
      [@*property])
-    (property-value-select-inner repo *property *find *tree opts loc values
+    (property-value-select-inner repo *property *private-property? *find *tree opts loc values
                                  {:db-graph? db-graph?
                                   :ref-property? ref-property?
                                   :property-type property-type})))
 
 (rum/defc tags
   [repo *tree opts loc]
-  (let [[values set-values!] (rum/use-state nil)]
+  (let [[values set-values!] (rum/use-state nil)
+        db-based? (config/db-based-graph? repo)]
     (rum/use-effect!
      (fn []
-       (p/let [result (db-async/<get-tags repo)]
+       (let [result (db-model/get-all-classes repo {:except-root-class? true})]
          (set-values! result)))
      [])
     (let [items (->> values
@@ -216,12 +235,91 @@
                      sort)]
       (select items
               (fn [{:keys [value]}]
-                (append-tree! *tree opts loc [:page-tags value]))))))
+                (append-tree! *tree opts loc [(if db-based? :tags :page-tags) value]))))))
 
-(defn- query-filter-picker
+(defn- db-based-query-filter-picker
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
         *property (::property state)
+        *private-property? (::private-property? state)
+        repo (state/get-current-repo)]
+    [:div
+     (case @*mode
+       "property"
+       (property-select *mode *property *private-property?)
+
+       "property-value"
+       (property-value-select repo *property *private-property? *find *tree opts loc)
+
+       "sample"
+       (select (range 1 101)
+               (fn [{:keys [value]}]
+                 (append-tree! *tree opts loc [:sample (util/safe-parse-int value)])))
+
+       "tags"
+       (tags repo *tree opts loc)
+
+       "task"
+       (let [items (let [values (:property/closed-values (db/entity :logseq.task/status))]
+                     (mapv db-property/property-value-content values))]
+         (select items
+                 (constantly nil)
+                 {:multiple-choices? true
+                ;; Need the existing choices later to improve the UX
+                  :selected-choices #{}
+                  :extract-chosen-fn :value
+                  :prompt-key :select/default-select-multiple
+                  :close-modal? false
+                  :on-apply (fn [choices]
+                              (when (seq choices)
+                                (append-tree! *tree opts loc (vec (cons :task choices)))))}))
+
+       "priority"
+       (select (if (config/db-based-graph? repo)
+                 (let [values (:property/closed-values (db/entity :logseq.task/priority))]
+                   (mapv db-property/property-value-content values))
+                 gp-db/built-in-priorities)
+               (constantly nil)
+               {:multiple-choices? true
+                :selected-choices #{}
+                :extract-chosen-fn :value
+                :prompt-key :select/default-select-multiple
+                :close-modal? false
+                :on-apply (fn [choices]
+                            (when (seq choices)
+                              (append-tree! *tree opts loc (vec (cons :priority choices)))))})
+
+       "page"
+       (let [pages (sort (db-model/get-all-page-titles repo))]
+         (select pages
+                 (fn [{:keys [value]}]
+                   (append-tree! *tree opts loc [:page value]))))
+
+       ;; TODO: replace with node reference
+       "page reference"
+       (let [pages (sort (db-model/get-all-page-titles repo))]
+         (select pages
+                 (fn [{:keys [value]}]
+                   (append-tree! *tree opts loc [:page-ref value]))
+                 {}))
+
+       "full text search"
+       (search (fn [v] (append-tree! *tree opts loc v))
+               (:toggle-fn opts))
+
+       "between"
+       (between (merge opts
+                       {:tree *tree
+                        :loc loc
+                        :clause clause}))
+
+       nil)]))
+
+(defn- file-based-query-filter-picker
+  [state *find *tree loc clause opts]
+  (let [*mode (::mode state)
+        *property (::property state)
+        *private-property? (::private-property? state)
         repo (state/get-current-repo)]
     [:div
      (case @*mode
@@ -235,10 +333,10 @@
        (tags repo *tree opts loc)
 
        "property"
-       (property-select *mode *property)
+       (property-select *mode *property *private-property?)
 
        "property-value"
-       (property-value-select repo *property *find *tree opts loc)
+       (property-value-select repo *property *private-property? *find *tree opts loc)
 
        "sample"
        (select (range 1 101)
@@ -301,33 +399,38 @@
 
        nil)]))
 
-(rum/defcs picker <
+(rum/defcs picker < rum/reactive
   {:will-mount (fn [state]
                  (state/clear-selection!)
                  state)}
   (rum/local nil ::mode)                ; pick mode
   (rum/local nil ::property)
+  (rum/local false ::private-property?)
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
         db-based? (config/db-based-graph? (state/get-current-repo))
-        filters (if (= :page @*find)
-                  (if db-based?
-                    (remove #{"namespace"} query-builder/page-filters)
-                    query-builder/page-filters)
-                  query-builder/block-filters)
+        filters (if db-based?
+                  query-builder/db-based-block-filters
+                  (if (= :page (rum/react *find))
+                    query-builder/page-filters
+                    query-builder/block-filters))
         filters-and-ops (concat filters query-builder/operators)
         operator? #(contains? query-builder/operators-set (keyword %))]
     [:div.query-builder-picker
      (if @*mode
        (when-not (operator? @*mode)
-         (query-filter-picker state *find *tree loc clause opts))
+         (if db-based?
+           (db-based-query-filter-picker state *find *tree loc clause opts)
+           (file-based-query-filter-picker state *find *tree loc clause opts)))
        [:div
-        (when-not @*find
-          [:div.flex.flex-row.items-center.p-2.justify-between
-           [:div.ml-2 "Find: "]
-           (page-block-selector *find)])
-        (when-not @*find
-          [:hr.m-0])
+        (when-not db-based?
+          [:<>
+           (when-not @*find
+             [:div.flex.flex-row.items-center.p-2.justify-between
+              [:div.ml-2 "Find: "]
+              (page-block-selector *find)])
+           (when-not @*find
+             [:hr.m-0])])
         (select
          (map name filters-and-ops)
          (fn [{:keys [value]}]
@@ -363,13 +466,16 @@
   [clause]
   (let [f (first clause)]
     (cond
+      (string/starts-with? (str f) "?") ; variable
+      (str clause)
+
       (string? clause)
       (str "Search: " clause)
 
       (= (keyword f) :page-ref)
       (page-ref/->page-ref (second clause))
 
-      (= (keyword f) :page-tags)
+      (contains? #{:tags :page-tags} (keyword f))
       (cond
         (string? (second clause))
         (str "#" (second clause))
@@ -378,7 +484,7 @@
         :else
         (str "#" (second (second clause))))
 
-      (contains? #{:property :page-property} (keyword f))
+      (contains? #{:property :private-property :page-property} (keyword f))
       (str (if (and (config/db-based-graph? (state/get-current-repo))
                     (qualified-keyword? (second clause)))
              (:block/title (db/entity (second clause)))
@@ -394,6 +500,26 @@
              :else
              (last clause)))
 
+      ;; between timestamp start (optional end)
+      (and (= (keyword f) :between) (query-dsl/get-timestamp-property clause))
+      (let [k (query-dsl/get-timestamp-property clause)
+            [_ _property start end] clause
+            start (if (or (keyword? start)
+                          (symbol? start))
+                    (name start)
+                    (second start))
+            end (if (or (keyword? end)
+                        (symbol? end))
+                  (name end)
+                  (second end))]
+        (str (if (= k :block/created-at)
+               "Created"
+               "Updated")
+             " " start
+             (when end
+               (str " ~ " end))))
+
+      ;; between journal start end
       (= (keyword f) :between)
       (let [start (if (or (keyword? (second clause))
                           (symbol? (second clause)))
@@ -481,7 +607,8 @@
   [*tree *find loc clauses]
   (when (seq clauses)
     [:div.query-builder-clause
-     (let [kind (keyword (first clauses))]
+     (let [operator (first clauses)
+           kind (keyword operator)]
        (if (query-builder/operators-set kind)
          [:div.operator-clause.flex.flex-row.items-center {:data-level (count loc)}
           [:div.clause-bracket "("]
@@ -491,8 +618,7 @@
 
 (rum/defc clauses-group
   [*tree *find loc kind clauses]
-  (let [parens? (and (= loc [0])
-                     (> (count clauses) 1))]
+  (let [parens? (and (= loc [0]) (or (not= kind :and) (> (count clauses) 1)))]
     [:div.clauses-group
      (when parens? [:div.clause-bracket "("])
      (when-not (and (= loc [0])
@@ -526,7 +652,8 @@
     ""
     (if (or (common-util/wrapped-by-parens? q-str)
             (common-util/wrapped-by-quotes? q-str)
-            (page-ref/page-ref? q-str))
+            (page-ref/page-ref? q-str)
+            (string/starts-with? q-str "[?"))
       q-str
       (str "\"" q-str "\""))))
 

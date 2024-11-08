@@ -47,6 +47,7 @@
     }
 
     .ls-table-header-cell {
+      @apply overflow-hidden;
       position: relative;
     }
   }

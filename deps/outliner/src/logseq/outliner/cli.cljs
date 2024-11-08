@@ -1,13 +1,13 @@
 (ns ^:node-only logseq.outliner.cli
   "Primary ns for outliner CLI fns"
-    (:require [clojure.string :as string]
-              [datascript.core :as d]
-              [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-              [logseq.db.sqlite.build :as sqlite-build]
-              [logseq.db.sqlite.cli :as sqlite-cli]
-              [logseq.outliner.db-pipeline :as db-pipeline]
-              ["fs" :as fs]
-              ["path" :as node-path]))
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.sqlite.cli :as sqlite-cli]
+            [logseq.outliner.db-pipeline :as db-pipeline]
+            ["fs" :as fs]
+            ["path" :as node-path]))
 
 (defn- find-on-classpath [classpath rel-path]
   (some (fn [dir]

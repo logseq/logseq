@@ -152,47 +152,54 @@
 (def ^:large-vars/data-var db-query-dsl-rules
   "Rules used by frontend.query.dsl for db graphs"
   (merge
-   (dissoc query-dsl-rules :namespace)
-   {:page-tags
-    '[(page-tags ?p ?tags)
-      [?p :block/tags ?t]
+   (dissoc query-dsl-rules :namespace
+           :page-property :has-page-property
+           :page-tags :all-page-tags)
+   {:tags
+    '[(tags ?b ?tags)
+      [?b :block/tags ?t]
       [?t :block/name ?tag]
-      [(missing? $ ?p :block/link)]
+      [(missing? $ ?b :block/link)]
       [(contains? ?tags ?tag)]]
 
-    :has-page-property
-    '[(has-page-property ?p ?prop)
-      [?p :block/name]
-      [?p ?prop _]
+    :has-property
+    '[(has-property ?b ?prop)
+      [?b ?prop _]
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/type "property"]
+      [?prop-e :block/schema ?prop-schema]
+      [(get ?prop-schema :public? true) ?public]
+      [(= true ?public)]]
+
+    ;; Same as has-property except it returns public and private properties like :block/title
+    :has-private-property
+    '[(has-private-property ?b ?prop)
+      [?b ?prop _]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]
 
-    :page-property
-    '[(page-property ?p ?prop ?val)
-      [?p :block/name]
+    :property
+    '[(property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
-      [?p ?prop ?pv]
+      [?prop-e :block/schema ?prop-schema]
+      [(get ?prop-schema :public? true) ?public]
+      [(= true ?public)]
+      [?b ?prop ?pv]
       (or
        ;; non-ref value
        (and
         [(missing? $ ?prop-e :db/valueType)]
-        [?p ?prop ?val])
+        [?b ?prop ?val])
        ;; ref value
        (and
         [?prop-e :db/valueType :db.type/ref]
         (or [?pv :block/title ?val]
             [?pv :property.value/content ?val])))]
 
-    :has-property
-    '[(has-property ?b ?prop)
-      [?b ?prop _]
-      [(missing? $ ?b :block/name)]
-      [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]]
-
-    :property
-    '[(property ?b ?prop ?val)
+    ;; Same as property except it returns public and private properties like :block/title
+    :private-property
+    '[(private-property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
       [?b ?prop ?pv]
@@ -205,8 +212,7 @@
        (and
         [?prop-e :db/valueType :db.type/ref]
         (or [?pv :block/title ?val]
-            [?pv :property.value/content ?val])))
-      [(missing? $ ?b :block/name)]]
+            [?pv :property.value/content ?val])))]
 
     :task
     '[(task ?b ?statuses)

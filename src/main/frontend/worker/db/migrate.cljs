@@ -204,6 +204,17 @@
          [[:db/retract (:e datom) (:a datom)]]))
      datoms)))
 
+(defn- replace-hidden-type-with-schema
+  [conn _search-db]
+  (let [db @conn
+        datoms (d/datoms db :avet :block/type "hidden")]
+    (map
+     (fn [datom]
+       {:db/id (:e datom)
+        :block/type "page"
+        :block/schema {:public? false}})
+     datoms)))
+
 (defn- update-block-type-many->one
   [conn _search-db]
   (let [db @conn
@@ -440,7 +451,14 @@
    [43 {:properties [:logseq.property/hide-empty-value]
         :fix set-hide-empty-value}]
    [44 {:fix update-hl-color-and-page}]
-   [45 {:fix store-url-value-in-block-title}]])
+   [45 {:fix store-url-value-in-block-title}]
+   [46 {:properties [:logseq.property.attribute/kv-value :block/type :block/schema :block/parent
+                     :block/order :block/collapsed? :block/page
+                     :block/refs :block/path-refs :block/link
+                     :block/title :block/closed-value-property
+                     :block/created-at :block/updated-at
+                     :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content]}]
+   [47 {:fix replace-hidden-type-with-schema}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

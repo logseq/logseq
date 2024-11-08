@@ -31,6 +31,13 @@
 
 (rum/defcs query-result < rum/static mixins/container-id
   (rum/local nil ::result)
+  {:will-remount (fn [old-state new-state]
+                   (let [*result (::result new-state)
+                         [_config view-entity old-result] (:rum/args old-state)
+                         [_config _view-entity new-result] (:rum/args old-state)]
+                     (when-not (= old-result new-result)
+                       (reset! *result (init-result new-result view-entity))))
+                   new-state)}
   [state config view-entity result]
   (let [*result (::result state)
         result' (or @*result (init-result result view-entity))

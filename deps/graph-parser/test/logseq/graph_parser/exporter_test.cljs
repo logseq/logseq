@@ -132,6 +132,13 @@
           _ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
     {:import-state (:import-state doc-options)}))
 
+(defn- remove-block-ns-properties
+  [m]
+  (->> (remove (fn [[k _v]]
+                 (and (= "block" (namespace k))
+                      (not (contains? #{:block/tags :block/alias} k)))) m)
+       (into {})))
+
 (defn- readable-properties
   [db query-ent]
   (->> (db-property/properties query-ent)
@@ -146,7 +153,8 @@
                        (db-property/ref->property-value-contents db v)
                        v))
                    (db-property/ref->property-value-contents db v))])))
-       (into {})))
+       (into {})
+       (remove-block-ns-properties)))
 
 ;; Tests
 ;; =====
@@ -185,7 +193,7 @@
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 9
+      (is (= 10
              (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
                                 :where [?b :block/title] [_ :block/page ?b]] @conn)
                          (filter ldb/internal-page?))))
@@ -245,8 +253,9 @@
       (is (= {:user.property/prop-bool true
               :user.property/prop-num 5
               :user.property/prop-string "woot"}
-             (update-vals (db-property/properties (find-block-by-content @conn "b1"))
-                          (fn [v] (if (map? v) (db-property/ref->property-value-content @conn v) v))))
+             (->> (update-vals (db-property/properties (find-block-by-content @conn "b1"))
+                               (fn [v] (if (map? v) (db-property/ref->property-value-content @conn v) v)))
+                  (remove-block-ns-properties)))
           "Basic block has correct properties")
       (is (= #{"prop-num" "prop-string" "prop-bool"}
              (->> (d/entity @conn (:db/id (find-block-by-content @conn "b1")))

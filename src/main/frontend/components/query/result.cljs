@@ -11,7 +11,8 @@
             [frontend.state :as state]
             [frontend.template :as template]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db :as ldb]))
 
 (defn trigger-custom-query!
   [config query *query-error set-result!]
@@ -30,17 +31,20 @@
                  (not (re-matches template/template-re (string/trim q))))
             nil
 
-            (re-matches #"\".*\"" q) ; full-text search
+            (re-matches #"^\".*\"$" q) ; full-text search
             (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
               (when (seq blocks)
                 (let [result (->> blocks
                                   (keep (fn [b]
                                           (when-not (= (:block/uuid b) current-block-uuid)
-                                            (db/entity [:block/uuid (:block/uuid b)])))))]
+                                            (let [entity (db/entity [:block/uuid (:block/uuid b)])]
+                                              (when-not (ldb/hidden? entity)
+                                                entity))))))]
                   (set-result! (atom result)))))
 
             :else
-            (set-result! (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)}))))
+            (let [result (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})]
+              (set-result! (or result (atom []))))))
 
         :else
         (set-result! (query-custom/custom-query query {:current-block-uuid current-block-uuid

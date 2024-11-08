@@ -166,7 +166,7 @@
                   :block/file {:file/path (common-util/path-normalize file)}))
                 (extract-page-alias-and-tags page-name properties))]
     (cond->
-      page-m
+     page-m
 
       (seq valid-properties)
       (assoc :block/properties valid-properties
