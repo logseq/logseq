@@ -54,10 +54,11 @@
         ;; Stores random closed values for use with queries
         closed-values (atom {})
         random-closed-value #(let [val (-> closed-values-config % rand-nth)]
-                               (swap! closed-values assoc % (:value val))
+                               (swap! closed-values assoc % val)
                                [:block/uuid (:uuid val)])
         object-uuid (random-uuid)
-        get-closed-value #(get @closed-values %)
+        get-closed-value #(:value (get @closed-values %))
+        get-closed-value-ref #(vector :block/uuid (:uuid (get @closed-values %)))
         timestamp (common-util/time-ms)]
     {:pages-and-blocks
      (vec
@@ -124,16 +125,16 @@
           (query (str "(property datetime "  timestamp ")"))]}
 
         ;; Page property pages and queries
-        {:page {:block/title "default page" :build/properties {:default "yolo"}}}
+        {:page {:block/title "default page" :build/properties {:default "haha"}}}
         {:page {:block/title "default-many page" :build/properties {:default-many #{"yee" "haw" "sir"}}}}
-        {:page {:block/title "default-closed page" :build/properties {:default-closed (random-closed-value :default-closed)}}}
+        {:page {:block/title "default-closed page" :build/properties {:default-closed (get-closed-value-ref :default-closed)}}}
         {:page {:block/title "url page" :build/properties {:url "https://logseq.com"}}}
         {:page {:block/title "url-many page" :build/properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}}
-        {:page {:block/title "url-closed page" :build/properties {:url-closed (random-closed-value :url-closed)}}}
+        {:page {:block/title "url-closed page" :build/properties {:url-closed (get-closed-value-ref :url-closed)}}}
         {:page {:block/title "checkbox page" :build/properties {:checkbox true}}}
         {:page {:block/title "number page" :build/properties {:number 5}}}
         {:page {:block/title "number-many page" :build/properties {:number-many #{5 10}}}}
-        {:page {:block/title "number-closed page" :build/properties {:number-closed (random-closed-value :number-closed)}}}
+        {:page {:block/title "number-closed page" :build/properties {:number-closed (get-closed-value-ref :number-closed)}}}
         {:page {:block/title "node page" :build/properties {:node [:block/uuid object-uuid]}}}
         {:page {:block/title "node without classes page" :build/properties {:node-without-classes [:page "Page 1"]}}}
         {:page {:block/title "node-many page" :build/properties {:node-many #{[:block/uuid object-uuid] [:page "Page object"]}}}}
