@@ -4016,7 +4016,8 @@
         *virtualized-ref (rum/use-ref nil)
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
-                        :custom-scroll-parent (gdom/getElement "main-content-container")
+                        :custom-scroll-parent (or (:scroll-container config)
+                                                (gdom/getElement "main-content-container"))
                         :compute-item-key (fn [idx]
                                             (let [block (nth blocks idx)]
                                               (str (:container-id config) "-" (:db/id block))))
@@ -4029,12 +4030,12 @@
                                               bottom? (= (dec (count blocks)) idx)
                                               block (nth blocks idx)]
                                           (block-item (assoc config :top? top?)
-                                                      block
-                                                      {:top? top?
-                                                       :bottom? bottom?})))})
+                                            block
+                                            {:top? top?
+                                             :bottom? bottom?})))})
         *wrap-ref (rum/use-ref nil)]
     (rum/use-effect!
-     (fn []
+      (fn []
        (when virtualized?
          (when (:current-page? config)
            (let [ref (.-current *virtualized-ref)]
@@ -4170,10 +4171,8 @@
      (and (:ref? config) (:group-by-page? config) (vector? (first blocks)))
      [:div.flex.flex-col.references-blocks-wrap
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)
-            scroll-container (or
-                              (when-let [*ref (:scroll-container config)]
-                                (rum/deref *ref))
-                              (gdom/getElement "main-content-container"))]
+            scroll-container (or (:scroll-container config)
+                               (gdom/getElement "main-content-container"))]
         (when (seq blocks)
           (if (:sidebar? config)
             (for [block blocks]
