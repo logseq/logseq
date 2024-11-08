@@ -541,7 +541,8 @@
         tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (model/untitled-page? page-name)
-        file-missing? (not (model/get-page-file page-name))]
+        file-missing? (not (model/get-page-file page-name))
+        page-alias? (not (= page-name redirect-page-name))]
         ; gradient-styles (state/sub-color-gradient-text-styles :09)]
 
     [:a
@@ -549,7 +550,7 @@
       :class (cond-> (if tag? "tag" "page-ref")
                (:property? config) (str " page-property-key block-property")
                untitled? (str " opacity-50")
-               file-missing? (str " page-missing")
+               file-missing? (str (if page-alias? " page-alias" " page-missing")))
       :data-ref page-name
       :draggable true
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
