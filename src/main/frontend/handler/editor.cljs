@@ -3249,7 +3249,7 @@
       (state/selection?)
       (shortcut-copy-selection e)
 
-      (state/editing?)
+      (and (state/editing?) (nil? (:editor/code-block-context @state/state)))
       (let [input (state/get-input)
             selected-start (util/get-selection-start input)
             selected-end (util/get-selection-end input)]

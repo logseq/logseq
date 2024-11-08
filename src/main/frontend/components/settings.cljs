@@ -149,13 +149,12 @@
            :height 500}]]])
 
 (defn row-with-button-action
-  [{:keys [left-label description action button-label href on-click desc -for stretch center?]
-    :or {center? true}}]
+  [{:keys [left-label description action button-label href on-click desc -for stretch]}]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
-   {:class (if center? "sm:items-center" "sm:items-start")}
+   {:class "sm:items-start"}
    ;; left column
    [:div.flex.flex-col
-    [:label.block.text-sm.font-medium.leading-5.opacity-70.pt-2
+    [:label.block.text-sm.font-medium.leading-5.opacity-70
      {:for -for}
      left-label]
     (when description
@@ -236,18 +235,19 @@
       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-wide-mode))])])
 
 (defn editor-font-family-row [t font]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "font_family"}
     (t :settings-page/editor-font)]
-   [:div.rounded-md.sm:max-w-xs.flex.gap-2
+   [:div.col-span-2.flex.gap-2
     (for [t [:default :serif :mono]
           :let [t (name t)
                 tt (string/capitalize t)
                 active? (= font t)]]
       (shui/button
        {:variant :secondary
-        :class (when active? "border-primary border-[2px]")
+        :class (when active? " border-primary border-[2px]")
+        :style {:width "4.4rem"}
         :on-click #(state/set-editor-font! t)}
        [:span.flex.flex-col
         {:class (str "ls-font-" t)}
@@ -379,7 +379,7 @@
                     (for [color (concat [:none :logseq] colors/color-list)
                           :let [active? (= color color-accent)
                                 none? (= color :none)]]
-                      [:div.flex.items-center {:style {:height 28}}
+                      [:div.flex.items-center
                        (ui/tippy
                         {:html (case color
                                  :none [:p {:style {:max-width "300px"}}
@@ -412,7 +412,7 @@
                             (shortcut-helper/gen-shortcut-seq :ui/customize-appearance))])
        :stretch (boolean _in-modal?)
        :action pick-theme})
-     [:div.text-sm.opacity-50
+     [:div.text-sm.opacity-50.mt-1
       (t :settings-page/accent-color-alert)]]))
 
 (rum/defc appearance < rum/reactive
@@ -729,11 +729,13 @@
 (rum/defcs settings-general < rum/reactive
   [_state current-repo]
   (let [preferred-language (state/sub [:preferred-language])
-        show-radix-themes? true]
+        show-radix-themes? true
+        editor-font (state/sub :ui/editor-font)]
     [:div.panel-wrap.is-general
      (version-row t fv/version)
      (language-row t preferred-language)
      (theme-modes-row t)
+     (editor-font-family-row t editor-font)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
      (when show-radix-themes? (accent-color-row false))
      (when (config/global-config-enabled?) (edit-global-config-edn))
@@ -773,7 +775,6 @@
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
         wide-mode? (state/sub :ui/wide-mode?)
-        editor-font (state/sub :ui/editor-font)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
         db-graph? (config/db-based-graph? (state/get-current-repo))]
 
@@ -783,7 +784,6 @@
      (date-format-row t preferred-date-format)
      (when-not db-graph?
        (workflow-row t preferred-workflow))
-     (editor-font-family-row t editor-font)
      (show-brackets-row t show-brackets?)
      (toggle-wide-mode-row t wide-mode?)
 

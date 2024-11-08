@@ -819,43 +819,47 @@
         [visible? set-visible!] (rum/use-state nil)
         ;; set-visible! (fn debug-visible [v] (js/console.warn "debug: visible" v) (set-visible! v))
         _  #_:clj-kondo/ignore (rum/defc preview-render []
-                                 (rum/use-effect!
-                                  (fn []
-                                    (let [el-popup (rum/deref *el-popup)
-                                          focus! #(js/setTimeout (fn [] (.focus el-popup)))]
-                                      (focus!)
-                                      #(set-visible! false)))
-                                  [])
+                                 (let [[ready? set-ready!] (rum/use-state false)]
 
-                                 (when-let [source (or (db/get-alias-source-page (state/get-current-repo) (:db/id page-entity))
+                                   (rum/use-effect!
+                                     (fn []
+                                       (let [el-popup (rum/deref *el-popup)
+                                             focus! #(js/setTimeout (fn [] (.focus el-popup)))]
+                                         (set-ready! true)
+                                         (focus!)
+                                         (fn [] (set-visible! false))))
+                                     [])
+
+                                   (when-let [source (or (db/get-alias-source-page (state/get-current-repo) (:db/id page-entity))
                                                        page-entity)]
-                                   [:div.tippy-wrapper.as-page
-                                    {:ref *el-popup
-                                     :tab-index -1
-                                     :style {:width 600
-                                             :text-align "left"
-                                             :font-weight 500
-                                             :padding-bottom 64}
-                                     :on-mouse-enter (fn []
-                                                       (when-let [timer1 (rum/deref *timer1)]
-                                                         (js/clearTimeout timer1)))
-                                     :on-mouse-leave (fn []
+                                     [:div.tippy-wrapper.as-page
+                                      {:ref *el-popup
+                                       :tab-index -1
+                                       :style {:width 600
+                                               :text-align "left"
+                                               :font-weight 500
+                                               :padding-bottom 64}
+                                       :on-mouse-enter (fn []
+                                                         (when-let [timer1 (rum/deref *timer1)]
+                                                           (js/clearTimeout timer1)))
+                                       :on-mouse-leave (fn []
                                                          ;; check the top popup whether is the preview popup
-                                                       (when (ui/last-shui-preview-popup?)
-                                                         (rum/set-ref! *timer1
-                                                                       (js/setTimeout #(set-visible! false) 500))))}
-                                    (let [page-cp (state/get-page-blocks-cp)]
-                                      (page-cp {:repo (state/get-current-repo)
-                                                :page-name (str (:block/uuid source))
-                                                :sidebar? sidebar?
-                                                :preview? true}))]))]
+                                                         (when (ui/last-shui-preview-popup?)
+                                                           (rum/set-ref! *timer1
+                                                             (js/setTimeout #(set-visible! false) 500))))}
+                                      (when-let [page-cp (and ready? (state/get-page-blocks-cp))]
+                                        (page-cp {:repo (state/get-current-repo)
+                                                  :page-name (str (:block/uuid source))
+                                                  :sidebar? sidebar?
+                                                  :scroll-container (some-> (rum/deref *el-popup) (.closest ".ls-preview-popup"))
+                                                  :preview? true}))])))]
 
     (rum/use-effect!
-     (fn []
-       (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
-         (set-in-popup! true)
-         (set-in-popup! false)))
-     [])
+      (fn []
+        (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
+          (set-in-popup! true)
+          (set-in-popup! false)))
+      [])
 
     [:span {:ref *el-wrap}
      (if (boolean? in-popup?)
@@ -4014,7 +4018,8 @@
         *virtualized-ref (rum/use-ref nil)
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
-                        :custom-scroll-parent (gdom/getElement "main-content-container")
+                        :custom-scroll-parent (or (:scroll-container config)
+                                                (gdom/getElement "main-content-container"))
                         :compute-item-key (fn [idx]
                                             (let [block (nth blocks idx)]
                                               (str (:container-id config) "-" (:db/id block))))
@@ -4027,12 +4032,12 @@
                                               bottom? (= (dec (count blocks)) idx)
                                               block (nth blocks idx)]
                                           (block-item (assoc config :top? top?)
-                                                      block
-                                                      {:top? top?
-                                                       :bottom? bottom?})))})
+                                            block
+                                            {:top? top?
+                                             :bottom? bottom?})))})
         *wrap-ref (rum/use-ref nil)]
     (rum/use-effect!
-     (fn []
+      (fn []
        (when virtualized?
          (when (:current-page? config)
            (let [ref (.-current *virtualized-ref)]
@@ -4168,10 +4173,8 @@
      (and (:ref? config) (:group-by-page? config) (vector? (first blocks)))
      [:div.flex.flex-col.references-blocks-wrap
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)
-            scroll-container (or
-                              (when-let [*ref (:scroll-container config)]
-                                (rum/deref *ref))
-                              (gdom/getElement "main-content-container"))]
+            scroll-container (or (:scroll-container config)
+                               (gdom/getElement "main-content-container"))]
         (when (seq blocks)
           (if (:sidebar? config)
             (for [block blocks]

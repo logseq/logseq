@@ -246,7 +246,7 @@
  :settings-page/export-theme "Export theme"
  :settings-page/show-brackets "Show brackets"
  :settings-page/wide-mode "Wide mode"
- :settings-page/editor-font "Editor font"
+ :settings-page/editor-font "Font"
  :settings-page/accent-color "Accent color"
  :settings-page/accent-color-alert "Choosing an accent color may override any theme you have selected."
  :settings-page/spell-checker "Spell checker"

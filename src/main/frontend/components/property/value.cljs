@@ -115,7 +115,7 @@
     (shui/popup-hide!)
     (shui/dialog-close!))
   (p/let [block
-          (if (and (= :default (get-in property [:block/schema :type]))
+          (if (and (contains? #{:default :url} (get-in property [:block/schema :type]))
                    (not (db-property/many? property)))
             (p/let [existing-value (get block (:db/ident property))
                     existing-value? (and (some? existing-value)
@@ -806,10 +806,7 @@
        (closed-value-item value opts)
 
        (de/entity? value)
-       (when-some [content (if (some? (:property.value/content value))
-                             ;; content needs to be a string for display purposes
-                             (str (:property.value/content value))
-                             (:block/title value))]
+       (when-some [content (str (db-property/property-value-content value))]
          (inline-text-cp content))
 
        :else
@@ -872,10 +869,10 @@
     [:div.cursor-text
      {:id (or dom-id (random-uuid))
       :tabIndex 0
-      :class (str class " " (when-not (= type :default) "jtrigger"))
+      :class (str class " " (when-not (contains? #{:default :url} type) "jtrigger"))
       :style {:min-height 24}
       :on-click (fn []
-                  (when (and (= type :default) (nil? value))
+                  (when (and (contains? #{:default :url} type) (nil? value))
                     (<create-new-block! block property "")))}
      (cond
        (and (contains? #{:default :url} type) (nil? (:block/title value)))

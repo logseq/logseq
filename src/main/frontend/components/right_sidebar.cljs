@@ -41,11 +41,16 @@
                    :sidebar/idx idx
                    :repo        repo})))
 
+(defn get-scrollable-container
+  []
+  (js/document.querySelector ".sidebar-item-list"))
+
 (rum/defc page-cp < rum/reactive
   [repo page-name]
   (page/page-cp {:parameters {:path {:name page-name}}
                  :sidebar?   true
-                 :repo       repo}))
+                 :scroll-container (get-scrollable-container)
+                 :repo repo}))
 
 (rum/defc shortcut-settings
   []

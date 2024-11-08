@@ -321,7 +321,7 @@
 
 (defn- import-file-graph
   [*files
-   {:keys [graph-name tag-classes convert-all-tags? property-classes property-parent-classes remove-inline-tags?]}
+   {:keys [graph-name tag-classes property-classes property-parent-classes] :as user-options}
    config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] "Config files")
@@ -329,12 +329,12 @@
           _ (repo-handler/new-db! graph-name {:file-graph-import? true})
           repo (state/get-current-repo)
           db-conn (db/get-db repo false)
-          options {;; user options
-                   :tag-classes (set (string/split tag-classes #",\s*"))
-                   :property-classes (set (string/split property-classes #",\s*"))
-                   :property-parent-classes (set (string/split property-parent-classes #",\s*"))
-                   :convert-all-tags? convert-all-tags?
-                   :remove-inline-tags? remove-inline-tags?
+          options {:user-options
+                   (merge
+                    (dissoc user-options :graph-name)
+                    {:tag-classes (some-> tag-classes string/trim not-empty  (string/split #",\s*") set)
+                     :property-classes (some-> property-classes string/trim not-empty  (string/split #",\s*") set)
+                     :property-parent-classes (some-> property-parent-classes string/trim not-empty  (string/split #",\s*") set)})
                    ;; common options
                    :notify-user show-notification
                    :set-ui-state state/set-state!
