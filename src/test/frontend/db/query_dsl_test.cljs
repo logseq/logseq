@@ -37,7 +37,6 @@
   [query]
   (if js/process.env.DB_GRAPH
     (some-> query
-            (str/replace "(page-property" "(property")
             (str/replace "(page-tags" "(tags"))
     query))
 
@@ -264,10 +263,11 @@ prop-d:: [[nada]]"}])
            (set (map :block/name (dsl-query "(page-property interesting false)"))))
         "Boolean false")))
 
-(deftest page-property-queries
-  (testing "page property tests with default config"
-    (test-helper/with-config {}
-      (page-property-queries-test))))
+(when-not js/process.env.DB_GRAPH
+ (deftest page-property-queries
+   (testing "page property tests with default config"
+     (test-helper/with-config {}
+       (page-property-queries-test)))))
 
 (deftest task-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -323,7 +323,7 @@ prop-d:: [[nada]]"}])
          (count (dsl-query "(and (task todo) (sample 1))")))
       "Correctly limits block results")
   (is (= 1
-         (count (dsl-query "(and (page-property foo) (sample 1))")))
+         (count (dsl-query (if js/process.env.DB_GRAPH "(and (property foo) (sample 1))"  "(and (page-property foo) (sample 1))"))))
       "Correctly limits page results"))
 
 (deftest priority-queries
