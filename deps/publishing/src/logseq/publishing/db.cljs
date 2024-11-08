@@ -50,9 +50,9 @@
   (let [pages (->> (d/q
                     '[:find ?p
                       :in $ %
-                      :where (page-property ?p :logseq.property/public true)]
+                      :where (property ?p :logseq.property/public true) [?p :block/name]]
                     db
-                    (rules/extract-rules rules/db-query-dsl-rules [:page-property]))
+                    (rules/extract-rules rules/db-query-dsl-rules [:property]))
                    (map first)
                    set)
         page-ents (map #(d/entity db %) pages)
@@ -72,9 +72,9 @@
   (->> (d/q
         '[:find ?p
           :in $ %
-          :where (page-property ?p :logseq.property/public false)]
+          :where (property ?p :logseq.property/public false) [?p :block/name]]
         db
-        (rules/extract-rules rules/db-query-dsl-rules [:page-property]))
+        (rules/extract-rules rules/db-query-dsl-rules [:property]))
        (map first)
        set))
 
@@ -184,7 +184,7 @@
                                        (not (contains? non-public-datom-ids (:e datom)))))))
         datoms (d/datoms filtered-db :eavt)
         assets (if db-graph? (get-db-assets filtered-db) (get-file-assets db datoms))]
-    ;; (prn :datoms (count datoms) :assets (count assets))
+    ;; (prn :public-counts :datoms (count datoms) :assets (count assets))
     [@(d/conn-from-datoms datoms (:schema db)) assets]))
 
 (defn- file-filter-only-public
@@ -229,5 +229,5 @@
         filtered-db (d/filter db filter-fn)
         datoms (d/datoms filtered-db :eavt)
         assets (if db-graph? (get-db-assets filtered-db) (get-file-assets db datoms))]
-    ;; (prn :counts :internal (count internal-ents) :datoms (count datoms) :assets (count assets))
+    ;; (prn :private-counts :internal (count internal-ents) :datoms (count datoms) :assets (count assets))
     [@(d/conn-from-datoms datoms (:schema db)) assets]))
