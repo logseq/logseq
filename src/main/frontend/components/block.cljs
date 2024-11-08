@@ -2302,9 +2302,7 @@
            (not advanced-query?)
            (string/blank? (:block/title block'))
            (seq (:block/title query)))
-      (text-block-title config
-                        (merge query
-                               (block/parse-title-and-body (:block/uuid query) :markdown false (:block/title query))))
+      (query-builder-component/builder query {})
 
       (seq (:logseq.property/_query block'))
       (query-builder-component/builder block' {})

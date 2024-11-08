@@ -492,7 +492,8 @@
      {:block/uuid (common-uuid/gen-uuid)
       :block/name common-config/favorites-page-name
       :block/title common-config/favorites-page-name
-      :block/type "hidden"
+      :block/type "page"
+      :block/schema {:public? false}
       :block/format :markdown})]))
 
 (defn build-favorite-tx
@@ -512,7 +513,8 @@
        {:block/uuid page-id
         :block/name common-config/views-page-name
         :block/title common-config/views-page-name
-        :block/type "hidden"
+        :block/type "page"
+        :block/schema {:public? false}
         :block/format :markdown})
       (sqlite-util/block-with-timestamps
        {:block/uuid (common-uuid/gen-uuid)

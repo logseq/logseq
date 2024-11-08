@@ -123,6 +123,7 @@
    (fn [ent]
      (reduce (fn [m [k v]]
                (if-let [property (and (db-property/property? k)
+                                      (not (db-property/db-attribute-properties k))
                                       ;; This allows schemas like property-value-block to require properties in
                                       ;; their schema that they depend on
                                       (not (contains? required-properties k))
@@ -183,10 +184,18 @@
         (datoms->entity-maps datoms)))
 
 (defn internal-ident?
-  "Determines if given ident is created by Logseq"
+  "Determines if given ident is created by Logseq. All Logseq internal idents
+   must start with 'block' or 'logseq' to keep Logseq internals from leaking
+   across namespaces and to allow for users and 3rd party plugins to choose
+   any other namespace"
   [ident]
   (or (contains? db-property/db-attribute-properties ident)
       (contains? logseq-ident-namespaces (namespace ident))))
+
+(assert (every? #(re-find #"^(block|logseq\.)" (namespace %)) db-property/db-attribute-properties)
+        "All db-attribute idents start with an internal namespace")
+(assert (every? #(re-find #"^logseq\." %) logseq-ident-namespaces)
+        "All logseq idents start with an internal namespace")
 
 ;; Main malli schemas
 ;; ==================
@@ -227,7 +236,7 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/title :string]
-   [:block/type [:enum "page" "class" "property" "whiteboard" "journal" "hidden"]]
+   [:block/type [:enum "page" "class" "property" "whiteboard" "journal"]]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]
@@ -323,7 +332,10 @@
    (concat
     [:map
      ;; pages from :default property uses this but closed-value pages don't
-     [:block/order {:optional true} block-order]]
+     [:block/order {:optional true} block-order]
+     [:block/schema
+      [:map
+       [:public? {:optional true} :boolean]]]]
     page-attrs
     page-or-block-attrs)))
 

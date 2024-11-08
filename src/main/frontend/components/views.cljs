@@ -138,9 +138,11 @@
                              add-tags-column? true}}]
   (let [;; FIXME: Shouldn't file graphs have :block/tags?
         add-tags-column?' (and (config/db-based-graph? (state/get-current-repo)) add-tags-column?)
-        properties' (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
-                      properties
-                      (conj properties (db/entity :block/tags)))]
+        properties' (->>
+                     (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
+                       properties
+                       (conj properties (db/entity :block/tags)))
+                     (remove nil?))]
     (->> (concat
           [{:id :select
             :name "Select"
@@ -163,19 +165,20 @@
               :disable-hide? true})]
           (keep
            (fn [property]
-             (let [ident (or (:db/ident property) (:id property))]
+             (when-let [ident (or (:db/ident property) (:id property))]
                ;; Hide properties that shouldn't ever be editable or that do not display well in a table
-               (when-not (or (contains? #{:logseq.property/built-in? :logseq.property/created-from-property} ident)
-                             (contains? #{:map} (get-in property [:block/schema :type])))
+               (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
+                                          :block/created-at :block/updated-at :block/order :block/collapsed?
+                                          :logseq.property/created-from-property}
+                                        ident)
+                             (and with-object-name? (= :block/title ident))
+                             (contains? #{:map :entity} (get-in property [:block/schema :type])))
                  (let [property (if (de/entity? property)
                                   property
-                                  (or (merge (db/entity ident) property) ; otherwise, :cell/:header/etc. will be removed
-                                      property))
-                       get-value (if-let [f (:get-value property)]
-                                   (fn [row]
-                                     (f row))
-                                   (when (de/entity? property)
-                                     (fn [row] (get-property-value-for-search row property))))
+                                  (or (merge (db/entity ident) property) property)) ; otherwise, :cell/:header/etc. will be removed
+                       get-value (or (:get-value property)
+                                     (when (de/entity? property)
+                                       (fn [row] (get-property-value-for-search row property))))
                        closed-values (seq (:property/closed-values property))
                        closed-value->sort-number (when closed-values
                                                    (->> (zipmap (map :db/id closed-values) (range 0 (count closed-values)))

@@ -11,7 +11,7 @@
   [^js doc]
   (when-let [styles (keep #(when (some-> % (.-href) (.endsWith "style.css"))
                              (.-href %))
-                      (seq js/document.styleSheets))]
+                          (seq js/document.styleSheets))]
     (doseq [r styles]
       (let [^js link (js/document.createElement "link")]
         (set! (.-rel link) "stylesheet")
@@ -110,7 +110,7 @@
                 (state/set-state! :pdf/system-win? true)
                 ;; NOTE: must do ipc in new window
                 (some-> (.-apis win)
-                  (.doAction (bean/->js [:window/open-blank-callback :pdf]))))))]
+                        (.doAction (bean/->js [:window/open-blank-callback :pdf]))))))]
 
       (js/setTimeout
        (fn []
