@@ -386,11 +386,11 @@
            :rules [:priority]})))))
 
 (defn- build-page-property
-  [e {:keys [db-graph?]}]
+  [e]
   (let [[k v] (rest e)
-        k' (if db-graph? (->db-keyword-property k) (->file-keyword-property k))]
+        k' (->file-keyword-property k)]
     (if (some? v)
-      (let [v' (if db-graph? (->db-property-value k' v) (->file-property-value v))]
+      (let [v' (->file-property-value v)]
         {:query (list 'page-property '?p k' v')
          :rules [:page-property]})
       {:query (list 'has-page-property '?p k')
@@ -490,6 +490,24 @@
           ;; function
           (list? (first e)))))))
 
+(defn- build-file-query
+  [e fe {:keys [sort-by]}]
+  (cond
+       (= 'namespace fe)
+       (build-namespace e)
+
+       (= 'page-property fe)
+       (build-page-property e)
+
+       (= 'page-tags fe)
+       (build-page-tags e)
+
+       (= 'all-page-tags fe)
+       (build-all-page-tags)
+
+       (= 'sort-by fe)
+       (build-sort-by e sort-by)))
+
 (defn build-query
   "This fn converts a form/list in a query e.g. `(operator arg1 arg2)` to its datalog
   equivalent. This fn is called recursively on sublists for boolean operators
@@ -501,7 +519,7 @@ Some bindings in this fn:
 * fe - the query operator e.g. `property`"
   ([e env]
    (build-query e (assoc env :vars (atom {})) 0))
-  ([e {:keys [sort-by blocks? sample] :as env :or {blocks? (atom nil)}} level]
+  ([e {:keys [blocks? sample] :as env :or {blocks? (atom nil)}} level]
    ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
          fe (when fe
@@ -549,29 +567,17 @@ Some bindings in this fn:
        (= 'priority fe)
        (build-priority e env)
 
-       (= 'sort-by fe)
-       (build-sort-by e sort-by)
-
        (= 'page fe)
        (build-page e)
 
-       (= 'namespace fe)
-       (build-namespace e)
-
-       (= 'page-property fe)
-       (build-page-property e env)
+       (= 'sample fe)
+       (build-sample e sample)
 
        (= 'tags fe)
        (build-tags e env)
 
-       (= 'page-tags fe)
-       (build-page-tags e)
-
-       (= 'all-page-tags fe)
-       (build-all-page-tags)
-
-       (= 'sample fe)
-       (build-sample e sample)
+       (not (:db-graph? env))
+       (build-file-query e fe env)
 
        :else
        nil))))
