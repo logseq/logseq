@@ -43,7 +43,7 @@
 (def value-ref-property-types
   "Property value ref types where the refed entities either store their value in
   :property.value/content or :block/title (for :default)"
-  (into #{:default} original-value-ref-property-types))
+  (into #{:default :url} original-value-ref-property-types))
 
 (def user-ref-property-types
   "User ref types. Property values that users see are stored in either
