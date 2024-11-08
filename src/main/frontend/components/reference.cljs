@@ -49,7 +49,6 @@
     [:div.references-blocks.faster.fade-in {:ref *ref}
      (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                       {:id (str (:block/uuid page-entity))
-                                       :scroll-container *ref
                                        :ref? true
                                        :breadcrumb-show? true
                                        :group-by-page? true
