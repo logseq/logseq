@@ -307,6 +307,10 @@
   &:hover {
     color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary))));
   }
+
+  &.page-missing {
+    color: hsl(from var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)))) h calc(s * 0.6) calc(l * 0.8));
+  }
 }
 
 .asset-ref {
