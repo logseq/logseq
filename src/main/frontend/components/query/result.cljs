@@ -43,7 +43,8 @@
                   (set-result! (atom result)))))
 
             :else
-            (set-result! (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)}))))
+            (let [result (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})]
+              (set-result! (or result (atom []))))))
 
         :else
         (set-result! (query-custom/custom-query query {:current-block-uuid current-block-uuid
