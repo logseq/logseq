@@ -865,3 +865,43 @@ test('undo cut block should recover refs', async ({ page, block }) => {
   await expect(page.locator('.ls-block')).toHaveCount(2)
   await expect(page.locator('.open-block-ref-link')).toHaveCount(1)
 })
+
+test('toggling checked state of TODO via keyboard', async ({ page, block }) => {
+  await createRandomPage(page)
+
+  // Doesn't do anything if the block has no marker
+  await block.mustFill('foobar')
+  await block.escapeEditing()
+  await page.keyboard.press('ArrowDown', { delay: 10 })
+  await page.keyboard.press(modKey + '+Space', { delay: 10 })
+  await expect(page.locator('.block-content span >> nth=0')).toHaveClass(
+    'inline'
+  )
+
+  // Flips marker between LATER/DONE if the block has one already
+  await block.activeEditing(0)
+  await block.mustFill('LATER foobar')
+  await block.escapeEditing()
+  await page.keyboard.press('ArrowDown', { delay: 10 })
+  await page.keyboard.press(modKey + '+Space', { delay: 10 })
+  await expect(page.locator('.block-content span >> nth=0')).toHaveClass(
+    'inline done'
+  )
+  await page.keyboard.press(modKey + '+Space', { delay: 10 })
+  await expect(page.locator('.block-content span >> nth=0')).toHaveClass(
+    'inline later'
+  )
+
+  // Reschedules the scheduled block without updating the marker
+  await block.activeEditing(0)
+  await block.mustFill(`LATER foobar\nSCHEDULED: <2000-01-01 Sat .+73y>`)
+  await block.escapeEditing()
+  await page.keyboard.press('ArrowDown', { delay: 10 })
+  await page.keyboard.press(modKey + '+Space', { delay: 10 })
+  await expect(page.locator('.block-content span >> nth=0')).toHaveClass(
+    'inline later'
+  )
+  await expect(
+    page.locator('.block-content .timestamp >> nth=0')
+  ).toContainText('<2073-01-01 Sun .+73y>')
+})
