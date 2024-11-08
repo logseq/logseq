@@ -123,9 +123,9 @@
    (fn [ent]
      (reduce (fn [m [k v]]
                (if-let [property (and (db-property/property? k)
+                                      (not (db-property/db-attribute-properties k))
                                       ;; This allows schemas like property-value-block to require properties in
                                       ;; their schema that they depend on
-                                      (not (db-property/db-attribute-properties k))
                                       (not (contains? required-properties k))
                                       (d/entity db k))]
                  (update m :block/properties (fnil conj [])

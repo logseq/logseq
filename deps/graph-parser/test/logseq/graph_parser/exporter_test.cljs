@@ -466,8 +466,7 @@
             "tag page is not a class")
 
         (is (= {:logseq.property/page-tags #{"Movie"}}
-               (-> (readable-properties @conn tagged-page)
-                   (dissoc :block/type)))
+               (readable-properties @conn tagged-page))
             "tagged page has existing page imported as a tag to page-tags")
         (is (= #{"LargeLanguageModel" "fun" "ai"}
                (:logseq.property/page-tags (readable-properties @conn (find-page-by-name @conn "chat-gpt"))))
@@ -514,8 +513,7 @@
           "unconfigured tag page is not a class")
 
       (is (= {:block/tags [:user.class/Movie]}
-             (-> (readable-properties @conn (find-page-by-name @conn "Interstellar"))
-                 (dissoc :block/type)))
+             (readable-properties @conn (find-page-by-name @conn "Interstellar")))
           "tagged page has configured tag imported as a class"))))
 
 (deftest-async export-files-with-property-classes-option
