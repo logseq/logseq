@@ -36,7 +36,7 @@
                 :value "page"
                 :selected (= @*find :page)}]
               (fn [e v]
-       ;; Prevent opening the current block's editor
+                ;; Prevent opening the current block's editor
                 (util/stop e)
                 (reset! *find (keyword v))))])
 
@@ -192,7 +192,7 @@
             (fn [{:keys [original-value]}]
               (let [k (cond
                         db-graph? (if @*private-property? :private-property :property)
-                        (= @*find :page) :page-property
+                        (= (rum/react *find) :page) :page-property
                         :else :property)
                     x (if (= original-value "Select all")
                         [k @*property]
@@ -399,7 +399,7 @@
 
        nil)]))
 
-(rum/defcs picker <
+(rum/defcs picker < rum/reactive
   {:will-mount (fn [state]
                  (state/clear-selection!)
                  state)}
@@ -411,7 +411,7 @@
         db-based? (config/db-based-graph? (state/get-current-repo))
         filters (if db-based?
                   query-builder/db-based-block-filters
-                  (if (= :page @*find)
+                  (if (= :page (rum/react *find))
                     query-builder/page-filters
                     query-builder/block-filters))
         filters-and-ops (concat filters query-builder/operators)

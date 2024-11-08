@@ -223,5 +223,5 @@
                         :table? table?
                         :built-in-query? (built-in-custom-query? (:title q))
                         :*query-error *query-error)]
-     (when (or built-in-collapsed? (not collapsed?'))
+     (when (or built-in-collapsed? (not db-graph?) (not collapsed?'))
        (trigger-custom-query config' q)))))
