@@ -5,7 +5,8 @@
             [frontend.common.schema-register :include-macros true :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.client-op :as client-op]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- latest-add?->v->t
   [add?->v->t]
@@ -26,9 +27,7 @@
     :db/index :db/valueType :db/cardinality})
 
 (def ^:private watched-attr-ns
-  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs"
-    "logseq.property.linked-references" "logseq.task" "logseq.property.node" "logseq.property.code"
-    "logseq.class" "logseq.kv"})
+  (conj db-property/logseq-property-namespaces "logseq.class" "logseq.kv"))
 
 (defn- watched-attr?
   [attr]

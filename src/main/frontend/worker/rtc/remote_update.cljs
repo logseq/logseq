@@ -14,6 +14,7 @@
             [logseq.clj-fractional-indexing :as index]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.outliner.batch-tx :as batch-tx]
@@ -335,12 +336,16 @@
     :property/schema.classes
     :property.value/content})
 
+(def ^:private watched-attr-ns
+  (conj db-property/logseq-property-namespaces "logseq.class" "logseq.kv"))
+
 (defn- update-op-watched-attr?
   [attr]
   (or (contains? update-op-watched-attrs attr)
       (when-let [ns (namespace attr)]
-        (or (= "logseq.task" ns)
-            (string/ends-with? ns ".property")))))
+        (or (contains? watched-attr-ns ns)
+            (string/ends-with? ns ".property")
+            (string/ends-with? ns ".class")))))
 
 (defn- diff-block-kv->tx-data
   [db db-schema e k local-v remote-v]
