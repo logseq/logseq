@@ -220,7 +220,7 @@
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (get&remove-all-block-ops* conn)))
 
-(defn get-unpushed-ops-count
+(defn get-unpushed-block-ops-count
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (count (get-all-block-ops* @conn))))
@@ -295,6 +295,11 @@
                             (> (count op-map) 1))
                    [e op-map]))))
        (into {})))
+
+(defn get-unpushed-asset-ops-count
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (count (get-all-asset-ops* @conn))))
 
 (defn get-all-asset-ops
   [repo]

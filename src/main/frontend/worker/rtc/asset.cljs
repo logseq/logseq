@@ -12,9 +12,9 @@
   (:require [cljs-http.client :as http]
             [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
+            [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
-            [malli.core :as ma]
             [missionary.core :as m])
   (:import [missionary Cancelled]))
 
@@ -95,6 +95,27 @@
                (d/transact! conn [{:block/uuid asset-uuid
                                    :file/path "TEST-FILE-PATH"}])
                (prn :debug-succ-download-asset asset-uuid)))))))))
+
+(defn- create-local-updates-check-flow
+  "Return a flow that emits value if need to push local-updates"
+  [repo *auto-push? interval-ms]
+  (let [auto-push-flow (m/watch *auto-push?)
+        clock-flow (c.m/clock interval-ms :clock)
+        merge-flow (m/latest vector auto-push-flow clock-flow)]
+    (m/eduction (filter first)
+                (map second)
+                (filter (fn [v] (when (client-op/get-unpushed-asset-ops-count repo) v)))
+                merge-flow)))
+
+(defn- create-mixed-flow
+  "Return a flow that emits different events:
+  - `:local-update-check`: event to notify check if there're some new local-updates on assets"
+  [repo *auto-push?]
+  (let [remote-update-flow m/none       ;TODO
+        local-update-check-flow (m/eduction
+                                 (map (fn [v] {:type :local-update-check :value v}))
+                                 (create-local-updates-check-flow repo *auto-push? 2500))]
+    (c.m/mix remote-update-flow local-update-check-flow)))
 
 (defonce ^:private *assets-sync-lock (atom nil))
 (defn- holding-assets-sync-lock

@@ -50,7 +50,7 @@
         merge-flow (m/latest vector auto-push-flow clock-flow)]
     (m/eduction (filter first)
                 (map second)
-                (filter (fn [v] (when (pos? (client-op/get-unpushed-ops-count repo)) v)))
+                (filter (fn [v] (when (pos? (client-op/get-unpushed-block-ops-count repo)) v)))
                 merge-flow)))
 
 (defn- create-pull-remote-updates-flow
