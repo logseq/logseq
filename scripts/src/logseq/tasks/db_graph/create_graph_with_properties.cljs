@@ -79,8 +79,8 @@
          {:build/journal (date-time-util/date->int today)}
          :blocks
          [{:block/title "[[Block Properties]]"}
-          {:block/title "[[Block Property Queries]]"}
-          {:block/title "[[Page Property Queries]]"}]}
+          {:block/title "[[Property Queries]]"}
+          {:block/title "[[Has Property Queries]]"}]}
         {:page {:build/journal (date-time-util/date->int yesterday)}}
         {:page {:build/journal (date-time-util/date->int two-days-ago)}}
 
@@ -104,7 +104,7 @@
           {:block/title "date-many property block" :build/properties {:date-many #{[:page (date-journal-title today)]
                                                                                    [:page (date-journal-title yesterday)]}}}
           {:block/title "datetime property block" :build/properties {:datetime timestamp}}]}
-        {:page {:block/title "Block Property Queries"}
+        {:page {:block/title "Property Queries"}
          :blocks
          [(query "(property default \"haha\")")
           (query "(property default-many \"haw\")")
@@ -142,24 +142,24 @@
                                                                               [:page (date-journal-title yesterday)]}}}}
         {:page {:block/title "datetime page" :build/properties {:datetime timestamp}}}
 
-        {:page {:block/title "Page Property Queries"}
+        {:page {:block/title "Has Property Queries"}
          :blocks
-         [(query "(page-property default \"yolo\")")
-          (query "(page-property default-many \"haw\")")
-          (query (str "(page-property default-closed " (pr-str (get-closed-value :default-closed)) ")"))
-          (query "(page-property url \"https://logseq.com\")")
-          (query "(page-property url-many \"https://logseq.com\")")
-          (query (str "(page-property url-closed " (pr-str (get-closed-value :url-closed)) ")"))
-          (query "(page-property checkbox true)")
-          (query "(page-property number 5)")
-          (query "(page-property number-many 10)")
-          (query (str "(page-property number-closed " (pr-str (get-closed-value :number-closed)) ")"))
-          (query "(page-property node \"block object\")")
-          (query "(page-property node-without-classes [[Page 1]])")
-          (query "(page-property node-many [[Page object]])")
-          (query (str "(page-property date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")"))
-          (query (str "(page-property date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")"))
-          (query (str "(page-property datetime "  timestamp ")"))]}]))
+         [(query "(property default)")
+          (query "(property default-many)")
+          (query "(property default-closed)")
+          (query "(property url)")
+          (query "(property url-many)")
+          (query "(property url-closed)")
+          (query "(property checkbox)")
+          (query "(property number)")
+          (query "(property number-many)")
+          (query "(property number-closed)")
+          (query "(property node)")
+          (query "(property node-without-classes)")
+          (query "(property node-many)")
+          (query "(property date)")
+          (query "(property date-many)")
+          (query "(property datetime)")]}]))
 
      :classes {:TestClass {}}
 
