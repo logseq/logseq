@@ -54,8 +54,8 @@
         (reset! *query-error e)))))
 
 (defn get-group-by-page [{:keys [result-transform query] :as query-m}
-                         {:keys [table?]}]
-  (if table?
+                         {:keys [table? db-graph?]}]
+  (if (or table? db-graph?)
     false ;; Immediately return false as table view can't handle grouping
     (get query-m :group-by-page?
          (and (not result-transform)
@@ -63,7 +63,7 @@
 
 (defn transform-query-result
   "Transforms a query result if query conditions and config indicate a transformation"
-  [{:keys [current-block-uuid table?] :as config} query-m query-result]
+  [{:keys [current-block-uuid] :as config} query-m query-result]
   (let [;; exclude the current one, otherwise it'll loop forever
         remove-blocks (if current-block-uuid [current-block-uuid] nil)
         transformed-query-result (when query-result
@@ -73,7 +73,7 @@
                                          (get query-m :remove-block-children? true)
                                          tree/filter-top-level-blocks)
                                        result)))
-        group-by-page? (get-group-by-page query-m {:table? table?})
+        group-by-page? (get-group-by-page query-m config)
         result (if (and group-by-page? (:block/uuid (first transformed-query-result)))
                  (let [result (db-utils/group-by-page transformed-query-result)]
                    (if (map? result)
