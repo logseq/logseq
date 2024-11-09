@@ -310,3 +310,17 @@
                (when (not= :block/uuid k) v))
              m))
      (vals (get-all-asset-ops* @conn)))))
+
+(defn- get&remove-all-asset-ops*
+  [conn]
+  (let [e->op-map (get-all-asset-ops* @conn)
+        retract-all-tx-data (mapcat
+                             (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) asset-op-types))
+                             (keys e->op-map))]
+    (d/transact! conn retract-all-tx-data)
+    (vals e->op-map)))
+
+(defn get&remove-all-asset-ops
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (get&remove-all-asset-ops* conn)))

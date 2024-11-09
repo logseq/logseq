@@ -150,7 +150,7 @@
         get-ws-create-task         (r.client/ensure-register-graph-updates
                                     get-ws-create-task graph-uuid repo conn *last-calibrate-t *online-users)
         {:keys [assets-sync-loop-task]}
-        (r.asset/create-assets-sync-loop get-ws-create-task graph-uuid conn)
+        (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid conn *auto-push?)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push?)]
     (assert (some? *current-ws))
     {:rtc-state-flow     (create-rtc-state-flow (create-ws-state-flow *current-ws))
