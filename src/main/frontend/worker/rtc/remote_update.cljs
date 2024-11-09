@@ -6,6 +6,7 @@
             [datascript.core :as d]
             [frontend.common.schema-register :as sr]
             [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
@@ -552,7 +553,8 @@
               sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)
               update-ops (vals update-ops-map)
               update-page-ops (vals update-page-ops-map)
-              remove-page-ops (vals remove-page-ops-map)]
+              remove-page-ops (vals remove-page-ops-map)
+              db-before @conn]
           (js/console.groupCollapsed "rtc/apply-remote-ops-log")
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
                                              :persist-op? false
@@ -566,6 +568,9 @@
           ;; NOTE: we cannot set :persist-op? = true when batch-tx/with-batch-tx-mode (already set to false)
           ;; and there're some transactions in `apply-remote-remove-ops` need to :persist-op?=true
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
+          ;; wait all remote-ops transacted into db,
+          ;; then start to check any asset-updates in remote
+          (r.asset/emit-remote-asset-updates! @conn db-before update-ops remove-ops)
           (js/console.groupEnd)
 
           (client-op/update-local-tx repo remote-t)
