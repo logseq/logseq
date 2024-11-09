@@ -15,6 +15,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
+            [logseq.db :as ldb]
             [malli.core :as ma]
             [missionary.core :as m])
   (:import [missionary Cancelled]))
@@ -117,34 +118,41 @@
 (def ^:private *remote-asset-updates (atom nil :validator (ma/validator remote-asset-updates-schema)))
 (def ^:private remote-asset-updates-flow (m/buffer 10 (m/watch *remote-asset-updates)))
 
+(comment
+  (def cancel ((m/reduce (fn [_ v] (prn :v v)) remote-asset-updates-flow) prn prn)))
+
 (defn- remote-block-ops=>remote-asset-ops
-  [db update-ops remove-ops]
+  [db-after db-before update-ops remove-ops]
   {:update-asset-ops
    (keep
     (fn [update-op]
       (let [block-uuid (:self update-op)
-            asset-checksum (:logseq.property.asset/checksum update-op)]
+            asset-checksum (some-> (first (:logseq.property.asset/checksum update-op))
+                                   ldb/read-transit-str)]
         (when asset-checksum
-          (when-let [ent (d/entity db [:block/uuid block-uuid])]
+          (when-let [ent (d/entity db-after [:block/uuid block-uuid])]
             (let [local-checksum (:logseq.property.asset/checksum ent)]
               (when (or (and local-checksum (not= local-checksum asset-checksum))
                         (nil? local-checksum))
                 (apply conj {:block/uuid block-uuid}
-                       (filter (fn [[k _v]] (= :logseq.property.asset (namespace k))) update-op))))))))
+                       (keep (fn [[k v]]
+                               (when (= "logseq.property.asset" (namespace k))
+                                 [k (ldb/read-transit-str (first v))]))
+                             update-op))))))))
     update-ops)
    :remove-asset-ops
    (keep
     (fn [remove-op]
       (let [block-uuid (:block-uuid remove-op)]
-        (when-let [ent (d/entity db [:block/uuid block-uuid])]
+        (when-let [ent (d/entity db-before [:block/uuid block-uuid])]
           (when (:logseq.property.asset/checksum ent)
             {:block/uuid block-uuid}))))
     remove-ops)})
 
 (defn emit-remote-asset-updates!
-  [db update-ops remove-ops]
+  [db-after db-before update-ops remove-ops]
   (let [{:keys [update-asset-ops remove-asset-ops]}
-        (remote-block-ops=>remote-asset-ops db update-ops remove-ops)]
+        (remote-block-ops=>remote-asset-ops db-after db-before update-ops remove-ops)]
     (when-let [remote-asset-updates-ops (not-empty (concat update-asset-ops remove-asset-ops))]
       (reset! *remote-asset-updates remote-asset-updates-ops))))
 
