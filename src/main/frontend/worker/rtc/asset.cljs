@@ -185,40 +185,36 @@
      (finally
        (reset! *assets-sync-lock nil)))))
 
+(defn- new-task--push-local-asset-updates
+  [repo db graph-uuid add-log-fn]
+  (m/sp
+    (let [asset-ops (client-op/get&remove-all-asset-ops repo)]
+      ;; TODO: upload local-assets to remote
+      )))
+
 (defn create-assets-sync-loop
-  [get-ws-create-task graph-uuid conn]
+  [repo get-ws-create-task graph-uuid conn *auto-push?]
   (let [started-dfv         (m/dfv)
-        asset-change-event-flow m/none
         add-log-fn (fn [type message]
                      (assert (map? message) message)
-                     (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))]
+                     (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))
+        mixed-flow (create-mixed-flow repo *auto-push?)]
     {:onstarted-task started-dfv
      :assets-sync-loop-task
      (holding-assets-sync-lock
       started-dfv
       (m/sp
-       (try
-         (started-dfv true)
-         (let [action->asset-blocks (get-action->asset-blocks @conn)]
-           (m/?
-            (m/join
-             (constantly nil)
-             (m/sp
-                ;; init phase:
-                ;; generate all asset-change-events from db
-              (when (or (seq (action->asset-blocks :download))
-                        (seq (action->asset-blocks :upload)))
-                (prn "init phase: generate all asset-change-events from db" action->asset-blocks))
-              (m/? (new-task--download-assets
-                    get-ws-create-task conn graph-uuid (map :block/uuid (action->asset-blocks :download))))
-              (m/? (new-task--upload-assets
-                    get-ws-create-task conn graph-uuid (map :block/uuid (action->asset-blocks :upload)))))
-             (->>
-              (let [{asset-uuids-to-download :download
-                     asset-uuids-to-upload :upload} (m/?> asset-change-event-flow)]
-                (m/? (new-task--download-assets get-ws-create-task conn graph-uuid asset-uuids-to-download))
-                (m/? (new-task--upload-assets get-ws-create-task conn graph-uuid asset-uuids-to-upload)))
-              m/ap (m/reduce {} nil)))))
+        (try
+          (started-dfv true)
+          (->>
+           (let [event (m/?> mixed-flow)]
+             (case (:type event)
+               :remote-updates nil
+               :local-update-check
+               (m/? (new-task--push-local-asset-updates repo @conn graph-uuid add-log-fn))))
+           m/ap
+           (m/reduce {} nil)
+           m/?)
 
          (catch Cancelled e
            (add-log-fn :rtc.asset.log/cancelled {})
