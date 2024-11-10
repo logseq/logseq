@@ -1,5 +1,7 @@
 (ns ^:no-doc frontend.handler.assets
-  (:require [clojure.string :as string]
+  (:require [cljs-http.client :as http]
+            [clojure.string :as string]
+            [frontend.common.missionary-util :as c.m]
             [frontend.config :as config]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
@@ -10,6 +12,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [medley.core :as medley]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defn alias-enabled?
@@ -247,6 +250,25 @@
         file-path (path/path-join common-config/local-assets-dir
                                   (str asset-block-id-str "." asset-type))]
     (fs/write-file! repo repo-dir file-path data {})))
+
+(defn new-task--rtc-upload-asset
+  [repo asset-block-uuid-str asset-type put-url]
+  (m/sp
+    (let [asset-file (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
+          {:keys [status] :as r}
+          (c.m/<? (http/put put-url {:headers {"x-amz-meta-checksum" "TODO-CHECKSUM-HERE"}
+                                     :body asset-file
+                                     :with-credentials? false}))]
+      (when-not (http/unexceptional-status? status)
+        (throw (ex-info "upload asset failed" {:type :rtc.exception/upload-asset-failed :data r}))))))
+
+(defn new-task--rtc-download-asset
+  [repo asset-block-uuid-str asset-type get-url]
+  (m/sp
+    (let [{:keys [status body] :as r} (c.m/<? (http/get get-url {:with-credentials? false}))]
+      (when-not (http/unexceptional-status? status)
+        (throw (ex-info "download asset failed" {:type :rtc.exception/download-asset-failed :data r})))
+      (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body)))))
 
 (comment
   ;; read asset

@@ -85,12 +85,24 @@
                  (ldb/write-transit-str context))
       (notification/show! "Latest change was not saved! Please restart the application." :error))))
 
+(defn- with-write-transit-str
+  [p]
+  (p/chain p ldb/write-transit-str))
+
 (deftype Main []
   Object
   (readAsset [_this repo asset-block-id asset-type]
     (assets-handler/<read-asset repo asset-block-id asset-type))
   (writeAsset [_this repo asset-block-id asset-type data]
     (assets-handler/<write-asset repo asset-block-id asset-type data))
+  (rtc-upload-asset [_this repo asset-block-uuid-str asset-type put-url]
+    (with-write-transit-str
+      (js/Promise.
+       (assets-handler/new-task--rtc-upload-asset repo asset-block-uuid-str asset-type put-url))))
+  (rtc-download-asset [_this repo asset-block-uuid-str asset-type get-url]
+    (with-write-transit-str
+      (js/Promise.
+       (assets-handler/new-task--rtc-download-asset repo asset-block-uuid-str asset-type get-url))))
   (testFn [_this]
     (prn :debug :works)))
 
