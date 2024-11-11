@@ -438,21 +438,17 @@
     :else
     "letter-n"))
 
-(rum/defcs ^:large-vars/cleanup-todo select-node < rum/reactive db-mixins/query
-  (rum/local 0 ::refresh-count)
-  [state property
+(rum/defc ^:large-vars/cleanup-todo select-node < rum/static
+  [property
    {:keys [block multiple-choices? dropdown? input-opts on-input] :as opts}
-   *result]
-  (let [*refresh-count (::refresh-count state)
-        ;; Trigger refresh
-        _ @*refresh-count
+   result]
+  (let [[refresh-count set-refresh-count!] (rum/use-state 0)
         repo (state/get-current-repo)
         classes (:property/schema.classes property)
         tags? (= :block/tags (:db/ident property))
         alias? (= :block/alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
         block (db/entity (:db/id block))
-        result (rum/react *result)
         selected-choices (when block
                            (when-let [v (get block (:db/ident property))]
                              (if (every? de/entity? v)
@@ -478,12 +474,14 @@
              excluded-options)
 
            (seq classes)
-           (mapcat
-            (fn [class]
-              (if (= :logseq.class/Root (:db/ident class))
-                (model/get-all-classes repo {:except-root-class? true})
-                (model/get-class-objects repo (:db/id class))))
-            classes)
+           (->>
+            (mapcat
+             (fn [class]
+               (if (= :logseq.class/Root (:db/ident class))
+                 (model/get-all-classes repo {:except-root-class? true})
+                 (model/get-class-objects repo (:db/id class))))
+             classes)
+            distinct)
 
            :else
            (let [property-type (get-in property [:block/schema :type])]
@@ -559,7 +557,7 @@
                                  (if id
                                    (add-or-remove-property-value block property id selected? {})
                                    (log/error :msg "No :db/id found or created for chosen" :chosen chosen))
-                                 (when new? (swap! *refresh-count inc)))))})
+                                 (when new? (set-refresh-count! (inc refresh-count))))))})
 
                 (and (seq classes') (not tags-or-alias?))
                 (assoc
@@ -578,11 +576,10 @@
                                    results))))]
     (select-aux block property opts')))
 
-(rum/defcs property-value-select-node <
-  (rum/local nil ::result)
-  [state block property opts
+(rum/defc property-value-select-node < rum/static
+  [block property opts
    {:keys [*show-new-property-config?]}]
-  (let [*result (::result state)
+  (let [[result set-result!] (rum/use-state nil)
         input-opts (fn [_]
                      {:on-click (fn []
                                   (when *show-new-property-config?
@@ -598,11 +595,23 @@
                      :input-opts input-opts
                      :on-input (fn [v]
                                  (if (string/blank? v)
-                                   (reset! *result nil)
+                                   (set-result! nil)
                                    (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
                                                                                                    :built-in? false})]
-                                     (reset! *result result)))))]
-    (select-node property opts' *result)))
+                                     (set-result! result)))))
+        repo (state/get-current-repo)
+        classes (:property/schema.classes property)
+        non-root-classes (remove (fn [c] (= (:db/ident c) :logseq.class/Root)) classes)
+        parent-property? (= (:db/ident property) :logseq.property/parent)]
+    (when (and (not parent-property?) (seq non-root-classes))
+      ;; effect runs once
+      (rum/use-effect!
+       (fn []
+         (p/let [result (p/all (map (fn [class] (db-async/<get-tag-objects repo (:db/id class))) non-root-classes))
+                 result' (distinct (apply concat result))]
+           (set-result! result')))
+       []))
+    (select-node property opts' result)))
 
 (rum/defcs select < rum/reactive db-mixins/query
   {:init (fn [state]
