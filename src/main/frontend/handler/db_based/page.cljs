@@ -57,7 +57,8 @@
 (defn <create-class!
   "Creates a class page and provides class-specific error handling"
   [title options]
-  (-> (page-common-handler/<create! title (assoc options :class? true))
+  (-> (page-common-handler/<create! title (assoc options :class? true
+                                                 :skip-existing-page-check? false))
       (p/catch (fn [e]
                  (when (= :notification (:type (ex-data e)))
                    (notification/show! (get-in (ex-data e) [:payload :message])

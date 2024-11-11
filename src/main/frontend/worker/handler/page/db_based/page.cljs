@@ -159,11 +159,12 @@
 
 (defn create!
   [conn title*
-   {:keys [create-first-block? properties uuid persist-op? whiteboard? class? today-journal? split-namespace?]
+   {:keys [create-first-block? properties uuid persist-op? whiteboard? class? today-journal? split-namespace? skip-existing-page-check?]
     :or   {create-first-block?      true
            properties               nil
            uuid                     nil
-           persist-op?              true}
+           persist-op?              true
+           skip-existing-page-check? false}
     :as options}]
   (let [db @conn
         date-formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
@@ -181,7 +182,9 @@
             page      (-> (gp-block/page-name->map title @conn true date-formatter
                                                    {:class? class?
                                                     :page-uuid (when (uuid? uuid) uuid)
-                                                    :skip-existing-page-check? true})
+                                                    :skip-existing-page-check? (if (some? skip-existing-page-check?)
+                                                                                 skip-existing-page-check?
+                                                                                 true)})
                           (assoc :block/format format))
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
                              (let [pages (split-namespace-pages db page date-formatter)]
