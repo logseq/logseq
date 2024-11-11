@@ -3457,7 +3457,7 @@
        (let [query-block (:logseq.property/query (db/entity (:db/id block)))
              query-block (if query-block (db/sub-block (:db/id query-block)) query-block)
              query (:block/title query-block)
-             result (common-util/safe-read-string query)
+             result (common-util/safe-read-string {:log-error? false} query)
              advanced-query? (map? result)]
          [:div {:style {:padding-left 42}}
           (query/custom-query (wrap-query-components (assoc config
