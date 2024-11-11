@@ -503,21 +503,22 @@
 
         options (map (fn [node]
                        (let [id (or (:value node) (:db/id node))
-                             label (if (integer? id)
-                                     (let [title (subs (title/block-unique-title node) 0 256)
-                                           node (or (db/entity id) node)
-                                           icon (get-node-icon node)]
-                                       [:div.flex.flex-col
-                                        (when-not (db/page? node)
-                                          (when-let [breadcrumb (state/get-component :block/breadcrumb)]
-                                            [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
-                                             (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
-                                        [:div.flex.flex-row.items-center.gap-1
-                                         (when-not (:property/schema.classes property)
-                                           (ui/icon icon {:size 14}))
-                                         [:div title]]])
-                                     (or (:label node) (:block/title node)))]
+                             [header label] (if (integer? id)
+                                              (let [title (subs (title/block-unique-title node) 0 256)
+                                                    node (or (db/entity id) node)
+                                                    icon (get-node-icon node)
+                                                    header (when-not (db/page? node)
+                                                             (when-let [breadcrumb (state/get-component :block/breadcrumb)]
+                                                               [:div.text-xs.opacity-70
+                                                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
+                                                    label [:div.flex.flex-row.items-center.gap-1
+                                                           (when-not (:property/schema.classes property)
+                                                             (ui/icon icon {:size 14}))
+                                                           [:div title]]]
+                                                [header label])
+                                              [nil (or (:label node) (:block/title node))])]
                          (assoc node
+                                :header header
                                 :label-value (:block/title node)
                                 :label label
                                 :value id))) nodes)

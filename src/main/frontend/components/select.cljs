@@ -22,17 +22,23 @@
   [result chosen? multiple-choices? *selected-choices]
   (let [value (if (map? result) (or (:label result)
                                     (:value result)) result)
-        selected-choices (rum/react *selected-choices)]
-    [:div.flex.flex-row.justify-between.w-full {:class (when chosen? "chosen")}
-     [:div.flex.flex-row.items-center.gap-1
-      (when multiple-choices?
-        (ui/checkbox {:checked (boolean (selected-choices (:value result)))
-                      :on-click (fn [e]
-                                  (.preventDefault e))}))
-      value]
-     (when (and (map? result) (:id result))
-       [:div.tip.flex
-        [:code.opacity-20.bg-transparent (:id result)]])]))
+        header (:header result)
+        selected-choices (rum/react *selected-choices)
+        row [:div.flex.flex-row.justify-between.w-full {:class (when chosen? "chosen")}
+             [:div.flex.flex-row.items-center.gap-1
+              (when multiple-choices?
+                (ui/checkbox {:checked (boolean (selected-choices (:value result)))
+                              :on-click (fn [e]
+                                          (.preventDefault e))}))
+              value]
+             (when (and (map? result) (:id result))
+               [:div.tip.flex
+                [:code.opacity-20.bg-transparent (:id result)]])]]
+    (if header
+      [:div.flex.flex-col.gap-1
+       header
+       row]
+      row)))
 
 (rum/defcs ^:large-vars/cleanup-todo select
   "Provides a select dropdown powered by a fuzzy search. Takes the following options:
