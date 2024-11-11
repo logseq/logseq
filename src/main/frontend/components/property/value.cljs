@@ -837,7 +837,7 @@
           popup-content (fn content-fn [_]
                           [:div.property-select
                            (case type
-                             (:number :default)
+                             (:number :default :url)
                              (select block property select-opts' opts)
 
                              (:node :class :property :page :date)
