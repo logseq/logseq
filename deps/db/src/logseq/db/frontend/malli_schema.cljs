@@ -41,9 +41,6 @@
                             {:error/message "should be a valid user property namespace"}
                             user-property?]])
 
-(def property-ident
-  [:or internal-property-ident user-property-ident])
-
 (def logseq-ident-namespaces
   "Set of all namespaces Logseq uses for :db/ident except for
   db-attribute-ident. It's important to grow this list purposefully and have it
@@ -264,10 +261,6 @@
   (vec
    (concat
     [:map
-     [:block/schema
-      {:optional true}
-      [:map
-       [:properties {:optional true} [:vector property-ident]]]]
      [:db/ident class-ident]]
     page-attrs
     page-or-block-attrs)))
@@ -509,7 +502,7 @@
 
 (let [malli-non-ref-attrs (->> (concat property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (concat (rest file-block) (rest property-value-block)
-                                       (rest db-ident-key-val) (rest class-page))
+                                       (rest db-ident-key-val) (rest internal-property))
                                (remove #(= (last %) [:set :int]))
                                (map first)
                                set)]
