@@ -277,6 +277,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                           :or {enable-snippet? true}}]
   (when-not (string/blank? q)
     (let [match-input (get-match-input q)
+          non-match-input (when (<= (count q) 2)
+                            (str "%" (string/replace q #"\s+" "%") "%"))
           limit  (or limit 100)
             ;; https://www.sqlite.org/fts5.html#the_highlight_function
             ;; the 2nd column in blocks_fts (content)
@@ -290,9 +292,12 @@ DROP TRIGGER IF EXISTS blocks_au;
           match-sql (if (ns-util/namespace-page? q)
                       (str select pg-sql " title match ? or title match ? order by rank limit ?")
                       (str select pg-sql " title match ? order by rank limit ?"))
+          non-match-sql (str select pg-sql " title like ? limit ?")
           matched-result (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?)
+          non-match-result (when non-match-input
+                             (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
           fuzzy-result (when-not page (fuzzy-search repo @conn q option))
-          result (->> (concat fuzzy-result matched-result)
+          result (->> (concat fuzzy-result matched-result non-match-result)
                       (common-util/distinct-by :id)
                       (keep (fn [result]
                               (let [{:keys [id page title snippet]} result
