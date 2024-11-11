@@ -436,6 +436,12 @@
     :block/created-at :block/updated-at
     :logseq.property.attribute/kv-value :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content})
 
+(def private-db-attribute-properties
+  "db-attribute properties that are not visible to user"
+  (->> db-attribute-properties
+       (remove #(get-in built-in-properties [% :schema :public?]))
+       set))
+
 (def read-only-properties
   "Property values that shouldn't be updated"
   #{:logseq.property/built-in?})
