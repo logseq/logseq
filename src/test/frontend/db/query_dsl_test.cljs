@@ -559,12 +559,11 @@ created-at:: 1608968448116
 
        ;; between with journal pages
       (str "(and " task-filter " (between [[Dec 26th, 2020]] [[Dec 27th, 2020]]))")
-      3
+      3)
 
-       ;; ;; between with created-at
-       ;; "(and (task now later done) (between created-at [[Dec 26th, 2020]] tomorrow))"
-       ;; 3
-      )))
+    (when js/process.env.DB_GRAPH
+      (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]]))"))))
+      (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]] +1d))")))))))
 
 (deftest custom-query-test
   (load-test-files [{:file/path "pages/page1.md"
@@ -584,9 +583,7 @@ created-at:: 1608968448116
            (map :block/title (custom-query {:query (list 'and task-query "b")})))
         "Query with rule that can't be derived from the form itself")))
 
-(if js/process.env.DB_GRAPH
-  (def get-property-value query-dsl/get-db-property-value)
-  (def get-property-value #(get-in %1 [:block/properties %2])))
+(def get-property-value #(get-in %1 [:block/properties %2]))
 
 (when-not js/process.env.DB_GRAPH
   (deftest sort-by-queries

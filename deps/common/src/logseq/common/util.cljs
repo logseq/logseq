@@ -228,11 +228,11 @@
   "Reads an edn string and returns nil if it fails to parse"
   ([content]
    (safe-read-string {} content))
-  ([opts content]
+  ([{:keys [log-error?] :or {log-error? true} :as opts} content]
    (try
-     (reader/read-string opts content)
+     (reader/read-string (dissoc opts :log-error?) content)
      (catch :default e
-       (log/error :parse/read-string-failed e)
+       (when log-error? (log/error :parse/read-string-failed e))
        nil))))
 
 (defn safe-read-map-string

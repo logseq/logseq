@@ -24,10 +24,10 @@
       (cond
         (:dsl-query? config)
         (let [q (:query query)
-              form (common-util/safe-read-string q)]
+              form (common-util/safe-read-string {:log-error? false} q)]
           (cond
             (and (symbol? form)
-                                ;; Queries only containgin template should trigger a query
+                                ;; Queries only containing template should trigger a query
                  (not (re-matches template/template-re (string/trim q))))
             nil
 

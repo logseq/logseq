@@ -32,7 +32,7 @@
 ;; between
 ;;   Example: (between -7d +7d)
 ;;            (between created-at -1d today)
-;;            (between last-modified-at -1d today)
+;;            (between updated-at -1d today)
 ;; [[page-ref]]
 ;; property (block)
 ;; task (block)
@@ -718,15 +718,6 @@ Some bindings in this fn:
   [q]
   (let [q' (template/resolve-dynamic-template! q)]
     (pre-transform q')))
-
-(defn get-db-property-value
-  "Fetch a property's value given a block map and property name. Similar to
-  query-table/sort-by-fn. We should standardize this soon"
-  [m prop]
-  (case prop
-    :created-at (:block/created-at m)
-    :updated-at (:block/updated-at m)
-    (get-in m [:block/properties-by-name (name prop)])))
 
 (def db-block-attrs
   "Like ldb/block-attrs but for query dsl an db graphs"
