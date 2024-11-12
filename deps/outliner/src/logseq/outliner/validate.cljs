@@ -66,6 +66,25 @@
                      :payload {:message (str "Another property named " (pr-str new-title) " already exists")
                                :type :warning}}))))
 
+(defn- validate-unique-by-parent-and-name [db entity new-title]
+  (when-let [_res (seq (d/q '[:find [?b ...]
+                              :in $ ?eid ?type ?title
+                              :where
+                              [?b :block/title ?title]
+                              [?b :logseq.property/parent ?type]
+                              [(not= ?b ?eid)]]
+                            db
+                            (:db/id entity)
+                            (:db/id (:logseq.property/parent entity))
+                            new-title))]
+    (throw (ex-info "Duplicate page by parent"
+                    {:type :notification
+                     :payload {:message (str "Another page named " (pr-str new-title) " already exists for parents "
+                                             (pr-str (->> (ldb/get-page-parents entity)
+                                                          (map :block/title)
+                                                          (string/join ns-util/parent-char))))
+                               :type :warning}}))))
+
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (cond
@@ -88,6 +107,9 @@
 
     (ldb/property? entity)
     (validate-unique-for-property-page entity db new-title)
+
+    (:logseq.property/parent entity)
+    (validate-unique-by-parent-and-name db entity new-title)
 
     :else
     (when-let [_res (seq (d/q '[:find [?b ...]

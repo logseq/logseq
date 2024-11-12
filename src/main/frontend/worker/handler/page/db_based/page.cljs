@@ -110,7 +110,6 @@
                                     (ldb/get-page db part)
                                     (get-page-by-parent-name db (nth parts (dec idx)) part))
                              result (or page
-                                        (when last-part? (ldb/get-page db part))
                                         (-> (gp-block/page-name->map part db true date-formatter
                                                                      {:page-uuid (when last-part? block-uuid)
                                                                       :skip-existing-page-check? true

@@ -26,7 +26,7 @@
                :classes {:class1 {}}
                :pages-and-blocks [{:page {:block/title "page1"}}]})]
 
-    (testing "Valid workflows"
+    (testing "Basic valid workflows"
       (let [[_ child-uuid] (worker-db-page/create! conn "foo/bar/baz" {:split-namespace? true})
             child-page (d/entity @conn [:block/uuid child-uuid])
             ;; Create a 2nd child page using existing parent pages
@@ -48,6 +48,15 @@
                (set (d/q '[:find [?type ...]
                            :where [?b :block/type ?type] [?b :block/title "class1"]] @conn)))
             "Using an existing class page in a multi-parent namespace doesn't allow a page to have a class parent and instead creates a new page")))
+
+    (testing "Child pages with same name and different parents"
+      (let [_ (worker-db-page/create! conn "vim/keys" {:split-namespace? true})
+            _ (worker-db-page/create! conn "emacs/keys" {:split-namespace? true})]
+        (is (= #{"vim" "emacs"}
+               (->> (d/q '[:find [(pull ?b [{:logseq.property/parent [:block/title]}]) ...] :where [?b :block/title "keys"]] @conn)
+                    (map #(get-in % [:logseq.property/parent :block/title]))
+                    set))
+            "Two child pages with same name exist and have different parents")))
 
     (testing "Invalid workflows"
       (is (thrown-with-msg?
