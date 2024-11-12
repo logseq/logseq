@@ -260,15 +260,16 @@
                                      :body asset-file
                                      :with-credentials? false}))]
       (when-not (http/unexceptional-status? status)
-        (throw (ex-info "upload asset failed" {:type :rtc.exception/upload-asset-failed :data r}))))))
+        {:ex-data {:type :rtc.exception/upload-asset-failed :data r}}))))
 
 (defn new-task--rtc-download-asset
   [repo asset-block-uuid-str asset-type get-url]
   (m/sp
     (let [{:keys [status body] :as r} (c.m/<? (http/get get-url {:with-credentials? false}))]
-      (when-not (http/unexceptional-status? status)
-        (throw (ex-info "download asset failed" {:type :rtc.exception/download-asset-failed :data r})))
-      (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body)))))
+      (if-not (http/unexceptional-status? status)
+        {:ex-data {:type :rtc.exception/download-asset-failed :data r}}
+        (do (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body))
+            nil)))))
 
 (comment
   ;; read asset
