@@ -186,8 +186,8 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 20 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
-      (is (= 20 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 21 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 21 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
@@ -481,10 +481,10 @@
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
-    (is (= 9 (->> @conn
-                  (d/q '[:find [?ident ...]
-                         :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
-                  count))
+    (is (= 11 (->> @conn
+                   (d/q '[:find [?ident ...]
+                          :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                   count))
         "Correct number of user classes")))
 
 (deftest-async export-files-with-tag-classes-option
