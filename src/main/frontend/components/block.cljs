@@ -822,16 +822,16 @@
                                  (let [[ready? set-ready!] (rum/use-state false)]
 
                                    (rum/use-effect!
-                                     (fn []
-                                       (let [el-popup (rum/deref *el-popup)
-                                             focus! #(js/setTimeout (fn [] (.focus el-popup)))]
-                                         (set-ready! true)
-                                         (focus!)
-                                         (fn [] (set-visible! false))))
-                                     [])
+                                    (fn []
+                                      (let [el-popup (rum/deref *el-popup)
+                                            focus! #(js/setTimeout (fn [] (.focus el-popup)))]
+                                        (set-ready! true)
+                                        (focus!)
+                                        (fn [] (set-visible! false))))
+                                    [])
 
                                    (when-let [source (or (db/get-alias-source-page (state/get-current-repo) (:db/id page-entity))
-                                                       page-entity)]
+                                                         page-entity)]
                                      [:div.tippy-wrapper.as-page
                                       {:ref *el-popup
                                        :tab-index -1
@@ -846,7 +846,7 @@
                                                          ;; check the top popup whether is the preview popup
                                                          (when (ui/last-shui-preview-popup?)
                                                            (rum/set-ref! *timer1
-                                                             (js/setTimeout #(set-visible! false) 500))))}
+                                                                         (js/setTimeout #(set-visible! false) 500))))}
                                       (when-let [page-cp (and ready? (state/get-page-blocks-cp))]
                                         (page-cp {:repo (state/get-current-repo)
                                                   :page-name (str (:block/uuid source))
@@ -855,11 +855,11 @@
                                                   :preview? true}))])))]
 
     (rum/use-effect!
-      (fn []
-        (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
-          (set-in-popup! true)
-          (set-in-popup! false)))
-      [])
+     (fn []
+       (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
+         (set-in-popup! true)
+         (set-in-popup! false)))
+     [])
 
     [:span {:ref *el-wrap}
      (if (boolean? in-popup?)
@@ -894,21 +894,23 @@
 (rum/defcs page-cp-inner < db-mixins/query rum/reactive
   {:init (fn [state]
            (let [page (last (:rum/args state))
-                 *result (atom nil)]
-             (p/let [result (if (e/entity? page)
-                              page
-                              (p/let [page-name (or (:block/uuid page)
-                                                    (when-let [s (:block/name page)]
-                                                      (let [s (string/trim s)
-                                                            s (if (string/starts-with? s db-content/page-ref-special-chars)
-                                                                (common-util/safe-subs s 2)
-                                                                s)]
-                                                        s)))
-                                      query-result (db-async/<get-block (state/get-current-repo) page-name {:children? false})]
-                                (if (e/entity? query-result)
-                                  query-result
-                                  (:block query-result))))]
-               (reset! *result result))
+                 *result (atom nil)
+                 page-name (or (:block/uuid page)
+                               (when-let [s (:block/name page)]
+                                 (let [s (string/trim s)
+                                       s (if (string/starts-with? s db-content/page-ref-special-chars)
+                                           (common-util/safe-subs s 2)
+                                           s)]
+                                   s)))
+                 page-entity (if (e/entity? page) page (db/get-page page-name))]
+             (if page-entity
+               (reset! *result page-entity)
+               (p/let [query-result (db-async/<get-block (state/get-current-repo) page-name {:children? false})
+                       result (if (e/entity? query-result)
+                                query-result
+                                (:block query-result))]
+                 (reset! *result result)))
+
              (assoc state :*entity *result)))}
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
@@ -4019,7 +4021,7 @@
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
                         :custom-scroll-parent (or (:scroll-container config)
-                                                (gdom/getElement "main-content-container"))
+                                                  (gdom/getElement "main-content-container"))
                         :compute-item-key (fn [idx]
                                             (let [block (nth blocks idx)]
                                               (str (:container-id config) "-" (:db/id block))))
@@ -4032,12 +4034,12 @@
                                               bottom? (= (dec (count blocks)) idx)
                                               block (nth blocks idx)]
                                           (block-item (assoc config :top? top?)
-                                            block
-                                            {:top? top?
-                                             :bottom? bottom?})))})
+                                                      block
+                                                      {:top? top?
+                                                       :bottom? bottom?})))})
         *wrap-ref (rum/use-ref nil)]
     (rum/use-effect!
-      (fn []
+     (fn []
        (when virtualized?
          (when (:current-page? config)
            (let [ref (.-current *virtualized-ref)]
@@ -4174,7 +4176,7 @@
      [:div.flex.flex-col.references-blocks-wrap
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)
             scroll-container (or (:scroll-container config)
-                               (gdom/getElement "main-content-container"))]
+                                 (gdom/getElement "main-content-container"))]
         (when (seq blocks)
           (if (:sidebar? config)
             (for [block blocks]
