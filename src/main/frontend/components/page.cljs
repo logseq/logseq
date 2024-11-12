@@ -429,23 +429,23 @@
    [:div.flex.flex-row.items-center.gap-2
     (when-not (:logseq.property/icon (db/entity (:db/id page)))
       (shui/button
-        {:variant :outline
-         :size :sm
-         :class "px-2 py-0 h-4 text-xs text-muted-foreground"
-         :on-click (fn [e]
-                     (state/pub-event! [:editor/new-property {:property-key "Icon"
-                                                              :block page
-                                                              :target (.-target e)}]))}
-        "Add icon"))
+       {:variant :outline
+        :size :sm
+        :class "px-2 py-0 h-4 text-xs text-muted-foreground"
+        :on-click (fn [e]
+                    (state/pub-event! [:editor/new-property {:property-key "Icon"
+                                                             :block page
+                                                             :target (.-target e)}]))}
+       "Add icon"))
 
     (shui/button
-      {:variant :outline
-       :size :sm
-       :class "px-2 py-0 h-4 text-xs text-muted-foreground"
-       :on-click (fn [e]
-                   (state/pub-event! [:editor/new-property {:block page
-                                                            :target (.-target e)}]))}
-      "Set node property")]])
+     {:variant :outline
+      :size :sm
+      :class "px-2 py-0 h-4 text-xs text-muted-foreground"
+      :on-click (fn [e]
+                  (state/pub-event! [:editor/new-property {:block page
+                                                           :target (.-target e)}]))}
+     "Set node property")]])
 
 (rum/defc db-page-title
   [page whiteboard-page? sidebar? container-id]
@@ -453,11 +453,11 @@
         *el (rum/use-ref nil)]
 
     (rum/use-effect!
-      (fn []
-        (when (and (not config/publishing?)
-                (some-> (rum/deref *el) (.closest "#main-content-container")))
-          (set-with-actions! true)))
-      [])
+     (fn []
+       (when (and (not config/publishing?)
+                  (some-> (rum/deref *el) (.closest "#main-content-container")))
+         (set-with-actions! true)))
+     [])
 
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
@@ -477,13 +477,13 @@
 
      [:div.w-full.relative
       (component-block/block-container
-        {:page-title? true
-         :page-title-actions-cp (when (and with-actions? (not= (:db/id (state/get-edit-block)) (:db/id page))) db-page-title-actions)
-         :hide-title? sidebar?
-         :hide-children? true
-         :container-id container-id
-         :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))}
-        page)]]))
+       {:page-title? true
+        :page-title-actions-cp (when (and with-actions? (not= (:db/id (state/get-edit-block)) (:db/id page))) db-page-title-actions)
+        :hide-title? sidebar?
+        :hide-children? true
+        :container-id container-id
+        :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))}
+       page)]]))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -673,7 +673,9 @@
                  preview-or-sidebar? (or (:preview? option) (:sidebar? option))
                  page-name' (get-sanity-page-name state page-name)
                  page-uuid? (util/uuid-string? page-name')
-                 *loading? (atom true)]
+                 *loading? (atom true)
+                 page (db/get-page page-name')]
+             (when page (reset! *loading? false))
              (p/let [page-block (db-async/<get-block (state/get-current-repo) page-name')]
                (reset! *loading? false)
                (if (not page-block)
