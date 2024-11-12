@@ -660,7 +660,7 @@
         refs (gp-block/get-page-refs-from-properties properties
                                                      (db/get-db (state/get-current-repo))
                                                      (state/get-date-formatter)
-                                                     (assoc (state/get-config) :format format))]
+                                                     (state/get-config))]
     {:block/pre-block? true
      :block/uuid (db/new-block-id)
      :block/properties properties
