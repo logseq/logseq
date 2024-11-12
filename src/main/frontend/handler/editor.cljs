@@ -1562,33 +1562,44 @@
                         (-> (p/let [buffer (.arrayBuffer file)]
                               (fs/write-file! repo dir file-rpath buffer {:skip-compare? false}))
                             (p/catch #(js/console.error "Debug: Writing Asset #" %)))))
-                  insert-opts' (assoc insert-opts :page (:block/uuid asset))
+                  edit-block (state/get-edit-block)
+                  insert-to-current-block-page? (and (:block/uuid edit-block) (string/blank? (state/get-edit-content)))
+                  insert-opts' (if insert-to-current-block-page?
+                                 (assoc insert-opts
+                                        :block-uuid (:block/uuid edit-block)
+                                        :replace-empty-target? true
+                                        :sibling? true)
+                                 (assoc insert-opts :page (:block/uuid asset)))
                   result (api-insert-new-block! file-name-without-ext insert-opts')
                   new-entity (db/entity [:block/uuid (:block/uuid result)])]
-            (if (util/electron?)
-              new-entity
-              (->
-               (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
-                      (cond
-                        (mobile-util/native-platform?)
-                        ;; capacitor fs accepts Blob, File implements Blob
-                        (p/let [buffer (.arrayBuffer file)
-                                content (base64/encodeByteArray (js/Uint8Array. buffer))
-                                fpath (path/path-join dir file-rpath)]
-                          (capacitor-fs/<write-file-with-base64 fpath content))
+            (when insert-to-current-block-page?
+              (state/clear-edit!))
+            (if new-entity
+              (if (util/electron?)
+                new-entity
+                (->
+                 (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
+                        (cond
+                          (mobile-util/native-platform?)
+                          ;; capacitor fs accepts Blob, File implements Blob
+                          (p/let [buffer (.arrayBuffer file)
+                                  content (base64/encodeByteArray (js/Uint8Array. buffer))
+                                  fpath (path/path-join dir file-rpath)]
+                            (capacitor-fs/<write-file-with-base64 fpath content))
 
-                        (config/db-based-graph? repo) ;; memory-fs
-                        (p/let [buffer (.arrayBuffer file)
-                                content (js/Uint8Array. buffer)]
-                          (fs/write-file! repo dir file-rpath content nil))
+                          (config/db-based-graph? repo) ;; memory-fs
+                          (p/let [buffer (.arrayBuffer file)
+                                  content (js/Uint8Array. buffer)]
+                            (fs/write-file! repo dir file-rpath content nil))
 
-                        :else
-                        (throw (ex-info "Paste failed"
-                                        {:file-name file-name})))
-                      new-entity)
-               (p/catch (fn [error]
-                          (prn :paste-file-error)
-                          (js/console.error error))))))))))))
+                          :else
+                          (throw (ex-info "Paste failed"
+                                          {:file-name file-name})))
+                        new-entity)
+                 (p/catch (fn [error]
+                            (prn :paste-file-error)
+                            (js/console.error error)))))
+              (throw (ex-info "Can't save asset" {:files files}))))))))))
 
 (defn db-upload-assets!
   "Paste asset and insert link to current editing block"
