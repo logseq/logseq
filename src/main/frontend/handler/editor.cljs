@@ -1527,8 +1527,8 @@
    Returns: asset entity"
   ([repo files]
    (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
-     (db-based-save-assets! repo repo-dir assets-dir files)))
-  ([repo repo-dir asset-dir-rpath files]
+     (db-based-save-assets! repo repo-dir assets-dir files {})))
+  ([repo repo-dir asset-dir-rpath files {:keys [pdf-area?]}]
    (p/all
     (for [[_index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
@@ -1563,7 +1563,7 @@
                               (fs/write-file! repo dir file-rpath buffer {:skip-compare? false}))
                             (p/catch #(js/console.error "Debug: Writing Asset #" %)))))
                   edit-block (state/get-edit-block)
-                  insert-to-current-block-page? (and (:block/uuid edit-block) (string/blank? (state/get-edit-content)))
+                  insert-to-current-block-page? (and (:block/uuid edit-block) (string/blank? (state/get-edit-content)) (not pdf-area?))
                   insert-opts' (if insert-to-current-block-page?
                                  (assoc insert-opts
                                         :block-uuid (:block/uuid edit-block)
