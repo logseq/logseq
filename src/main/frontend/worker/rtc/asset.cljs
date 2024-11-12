@@ -15,6 +15,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
+            [frontend.worker.state :as worker-state]
             [logseq.db :as ldb]
             [malli.core :as ma]
             [missionary.core :as m])
@@ -53,50 +54,50 @@
   [get-ws-create-task conn graph-uuid asset-uuids]
   {:pre [(every? uuid? asset-uuids)]}
   (m/sp
-   (when (seq asset-uuids)
-     (let [asset-uuid->url (->> (m/? (ws-util/send&recv get-ws-create-task
-                                                        {:action "get-assets-upload-urls"
-                                                         :graph-uuid graph-uuid
-                                                         :asset-uuid->metadata
-                                                         (into {}
-                                                               (map (fn [asset-uuid] [asset-uuid {"checksum" "TEST-CHECKSUM"}]))
-                                                               asset-uuids)}))
-                                :asset-uuid->url)]
-       (doseq [[asset-uuid put-url] asset-uuid->url]
-         (assert (uuid? asset-uuid) asset-uuid)
-         (let [{:keys [status] :as r}
-               (c.m/<? (http/put put-url {:headers {"x-amz-meta-checksum" "TEST-CHECKSUM"}
-                                          :body (js/JSON.stringify
-                                                 (clj->js {:TEST-ASSET true
-                                                           :asset-uuid (str asset-uuid)
-                                                           :graph-uuid (str graph-uuid)}))
-                                          :with-credentials? false}))]
-           (if (not= 200 status)
-             (prn :debug-failed-upload-asset {:resp r :asset-uuid asset-uuid :graph-uuid graph-uuid})
+    (when (seq asset-uuids)
+      (let [asset-uuid->url (->> (m/? (ws-util/send&recv get-ws-create-task
+                                                         {:action "get-assets-upload-urls"
+                                                          :graph-uuid graph-uuid
+                                                          :asset-uuid->metadata
+                                                          (into {}
+                                                                (map (fn [asset-uuid] [asset-uuid {"checksum" "TEST-CHECKSUM"}]))
+                                                                asset-uuids)}))
+                                 :asset-uuid->url)]
+        (doseq [[asset-uuid put-url] asset-uuid->url]
+          (assert (uuid? asset-uuid) asset-uuid)
+          (let [{:keys [status] :as r}
+                (c.m/<? (http/put put-url {:headers {"x-amz-meta-checksum" "TEST-CHECKSUM"}
+                                           :body (js/JSON.stringify
+                                                  (clj->js {:TEST-ASSET true
+                                                            :asset-uuid (str asset-uuid)
+                                                            :graph-uuid (str graph-uuid)}))
+                                           :with-credentials? false}))]
+            (if (not= 200 status)
+              (prn :debug-failed-upload-asset {:resp r :asset-uuid asset-uuid :graph-uuid graph-uuid})
 
-             (when (some? (d/entity @conn [:block/uuid asset-uuid]))
-               (d/transact! conn [{:block/uuid asset-uuid
-                                   :logseq.property.asset/remote-metadata {:checksum "TEST"}}])))))))))
+              (when (some? (d/entity @conn [:block/uuid asset-uuid]))
+                (d/transact! conn [{:block/uuid asset-uuid
+                                    :logseq.property.asset/remote-metadata {:checksum "TEST"}}])))))))))
 
 (defn new-task--download-assets
   [get-ws-create-task conn graph-uuid asset-uuids]
   {:pre [(every? uuid? asset-uuids)]}
   (m/sp
-   (when (seq asset-uuids)
-     (let [asset-uuid->url
-           (->> (m/? (ws-util/send&recv get-ws-create-task {:action "get-assets-download-urls"
-                                                            :graph-uuid graph-uuid
-                                                            :asset-uuids asset-uuids}))
-                :asset-uuid->url)]
-       (doseq [[asset-uuid get-url] asset-uuid->url]
-         (assert (uuid? asset-uuid) asset-uuid)
-         (let [{:keys [status _body] :as r} (c.m/<? (http/get get-url {:with-credentials? false}))]
-           (if (not= 200 status)
-             (prn :debug-failed-download-asset {:resp r :asset-uuid asset-uuid :graph-uuid graph-uuid})
-             (when (d/entity @conn [:block/uuid asset-uuid])
-               (d/transact! conn [{:block/uuid asset-uuid
-                                   :file/path "TEST-FILE-PATH"}])
-               (prn :debug-succ-download-asset asset-uuid)))))))))
+    (when (seq asset-uuids)
+      (let [asset-uuid->url
+            (->> (m/? (ws-util/send&recv get-ws-create-task {:action "get-assets-download-urls"
+                                                             :graph-uuid graph-uuid
+                                                             :asset-uuids asset-uuids}))
+                 :asset-uuid->url)]
+        (doseq [[asset-uuid get-url] asset-uuid->url]
+          (assert (uuid? asset-uuid) asset-uuid)
+          (let [{:keys [status _body] :as r} (c.m/<? (http/get get-url {:with-credentials? false}))]
+            (if (not= 200 status)
+              (prn :debug-failed-download-asset {:resp r :asset-uuid asset-uuid :graph-uuid graph-uuid})
+              (when (d/entity @conn [:block/uuid asset-uuid])
+                (d/transact! conn [{:block/uuid asset-uuid
+                                    :file/path "TEST-FILE-PATH"}])
+                (prn :debug-succ-download-asset asset-uuid)))))))))
 
 (defn- create-local-updates-check-flow
   "Return a flow that emits value if need to push local-updates"
@@ -106,7 +107,7 @@
         merge-flow (m/latest vector auto-push-flow clock-flow)]
     (m/eduction (filter first)
                 (map second)
-                (filter (fn [v] (when (client-op/get-unpushed-asset-ops-count repo) v)))
+                (filter (fn [v] (when (pos? (client-op/get-unpushed-asset-ops-count repo)) v)))
                 merge-flow)))
 
 (def ^:private remote-asset-updates-schema
@@ -174,23 +175,53 @@
   "Use this to prevent multiple assets-sync loops at same time."
   [started-dfv task]
   (m/sp
-   (when-not (compare-and-set! *assets-sync-lock nil true)
-     (let [e (ex-info "Must not run multiple assets-sync loops"
-                      {:type :assets-sync.exception/lock-failed
-                       :missionary/retry true})]
-       (started-dfv e)
-       (throw e)))
-   (try
-     (m/? task)
-     (finally
-       (reset! *assets-sync-lock nil)))))
+    (when-not (compare-and-set! *assets-sync-lock nil true)
+      (let [e (ex-info "Must not run multiple assets-sync loops"
+                       {:type :assets-sync.exception/lock-failed
+                        :missionary/retry true})]
+        (started-dfv e)
+        (throw e)))
+    (try
+      (m/? task)
+      (finally
+        (reset! *assets-sync-lock nil)))))
 
 (defn- new-task--push-local-asset-updates
-  [repo db graph-uuid add-log-fn]
+  [repo get-ws-create-task conn graph-uuid _add-log-fn]
   (m/sp
-    (let [asset-ops (client-op/get&remove-all-asset-ops repo)]
-      ;; TODO: upload local-assets to remote
-      )))
+    (let [asset-ops (client-op/get&remove-all-asset-ops repo)
+          upload-asset-uuids (keep
+                              (fn [asset-op]
+                                (when (contains? asset-op :update-asset)
+                                  (:block/uuid asset-op)))
+                              asset-ops)
+          asset-uuid->asset-type (into {}
+                                       (keep (fn [asset-uuid]
+                                               (when-let [tp (:logseq.property.asset/type
+                                                              (d/entity @conn [:block/uuid asset-uuid]))]
+                                                 [asset-uuid tp])))
+                                       upload-asset-uuids)
+          asset-uuid->url
+          (when (seq asset-uuid->asset-type)
+            (->> (m/? (ws-util/send&recv get-ws-create-task
+                                         {:action "get-assets-upload-urls"
+                                          :graph-uuid graph-uuid
+                                          :asset-uuid->metadata
+                                          (into {} (map (fn [asset-uuid] [asset-uuid {"checksum" "TEST-CHECKSUM"}]))
+                                                (keys asset-uuid->asset-type))}))
+                 :asset-uuid->url))]
+      (prn :xxx-push-local-asset-updates asset-ops asset-uuid->url)
+      (doseq [[asset-uuid put-url] asset-uuid->url]
+        (prn :start-upload-asset asset-uuid)
+        (let [r (->> (.rtc-upload-asset
+                      @worker-state/*main-thread
+                      repo (str asset-uuid) (get asset-uuid->asset-type asset-uuid) put-url)
+                     c.m/<?
+                     ldb/read-transit-str)]
+          (when (:ex-data r)
+            (throw (ex-info "upload asset failed" r)))
+          (d/transact! conn [{:block/uuid asset-uuid
+                              :logseq.property.asset/remote-metadata {:checksum "TEST-CHECKSUM"}}]))))))
 
 (defn create-assets-sync-loop
   [repo get-ws-create-task graph-uuid conn *auto-push?]
@@ -211,20 +242,21 @@
              (case (:type event)
                :remote-updates nil
                :local-update-check
-               (m/? (new-task--push-local-asset-updates repo @conn graph-uuid add-log-fn))))
+               (m/? (new-task--push-local-asset-updates
+                     repo get-ws-create-task @conn graph-uuid add-log-fn))))
            m/ap
            (m/reduce {} nil)
            m/?)
 
-         (catch Cancelled e
-           (add-log-fn :rtc.asset.log/cancelled {})
-           (throw e)))))}))
+          (catch Cancelled e
+            (add-log-fn :rtc.asset.log/cancelled {})
+            (throw e)))))}))
 
 (comment
   (def x (atom 1))
   (def f (m/ap
-          (let [r (m/?> (m/buffer 10 (m/watch x)))]
-            (m/? (m/sleep 2000))
-            r)))
+           (let [r (m/?> (m/buffer 10 (m/watch x)))]
+             (m/? (m/sleep 2000))
+             r)))
 
   (def cancel ((m/reduce (fn [r e] (prn :e e)) f) prn prn)))
