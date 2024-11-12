@@ -4007,7 +4007,8 @@
 
 (rum/defc block-list
   [config blocks]
-  (let [virtualized? (not (:block-children? config))
+  (let [virtualized? (and (not (:block-children? config))
+                          (>= (count blocks) 50))
         render-item (fn [idx]
                       (let [top? (zero? idx)
                             bottom? (= (dec (count blocks)) idx)
