@@ -112,7 +112,7 @@
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
   (when-not (get-in property [:block/schema :hide?])
-    (shui/popup-hide!)
+    (ui/hide-popups-until-preview-popup!)
     (shui/dialog-close!))
   (p/let [block
           (if (and (contains? #{:default :url} (get-in property [:block/schema :type]))
