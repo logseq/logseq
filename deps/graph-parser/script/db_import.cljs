@@ -15,7 +15,8 @@
             [logseq.common.graph :as common-graph]
             #_:clj-kondo/ignore
             [logseq.outliner.cli :as outliner-cli]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.set :as set]))
 
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
@@ -105,12 +106,16 @@
           :desc "Print help"}
    :verbose {:alias :v
              :desc "Verbose mode"}
+   :all-tags {:alias :a
+              :desc "All tags convert to classes"}
    :tag-classes {:alias :t
                  :coerce []
                  :desc "List of tags to convert to classes"}
    :files {:alias :f
            :coerce []
            :desc "Additional files to import"}
+   :remove-inline-tags {:alias :r
+                        :desc "Remove inline tags"}
    :property-classes {:alias :p
                       :coerce []
                       :desc "List of properties whose values convert to classes"}
@@ -133,9 +138,13 @@
         file-graph' (resolve-path file-graph)
         conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
         directory? (.isDirectory (fs/statSync file-graph'))
-        ;; coerce option collection into strings
-        user-options (if (:tag-classes options) (update options :tag-classes (partial mapv str)) options)
-        options' (merge {:user-options (dissoc user-options :verbose :files :help)
+        user-options (cond-> (dissoc options :verbose :files :help)
+                       ;; coerce option collection into strings
+                       (:tag-classes options)
+                       (update :tag-classes (partial mapv str))
+                       true
+                       (set/rename-keys {:all-tags :convert-all-tags? :remove-inline-tags :remove-inline-tags?}))
+        options' (merge {:user-options user-options
                          :graph-name db-name}
                         (select-keys options [:files :verbose]))]
     (p/let [{:keys [import-state]}
