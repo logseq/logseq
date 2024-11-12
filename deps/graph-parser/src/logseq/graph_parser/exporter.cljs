@@ -41,14 +41,12 @@
                 (assoc :block/created-at updated-at))]
     block))
 
-(defn- find-or-create-class
-  [db class-name all-idents]
-  (if-let [db-ident (get @all-idents (keyword class-name))]
-    {:db/ident db-ident}
-    (let [m (db-class/build-new-class db {:block/title class-name
-                                          :block/name (common-util/page-name-sanity-lc class-name)})]
-      (swap! all-idents assoc (keyword class-name) (:db/ident m))
-      m)))
+(defn- build-new-namespace-page [block]
+  (let [new-title (ns-util/get-last-part (:block/title block))]
+    (merge block
+           {;; DB graphs only have child name of namespace
+            :block/title new-title
+            :block/name (common-util/page-name-sanity-lc new-title)})))
 
 (defn- get-page-uuid [page-names-to-uuids page-name]
   (or (get @page-names-to-uuids (if (string/includes? (str page-name) "#")
@@ -56,6 +54,27 @@
                                   page-name))
       (throw (ex-info (str "No uuid found for page name " (pr-str page-name))
                       {:page-name page-name}))))
+
+(defn- replace-namespace-with-parent [block page-names-to-uuids]
+  (if (:block/namespace block)
+    (-> (dissoc block :block/namespace)
+        (assoc :logseq.property/parent
+               {:block/uuid (get-page-uuid page-names-to-uuids (get-in block [:block/namespace :block/name]))}))
+    block))
+
+(defn- find-or-create-class
+  ([db class-name all-idents]
+   (find-or-create-class db class-name all-idents {}))
+  ([db class-name all-idents class-block]
+   (if-let [db-ident (get @all-idents (keyword class-name))]
+     {:db/ident db-ident}
+     (let [m* (cond-> {:block/title class-name
+                       :block/name (common-util/page-name-sanity-lc class-name)}
+                (:block/namespace class-block)
+                (build-new-namespace-page))
+           m (db-class/build-new-class db m*)]
+       (swap! all-idents assoc (keyword class-name) (:db/ident m))
+       m))))
 
 (defn- find-or-gen-class-uuid [page-names-to-uuids page-name db-ident]
   (or (get @page-names-to-uuids page-name)
@@ -87,14 +106,15 @@
                                        (:block/name tag-block)))]
         [:block/uuid existing-tag-uuid]
         ;; Creates or updates page within same tx
-        (let [class-m (find-or-create-class db (:block/title tag-block) all-idents)]
+        (let [class-m (find-or-create-class db (:block/title tag-block) all-idents tag-block)]
           (-> (merge tag-block class-m
                      (when-not (:block/uuid tag-block)
                        {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (:block/name tag-block) (:db/ident class-m))}))
               ;; override with imported timestamps
               (dissoc :block/created-at :block/updated-at)
               (merge (add-missing-timestamps
-                      (select-keys tag-block [:block/created-at :block/updated-at])))))))))
+                      (select-keys tag-block [:block/created-at :block/updated-at])))
+              (replace-namespace-with-parent page-names-to-uuids)))))))
 
 (defn- logseq-class-ident?
   [k]
@@ -655,7 +675,7 @@
                                                     distinct)]
             (cond-> block
               (seq parent-classes-from-properties)
-              (merge (find-or-create-class db (:block/title block) (:all-idents import-state)))
+              (merge (find-or-create-class db (:block/title block) (:all-idents import-state) block))
               (seq parent-classes-from-properties)
               (assoc :logseq.property/parent
                      (let [new-class (first parent-classes-from-properties)
@@ -665,11 +685,7 @@
                        (merge class-m
                               {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m))})))))
           (dissoc block* :block/properties))
-        block'' (if (:block/namespace block')
-                  (-> (dissoc block' :block/namespace)
-                      (assoc :logseq.property/parent
-                             {:block/uuid (get-page-uuid page-names-to-uuids (get-in block' [:block/namespace :block/name]))}))
-                  block')]
+        block'' (replace-namespace-with-parent block' page-names-to-uuids)]
     {:block block'' :properties-tx properties-tx}))
 
 (defn- handle-block-properties
@@ -891,13 +907,9 @@
     (cond-> page'
       (:block/namespace page)
       ((fn [block']
-         (let [new-title (ns-util/get-last-part (:block/title block'))]
-           (merge block'
-                  {;; DB graphs only have child name of namespace
-                   :block/title new-title
-                   ;; save original name b/c it's still used for a few name lookups
-                   ::original-name (:block/name block')
-                   :block/name (common-util/page-name-sanity-lc new-title)})))))))
+         (merge (build-new-namespace-page block')
+                {;; save original name b/c it's still used for a few name lookups
+                 ::original-name (:block/name block')}))))))
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
