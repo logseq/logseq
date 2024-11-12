@@ -1555,7 +1555,6 @@
                   insert-opts {:custom-uuid block-id
                                :edit-block? false
                                :properties properties}
-                  edit-block (state/get-edit-block)
                   _ (when (util/electron?)
                       (if-let [from (not-empty (.-path file))]
                         (-> (js/window.apis.copyFileToAssets dir file-rpath from)
@@ -1563,13 +1562,7 @@
                         (-> (p/let [buffer (.arrayBuffer file)]
                               (fs/write-file! repo dir file-rpath buffer {:skip-compare? false}))
                             (p/catch #(js/console.error "Debug: Writing Asset #" %)))))
-                  insert-opts' (if (and (:block/uuid edit-block)
-                                        (string/blank? (:block/title edit-block)))
-                                 (assoc insert-opts
-                                        :block-uuid (:block/uuid edit-block)
-                                        :replace-empty-target? true
-                                        :sibling? true)
-                                 (assoc insert-opts :page (:block/uuid asset)))
+                  insert-opts' (assoc insert-opts :page (:block/uuid asset))
                   result (api-insert-new-block! file-name-without-ext insert-opts')
                   new-entity (db/entity [:block/uuid (:block/uuid result)])]
             (if (util/electron?)
