@@ -828,13 +828,11 @@ html[data-theme=dark] {
     .hl-area {
       @apply relative block cursor-text border rounded-md overflow-hidden mt-1;
 
-      .actions {
-        @apply absolute right-1 top-1 flex opacity-0 transition-opacity;
-      }
+      > .asset-container {
+        @apply mt-0;
 
-      &:hover {
-        .actions {
-          @apply opacity-100;
+        > .asset-action-bar {
+          @apply top-1 right-1;
         }
       }
 
