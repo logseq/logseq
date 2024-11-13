@@ -147,10 +147,10 @@
                                      :public? true
                                      :view-context :page}
                             :queryable? true}
-   ;; :logseq.property/default-value {:title "Default value"
-   ;;                                 :schema {:type :any
-   ;;                                          :public? true
-   ;;                                          :view-context :property}}
+   :logseq.property/default-value {:title "Default value"
+                                   :schema {:type :entity
+                                            :public? true
+                                            :view-context :property}}
    :logseq.property.class/properties {:title "Tag Properties"
                                       :schema {:type :property
                                                :cardinality :many

@@ -875,20 +875,21 @@
         multiple-values? (db-property/many? property)
         class (str (when-not row? "flex flex-1 ")
                    (when multiple-values? "property-value-content"))
-        type (:type schema)]
+        type (:type schema)
+        text-ref-type? (db-property-type/text-ref-property-types type)]
     [:div.cursor-text
      {:id (or dom-id (random-uuid))
       :tabIndex 0
-      :class (str class " " (when-not (contains? #{:default :url} type) "jtrigger"))
+      :class (str class " " (when-not text-ref-type? "jtrigger"))
       :style {:min-height 24}
       :on-click (fn []
-                  (when (and (contains? #{:default :url} type) (nil? value))
+                  (when (and text-ref-type? (nil? value))
                     (<create-new-block! block property "")))}
      (cond
-       (and (contains? #{:default :url} type) (nil? (:block/title value)))
+       (and text-ref-type? (nil? (:block/title value)))
        [:div.jtrigger (property-empty-btn-value property)]
 
-       (#{:default :url :entity} type)
+       text-ref-type?
        (property-block-value value block property page-cp)
 
        :else
@@ -1028,12 +1029,13 @@
              v)
          empty-value? (when (coll? v) (= :logseq.property/empty-placeholder (:db/ident (first v))))
          closed-values? (seq (:property/closed-values property))
+         property-ident (:db/ident property)
          value-cp [:div.property-value-inner
                    {:data-type type
                     :class (str (when empty-value? "empty-value")
                                 (when-not (:other-position? opts) " w-full"))}
                    (cond
-                     (= (:db/ident property) :logseq.property.class/properties)
+                     (= property-ident :logseq.property.class/properties)
                      (properties-cp {} block {:selected? false
                                               :class-schema? true})
 
@@ -1044,7 +1046,7 @@
                      (multiple-values block property opts schema)
 
                      :else
-                     (let [parent? (= (:db/ident property) :logseq.property/parent)
+                     (let [parent? (= property-ident :logseq.property/parent)
                            value-cp (property-scalar-value block property v
                                                            (merge
                                                             opts

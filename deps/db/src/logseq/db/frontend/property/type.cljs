@@ -28,6 +28,14 @@
   "Valid property types that can change cardinality"
   #{:default :number :url :date :node})
 
+(def default-value-ref-property-types
+  "Valid ref property :type for default value support"
+  #{:default :number})
+
+(def text-ref-property-types
+  "Valid ref property :types that support text"
+  #{:default :url :entity})
+
 (assert (set/subset? cardinality-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
 

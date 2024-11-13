@@ -23,6 +23,7 @@
             [rum.core :as rum]
             [frontend.db-mixins :as db-mixins]
             [frontend.components.property.value :as pv]
+            [frontend.components.property.default-value :as pdv]
             [frontend.components.select :as select]
             [frontend.db.model :as model]
             [frontend.handler.db-based.page :as db-page-handler]
@@ -526,6 +527,12 @@
                                   :submenu-content (fn [_ops]
                                                      [:div.px-4
                                                       (class-select property {:default-open? false})])}))
+
+     (when (contains? db-property-type/default-value-ref-property-types property-type)
+       (let [default-value (:logseq.property/default-value property)]
+         (dropdown-editor-menuitem {:icon :settings-2 :title "Default value"
+                                    :desc (if default-value (db-property/property-value-content default-value) "Set value")
+                                    :submenu-content (fn [] (pdv/default-value-config property))})))
 
      (when enable-closed-values?
        (let [values (:property/closed-values property)]
