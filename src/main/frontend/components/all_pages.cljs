@@ -36,8 +36,12 @@
 
 (defn- get-all-pages
   []
-  (->> (page-handler/get-all-pages (state/get-current-repo))
-       (map (fn [p] (assoc p :id (:db/id p))))))
+  (let [pages (->> (page-handler/get-all-pages (state/get-current-repo))
+                   (map (fn [p] (assoc p :id (:db/id p)))))]
+    (when-let [buggy-pages (seq (remove :block/type pages))]
+      (js/console.error "The following pages aren't displayed because they don't have a :block/type"
+                        buggy-pages))
+    (filter :block/type pages)))
 
 (rum/defc all-pages < rum/static
   []
