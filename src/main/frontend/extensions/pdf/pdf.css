@@ -826,7 +826,7 @@ html[data-theme=dark] {
     }
 
     .hl-area {
-      @apply relative inline-block cursor-text border rounded-md overflow-hidden mt-1;
+      @apply relative block cursor-text border rounded-md overflow-hidden mt-1;
 
       .actions {
         @apply absolute right-1 top-1 flex opacity-0 transition-opacity;

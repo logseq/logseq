@@ -414,33 +414,36 @@
         (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
           (reset! *src asset-path)))
       (when @*src
-        [:span.hl-area
-         [:span.actions.py-2.px-1
-          (when-let [asset-uuid (and (config/db-based-graph?)
-                             (some-> block (:logseq.property.pdf/hl-image) (:block/uuid)))]
+        (let [asset-block (some-> block (:logseq.property.pdf/hl-image))
+              resize-metadata (some-> asset-block :logseq.property.asset/resize-metadata)]
+          [:span.hl-area
+           (when-let [w (:width resize-metadata)] {:style {:width w}})
+           [:span.actions.py-2.px-1
+            (when-let [asset-uuid (and (config/db-based-graph?)
+                                    (some-> asset-block (:block/uuid)))]
+              [:button.asset-action-btn.px-1
+               {:title (t :asset/ref-block)
+                :tabIndex "-1"
+                :on-pointer-down util/stop
+                :on-click (fn [] (route-handler/redirect-to-page! asset-uuid))}
+               (ui/icon "file-symlink")])
+
+            (when-not config/publishing?
+              [:button.asset-action-btn.px-1
+               {:title (t :asset/copy)
+                :tabIndex "-1"
+                :on-pointer-down util/stop
+                :on-click (fn [e]
+                            (util/stop e)
+                            (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol @*src))
+                              (p/then #(notification/show! "Copied!" :success))))}
+               (ui/icon "copy")])
+
             [:button.asset-action-btn.px-1
-             {:title (t :asset/ref-block)
+             {:title (t :asset/maximize)
               :tabIndex "-1"
               :on-pointer-down util/stop
-              :on-click (fn [] (route-handler/redirect-to-page! asset-uuid))}
-             (ui/icon "file-symlink")])
+              :on-click open-lightbox}
 
-          (when-not config/publishing?
-            [:button.asset-action-btn.px-1
-             {:title (t :asset/copy)
-              :tabIndex      "-1"
-              :on-pointer-down util/stop
-              :on-click      (fn [e]
-                               (util/stop e)
-                               (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol @*src))
-                                   (p/then #(notification/show! "Copied!" :success))))}
-             (ui/icon "copy")])
-
-          [:button.asset-action-btn.px-1
-           {:title         (t :asset/maximize)
-            :tabIndex      "-1"
-            :on-pointer-down util/stop
-            :on-click      open-lightbox}
-
-           (ui/icon "maximize")]]
-         [:img {:src @*src}]]))))
+             (ui/icon "maximize")]]
+           [:img.w-full {:src @*src}]])))))
