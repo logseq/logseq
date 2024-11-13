@@ -797,13 +797,18 @@
     (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)))})))
 
 (defn- build-block-tx
-  [db block* pre-blocks page-names-to-uuids {:keys [import-state] :as options}]
+  [db block* pre-blocks page-names-to-uuids {:keys [import-state journal-created-ats] :as options}]
   ;; (prn ::block-in block*)
   (let [;; needs to come before update-block-refs to detect new property schemas
         {:keys [block properties-tx]}
         (handle-block-properties block* db page-names-to-uuids (:block/refs block*) options)
         {block-after-built-in-props :block deadline-properties-tx :properties-tx} (update-block-deadline block db options)
-        block' (-> block-after-built-in-props
+        ;; :block/page should be [:block/page NAME]
+        journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
+        prepared-block (cond-> block-after-built-in-props
+                         journal-page-created-at
+                         (assoc :block/created-at journal-page-created-at))
+        block' (-> prepared-block
                    (fix-pre-block-references pre-blocks page-names-to-uuids)
                    (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
@@ -826,13 +831,15 @@
                                 aliases))))
 
 (defn- build-new-page-or-class
-  [m db user-options page-names-to-uuids all-idents]
+  [m db page-names-to-uuids all-idents {:keys [user-options journal-created-ats]}]
   (-> (cond-> m
         ;; Fix pages missing :block/title. Shouldn't happen
         (not (:block/title m))
         (assoc :block/title (:block/name m))
         (seq (:block/alias m))
-        (update-page-alias page-names-to-uuids))
+        (update-page-alias page-names-to-uuids)
+        (journal-created-ats (:block/name m))
+        (assoc :block/created-at (journal-created-ats (:block/name m))))
       add-missing-timestamps
       ;; TODO: org-mode content needs to be handled
       (assoc :block/format :markdown)
@@ -943,7 +950,7 @@
                                      (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
                                                   db-malli-schema/class?)))
                              (build-new-page-or-class (dissoc m ::original-name)
-                                                      @conn user-options page-names-to-uuids (:all-idents import-state)))))
+                                                      @conn page-names-to-uuids (:all-idents import-state) options))))
                        (map :block all-pages-m))]
     {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
@@ -1154,6 +1161,14 @@
           :else
           (notify-user {:msg (str "Skipped file since its format is not supported: " file)}))))
 
+(defn- build-journal-created-ats
+  "Calculate created-at timestamps for journals"
+  [pages]
+  (->> pages
+       (map #(when-let [journal-day (:block/journal-day %)]
+               [(:block/name %) (date-time-util/journal-day->ms journal-day)]))
+       (into {})))
+
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -1171,7 +1186,8 @@
                       :as *options}]
   (let [options (assoc *options :notify-user notify-user :log-fn log-fn)
         {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
-        tx-options (build-tx-options options)
+        tx-options (merge (build-tx-options options)
+                          {:journal-created-ats (build-journal-created-ats pages)})
         old-properties (keys @(get-in options [:import-state :property-schemas]))
         ;; Build page and block txs
         {:keys [pages-tx page-properties-tx page-names-to-uuids existing-pages]} (build-pages-tx conn pages blocks tx-options)

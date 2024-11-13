@@ -18,7 +18,8 @@
             [logseq.db :as ldb]
             [logseq.outliner.db-pipeline :as db-pipeline]
             [logseq.db.test.helper :as db-test]
-            [logseq.db.frontend.rules :as rules]))
+            [logseq.db.frontend.rules :as rules]
+            [logseq.common.util.date-time :as date-time-util]))
 
 ;; Helpers
 ;; =======
@@ -358,6 +359,14 @@
                 {:parent "n2" :child "alias"}]
                (rest (expand-children (d/entity @conn (:db/id (find-page-by-name @conn "n2"))) nil)))
             "First namespace tests duplicate child page name and built-in page name")))
+
+    (testing "journal timestamps"
+      (is (= (date-time-util/journal-day->ms 20240207)
+             (:block/created-at (find-page-by-name @conn "Feb 7th, 2024")))
+          "journal pages are created on their journal day")
+      (is (= (date-time-util/journal-day->ms 20240207)
+             (:block/created-at (find-block-by-content @conn #"Inception")))
+          "journal blocks are created on their page's journal day"))
 
     (testing "db attributes"
       (is (= true
