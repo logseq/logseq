@@ -151,6 +151,10 @@
                                    :schema {:type :entity
                                             :public? true
                                             :view-context :property}}
+   :logseq.property/checkbox-default-value {:title "Default value"
+                                            :schema {:type :checkbox
+                                                     :public? true
+                                                     :view-context :property}}
    :logseq.property.class/properties {:title "Tag Properties"
                                       :schema {:type :property
                                                :cardinality :many
