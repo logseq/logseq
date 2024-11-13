@@ -2227,10 +2227,10 @@
                              :dune)))}
 
                       [:span.hl-page
-                       [:strong.forbid-edit (str "P" (or
-                                                      (pu/lookup properties :logseq.property.pdf/hl-page)
-                                                      "?"))]
-                       [:label.blank " "]]
+                       [:strong.forbid-edit
+                        (str "P"
+                          (or (pu/lookup properties :logseq.property.pdf/hl-page)
+                            "?"))]]
 
                       (when (and area?
                                  (or (:hl-stamp properties)

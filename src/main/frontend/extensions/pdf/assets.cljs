@@ -13,6 +13,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.property.util :as pu]
             [frontend.ui :as ui]
             [frontend.context.i18n :refer [t]]
@@ -414,10 +415,19 @@
           (reset! *src asset-path)))
       (when @*src
         [:span.hl-area
-         [:span.actions
+         [:span.actions.py-2.px-1
+          (when-let [asset-uuid (and (config/db-based-graph?)
+                             (some-> block (:logseq.property.pdf/hl-image) (:block/uuid)))]
+            [:button.asset-action-btn.px-1
+             {:title (t :asset/ref-block)
+              :tabIndex "-1"
+              :on-pointer-down util/stop
+              :on-click (fn [] (route-handler/redirect-to-page! asset-uuid))}
+             (ui/icon "file-symlink")])
+
           (when-not config/publishing?
             [:button.asset-action-btn.px-1
-             {:title         (t :asset/copy)
+             {:title (t :asset/copy)
               :tabIndex      "-1"
               :on-pointer-down util/stop
               :on-click      (fn [e]
