@@ -30,7 +30,7 @@
 
 (def default-value-ref-property-types
   "Valid ref property :type for default value support"
-  #{:default :number})
+  #{:default :number :checkbox})
 
 (def text-ref-property-types
   "Valid ref property :types that support text"
