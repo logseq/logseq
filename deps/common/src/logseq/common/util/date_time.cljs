@@ -79,3 +79,12 @@
   [date]
   (parse-long
    (string/replace (ymd date) "/" "")))
+
+(defn journal-day->ms
+  "Convert :block/journal-day int to ms timestamp in current timezone"
+  [journal-day]
+  (let [journal-day' (str journal-day)
+        year (js/parseInt (subs journal-day' 0 4))
+        month (dec (js/parseInt (subs journal-day' 4 6)))
+        day (js/parseInt (subs journal-day' 6 8))]
+    (.getTime (new js/Date year month day))))
