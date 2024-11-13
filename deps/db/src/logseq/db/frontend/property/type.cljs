@@ -196,3 +196,11 @@
     (url? val) :url
     (contains? #{true false} val) :checkbox
     :else :default))
+
+(defn property-value-content?
+  "Whether property value should be stored in :property.value/content"
+  [block-type property]
+  (or
+   (original-value-ref-property-types (get-in property [:block/schema :type]))
+   (and (= (:db/ident property) :logseq.property/default-value)
+        (original-value-ref-property-types block-type))))

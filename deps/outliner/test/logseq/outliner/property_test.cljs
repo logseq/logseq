@@ -39,7 +39,7 @@
     (let [test-uuid (random-uuid)]
       (are [x y]
            (= (let [[schema-type value] x]
-                (outliner-property/convert-property-input-string schema-type value)) y)
+                (outliner-property/convert-property-input-string nil {:block/schema {:type schema-type}} value)) y)
         [:number "1"] 1
         [:number "1.2"] 1.2
         [:url test-uuid] test-uuid

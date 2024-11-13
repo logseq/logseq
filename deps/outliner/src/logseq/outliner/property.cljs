@@ -74,10 +74,14 @@
                                    :type :error}})))))
 
 (defn ^:api convert-property-input-string
-  [schema-type v-str]
-  (if (and (= :number schema-type) (string? v-str))
-    (fail-parse-double v-str)
-    v-str))
+  [block-type property v-str]
+  (let [schema-type (get-in property [:block/schema :type])]
+    (if (and (or (= :number schema-type)
+                 (and (= (:db/ident property) :logseq.property/default-value)
+                      (= :number block-type)))
+             (string? v-str))
+      (fail-parse-double v-str)
+      v-str)))
 
 (defn- update-datascript-schema
   [property {type' :type :keys [cardinality]}]
@@ -207,7 +211,8 @@
   (let [property (d/entity @conn property-id)
         block (when block-id (d/entity @conn block-id))
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-        value' (convert-property-input-string (get-in property [:block/schema :type]) value)
+        value' (convert-property-input-string (get-in block [:block/schema :type])
+                                              property value)
         new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value')
                           new-block-id
                           (assoc :block/uuid new-block-id))]
@@ -284,7 +289,7 @@
       (let [property (d/entity @conn property-id)
             _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
             property-type (get-in property [:block/schema :type] :default)
-            new-value (if (db-property-type/user-ref-property-types property-type)
+            new-value (if (db-property-type/all-ref-property-types property-type)
                         (convert-ref-property-value conn property-id v property-type)
                         v)
             existing-value (get block property-id)]
@@ -454,13 +459,13 @@
                      (merge
                       {:block/uuid id
                        :block/closed-value-property (:db/id property)}
-                      (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
+                      (if (db-property-type/property-value-content? (get-in block [:block/schema :type]) property)
                         {:property.value/content resolved-value}
                         {:block/title resolved-value})))
                      icon
                      (assoc :logseq.property/icon icon))]
                   (let [max-order (:block/order (last (:property/closed-values property)))
-                        new-block (-> (db-property-build/build-closed-value-block block-id resolved-value
+                        new-block (-> (db-property-build/build-closed-value-block block-id nil resolved-value
                                                                                   property {:icon icon})
                                       (assoc :block/order (db-order/gen-key max-order nil)))]
                     [new-block
@@ -481,7 +486,7 @@
         property-type (get property-schema :type :default)]
     (when (contains? db-property-type/closed-value-property-types property-type)
       (let [value' (if (string? value) (string/trim value) value)
-            resolved-value (convert-property-input-string (:type property-schema) value')
+            resolved-value (convert-property-input-string nil property value')
             validate-message (validate-property-value-aux
                               (get-property-value-schema @conn property-type property {:new-closed-value? true})
                               resolved-value

@@ -338,6 +338,7 @@
             m (cond->
                (db-property-build/build-closed-value-block
                 uuid'
+                nil
                 "Card View"
                 property
                 {:db-ident :logseq.property.view/type.card})

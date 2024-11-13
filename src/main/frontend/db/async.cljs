@@ -93,15 +93,19 @@
   "For db graphs, returns property value ids for given property db-ident.
    Separate from file version because values are lazy loaded"
   [graph property-id]
-  (let [empty-id (:db/id (db/entity :logseq.property/empty-placeholder))]
-    (<q graph {:transact-db? false}
-        '[:find [?v ...]
-          :in $ ?property-id ?empty-id
-          :where
-          [?b ?property-id ?v]
-          [(not= ?v ?empty-id)]]
-        property-id
-        empty-id)))
+  (let [default-value-id (:db/id (:logseq.property/default-value (db/entity property-id)))
+        empty-id (:db/id (db/entity :logseq.property/empty-placeholder))]
+    (p/let [result (<q graph {:transact-db? false}
+                       '[:find [?v ...]
+                         :in $ ?property-id ?empty-id
+                         :where
+                         [?b ?property-id ?v]
+                         [(not= ?v ?empty-id)]]
+                       property-id
+                       empty-id)]
+      (if default-value-id
+        (conj result default-value-id)
+        result))))
 
 (comment
   (defn <get-block-property-value-entity
