@@ -528,7 +528,7 @@
                                                      [:div.px-4
                                                       (class-select property {:default-open? false})])}))
 
-     (when (contains? db-property-type/default-value-ref-property-types property-type)
+     (when (and (contains? db-property-type/default-value-ref-property-types property-type) (not (db-property/many? property)))
        (let [default-value (:logseq.property/default-value property)]
          (dropdown-editor-menuitem {:icon :settings-2 :title "Default value"
                                     :desc (if default-value (db-property/property-value-content default-value) "Set value")
