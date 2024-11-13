@@ -103,15 +103,18 @@
                                   :on-chosen on-chosen!})]))
 
 (defn- select-type?
-  [property type]
+  [block property type]
   (or (contains? #{:node :number :date :page :class :property} type)
-    ;; closed values
-      (seq (:property/closed-values property))))
+      ;; closed values
+      (seq (:property/closed-values property))
+      (and (= (:db/ident property) :logseq.property/default-value)
+           (= (get-in block [:block/schema :type]) :number))))
 
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
-  (when-not (get-in property [:block/schema :hide?])
+  (when-not (or (get-in property [:block/schema :hide?])
+                (= (:db/ident property) :logseq.property/default-value))
     (ui/hide-popups-until-preview-popup!)
     (shui/dialog-close!))
   (p/let [block
@@ -165,7 +168,7 @@
       (if (and class? class-schema?)
         (db-property-handler/class-add-property! (:db/id block) property-id)
         (let [block-ids (map :block/uuid blocks)]
-          (if (and (db-property-type/user-ref-property-types (get-in property [:block/schema :type]))
+          (if (and (db-property-type/all-ref-property-types (get-in property [:block/schema :type]))
                    (string? property-value'))
             (p/let [new-block (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})]
               (when (seq (remove #{(:db/id block)} (map :db/id block)))
@@ -618,9 +621,13 @@
   {:init (fn [state]
            (let [*values (atom :loading)
                  refresh-result-f (fn []
-                                    (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
-                                                                                        (:db/ident (nth (:rum/args state) 1)))]
-                                      (reset! *values result)))]
+                                    (let [[block property _] (:rum/args state)]
+                                      (p/let [property-ident (if (= :logseq.property/default-value (:db/ident property))
+                                                               (:db/ident block)
+                                                               (:db/ident property))
+                                              result (db-async/<get-block-property-values (state/get-current-repo)
+                                                                                          property-ident)]
+                                        (reset! *values result))))]
              (refresh-result-f)
              (assoc state
                     ::values *values
@@ -636,7 +643,7 @@
       (let [schema (:block/schema property)
             type (:type schema)
             closed-values? (seq (:property/closed-values property))
-            ref-type? (db-property-type/user-ref-property-types type)
+            ref-type? (db-property-type/all-ref-property-types type)
             items (if closed-values?
                     (keep (fn [block]
                             (let [icon (pu/get-block-property-value block :logseq.property/icon)
@@ -837,7 +844,7 @@
           popup-content (fn content-fn [_]
                           [:div.property-select
                            (case type
-                             (:number :default :url)
+                             (:entity :number :default :url)
                              (select block property select-opts' opts)
 
                              (:node :class :property :page :date)
@@ -886,6 +893,9 @@
                   (when (and text-ref-type? (nil? value))
                     (<create-new-block! block property "")))}
      (cond
+       (and (= :logseq.property/default-value (:db/ident property)) (nil? (:block/title value)))
+       [:div.jtrigger.cursor-pointer.text-sm.px-2 "Set default value"]
+
        (and text-ref-type? (nil? (:block/title value)))
        [:div.jtrigger (property-empty-btn-value property)]
 
@@ -905,7 +915,7 @@
         editing? (or editing?
                      (and (state/sub-editing? [container-id (:block/uuid block)])
                           (= (:db/id property) (:db/id (:property (state/get-editor-action-data))))))
-        select-type?' (select-type? property type)
+        select-type?' (select-type? block property type)
         closed-values? (seq (:property/closed-values property))
         select-opts {:on-chosen on-chosen}
         value (if (and (de/entity? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
