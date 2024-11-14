@@ -22,8 +22,7 @@
   (let [sibling-block (ldb/get-left-sibling (d/entity db (:db/id block)))
         first-block (ldb/get-left-sibling sibling-block)
         block-dom-id "ls-block-block-to-delete"]
-    (test-helper/with-reset
-      reset
+    (p/with-redefs
       [editor/get-state (constantly {:block-id (:block/uuid block)
                                      :block-parent-id block-dom-id
                                      :config {:embed? embed?}})
@@ -48,8 +47,7 @@
       (p/do!
        (editor/delete-block! test-helper/test-db)
        (when (fn? on-delete)
-         (on-delete))
-       (reset)))))
+         (on-delete))))))
 
 (deftest-async delete-block-async!
   (testing "backspace deletes empty block"

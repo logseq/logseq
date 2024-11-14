@@ -67,16 +67,14 @@
         error-message (atom nil)]
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path) "{:id {}")
 
-    (test-helper/with-reset reset
+    (p/with-redefs
       [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!
         (plugin-config-handler/open-replace-plugins-modal)
         (is (string/starts-with? @error-message "Malformed plugins.edn")
             "User sees correct notification"))
-       (p/finally #(do
-                     (reset)
-                     (delete-global-config-dir dir)))))))
+       (p/finally #(delete-global-config-dir dir))))))
 
 (deftest-async open-replace-plugins-modal-invalid-edn
   (let [dir (create-global-config-dir)
@@ -85,16 +83,14 @@
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path)
                            (pr-str {:id {:theme true :repo "user/repo"}}))
 
-    (test-helper/with-reset reset
+    (p/with-redefs
       [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!
         (plugin-config-handler/open-replace-plugins-modal)
         (is (string/starts-with? @error-message "Invalid plugins.edn")
             "User sees correct notification"))
-       (p/finally #(do
-                     (reset)
-                     (delete-global-config-dir dir)))))))
+       (p/finally #(delete-global-config-dir dir))))))
 
 (defn- installed-plugins->edn-plugins
   "Converts installed plugins state to edn.plugins format"
