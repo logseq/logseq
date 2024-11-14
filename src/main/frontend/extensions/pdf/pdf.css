@@ -826,10 +826,10 @@ html[data-theme=dark] {
     }
 
     .hl-area {
-      @apply relative block cursor-text border rounded-md overflow-hidden mt-1;
+      @apply relative block cursor-text mt-1;
 
       > .asset-container {
-        @apply mt-0;
+        @apply mt-0 border rounded-md overflow-hidden;
 
         > .asset-action-bar {
           @apply top-1 right-1;
