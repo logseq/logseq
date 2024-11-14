@@ -101,6 +101,8 @@
       (db-property/property-value-content (db/entity [:block/uuid entity]))
       (de/entity? entity)
       (db-property/property-value-content entity)
+      (keyword? entity)
+      (str entity)
       :else
       entity)))
 
@@ -514,8 +516,8 @@
      (map (fn [e]
             (let [label (get-property-value-content e)
                   label' (if (and block-type? (= label "class")) "tag" label)]
-              {:label label' :value e}))
-          values)
+              {:label (str label') :value e}))
+       values)
      (sort-by :label))))
 
 (defn datetime-property?
