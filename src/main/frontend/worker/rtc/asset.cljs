@@ -21,35 +21,6 @@
             [missionary.core :as m])
   (:import [missionary Cancelled]))
 
-(defn get-all-asset-blocks
-  [db]
-  (->> (d/q
-        '[:find (pull ?asset [*])
-          :in $
-          :where
-          [?asset :block/uuid]
-          [?asset :logseq.property.asset/type]]
-        db)
-       (apply concat)))
-
-(defn asset-block->upload+download-action
-  [asset-block]
-  (let [local-file-path (:file/path asset-block)
-        remote-metadata (:logseq.property.asset/remote-metadata asset-block)]
-    (cond
-      (and local-file-path remote-metadata) nil
-      (nil? local-file-path) :download
-      (nil? remote-metadata) :upload)))
-
-(defn get-action->asset-blocks
-  [db]
-  (reduce
-   (fn [action->asset-blocks asset-block]
-     (if-let [action (asset-block->upload+download-action asset-block)]
-       (update action->asset-blocks action (fnil conj #{}) asset-block)
-       action->asset-blocks))
-   {} (get-all-asset-blocks db)))
-
 (defn- create-local-updates-check-flow
   "Return a flow that emits value if need to push local-updates"
   [repo *auto-push? interval-ms]
@@ -181,7 +152,7 @@
             (d/transact! conn
                          [{:block/uuid asset-uuid
                            :logseq.property.asset/remote-metadata {:checksum "TEST-CHECKSUM"}}]
-                       ;; Don't generate rtc ops again, (block-ops & asset-ops)
+                         ;; Don't generate rtc ops again, (block-ops & asset-ops)
                          {:generate-asset-change-events? false
                           :persist-op? false})
             (client-op/remove-asset-op repo asset-uuid)))
@@ -208,6 +179,7 @@
                                             :graph-uuid graph-uuid
                                             :asset-uuids (keys asset-uuid->asset-type)}))
                    :asset-uuid->url))]
+        (prn :xxx-pull-remote-asset-updates asset-uuid->asset-type asset-uuid->url)
         (doseq [[asset-uuid get-url] asset-uuid->url]
           (prn :start-download-asset asset-uuid)
           (let [r (ldb/read-transit-str
