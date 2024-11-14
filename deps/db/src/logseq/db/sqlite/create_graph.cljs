@@ -124,6 +124,17 @@
        :logseq.property/view-for [:block/uuid page-id]
        :logseq.property/built-in? true})]))
 
+(defn- build-favorites-page
+  []
+  [(sqlite-util/block-with-timestamps
+    {:block/uuid (common-uuid/gen-uuid)
+     :block/name common-config/favorites-page-name
+     :block/title common-config/favorites-page-name
+     :block/type "page"
+     :block/schema {:public? false}
+     :block/format :markdown
+     :logseq.property/built-in? true})])
+
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
@@ -158,7 +169,7 @@
         default-classes (build-initial-classes db-ident->properties)
         default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
                            (map mark-block-as-built-in))
-        hidden-pages (build-initial-views)
+        hidden-pages (concat (build-initial-views) (build-favorites-page))
         tx (vec (concat initial-data properties-tx default-classes
                         initial-files default-pages hidden-pages))]
     (validate-tx-for-duplicate-idents tx)

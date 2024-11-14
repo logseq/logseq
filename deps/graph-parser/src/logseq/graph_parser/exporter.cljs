@@ -1400,7 +1400,6 @@
   [conn repo config {:keys [log-fn] :or {log-fn prn}}]
   (when-let [favorites (seq (:favorites config))]
     (p/do!
-     (ldb/create-favorites-page! repo)
      (if-let [favorited-ids
               (keep (fn [page-name]
                       (some-> (ldb/get-page @conn page-name)
