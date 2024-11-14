@@ -415,10 +415,11 @@
           (reset! *src asset-path)))
       (when @*src
         (let [asset-block (some-> block (:logseq.property.pdf/hl-image))
-              resize-metadata (some-> asset-block :logseq.property.asset/resize-metadata)]
-          [:div.hl-area
-           (when-let [w (:width resize-metadata)] {:style {:width w}})
+              resize-metadata (some-> asset-block :logseq.property.asset/resize-metadata)
+              style (when-let [w (:width resize-metadata)] {:style {:width w}})]
+          [:div.hl-area style
            [:div.asset-container
+            {:style {:width (if style "100%" "auto")}}
             [:span.asset-action-bar
              (when-let [asset-uuid (and (config/db-based-graph?)
                                      (some-> asset-block (:block/uuid)))]
