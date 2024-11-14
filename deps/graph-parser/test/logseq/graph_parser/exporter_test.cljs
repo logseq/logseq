@@ -494,7 +494,11 @@
                    (d/q '[:find [?ident ...]
                           :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                    count))
-        "Correct number of user classes")))
+        "Correct number of user classes")
+
+    (is (= [{:block/type "class"}]
+           (d/q '[:find [(pull ?b [:block/type]) ...] :where [?b :block/name "life"]] @conn))
+        "When a class is used and referenced on the same page, there should only be one instance of it")))
 
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
