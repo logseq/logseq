@@ -9,7 +9,8 @@
   - if an asset-block doesn't have both :file/path and :logseq.property.asset/remote-metadata,
     it means the other client hasn't uploaded the asset to server
 "
-  (:require [datascript.core :as d]
+  (:require [clojure.set :as set]
+            [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
@@ -138,42 +139,53 @@
       (finally
         (reset! *assets-sync-lock nil)))))
 
+(defn- clean-asset-ops!
+  [repo all-asset-uuids handled-asset-uuids]
+  (doseq [asset-uuid (set/difference (set all-asset-uuids) (set handled-asset-uuids))]
+    (client-op/remove-asset-op repo asset-uuid)))
+
 (defn- new-task--push-local-asset-updates
   [repo get-ws-create-task conn graph-uuid _add-log-fn]
   (m/sp
-    (let [asset-ops (client-op/get&remove-all-asset-ops repo)
-          upload-asset-uuids (keep
-                              (fn [asset-op]
-                                (when (contains? asset-op :update-asset)
-                                  (:block/uuid asset-op)))
-                              asset-ops)
-          asset-uuid->asset-type (into {}
-                                       (keep (fn [asset-uuid]
-                                               (when-let [tp (:logseq.property.asset/type
-                                                              (d/entity @conn [:block/uuid asset-uuid]))]
-                                                 [asset-uuid tp])))
-                                       upload-asset-uuids)
-          asset-uuid->url
-          (when (seq asset-uuid->asset-type)
-            (->> (m/? (ws-util/send&recv get-ws-create-task
-                                         {:action "get-assets-upload-urls"
-                                          :graph-uuid graph-uuid
-                                          :asset-uuid->metadata
-                                          (into {} (map (fn [asset-uuid] [asset-uuid {"checksum" "TEST-CHECKSUM"}]))
-                                                (keys asset-uuid->asset-type))}))
-                 :asset-uuid->url))]
-      (prn :xxx-push-local-asset-updates asset-ops asset-uuid->url asset-uuid->asset-type)
-      (doseq [[asset-uuid put-url] asset-uuid->url]
-        (prn :start-upload-asset asset-uuid)
-        (let [r (ldb/read-transit-str
-                 (c.m/<?
-                  (.rtc-upload-asset
-                   ^js @worker-state/*main-thread
-                   repo (str asset-uuid) (get asset-uuid->asset-type asset-uuid) put-url)))]
-          (when (:ex-data r)
-            (throw (ex-info "upload asset failed" r)))
-          (d/transact! conn [{:block/uuid asset-uuid
-                              :logseq.property.asset/remote-metadata {:checksum "TEST-CHECKSUM"}}]))))))
+    (when-let [asset-ops (not-empty (client-op/get-all-asset-ops repo))]
+      (let [upload-asset-uuids (keep
+                                (fn [asset-op]
+                                  (when (contains? asset-op :update-asset)
+                                    (:block/uuid asset-op)))
+                                asset-ops)
+            asset-uuid->asset-type (into {}
+                                         (keep (fn [asset-uuid]
+                                                 (when-let [tp (:logseq.property.asset/type
+                                                                (d/entity @conn [:block/uuid asset-uuid]))]
+                                                   [asset-uuid tp])))
+                                         upload-asset-uuids)
+            asset-uuid->url
+            (when (seq asset-uuid->asset-type)
+              (->> (m/? (ws-util/send&recv get-ws-create-task
+                                           {:action "get-assets-upload-urls"
+                                            :graph-uuid graph-uuid
+                                            :asset-uuid->metadata
+                                            (into {} (map (fn [asset-uuid] [asset-uuid {"checksum" "TEST-CHECKSUM"}]))
+                                                  (keys asset-uuid->asset-type))}))
+                   :asset-uuid->url))]
+        (prn :xxx-push-local-asset-updates asset-ops asset-uuid->url asset-uuid->asset-type)
+        (doseq [[asset-uuid put-url] asset-uuid->url]
+          (prn :start-upload-asset asset-uuid)
+          (let [r (ldb/read-transit-str
+                   (c.m/<?
+                    (.rtc-upload-asset
+                     ^js @worker-state/*main-thread
+                     repo (str asset-uuid) (get asset-uuid->asset-type asset-uuid) put-url)))]
+            (when (:ex-data r)
+              (throw (ex-info "upload asset failed" r)))
+            (d/transact! conn
+                         [{:block/uuid asset-uuid
+                           :logseq.property.asset/remote-metadata {:checksum "TEST-CHECKSUM"}}]
+                       ;; Don't generate rtc ops again, (block-ops & asset-ops)
+                         {:generate-asset-change-events? false
+                          :persist-op? false})
+            (client-op/remove-asset-op repo asset-uuid)))
+        (clean-asset-ops! repo (map :block/uuid asset-ops) (keys asset-uuid->url))))))
 
 (defn- new-task--pull-remote-asset-updates
   [repo get-ws-create-task conn graph-uuid _add-log-fn asset-update-ops]
