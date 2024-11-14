@@ -3,12 +3,8 @@
   some notes:
   - has :logseq.property.asset/type
   - block/content, store the asset name
-  - an asset-block not having :file/path indicates need to download asset from server
   - an asset-block not having :logseq.property.asset/remote-metadata
-    indicates need to upload the asset to server
-  - if an asset-block doesn't have both :file/path and :logseq.property.asset/remote-metadata,
-    it means the other client hasn't uploaded the asset to server
-"
+    indicates need to upload the asset to server"
   (:require [clojure.set :as set]
             [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
