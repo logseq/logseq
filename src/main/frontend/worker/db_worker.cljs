@@ -320,10 +320,11 @@
                                                                         (when import-type {:import-type import-type}))]
             (d/transact! conn initial-data {:initial-db? true})))
 
-        (try
-          (when-not (ldb/page-exists? @conn common-config/views-page-name "page")
-            (ldb/create-views-page! conn))
-          (catch :default _e))
+        (when-not db-based?
+         (try
+           (when-not (ldb/page-exists? @conn common-config/views-page-name "page")
+             (ldb/transact! conn (sqlite-create-graph/build-initial-views)))
+           (catch :default _e)))
 
         ;; (gc-kvs-table! db)
         (try

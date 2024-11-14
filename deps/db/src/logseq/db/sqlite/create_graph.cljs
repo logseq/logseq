@@ -8,7 +8,9 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.config :as common-config]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn- mark-block-as-built-in [block]
   (assoc block :logseq.property/built-in? true))
@@ -100,6 +102,28 @@
   [db-ident->properties]
   (build-initial-classes* db-class/built-in-classes db-ident->properties))
 
+(defn build-initial-views
+  "Builds initial blocks used for storing views. Used by db and file graphs"
+  []
+  (let [page-id (common-uuid/gen-uuid)]
+    [(sqlite-util/block-with-timestamps
+      {:block/uuid page-id
+       :block/name common-config/views-page-name
+       :block/title common-config/views-page-name
+       :block/type "page"
+       :block/schema {:public? false}
+       :block/format :markdown
+       :logseq.property/built-in? true})
+     (sqlite-util/block-with-timestamps
+      {:block/uuid (common-uuid/gen-uuid)
+       :block/title "All Pages Default View"
+       :block/format :markdown
+       :block/parent [:block/uuid page-id]
+       :block/order (db-order/gen-key nil)
+       :block/page [:block/uuid page-id]
+       :logseq.property/view-for [:block/uuid page-id]
+       :logseq.property/built-in? true})]))
+
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
@@ -134,7 +158,8 @@
         default-classes (build-initial-classes db-ident->properties)
         default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
                            (map mark-block-as-built-in))
+        hidden-pages (build-initial-views)
         tx (vec (concat initial-data properties-tx default-classes
-                        initial-files default-pages))]
+                        initial-files default-pages hidden-pages))]
     (validate-tx-for-duplicate-idents tx)
     tx))

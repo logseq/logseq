@@ -54,9 +54,14 @@
                     ;; only kv's and empty property value aren't marked because
                     ;; they aren't user facing
                     (remove #(or (= "logseq.kv" (namespace (:db/ident %)))
-                                 (= :logseq.property/empty-placeholder (:db/ident %)))))]
+                                 (= :logseq.property/empty-placeholder (:db/ident %)))))
+        pages (d/q '[:find [(pull ?b [:logseq.property/built-in? :block/title]) ...]
+                     :where [?b :block/type "page"]]
+                   @conn)]
     (is (= [] (remove :logseq.property/built-in? idents))
-        "All entities with :db/ident have built-in property (except for kv idents)")))
+        "All entities with :db/ident have built-in property (except for kv idents)")
+    (is (= [] (remove :logseq.property/built-in? pages))
+        "All default internal pages should have built-in property")))
 
 (deftest new-graph-creates-class
   (let [conn (db-test/create-conn)

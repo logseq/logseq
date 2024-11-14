@@ -12,7 +12,6 @@
             [logseq.db.frontend.delete-blocks :as delete-blocks] ;; Load entity extensions
             [logseq.db.frontend.entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -502,29 +501,6 @@
   {:block/link [:block/uuid favorite-uuid]
    :block/title ""
    :block/format :markdown})
-
-(defn create-views-page!
-  "Creates hidden all pages for storing views"
-  [conn]
-  (let [page-id (common-uuid/gen-uuid)]
-    (transact!
-     conn
-     [(sqlite-util/block-with-timestamps
-       {:block/uuid page-id
-        :block/name common-config/views-page-name
-        :block/title common-config/views-page-name
-        :block/type "page"
-        :block/schema {:public? false}
-        :block/format :markdown})
-      (sqlite-util/block-with-timestamps
-       {:block/uuid (common-uuid/gen-uuid)
-        :block/title "All Pages Default View"
-        :block/format :markdown
-        :block/parent [:block/uuid page-id]
-        :block/order (db-order/gen-key nil)
-        :block/page [:block/uuid page-id]
-        :logseq.property/view-for [:block/uuid page-id]
-        :logseq.property/built-in? true})])))
 
 (defn get-key-value
   [db key-ident]
