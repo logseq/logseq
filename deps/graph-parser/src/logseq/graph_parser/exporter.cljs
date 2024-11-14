@@ -1099,36 +1099,39 @@
              (assoc :block/title (:block/content b)))))
        blocks))
 
-(defn- fix-extracted-block-tags
-  "A tag can have different :block/uuid's across extracted blocks. This makes
+(defn- fix-extracted-block-tags-and-refs
+  "A tag or ref can have different :block/uuid's across extracted blocks. This makes
    sense for most in-app uses but not for importing where we want consistent identity.
-   This fn fixes that issue"
+   This fn fixes that issue. This fn also ensures that tags and pages have the same uuid"
   [blocks]
   (let [name-uuids (atom {})
         fix-block-uuids
-        (fn fix-block-uuids [tags-or-refs]
+        (fn fix-block-uuids [tags-or-refs {:keys [ref? properties]}]
           ;; mapv to determinastically process in order
           (mapv (fn [b]
-                  (if-let [existing-uuid (some->> (:block/name b) (get @name-uuids))]
-                    (if (not= existing-uuid (:block/uuid b))
-                      ;; fix unequal uuids for same name
-                      (assoc b :block/uuid existing-uuid)
-                      b)
-                    (if (vector? b)
-                      ;; ignore [:block/uuid] refs
-                      b
-                      (do
-                        (assert (and (:block/name b) (:block/uuid b))
-                                (str "Extracted block tag/ref must have a name and uuid: " (pr-str b)))
-                        (swap! name-uuids assoc (:block/name b) (:block/uuid b))
-                        b))))
+                  (if (and ref? (get properties (keyword (:block/name b))))
+                    ;; don't change uuid if property since properties and tags have different uuids
+                    b
+                    (if-let [existing-uuid (some->> (:block/name b) (get @name-uuids))]
+                      (if (not= existing-uuid (:block/uuid b))
+                        ;; fix unequal uuids for same name
+                        (assoc b :block/uuid existing-uuid)
+                        b)
+                      (if (vector? b)
+                        ;; ignore [:block/uuid] refs
+                        b
+                        (do
+                          (assert (and (:block/name b) (:block/uuid b))
+                                  (str "Extracted block tag/ref must have a name and uuid: " (pr-str b)))
+                          (swap! name-uuids assoc (:block/name b) (:block/uuid b))
+                          b)))))
                 tags-or-refs))]
     (map (fn [b]
-           (if (seq (:block/tags b))
-             (-> b
-                 (update :block/tags fix-block-uuids)
-                 (update :block/refs fix-block-uuids))
-             b))
+           (cond-> b
+             (seq (:block/tags b))
+             (update :block/tags fix-block-uuids {})
+             (seq (:block/refs b))
+             (update :block/refs fix-block-uuids {:ref? true :properties (:block/properties b)})))
          blocks)))
 
 (defn- extract-pages-and-blocks
@@ -1146,7 +1149,7 @@
           (-> (extract/extract file content extract-options')
               (update :pages (fn [pages]
                                (map #(dissoc % :block.temp/original-page-name) pages)))
-              (update :blocks fix-extracted-block-tags))
+              (update :blocks fix-extracted-block-tags-and-refs))
 
           (common-config/whiteboard? file)
           (-> (extract/extract-whiteboard-edn file content extract-options')
