@@ -162,13 +162,13 @@
                                           (into {} (map (fn [asset-uuid] [asset-uuid {"checksum" "TEST-CHECKSUM"}]))
                                                 (keys asset-uuid->asset-type))}))
                  :asset-uuid->url))]
-      (prn :xxx-push-local-asset-updates asset-ops asset-uuid->url)
+      (prn :xxx-push-local-asset-updates asset-ops asset-uuid->url asset-uuid->asset-type)
       (doseq [[asset-uuid put-url] asset-uuid->url]
         (prn :start-upload-asset asset-uuid)
         (let [r (ldb/read-transit-str
                  (c.m/<?
                   (.rtc-upload-asset
-                   @worker-state/*main-thread
+                   ^js @worker-state/*main-thread
                    repo (str asset-uuid) (get asset-uuid->asset-type asset-uuid) put-url)))]
           (when (:ex-data r)
             (throw (ex-info "upload asset failed" r)))
@@ -201,7 +201,7 @@
           (let [r (ldb/read-transit-str
                    (c.m/<?
                     (.rtc-download-asset
-                     @worker-state/*main-thread
+                     ^js @worker-state/*main-thread
                      repo (str asset-uuid) (get asset-uuid->asset-type asset-uuid) get-url)))]
             (when (:ex-data r)
               (throw (ex-info "upload asset failed" r)))))))))
