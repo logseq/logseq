@@ -151,7 +151,7 @@
                                    :schema {:type :entity
                                             :public? true
                                             :view-context :property}}
-   :logseq.property/checkbox-default-value {:title "Default value"
+   :logseq.property/checkbox-default-value {:title "Checkbox default value"
                                             :schema {:type :checkbox
                                                      :public? true
                                                      :view-context :property}}
