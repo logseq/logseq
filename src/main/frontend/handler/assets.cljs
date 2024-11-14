@@ -256,7 +256,7 @@
   (m/sp
     (let [asset-file (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
           {:keys [status] :as r}
-          (c.m/<? (http/put put-url {:headers {"x-amz-meta-checksum" "TODO-CHECKSUM-HERE"}
+          (c.m/<? (http/put put-url {:headers {"x-amz-meta-checksum" "TEST-CHECKSUM"}
                                      :body asset-file
                                      :with-credentials? false}))]
       (when-not (http/unexceptional-status? status)
