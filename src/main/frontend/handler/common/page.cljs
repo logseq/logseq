@@ -129,16 +129,13 @@
 (defn <db-favorite-page!
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (let [favorites-page (db/get-page common-config/favorites-page-name)]
-    (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
-      (p/do!
-       (when-not favorites-page (ldb/create-favorites-page!
- (state/get-current-repo)))
-       (ui-outliner-tx/transact!
-        {:outliner-op :insert-blocks}
-        (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]
-                                    (db/get-page common-config/favorites-page-name)
-                                    {}))))))
+  (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
+    (p/do!
+     (ui-outliner-tx/transact!
+      {:outliner-op :insert-blocks}
+      (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]
+                                  (db/get-page common-config/favorites-page-name)
+                                  {})))))
 
 (defn <db-unfavorite-page!
   [page-block-uuid]
