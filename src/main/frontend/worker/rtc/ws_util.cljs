@@ -13,7 +13,9 @@
 (defn- handle-remote-ex
   [resp]
   (if-let [e ({:graph-not-exist r.ex/ex-remote-graph-not-exist
-               :graph-not-ready r.ex/ex-remote-graph-not-ready}
+               :graph-not-ready r.ex/ex-remote-graph-not-ready
+               :bad-request-body r.ex/ex-bad-request-body
+               :not-allowed r.ex/ex-not-allowed}
               (:type (:ex-data resp)))]
     (throw e)
     resp))
