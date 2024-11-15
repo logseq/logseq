@@ -5,6 +5,14 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.schema :as db-schema]))
 
+(defn find-block-by-content [db content]
+  (->> content
+       (d/q '[:find [(pull ?b [*]) ...]
+              :in $ ?content
+              :where [?b :block/title ?content]]
+            db)
+       first))
+
 (defn create-conn
   "Create a conn for a DB graph seeded with initial data"
   []

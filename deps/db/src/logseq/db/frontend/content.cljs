@@ -11,11 +11,9 @@
 (defonce special-id-ref-pattern
   (re-pattern
    (str
-    "(?i)"
-    "~\\^"
-    "("
+    "\\[("
     common-util/uuid-pattern
-    ")")))
+    ")\\]")))
 
 (defn block-id->special-id-ref
   [id]
