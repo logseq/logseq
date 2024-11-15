@@ -193,7 +193,10 @@
     (merge block
            (update-vals (select-keys block card-one-attrs-in-block)
                         (fn [v]
-                          (if (coll? v) (first v) v))))))
+                          (if (or (sequential? v)
+                                  (set? v))
+                            (first v)
+                            v))))))
 
 (defn- transact-block-refs!
   [repo]
@@ -258,13 +261,13 @@
   [all-blocks repo graph-uuid]
   (let [{:keys [t blocks]} all-blocks
         card-one-attrs (blocks->card-one-attrs blocks)
-        blocks (worker-util/profile :convert-card-one-value-from-value-coll
+        blocks1 (worker-util/profile :convert-card-one-value-from-value-coll
                                     (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
-        blocks (worker-util/profile :normalize-remote-blocks
-                                    (normalized-remote-blocks-coercer blocks))
+        blocks2 (worker-util/profile :normalize-remote-blocks
+                 (normalized-remote-blocks-coercer blocks1))
         ;;TODO: remove this, client/schema already converted to :db/cardinality, :db/valueType by remote,
         ;; and :client/schema should be removed by remote too
-        blocks (map #(dissoc % :client/schema) blocks)
+        blocks (map #(dissoc % :client/schema) blocks2)
         blocks (fill-block-fields blocks)
         [schema-blocks normal-blocks] (blocks->schema-blocks+normal-blocks blocks)
         tx-data (concat
