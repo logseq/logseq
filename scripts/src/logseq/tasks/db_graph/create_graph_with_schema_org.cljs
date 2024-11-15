@@ -375,7 +375,6 @@
                        (->> ents
                             (map (fn [m]
                                    (let [props (->> (db-property/properties m)
-                                                    (remove #(db-property/private-db-attribute-properties (key %)))
                                                     (into {}))]
                                      (cond-> (select-keys m [:block/name :block/type :block/title :block/schema :db/ident
                                                              :logseq.property.class/properties :logseq.property/parent
