@@ -789,24 +789,27 @@
 
     [:span.preview-ref-link
      {:ref *el-trigger
-      :on-mouse-enter (fn []
-                        (let [timer (rum/deref *timer)
-                              timer1 (rum/deref *timer1)]
-                          (when-not timer
-                            (rum/set-ref! *timer
-                                          (js/setTimeout #(set-visible! true) 1000)))
-                          (when timer1
-                            (js/clearTimeout timer1)
-                            (rum/set-ref! *timer1 nil))))
+      :on-mouse-enter (fn [^js e]
+                        (when (= (some-> (.-target e) (.closest ".preview-ref-link"))
+                                (rum/deref *el-trigger))
+                          (let [timer (rum/deref *timer)
+                                timer1 (rum/deref *timer1)]
+                            (when-not timer
+                              (rum/set-ref! *timer
+                                (js/setTimeout #(set-visible! true) 1000)))
+                            (when timer1
+                              (js/clearTimeout timer1)
+                              (rum/set-ref! *timer1 nil)))))
       :on-mouse-leave (fn []
                         (let [timer (rum/deref *timer)
                               timer1 (rum/deref *timer1)]
-                          (when timer
-                            (js/clearTimeout timer)
-                            (rum/set-ref! *timer nil))
-                          (when-not timer1
-                            (rum/set-ref! *timer1
-                                          (js/setTimeout #(set-visible! false) 300)))))}
+                          (when (or (number? timer) (number? timer1))
+                            (when timer
+                              (js/clearTimeout timer)
+                              (rum/set-ref! *timer nil))
+                            (when-not timer1
+                              (rum/set-ref! *timer1
+                                (js/setTimeout #(set-visible! false) 300))))))}
      children]))
 
 (rum/defc page-preview-trigger
@@ -822,8 +825,8 @@
                                  (let [[ready? set-ready!] (rum/use-state false)]
 
                                    (rum/use-effect!
-                                    (fn []
-                                      (let [el-popup (rum/deref *el-popup)
+                                     (fn []
+                                       (let [el-popup (rum/deref *el-popup)
                                             focus! #(js/setTimeout (fn [] (.focus el-popup)))]
                                         (set-ready! true)
                                         (focus!)
