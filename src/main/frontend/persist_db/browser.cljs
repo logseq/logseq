@@ -95,6 +95,9 @@
     (assets-handler/<read-asset repo asset-block-id asset-type))
   (writeAsset [_this repo asset-block-id asset-type data]
     (assets-handler/<write-asset repo asset-block-id asset-type data))
+  (get-all-asset-file-paths [_this repo]
+    (with-write-transit-str
+      (assets-handler/<get-all-asset-file-paths repo)))
   (rtc-upload-asset [_this repo asset-block-uuid-str asset-type put-url]
     (with-write-transit-str
       (js/Promise.

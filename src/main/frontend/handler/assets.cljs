@@ -216,7 +216,8 @@
 (defn <get-all-assets
   []
   (when-let [path (config/get-current-repo-assets-root)]
-    (p/let [result (fs/readdir path {:path-only? true})]
+    (p/let [result (p/catch (fs/readdir path {:path-only? true})
+                       (fn [_e] nil))]
       (p/all (map (fn [path]
                     (p/let [data (fs/read-file path "" {})]
                       (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
@@ -234,6 +235,12 @@
   [filename]
   (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
     (path/path-join repo-dir assets-dir filename)))
+
+(defn <get-all-asset-file-paths
+  [repo]
+  (when-let [path (config/get-repo-assets-root repo)]
+    (p/catch (fs/readdir path {:path-only? true})
+        (fn [_e] nil))))
 
 (defn <read-asset
   [repo asset-block-id asset-type]

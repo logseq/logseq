@@ -12,6 +12,7 @@
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
+            [logseq.common.path :as path]
             [logseq.db :as ldb]
             [malli.core :as ma]
             [missionary.core :as m])
@@ -32,6 +33,7 @@
   [:sequential
    [:map {:closed true}
     [:op [:enum :update-asset :remove-asset]]
+    [:block/uuid :uuid]
     [:malli.core/default [:map-of :keyword :any]]]])
 
 (def ^:private *remote-asset-updates (atom nil :validator (ma/validator remote-asset-updates-schema)))
@@ -183,8 +185,35 @@
                     (.rtc-download-asset
                      ^js @worker-state/*main-thread
                      repo (str asset-uuid) (get asset-uuid->asset-type asset-uuid) get-url)))]
-            (when (:ex-data r)
-              (throw (ex-info "upload asset failed" r)))))))))
+            (when-let [edata (:ex-data r)]
+              ;; if download-url return 404, ignore this asset
+              (when (not= 404 (:status (:data edata)))
+                (throw (ex-info "download asset failed" r))))))))))
+
+(defn- get-all-asset-blocks
+  [db]
+  (d/q '[:find [(pull ?b [:block/uuid
+                          :logseq.property.asset/type
+                          :logseq.property.asset/checksum])
+                ...]
+         :where
+         [?b :block/uuid]
+         [?b :logseq.property.asset/type]]
+       db))
+
+(defn- new-task--initial-download-missing-assets
+  [repo get-ws-create-task graph-uuid conn add-log-fn]
+  (m/sp
+    (let [local-all-asset-file-paths (ldb/read-transit-str
+                                      (c.m/<? (.get-all-asset-file-paths ^js @worker-state/*main-thread repo)))
+          local-all-asset-file-uuids (set (map (comp parse-uuid path/file-stem) local-all-asset-file-paths))
+          local-all-asset-uuids (set (map :block/uuid (get-all-asset-blocks @conn)))]
+      (when-let [asset-update-ops
+                 (not-empty
+                  (map (fn [asset-uuid] {:op :update-asset :block/uuid asset-uuid})
+                       (set/difference local-all-asset-uuids local-all-asset-file-uuids)))]
+        (m/? (new-task--pull-remote-asset-updates
+              repo get-ws-create-task conn graph-uuid add-log-fn asset-update-ops))))))
 
 (defn create-assets-sync-loop
   [repo get-ws-create-task graph-uuid conn *auto-push?]
@@ -200,6 +229,7 @@
       (m/sp
         (try
           (started-dfv true)
+          (m/? (new-task--initial-download-missing-assets repo get-ws-create-task graph-uuid conn add-log-fn))
           (->>
            (let [event (m/?> mixed-flow)]
              (case (:type event)
@@ -213,7 +243,6 @@
            m/ap
            (m/reduce {} nil)
            m/?)
-
           (catch Cancelled e
             (add-log-fn :rtc.asset.log/cancelled {})
             (throw e)))))}))
