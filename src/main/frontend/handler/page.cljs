@@ -46,7 +46,8 @@
             [logseq.db :as ldb]
             [logseq.graph-parser.db :as gp-db]
             [logseq.graph-parser.text :as text]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.frontend.content :as db-content]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
@@ -364,7 +365,7 @@
             ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
                        (cond
                          db-based?
-                         (page-ref/->page-ref (:block/uuid chosen-result))
+                         (db-content/block-id->special-id-ref (:block/uuid chosen-result))
                          :else
                          (block-ref/->block-ref (:block/uuid chosen-result)))
                        (get-page-ref-text chosen'))
