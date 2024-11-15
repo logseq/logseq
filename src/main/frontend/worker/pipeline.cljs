@@ -34,10 +34,11 @@
               (when (d/entity db-after (:db/id block))
                 (let [date-formatter (worker-state/get-date-formatter repo)
                       refs (outliner-core/rebuild-block-refs repo db-after date-formatter block)]
-                  (when (seq refs)
-                    [[:db/retract (:db/id block) :block/refs]
-                     {:db/id (:db/id block)
-                      :block/refs refs}]))))
+                  ;; Always retract because if refs is empty then a delete action has occurred
+                  (cond-> [[:db/retract (:db/id block) :block/refs]]
+                    (seq refs)
+                    (conj {:db/id (:db/id block)
+                           :block/refs refs})))))
             blocks)))
 
 (sr/defkeyword :skip-validate-db?

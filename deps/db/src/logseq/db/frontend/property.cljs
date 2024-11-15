@@ -4,7 +4,8 @@
             [datascript.core :as d]
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.uuid :as common-uuid]
-            [logseq.db.frontend.db-ident :as db-ident]))
+            [logseq.db.frontend.db-ident :as db-ident]
+            [clojure.set :as set]))
 
 ;; Main property vars
 ;; ==================
@@ -442,6 +443,10 @@
        (remove #(get-in built-in-properties [% :schema :public?]))
        set))
 
+(def public-db-attribute-properties
+  "db-attribute properties that are visible to user"
+  (set/difference db-attribute-properties private-db-attribute-properties))
+
 (def read-only-properties
   "Property values that shouldn't be updated"
   #{:logseq.property/built-in?})
@@ -470,13 +475,15 @@
   (string/includes? s ".property"))
 
 (defn property?
-  "Determines if ident kw is a property"
+  "Determines if ident kw is a property visible to user"
   [k]
   (let [k-name (namespace k)]
     (and k-name
          (or (contains? logseq-property-namespaces k-name)
              (user-property-namespace? k-name)
-             (and (keyword? k) (contains? db-attribute-properties k))))))
+             ;; disallow private db-attribute-properties as they cause unwanted refs
+             ;; and appear noisily in debugging contexts
+             (and (keyword? k) (contains? public-db-attribute-properties k))))))
 
 ;; Helper fns
 ;; ==========
