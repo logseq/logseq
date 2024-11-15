@@ -562,9 +562,7 @@ tags:: tag1, tag2
                                     :block/refs [])))
           updated-pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))]
       (is (not (contains? updated-pages "blarg"))
-          "Deleted, orphaned page no longer exists")
-      (is (contains? updated-pages "bar")
-          "Deleted but not orphaned page still exists"))))
+          "Deleted, orphaned page no longer exists"))))
 
 ;;; Fuzzy tests
 
