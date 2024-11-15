@@ -1,8 +1,8 @@
 (ns frontend.worker.rtc.asset
   "Fns to sync assets.
   some notes:
-  - has :logseq.property.asset/type
-  - block/content, store the asset name
+  - has :logseq.property.asset/type, :logseq.property.asset/size, :logseq.property.asset/checksum
+  - block/title, store the asset name
   - an asset-block not having :logseq.property.asset/remote-metadata
     indicates need to upload the asset to server"
   (:require [clojure.set :as set]
