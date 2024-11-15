@@ -846,7 +846,7 @@
                                                          ;; check the top popup whether is the preview popup
                                                          (when (ui/last-shui-preview-popup?)
                                                            (rum/set-ref! *timer1
-                                                                         (js/setTimeout #(set-visible! false) 500))))}
+                                                             (js/setTimeout #(set-visible! false) 500))))}
                                       (when-let [page-cp (and ready? (state/get-page-blocks-cp))]
                                         (page-cp {:repo (state/get-current-repo)
                                                   :page-name (str (:block/uuid source))
@@ -855,11 +855,11 @@
                                                   :preview? true}))])))]
 
     (rum/use-effect!
-     (fn []
-       (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
-         (set-in-popup! true)
-         (set-in-popup! false)))
-     [])
+      (fn []
+        (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
+          (set-in-popup! true)
+          (set-in-popup! false)))
+      [])
 
     [:span {:ref *el-wrap}
      (if (boolean? in-popup?)
@@ -1179,16 +1179,17 @@
                                                       (js/clearTimeout timer1)))
 
                                   :on-mouse-leave (fn []
-                                                    (rum/set-ref! *timer1
-                                                                  (js/setTimeout #(set-visible! false) 500)))}
+                                                    (when (ui/last-shui-preview-popup?)
+                                                      (rum/set-ref! *timer1
+                                                        (js/setTimeout #(set-visible! false) 500))))}
                                  [(breadcrumb config repo id {:indent? true})
                                   (blocks-container
-                                   (assoc config :id (str id) :preview? true)
-                                   [(db/entity [:block/uuid id])])]])]
+                                    (assoc config :id (str id) :preview? true)
+                                    [(db/entity [:block/uuid id])])]])]
     (popup-preview-impl children
-                        {:visible? visible? :set-visible! set-visible!
-                         :*timer *timer :*timer1 *timer1
-                         :render render})))
+      {:visible? visible? :set-visible! set-visible!
+       :*timer *timer :*timer1 *timer1
+       :render render})))
 
 (rum/defc block-reference < rum/reactive db-mixins/query
   {:init (fn [state]
