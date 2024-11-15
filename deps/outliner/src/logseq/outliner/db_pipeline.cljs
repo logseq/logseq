@@ -15,6 +15,7 @@
   (mapcat (fn [block]
             (when (d/entity db-after (:db/id block))
               (let [refs (outliner-pipeline/db-rebuild-block-refs db-after block)]
+                ;; TODO: When deleting property values retract property value refs
                 (when (seq refs)
                   [[:db/retract (:db/id block) :block/refs]
                    {:db/id (:db/id block)
