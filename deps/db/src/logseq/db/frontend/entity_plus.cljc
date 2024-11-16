@@ -83,14 +83,16 @@
             ;; from kv
             (get (.-kv e) k)
             ;; from db
-            (lookup-entity e k default-value)
-            ;; property default value
-            (when (qualified-keyword? k)
-              (when-let [property (d/entity db k)]
-                (let [schema (lookup-entity property :block/schema nil)]
-                  (if (= :checkbox (:type schema))
-                    (lookup-entity property :logseq.property/checkbox-default-value nil)
-                    (lookup-entity property :logseq.property/default-value nil)))))))))
+            (let [result (lookup-entity e k default-value)]
+              (if (some? result)
+                result
+                ;; property default value
+                (when (qualified-keyword? k)
+                  (when-let [property (d/entity db k)]
+                    (let [schema (lookup-entity property :block/schema nil)]
+                      (if (= :checkbox (:type schema))
+                        (lookup-entity property :logseq.property/checkbox-default-value nil)
+                        (lookup-entity property :logseq.property/default-value nil)))))))))))
      (catch :default e
        (js/console.error e)))))
 
