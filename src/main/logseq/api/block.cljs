@@ -20,6 +20,35 @@
             [logseq.db :as ldb]
             [logseq.sdk.utils :as sdk-utils]))
 
+(defn- encode-user-property-name
+  [k]
+  (if (string? k)
+    (-> k (string/trim)
+      (string/replace "/" "")
+      (string/replace " " ""))
+    k))
+
+(defn convert?to-built-in-property-name
+  [property-name]
+  (if (and (not (qualified-keyword? property-name))
+        (contains? #{:background-color} property-name))
+    (keyword :logseq.property property-name)
+    property-name))
+
+;; FIXME: This ns should not be creating idents. This allows for ident conflicts
+;; and assumes that names directly map to idents which is incorrect and breaks for multiple
+;; cases e.g. a property that has been renamed or sanitized. Instead it should
+;; find a property's ident by looking up the property in the db by its title
+(defn get-db-ident-for-user-property-name
+  "Finds a property :db/ident for a given property name"
+  [property-name]
+  (let [property-name' (if (string? property-name)
+                         (keyword property-name) property-name)
+        property-name' (convert?to-built-in-property-name property-name')]
+    (if (qualified-keyword? property-name')
+      property-name'
+      (keyword "plugin.property" (encode-user-property-name property-name)))))
+
 (defn into-readable-db-properties
   [properties]
   (some-> properties
@@ -71,9 +100,7 @@
   [block properties]
   (when-let [block-id (and (seq properties) (:db/id block))]
     (let [properties (update-keys properties
-                       (fn [k]
-                         (if (qualified-keyword? k) k
-                           (db-property/create-user-property-ident-from-name (name k)))))
+                       (fn [k] (get-db-ident-for-user-property-name k)))
           *properties-page-refs (volatile! {})]
       (-> (for [ident (keys properties)]
             (p/let [ret (infer-property-value-type-to-save! ident (get properties ident))] ret))
