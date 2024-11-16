@@ -121,8 +121,10 @@
           (if (and (contains? #{:default :url} (get-in property [:block/schema :type]))
                    (not (db-property/many? property)))
             (p/let [existing-value (get block (:db/ident property))
+                    default-value (:logseq.property/default-value property)
                     existing-value? (and (some? existing-value)
-                                         (not= (:db/ident existing-value) :logseq.property/empty-placeholder))
+                                         (not= (:db/ident existing-value) :logseq.property/empty-placeholder)
+                                         (not= (:db/id existing-value) (:db/id default-value)))
                     new-block-id (when-not existing-value? (db/new-block-id))
                     _ (when-not existing-value?
                         (db-property-handler/create-property-text-block!
@@ -716,7 +718,10 @@
         blocks-container (state/get-component :block/blocks-container)
         value-block (if (and (coll? value-block) (every? de/entity? value-block))
                       (set (remove #(= (:db/ident %) :logseq.property/empty-placeholder) value-block))
-                      value-block)]
+                      value-block)
+        default-value (:logseq.property/default-value property)
+        default-value? (and (= (:db/id value-block) (:db/id default-value))
+                            (not= (:db/ident property) :logseq.property/default-value))]
     (if (seq value-block)
       [:div.property-block-container.content.w-full
        (let [config {:id (str (if multiple-values?
@@ -724,7 +729,10 @@
                                 (:block/uuid value-block)))
                      :container-id container-id
                      :editor-box (state/get-component :editor/box)
-                     :property-block? true}]
+                     :property-block? true
+                     :on-block-content-pointer-down (when default-value?
+                                                      (fn [_e]
+                                                        (<create-new-block! block property "")))}]
          (if (set? value-block)
            (blocks-container config (ldb/sort-by-order value-block))
            (rum/with-key
