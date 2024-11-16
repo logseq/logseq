@@ -2233,8 +2233,8 @@
                       [:span.hl-page
                        [:strong.forbid-edit
                         (str "P"
-                          (or (pu/lookup properties :logseq.property.pdf/hl-page)
-                            "?"))]]
+                             (or (pu/lookup properties :logseq.property.pdf/hl-page)
+                                 "?"))]]
 
                       (when (and area?
                                  (or (:hl-stamp properties)
@@ -2740,7 +2740,10 @@
                                             (.preventDefault e)
 
                                             :else
-                                            (block-content-on-pointer-down e block block-id content edit-input-id config))))))]
+                                            (let [f (:on-block-content-pointer-down config)]
+                                              (if (fn? f)
+                                                (f e)
+                                                (block-content-on-pointer-down e block block-id content edit-input-id config))))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :key (str "block-content-" uuid)}
