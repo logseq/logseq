@@ -217,7 +217,7 @@
   []
   (when-let [path (config/get-current-repo-assets-root)]
     (p/let [result (p/catch (fs/readdir path {:path-only? true})
-                       (fn [_e] nil))]
+                            (fn [_e] nil))]
       (p/all (map (fn [path]
                     (p/let [data (fs/read-file path "" {})]
                       (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
@@ -240,7 +240,7 @@
   [repo]
   (when-let [path (config/get-repo-assets-root repo)]
     (p/catch (fs/readdir path {:path-only? true})
-        (fn [_e] nil))))
+             (fn [_e] nil))))
 
 (defn <read-asset
   [repo asset-block-id asset-type]
@@ -249,6 +249,14 @@
         file-path (path/path-join common-config/local-assets-dir
                                   (str asset-block-id-str "." asset-type))]
     (fs/read-file repo-dir file-path {})))
+
+(defn <get-asset-file-metadata
+  [repo asset-block-id asset-type]
+  (-> (p/let [file (<read-asset repo asset-block-id asset-type)
+              blob (js/Blob. (array file) (clj->js {:type "image"}))
+              checksum (get-file-checksum blob)]
+        {:checksum checksum})
+      (p/catch (fn [_e] nil))))
 
 (defn <write-asset
   [repo asset-block-id asset-type data]

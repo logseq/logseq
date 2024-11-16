@@ -4,6 +4,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.common.missionary-util :as c.m]
             [frontend.common.schema-register :as sr]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.rtc.asset :as r.asset]
@@ -570,7 +571,10 @@
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
           ;; wait all remote-ops transacted into db,
           ;; then start to check any asset-updates in remote
-          (r.asset/emit-remote-asset-updates! @conn db-before update-ops remove-ops)
+          (c.m/run-task
+           (r.asset/new-task--emit-remote-asset-updates! repo @conn db-before update-ops remove-ops)
+           :emit-remote-asset-updates
+           :succ (constantly nil))
           (js/console.groupEnd)
 
           (client-op/update-local-tx repo remote-t)
