@@ -43,7 +43,7 @@
   (def cancel ((m/reduce (fn [_ v] (prn :v v)) remote-asset-updates-flow) prn prn)))
 
 (defn- remote-block-ops=>remote-asset-ops
-  [db-after db-before update-ops remove-ops]
+  [_db-after db-before update-ops remove-ops]
   (let [update-asset-ops
         (keep
          (fn [update-op]
@@ -51,16 +51,13 @@
                  asset-checksum (some-> (first (:logseq.property.asset/checksum update-op))
                                         ldb/read-transit-str)]
              (when asset-checksum
-               (when-let [ent (d/entity db-after [:block/uuid block-uuid])]
-                 (let [local-checksum (:logseq.property.asset/checksum ent)]
-                   (when (or (and local-checksum (not= local-checksum asset-checksum))
-                             (nil? local-checksum))
-                     (apply conj {:op :update-asset
-                                  :block/uuid block-uuid}
-                            (keep (fn [[k v]]
-                                    (when (= "logseq.property.asset" (namespace k))
-                                      [k (ldb/read-transit-str (first v))]))
-                                  update-op))))))))
+               ;; TODO: don't generate update-op if local-asset-file already exists(same checksum)
+               (apply conj {:op :update-asset
+                            :block/uuid block-uuid}
+                      (keep (fn [[k v]]
+                              (when (= "logseq.property.asset" (namespace k))
+                                [k (ldb/read-transit-str (first v))]))
+                            update-op)))))
          update-ops)
         remove-asset-ops
         (keep
@@ -77,6 +74,7 @@
   [db-after db-before update-ops remove-ops]
   (when-let [asset-update-ops
              (not-empty (remote-block-ops=>remote-asset-ops db-after db-before update-ops remove-ops))]
+    (prn ::xxx-emit2 asset-update-ops)
     (reset! *remote-asset-updates asset-update-ops)))
 
 (defn- create-mixed-flow
@@ -151,8 +149,7 @@
                          [{:block/uuid asset-uuid
                            :logseq.property.asset/remote-metadata {:checksum "TEST-CHECKSUM"}}]
                          ;; Don't generate rtc ops again, (block-ops & asset-ops)
-                         {:generate-asset-change-events? false
-                          :persist-op? false})
+                         {:persist-op? false})
             (client-op/remove-asset-op repo asset-uuid)))
         (clean-asset-ops! repo (map :block/uuid asset-ops) (keys asset-uuid->url))))))
 
