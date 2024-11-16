@@ -155,7 +155,15 @@
    (dissoc query-dsl-rules :namespace
            :page-property :has-page-property
            :page-tags :all-page-tags)
-   {:tags
+   {:property-value
+    '[[(property-value ?b ?prop ?pv)
+       [?b ?prop ?pv]]
+      [(property-value ?b ?prop ?pv)
+       [?prop-e :db/ident ?prop]
+       (or
+        [?prop-e :logseq.property/default-value ?pv]
+        [?prop-e :logseq.property/checkbox-default-value ?pv])]]
+    :tags
     '[(tags ?b ?tags)
       [?b :block/tags ?t]
       [?t :block/name ?tag]
@@ -164,7 +172,7 @@
 
     :has-property
     '[(has-property ?b ?prop)
-      [?b ?prop _]
+      (property-value ?b ?prop ?pv)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
       [?prop-e :block/schema ?prop-schema]
@@ -174,7 +182,7 @@
     ;; Same as has-property except it returns public and private properties like :block/title
     :has-private-property
     '[(has-private-property ?b ?prop)
-      [?b ?prop _]
+      (property-value ?b ?prop ?pv)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]
 
@@ -184,25 +192,27 @@
       [?prop-e :block/type "property"]
       [?prop-e :block/schema ?prop-schema]
       [(get ?prop-schema :public? true) ?public]
+      [(get ?prop-schema :type) ?type]
       [(= true ?public)]
-      [?b ?prop ?pv]
-      (or
-       ;; non-ref value
-       (and
-        [(missing? $ ?prop-e :db/valueType)]
-        [?b ?prop ?val])
-       ;; ref value
-       (and
-        [?prop-e :db/valueType :db.type/ref]
-        (or [?pv :block/title ?val]
-            [?pv :property.value/content ?val])))]
+      (and
+       (property-value ?b ?prop ?pv)
+       (or
+         ;; non-ref value
+        (and
+         [(missing? $ ?prop-e :db/valueType)]
+         [?b ?prop ?val])
+         ;; ref value
+        (and
+         [?prop-e :db/valueType :db.type/ref]
+         (or [?pv :block/title ?val]
+             [?pv :property.value/content ?val]))))]
 
-    ;; Same as property except it returns public and private properties like :block/title
+;; Same as property except it returns public and private properties like :block/title
     :private-property
     '[(private-property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
-      [?b ?prop ?pv]
+      (property-value ?b ?prop ?pv)
       (or
        ;; non-ref value
        (and
@@ -231,7 +241,8 @@
   becomes long or brittle, we could do scan rules for their deps with something
   like find-rules-in-where"
   {:task #{:property}
-   :priority #{:property}})
+   :priority #{:property}
+   :property #{:property-value}})
 
 (defn extract-rules
   "Given a rules map and the rule names to extract, returns a vector of rules to
