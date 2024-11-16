@@ -86,13 +86,6 @@
         (string/lower-case))
     k))
 
-(defn- encode-user-property-name
-  [k]
-  (when (string? k)
-    (-> k (string/trim)
-        (string/replace "/" "")
-        (string/replace " " ""))))
-
 ;; helpers
 (defn ^:export install-plugin-hook
   [pid hook ^js opts]
@@ -850,32 +843,11 @@
               (editor-handler/expand-block! block-uuid))
           nil)))))
 
-(defn convert?to-built-in-property-name
-  [property-name]
-  (if (and (not (qualified-keyword? property-name))
-           (contains? #{:background-color} property-name))
-    (keyword :logseq.property property-name)
-    property-name))
-
-;; FIXME: This ns should not be creating idents. This allows for ident conflicts
-;; and assumes that names directly map to idents which is incorrect and breaks for multiple
-;; cases e.g. a property that has been renamed or sanitized. Instead it should
-;; find a property's ident by looking up the property in the db by its title
-(defn get-db-ident-for-property-name
-  "Finds a property :db/ident for a given property name"
-  [property-name]
-  (let [property-name' (if (string? property-name)
-                         (keyword property-name) property-name)
-        property-name' (convert?to-built-in-property-name property-name')]
-    (if (qualified-keyword? property-name')
-      property-name'
-      (keyword "plugin.property" (encode-user-property-name property-name)))))
-
 ;; properties (db only)
 (defn ^:export get_property
   [k]
   (when-let [k' (and (string? k) (some-> k (sanitize-user-property-name) (keyword)))]
-    (p/let [k (if (qualified-keyword? k') k' (get-db-ident-for-property-name k))
+    (p/let [k (if (qualified-keyword? k') k' (api-block/get-db-ident-for-user-property-name k))
             p (db-utils/pull k)]
       (bean/->js (sdk-utils/normalize-keyword-for-json p)))))
 
@@ -892,7 +864,7 @@
     (p/let [opts (or (some-> opts (bean/->clj)) {})
             name (or (:name opts) (some-> (str k) (string/trim)))
             k (if (qualified-keyword? k') k'
-                  (get-db-ident-for-property-name k))
+                  (api-block/get-db-ident-for-user-property-name k))
             schema (or (some-> schema (bean/->clj)
                                (update-keys #(if (contains? #{:hide :public} %)
                                                (keyword (str (name %) "?")) %))) {})
@@ -915,7 +887,7 @@
             _ (db-async/<get-block repo block-uuid :children? false)
             db? (config/db-based-graph? repo)
             key (-> (if (keyword? key) (name keyname) keyname) (util/safe-lower-case))
-            key (if db? (get-db-ident-for-property-name key) key)
+            key (if db? (api-block/get-db-ident-for-user-property-name key) key)
             _ (when (and db? (not (db-utils/entity key)))
                 (db-property-handler/upsert-property! key {} {:property-name keyname}))]
       (property-handler/set-block-property! repo block-uuid key value))))
@@ -928,7 +900,7 @@
             db? (config/db-based-graph? (state/get-current-repo))
             key-ns? (and (keyword? key) (namespace key))
             key (if key-ns? key (-> (if (keyword? key) (name key) key) (util/safe-lower-case)))
-            key (if (and db? (not key-ns?)) (get-db-ident-for-property-name key) key)]
+            key (if (and db? (not key-ns?)) (api-block/get-db-ident-for-user-property-name key) key)]
       (property-handler/remove-block-property!
        (state/get-current-repo)
        block-uuid key))))
@@ -943,7 +915,7 @@
                 property-name (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
                 property-value (or (get properties key)
                                    (get properties (keyword property-name))
-                                   (get properties (get-db-ident-for-property-name property-name)))
+                                   (get properties (api-block/get-db-ident-for-user-property-name property-name)))
                 property-value (if-let [property-id (:db/id property-value)]
                                  (db/pull property-id) property-value)
                 ret (sdk-utils/normalize-keyword-for-json property-value)]
