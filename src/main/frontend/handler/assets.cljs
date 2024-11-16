@@ -218,3 +218,16 @@
                     (p/let [data (fs/read-file path "" {})]
                       (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
                         [path' data]))) result)))))
+
+(defn ensure-assets-dir!
+  [repo]
+  (p/let [repo-dir (config/get-repo-dir repo)
+          assets-dir "assets"
+          _ (fs/mkdir-if-not-exists (path/path-join repo-dir assets-dir))]
+    [repo-dir assets-dir]))
+
+(defn get-asset-path
+  "Get asset path from filename, ensure assets dir exists"
+  [filename]
+  (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
+    (path/path-join repo-dir assets-dir filename)))

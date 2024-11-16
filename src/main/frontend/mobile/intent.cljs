@@ -83,13 +83,12 @@
   (let [args (transform-args args)]
     (state/pub-event! [:editor/quick-capture args])))
 
-
 (defn- embed-asset-file [url format]
   (p/let [basename (node-path/basename url)
           label (-> basename util/node-path.name)
           time (date/get-current-time)
           date-ref-name (date/today)
-          path (editor-handler/get-asset-path basename)
+          path (assets-handler/get-asset-path basename)
           _file (p/catch
                  (.copy Filesystem (clj->js {:from url :to path}))
                  (fn [error]
@@ -186,7 +185,7 @@
 (defn- handle-asset-file [url format]
   (p/let [basename (node-path/basename url)
           label (-> basename util/node-path.name)
-          path (editor-handler/get-asset-path basename)
+          path (assets-handler/get-asset-path basename)
           _file (p/catch
                  (.copy Filesystem (clj->js {:from url :to path}))
                  (fn [error]
@@ -264,7 +263,6 @@
                                                                            :edit-block? true
                                                                            :replace-empty-target? true})
                            100)))))))
-
 
 (defn handle-result
   "Mobile share intent handler v1, legacy. Only for Android"
