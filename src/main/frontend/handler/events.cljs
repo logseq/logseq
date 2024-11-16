@@ -57,6 +57,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.shell :as shell-handler]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.core :as mobile]
@@ -716,6 +717,7 @@
   (file-sync-stop!))
 
 (defmethod handle :graph/restored [[_ graph]]
+  (when graph (assets-handler/ensure-assets-dir! graph))
   (mobile/init!)
   (rtc-handler/<rtc-start! graph)
   (fsrs/update-due-cards-count)

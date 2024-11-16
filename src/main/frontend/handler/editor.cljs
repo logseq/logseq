@@ -1368,25 +1368,12 @@
   (when restore?
     (commands/restore-state)))
 
-(defn- ensure-assets-dir!
-  [repo]
-  (p/let [repo-dir (config/get-repo-dir repo)
-          assets-dir "assets"
-          _ (fs/mkdir-if-not-exists (path/path-join repo-dir assets-dir))]
-    [repo-dir assets-dir]))
-
-(defn get-asset-path
-  "Get asset path from filename, ensure assets dir exists"
-  [filename]
-  (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
-    (path/path-join repo-dir assets-dir filename)))
-
 (defn file-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
 
    Returns: [file-rpath file-obj file-fpath matched-alias]"
   ([repo files]
-   (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
+   (p/let [[repo-dir assets-dir] (assets-handler/ensure-assets-dir! repo)]
      (file-based-save-assets! repo repo-dir assets-dir files
                               (fn [index file-stem]
                      ;; TODO: maybe there're other chars we need to handle?
@@ -1526,7 +1513,7 @@
 
    Returns: asset entity"
   [repo files & {:keys [pdf-area?]}]
-  (p/let [[repo-dir asset-dir-rpath] (ensure-assets-dir! repo)]
+  (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)]
     (p/all
      (for [[_index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file

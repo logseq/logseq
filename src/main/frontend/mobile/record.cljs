@@ -48,7 +48,7 @@
           filename (str (date/get-date-time-string-2) ".aac")
           edit-block (state/get-edit-block)
           format (or (:block/format edit-block) (db/get-page-format page))
-          path (editor-handler/get-asset-path filename)
+          path (assets-handler/get-asset-path filename)
           _file (p/catch
                  (.writeFile Filesystem (clj->js {:data database64
                                                   :path path
