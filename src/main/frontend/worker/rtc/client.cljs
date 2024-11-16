@@ -95,10 +95,17 @@
               ;; [a v] as key for card-many attr, `a` as key for card-one attr
          ]
     (if-not av
-      (sort-by #(nth % 2) (vals r))
+      (vals r)
       (let [[a v _t _add?] av
             av-key (if (card-many-attr? db a) [a v] a)]
-        (recur others (assoc r av-key av))))))
+        (if-let [old-av (get r av-key)]
+          (recur others
+                 (cond
+                   (< (nth old-av 2) (nth av 2)) (assoc r av-key av)
+                   (> (nth old-av 2) (nth av 2)) r
+                   (true? (nth av 3)) (assoc r av-key av)
+                   :else r))
+          (recur others (assoc r av-key av)))))))
 
 (defn- remove-non-exist-ref-av
   "Remove av if its v is ref(block-uuid) and not exist"

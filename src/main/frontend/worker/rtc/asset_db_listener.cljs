@@ -27,12 +27,9 @@
   (when-let [ops (not-empty (mapcat (partial entity-datoms=>ops db-before db-after) same-entity-datoms-coll))]
     (client-op/add-asset-ops repo ops)))
 
-(sr/defkeyword :generate-asset-change-events?
-  "tx-meta option, generate events to notify asset-sync (default true)")
-
 (defmethod db-listener/listen-db-changes :gen-asset-change-events
   [_ {:keys [_tx-data tx-meta db-before db-after
              repo _id->attr->datom _e->a->add?->v->t same-entity-datoms-coll]}]
   (when (and (client-op/rtc-db-graph? repo)
-             (:generate-asset-change-events? tx-meta true))
+             (:persist-op? tx-meta true))
     (generate-asset-ops repo db-before db-after same-entity-datoms-coll)))
