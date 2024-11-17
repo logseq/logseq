@@ -168,8 +168,8 @@
        (or [?pv :block/title ?val]
            [?pv :property.value/content ?val])]]
 
-    :property-default-value
-    '[(property-default-value ?prop-e ?default-p ?val)
+    :property-missing-value
+    '[(property-missing-value ?b ?prop-e ?default-p ?default-v)
       [?t :logseq.property.class/properties ?prop-e]
       [?b :block/tags ?t]
       [?prop-e :db/ident ?prop]
@@ -177,12 +177,17 @@
        ;; returns the default value if there's no value yet.
       [(get-else $ ?b ?prop "N/A") ?prop-v]
       [(= ?prop-v "N/A")]
-      [?prop-e ?default-p ?pv]
-      (or [(= ?pv ?val)]
-          (and [(nil? ?pv)]
-               (or
-                [?pv :block/title ?val]
-                [?pv :property.value/content ?val])))]
+      [?prop-e ?default-p ?default-v]]
+
+    :property-default-value
+    '[[(property-default-value ?b ?prop-e ?default-p ?val)
+       (property-missing-value ?b ?prop-e ?default-p ?default-v)
+       [(= ?default-v ?val)]]
+      [(property-default-value ?b ?prop-e ?default-p ?val)
+       (property-missing-value ?b ?prop-e ?default-p ?default-v)
+       (or
+        [?default-v :block/title ?val]
+        [?default-v :property.value/content ?val])]]
 
     :property-value
     '[[(property-value ?b ?prop-e ?val)
@@ -190,8 +195,8 @@
        (existing-property-value ?b ?prop ?val)]
       [(property-value ?b ?prop-e ?val)
        (or
-        (property-default-value ?prop-e :logseq.property/checkbox-default-value ?val)
-        (property-default-value ?prop-e :logseq.property/default-value ?val))]]
+        (property-default-value ?b ?prop-e :logseq.property/checkbox-default-value ?val)
+        (property-default-value ?b ?prop-e :logseq.property/default-value ?val))]]
 
     :tags
     '[(tags ?b ?tags)
@@ -249,10 +254,20 @@
   "For db graphs, a map of rule names and the rules they depend on. If this map
   becomes long or brittle, we could do scan rules for their deps with something
   like find-rules-in-where"
-  {:task #{:property :property-value :existing-property-value :property-default-value}
-   :priority #{:property :property-value :existing-property-value :property-default-value}
-   :property-value #{:existing-property-value :property-default-value}
-   :property #{:property-value :existing-property-value :property-default-value}})
+  {:task #{:property}
+   :priority #{:property}
+   :property-default-value #{:existing-property-value :property-missing-value}
+   :property-value #{:property-default-value}
+   :property #{:property-value}})
+
+(defn- get-full-deps
+  [deps rules-deps]
+  (loop [deps' deps
+         result #{}]
+    (if (seq deps')
+      (recur (mapcat rules-deps deps')
+             (into result deps'))
+      result)))
 
 (defn extract-rules
   "Given a rules map and the rule names to extract, returns a vector of rules to
@@ -262,9 +277,9 @@
    No dependencies are detected by default though we could add it later e.g. find-rules-in-where"
   ([rules-m] (extract-rules rules-m (keys rules-m)))
   ([rules-m rules' & {:keys [deps]}]
-   (let [rules-with-deps (concat rules'
-                                 (when (map? deps)
-                                   (mapcat deps rules')))]
+   (let [rules-with-deps (if (map? deps)
+                           (get-full-deps rules' deps)
+                           rules')]
      (vec
       (mapcat #(let [val (rules-m %)]
                  ;; if vector?, rule has multiple clauses
