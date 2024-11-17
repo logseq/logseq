@@ -95,7 +95,6 @@
                (not-empty
                 (m/? (new-task--remote-block-ops=>remote-asset-ops
                       repo db-after db-before update-ops remove-ops)))]
-      (prn ::xxx-emit2 asset-update-ops)
       (reset! *remote-asset-updates asset-update-ops))))
 
 (defn- create-mixed-flow
@@ -141,6 +140,11 @@
                                   (when (contains? asset-op :update-asset)
                                     (:block/uuid asset-op)))
                                 asset-ops)
+            remove-asset-uuids (keep
+                                (fn [asset-op]
+                                  (when (contains? asset-op :remove-asset)
+                                    (:block/uuid asset-op)))
+                                asset-ops)
             asset-uuid->asset-type (into {}
                                          (keep (fn [asset-uuid]
                                                  (when-let [tp (:logseq.property.asset/type
@@ -172,7 +176,17 @@
                          ;; Don't generate rtc ops again, (block-ops & asset-ops)
                          {:persist-op? false})
             (client-op/remove-asset-op repo asset-uuid)))
-        (clean-asset-ops! repo (map :block/uuid asset-ops) (keys asset-uuid->url))))))
+        (when (seq remove-asset-uuids)
+          (prn :start-delete-assets remove-asset-uuids)
+          (m/? (ws-util/send&recv get-ws-create-task
+                                  {:action "delete-assets"
+                                   :graph-uuid graph-uuid
+                                   :asset-uuids remove-asset-uuids}))
+          (doseq [asset-uuid remove-asset-uuids]
+            (client-op/remove-asset-op repo asset-uuid)))
+        (clean-asset-ops! repo
+                          (map :block/uuid asset-ops)
+                          (concat (keys asset-uuid->url) remove-asset-uuids))))))
 
 (defn- new-task--pull-remote-asset-updates
   [repo get-ws-create-task conn graph-uuid _add-log-fn asset-update-ops]
@@ -180,6 +194,10 @@
     (when (seq asset-update-ops)
       (let [update-asset-uuids (keep (fn [op]
                                        (when (= :update-asset (:op op))
+                                         (:block/uuid op)))
+                                     asset-update-ops)
+            remove-asset-uuids (keep (fn [op]
+                                       (when (= :remove-asset (:op op))
                                          (:block/uuid op)))
                                      asset-update-ops)
             asset-uuid->asset-type (into {}
@@ -196,6 +214,8 @@
                                             :asset-uuids (keys asset-uuid->asset-type)}))
                    :asset-uuid->url))]
         (prn :xxx-pull-remote-asset-updates asset-uuid->asset-type asset-uuid->url)
+        (doseq [asset-uuid remove-asset-uuids]
+          (prn :TODO-delete-asset asset-uuid))
         (doseq [[asset-uuid get-url] asset-uuid->url]
           (prn :start-download-asset asset-uuid)
           (let [r (ldb/read-transit-str
