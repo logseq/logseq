@@ -13,7 +13,8 @@
 (deftest get-full-deps
   (let [default-value-deps #{:property-default-value
                              :property-missing-value
-                             :existing-property-value}
+                             :existing-property-value
+                             :object-has-class-property}
         property-value-deps (conj default-value-deps :property-value)
         property-deps (conj property-value-deps :property)
         task-deps (conj property-deps :task)

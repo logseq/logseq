@@ -161,6 +161,7 @@
        [?prop-e :db/ident ?prop]
        [(missing? $ ?prop-e :db/valueType)]
        [?b ?prop ?val]]
+      ;; ref value
       [(existing-property-value ?b ?prop ?val)
        [?prop-e :db/ident ?prop]
        [?prop-e :db/valueType :db.type/ref]
@@ -171,8 +172,8 @@
     :property-missing-value
     '[(property-missing-value ?b ?prop-e ?default-p ?default-v)
       [?t :logseq.property.class/properties ?prop-e]
-      [?b :block/tags ?t]
       [?prop-e :db/ident ?prop]
+      (object-has-class-property? ?b ?prop)
        ;; Notice: `(missing? )` doesn't work here because `de/entity`
        ;; returns the default value if there's no value yet.
       [(get-else $ ?b ?prop "N/A") ?prop-v]
@@ -205,11 +206,26 @@
       [(missing? $ ?b :block/link)]
       [(contains? ?tags ?tag)]]
 
+    :object-has-class-property
+    '[(object-has-class-property? ?b ?prop)
+      [?prop-e :db/ident ?prop]
+      [?t :logseq.property.class/properties ?prop-e]
+      [?b :block/tags ?t]]
+
+    :has-property-or-default-value
+    '[(has-property-or-default-value? ?b ?prop)
+      [?prop-e :db/ident ?prop]
+      (or
+       [?b ?prop _]
+       (and (object-has-class-property? ?b ?prop)
+            (or [?prop-e :logseq.property/default-value _]
+                [?prop-e :logseq.property/checkbox-default-value _])))]
+
     :has-property
     '[(has-property ?b ?prop)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
-      (property-value ?b ?prop-e ?val)
+      (has-property-or-default-value? ?b ?prop)
       [?prop-e :block/schema ?prop-schema]
       [(get ?prop-schema :public? true) ?public]
       [(= true ?public)]]
@@ -219,7 +235,7 @@
     '[(has-private-property ?b ?prop)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
-      (property-value ?b ?prop-e ?val)]
+      (has-property-or-default-value? ?b ?prop)]
 
     :property
     '[(property ?b ?prop ?val)
@@ -256,9 +272,14 @@
   like find-rules-in-where"
   {:task #{:property}
    :priority #{:property}
+   :property-missing-value #{:object-has-class-property}
+   :has-property-or-default-value #{:object-has-class-property}
+   :has-property #{:has-property-or-default-value}
+   :has-private-property #{:has-property-or-default-value}
    :property-default-value #{:existing-property-value :property-missing-value}
    :property-value #{:property-default-value}
-   :property #{:property-value}})
+   :property #{:property-value}
+   :has-propeorty #{}})
 
 (defn- get-full-deps
   [deps rules-deps]
