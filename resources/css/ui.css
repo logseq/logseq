@@ -564,6 +564,10 @@
   max-width: 36rem;
 }
 
+.max-w- {
+  max-width: 100%;
+}
+
 .flex-1 {
   flex: 1;
 }
@@ -778,6 +782,10 @@
 }
 
 .overflow-x-hidden {
+  overflow-x: hidden;
+}
+
+.overflow-x-auto {
   overflow-x: hidden;
 }
 
