@@ -1,5 +1,5 @@
 (ns logseq.db.frontend.rules-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [deftest is testing are]]
             [datascript.core :as d]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.test.helper :as db-test]))
@@ -9,6 +9,23 @@
   (d/q (into query [:in '$ '%])
        db
        (rules/extract-rules rules/db-query-dsl-rules)))
+
+(deftest get-full-deps
+  (let [default-value-deps #{:property-default-value
+                             :property-missing-value
+                             :existing-property-value}
+        property-value-deps (conj default-value-deps :property-value)
+        property-deps (conj property-value-deps :property)
+        task-deps (conj property-deps :task)
+        priority-deps (conj property-deps :priority)
+        task-priority-deps (conj property-deps :task :priority)]
+    (are [x y] (= (#'rules/get-full-deps x rules/rules-dependencies) y)
+      [:property-default-value] default-value-deps
+      [:property-value] property-value-deps
+      [:property] property-deps
+      [:task] task-deps
+      [:priority] priority-deps
+      [:task :priority] task-priority-deps)))
 
 (deftest has-property-rule
   (let [conn (db-test/create-conn-with-blocks
