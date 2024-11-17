@@ -155,14 +155,44 @@
    (dissoc query-dsl-rules :namespace
            :page-property :has-page-property
            :page-tags :all-page-tags)
-   {:property-value
-    '[[(property-value ?b ?prop ?pv)
-       [?b ?prop ?pv]]
-      [(property-value ?b ?prop ?pv)
+   {:existing-property-value
+    '[;; non-ref value
+      [(existing-property-value ?b ?prop ?val)
        [?prop-e :db/ident ?prop]
+       [(missing? $ ?prop-e :db/valueType)]
+       [?b ?prop ?val]]
+      [(existing-property-value ?b ?prop ?val)
+       [?prop-e :db/ident ?prop]
+       [?prop-e :db/valueType :db.type/ref]
+       [?b ?prop ?pv]
+       (or [?pv :block/title ?val]
+           [?pv :property.value/content ?val])]]
+
+    :property-default-value
+    '[(property-default-value ?prop-e ?default-p ?val)
+      [?t :logseq.property.class/properties ?prop-e]
+      [?b :block/tags ?t]
+      [?prop-e :db/ident ?prop]
+       ;; Notice: `(missing? )` doesn't work here because `de/entity`
+       ;; returns the default value if there's no value yet.
+      [(get-else $ ?b ?prop "N/A") ?prop-v]
+      [(= ?prop-v "N/A")]
+      [?prop-e ?default-p ?pv]
+      (or [(= ?pv ?val)]
+          (and [(nil? ?pv)]
+               (or
+                [?pv :block/title ?val]
+                [?pv :property.value/content ?val])))]
+
+    :property-value
+    '[[(property-value ?b ?prop-e ?val)
+       [?prop-e :db/ident ?prop]
+       (existing-property-value ?b ?prop ?val)]
+      [(property-value ?b ?prop-e ?val)
        (or
-        [?prop-e :logseq.property/default-value ?pv]
-        [?prop-e :logseq.property/checkbox-default-value ?pv])]]
+        (property-default-value ?prop-e :logseq.property/checkbox-default-value ?val)
+        (property-default-value ?prop-e :logseq.property/default-value ?val))]]
+
     :tags
     '[(tags ?b ?tags)
       [?b :block/tags ?t]
@@ -172,9 +202,9 @@
 
     :has-property
     '[(has-property ?b ?prop)
-      (property-value ?b ?prop ?pv)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
+      (property-value ?b ?prop-e ?val)
       [?prop-e :block/schema ?prop-schema]
       [(get ?prop-schema :public? true) ?public]
       [(= true ?public)]]
@@ -182,9 +212,9 @@
     ;; Same as has-property except it returns public and private properties like :block/title
     :has-private-property
     '[(has-private-property ?b ?prop)
-      (property-value ?b ?prop ?pv)
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]]
+      [?prop-e :block/type "property"]
+      (property-value ?b ?prop-e ?val)]
 
     :property
     '[(property ?b ?prop ?val)
@@ -194,35 +224,14 @@
       [(get ?prop-schema :public? true) ?public]
       [(get ?prop-schema :type) ?type]
       [(= true ?public)]
-      (and
-       (property-value ?b ?prop ?pv)
-       (or
-         ;; non-ref value
-        (and
-         [(missing? $ ?prop-e :db/valueType)]
-         [?b ?prop ?val])
-         ;; ref value
-        (and
-         [?prop-e :db/valueType :db.type/ref]
-         (or [?pv :block/title ?val]
-             [?pv :property.value/content ?val]))))]
+      (property-value ?b ?prop-e ?val)]
 
 ;; Same as property except it returns public and private properties like :block/title
     :private-property
     '[(private-property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
-      (property-value ?b ?prop ?pv)
-      (or
-       ;; non-ref value
-       (and
-        [(missing? $ ?prop-e :db/valueType)]
-        [?b ?prop ?val])
-       ;; ref value
-       (and
-        [?prop-e :db/valueType :db.type/ref]
-        (or [?pv :block/title ?val]
-            [?pv :property.value/content ?val])))]
+      (property-value ?b ?prop-e ?val)]
 
     :task
     '[(task ?b ?statuses)
@@ -240,9 +249,10 @@
   "For db graphs, a map of rule names and the rules they depend on. If this map
   becomes long or brittle, we could do scan rules for their deps with something
   like find-rules-in-where"
-  {:task #{:property}
-   :priority #{:property}
-   :property #{:property-value}})
+  {:task #{:property :property-value :existing-property-value :property-default-value}
+   :priority #{:property :property-value :existing-property-value :property-default-value}
+   :property-value #{:existing-property-value :property-default-value}
+   :property #{:property-value :existing-property-value :property-default-value}})
 
 (defn extract-rules
   "Given a rules map and the rule names to extract, returns a vector of rules to
