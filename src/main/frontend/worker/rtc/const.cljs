@@ -261,6 +261,12 @@
       [:action :string]
       [:graph-uuid :string]
       [:asset-uuids [:sequential :uuid]]]]
+    ["delete-assets"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :string]
+      [:asset-uuids [:sequential :uuid]]]]
     ["get-user-devices"
      [:map
       [:req-id :string]
