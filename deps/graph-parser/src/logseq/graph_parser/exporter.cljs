@@ -702,7 +702,7 @@
           (let [parent-classes-from-properties (->> (select-keys properties (:property-parent-classes user-options))
                                                     (mapcat (fn [[_k v]] (if (coll? v) v [v])))
                                                     distinct)]
-            ;; TODO: Mv new classses from these find-or-create-class to :classes-tx as they are the only ones
+            ;; TODO: Mv new classes from these find-or-create-class to :classes-tx as they are the only ones
             ;; that aren't conrolled by :classes-tx
             (cond-> block
               (seq parent-classes-from-properties)
