@@ -74,7 +74,7 @@
                 (build-new-namespace-page))
            m (db-class/build-new-class db m*)]
        (swap! all-idents assoc (keyword class-name) (:db/ident m))
-       m))))
+       (with-meta m {:new-class? true})))))
 
 (defn- find-or-gen-class-uuid [page-names-to-uuids page-name db-ident]
   (or (get @page-names-to-uuids page-name)
@@ -114,39 +114,45 @@
 (defn- convert-tag-to-class
   "Converts a tag block with class or returns nil if this tag should be removed
    because it has been moved"
-  [db tag-block page-names-to-uuids user-options all-idents]
+  [db tag-block {:keys [page-names-to-uuids classes-tx]} user-options all-idents]
   (if-let [new-class (:block.temp/new-class tag-block)]
-    (let [class-m (find-or-create-class db new-class all-idents)]
-      (merge class-m
-             {:block/uuid
-              (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m))}))
+    (let [class-m (find-or-create-class db new-class all-idents)
+          class-m' (merge class-m
+                          {:block/uuid
+                           (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m))})]
+      (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
+      (assert (:block/uuid class-m') "Class must have a :block/uuid")
+      [:block/uuid (:block/uuid class-m')])
     (when (convert-tag? (:block/name tag-block) user-options)
       (if-let [existing-tag-uuid (find-existing-class db tag-block)]
         [:block/uuid existing-tag-uuid]
         ;; Creates or updates page within same tx
-        (let [class-m (find-or-create-class db (:block/title tag-block) all-idents tag-block)]
-          (-> (merge tag-block class-m
-                     (when-not (:block/uuid tag-block)
-                       {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (:block/name tag-block) (:db/ident class-m))}))
-              ;; override with imported timestamps
-              (dissoc :block/created-at :block/updated-at)
-              (merge (add-missing-timestamps
-                      (select-keys tag-block [:block/created-at :block/updated-at])))
-              (replace-namespace-with-parent page-names-to-uuids)))))))
+        (let [class-m (find-or-create-class db (:block/title tag-block) all-idents tag-block)
+              class-m' (-> (merge tag-block class-m
+                                  (when-not (:block/uuid tag-block)
+                                    {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (:block/name tag-block) (:db/ident class-m))}))
+                           ;; override with imported timestamps
+                           (dissoc :block/created-at :block/updated-at)
+                           (merge (add-missing-timestamps
+                                   (select-keys tag-block [:block/created-at :block/updated-at])))
+                           (replace-namespace-with-parent page-names-to-uuids))]
+          (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
+          (assert (:block/uuid class-m') "Class must have a :block/uuid")
+          [:block/uuid (:block/uuid class-m')])))))
 
 (defn- logseq-class-ident?
   [k]
   (and (qualified-keyword? k) (= "logseq.class" (namespace k))))
 
 (defn- update-page-tags
-  [block db user-options page-names-to-uuids all-idents]
+  [block db user-options per-file-state all-idents]
   (if (seq (:block/tags block))
     (let [page-tags (->> (:block/tags block)
                          (remove #(or (:block.temp/new-class %)
                                       (convert-tag? (:block/name %) user-options)
                                       ;; Ignore new class tags from extract e.g. :logseq.class/Journal
                                       (logseq-class-ident? %)))
-                         (map #(vector :block/uuid (get-page-uuid page-names-to-uuids (:block/name %))))
+                         (map #(vector :block/uuid (get-page-uuid (:page-names-to-uuids per-file-state) (:block/name %))))
                          set)]
       (cond-> block
         true
@@ -155,7 +161,7 @@
                   ;; Don't lazy load as this needs to build before the page does
                   (vec (keep #(if (logseq-class-ident? %)
                                 %
-                                (convert-tag-to-class db % page-names-to-uuids user-options all-idents)) tags))))
+                                (convert-tag-to-class db % per-file-state user-options all-idents)) tags))))
         (seq page-tags)
         (merge {:logseq.property/page-tags page-tags})))
     block))
@@ -177,7 +183,7 @@
    (string/trim)))
 
 (defn- update-block-tags
-  [block db {:keys [remove-inline-tags?] :as user-options} page-names-to-uuids all-idents]
+  [block db {:keys [remove-inline-tags?] :as user-options} per-file-state all-idents]
   (let [block'
         (if (seq (:block/tags block))
           (let [original-tags (remove #(or (:block.temp/new-class %)
@@ -197,13 +203,13 @@
                       db-content/replace-tags-with-page-refs
                       (->> original-tags
                            (remove convert-tag?')
-                           (map #(add-uuid-to-page-map % page-names-to-uuids))))
+                           (map #(add-uuid-to-page-map % (:page-names-to-uuids per-file-state)))))
               true
               (update :block/tags
                       (fn [tags]
                         (vec (keep #(if (logseq-class-ident? %)
                                       %
-                                      (convert-tag-to-class db % page-names-to-uuids user-options all-idents))
+                                      (convert-tag-to-class db % per-file-state user-options all-idents))
                                    tags))))))
           block)]
     block'))
@@ -683,7 +689,7 @@
 
 (defn- handle-page-properties
   "Adds page properties including special handling for :logseq.property/parent"
-  [{:block/keys [properties] :as block*} db page-names-to-uuids refs
+  [{:block/keys [properties] :as block*} db {:keys [page-names-to-uuids]} refs
    {:keys [user-options log-fn import-state] :as options}]
   (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
         block'
@@ -691,6 +697,8 @@
           (let [parent-classes-from-properties (->> (select-keys properties (:property-parent-classes user-options))
                                                     (mapcat (fn [[_k v]] (if (coll? v) v [v])))
                                                     distinct)]
+            ;; TODO: Mv new classses from these find-or-create-class to :classes-tx as they are the only ones
+            ;; that aren't conrolled by :classes-tx
             (cond-> block
               (seq parent-classes-from-properties)
               (merge (find-or-create-class db (:block/title block) (:all-idents import-state) block))
@@ -815,7 +823,7 @@
     (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)))})))
 
 (defn- build-block-tx
-  [db block* pre-blocks page-names-to-uuids {:keys [import-state journal-created-ats] :as options}]
+  [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
   ;; (prn ::block-in block*)
   (let [;; needs to come before update-block-refs to detect new property schemas
         {:keys [block properties-tx]}
@@ -830,7 +838,7 @@
                    (fix-pre-block-references pre-blocks page-names-to-uuids)
                    (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
-                   (update-block-tags db (:user-options options) page-names-to-uuids (:all-idents import-state))
+                   (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
@@ -849,20 +857,20 @@
                                 aliases))))
 
 (defn- build-new-page-or-class
-  [m db page-names-to-uuids all-idents {:keys [user-options journal-created-ats]}]
+  [m db per-file-state all-idents {:keys [user-options journal-created-ats]}]
   (-> (cond-> m
         ;; Fix pages missing :block/title. Shouldn't happen
         (not (:block/title m))
         (assoc :block/title (:block/name m))
         (seq (:block/alias m))
-        (update-page-alias page-names-to-uuids)
+        (update-page-alias (:page-names-to-uuids per-file-state))
         (journal-created-ats (:block/name m))
         (assoc :block/created-at (journal-created-ats (:block/name m))))
       add-missing-timestamps
       ;; TODO: org-mode content needs to be handled
       (assoc :block/format :markdown)
       (dissoc :block/whiteboard?)
-      (update-page-tags db user-options page-names-to-uuids all-idents)))
+      (update-page-tags db user-options per-file-state all-idents)))
 
 (defn- get-all-existing-page-uuids
   "Returns a map of unique page names mapped to their uuids. The page names
@@ -889,7 +897,7 @@
        (into {})))
 
 (defn- build-existing-page
-  [m db page-uuid page-names-to-uuids {:keys [notify-user import-state] :as options}]
+  [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state] :as options}]
   (let [;; These attributes are not allowed to be transacted because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
@@ -908,7 +916,7 @@
         (seq (:block/alias m))
         (update-page-alias page-names-to-uuids)
         (:block/tags m)
-        (update-page-tags db (:user-options options) page-names-to-uuids (:all-idents import-state))))))
+        (update-page-tags db (:user-options options) per-file-state (:all-idents import-state))))))
 
 (defn- modify-page-tx
   "Modifies page tx from graph-parser for use with DB graphs. Currently modifies
@@ -959,24 +967,26 @@
         page-names-to-uuids (atom (merge all-existing-page-uuids
                                          (into {} (map (juxt (some-fn ::original-name :block/name) :block/uuid)
                                                        (remove all-existing-page-uuids all-pages)))))
-        all-pages-m (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
+        per-file-state {:page-names-to-uuids page-names-to-uuids
+                        :classes-tx (:classes-tx options)}
+        all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
                           all-pages)
         pages-tx (keep (fn [m]
                          (if-let [page-uuid (if (::original-name m)
                                               (all-existing-page-uuids (::original-name m))
                                               (all-existing-page-uuids (:block/name m)))]
-                           (build-existing-page (dissoc m ::original-name) @conn page-uuid page-names-to-uuids options)
+                           (build-existing-page (dissoc m ::original-name) @conn page-uuid per-file-state options)
                            (when (or (= "class" (:block/type m))
                                      ;; Don't build a new page if it overwrites an existing class
                                      (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
                                                   db-malli-schema/class?)))
                              (build-new-page-or-class (dissoc m ::original-name)
-                                                      @conn page-names-to-uuids (:all-idents import-state) options))))
+                                                      @conn per-file-state (:all-idents import-state) options))))
                        (map :block all-pages-m))]
     {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
      :existing-pages (select-keys all-existing-page-uuids (map :block/name all-pages*))
-     :page-names-to-uuids page-names-to-uuids}))
+     :per-file-state per-file-state}))
 
 (defn- build-upstream-properties-tx-for-default
   "Builds upstream-properties-tx for properties that change to :default type"
@@ -1062,6 +1072,8 @@
     ;; Track per file changes to make to existing properties
     ;; Map of property names (keyword) and their changes (map)
     :upstream-properties (atom {})
+    ;; Track per file class tx so that their tx isn't embedded in individual :block/tags and can be post processed
+    :classes-tx (atom [])
     :user-options
     (merge user-options
            {:tag-classes (set (map string/lower-case (:tag-classes user-options)))
@@ -1214,7 +1226,7 @@
                           {:journal-created-ats (build-journal-created-ats pages)})
         old-properties (keys @(get-in options [:import-state :property-schemas]))
         ;; Build page and block txs
-        {:keys [pages-tx page-properties-tx page-names-to-uuids existing-pages]} (build-pages-tx conn pages blocks tx-options)
+        {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
         whiteboard-pages (->> pages-tx
                               ;; support old and new whiteboards
                               (filter ldb/whiteboard?)
@@ -1225,7 +1237,7 @@
         pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
         blocks-tx (->> blocks
                        (remove :block/pre-block?)
-                       (mapcat #(build-block-tx @conn % pre-blocks page-names-to-uuids
+                       (mapcat #(build-block-tx @conn % pre-blocks per-file-state
                                                 (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))))
                        vec)
         {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
@@ -1233,10 +1245,10 @@
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
         main-props-tx-report (d/transact! conn property-pages-tx {:new-graph? true})
 
+        classes-tx @(:classes-tx tx-options)
         ;; Build indices
         pages-index (->> (map #(select-keys % [:block/uuid]) pages-tx')
-                         ;; For new classes which may also be referenced elsewhere in the same page
-                         (concat (mapcat (fn [p] (map #(select-keys % [:block/uuid]) (:block/tags p))) pages-tx'))
+                         (concat (map #(select-keys % [:block/uuid]) classes-tx))
                          distinct)
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks-tx)
         block-refs-ids (->> (mapcat :block/refs blocks-tx)
@@ -1248,9 +1260,9 @@
         blocks-index (set/union (set block-ids) (set block-refs-ids))
         ;; Order matters. pages-index and blocks-index needs to come before their corresponding tx for
         ;; uuids to be valid. Also upstream-properties-tx comes after blocks-tx to possibly override blocks
-        tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' blocks-index blocks-tx)
+        tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx)
         tx' (common-util/fast-remove-nils tx)
-        ;; _ (prn :tx-counts (map count (vector whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' blocks-index blocks-tx)))
+        ;; _ (prn :tx-counts (map count (vector whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx)))
         ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :tx tx'}))
         ;; :new-graph? needed for :block/path-refs to be calculated
         main-tx-report (d/transact! conn tx' {:new-graph? true})
