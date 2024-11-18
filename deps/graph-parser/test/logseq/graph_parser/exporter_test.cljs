@@ -179,8 +179,8 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 21 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
-      (is (= 21 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 22 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 22 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))

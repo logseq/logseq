@@ -88,6 +88,29 @@
        ;; Disallow tags as it breaks :block/tags
        (not (contains? #{"tags"} tag-name))))
 
+(defn- find-existing-class
+  "Finds a class entity by unique name and parents and returns its :block/uuid if found.
+  db is searched because there is no in-memory index only for created classes by unique name"
+  [db {full-name :block/name block-ns :block/namespace}]
+  (if block-ns
+    (->> (d/q '[:find [?b ...]
+                :in $ ?name
+                :where [?b :block/uuid ?uuid] [?b :block/type "class"] [?b :block/name ?name]]
+              db
+              (ns-util/get-last-part full-name))
+         (map #(d/entity db %))
+         (some #(let [parents (->> (ldb/get-page-parents %)
+                                   (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
+                                   vec)]
+                  (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents %))))
+                    (:block/uuid %)))))
+    (first
+     (d/q '[:find [?uuid ...]
+            :in $ ?name
+            :where [?b :block/uuid ?uuid] [?b :block/type "class"] [?b :block/name ?name]]
+          db
+          full-name))))
+
 (defn- convert-tag-to-class
   "Converts a tag block with class or returns nil if this tag should be removed
    because it has been moved"
@@ -98,12 +121,7 @@
              {:block/uuid
               (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m))}))
     (when (convert-tag? (:block/name tag-block) user-options)
-      (if-let [existing-tag-uuid (first
-                                  (d/q '[:find [?uuid ...]
-                                         :in $ ?name
-                                         :where [?b :block/uuid ?uuid] [?b :block/type "class"] [?b :block/name ?name]]
-                                       db
-                                       (:block/name tag-block)))]
+      (if-let [existing-tag-uuid (find-existing-class db tag-block)]
         [:block/uuid existing-tag-uuid]
         ;; Creates or updates page within same tx
         (let [class-m (find-or-create-class db (:block/title tag-block) all-idents tag-block)]
@@ -858,9 +876,12 @@
               :where [?b :block/name] [(missing? $ ?b :logseq.property/built-in?)]])
        (map #(d/entity db %))
        (map #(vector
-              (if-let [parents (and (ldb/internal-page? %) (ldb/get-page-parents %))]
+              (if-let [parents (and (or (ldb/internal-page? %) (ldb/class? %))
+                                    (->> (ldb/get-page-parents %)
+                                         (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
+                                         seq))]
                 ;; Build a :block/name for namespace pages that matches data from extract/extract
-                (string/join ns-util/namespace-char (conj (mapv :block/name parents) (:block/name %)))
+                (string/join ns-util/namespace-char (map :block/name (conj (vec parents) %)))
                 (:block/name %))
               (or (:block/uuid %)
                   (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name %)))
