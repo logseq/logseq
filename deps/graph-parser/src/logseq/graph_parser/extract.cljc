@@ -271,7 +271,7 @@
   "Extracts pages, blocks and ast from given file"
   [file-path content {:keys [user-config verbose] :or {verbose true} :as options}]
   (if (string/blank? content)
-    []
+    {}
     (let [format (common-util/get-format file-path)
           _ (when verbose (println "Parsing start: " file-path))
           ast (gp-mldoc/->edn content (gp-mldoc/default-config format
