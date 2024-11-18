@@ -180,15 +180,18 @@
       [(= ?prop-v "N/A")]
       [?prop-e ?default-p ?default-v]]
 
+    :property-checkbox-default-value
+    '[(property-checkbox-default-value ?b ?prop-e ?default-p ?val)
+      (property-missing-value ?b ?prop-e ?default-p ?default-v)
+      [(missing? $ ?prop-e :db/valueType)]
+      [?prop-e ?default-p ?val]]
+
     :property-default-value
-    '[[(property-default-value ?b ?prop-e ?default-p ?val)
-       (property-missing-value ?b ?prop-e ?default-p ?default-v)
-       [(= ?default-v ?val)]]
-      [(property-default-value ?b ?prop-e ?default-p ?val)
-       (property-missing-value ?b ?prop-e ?default-p ?default-v)
-       (or
-        [?default-v :block/title ?val]
-        [?default-v :property.value/content ?val])]]
+    '[(property-default-value ?b ?prop-e ?default-p ?val)
+      (property-missing-value ?b ?prop-e ?default-p ?default-v)
+      (or
+       [?default-v :block/title ?val]
+       [?default-v :property.value/content ?val])]
 
     :property-value
     '[[(property-value ?b ?prop-e ?val)
@@ -196,8 +199,12 @@
        (existing-property-value ?b ?prop ?val)]
       [(property-value ?b ?prop-e ?val)
        (or
-        (property-default-value ?b ?prop-e :logseq.property/checkbox-default-value ?val)
-        (property-default-value ?b ?prop-e :logseq.property/default-value ?val))]]
+        (and
+         [(missing? $ ?prop-e :db/valueType)]
+         (property-checkbox-default-value ?b ?prop-e :logseq.property/checkbox-default-value ?val))
+        (and
+         [?prop-e :db/valueType :db.type/ref]
+         (property-default-value ?b ?prop-e :logseq.property/default-value ?val)))]]
 
     :tags
     '[(tags ?b ?tags)
@@ -277,7 +284,8 @@
    :has-property #{:has-property-or-default-value}
    :has-private-property #{:has-property-or-default-value}
    :property-default-value #{:existing-property-value :property-missing-value}
-   :property-value #{:property-default-value}
+   :property-checkbox-default-value #{:existing-property-value :property-missing-value}
+   :property-value #{:property-default-value :property-checkbox-default-value}
    :property #{:property-value}
    :has-propeorty #{}})
 
