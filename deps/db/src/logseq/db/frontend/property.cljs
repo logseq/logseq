@@ -149,11 +149,13 @@
                             :queryable? true}
    :logseq.property/default-value {:title "Default value"
                                    :schema {:type :entity
-                                            :public? true
+                                            :public? false
+                                            :hide? true
                                             :view-context :property}}
    :logseq.property/checkbox-default-value {:title "Checkbox default value"
                                             :schema {:type :checkbox
-                                                     :public? true
+                                                     :public? false
+                                                     :hide? true
                                                      :view-context :property}}
    :logseq.property.class/properties {:title "Tag Properties"
                                       :schema {:type :property
