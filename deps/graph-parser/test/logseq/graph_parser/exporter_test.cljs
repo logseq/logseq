@@ -493,7 +493,12 @@
 
     (is (= [{:block/type "class"}]
            (d/q '[:find [(pull ?b [:block/type]) ...] :where [?b :block/name "life"]] @conn))
-        "When a class is used and referenced on the same page, there should only be one instance of it")))
+        "When a class is used and referenced on the same page, there should only be one instance of it")
+
+    (is (= ["life"]
+           (->> (:block/tags (find-block-by-content @conn #"with namespace tag"))
+                (mapv #(db-property/ref->property-value-contents @conn %))))
+        "Block tagged with namespace tag is only associated with leaf child tag")))
 
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
