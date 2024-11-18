@@ -15,7 +15,7 @@
                              :property-missing-value
                              :existing-property-value
                              :object-has-class-property}
-        property-value-deps (conj default-value-deps :property-value)
+        property-value-deps (conj default-value-deps :property-value :property-checkbox-default-value)
         property-deps (conj property-value-deps :property)
         task-deps (conj property-deps :task)
         priority-deps (conj property-deps :priority)
@@ -125,8 +125,8 @@
                [:user.property/number-many 5]
                [:user.property/foo "bar"]
                [:user.property/page-many "Page A"]}
-             (->> (q-with-rules '[:find ?p ?v
-                                  :where (property ?b ?p ?v) [?b :block/title "Page"]]
+             (->> (q-with-rules '[:find ?p ?val
+                                  :where (property ?b ?p ?val) [?b :block/title "Page"]]
                                 @conn)
                   set))
           "property can bind to property and property value args")
