@@ -144,6 +144,21 @@
   [k]
   (and (qualified-keyword? k) (= "logseq.class" (namespace k))))
 
+(defn- convert-tags-to-classes
+  "Handles converting tags to classes and any post processing of it e.g.
+  cleaning :block/tags when a block is tagged with a namespace page"
+  [tags db per-file-state user-options all-idents]
+  ;; vec needed is needed so that tags are built in order
+  (let [tags' (vec (keep #(if (logseq-class-ident? %)
+                            %
+                            (convert-tag-to-class db % per-file-state user-options all-idents))
+                         tags))]
+    ;; Only associate leaf child tag with block as other tags are only used to define tag parents.
+    ;; This assumes that extract/extract returns :block/tags with their leaf child first and then its parents
+    (if-let [child-tag (and (some :block/namespace tags) (first tags'))]
+      [child-tag]
+      tags')))
+
 (defn- update-page-tags
   [block db user-options per-file-state all-idents]
   (if (seq (:block/tags block))
@@ -156,12 +171,7 @@
                          set)]
       (cond-> block
         true
-        (update :block/tags
-                (fn [tags]
-                  ;; Don't lazy load as this needs to build before the page does
-                  (vec (keep #(if (logseq-class-ident? %)
-                                %
-                                (convert-tag-to-class db % per-file-state user-options all-idents)) tags))))
+        (update :block/tags convert-tags-to-classes db per-file-state user-options all-idents)
         (seq page-tags)
         (merge {:logseq.property/page-tags page-tags})))
     block))
@@ -205,12 +215,7 @@
                            (remove convert-tag?')
                            (map #(add-uuid-to-page-map % (:page-names-to-uuids per-file-state)))))
               true
-              (update :block/tags
-                      (fn [tags]
-                        (vec (keep #(if (logseq-class-ident? %)
-                                      %
-                                      (convert-tag-to-class db % per-file-state user-options all-idents))
-                                   tags))))))
+              (update :block/tags convert-tags-to-classes db per-file-state user-options all-idents)))
           block)]
     block'))
 
