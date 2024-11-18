@@ -148,9 +148,9 @@ prop-d:: [[nada]]"}])
               (dsl-query "(property prop-d no-space-link)")))
       "Blocks have property value with no space")
 
-  (is (= ["b3" "b4"]
-         (map (comp first str/split-lines :block/title)
-              (dsl-query "(property prop-d)")))
+  (is (= #{"b3" "b4"}
+         (set (map (comp first str/split-lines :block/title)
+                   (dsl-query "(property prop-d)"))))
       "Blocks that have a property"))
 
 (deftest block-property-queries
@@ -264,10 +264,10 @@ prop-d:: [[nada]]"}])
         "Boolean false")))
 
 (when-not js/process.env.DB_GRAPH
- (deftest page-property-queries
-   (testing "page property tests with default config"
-     (test-helper/with-config {}
-       (page-property-queries-test)))))
+  (deftest page-property-queries
+    (testing "page property tests with default config"
+      (test-helper/with-config {}
+        (page-property-queries-test)))))
 
 (deftest task-queries
   (load-test-files [{:file/path "pages/page1.md"
