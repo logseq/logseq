@@ -19,7 +19,8 @@
             [logseq.outliner.db-pipeline :as db-pipeline]
             [logseq.db.test.helper :as db-test]
             [logseq.db.frontend.rules :as rules]
-            [logseq.common.util.date-time :as date-time-util]))
+            [logseq.common.util.date-time :as date-time-util]
+            [logseq.graph-parser.block :as gp-block]))
 
 ;; Helpers
 ;; =======
@@ -126,12 +127,15 @@
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [files conn options]
-  (p/let [doc-options (gp-exporter/build-doc-options (merge {:macros {}} (:user-config options))
-                                                     (merge default-export-options
-                                                            {:user-options (dissoc options :user-config)}))
-          files' (mapv #(hash-map :path %) files)
-          _ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
-    {:import-state (:import-state doc-options)}))
+  (reset! gp-block/*export-to-db-graph? true)
+  (-> (p/let [doc-options (gp-exporter/build-doc-options (merge {:macros {}} (:user-config options))
+                                                         (merge default-export-options
+                                                                {:user-options (dissoc options :user-config)}))
+              files' (mapv #(hash-map :path %) files)
+              _ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
+        {:import-state (:import-state doc-options)})
+      (p/finally (fn [_]
+                   (reset! gp-block/*export-to-db-graph? false)))))
 
 (defn- readable-properties
   [db query-ent]
