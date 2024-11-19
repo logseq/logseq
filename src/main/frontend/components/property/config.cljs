@@ -317,21 +317,40 @@
         value (db-property/closed-value-content block)]
 
     [:li
-     (shui/tabler-icon "grip-vertical" {:size 14})
-     (shui/button {:size "sm" :variant :outline}
-                  (icon-component/icon-picker icon {:on-chosen (fn [_e icon] (update-icon! icon))
-                                                    :popup-opts {:align "start"}
-                                                    :del-btn? (boolean icon)
-                                                    :empty-label "?"}))
+     (shui/button {:size :sm :variant :ghost :title "Drag && Drop to reorder"}
+                  (shui/tabler-icon "grip-vertical" {:size 14}))
+     (icon-component/icon-picker icon {:on-chosen (fn [_e icon] (update-icon! icon))
+                                       :popup-opts {:align "start"}
+                                       :del-btn? (boolean icon)
+                                       :empty-label "?"})
      [:strong {:on-click (fn [^js e]
                            (shui/popup-show! (.-target e)
                                              (fn [] (choice-base-edit-form property block))
                                              {:id :ls-base-edit-form
                                               :align "start"}))}
       value]
-     [:a.del {:on-click delete-choice!
-              :title "Delete this choice"}
-      (shui/tabler-icon "x" {:size 16})]]))
+
+     (let [property-type (get-in property [:block/schema :type])]
+       (when (contains? #{:default :number} property-type)
+         (shui/dropdown-menu
+          (shui/dropdown-menu-trigger
+           {:as-child true}
+           (shui/button
+            {:size :sm :variant :ghost}
+            (shui/tabler-icon "dots" {:size 14})))
+          (shui/dropdown-menu-content
+           {:align :end}
+           (shui/dropdown-menu-item
+            {:on-click (fn []
+                         (let [property-ident :logseq.property/default-value]
+                           (db-property-handler/set-block-property! (:db/ident property) property-ident (:db/id block))))}
+            "Set as default choice")))))
+
+     (shui/button
+      {:size :sm :variant :ghost :class "del"
+       :title "Delete this choice"
+       :on-click delete-choice!}
+      (shui/tabler-icon "x" {:size 16}))]))
 
 (rum/defc add-existing-values
   [property values {:keys [toggle-fn]}]
@@ -552,7 +571,10 @@
                                                      [:div.px-4
                                                       (class-select property {:default-open? false})])}))
 
-     (when (and (contains? db-property-type/default-value-ref-property-types property-type) (not (db-property/many? property)))
+     (when (and (contains? db-property-type/default-value-ref-property-types property-type)
+                (not (db-property/many? property))
+                (not (and enable-closed-values?
+                          (seq (:property/closed-values property)))))
        (default-value-subitem property))
 
      (when enable-closed-values?

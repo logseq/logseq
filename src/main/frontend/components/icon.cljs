@@ -459,9 +459,10 @@
     (let [has-icon? (some? icon-value)]
       (shui/button
        {:ref *trigger-ref
-        :variant (if has-icon? :ghost :text)
+        :variant :ghost
         :size :sm
-        :class (if has-icon? "px-1 leading-none" "font-normal text-sm px-[0.5px] opacity-50")
+        :class (if has-icon? "px-1 leading-none text-muted-foreground hover:text-foreground"
+                   "font-normal text-sm px-[0.5px] text-muted-foreground hover:text-foreground")
         :on-click (fn [^js e]
                     (when-not disabled?
                       (shui/popup-show! (.-target e) content-fn
