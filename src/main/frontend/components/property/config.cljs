@@ -338,7 +338,8 @@
   (let [uuid-values? (every? uuid? values)
         values' (if uuid-values?
                   (let [values' (map #(db/entity [:block/uuid %]) values)]
-                    (->> (util/distinct-by db-property/closed-value-content values')
+                    (->> values'
+                         (util/distinct-by db-property/closed-value-content)
                          (map :block/uuid)))
                   values)]
     [:div.flex.flex-col.gap-1.w-64.p-4.overflow-y-auto
@@ -406,9 +407,9 @@
                                             (fn [{:keys [id]}]
                                               (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}
                                                     values' (->> (if (contains? db-property-type/all-ref-property-types (get-in property [:block/schema :type]))
-                                                                   (map #(:block/uuid (db/entity %)) values)
-                                                                   values)
-                                                                 (remove string/blank?)
+                                                                   (->> (map #(:block/uuid (db/entity %)) values)
+                                                                        (remove (fn [e] (string/blank? (:block/title e)))))
+                                                                   (remove string/blank? values))
                                                                  distinct)]
                                                 (if (seq values')
                                                   (add-existing-values property values' opts)
