@@ -407,7 +407,7 @@
                          (filter (fn [class]
                                    (seq (:logseq.property.class/properties class)))))
         all-properties (-> (mapcat (fn [class]
-                                     (map :db/ident (:logseq.property.class/properties class))) all-classes)
+                                     (:logseq.property.class/properties class)) all-classes)
                            distinct)]
     {:classes classes
      :all-classes all-classes           ; block own classes + parent classes
@@ -436,6 +436,7 @@
   (let [block (d/entity db eid)
         own-properties (keys (:block/properties block))]
     (->> (:classes-properties (get-block-classes-properties db eid))
+         (map :db/ident)
          (concat own-properties)
          (filter (fn [id] (property-with-position? db id (:block/properties block) position)))
          (distinct)
