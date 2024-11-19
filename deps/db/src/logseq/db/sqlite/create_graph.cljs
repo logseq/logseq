@@ -18,18 +18,19 @@
 (defn build-initial-properties*
   [built-in-properties]
   (mapcat
-   (fn [[db-ident {:keys [schema title closed-values] :as m}]]
+   (fn [[db-ident {:keys [schema title closed-values properties] :as m}]]
      (let [prop-name (or title (name (:name m)))
            blocks (if closed-values
                     (db-property-build/build-closed-values
                      db-ident
                      prop-name
                      {:db/ident db-ident :block/schema schema :closed-values closed-values}
-                     {})
+                     {:properties properties})
                     [(sqlite-util/build-new-property
                       db-ident
                       schema
-                      {:title prop-name})])]
+                      {:title prop-name
+                       :properties properties})])]
        blocks))
    (dissoc built-in-properties :logseq.property/built-in?)))
 

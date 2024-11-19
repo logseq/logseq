@@ -80,7 +80,7 @@
    * :title - Case sensitive property name. Defaults to deriving this from db-ident
    * :block-uuid - :block/uuid for property"
   ([db-ident prop-schema] (build-new-property db-ident prop-schema {}))
-  ([db-ident prop-schema {:keys [title block-uuid ref-type?]}]
+  ([db-ident prop-schema {:keys [title block-uuid ref-type? properties]}]
    (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
@@ -105,7 +105,9 @@
         (seq classes)
         (assoc :property/schema.classes classes)
         (or ref-type? (contains? db-property-type/all-ref-property-types (:type prop-schema)))
-        (assoc :db/valueType :db.type/ref))))))
+        (assoc :db/valueType :db.type/ref)
+        (seq properties)
+        (merge properties))))))
 
 (defn build-new-class
   "Build a standard new class so that it is consistent across contexts"
