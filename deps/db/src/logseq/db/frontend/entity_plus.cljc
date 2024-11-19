@@ -38,6 +38,23 @@
                        result)]
          (or result' default-value))))))
 
+(defn- lookup-kv-with-default-value
+  [db ^Entity e k default-value]
+  (or
+            ;; from kv
+   (get (.-kv e) k)
+            ;; from db
+   (let [result (lookup-entity e k default-value)]
+     (if (some? result)
+       result
+                ;; property default value
+       (when (qualified-keyword? k)
+         (when-let [property (d/entity db k)]
+           (let [schema (lookup-entity property :block/schema nil)]
+             (if (= :checkbox (:type schema))
+               (lookup-entity property :logseq.property/checkbox-default-value nil)
+               (lookup-entity property :logseq.property/default-value nil)))))))))
+
 (defn lookup-kv-then-entity
   ([e k] (lookup-kv-then-entity e k nil))
   ([^Entity e k default-value]
@@ -79,20 +96,7 @@
            (->> (lookup-entity e :block/_closed-value-property default-value)
                 (sort-by :block/order))
 
-           (or
-            ;; from kv
-            (get (.-kv e) k)
-            ;; from db
-            (let [result (lookup-entity e k default-value)]
-              (if (some? result)
-                result
-                ;; property default value
-                (when (qualified-keyword? k)
-                  (when-let [property (d/entity db k)]
-                    (let [schema (lookup-entity property :block/schema nil)]
-                      (if (= :checkbox (:type schema))
-                        (lookup-entity property :logseq.property/checkbox-default-value nil)
-                        (lookup-entity property :logseq.property/default-value nil)))))))))))
+           (lookup-kv-with-default-value db e k default-value))))
      (catch :default e
        (js/console.error e)))))
 
