@@ -23,12 +23,6 @@
   (let [db (conn/get-db repo)]
     (db-property/properties-by-name db block)))
 
-(defn all-hidden-properties?
-  "Checks if the given properties are all hidden properties"
-  [properties]
-  (every? (fn [id]
-            (:hide? (:block/schema (db-utils/entity id)))) properties))
-
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as
   property names and property values dereferenced where possible. Has some
