@@ -62,17 +62,26 @@
                {:block/uuid (get-page-uuid page-names-to-uuids (get-in block [:block/namespace :block/name]))}))
     block))
 
+(defn- build-class-ident-name
+  [class-name]
+  (string/replace class-name "/" "___"))
+
 (defn- find-or-create-class
   ([db class-name all-idents]
    (find-or-create-class db class-name all-idents {}))
   ([db class-name all-idents class-block]
    (if-let [db-ident (get @all-idents (keyword class-name))]
      {:db/ident db-ident}
-     (let [m* (cond-> {:block/title class-name
-                       :block/name (common-util/page-name-sanity-lc class-name)}
-                (:block/namespace class-block)
-                (build-new-namespace-page))
-           m (db-class/build-new-class db m*)]
+     (let [m
+           (if (:block/namespace class-block)
+             ;; Give namespaced tags a unique ident so they don't conflict with other tags
+             (-> (db-class/build-new-class db {:block/title (build-class-ident-name class-name)})
+                 (merge {:block/title class-name
+                         :block/name (common-util/page-name-sanity-lc class-name)})
+                 (build-new-namespace-page))
+             (db-class/build-new-class db
+                                       {:block/title class-name
+                                        :block/name (common-util/page-name-sanity-lc class-name)}))]
        (swap! all-idents assoc (keyword class-name) (:db/ident m))
        (with-meta m {:new-class? true})))))
 
@@ -950,7 +959,8 @@
       ((fn [block']
          (merge (build-new-namespace-page block')
                 {;; save original name b/c it's still used for a few name lookups
-                 ::original-name (:block/name block')}))))))
+                 ::original-name (:block/name block')
+                 ::original-title (:block/title block')}))))))
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
@@ -976,18 +986,26 @@
                         :classes-tx (:classes-tx options)}
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
                           all-pages)
-        pages-tx (keep (fn [m]
-                         (if-let [page-uuid (if (::original-name m)
-                                              (all-existing-page-uuids (::original-name m))
-                                              (all-existing-page-uuids (:block/name m)))]
-                           (build-existing-page (dissoc m ::original-name) @conn page-uuid per-file-state options)
-                           (when (or (= "class" (:block/type m))
-                                     ;; Don't build a new page if it overwrites an existing class
-                                     (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
-                                                  db-malli-schema/class?)))
-                             (build-new-page-or-class (dissoc m ::original-name)
-                                                      @conn per-file-state (:all-idents import-state) options))))
-                       (map :block all-pages-m))]
+        pages-tx (keep (fn [{m :block _properties-tx :properties-tx}]
+                         (let [page (if-let [page-uuid (if (::original-name m)
+                                                         (all-existing-page-uuids (::original-name m))
+                                                         (all-existing-page-uuids (:block/name m)))]
+                                      (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
+                                      (when (or (= "class" (:block/type m))
+                                                ;; Don't build a new page if it overwrites an existing class
+                                                (not (some-> (get @(:all-idents import-state)
+                                                                  (some-> (or (::original-title m) (:block/title m))
+                                                                          build-class-ident-name
+                                                                          keyword))
+                                                             db-malli-schema/class?))
+                                                ;; TODO: Enable this when it's valid for all test graphs because
+                                                ;; pages with properties must be built or else properties-tx is invalid
+                                                #_(seq properties-tx))
+                                        (build-new-page-or-class (dissoc m ::original-name ::original-title)
+                                                                 @conn per-file-state (:all-idents import-state) options)))]
+                           ;;  (when-not ret (println "Skipped page tx for" (pr-str (:block/title m))))
+                           page))
+                       all-pages-m)]
     {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
      :existing-pages (select-keys all-existing-page-uuids (map :block/name all-pages*))

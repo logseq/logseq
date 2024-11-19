@@ -125,18 +125,21 @@
         config-file (first (filter #(string/ends-with? (:path %) "logseq/config.edn") *files))
         _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
         options' (merge default-export-options
-                        {:user-options (dissoc options :assets)
+                        {:user-options (dissoc options :assets :verbose)
                         ;; asset file options
-                         :<copy-asset #(swap! assets conj %)})]
+                         :<copy-asset #(swap! assets conj %)}
+                        (select-keys options [:verbose]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [files conn options]
   (reset! gp-block/*export-to-db-graph? true)
-  (-> (p/let [doc-options (gp-exporter/build-doc-options (merge {:macros {}} (:user-config options))
+  (-> (p/let [doc-options (gp-exporter/build-doc-options (merge {:macros {} :file/name-format :triple-lowbar}
+                                                                (:user-config options))
                                                          (merge default-export-options
-                                                                {:user-options (dissoc options :user-config)}))
+                                                                {:user-options (dissoc options :user-config :verbose)}
+                                                                (select-keys options [:verbose])))
               files' (mapv #(hash-map :path %) files)
               _ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
         {:import-state (:import-state doc-options)})
@@ -196,7 +199,7 @@
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 8
+      (is (= 9
              (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
                                 :where [?b :block/title] [_ :block/page ?b] (not [?b :logseq.property/built-in?])] @conn)
                          (filter ldb/internal-page?))))
@@ -497,6 +500,10 @@
                    count))
         "Correct number of user classes")
 
+    (is (= :user.class/Quotes___life
+           (:db/ident (find-page-by-name @conn "life")))
+        "Namespaced tag's ident has hierarchy to make it unique")
+
     (is (= [{:block/type "class"}]
            (d/q '[:find [(pull ?b [:block/type]) ...] :where [?b :block/name "life"]] @conn))
         "When a class is used and referenced on the same page, there should only be one instance of it")
@@ -535,7 +542,9 @@
 
 (deftest-async export-files-with-property-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_23.md" "pages/url.md"])
+          files (mapv #(node-path/join file-graph-dir %)
+                      ["journals/2024_02_23.md" "pages/url.md" "pages/Whiteboard___Tool.md"
+                       "pages/Whiteboard___Arrow_head_toggle.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:property-classes ["type"]})
           _ (@#'gp-exporter/export-class-properties conn conn)]
@@ -543,7 +552,7 @@
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
 
-    (is (= #{:user.class/Property :user.class/Movie}
+    (is (= #{:user.class/Property :user.class/Movie :user.class/Class :user.class/Tool}
            (->> @conn
                 (d/q '[:find [?ident ...]
                        :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
