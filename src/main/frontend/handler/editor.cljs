@@ -20,7 +20,6 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
-            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.file-based.editor :as file-editor-handler]
