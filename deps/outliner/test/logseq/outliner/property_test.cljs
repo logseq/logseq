@@ -283,4 +283,4 @@
                            :build/tags [:c1 :c2]}]}]})
         block (db-test/find-block-by-content @conn "o1")]
     (is (= [:user.property/p1 :user.property/p2 :user.property/p3]
-           (:classes-properties (outliner-property/get-block-classes-properties @conn (:db/id block)))))))
+           (map :db/ident (:classes-properties (outliner-property/get-block-classes-properties @conn (:db/id block))))))))

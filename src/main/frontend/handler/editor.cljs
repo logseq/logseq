@@ -3443,17 +3443,15 @@
 
 (defn- db-collapsable?
   [block]
-  (let [property-keys (->> (keys (:block/properties block))
-                           (remove db-property/db-attribute-properties)
-                           (remove #(outliner-property/property-with-other-position? (db/entity %))))]
-    (or (ldb/class-instance? (db/entity :logseq.class/Query) block)
-        (and (seq property-keys)
-             (not (db-pu/all-hidden-properties? property-keys)))
-        (and (seq (:block/tags block))
-             (some (fn [t]
-                     (let [properties (map :db/ident (:logseq.property.class/properties t))]
-                       (and (seq properties)
-                            (not (db-pu/all-hidden-properties? properties))))) (:block/tags block))))))
+  (let [class-properties (:classes-properties (outliner-property/get-block-classes-properties (db/get-db) (:db/id block)))
+        properties (->> (keys (:block/properties block))
+                        (map db/entity)
+                        (concat class-properties)
+                        (remove (fn [e] (db-property/db-attribute-properties (:db/ident e))))
+                        (remove outliner-property/property-with-other-position?)
+                        (remove (fn [e] (:hide? (:block/schema e)))))]
+    (or (seq properties)
+        (ldb/class-instance? (db/entity :logseq.class/Query) block))))
 
 (defn collapsable?
   ([block-id]

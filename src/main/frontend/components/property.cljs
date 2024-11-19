@@ -586,7 +586,7 @@
                                (contains? #{:logseq.property.class/properties} (:db/ident ent))))))))
                   properties))
         {:keys [all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))
-        classes-properties-set (set classes-properties)
+        classes-properties-set (set (map :db/ident classes-properties))
         block-own-properties (->> properties
                                   (remove (fn [[id _]] (classes-properties-set id))))
         root-block? (= (:id opts) (str (:block/uuid block)))
