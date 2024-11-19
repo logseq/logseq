@@ -732,7 +732,7 @@
                      :property-block? true
                      :on-block-content-pointer-down (when default-value?
                                                       (fn [_e]
-                                                        (<create-new-block! block property "")))}]
+                                                        (<create-new-block! block property (or (:block/title default-value) ""))))}]
          (if (set? value-block)
            (blocks-container config (ldb/sort-by-order value-block))
            (rum/with-key
