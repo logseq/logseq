@@ -27,6 +27,10 @@
     }
   }
 
+  .ls-table-row {
+    @apply min-h-[32px];
+  }
+
   .ls-table-header {
     @apply flex flex-row items-center w-fit absolute left-0 top-0;
 
