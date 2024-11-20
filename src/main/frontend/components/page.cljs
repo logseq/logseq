@@ -180,8 +180,8 @@
                   (util/stop e)
                   (state/set-state! :editor/container-id container-id)
                   (editor-handler/api-insert-new-block! "" args))
-      :on-mouse-over #(dom/add-class! (rum/deref *bullet-ref) "opacity-100")
-      :on-mouse-leave #(dom/remove-class! (rum/deref *bullet-ref) "opacity-100")
+      :on-mouse-over #(dom/add-class! (rum/deref *bullet-ref) "opacity-50")
+      :on-mouse-leave #(dom/remove-class! (rum/deref *bullet-ref) "opacity-50")
       :on-key-down (fn [e]
                      (util/stop e)
                      (when (= "Enter" (util/ekey e))
@@ -225,24 +225,27 @@
       [:<>
        (let [blocks (cond
                       (and
-                        (not block?)
-                        (empty? children) page-e)
+                       (not block?)
+                       (empty? children) page-e)
                       (dummy-block page-e)
 
                       :else
                       (let [document-mode? (state/sub :document/mode?)
                             hiccup-config (merge
-                                            {:id (if block? (str block-id) page-name)
-                                             :db/id (:db/id block)
-                                             :block? block?
-                                             :editor-box editor/box
-                                             :document/mode? document-mode?}
-                                            config)
+                                           {:id (if block? (str block-id) page-name)
+                                            :db/id (:db/id block)
+                                            :block? block?
+                                            :editor-box editor/box
+                                            :document/mode? document-mode?}
+                                           config)
                             config (common-handler/config-with-document-mode hiccup-config)
                             blocks (if block? [block] (db/sort-by-order children block))]
                         [:div
                          (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
-                         (when-not config/publishing?
+                         (when-not (or config/publishing?
+                                       (let [last-child-id (model/get-block-deep-last-open-child-id (db/get-db) (:db/id (last blocks)))
+                                             block' (if last-child-id (db/entity last-child-id) (last blocks))]
+                                         (string/blank? (:block/title block'))))
                            (let [args (if block-id
                                         {:block-uuid block-id}
                                         {:page page-name})]
@@ -250,9 +253,9 @@
          (if (and db-based? (or (ldb/class? block) (ldb/property? block)))
            [:div.mt-4.ml-2.-mb-1
             (ui/foldable
-              [:div.font-medium.opacity-50 {:class "pl-0.5"} "Notes"]
-              [:div.ml-1.-mb-2 blocks]
-              {:disable-on-pointer-down? true})]
+             [:div.font-medium.opacity-50 {:class "pl-0.5"} "Notes"]
+             [:div.ml-1.-mb-2 blocks]
+             {:disable-on-pointer-down? true})]
            blocks))])))
 
 (rum/defc today-queries < rum/reactive
