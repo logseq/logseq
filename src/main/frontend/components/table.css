@@ -51,8 +51,11 @@
     }
 
     .ls-table-header-cell {
-      @apply overflow-hidden;
       position: relative;
+
+      > .ui__button {
+        @apply overflow-hidden;
+      }
     }
   }
 
