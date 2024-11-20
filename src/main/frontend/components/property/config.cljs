@@ -284,7 +284,7 @@
                                   :id id1}
                                  item-props') %))]
     (wrap-menuitem
-     [:div.inner-wrap
+     [:div.inner-wrap.cursor-pointer
       {:class (util/classnames [{:disabled disabled?}])}
       [:strong
        (some-> icon (name) (shui/tabler-icon {:size 14
@@ -303,7 +303,7 @@
         [:label [:span desc]
          (when disabled? (shui/tabler-icon "forbid-2" {:size 15}))])])))
 
-(rum/defc choice-item-content
+(rum/defc choice-item-content < rum/reactive db-mixins/query
   [property block]
   (let [delete-choice! (fn []
                          (p/do!
@@ -317,6 +317,22 @@
         value (db-property/closed-value-content block)]
 
     [:li
+     (let [property-type (get-in property [:block/schema :type])
+           property (db/sub-block (:db/id property))
+           default-type? (contains? #{:default :number} property-type)
+           default-value (when default-type? (:logseq.property/default-value property))
+           default-value? (= (:db/id default-value) (:db/id block))]
+       (when default-type?
+         (shui/checkbox {:size :sm
+                         :title "Set as default choice"
+                         :class "opacity-50 hover:opacity-100"
+                         :checked default-value?
+                         :on-checked-change (fn []
+                                              (let [property-ident :logseq.property/default-value]
+                                                (if default-value?
+                                                  (db-property-handler/remove-block-property! (:db/ident property) property-ident)
+                                                  (db-property-handler/set-block-property! (:db/ident property) property-ident (:db/id block)))))})))
+
      (shui/button {:size :sm :variant :ghost :title "Drag && Drop to reorder"}
                   (shui/tabler-icon "grip-vertical" {:size 14}))
      (icon-component/icon-picker icon {:on-chosen (fn [_e icon] (update-icon! icon))
@@ -329,22 +345,6 @@
                                              {:id :ls-base-edit-form
                                               :align "start"}))}
       value]
-
-     (let [property-type (get-in property [:block/schema :type])]
-       (when (contains? #{:default :number} property-type)
-         (shui/dropdown-menu
-          (shui/dropdown-menu-trigger
-           {:as-child true}
-           (shui/button
-            {:size :sm :variant :ghost}
-            (shui/tabler-icon "dots" {:size 14})))
-          (shui/dropdown-menu-content
-           {:align :end}
-           (shui/dropdown-menu-item
-            {:on-click (fn []
-                         (let [property-ident :logseq.property/default-value]
-                           (db-property-handler/set-block-property! (:db/ident property) property-ident (:db/id block))))}
-            "Set as default choice")))))
 
      (shui/button
       {:size :sm :variant :ghost :class "del"
@@ -409,6 +409,8 @@
                                                     (outliner-core/block-with-updated-at
                                                      {:db/id (:db/id property)})]
                                                    {:outliner-op :save-block})))})])
+
+     (shui/dropdown-menu-separator)
 
      ;; add choice
      (when-not disabled?
