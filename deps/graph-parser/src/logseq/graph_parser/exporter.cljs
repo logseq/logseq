@@ -1476,7 +1476,7 @@
                          :filename-format (or (:file/name-format config) :legacy)
                          :verbose (:verbose options)}
        :user-config config
-       :user-options (merge {:remove-inline-tags? true} (:user-options options))
+       :user-options (merge {:remove-inline-tags? true :convert-all-tags? true} (:user-options options))
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
       (merge (select-keys options [:set-ui-state :export-file :notify-user]))))

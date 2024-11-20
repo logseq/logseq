@@ -138,12 +138,13 @@
         file-graph' (resolve-path file-graph)
         conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
         directory? (.isDirectory (fs/statSync file-graph'))
-        user-options (cond-> (dissoc options :verbose :files :help)
+        user-options (cond-> (merge {:all-tags false} (dissoc options :verbose :files :help))
                        ;; coerce option collection into strings
                        (:tag-classes options)
                        (update :tag-classes (partial mapv str))
                        true
                        (set/rename-keys {:all-tags :convert-all-tags? :remove-inline-tags :remove-inline-tags?}))
+        _ (when (:verbose options) (prn :options user-options))
         options' (merge {:user-options user-options
                          :graph-name db-name}
                         (select-keys options [:files :verbose]))]

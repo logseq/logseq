@@ -125,7 +125,7 @@
         config-file (first (filter #(string/ends-with? (:path %) "logseq/config.edn") *files))
         _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
         options' (merge default-export-options
-                        {:user-options (dissoc options :assets :verbose)
+                        {:user-options (merge {:convert-all-tags? false} (dissoc options :assets :verbose))
                         ;; asset file options
                          :<copy-asset #(swap! assets conj %)}
                         (select-keys options [:verbose]))]
@@ -138,7 +138,8 @@
   (-> (p/let [doc-options (gp-exporter/build-doc-options (merge {:macros {} :file/name-format :triple-lowbar}
                                                                 (:user-config options))
                                                          (merge default-export-options
-                                                                {:user-options (dissoc options :user-config :verbose)}
+                                                                {:user-options (merge {:convert-all-tags? false}
+                                                                                      (dissoc options :user-config :verbose))}
                                                                 (select-keys options [:verbose])))
               files' (mapv #(hash-map :path %) files)
               _ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
@@ -165,25 +166,25 @@
 ;; Tests
 ;; =====
 
-(deftest-async ^:integration export-docs-graph
+(deftest-async ^:integration export-docs-graph-with-convert-all-tags
   (p/let [file-graph-dir "test/resources/docs-0.10.9"
           _ (docs-graph-helper/clone-docs-repo-if-not-exists file-graph-dir "v0.10.9")
           conn (db-test/create-conn)
           {:keys [import-state]}
-          (import-file-graph-to-db file-graph-dir conn {})]
+          (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true})]
 
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")))
 
-(deftest-async export-basic-graph
+(deftest-async export-basic-graph-with-convert-all-tags
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)
           ;; Simulate frontend path-refs being calculated
           _ (db-pipeline/add-listener conn)
           assets (atom [])
-          {:keys [import-state]} (import-file-graph-to-db file-graph-dir conn {:assets assets})]
+          {:keys [import-state]} (import-file-graph-to-db file-graph-dir conn {:assets assets :convert-all-tags? true})]
 
     (testing "whole graph"
 
@@ -204,10 +205,10 @@
                                 :where [?b :block/title] [_ :block/page ?b] (not [?b :logseq.property/built-in?])] @conn)
                          (filter ldb/internal-page?))))
           "Correct number of pages with block content")
-      (is (= 0 (->> @conn
-                    (d/q '[:find [?ident ...]
-                           :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
-                    count))
+      (is (= 11 (->> @conn
+                     (d/q '[:find [?ident ...]
+                            :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                     count))
           "Correct number of user classes")
       (is (= 4 (count (d/datoms @conn :avet :block/type "whiteboard"))))
       (is (= 0 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
@@ -347,6 +348,20 @@
              (:block/title (find-block-by-content @conn #"tasks with")))
           "Advanced query has custom title migrated"))
 
+    (testing "tags convert to classes"
+      (is (= :user.class/Quotes___life
+             (:db/ident (find-page-by-name @conn "life")))
+          "Namespaced tag's ident has hierarchy to make it unique")
+
+      (is (= [{:block/type "class"}]
+             (d/q '[:find [(pull ?b [:block/type]) ...] :where [?b :block/name "life"]] @conn))
+          "When a class is used and referenced on the same page, there should only be one instance of it")
+
+      (is (= ["life"]
+             (->> (:block/tags (find-block-by-content @conn #"with namespace tag"))
+                  (mapv #(db-property/ref->property-value-contents @conn %))))
+          "Block tagged with namespace tag is only associated with leaf child tag"))
+
     (testing "namespaces"
       (let [expand-children (fn expand-children [ent parent]
                               (if-let [children (:logseq.property/_parent ent)]
@@ -414,23 +429,6 @@
         (is (= 3 (count (find-block-by-property @conn :user.property/people)))
             "Converted property has correct number of property values")))
 
-    (testing "replacing refs in :block/title"
-      (is (= 2
-             (->> (find-block-by-content @conn #"replace with same start string")
-                  :block/title
-                  (re-seq #"\[\[~\^\S+\]\]")
-                  distinct
-                  count))
-          "A block with ref names that start with same string has 2 distinct refs")
-
-      (is (= 1
-             (->> (find-block-by-content @conn #"replace case insensitive")
-                  :block/title
-                  (re-seq #"\[\[~\^\S+\]\]")
-                  distinct
-                  count))
-          "A block with different case of same ref names has 1 distinct ref"))
-
     (testing "imported concepts can have names of new-built concepts"
       (is (= #{:logseq.property/description :user.property/description}
              (set (d/q '[:find [?ident ...] :where [?b :db/ident ?ident] [?b :block/name "description"]] @conn)))
@@ -465,9 +463,41 @@
       (let [block-with-props (find-block-by-content @conn #"block with props")]
         (is (= {:user.property/prop-num 10}
                (readable-properties @conn block-with-props)))
-        (is (= "block with props" (:block/title block-with-props)))))
+        (is (= "block with props" (:block/title block-with-props)))))))
 
-    (testing "tags without tag options"
+(deftest-async export-basic-graph-with-convert-all-tags-option-disabled
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          conn (db-test/create-conn)
+          {:keys [import-state]}
+          (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? false})]
+
+    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+        "Created graph has no validation errors")
+    (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
+    (is (= 0 (->> @conn
+                  (d/q '[:find [?ident ...]
+                         :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                  count))
+        "Correct number of user classes")
+
+    (testing "replacing refs in :block/title when :remove-inline-tags? set"
+      (is (= 2
+             (->> (find-block-by-content @conn #"replace with same start string")
+                  :block/title
+                  (re-seq #"\[\[~\^\S+\]\]")
+                  distinct
+                  count))
+          "A block with ref names that start with same string has 2 distinct refs")
+
+      (is (= 1
+             (->> (find-block-by-content @conn #"replace case insensitive")
+                  :block/title
+                  (re-seq #"\[\[~\^\S+\]\]")
+                  distinct
+                  count))
+          "A block with different case of same ref names has 1 distinct ref"))
+
+    (testing "tags convert to page, refs and page-tags"
       (let [block (find-block-by-content @conn #"Inception")
             tag-page (find-page-by-name @conn "Movie")
             tagged-page (find-page-by-name @conn "Interstellar")]
@@ -484,34 +514,6 @@
         (is (= #{"LargeLanguageModel" "fun" "ai"}
                (:logseq.property/page-tags (readable-properties @conn (find-page-by-name @conn "chat-gpt"))))
             "tagged page has new page and other pages marked with '#' and '[[]]` imported as tags to page-tags")))))
-
-(deftest-async export-basic-graph-with-convert-all-tags-option
-  (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          conn (db-test/create-conn)
-          {:keys [import-state]}
-          (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true})]
-
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
-        "Created graph has no validation errors")
-    (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
-    (is (= 11 (->> @conn
-                   (d/q '[:find [?ident ...]
-                          :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
-                   count))
-        "Correct number of user classes")
-
-    (is (= :user.class/Quotes___life
-           (:db/ident (find-page-by-name @conn "life")))
-        "Namespaced tag's ident has hierarchy to make it unique")
-
-    (is (= [{:block/type "class"}]
-           (d/q '[:find [(pull ?b [:block/type]) ...] :where [?b :block/name "life"]] @conn))
-        "When a class is used and referenced on the same page, there should only be one instance of it")
-
-    (is (= ["life"]
-           (->> (:block/tags (find-block-by-content @conn #"with namespace tag"))
-                (mapv #(db-property/ref->property-value-contents @conn %))))
-        "Block tagged with namespace tag is only associated with leaf child tag")))
 
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"

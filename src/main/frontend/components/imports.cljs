@@ -170,7 +170,7 @@
   [:div.border.p-6.rounded.bg-gray-01.mt-4
    (let [form-ctx (form-core/use-form
                    {:defaultValues {:graph-name initial-name
-                                    :convert-all-tags? false
+                                    :convert-all-tags? true
                                     :tag-classes ""
                                     :remove-inline-tags? true
                                     :property-classes ""
@@ -184,7 +184,7 @@
                             ;; (js/console.log "[form] submit: " e (js->clj e))
                             (on-submit-fn (js->clj e :keywordize-keys true))
                             (shui/dialog-close!)))
-        [convert-all-tags-input set-convert-all-tags-input!] (rum/use-state false)]
+        [convert-all-tags-input set-convert-all-tags-input!] (rum/use-state true)]
 
      (shui/form-provider form-ctx
        [:form
