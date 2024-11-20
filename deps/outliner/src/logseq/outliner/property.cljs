@@ -419,17 +419,17 @@
      :classes-properties all-properties}))
 
 (defn- property-with-position?
-  [db property-id block-properties position]
+  [db property-id block position]
   (let [property (d/entity db property-id)
         schema (:block/schema property)]
     (and
      (= (:position schema) position)
      (not (and (:logseq.property/hide-empty-value property)
-               (nil? (get block-properties property-id))))
+               (nil? (get block property-id))))
      (not (get-in property [:block/schema :hide?]))
      (not (and
            (= (:position schema) :block-below)
-           (nil? (get block-properties property-id)))))))
+           (nil? (get block property-id)))))))
 
 (defn property-with-other-position?
   [property]
@@ -442,7 +442,7 @@
         own-properties (keys (:block/properties block))]
     (->> (:classes-properties (get-block-classes-properties db eid))
          (concat own-properties)
-         (filter (fn [id] (property-with-position? db id (:block/properties block) position)))
+         (filter (fn [id] (property-with-position? db id block position)))
          (distinct)
          (map #(d/entity db %))
          (ldb/sort-by-order)
