@@ -432,11 +432,23 @@
        [:div.absolute.top-0.left-8
         (action-bar table selected-rows option)]))))
 
-(rum/defc table-row < rum/reactive
+(rum/defc row-cell < rum/static
+  [table row column render cell-opts idx first-col-rendered? set-first-col-rendered!]
+  (let [primary-key? (or (= idx 1) (= (:id column) :block/title))]
+    (when primary-key?
+      (rum/use-effect!
+       (fn []
+         (let [timeout (js/setTimeout #(set-first-col-rendered! true) 0)]
+           #(js/clearTimeout timeout)))
+       []))
+
+    (shui/table-cell cell-opts
+                     (when (or primary-key? first-col-rendered?)
+                       (render table row column)))))
+
+(rum/defc table-row-inner < rum/static
   [{:keys [row-selected?] :as table} row columns props {:keys [show-add-property?]}]
-  (let [row' (db/sub-block (:id row))
-        ;; merge entity temporal attributes
-        row (reduce (fn [e [k v]] (assoc e k v)) row' (.-kv ^js row))
+  (let [[first-col-rendered? set-first-col-rendered!] (rum/use-state false)
         columns (if show-add-property?
                   (conj (vec columns)
                         {:id :add-property
@@ -448,20 +460,28 @@
       props
       {:key (str (:id row))
        :data-state (when (row-selected? row) "selected")})
-     (for [column columns]
-       (let [id (str (:id row) "-" (:id column))
-             render (get column :cell)
-             width (get-column-size column sized-columns)
-             select? (= (:id column) :select)
-             add-property? (= (:id column) :add-property)]
-         (when render
-           (shui/table-cell
-            {:key id
-             :select? select?
-             :add-property? add-property?
-             :style {:width width
-                     :min-width width}}
-            (render table row column))))))))
+     (map-indexed
+      (fn [idx column]
+        (let [id (str (:id row) "-" (:id column))
+              render (get column :cell)
+              width (get-column-size column sized-columns)
+              select? (= (:id column) :select)
+              add-property? (= (:id column) :add-property)
+              cell-opts {:key id
+                         :select? select?
+                         :add-property? add-property?
+                         :style {:width width
+                                 :min-width width}}]
+          (when render
+            (row-cell table row column render cell-opts idx first-col-rendered? set-first-col-rendered!))))
+      columns))))
+
+(rum/defc table-row < rum/reactive (mixins/perf-measure-mixin "table row")
+  [table row columns props option]
+  (let [row' (db/sub-block (:id row))
+        ;; merge entity temporal attributes
+        row (reduce (fn [e [k v]] (assoc e k v)) row' (.-kv ^js row))]
+    (table-row-inner table row columns props option)))
 
 (rum/defc search
   [input {:keys [on-change set-input!]}]
@@ -517,7 +537,7 @@
             (let [label (get-property-value-content e)
                   label' (if (and block-type? (= label "class")) "tag" label)]
               {:label (str label') :value e}))
-       values)
+          values)
      (sort-by :label))))
 
 (defn datetime-property?
@@ -1065,7 +1085,6 @@
          (ui/virtualized-list
           {:ref #(reset! *scroller-ref %)
            :custom-scroll-parent (gdom/getElement "main-content-container")
-           :increase-viewport-by {:top 600 :bottom 600}
            :compute-item-key (fn [idx]
                                (let [block (nth rows idx)]
                                  (str "table-row-" (:db/id block))))
