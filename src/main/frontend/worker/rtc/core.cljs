@@ -27,14 +27,23 @@
 
 (def ^:private sentinel (js-obj))
 (defn- get-remote-updates
-  "Return a flow: receive messages from ws, and filter messages with :req-id=`push-updates` or `online-users-updated`."
+  "Return a flow: receive messages from ws,
+  and filter messages with :req-id=
+  - `push-updates`
+  - `online-users-updated`.
+  - `push-asset-upload-updates`"
   [get-ws-create-task]
   (m/ap
    (loop []
      (let [ws (m/? get-ws-create-task)
            x (try
                (m/?> (m/eduction
-                      (filter (fn [data] (contains? #{"online-users-updated" "push-updates"} (:req-id data))))
+                      (filter (fn [data]
+                                (contains?
+                                 #{"online-users-updated"
+                                   "push-updates"
+                                   "push-asset-upload-updates"}
+                                 (:req-id data))))
                       (ws/recv-flow ws)))
                (catch js/CloseEvent _
                  sentinel))]
@@ -76,6 +85,7 @@
 (defn- create-mixed-flow
   "Return a flow that emits all kinds of events:
   `:remote-update`: remote-updates data from server
+  `:remote-asset-update`: remote asset-updates from server
   `:local-update-check`: event to notify to check if there're some new local-updates, then push to remote.
   `:online-users-updated`: online users info updated
   `:pull-remote-updates`: pull remote updates"
@@ -84,7 +94,8 @@
                              (map (fn [data]
                                     (case (:req-id data)
                                       "push-updates" {:type :remote-update :value data}
-                                      "online-users-updated" {:type :online-users-updated :value data})))
+                                      "online-users-updated" {:type :online-users-updated :value data}
+                                      "push-asset-upload-updates" {:type :remote-asset-update :value data})))
                              (get-remote-updates get-ws-create-task))
         local-updates-check-flow (m/eduction
                                   (map (fn [data] {:type :local-update-check :value data}))
@@ -161,40 +172,42 @@
      (holding-rtc-lock
       started-dfv
       (m/sp
-       (try
+        (try
           ;; init run to open a ws
-         (m/? get-ws-create-task)
-         (started-dfv true)
-         (reset! *assets-sync-loop-canceler
-                 (c.m/run-task assets-sync-loop-task :assets-sync-loop-task))
-         (->>
-          (let [event (m/?> mixed-flow)]
-            (case (:type event)
-              :remote-update
-              (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
-                   (catch :default e
-                     (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
-                       (m/? (r.client/new-task--pull-remote-data
-                             repo conn graph-uuid date-formatter get-ws-create-task add-log-fn)))))
+          (m/? get-ws-create-task)
+          (started-dfv true)
+          (reset! *assets-sync-loop-canceler
+                  (c.m/run-task assets-sync-loop-task :assets-sync-loop-task))
+          (->>
+           (let [event (m/?> mixed-flow)]
+             (case (:type event)
+               :remote-update
+               (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
+                    (catch :default e
+                      (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
+                        (m/? (r.client/new-task--pull-remote-data
+                              repo conn graph-uuid date-formatter get-ws-create-task add-log-fn)))))
+               :remote-asset-update
+               (r.asset/emit-remote-asset-updates-from-push-asset-upload-updates @conn (:value event))
 
-              :local-update-check
-              (m/? (r.client/new-task--push-local-ops
-                    repo conn graph-uuid date-formatter
-                    get-ws-create-task add-log-fn))
+               :local-update-check
+               (m/? (r.client/new-task--push-local-ops
+                     repo conn graph-uuid date-formatter
+                     get-ws-create-task add-log-fn))
 
-              :online-users-updated
-              (reset! *online-users (:online-users (:value event)))
+               :online-users-updated
+               (reset! *online-users (:online-users (:value event)))
 
-              :pull-remote-updates
-              (m/? (r.client/new-task--pull-remote-data
-                    repo conn graph-uuid date-formatter get-ws-create-task add-log-fn))))
-          (m/ap)
-          (m/reduce {} nil)
-          (m/?))
-         (catch Cancelled e
-           (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))
-           (add-log-fn :rtc.log/cancelled {})
-           (throw e)))))}))
+               :pull-remote-updates
+               (m/? (r.client/new-task--pull-remote-data
+                     repo conn graph-uuid date-formatter get-ws-create-task add-log-fn))))
+           (m/ap)
+           (m/reduce {} nil)
+           (m/?))
+          (catch Cancelled e
+            (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))
+            (add-log-fn :rtc.log/cancelled {})
+            (throw e)))))}))
 
 (def ^:private empty-rtc-loop-metadata
   {:graph-uuid nil

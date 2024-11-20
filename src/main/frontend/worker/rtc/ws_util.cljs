@@ -60,6 +60,7 @@
 
 (defn get-ws-url
   [token]
+  (assert (some? token))
   (gstring/format @worker-state/*rtc-ws-url token))
 
 (defn- gen-get-ws-create-map
