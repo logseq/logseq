@@ -28,7 +28,7 @@
   }
 
   .ls-table-row {
-    @apply min-h-[32px];
+    @apply min-h-[33px];
   }
 
   .ls-table-header {
