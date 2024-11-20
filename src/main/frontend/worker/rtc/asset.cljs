@@ -42,59 +42,42 @@
 (comment
   (def cancel ((m/reduce (fn [_ v] (prn :v v)) remote-asset-updates-flow) prn prn)))
 
-(defn- new-task--get-asset-file-metadata
-  [repo block-uuid asset-type]
-  (m/sp
-    (ldb/read-transit-str
-     (c.m/<?
-      (.get-asset-file-metadata ^js @worker-state/*main-thread repo (str block-uuid) asset-type)))))
+(comment
+  (defn- new-task--get-asset-file-metadata
+    [repo block-uuid asset-type]
+    (m/sp
+      (ldb/read-transit-str
+       (c.m/<?
+        (.get-asset-file-metadata ^js @worker-state/*main-thread repo (str block-uuid) asset-type))))))
 
-(defn- new-task--remote-block-ops=>remote-asset-ops
-  [repo _db-after db-before update-ops remove-ops]
-  (m/sp
-    (let [update-asset-ops
-          (->> (map
-                (fn [update-op]
-                  (m/sp
-                    (let [block-uuid (:self update-op)
-                          asset-checksum (some-> (first (:logseq.property.asset/checksum update-op))
-                                                 ldb/read-transit-str)
-                          asset-type (some-> (first (:logseq.property.asset/type update-op))
-                                             ldb/read-transit-str)]
-                      (when (and asset-checksum asset-type)
-                        (let [asset-file-meta
-                              (m/? (new-task--get-asset-file-metadata repo block-uuid asset-type))]
-                          (when (or (nil? (:checksum asset-file-meta))
-                                    (not= (:checksum asset-file-meta) asset-checksum))
-                            (apply conj {:op :update-asset
-                                         :block/uuid block-uuid}
-                                   (keep (fn [[k v]]
-                                           (when (= "logseq.property.asset" (namespace k))
-                                             [k (ldb/read-transit-str (first v))]))
-                                         update-op))))))))
+(defn- remote-block-ops=>remote-asset-ops
+  [db-before remove-ops]
+  (keep
+   (fn [remove-op]
+     (let [block-uuid (:block-uuid remove-op)]
+       (when-let [ent (d/entity db-before [:block/uuid block-uuid])]
+         (when (:logseq.property.asset/checksum ent)
+           {:op :remove-asset
+            :block/uuid block-uuid}))))
+   remove-ops))
 
-                update-ops)
-               (apply m/join vector)
-               m/?
-               (filter identity))
-          remove-asset-ops
-          (keep
-           (fn [remove-op]
-             (let [block-uuid (:block-uuid remove-op)]
-               (when-let [ent (d/entity db-before [:block/uuid block-uuid])]
-                 (when (:logseq.property.asset/checksum ent)
-                   {:op :remove-asset
-                    :block/uuid block-uuid}))))
-           remove-ops)]
-      (concat update-asset-ops remove-asset-ops))))
+(defn emit-remote-asset-updates-from-block-ops
+  [db-before remove-ops]
+  (when-let [asset-update-ops
+             (not-empty (remote-block-ops=>remote-asset-ops db-before remove-ops))]
+    (reset! *remote-asset-updates asset-update-ops)))
 
-(defn new-task--emit-remote-asset-updates!
-  [repo db-after db-before update-ops remove-ops]
-  (m/sp
+(defn emit-remote-asset-updates-from-push-asset-upload-updates
+  [db push-asset-upload-updates-message]
+  (let [{:keys [uploaded-assets]} push-asset-upload-updates-message]
     (when-let [asset-update-ops
                (not-empty
-                (m/? (new-task--remote-block-ops=>remote-asset-ops
-                      repo db-after db-before update-ops remove-ops)))]
+                (keep (fn [[asset-uuid _remote-metadata]]
+                        ;; TODO: compare checksum in remote-metadata
+                        (when (some? (d/entity db [:block/uuid asset-uuid]))
+                          {:op :update-asset
+                           :block/uuid asset-uuid}))
+                      uploaded-assets))]
       (reset! *remote-asset-updates asset-update-ops))))
 
 (defn- create-mixed-flow
