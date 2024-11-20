@@ -154,6 +154,7 @@
         [:op :keyword]
         [:block-uuid :uuid]]]]]]
    [:asset-uuid->url {:optional true} [:map-of :uuid :string]]
+   [:uploaded-assets {:optional true} [:map-of :uuid :map]]
    [:ex-data {:optional true} [:map [:type :keyword]]]
    [:ex-message {:optional true} :string]])
 
