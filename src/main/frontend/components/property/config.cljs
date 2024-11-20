@@ -338,7 +338,8 @@
      (icon-component/icon-picker icon {:on-chosen (fn [_e icon] (update-icon! icon))
                                        :popup-opts {:align "start"}
                                        :del-btn? (boolean icon)
-                                       :empty-label "?"})
+                                       :empty-label "?"
+                                       :button-opts {:title "Set Icon"}})
      [:strong {:on-click (fn [^js e]
                            (shui/popup-show! (.-target e)
                                              (fn [] (choice-base-edit-form property block))
@@ -430,7 +431,9 @@
                                                     values' (->> (if (contains? db-property-type/all-ref-property-types (get-in property [:block/schema :type]))
                                                                    (->> values
                                                                         (map db/entity)
-                                                                        (remove (fn [e] (string/blank? (:block/title e))))
+                                                                        (remove (fn [e]
+                                                                                  (let [value (db-property/property-value-content e)]
+                                                                                    (and (string? value) (string/blank? value)))))
                                                                         (map :block/uuid))
                                                                    (remove string/blank? values))
                                                                  distinct)]
