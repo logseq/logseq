@@ -715,7 +715,7 @@
             ;; that aren't conrolled by :classes-tx
             (cond-> block
               (seq parent-classes-from-properties)
-              (merge (find-or-create-class db (:block/title block) (:all-idents import-state) block))
+              (merge (find-or-create-class db ((some-fn ::original-title :block/title) block) (:all-idents import-state) block))
               (seq parent-classes-from-properties)
               (assoc :logseq.property/parent
                      (let [new-class (first parent-classes-from-properties)
