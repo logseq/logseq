@@ -280,7 +280,8 @@
 (defn new-task--rtc-download-asset
   [repo asset-block-uuid-str asset-type get-url]
   (m/sp
-    (let [{:keys [status body] :as r} (c.m/<? (http/get get-url {:with-credentials? false}))]
+    (let [{:keys [status body] :as r} (c.m/<? (http/get get-url {:with-credentials? false
+                                                                 :response-type :array-buffer}))]
       (if-not (http/unexceptional-status? status)
         {:ex-data {:type :rtc.exception/download-asset-failed :data r}}
         (do (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body))
