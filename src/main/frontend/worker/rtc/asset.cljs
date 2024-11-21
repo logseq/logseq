@@ -42,13 +42,13 @@
 (comment
   (def cancel ((m/reduce (fn [_ v] (prn :v v)) remote-asset-updates-flow) prn prn)))
 
-(comment
-  (defn- new-task--get-asset-file-metadata
-    [repo block-uuid asset-type]
-    (m/sp
-      (ldb/read-transit-str
-       (c.m/<?
-        (.get-asset-file-metadata ^js @worker-state/*main-thread repo (str block-uuid) asset-type))))))
+(defn- new-task--get-asset-file-metadata
+  "Return nil if this asset not exist"
+  [repo block-uuid asset-type]
+  (m/sp
+    (ldb/read-transit-str
+     (c.m/<?
+      (.get-asset-file-metadata ^js @worker-state/*main-thread repo (str block-uuid) asset-type)))))
 
 (defn- remote-block-ops=>remote-asset-ops
   [db-before remove-ops]
@@ -68,18 +68,31 @@
              (not-empty (remote-block-ops=>remote-asset-ops db-before remove-ops))]
     (reset! *remote-asset-updates asset-update-ops)))
 
-(defn emit-remote-asset-updates-from-push-asset-upload-updates
-  [db push-asset-upload-updates-message]
-  (let [{:keys [uploaded-assets]} push-asset-upload-updates-message]
-    (when-let [asset-update-ops
-               (not-empty
-                (keep (fn [[asset-uuid _remote-metadata]]
-                        ;; TODO: compare checksum in remote-metadata
-                        (when (some? (d/entity db [:block/uuid asset-uuid]))
-                          {:op :update-asset
-                           :block/uuid asset-uuid}))
-                      uploaded-assets))]
-      (reset! *remote-asset-updates asset-update-ops))))
+(defn new-task--emit-remote-asset-updates-from-push-asset-upload-updates
+  [repo db push-asset-upload-updates-message]
+  (m/sp
+    (let [{:keys [uploaded-assets]} push-asset-upload-updates-message]
+      (when-let [asset-update-ops
+                 (->> uploaded-assets
+                      (map
+                       (fn [[asset-uuid remote-metadata]]
+                         (m/sp
+                           (let [ent (d/entity db [:block/uuid asset-uuid])
+                                 asset-type (:logseq.property.asset/type ent)
+                                 local-checksum (:logseq.property.asset/checksum ent)
+                                 remote-checksum (get remote-metadata "checksum")]
+                             (when (or (and local-checksum remote-checksum
+                                            (not= local-checksum remote-checksum))
+                                       (and asset-type
+                                            (nil? (m/? (new-task--get-asset-file-metadata
+                                                        repo asset-uuid asset-type)))))
+                               {:op :update-asset
+                                :block/uuid asset-uuid})))))
+                      (apply m/join vector)
+                      m/?
+                      (remove nil?)
+                      not-empty)]
+        (reset! *remote-asset-updates asset-update-ops)))))
 
 (defn- create-mixed-flow
   "Return a flow that emits different events:
