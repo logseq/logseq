@@ -56,9 +56,10 @@
    (fn [remove-op]
      (let [block-uuid (:block-uuid remove-op)]
        (when-let [ent (d/entity db-before [:block/uuid block-uuid])]
-         (when (:logseq.property.asset/checksum ent)
+         (when-let [asset-type (:logseq.property.asset/type ent)]
            {:op :remove-asset
-            :block/uuid block-uuid}))))
+            :block/uuid block-uuid
+            :logseq.property.asset/type asset-type}))))
    remove-ops))
 
 (defn emit-remote-asset-updates-from-block-ops
@@ -179,10 +180,11 @@
                                        (when (= :update-asset (:op op))
                                          (:block/uuid op)))
                                      asset-update-ops)
-            remove-asset-uuids (keep (fn [op]
-                                       (when (= :remove-asset (:op op))
-                                         (:block/uuid op)))
-                                     asset-update-ops)
+            remove-asset-uuid->asset-type
+            (into {} (keep (fn [op]
+                             (when (= :remove-asset (:op op))
+                               [(:block/uuid op) (:logseq.property.asset/type op)])))
+                  asset-update-ops)
             asset-uuid->asset-type (into {}
                                          (keep (fn [asset-uuid]
                                                  (when-let [tp (:logseq.property.asset/type
@@ -197,8 +199,8 @@
                                             :asset-uuids (keys asset-uuid->asset-type)}))
                    :asset-uuid->url))]
         (prn :xxx-pull-remote-asset-updates asset-uuid->asset-type asset-uuid->url)
-        (doseq [asset-uuid remove-asset-uuids]
-          (prn :TODO-delete-asset asset-uuid))
+        (doseq [[asset-uuid asset-type] remove-asset-uuid->asset-type]
+          (c.m/<? (.unlinkAsset ^js @worker-state/*main-thread repo (str asset-uuid) asset-type)))
         (doseq [[asset-uuid get-url] asset-uuid->url]
           (prn :start-download-asset asset-uuid)
           (let [r (ldb/read-transit-str

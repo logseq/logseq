@@ -95,6 +95,8 @@
     (assets-handler/<read-asset repo asset-block-id asset-type))
   (writeAsset [_this repo asset-block-id asset-type data]
     (assets-handler/<write-asset repo asset-block-id asset-type data))
+  (unlinkAsset [_this repo asset-block-id asset-type]
+    (assets-handler/<unlink-asset repo asset-block-id asset-type))
   (get-all-asset-file-paths [_this repo]
     (with-write-transit-str
       (assets-handler/<get-all-asset-file-paths repo)))
