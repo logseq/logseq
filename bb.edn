@@ -89,6 +89,10 @@
    :task (apply shell {:dir "deps/graph-parser" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq -cp src:../outliner/src script/db_import.cljs" *command-line-args*)}
 
+  dev:db-import-many
+  {:doc "Import multiple file graphs to db graphs"
+   :task logseq.tasks.dev/db-import-many}
+
   dev:db-datoms
   {:doc "Write db's datoms to a file"
    :requires ([babashka.fs :as fs])
