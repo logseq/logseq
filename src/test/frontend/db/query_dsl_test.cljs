@@ -183,6 +183,60 @@ prop-d:: [[nada]]"}])
            (map :block/title (dsl-query "(property \"zzz name!\")")))
         "filter can handle property name")))
 
+(when js/process.env.DB_GRAPH
+  (deftest property-default-type-default-value-queries
+    (load-test-files-for-db-graph
+     {:properties
+      {:default {:block/schema {:type :default}
+                 :build/properties
+                 {:logseq.property/default-value "foo"}
+                 :build/properties-ref-types {:entity :number}}}
+      :classes {:Class1 {:build/schema-properties [:default]}}
+      :pages-and-blocks
+      [{:page {:block/title "page1"}
+        :blocks [{:block/title "b1"
+                  :build/properties {:default "foo"}}
+                 {:block/title "b2"
+                  :build/properties {:default "bar"}}
+                 {:block/title "b3"
+                  :build/tags [:Class1]}]}]})
+
+    (is (= ["b3" "b2" "b1"]
+           (map :block/title (dsl-query "(property :user.property/default)")))
+        "Blocks with any :default property or tagged with a tag that has that default-value property")
+    (is (= ["b1" "b3"]
+           (map :block/title (dsl-query "(property :user.property/default \"foo\")")))
+        "Blocks with :default property value or tagged with a tag that has that default-value property value")
+    (is (= ["b2"]
+           (map :block/title (dsl-query "(property :user.property/default \"bar\")")))
+        "Blocks with :default property value and not tagged with a tag that has that default-value property value"))
+
+  (deftest property-checkbox-type-default-value-queries
+    (load-test-files-for-db-graph
+     {:properties
+      {:checkbox {:block/schema {:type :checkbox}
+                  :build/properties
+                  {:logseq.property/checkbox-default-value true}}}
+      :classes {:Class1 {:build/schema-properties [:checkbox]}}
+      :pages-and-blocks
+      [{:page {:block/title "page1"}
+        :blocks [{:block/title "b1"
+                  :build/properties {:checkbox true}}
+                 {:block/title "b2"
+                  :build/properties {:checkbox false}}
+                 {:block/title "b3"
+                  :build/tags [:Class1]}]}]})
+
+    (is (= ["b3" "b2" "b1"]
+           (map :block/title (dsl-query "(property :user.property/checkbox)")))
+        "Blocks with any :checkbox property or tagged with a tag that has that default-value property")
+    (is (= ["b1" "b3"]
+           (map :block/title (dsl-query "(property :user.property/checkbox true)")))
+        "Blocks with :checkbox property value or tagged with a tag that has that default-value property value")
+    (is (= ["b2"]
+           (map :block/title (dsl-query "(property :user.property/checkbox false)")))
+        "Blocks with :checkbox property value and not tagged with a tag that has that default-value property value")))
+
 (deftest block-property-query-performance
   (let [pages (->> (repeat 10 {:tags ["tag1" "tag2"]})
                    (map-indexed (fn [idx {:keys [tags]}]
