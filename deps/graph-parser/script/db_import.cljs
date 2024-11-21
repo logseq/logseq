@@ -41,7 +41,7 @@
           _ (fsp/mkdir parent-dir #js {:recursive true})]
     (fsp/copyFile (:path file) (node-path/join parent-dir (node-path/basename (:path file))))))
 
-(defn- notify-user [m]
+(defn- notify-user [{:keys [continue]} m]
   (println (:msg m))
   (when (:ex-data m)
     (println "Ex-data:" (pr-str (dissoc (:ex-data m) :error)))
@@ -56,13 +56,14 @@
                          (str " calls #'" (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name]))))
                  (reverse stack))))
       (println (some-> (get-in m [:ex-data :error]) .-stack))))
-  (when (= :error (:level m))
+  (when (and (= :error (:level m)) (not continue))
     (js/process.exit 1)))
 
-(def default-export-options
+(defn default-export-options
+  [options]
   {;; common options
    :rpath-key ::rpath
-   :notify-user notify-user
+   :notify-user (partial notify-user options)
    :<read-file <read-file
    ;; :set-ui-state prn
    ;; config file options
@@ -78,7 +79,7 @@
         config-file (first (filter #(string/ends-with? (:path %) "logseq/config.edn") *files))
         _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
         options (merge options
-                       default-export-options
+                       (default-export-options options)
                         ;; asset file options
                        {:<copy-asset (fn copy-asset [file]
                                        (<copy-asset-file file db-graph-dir file-graph-dir))})]
@@ -94,7 +95,7 @@
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [file conn {:keys [files] :as options}]
-  (let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge options default-export-options))
+  (let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge options (default-export-options options)))
         files' (mapv #(hash-map :path %)
                      (into [file] (map resolve-path files)))]
     (p/let [_ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
@@ -106,6 +107,8 @@
           :desc "Print help"}
    :verbose {:alias :v
              :desc "Verbose mode"}
+   :continue {:alias :c
+              :desc "Continue past import failures"}
    :all-tags {:alias :a
               :desc "All tags convert to classes"}
    :tag-classes {:alias :t
@@ -138,7 +141,7 @@
         file-graph' (resolve-path file-graph)
         conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
         directory? (.isDirectory (fs/statSync file-graph'))
-        user-options (cond-> (merge {:all-tags false} (dissoc options :verbose :files :help))
+        user-options (cond-> (merge {:all-tags false} (dissoc options :verbose :files :help :continue))
                        ;; coerce option collection into strings
                        (:tag-classes options)
                        (update :tag-classes (partial mapv str))
@@ -147,7 +150,7 @@
         _ (when (:verbose options) (prn :options user-options))
         options' (merge {:user-options user-options
                          :graph-name db-name}
-                        (select-keys options [:files :verbose]))]
+                        (select-keys options [:files :verbose :continue]))]
     (p/let [{:keys [import-state]}
             (if directory?
               (import-file-graph-to-db file-graph' (node-path/join dir db-name) conn options')
