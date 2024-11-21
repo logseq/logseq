@@ -19,9 +19,12 @@
 ;; ============
 
 (def dsl-query*
-  "When $EXAMPLE set, prints query result of build query. Useful for
-   documenting examples and debugging"
-  (if (some? js/process.env.EXAMPLE)
+  "Overrides dsl-query/query with ENV variables. When $EXAMPLE is set, prints query
+  result of build query. This is useful for documenting examples and debugging.
+   When $DB_QUERY_TYPE is set, runs query tests against other versions of simple query e.g.
+   more basic property rules"
+  (cond
+    (some? js/process.env.EXAMPLE)
     (fn dsl-query-star [& args]
       (let [old-build-query query-dsl/build-query]
         (with-redefs [query-dsl/build-query
@@ -30,6 +33,24 @@
                           (println "EXAMPLE:" (pr-str (:query res)))
                           res))]
           (apply query-dsl/query args))))
+    (some? js/process.env.DB_QUERY_TYPE)
+    (fn dsl-query-star [& args]
+      (let [old-build-property @#'query-dsl/build-property]
+        (with-redefs [query-dsl/build-property
+                      (fn [& args']
+                        (let [m (apply old-build-property args')
+                              m' (cond
+                                   (= (:rules m) [:simple-query-property])
+                                   {:rules [:property]
+                                    :query (apply list 'property (rest (:query m)))}
+                                   (= (:rules m) [:has-simple-query-property])
+                                   {:rules [:has-property]
+                                    :query (apply list 'has-property (rest (:query m)))}
+                                   :else
+                                   m)]
+                          m'))]
+          (apply query-dsl/query args))))
+    :else
     query-dsl/query))
 
 (defn- ->smart-query
@@ -183,7 +204,7 @@ prop-d:: [[nada]]"}])
            (map :block/title (dsl-query "(property \"zzz name!\")")))
         "filter can handle property name")))
 
-(when js/process.env.DB_GRAPH
+(when (and js/process.env.DB_GRAPH (not js/process.env.DB_QUERY_TYPE))
   (deftest property-default-type-default-value-queries
     (load-test-files-for-db-graph
      {:properties
