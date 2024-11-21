@@ -206,13 +206,6 @@
          [?prop-e :db/valueType :db.type/ref]
          (property-default-value ?b ?prop-e :logseq.property/default-value ?val)))]]
 
-    :tags
-    '[(tags ?b ?tags)
-      [?b :block/tags ?t]
-      [?t :block/name ?tag]
-      [(missing? $ ?b :block/link)]
-      [(contains? ?tags ?tag)]]
-
     :object-has-class-property
     '[(object-has-class-property? ?b ?prop)
       [?prop-e :db/ident ?prop]
@@ -228,8 +221,9 @@
             (or [?prop-e :logseq.property/default-value _]
                 [?prop-e :logseq.property/checkbox-default-value _])))]
 
-    :has-property
-    '[(has-property ?b ?prop)
+    ;; Checks if a property exists for simple queries. Supports default values
+    :has-simple-query-property
+    '[(has-simple-query-property ?b ?prop)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
       (has-property-or-default-value? ?b ?prop)
@@ -237,15 +231,46 @@
       [(get ?prop-schema :public? true) ?public]
       [(= true ?public)]]
 
-    ;; Same as has-property except it returns public and private properties like :block/title
-    :has-private-property
-    '[(has-private-property ?b ?prop)
+    ;; Same as has-simple-query-property except it returns public and private properties like :block/title
+    :has-private-simple-query-property
+    '[(has-private-simple-query-property ?b ?prop)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
       (has-property-or-default-value? ?b ?prop)]
 
+    ;; Checks if a property exists for any features that are not simple queries
+    :has-property
+    '[(has-property ?b ?prop)
+      [?b ?prop _]
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/type "property"]
+      [?prop-e :block/schema ?prop-schema]
+      [(get ?prop-schema :public? true) ?public]
+      [(= true ?public)]]
+
+    ;; Checks if a property has a value for any features that are not simple queries
     :property
     '[(property ?b ?prop ?val)
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/type "property"]
+      [?prop-e :block/schema ?prop-schema]
+      [(get ?prop-schema :public? true) ?public]
+      [(= true ?public)]
+      [?b ?prop ?pv]
+      (or
+       ;; non-ref value
+       (and
+        [(missing? $ ?prop-e :db/valueType)]
+        [?b ?prop ?val])
+       ;; ref value
+       (and
+        [?prop-e :db/valueType :db.type/ref]
+        (or [?pv :block/title ?val]
+            [?pv :property.value/content ?val])))]
+
+    ;; Checks if a property has a value for simple queries. Supports default values
+    :simple-query-property
+    '[(simple-query-property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
       [?prop-e :block/schema ?prop-schema]
@@ -254,12 +279,19 @@
       [(= true ?public)]
       (property-value ?b ?prop-e ?val)]
 
-;; Same as property except it returns public and private properties like :block/title
-    :private-property
-    '[(private-property ?b ?prop ?val)
+    ;; Same as property except it returns public and private properties like :block/title
+    :private-simple-query-property
+    '[(private-simple-query-property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
       (property-value ?b ?prop-e ?val)]
+
+    :tags
+    '[(tags ?b ?tags)
+      [?b :block/tags ?t]
+      [?t :block/name ?tag]
+      [(missing? $ ?b :block/link)]
+      [(contains? ?tags ?tag)]]
 
     :task
     '[(task ?b ?statuses)
@@ -281,13 +313,13 @@
    :priority #{:property}
    :property-missing-value #{:object-has-class-property}
    :has-property-or-default-value #{:object-has-class-property}
-   :has-property #{:has-property-or-default-value}
-   :has-private-property #{:has-property-or-default-value}
+   :has-simple-query-property #{:has-property-or-default-value}
+   :has-private-simple-query-property #{:has-property-or-default-value}
    :property-default-value #{:existing-property-value :property-missing-value}
    :property-checkbox-default-value #{:existing-property-value :property-missing-value}
    :property-value #{:property-default-value :property-checkbox-default-value}
-   :property #{:property-value}
-   :has-propeorty #{}})
+   :simple-query-property #{:property-value}
+   :private-simple-query-property #{:property-value}})
 
 (defn- get-full-deps
   [deps rules-deps]
