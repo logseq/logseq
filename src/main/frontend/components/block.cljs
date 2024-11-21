@@ -3286,6 +3286,7 @@
         editing? (or (state/sub-editing? [container-id (:block/uuid block)])
                      (state/sub-editing? [:unknown-container (:block/uuid block)]))
         table? (:table? config*)
+        sidebar? (:sidebar? config*)
         property? (:property? config*)
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
@@ -3454,7 +3455,9 @@
      (when-not (:table? config)
        (query-property-cp block config collapsed?))
 
-     (when (and db-based? (not collapsed?) (not (or table? property?)))
+     (when (and db-based?
+             (or sidebar? (not collapsed?))
+             (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])
 
