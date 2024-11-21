@@ -27,7 +27,7 @@
               [[:block/updated-at "[\"~#'\",1724836490810]" true]
                [:block/created-at "[\"~#'\",1724836490810]" true]
                [:block/title "[\"~#'\",\"block1\"]" true]]]}
-           (set (map helper/simplify-client-op (client-op/get-all-ops const/downloaded-test-repo)))))))
+           (set (map helper/simplify-client-op (client-op/get-all-block-ops const/downloaded-test-repo)))))))
    :client2 nil})
 
 (def ^:private step1
