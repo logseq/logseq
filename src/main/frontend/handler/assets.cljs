@@ -267,10 +267,10 @@
 
 (defn <unlink-asset
   [repo asset-block-id asset-type]
-  (let [repo-dir (config/get-repo-dir repo)
-        file-path (path/path-join common-config/local-assets-dir
+  (let [file-path (path/path-join (config/get-repo-dir repo)
+                                  common-config/local-assets-dir
                                   (str asset-block-id "." asset-type))]
-    (fs/unlink! repo-dir file-path {})))
+    (p/catch (fs/unlink! repo file-path {}) (constantly nil))))
 
 (defn new-task--rtc-upload-asset
   [repo asset-block-uuid-str asset-type checksum put-url]
