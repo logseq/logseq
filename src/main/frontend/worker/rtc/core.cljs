@@ -188,7 +188,8 @@
                         (m/? (r.client/new-task--pull-remote-data
                               repo conn graph-uuid date-formatter get-ws-create-task add-log-fn)))))
                :remote-asset-update
-               (r.asset/emit-remote-asset-updates-from-push-asset-upload-updates @conn (:value event))
+               (m/? (r.asset/new-task--emit-remote-asset-updates-from-push-asset-upload-updates
+                     repo @conn (:value event)))
 
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
