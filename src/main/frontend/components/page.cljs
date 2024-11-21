@@ -485,6 +485,7 @@
        {:page-title? true
         :page-title-actions-cp (when (and with-actions? (not= (:db/id (state/get-edit-block)) (:db/id page))) db-page-title-actions)
         :hide-title? sidebar?
+        :sidebar? sidebar?
         :hide-children? true
         :container-id container-id
         :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))}
@@ -610,7 +611,7 @@
                    :on-mouse-leave (fn [e]
                                      (page-mouse-leave e *control-show?))}
                   (page-blocks-collapse-control title *control-show? *all-collapsed?)])
-               (when (and (not whiteboard?) (not sidebar?) (ldb/page? page))
+               (when (and (not whiteboard?) (ldb/page? page))
                  (if db-based?
                    (db-page-title page whiteboard-page? sidebar? (:container-id state))
                    (page-title-cp page {:journal? journal?
@@ -622,7 +623,7 @@
               (db-page/configure-property page))
 
             (when (and db-based? class-page?)
-              (objects/class-objects page (:current-page? option)))
+              (objects/class-objects page {:current-page? option :sidebar? sidebar?}))
 
             (when (and db-based? (ldb/property? page))
               (objects/property-related-objects page (:current-page? option)))

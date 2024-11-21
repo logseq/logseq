@@ -197,14 +197,16 @@
                                                        (set-data! (get-class-objects class))
                                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
                                                          (f {})))))})]
-        {:disable-on-pointer-down? true})])))
+        {:disable-on-pointer-down? true
+         :default-collapsed? (:sidebar? config)})])))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
-  [state class current-page?]
+  [state class {:keys [current-page? sidebar?]}]
   (when class
     (let [class (db/sub-block (:db/id class))
           config {:container-id (:container-id state)
-                  :current-page? current-page?}
+                  :current-page? current-page?
+                  :sidebar? sidebar?}
           properties (outliner-property/get-class-properties class)
           repo (state/get-current-repo)
           objects (->> (db-model/sub-class-objects repo (:db/id class))
