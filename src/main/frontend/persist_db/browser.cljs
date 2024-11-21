@@ -103,10 +103,10 @@
   (get-asset-file-metadata [_this repo asset-block-id asset-type]
     (with-write-transit-str
       (assets-handler/<get-asset-file-metadata repo asset-block-id asset-type)))
-  (rtc-upload-asset [_this repo asset-block-uuid-str asset-type put-url]
+  (rtc-upload-asset [_this repo asset-block-uuid-str asset-type checksum put-url]
     (with-write-transit-str
       (js/Promise.
-       (assets-handler/new-task--rtc-upload-asset repo asset-block-uuid-str asset-type put-url))))
+       (assets-handler/new-task--rtc-upload-asset repo asset-block-uuid-str asset-type checksum put-url))))
   (rtc-download-asset [_this repo asset-block-uuid-str asset-type get-url]
     (with-write-transit-str
       (js/Promise.
