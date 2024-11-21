@@ -129,34 +129,40 @@
                                   (when (contains? asset-op :remove-asset)
                                     (:block/uuid asset-op)))
                                 asset-ops)
-            asset-uuid->asset-type (into {}
-                                         (keep (fn [asset-uuid]
-                                                 (when-let [tp (:logseq.property.asset/type
-                                                                (d/entity @conn [:block/uuid asset-uuid]))]
-                                                   [asset-uuid tp])))
-                                         upload-asset-uuids)
+            asset-uuid->asset-type+checksum
+            (into {}
+                  (keep
+                   (fn [asset-uuid]
+                     (let [ent (d/entity @conn [:block/uuid asset-uuid])]
+                       (when-let [tp (:logseq.property.asset/type ent)]
+                         (when-let [checksum (:logseq.property.asset/checksum ent)]
+                           [asset-uuid [tp checksum]])))))
+                  upload-asset-uuids)
             asset-uuid->url
-            (when (seq asset-uuid->asset-type)
+            (when (seq asset-uuid->asset-type+checksum)
               (->> (m/? (ws-util/send&recv get-ws-create-task
                                            {:action "get-assets-upload-urls"
                                             :graph-uuid graph-uuid
                                             :asset-uuid->metadata
-                                            (into {} (map (fn [asset-uuid] [asset-uuid {"checksum" "TEST-CHECKSUM"}]))
-                                                  (keys asset-uuid->asset-type))}))
+                                            (into {}
+                                                  (map (fn [[asset-uuid [asset-type checksum]]]
+                                                         [asset-uuid {"checksum" checksum "type" asset-type}]))
+                                                  asset-uuid->asset-type+checksum)}))
                    :asset-uuid->url))]
-        (prn :xxx-push-local-asset-updates asset-ops asset-uuid->url asset-uuid->asset-type)
+        (prn :xxx-push-local-asset-updates asset-ops (keys asset-uuid->url))
         (doseq [[asset-uuid put-url] asset-uuid->url]
           (prn :start-upload-asset asset-uuid)
-          (let [r (ldb/read-transit-str
+          (let [[asset-type checksum] (get asset-uuid->asset-type+checksum asset-uuid)
+                r (ldb/read-transit-str
                    (c.m/<?
                     (.rtc-upload-asset
                      ^js @worker-state/*main-thread
-                     repo (str asset-uuid) (get asset-uuid->asset-type asset-uuid) put-url)))]
+                     repo (str asset-uuid) asset-type checksum put-url)))]
             (when (:ex-data r)
               (throw (ex-info "upload asset failed" r)))
             (d/transact! conn
                          [{:block/uuid asset-uuid
-                           :logseq.property.asset/remote-metadata {:checksum "TEST-CHECKSUM"}}]
+                           :logseq.property.asset/remote-metadata {:checksum checksum :type asset-type}}]
                          ;; Don't generate rtc ops again, (block-ops & asset-ops)
                          {:persist-op? false})
             (client-op/remove-asset-op repo asset-uuid)))

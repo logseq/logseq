@@ -273,11 +273,13 @@
     (fs/unlink! repo-dir file-path {})))
 
 (defn new-task--rtc-upload-asset
-  [repo asset-block-uuid-str asset-type put-url]
+  [repo asset-block-uuid-str asset-type checksum put-url]
+  (assert (and asset-type checksum))
   (m/sp
     (let [asset-file (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
           {:keys [status] :as r}
-          (c.m/<? (http/put put-url {:headers {"x-amz-meta-checksum" "TEST-CHECKSUM"}
+          (c.m/<? (http/put put-url {:headers {"x-amz-meta-checksum" checksum
+                                               "x-amz-meta-type" asset-type}
                                      :body asset-file
                                      :with-credentials? false}))]
       (when-not (http/unexceptional-status? status)
