@@ -206,9 +206,10 @@
            (m/reduce {} nil)
            (m/?))
           (catch Cancelled e
-            (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))
             (add-log-fn :rtc.log/cancelled {})
-            (throw e)))))}))
+            (throw e))
+          (finally
+            (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))))))}))
 
 (def ^:private empty-rtc-loop-metadata
   {:graph-uuid nil
