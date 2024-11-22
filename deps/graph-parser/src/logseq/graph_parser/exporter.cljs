@@ -978,10 +978,12 @@
         ;; Fetch all named ents once per import file to speed up named lookups
         all-existing-page-uuids (get-all-existing-page-uuids @conn)
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
+        all-new-page-uuids (->> all-pages
+                                (remove #(all-existing-page-uuids (or (::original-name %) (:block/name %))))
+                                (map (juxt (some-fn ::original-name :block/name) :block/uuid))
+                                (into {}))
         ;; Stateful because new page uuids can occur via tags
-        page-names-to-uuids (atom (merge all-existing-page-uuids
-                                         (into {} (map (juxt (some-fn ::original-name :block/name) :block/uuid)
-                                                       (remove all-existing-page-uuids all-pages)))))
+        page-names-to-uuids (atom (merge all-existing-page-uuids all-new-page-uuids))
         per-file-state {:page-names-to-uuids page-names-to-uuids
                         :classes-tx (:classes-tx options)}
         all-pages-m (mapv #(handle-page-properties % @conn per-file-state all-pages options)
