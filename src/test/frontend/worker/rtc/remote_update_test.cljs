@@ -3,11 +3,13 @@
             [datascript.core :as d]
             [frontend.worker.rtc.remote-update :as subject]
             [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (deftest remote-op-value->tx-data-test
   (let [[block-uuid ref-uuid1 ref-uuid2] (repeatedly random-uuid)
-        db (d/empty-db db-schema/schema-for-db-based-graph)]
+        db (d/db-with (d/empty-db db-schema/schema-for-db-based-graph)
+                      (sqlite-create-graph/build-db-initial-data {}))]
     (testing ":block/title"
       (let [db (d/db-with db [{:block/uuid block-uuid
                                :block/title "local-content"}])
@@ -49,6 +51,16 @@
                (set (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value))))))
     (testing ":block/updated-at"
       (let [db (d/db-with db [{:block/uuid block-uuid
-                               :block/updated-at 1}])]
-        (is (= [[:db/retract 1 :block/updated-at 1]]
-               (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) {})))))))
+                               :block/updated-at 1}])
+            ent (d/entity db [:block/uuid block-uuid])]
+        (is (= [[:db/retract (:db/id ent) :block/updated-at]]
+               (#'subject/remote-op-value->tx-data db ent {})))))
+    (testing ":logseq.task/status, op-value don't have this attr, means remove this attr"
+      (let [db (d/db-with db [{:db/id "ref1"
+                               :block/uuid ref-uuid1}
+                              {:block/uuid block-uuid
+                               :logseq.task/status "ref1"}])
+            op-value {}
+            ent (d/entity db [:block/uuid block-uuid])]
+        (is (= [[:db/retract (:db/id ent) :logseq.task/status]]
+               (#'subject/remote-op-value->tx-data db ent op-value)))))))
