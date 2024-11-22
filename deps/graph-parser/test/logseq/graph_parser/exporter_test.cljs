@@ -194,7 +194,7 @@
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 9
+      (is (= 10
              (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
                                 :where [?b :block/title] [_ :block/page ?b] (not [?b :logseq.property/built-in?])] @conn)
                          (filter ldb/internal-page?))))
