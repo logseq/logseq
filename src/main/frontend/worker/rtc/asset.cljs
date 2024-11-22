@@ -162,7 +162,6 @@
                                                          [asset-uuid {"checksum" checksum "type" asset-type}]))
                                                   asset-uuid->asset-type+checksum)}))
                    :asset-uuid->url))]
-        (prn :xxx-push-local-asset-updates asset-ops (keys asset-uuid->url))
         (doseq [[asset-uuid put-url] asset-uuid->url]
           (prn :start-upload-asset asset-uuid)
           (let [[asset-type checksum] (get asset-uuid->asset-type+checksum asset-uuid)
@@ -217,7 +216,6 @@
                                             :graph-uuid graph-uuid
                                             :asset-uuids (keys asset-uuid->asset-type)}))
                    :asset-uuid->url))]
-        (prn :xxx-pull-remote-asset-updates asset-uuid->asset-type asset-uuid->url)
         (doseq [[asset-uuid asset-type] remove-asset-uuid->asset-type]
           (c.m/<? (.unlinkAsset ^js @worker-state/*main-thread repo (str asset-uuid) asset-type)))
         (doseq [[asset-uuid get-url] asset-uuid->url]
