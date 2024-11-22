@@ -9,16 +9,22 @@
   [entity-datoms]
   (apply max (map (fn [[_e _a _v t]] t) entity-datoms)))
 
+(defn- asset-related-attrs-changed?
+  [entity-datoms]
+  (some (fn [[_e a]] (= :logseq.property.asset/checksum a)) entity-datoms))
+
 (defn- entity-datoms=>ops
   [db-before db-after entity-datoms]
   (when-let [e (ffirst entity-datoms)]
     (let [ent-after (d/entity db-after e)
           ent-before (d/entity db-before e)]
       (cond
-        (some-> ent-after ldb/asset?)
+        (and (some-> ent-after ldb/asset?)
+             (asset-related-attrs-changed? entity-datoms))
         [[:update-asset (max-t entity-datoms) {:block-uuid (:block/uuid ent-after)}]]
 
-        (some-> ent-before ldb/asset?)
+        (and (some-> ent-before ldb/asset?)
+             (nil? ent-after))
         [[:remove-asset (max-t entity-datoms) {:block-uuid (:block/uuid ent-before)}]]))))
 
 (defn generate-asset-ops
