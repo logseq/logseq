@@ -365,15 +365,18 @@
       [true false]
       (let [remote-block-uuid (if (coll? remote-v) (first remote-v) remote-v)]
         (when (not= local-v remote-block-uuid)
-          (when-let [db-id (:db/id (d/entity db [:block/uuid remote-block-uuid]))]
-            [[:db/add e k db-id]])))
+          (if (nil? remote-block-uuid)
+            [[:db/retract e k]]
+            (when-let [db-id (:db/id (d/entity db [:block/uuid remote-block-uuid]))]
+              [[:db/add e k db-id]]))))
+
       [false false]
       (let [remote-v* (if (coll? remote-v)
                         (first (map ldb/read-transit-str remote-v))
                         (ldb/read-transit-str remote-v))]
         (when (not= local-v remote-v*)
           (if (nil? remote-v*)
-            [[:db/retract e k local-v]]
+            [[:db/retract e k]]
             [[:db/add e k remote-v*]])))
 
       [false true]
