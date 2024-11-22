@@ -85,8 +85,15 @@
        (swap! all-idents assoc (keyword class-name) (:db/ident m))
        (with-meta m {:new-class? true})))))
 
-(defn- find-or-gen-class-uuid [page-names-to-uuids page-name db-ident]
-  (or (get @page-names-to-uuids page-name)
+(defn- find-or-gen-class-uuid [page-names-to-uuids page-name db-ident & {:keys [temp-new-class?]}]
+  (or (if temp-new-class?
+        ;; First lookup by possible parent b/c page-names-to-uuids erroneously has the child name
+        ;; and full name. To not guess at the parent name we would need to save all properties-from-classes
+        (or (some #(when (string/ends-with? (key %) (str ns-util/parent-char page-name))
+                     (val %))
+                  @page-names-to-uuids)
+            (get @page-names-to-uuids page-name))
+        (get @page-names-to-uuids page-name))
       (let [new-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)]
         (swap! page-names-to-uuids assoc page-name new-uuid)
         new-uuid)))
@@ -128,7 +135,7 @@
     (let [class-m (find-or-create-class db new-class all-idents)
           class-m' (merge class-m
                           {:block/uuid
-                           (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m))})]
+                           (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m) {:temp-new-class? true})})]
       (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
       (assert (:block/uuid class-m') "Class must have a :block/uuid")
       [:block/uuid (:block/uuid class-m')])
