@@ -129,7 +129,7 @@
     (client-op/remove-asset-op repo asset-uuid)))
 
 (defn- new-task--push-local-asset-updates
-  [repo get-ws-create-task conn graph-uuid _add-log-fn]
+  [repo get-ws-create-task conn graph-uuid add-log-fn]
   (m/sp
     (when-let [asset-ops (not-empty (client-op/get-all-asset-ops repo))]
       (let [upload-asset-uuids (keep
@@ -162,8 +162,9 @@
                                                          [asset-uuid {"checksum" checksum "type" asset-type}]))
                                                   asset-uuid->asset-type+checksum)}))
                    :asset-uuid->url))]
+        (when (seq asset-uuid->url)
+          (add-log-fn :rtc.asset.log/upload-assets {:asset-uuids (keys asset-uuid->url)}))
         (doseq [[asset-uuid put-url] asset-uuid->url]
-          (prn :start-upload-asset asset-uuid)
           (let [[asset-type checksum] (get asset-uuid->asset-type+checksum asset-uuid)
                 r (ldb/read-transit-str
                    (c.m/<?
@@ -179,7 +180,7 @@
                          {:persist-op? false})
             (client-op/remove-asset-op repo asset-uuid)))
         (when (seq remove-asset-uuids)
-          (prn :start-delete-assets remove-asset-uuids)
+          (add-log-fn :rtc.asset.log/remove-assets {:asset-uuids remove-asset-uuids})
           (m/? (ws-util/send&recv get-ws-create-task
                                   {:action "delete-assets"
                                    :graph-uuid graph-uuid
@@ -191,7 +192,7 @@
                           (concat (keys asset-uuid->url) remove-asset-uuids))))))
 
 (defn- new-task--pull-remote-asset-updates
-  [repo get-ws-create-task conn graph-uuid _add-log-fn asset-update-ops]
+  [repo get-ws-create-task conn graph-uuid add-log-fn asset-update-ops]
   (m/sp
     (when (seq asset-update-ops)
       (let [update-asset-uuids (keep (fn [op]
@@ -218,6 +219,8 @@
                    :asset-uuid->url))]
         (doseq [[asset-uuid asset-type] remove-asset-uuid->asset-type]
           (c.m/<? (.unlinkAsset ^js @worker-state/*main-thread repo (str asset-uuid) asset-type)))
+        (when (seq asset-uuid->url)
+          (add-log-fn :rtc.asset.log/download-assets {:asset-uuids (keys asset-uuid->url)}))
         (doseq [[asset-uuid get-url] asset-uuid->url]
           (prn :start-download-asset asset-uuid)
           (let [r (ldb/read-transit-str
@@ -252,6 +255,7 @@
                  (not-empty
                   (map (fn [asset-uuid] {:op :update-asset :block/uuid asset-uuid})
                        (set/difference local-all-asset-uuids local-all-asset-file-uuids)))]
+        (add-log-fn :rtc.asset.log/initial-download-missing-assets-count {:count (count asset-update-ops)})
         (m/? (new-task--pull-remote-asset-updates
               repo get-ws-create-task conn graph-uuid add-log-fn asset-update-ops))))))
 
