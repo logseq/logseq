@@ -111,7 +111,10 @@
                    (and block (= type :checkbox))
                    (p/do!
                     (ui/hide-popups-until-preview-popup!)
-                    (pv/<add-property! block (:db/ident property) false {:exit-edit? true}))
+                    (let [value (if-some [value (:logseq.property/scalar-default-value property)]
+                                  value
+                                  false)]
+                      (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
                    (and block
                         (contains? #{:default :url} type)
                         (not (seq (:property/closed-values property))))
@@ -208,7 +211,10 @@
              (ui/hide-popups-until-preview-popup!)
              (shui/popup-hide!)
              (shui/dialog-close!)
-             (pv/<add-property! block (:db/ident property) false {:exit-edit? true}))
+             (let [value (if-some [value (:logseq.property/scalar-default-value property)]
+                           value
+                           false)]
+               (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
 
             (and (contains? #{:default :url} type)
                  (not (seq (:property/closed-values property))))

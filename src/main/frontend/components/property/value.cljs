@@ -179,10 +179,7 @@
               (when (seq (remove #{(:db/id block)} (map :db/id block)))
                 (property-handler/batch-set-block-property! repo block-ids property-id (:db/id new-block)))
               new-block)
-            (let [value (if-some [value (:logseq.property/scalar-default-value property)]
-                          value
-                          property-value)]
-              (property-handler/batch-set-block-property! repo block-ids property-id value)))))
+            (property-handler/batch-set-block-property! repo block-ids property-id property-value))))
       (when exit-edit?
         (ui/hide-popups-until-preview-popup!)
         (shui/dialog-close!))
