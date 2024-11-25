@@ -73,9 +73,10 @@
 default = false")
 
 (defn- add-missing-properties-to-typed-display-blocks
-  "Add missing properties for those two cases:
+  "Add missing properties for these cases:
   1. Add corresponding tag when invoking commands like /code block.
-  2. Add properties when tagging a block."
+  2. Add properties when tagging a block.
+  3. Add properties when removing a tag from a block"
   [db datoms]
   (mapcat
    (fn [d]
@@ -85,7 +86,12 @@ default = false")
          [[:db/add (:e d) :block/tags tag]])
 
        (and (= (:a d) :block/tags)
-            (contains? ldb/node-display-classes (:db/ident (d/entity db (:v d))))
+            (contains? ldb/node-display-type-classes (:db/ident (d/entity db (:v d))))
+            (false? (:added d)))
+       [[:db/retract (:e d) :logseq.property.node/display-type]]
+
+       (and (= (:a d) :block/tags)
+            (contains? ldb/node-display-type-classes (:db/ident (d/entity db (:v d))))
             (:added d))
        (when-let [display-type (ldb/get-display-type-by-class-ident (:db/ident (d/entity db (:v d))))]
          [(cond->

@@ -591,7 +591,7 @@
   (or (string/includes? block-raw-title (str "#" (db-content/block-id->special-id-ref (:block/uuid tag))))
       (string/includes? block-raw-title (str "#" db-content/page-ref-special-chars (:block/uuid tag)))))
 
-(defonce node-display-classes
+(defonce node-display-type-classes
   #{:logseq.class/Code-block :logseq.class/Math-block :logseq.class/Quote-block})
 
 (defn get-class-ident-by-display-type
