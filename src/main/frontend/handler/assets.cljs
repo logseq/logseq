@@ -217,7 +217,7 @@
   []
   (when-let [path (config/get-current-repo-assets-root)]
     (p/let [result (p/catch (fs/readdir path {:path-only? true})
-                       (constantly nil))]
+                            (constantly nil))]
       (p/all (map (fn [path]
                     (p/let [data (fs/read-file path "" {})]
                       (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
@@ -276,24 +276,28 @@
   [repo asset-block-uuid-str asset-type checksum put-url]
   (assert (and asset-type checksum))
   (m/sp
-    (let [asset-file (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
-          {:keys [status] :as r}
-          (c.m/<? (http/put put-url {:headers {"x-amz-meta-checksum" checksum
-                                               "x-amz-meta-type" asset-type}
-                                     :body asset-file
-                                     :with-credentials? false}))]
-      (when-not (http/unexceptional-status? status)
-        {:ex-data {:type :rtc.exception/upload-asset-failed :data r}}))))
+   (let [asset-file (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
+         {:keys [status] :as r}
+         (c.m/<? (http/put put-url {:headers {"x-amz-meta-checksum" checksum
+                                              "x-amz-meta-type" asset-type}
+                                    :body asset-file
+                                    :with-credentials? false}))]
+     (when-not (http/unexceptional-status? status)
+       {:ex-data {:type :rtc.exception/upload-asset-failed :data r}}))))
 
 (defn new-task--rtc-download-asset
   [repo asset-block-uuid-str asset-type get-url]
+  (state/update-state! :rtc/asset-downloading? (fn [m] (assoc m asset-block-uuid-str true)))
   (m/sp
-    (let [{:keys [status body] :as r} (c.m/<? (http/get get-url {:with-credentials? false
-                                                                 :response-type :array-buffer}))]
-      (if-not (http/unexceptional-status? status)
-        {:ex-data {:type :rtc.exception/download-asset-failed :data r}}
-        (do (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body))
-            nil)))))
+   (let [{:keys [status body] :as r} (c.m/<? (http/get get-url {:with-credentials? false
+                                                                :response-type :array-buffer}))]
+     (if-not (http/unexceptional-status? status)
+       (do
+         (state/update-state! :rtc/asset-downloading? (fn [m] (assoc m asset-block-uuid-str false))) ; TODO: :failed
+         {:ex-data {:type :rtc.exception/download-asset-failed :data r}})
+       (do (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body))
+           (state/update-state! :rtc/asset-downloading? (fn [m] (assoc m asset-block-uuid-str false)))
+           nil)))))
 
 (comment
   ;; read asset
