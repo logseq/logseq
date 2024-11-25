@@ -95,8 +95,7 @@
            (page-handler/init-commands!)
 
            (watch-for-date!)
-           (when (util/electron?) (file-handler/watch-for-current-graph-dir!))
-           (state/pub-event! [:graph/restored (state/get-current-repo)])))
+           (when (util/electron?) (file-handler/watch-for-current-graph-dir!))))
         (p/catch (fn [error]
                    (log/error :exception error))))))
 
