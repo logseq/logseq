@@ -25,7 +25,11 @@
    :rtc.log/apply-remote-update
    :rtc.log/push-local-update
 
-   :rtc.asset.log/cancelled])
+   :rtc.asset.log/cancelled
+   :rtc.asset.log/upload-assets
+   :rtc.asset.log/download-assets
+   :rtc.asset.log/remove-assets
+   :rtc.asset.log/initial-download-missing-assets-count])
 
 (def ^:private rtc-log-type-validator (ma/validator rtc-log-type-schema))
 

@@ -10,6 +10,9 @@
 (sr/defkeyword :undo/repo->page-block-uuid->redo-ops
   "{repo {<page-block-uuid> [op1 op2 ...]}}")
 
+
+(defonce *main-thread (atom nil))
+
 (defonce *state (atom {:worker/object nil
 
                        :db/latest-transact-time {}

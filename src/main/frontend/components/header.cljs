@@ -150,7 +150,8 @@
                      :icon (ui/icon "bulb")})
 
                   ;; Disable login on Web until RTC is ready
-                  (when (and (not login?) (not util/web-platform?))
+                  (when (and (not login?) (or (not util/web-platform?)
+                                              config/dev?))
                     {:title (t :login)
                      :options {:on-click #(state/pub-event! [:user/login])}
                      :icon (ui/icon "user")})

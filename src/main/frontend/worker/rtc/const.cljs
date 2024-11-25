@@ -154,6 +154,7 @@
         [:op :keyword]
         [:block-uuid :uuid]]]]]]
    [:asset-uuid->url {:optional true} [:map-of :uuid :string]]
+   [:uploaded-assets {:optional true} [:map-of :uuid :map]]
    [:ex-data {:optional true} [:map [:type :keyword]]]
    [:ex-message {:optional true} :string]])
 
@@ -256,6 +257,12 @@
       [:graph-uuid :string]
       [:asset-uuid->metadata [:map-of :uuid [:map-of :string :string]]]]]
     ["get-assets-download-urls"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :string]
+      [:asset-uuids [:sequential :uuid]]]]
+    ["delete-assets"
      [:map
       [:req-id :string]
       [:action :string]

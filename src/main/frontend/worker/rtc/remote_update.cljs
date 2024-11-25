@@ -6,6 +6,7 @@
             [datascript.core :as d]
             [frontend.common.schema-register :as sr]
             [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
@@ -14,6 +15,7 @@
             [logseq.clj-fractional-indexing :as index]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.outliner.batch-tx :as batch-tx]
@@ -276,7 +278,7 @@
 
 (defn- affected-blocks->diff-type-ops
   [repo affected-blocks]
-  (let [unpushed-ops (client-op/get-all-ops repo)
+  (let [unpushed-ops (client-op/get-all-block-ops repo)
         affected-blocks-map* (if unpushed-ops
                                (update-remote-data-by-local-unpushed-ops
                                 affected-blocks unpushed-ops)
@@ -335,12 +337,16 @@
     :property/schema.classes
     :property.value/content})
 
+(def ^:private watched-attr-ns
+  (conj db-property/logseq-property-namespaces "logseq.class" "logseq.kv"))
+
 (defn- update-op-watched-attr?
   [attr]
   (or (contains? update-op-watched-attrs attr)
       (when-let [ns (namespace attr)]
-        (or (= "logseq.task" ns)
-            (string/ends-with? ns ".property")))))
+        (or (contains? watched-attr-ns ns)
+            (string/ends-with? ns ".property")
+            (string/ends-with? ns ".class")))))
 
 (defn- diff-block-kv->tx-data
   [db db-schema e k local-v remote-v]
@@ -359,15 +365,18 @@
       [true false]
       (let [remote-block-uuid (if (coll? remote-v) (first remote-v) remote-v)]
         (when (not= local-v remote-block-uuid)
-          (when-let [db-id (:db/id (d/entity db [:block/uuid remote-block-uuid]))]
-            [[:db/add e k db-id]])))
+          (if (nil? remote-block-uuid)
+            [[:db/retract e k]]
+            (when-let [db-id (:db/id (d/entity db [:block/uuid remote-block-uuid]))]
+              [[:db/add e k db-id]]))))
+
       [false false]
       (let [remote-v* (if (coll? remote-v)
                         (first (map ldb/read-transit-str remote-v))
                         (ldb/read-transit-str remote-v))]
         (when (not= local-v remote-v*)
           (if (nil? remote-v*)
-            [[:db/retract e k local-v]]
+            [[:db/retract e k]]
             [[:db/add e k remote-v*]])))
 
       [false true]
@@ -547,7 +556,8 @@
               sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)
               update-ops (vals update-ops-map)
               update-page-ops (vals update-page-ops-map)
-              remove-page-ops (vals remove-page-ops-map)]
+              remove-page-ops (vals remove-page-ops-map)
+              db-before @conn]
           (js/console.groupCollapsed "rtc/apply-remote-ops-log")
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
                                              :persist-op? false
@@ -561,6 +571,9 @@
           ;; NOTE: we cannot set :persist-op? = true when batch-tx/with-batch-tx-mode (already set to false)
           ;; and there're some transactions in `apply-remote-remove-ops` need to :persist-op?=true
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
+          ;; wait all remote-ops transacted into db,
+          ;; then start to check any asset-updates in remote
+          (r.asset/emit-remote-asset-updates-from-block-ops db-before remove-ops)
           (js/console.groupEnd)
 
           (client-op/update-local-tx repo remote-t)

@@ -27,14 +27,23 @@
 
 (def ^:private sentinel (js-obj))
 (defn- get-remote-updates
-  "Return a flow: receive messages from ws, and filter messages with :req-id=`push-updates` or `online-users-updated`."
+  "Return a flow: receive messages from ws,
+  and filter messages with :req-id=
+  - `push-updates`
+  - `online-users-updated`.
+  - `push-asset-upload-updates`"
   [get-ws-create-task]
   (m/ap
    (loop []
      (let [ws (m/? get-ws-create-task)
            x (try
                (m/?> (m/eduction
-                      (filter (fn [data] (contains? #{"online-users-updated" "push-updates"} (:req-id data))))
+                      (filter (fn [data]
+                                (contains?
+                                 #{"online-users-updated"
+                                   "push-updates"
+                                   "push-asset-upload-updates"}
+                                 (:req-id data))))
                       (ws/recv-flow ws)))
                (catch js/CloseEvent _
                  sentinel))]
@@ -50,7 +59,7 @@
         merge-flow (m/latest vector auto-push-flow clock-flow)]
     (m/eduction (filter first)
                 (map second)
-                (filter (fn [v] (when (pos? (client-op/get-unpushed-ops-count repo)) v)))
+                (filter (fn [v] (when (pos? (client-op/get-unpushed-block-ops-count repo)) v)))
                 merge-flow)))
 
 (defn- create-pull-remote-updates-flow
@@ -76,6 +85,7 @@
 (defn- create-mixed-flow
   "Return a flow that emits all kinds of events:
   `:remote-update`: remote-updates data from server
+  `:remote-asset-update`: remote asset-updates from server
   `:local-update-check`: event to notify to check if there're some new local-updates, then push to remote.
   `:online-users-updated`: online users info updated
   `:pull-remote-updates`: pull remote updates"
@@ -84,7 +94,8 @@
                              (map (fn [data]
                                     (case (:req-id data)
                                       "push-updates" {:type :remote-update :value data}
-                                      "online-users-updated" {:type :online-users-updated :value data})))
+                                      "online-users-updated" {:type :online-users-updated :value data}
+                                      "push-asset-upload-updates" {:type :remote-asset-update :value data})))
                              (get-remote-updates get-ws-create-task))
         local-updates-check-flow (m/eduction
                                   (map (fn [data] {:type :local-update-check :value data}))
@@ -150,7 +161,7 @@
         get-ws-create-task         (r.client/ensure-register-graph-updates
                                     get-ws-create-task graph-uuid repo conn *last-calibrate-t *online-users)
         {:keys [assets-sync-loop-task]}
-        (r.asset/create-assets-sync-loop get-ws-create-task graph-uuid conn)
+        (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid conn *auto-push?)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push?)]
     (assert (some? *current-ws))
     {:rtc-state-flow     (create-rtc-state-flow (create-ws-state-flow *current-ws))
@@ -161,40 +172,44 @@
      (holding-rtc-lock
       started-dfv
       (m/sp
-       (try
+        (try
           ;; init run to open a ws
-         (m/? get-ws-create-task)
-         (started-dfv true)
-         (reset! *assets-sync-loop-canceler
-                 (c.m/run-task assets-sync-loop-task :assets-sync-loop-task))
-         (->>
-          (let [event (m/?> mixed-flow)]
-            (case (:type event)
-              :remote-update
-              (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
-                   (catch :default e
-                     (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
-                       (m/? (r.client/new-task--pull-remote-data
-                             repo conn graph-uuid date-formatter get-ws-create-task add-log-fn)))))
+          (m/? get-ws-create-task)
+          (started-dfv true)
+          (reset! *assets-sync-loop-canceler
+                  (c.m/run-task assets-sync-loop-task :assets-sync-loop-task))
+          (->>
+           (let [event (m/?> mixed-flow)]
+             (case (:type event)
+               :remote-update
+               (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
+                    (catch :default e
+                      (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
+                        (m/? (r.client/new-task--pull-remote-data
+                              repo conn graph-uuid date-formatter get-ws-create-task add-log-fn)))))
+               :remote-asset-update
+               (m/? (r.asset/new-task--emit-remote-asset-updates-from-push-asset-upload-updates
+                     repo @conn (:value event)))
 
-              :local-update-check
-              (m/? (r.client/new-task--push-local-ops
-                    repo conn graph-uuid date-formatter
-                    get-ws-create-task add-log-fn))
+               :local-update-check
+               (m/? (r.client/new-task--push-local-ops
+                     repo conn graph-uuid date-formatter
+                     get-ws-create-task add-log-fn))
 
-              :online-users-updated
-              (reset! *online-users (:online-users (:value event)))
+               :online-users-updated
+               (reset! *online-users (:online-users (:value event)))
 
-              :pull-remote-updates
-              (m/? (r.client/new-task--pull-remote-data
-                    repo conn graph-uuid date-formatter get-ws-create-task add-log-fn))))
-          (m/ap)
-          (m/reduce {} nil)
-          (m/?))
-         (catch Cancelled e
-           (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))
-           (add-log-fn :rtc.log/cancelled {})
-           (throw e)))))}))
+               :pull-remote-updates
+               (m/? (r.client/new-task--pull-remote-data
+                     repo conn graph-uuid date-formatter get-ws-create-task add-log-fn))))
+           (m/ap)
+           (m/reduce {} nil)
+           (m/?))
+          (catch Cancelled e
+            (add-log-fn :rtc.log/cancelled {})
+            (throw e))
+          (finally
+            (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))))))}))
 
 (def ^:private empty-rtc-loop-metadata
   {:graph-uuid nil
@@ -294,27 +309,27 @@
 (def ^:private create-get-state-flow
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
-     (let [{rtc-lock :*rtc-lock :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *online-users]}
-           (m/?< rtc-loop-metadata-flow)]
-       (try
-         (when (and repo rtc-state-flow *rtc-auto-push? rtc-lock)
-           (m/?<
-            (m/latest
-             (fn [rtc-state rtc-auto-push? rtc-lock online-users pending-local-ops-count local-tx remote-tx]
-               {:graph-uuid graph-uuid
-                :user-uuid user-uuid
-                :unpushed-block-update-count pending-local-ops-count
-                :local-tx local-tx
-                :remote-tx remote-tx
-                :rtc-state rtc-state
-                :rtc-lock rtc-lock
-                :auto-push? rtc-auto-push?
-                :online-users online-users})
-             rtc-state-flow (m/watch *rtc-auto-push?) (m/watch rtc-lock) (m/watch *online-users)
-             (client-op/create-pending-ops-count-flow repo)
-             (rtc-log-and-state/create-local-t-flow graph-uuid)
-             (rtc-log-and-state/create-remote-t-flow graph-uuid))))
-         (catch Cancelled _))))))
+      (let [{rtc-lock :*rtc-lock :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *online-users]}
+            (m/?< rtc-loop-metadata-flow)]
+        (try
+          (when (and repo rtc-state-flow *rtc-auto-push? rtc-lock)
+            (m/?<
+             (m/latest
+              (fn [rtc-state rtc-auto-push? rtc-lock online-users pending-local-ops-count local-tx remote-tx]
+                {:graph-uuid graph-uuid
+                 :user-uuid user-uuid
+                 :unpushed-block-update-count pending-local-ops-count
+                 :local-tx local-tx
+                 :remote-tx remote-tx
+                 :rtc-state rtc-state
+                 :rtc-lock rtc-lock
+                 :auto-push? rtc-auto-push?
+                 :online-users online-users})
+              rtc-state-flow (m/watch *rtc-auto-push?) (m/watch rtc-lock) (m/watch *online-users)
+              (client-op/create-pending-block-ops-count-flow repo)
+              (rtc-log-and-state/create-local-t-flow graph-uuid)
+              (rtc-log-and-state/create-remote-t-flow graph-uuid))))
+          (catch Cancelled _))))))
 
 (defn new-task--get-debug-state
   []

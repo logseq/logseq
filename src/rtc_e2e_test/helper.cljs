@@ -103,7 +103,7 @@
     (let [r (m/? (m/timeout
                   (m/reduce (fn [_ v]
                               (when (and (= :rtc.log/push-local-update (:type v))
-                                         (empty? (client-op/get-all-ops const/downloaded-test-repo)))
+                                         (empty? (client-op/get-all-block-ops const/downloaded-test-repo)))
                                 (is (nil? (:ex-data v)))
                                 (reduced v)))
                             rtc-log-and-state/rtc-log-flow)
