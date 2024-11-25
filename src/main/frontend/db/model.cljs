@@ -821,10 +821,13 @@ independent of format as format specific heading characters are stripped"
 (defn get-property-related-objects
   [repo property-id]
   (when-let [property (db-utils/entity repo property-id)]
-    (->> (d/q '[:find [?objects ...]
-                :in $ ?prop
-                :where [?objects ?prop]]
+    (->> (d/q '[:find [?b ...]
+                :in $ % ?prop
+                :where
+                (has-property-or-default-value? ?b ?prop)]
               (conn/get-db repo)
+              (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
+                                   {:deps rules/rules-dependencies})
               (:db/ident property))
          (map #(db-utils/entity repo %)))))
 

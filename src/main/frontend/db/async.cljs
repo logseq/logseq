@@ -8,6 +8,7 @@
             [frontend.db.file-based.async :as file-async]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
+            [logseq.db.frontend.rules :as rules]
             [frontend.persist-db.browser :as db-browser]
             [datascript.core :as d]
             [frontend.db.react :as react]
@@ -269,9 +270,11 @@
   [graph property-ident]
   (<q graph {:transact-db? true}
       '[:find [(pull ?b [*]) ...]
-        :in $ ?property-ident
+        :in $ % ?prop
         :where
-        [?b ?property-ident]]
+        (has-property-or-default-value? ?b ?prop)]
+      (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
+                           {:deps rules/rules-dependencies})
       property-ident))
 
 (defn <get-tag-objects
