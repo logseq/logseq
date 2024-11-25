@@ -734,7 +734,9 @@
         delete-one-block? (or (= 1 (count top-level-blocks)) (= start-block end-block))]
     (when (seq top-level-blocks)
       (let [from-property (:logseq.property/created-from-property start-block)
-            default-value-property? (:logseq.property/default-value from-property)]
+            default-value-property? (and (:logseq.property/default-value from-property)
+                                         (not= (:db/id start-block)
+                                               (:db/id (:logseq.property/default-value from-property))))]
         (cond
           (and delete-one-block? default-value-property?)
           (let [datoms (d/datoms @conn :avet (:db/ident from-property) (:db/id start-block))

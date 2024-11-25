@@ -360,8 +360,15 @@
   [conn eid property-id]
   (throw-error-if-read-only-property property-id)
   (let [eid (->eid eid)
-        block (d/entity @conn eid)]
+        block (d/entity @conn eid)
+        property (d/entity @conn property-id)]
     (cond
+      (= (:logseq.property/default-value property) (get block property-id))
+      (ldb/transact! conn
+                     [{:db/id (:db/id block)
+                       property-id :logseq.property/empty-placeholder}]
+                     {:outliner-op :save-block})
+
       (and (ldb/class? block) (= property-id :logseq.property/parent))
       (ldb/transact! conn
                      [[:db/add (:db/id block) :logseq.property/parent :logseq.class/Root]]
