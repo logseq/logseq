@@ -2819,19 +2819,6 @@
     (when-not edit?
       [:div.more (ui/icon "dots-circle-horizontal" {:size 18})])]])
 
-(rum/defc block-content-size-observer
-  [*wrap-ref config]
-  (rum/use-effect!
-    (fn []
-      (when-let [^js el (and (:property? config) (rum/deref *wrap-ref))]
-        (util/schedule
-          (fn []
-            (let [w (.-clientWidth el)]
-              (dom/set-attr! el :data-width w)
-              (dom/set-style! el :width (str w ".5px"))))))
-      []))
-  [:<>])
-
 (rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
   (rum/local false ::hover?)
   {:init (fn [state]
@@ -2870,15 +2857,12 @@
         raw-mode-block (state/sub :editor/raw-mode-block)
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
-        config (assoc config :block-parent-id block-id)
-        *inner-el (rum/create-ref)]
+        config (assoc config :block-parent-id block-id)]
     [:div.block-content-or-editor-wrap
      {:class (when (:page-title? config) "ls-page-title-container")
       :data-node-type (some-> (:logseq.property.node/display-type block) name)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
-     (block-content-size-observer *inner-el config)
      [:div.block-content-or-editor-inner
-      {:ref *inner-el}
       [:div.flex.flex-1.flex-row.gap-1.items-center
        (if (and editor-box edit? (not type-block-editor?))
          [:div.editor-wrapper.flex.flex-1
