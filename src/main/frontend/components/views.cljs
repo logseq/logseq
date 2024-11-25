@@ -1074,28 +1074,38 @@
 
 (rum/defc table-view < rum/static
   [table option row-selection add-new-object! *scroller-ref]
-  (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))]
+  (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))
+        [ready? set-ready?] (rum/use-state false)
+        *rows-wrap (rum/use-ref nil)]
+
+    (rum/use-effect!
+      (fn [] (set-ready? true))
+      [])
+
     (shui/table
      (let [columns' (:columns table)
            rows (:rows table)]
        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
-        [:div.relative
-         (table-header table columns' option selected-rows)
+        {:ref *rows-wrap}
+        (when ready?
+          [:div.relative
+           (table-header table columns' option selected-rows)
 
-         (ui/virtualized-list
-          {:ref #(reset! *scroller-ref %)
-           :custom-scroll-parent (gdom/getElement "main-content-container")
-           :increase-viewport-by {:top 300 :bottom 300}
-           :compute-item-key (fn [idx]
-                               (let [block (nth rows idx)]
-                                 (str "table-row-" (:db/id block))))
-           :total-count (count rows)
-           :item-content (fn [idx]
-                           (let [row (nth rows idx)]
-                             (table-row table row columns' {} option)))})
+           (ui/virtualized-list
+             {:ref #(reset! *scroller-ref %)
+              :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
+                                      (gdom/getElement "main-content-container"))
+              :increase-viewport-by {:top 300 :bottom 300}
+              :compute-item-key (fn [idx]
+                                  (let [block (nth rows idx)]
+                                    (str "table-row-" (:db/id block))))
+              :total-count (count rows)
+              :item-content (fn [idx]
+                              (let [row (nth rows idx)]
+                                (table-row table row columns' {} option)))})
 
-         (when add-new-object!
-           (shui/table-footer (add-new-row table)))]]))))
+           (when add-new-object!
+             (shui/table-footer (add-new-row table)))])]))))
 
 (rum/defc list-view < rum/static
   [config view-entity result]

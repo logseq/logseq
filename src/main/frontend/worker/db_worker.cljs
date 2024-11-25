@@ -31,14 +31,14 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.op :as outliner-op]
+            [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]
-            [logseq.db.frontend.schema :as db-schema]
-            [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]))
+            [shadow.cljs.modern :refer [defclass]]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -915,7 +915,8 @@
     (worker-state/set-worker-object! obj)
     (file/<ratelimit-file-writes!)
     (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
-    (Comlink/expose obj)))
+    (Comlink/expose obj)
+    (reset! worker-state/*main-thread (Comlink/wrap js/self))))
 
 (comment
   (defn <remove-all-files!

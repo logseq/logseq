@@ -159,7 +159,7 @@
     (reset! *ref-pages ref-pages)
     (when (or (seq (:included filters)) (seq (:excluded filters)) (> filter-n 0))
       [:div.references.page-linked.flex-1.flex-row
-       [:div.content.pt-6
+       [:div.content.pt-2
         (references-cp page-entity *filters total filter-n filtered-ref-blocks' *ref-pages)]])))
 
 (rum/defcs references* < rum/reactive db-mixins/query

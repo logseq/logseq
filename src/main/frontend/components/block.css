@@ -276,6 +276,10 @@
         @apply w-5 h-5;
       }
     }
+
+    &.as-inline {
+      @apply inline;
+    }
   }
 
   &:has(.dsl-query), &:has(.embed-page) {

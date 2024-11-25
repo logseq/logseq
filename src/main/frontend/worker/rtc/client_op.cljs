@@ -40,12 +40,28 @@
      [:t :int]
      [:value [:map
               [:block-uuid :uuid]
-              [:av-coll [:sequential rtc-const/av-schema]]]]]]])
+              [:av-coll [:sequential rtc-const/av-schema]]]]]]
+
+   [:update-asset
+    [:catn
+     [:op :keyword]
+     [:t :int]
+     [:value [:map
+              [:block-uuid :uuid]]]]]
+   [:remove-asset
+    [:catn
+     [:op :keyword]
+     [:t :int]
+     [:value [:map
+              [:block-uuid :uuid]]]]]])
 
 (def ops-schema [:sequential op-schema])
 (def ops-coercer (ma/coercer ops-schema mt/json-transformer nil
                              #(do (prn ::bad-ops (:value %))
                                   (ma/-fail! ::ops-schema %))))
+
+(def ^:private block-op-types #{:move :remove :update-page :remove-page :update})
+(def ^:private asset-op-types #{:update-asset :remove-asset})
 
 (def schema-in-db
   "TODO: rename this db-name from client-op to client-metadata+op.
@@ -158,35 +174,33 @@
     (assert (some? conn) repo)
     (add-ops* conn ops)))
 
-(defn- get-all-op-datoms
-  [conn]
-  (->> (d/datoms @conn :eavt)
-       (group-by :e)))
-
-(defn- get-all-ops*
+(defn- get-all-block-ops*
   "Return e->op-map"
-  [conn]
-  (let [e->datoms (get-all-op-datoms conn)]
-    (into {}
-          (keep (fn [[e same-ent-datoms]]
-                  (let [op-map (into {} (map (juxt :a :v)) same-ent-datoms)]
-                    (when (:block/uuid op-map)
-                      [e op-map])))
-                e->datoms))))
+  [db]
+  (->> (d/datoms db :eavt)
+       (group-by :e)
+       (keep (fn [[e datoms]]
+               (let [op-map (into {}
+                                  (keep (fn [datom]
+                                          (let [a (:a datom)]
+                                            (when (or (= :block/uuid a) (contains? block-op-types a))
+                                              [a (:v datom)]))))
+                                  datoms)]
+                 (when (and (:block/uuid op-map)
+                            ;; count>1 = contains some `block-op-types`
+                            (> (count op-map) 1))
+                   [e op-map]))))
+       (into {})))
 
-(defn get&remove-all-ops*
+(defn get&remove-all-block-ops*
   [conn]
-  (let [e->op-map (get-all-ops* conn)
-        retract-all-tx-data (map (fn [e] [:db.fn/retractEntity e]) (keys e->op-map))]
+  (let [e->op-map (get-all-block-ops* @conn)
+        retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) block-op-types))
+                                    (keys e->op-map))]
     (d/transact! conn retract-all-tx-data)
     (vals e->op-map)))
 
-(defn get-all-ops
-  "Return coll of
-  {:block/uuid ...
-   :update ...
-   :move ...
-   ...}"
+(defn get-all-block-ops
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (mapcat
@@ -194,9 +208,9 @@
        (keep (fn [[k v]]
                (when (not= :block/uuid k) v))
              m))
-     (vals (get-all-ops* conn)))))
+     (vals (get-all-block-ops* @conn)))))
 
-(defn get&remove-all-ops
+(defn get&remove-all-block-ops
   "Return coll of
   {:block/uuid ...
    :update ...
@@ -204,12 +218,12 @@
    ...}"
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (get&remove-all-ops* conn)))
+    (get&remove-all-block-ops* conn)))
 
-(defn get-unpushed-ops-count
+(defn get-unpushed-block-ops-count
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (count (get-all-op-datoms conn))))
+    (count (get-all-block-ops* @conn))))
 
 (defn rtc-db-graph?
   "Is db-graph & RTC enabled"
@@ -218,11 +232,11 @@
        (or (exists? js/process)
            (some? (get-local-tx repo)))))
 
-(defn create-pending-ops-count-flow
+(defn create-pending-block-ops-count-flow
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (letfn [(datom-count [db]
-              (count (d/datoms db :avet :block/uuid)))]
+              (count (get-all-block-ops* db)))]
       (m/relieve
        (m/observe
         (fn ctor [emit!]
@@ -232,3 +246,69 @@
           (emit! (datom-count @conn))
           (fn dtor []
             (d/unlisten! conn :create-pending-ops-count-flow))))))))
+
+;;; asset ops
+(defn add-asset-ops
+  [repo asset-ops]
+  (let [conn (worker-state/get-client-ops-conn repo)
+        ops (ops-coercer asset-ops)]
+    (assert (some? conn) repo)
+    (letfn [(already-removed? [remove-op t]
+              (some-> remove-op second (> t)))
+            (update-after-remove? [update-op t]
+              (some-> update-op second (> t)))]
+      (doseq [op ops]
+        (let [[op-type t value] op
+              {:keys [block-uuid]} value
+              exist-block-ops-entity (d/entity @conn [:block/uuid block-uuid])
+              e (:db/id exist-block-ops-entity)]
+          (when-let [tx-data
+                     (not-empty
+                      (case op-type
+                        :update-asset
+                        (let [remove-asset-op (get exist-block-ops-entity :remove-asset)]
+                          (when-not (already-removed? remove-asset-op t)
+                            (cond-> [{:block/uuid block-uuid
+                                      :update-asset op}]
+                              remove-asset-op (conj [:db.fn/retractAttribute e :remove-asset]))))
+                        :remove-asset
+                        (let [update-asset-op (get exist-block-ops-entity :update-asset)]
+                          (when-not (update-after-remove? update-asset-op t)
+                            (cond-> [{:block/uuid block-uuid
+                                      :remove-asset op}]
+                              update-asset-op (conj [:db.fn/retractAttribute e :update-asset]))))))]
+            (d/transact! conn tx-data)))))))
+
+(defn- get-all-asset-ops*
+  [db]
+  (->> (d/datoms db :eavt)
+       (group-by :e)
+       (keep (fn [[e datoms]]
+               (let [op-map (into {}
+                                  (keep (fn [datom]
+                                          (let [a (:a datom)]
+                                            (when (or (= :block/uuid a) (contains? asset-op-types a))
+                                              [a (:v datom)]))))
+                                  datoms)]
+                 (when (and (:block/uuid op-map)
+                            ;; count>1 = contains some `asset-op-types`
+                            (> (count op-map) 1))
+                   [e op-map]))))
+       (into {})))
+
+(defn get-unpushed-asset-ops-count
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (count (get-all-asset-ops* @conn))))
+
+(defn get-all-asset-ops
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (vals (get-all-asset-ops* @conn))))
+
+(defn remove-asset-op
+  [repo asset-uuid]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (let [ent (d/entity @conn [:block/uuid asset-uuid])]
+      (when-let [e (:db/id ent)]
+        (d/transact! conn (map (fn [a] [:db.fn/retractAttribute e a]) asset-op-types))))))

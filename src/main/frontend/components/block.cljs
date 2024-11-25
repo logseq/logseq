@@ -2194,7 +2194,7 @@
         heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading ".block-title-wrap.as-heading"
-                             (when block-ref? ".inline")))
+                             (when block-ref? ".as-inline")))
                :span.block-title-wrap)]
     (->elem
      elem
