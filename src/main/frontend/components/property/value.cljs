@@ -127,11 +127,14 @@
                                          (not= (:db/id existing-value) (:db/id default-value)))
                     new-block-id (when-not existing-value? (db/new-block-id))
                     _ (when-not existing-value?
-                        (db-property-handler/create-property-text-block!
-                         (:db/id block)
-                         (:db/id property)
-                         value
-                         {:new-block-id new-block-id}))]
+                        (let [value' (if (and default-value (string? value) (string/blank? value))
+                                       (db-property/property-value-content default-value)
+                                       value)]
+                          (db-property-handler/create-property-text-block!
+                           (:db/id block)
+                           (:db/id property)
+                           value'
+                           {:new-block-id new-block-id})))]
               (if existing-value? existing-value (db/entity [:block/uuid new-block-id])))
             (p/let [new-block-id (db/new-block-id)
                     _ (db-property-handler/create-property-text-block!

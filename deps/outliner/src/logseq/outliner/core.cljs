@@ -20,8 +20,7 @@
             [logseq.outliner.tree :as otree]
             [logseq.outliner.validate :as outliner-validate]
             [malli.core :as m]
-            [malli.util :as mu]
-            [logseq.db.frontend.property :as db-property]))
+            [malli.util :as mu]))
 
 (def ^:private block-map
   (mu/optional-keys
