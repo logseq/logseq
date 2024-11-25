@@ -105,7 +105,8 @@
                        property-id
                        empty-id)]
       (if default-value-id
-        (conj result default-value-id)
+        ;; put default value the first
+        (concat [default-value-id] result)
         result))))
 
 (comment
