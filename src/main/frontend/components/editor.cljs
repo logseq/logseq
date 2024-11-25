@@ -738,6 +738,23 @@
          (some-> config :on-escape-editing
                  (apply [(str uuid) (= type :esc)])))))))
 
+(rum/defc editor-box-size-observer
+  [*wrap-ref _config]
+  (rum/use-effect!
+    (fn []
+      (let [^js wrap (rum/deref *wrap-ref)
+            ^js content-wrap (some-> wrap (.closest ".block-content-or-editor-inner"))]
+        (when-let [content-width (some-> content-wrap (.-dataset) (.-width))]
+          (dom/set-style! wrap :width (str (inc (js/parseInt content-width)) "px"))
+          ;; clear content wrap width
+          (fn []
+            (util/schedule
+              (fn []
+                (dom/set-attr! content-wrap :data-width (.-clientWidth content-wrap))
+                (dom/set-style! content-wrap :width "auto")))))))
+    [])
+  [:<>])
+
 (rum/defcs box < rum/reactive
   {:init (fn [state]
            (assoc state
@@ -761,7 +778,9 @@
   lifecycle/lifecycle
   [state {:keys [format block parent-block]} id config]
   (let [*ref (::ref state)
+        *wrap-ref (rum/create-ref)
         content (state/sub-edit-content (:block/uuid block))
+        property? (:property? config)
         heading-class (get-editor-style-class block content format)
         opts (cond->
               {:id                id
@@ -784,11 +803,15 @@
 
                true
                (merge (:editor-opts config)))]
-    [:div.editor-inner.flex.flex-1 {:class (if block "block-editor" "non-block-editor")}
-
+    [:div.editor-inner.flex.flex-1
+     {:class (str (if block "block-editor" "non-block-editor")
+               (when property? " as-property"))
+      :ref *wrap-ref}
      (ui/ls-textarea opts)
      (mock-textarea content)
      (command-popups id format)
 
      (when format
-       (image-uploader id format))]))
+       (image-uploader id format))
+     (when property?
+       (editor-box-size-observer *wrap-ref config))]))
