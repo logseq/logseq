@@ -246,3 +246,13 @@ html.is-native-ios {
     @apply pt-2;
   }
 }
+
+.add-button-link-wrap {
+  @apply invisible;
+}
+
+.show-add-button {
+  .add-button-link-wrap {
+    @apply visible;
+  }
+}
