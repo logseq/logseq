@@ -240,16 +240,17 @@
                                            config)
                             config (common-handler/config-with-document-mode hiccup-config)
                             blocks (if block? [block] (db/sort-by-order children block))]
-                        [:div
-                         (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
-                         (when-not (or config/publishing?
-                                       (let [last-child-id (model/get-block-deep-last-open-child-id (db/get-db) (:db/id (last blocks)))
-                                             block' (if last-child-id (db/entity last-child-id) (last blocks))]
-                                         (string/blank? (:block/title block'))))
+                        (let [add-button? (not (or config/publishing?
+                                                 (let [last-child-id (model/get-block-deep-last-open-child-id (db/get-db) (:db/id (last blocks)))
+                                                       block' (if last-child-id (db/entity last-child-id) (last blocks))]
+                                                   (string/blank? (:block/title block')))))]
+                          [:div
+                           {:class (when add-button? "show-add-button")}
+                           (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
                            (let [args (if block-id
                                         {:block-uuid block-id}
                                         {:page page-name})]
-                             (add-button args (:container-id config))))]))]
+                             (add-button args (:container-id config)))])))]
          (if (and db-based? (or (ldb/class? block) (ldb/property? block)))
            [:div.mt-4.ml-2.-mb-1
             (ui/foldable
