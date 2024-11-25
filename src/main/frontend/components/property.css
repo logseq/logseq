@@ -312,7 +312,9 @@ a.control-link {
     }
   }
   .editor-inner {
-    width: 120px;
+    textarea {
+      field-sizing: content;
+    }
   }
 }
 
