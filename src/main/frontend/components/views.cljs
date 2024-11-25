@@ -476,7 +476,7 @@
             (row-cell table row column render cell-opts idx first-col-rendered? set-first-col-rendered!))))
       columns))))
 
-(rum/defc table-row < rum/reactive (mixins/perf-measure-mixin "table row")
+(rum/defc table-row < rum/reactive
   [table row columns props option]
   (let [row' (db/sub-block (:id row))
         ;; merge entity temporal attributes
