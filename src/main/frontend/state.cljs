@@ -293,6 +293,7 @@
       :rtc/downloading-graph-uuid            nil
       :rtc/graphs                            []
       :rtc/online-info                       (atom {})
+      :rtc/asset-downloading?                (atom {})
 
       :user/info                             {:UserGroups (storage/get :user-groups)}
       :encryption/graph-parsing?             false

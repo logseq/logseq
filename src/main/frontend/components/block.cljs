@@ -184,7 +184,7 @@
                 parts (remove #(string/blank? %) parts)]
             (util/string-join-path (reverse parts))))))))
 
-(rum/defcs asset-loader
+(rum/defcs file-based-asset-loader
   < rum/reactive
   (rum/local nil ::exist?)
   (rum/local false ::loading?)
@@ -460,13 +460,14 @@
   (rum/local nil ::src)
   [state config title href metadata full_text]
   (let [src (::src state)
-        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
+        repo (state/get-current-repo)
+        granted? (state/sub [:nfs/user-granted? repo])
         href (config/get-local-asset-absolute-path href)
-        db-based? (config/db-based-graph? (state/get-current-repo))]
-    (when (and (or granted?
+        db-based? (config/db-based-graph? repo)]
+    (when (and (or db-based?
+                   granted?
                    (util/electron?)
-                   (mobile-util/native-platform?)
-                   db-based?)
+                   (mobile-util/native-platform?))
                (nil? @src))
       (p/then (assets-handler/<make-asset-url href) #(reset! src %)))
 
@@ -488,16 +489,19 @@
 
         (cond
           (contains? config/audio-formats ext)
-          (asset-loader @src
-                        #(audio-cp @src))
+          (if db-based?
+            (audio-cp @src)
+            (file-based-asset-loader @src #(audio-cp @src)))
 
           (contains? config/video-formats ext)
           [:video {:src @src
                    :controls true}]
 
           (contains? (common-config/img-formats) ext)
-          (asset-loader @src
-                        #(resizable-image config title @src metadata full_text true))
+          (if db-based?
+            (resizable-image config title @src metadata full_text true)
+            (file-based-asset-loader @src
+                                     #(resizable-image config title @src metadata full_text true)))
 
           (and db-based? (contains? (common-config/text-formats) ext) (:asset-block config))
           (let [file-name (str (:block/title (:asset-block config)) "." (name ext))]
@@ -791,12 +795,12 @@
      {:ref *el-trigger
       :on-mouse-enter (fn [^js e]
                         (when (= (some-> (.-target e) (.closest ".preview-ref-link"))
-                                (rum/deref *el-trigger))
+                                 (rum/deref *el-trigger))
                           (let [timer (rum/deref *timer)
                                 timer1 (rum/deref *timer1)]
                             (when-not timer
                               (rum/set-ref! *timer
-                                (js/setTimeout #(set-visible! true) 1000)))
+                                            (js/setTimeout #(set-visible! true) 1000)))
                             (when timer1
                               (js/clearTimeout timer1)
                               (rum/set-ref! *timer1 nil)))))
@@ -809,7 +813,7 @@
                               (rum/set-ref! *timer nil))
                             (when-not timer1
                               (rum/set-ref! *timer1
-                                (js/setTimeout #(set-visible! false) 300))))))}
+                                            (js/setTimeout #(set-visible! false) 300))))))}
      children]))
 
 (rum/defc page-preview-trigger
@@ -825,8 +829,8 @@
                                  (let [[ready? set-ready!] (rum/use-state false)]
 
                                    (rum/use-effect!
-                                     (fn []
-                                       (let [el-popup (rum/deref *el-popup)
+                                    (fn []
+                                      (let [el-popup (rum/deref *el-popup)
                                             focus! #(js/setTimeout (fn [] (.focus el-popup)))]
                                         (set-ready! true)
                                         (focus!)
@@ -849,7 +853,7 @@
                                                          ;; check the top popup whether is the preview popup
                                                          (when (ui/last-shui-preview-popup?)
                                                            (rum/set-ref! *timer1
-                                                             (js/setTimeout #(set-visible! false) 500))))}
+                                                                         (js/setTimeout #(set-visible! false) 500))))}
                                       (when-let [page-cp (and ready? (state/get-page-blocks-cp))]
                                         (page-cp {:repo (state/get-current-repo)
                                                   :page-name (str (:block/uuid source))
@@ -858,11 +862,11 @@
                                                   :preview? true}))])))]
 
     (rum/use-effect!
-      (fn []
-        (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
-          (set-in-popup! true)
-          (set-in-popup! false)))
-      [])
+     (fn []
+       (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
+         (set-in-popup! true)
+         (set-in-popup! false)))
+     [])
 
     [:span {:ref *el-wrap}
      (if (boolean? in-popup?)
@@ -1012,14 +1016,40 @@
     (when draw-component
       (draw-component {:file file :block-uuid block-uuid}))))
 
-(rum/defc asset-cp
-  [config block]
-  (let [asset-type (:logseq.property.asset/type block)]
-    (asset-link (assoc config :asset-block block)
-                (:block/title block)
-                (path/path-join (str "../" common-config/local-assets-dir) (str (:block/uuid block) "." asset-type))
-                nil
-                nil)))
+(rum/defcs asset-cp < rum/reactive
+  (rum/local nil ::file-exists?)
+  {:will-mount (fn [state]
+                 (let [block (last (:rum/args state))
+                       asset-type (:logseq.property.asset/type block)
+                       path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))
+                       timeout (js/setTimeout
+                                #(p/let [result (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path)]
+                                   (reset! (::file-exists? state) result))
+                                500)]
+                   (assoc state ::timeout timeout)))
+   :will-unmount (fn [state]
+                   (when-let [timeout (::timeout state)]
+                     (js/clearTimeout timeout))
+                   state)}
+  [state config block]
+  (let [asset-type (:logseq.property.asset/type block)
+        file (str (:block/uuid block) "." asset-type)
+        file-exists? @(::file-exists? state)
+        downloading? (state/sub :rtc/asset-downloading?
+                                {:path-in-sub-atom (str (:block/uuid block))})]
+    (cond
+      (or file-exists? (false? downloading?))
+      (asset-link (assoc config :asset-block block)
+                  (:block/title block)
+                  (path/path-join (str "../" common-config/local-assets-dir) file)
+                  nil
+                  nil)
+
+      (or downloading? (false? file-exists?))
+      [:div.opacity-75 "Downloading asset"]
+
+      :else
+      nil)))
 
 (defn- img-audio-video?
   [block]
@@ -1184,15 +1214,15 @@
                                   :on-mouse-leave (fn []
                                                     (when (ui/last-shui-preview-popup?)
                                                       (rum/set-ref! *timer1
-                                                        (js/setTimeout #(set-visible! false) 500))))}
+                                                                    (js/setTimeout #(set-visible! false) 500))))}
                                  [(breadcrumb config repo id {:indent? true})
                                   (blocks-container
-                                    (assoc config :id (str id) :preview? true)
-                                    [(db/entity [:block/uuid id])])]])]
+                                   (assoc config :id (str id) :preview? true)
+                                   [(db/entity [:block/uuid id])])]])]
     (popup-preview-impl children
-      {:visible? visible? :set-visible! set-visible!
-       :*timer *timer :*timer1 *timer1
-       :render render})))
+                        {:visible? visible? :set-visible! set-visible!
+                         :*timer *timer :*timer1 *timer1
+                         :render render})))
 
 (rum/defc block-reference < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -2233,8 +2263,8 @@
                       [:span.hl-page
                        [:strong.forbid-edit
                         (str "P"
-                          (or (pu/lookup properties :logseq.property.pdf/hl-page)
-                            "?"))]]
+                             (or (pu/lookup properties :logseq.property.pdf/hl-page)
+                                 "?"))]]
 
                       (when (and area?
                                  (or (:hl-stamp properties)
@@ -3456,8 +3486,8 @@
        (query-property-cp block config collapsed?))
 
      (when (and db-based?
-             (or sidebar? (not collapsed?))
-             (not (or table? property?)))
+                (or sidebar? (not collapsed?))
+                (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])
 
