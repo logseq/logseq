@@ -15,7 +15,7 @@
                              :property-missing-value
                              :existing-property-value
                              :object-has-class-property}
-        property-value-deps (conj default-value-deps :property-value :property-checkbox-default-value)
+        property-value-deps (conj default-value-deps :property-value :property-scalar-default-value)
         property-deps (conj property-value-deps :simple-query-property)
         task-deps #{:property :task}
         priority-deps #{:property :priority}

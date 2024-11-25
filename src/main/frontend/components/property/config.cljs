@@ -522,13 +522,13 @@
   [property]
   (let [property-type (get-in property [:block/schema :type])
         option (if (= :checkbox property-type)
-                 (let [default-value (:logseq.property/checkbox-default-value property)]
+                 (let [default-value (:logseq.property/scalar-default-value property)]
                    {:icon :settings-2
                     :title "Default value"
                     :toggle-checked? (boolean default-value)
                     :checkbox? true
                     :on-toggle-checked-change (fn []
-                                                (db-property-handler/set-block-property! (:block/uuid property) :logseq.property/checkbox-default-value (not default-value)))})
+                                                (db-property-handler/set-block-property! (:block/uuid property) :logseq.property/scalar-default-value (not default-value)))})
                  (let [default-value (:logseq.property/default-value property)]
                    {:icon :settings-2 :title "Default value"
                     :desc (if default-value (db-property/property-value-content default-value) "Set value")

@@ -160,8 +160,8 @@
   "If a class and in a class schema context, add the property to its schema.
   Otherwise, add a block's property and its value"
   ([block property-key property-value] (<add-property! block property-key property-value {}))
-  ([block property-id property-value' {:keys [exit-edit? class-schema?]
-                                       :or {exit-edit? true}}]
+  ([block property-id property-value {:keys [exit-edit? class-schema?]
+                                      :or {exit-edit? true}}]
    (let [repo (state/get-current-repo)
          class? (ldb/class? block)
          property (db/entity property-id)
@@ -174,12 +174,15 @@
         (db-property-handler/class-add-property! (:db/id block) property-id)
         (let [block-ids (map :block/uuid blocks)]
           (if (and (db-property-type/all-ref-property-types (get-in property [:block/schema :type]))
-                   (string? property-value'))
-            (p/let [new-block (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})]
+                   (string? property-value))
+            (p/let [new-block (<create-new-block! block (db/entity property-id) property-value {:edit-block? false})]
               (when (seq (remove #{(:db/id block)} (map :db/id block)))
                 (property-handler/batch-set-block-property! repo block-ids property-id (:db/id new-block)))
               new-block)
-            (property-handler/batch-set-block-property! repo block-ids property-id property-value'))))
+            (let [value (if-some [value (:logseq.property/scalar-default-value property)]
+                          value
+                          property-value)]
+              (property-handler/batch-set-block-property! repo block-ids property-id value)))))
       (when exit-edit?
         (ui/hide-popups-until-preview-popup!)
         (shui/dialog-close!))

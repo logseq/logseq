@@ -461,7 +461,7 @@
                      :block/created-at :block/updated-at
                      :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content]}]
    [47 {:fix replace-hidden-type-with-schema}]
-   [48 {:properties [:logseq.property/default-value :logseq.property/checkbox-default-value]}]])
+   [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
