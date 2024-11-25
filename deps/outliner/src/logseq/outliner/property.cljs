@@ -363,6 +363,9 @@
         block (d/entity @conn eid)
         property (d/entity @conn property-id)]
     (cond
+      (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
+      nil
+
       (= (:logseq.property/default-value property) (get block property-id))
       (ldb/transact! conn
                      [{:db/id (:db/id block)
