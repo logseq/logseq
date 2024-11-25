@@ -728,6 +728,7 @@
                                 (:block/uuid block)
                                 (:block/uuid value-block)))
                      :container-id container-id
+                     :property-default-value? default-value?
                      :editor-box (state/get-component :editor/box)
                      :property-block? true
                      :on-block-content-pointer-down (when default-value?

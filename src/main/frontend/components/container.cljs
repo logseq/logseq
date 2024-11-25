@@ -836,11 +836,13 @@
 
                       ;; block bullet
                                 (and block-id (parse-uuid block-id))
-                                (let [block (.closest target ".ls-block")]
+                                (let [block (.closest target ".ls-block")
+                                      property-default-value? (when block
+                                                                (= "true" (d/attr block "data-is-property-default-value")))]
                                   (when block
                                     (state/clear-selection!)
                                     (state/conj-selection-block! block :down))
-                                  (show! (cp-content/block-context-menu-content target (uuid block-id))))
+                                  (show! (cp-content/block-context-menu-content target (uuid block-id) property-default-value?)))
 
                                 :else
                                 false)]

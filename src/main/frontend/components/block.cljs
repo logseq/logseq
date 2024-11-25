@@ -791,12 +791,12 @@
      {:ref *el-trigger
       :on-mouse-enter (fn [^js e]
                         (when (= (some-> (.-target e) (.closest ".preview-ref-link"))
-                                (rum/deref *el-trigger))
+                                 (rum/deref *el-trigger))
                           (let [timer (rum/deref *timer)
                                 timer1 (rum/deref *timer1)]
                             (when-not timer
                               (rum/set-ref! *timer
-                                (js/setTimeout #(set-visible! true) 1000)))
+                                            (js/setTimeout #(set-visible! true) 1000)))
                             (when timer1
                               (js/clearTimeout timer1)
                               (rum/set-ref! *timer1 nil)))))
@@ -809,7 +809,7 @@
                               (rum/set-ref! *timer nil))
                             (when-not timer1
                               (rum/set-ref! *timer1
-                                (js/setTimeout #(set-visible! false) 300))))))}
+                                            (js/setTimeout #(set-visible! false) 300))))))}
      children]))
 
 (rum/defc page-preview-trigger
@@ -825,8 +825,8 @@
                                  (let [[ready? set-ready!] (rum/use-state false)]
 
                                    (rum/use-effect!
-                                     (fn []
-                                       (let [el-popup (rum/deref *el-popup)
+                                    (fn []
+                                      (let [el-popup (rum/deref *el-popup)
                                             focus! #(js/setTimeout (fn [] (.focus el-popup)))]
                                         (set-ready! true)
                                         (focus!)
@@ -849,7 +849,7 @@
                                                          ;; check the top popup whether is the preview popup
                                                          (when (ui/last-shui-preview-popup?)
                                                            (rum/set-ref! *timer1
-                                                             (js/setTimeout #(set-visible! false) 500))))}
+                                                                         (js/setTimeout #(set-visible! false) 500))))}
                                       (when-let [page-cp (and ready? (state/get-page-blocks-cp))]
                                         (page-cp {:repo (state/get-current-repo)
                                                   :page-name (str (:block/uuid source))
@@ -858,11 +858,11 @@
                                                   :preview? true}))])))]
 
     (rum/use-effect!
-      (fn []
-        (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
-          (set-in-popup! true)
-          (set-in-popup! false)))
-      [])
+     (fn []
+       (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
+         (set-in-popup! true)
+         (set-in-popup! false)))
+     [])
 
     [:span {:ref *el-wrap}
      (if (boolean? in-popup?)
@@ -1184,15 +1184,15 @@
                                   :on-mouse-leave (fn []
                                                     (when (ui/last-shui-preview-popup?)
                                                       (rum/set-ref! *timer1
-                                                        (js/setTimeout #(set-visible! false) 500))))}
+                                                                    (js/setTimeout #(set-visible! false) 500))))}
                                  [(breadcrumb config repo id {:indent? true})
                                   (blocks-container
-                                    (assoc config :id (str id) :preview? true)
-                                    [(db/entity [:block/uuid id])])]])]
+                                   (assoc config :id (str id) :preview? true)
+                                   [(db/entity [:block/uuid id])])]])]
     (popup-preview-impl children
-      {:visible? visible? :set-visible! set-visible!
-       :*timer *timer :*timer1 *timer1
-       :render render})))
+                        {:visible? visible? :set-visible! set-visible!
+                         :*timer *timer :*timer1 *timer1
+                         :render render})))
 
 (rum/defc block-reference < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -3342,7 +3342,14 @@
                    (when order-list? " is-order-list")
                    (when (string/blank? title) " is-blank")
                    (when original-block " embed-block"))
-       :haschild (str (boolean has-child?))}
+       :haschild (str (boolean has-child?))
+       :on-focus (fn []
+                   (when (:property-default-value? config)
+                     (when-let [f (:on-block-content-pointer-down config)]
+                       (f))))}
+
+       (:property-default-value? config)
+       (assoc :data-is-property-default-value (:property-default-value? config))
 
        original-block
        (assoc :originalblockid (str (:block/uuid original-block)))
@@ -3459,8 +3466,8 @@
        (query-property-cp block config collapsed?))
 
      (when (and db-based?
-             (or sidebar? (not collapsed?))
-             (not (or table? property?)))
+                (or sidebar? (not collapsed?))
+                (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])
 
