@@ -52,7 +52,7 @@
          (when-let [property (d/entity db k)]
            (let [schema (lookup-entity property :block/schema nil)]
              (if (= :checkbox (:type schema))
-               (lookup-entity property :logseq.property/checkbox-default-value nil)
+               (lookup-entity property :logseq.property/scalar-default-value nil)
                (lookup-entity property :logseq.property/default-value nil)))))))))
 
 (defn lookup-kv-then-entity

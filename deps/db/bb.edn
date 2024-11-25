@@ -35,7 +35,7 @@
                    (rules/extract-rules (dissoc rules/db-query-dsl-rules
                                                 :task :priority
                                                 :property :simple-query-property :private-property
-                                                :property-checkbox-default-value
+                                                :property-scalar-default-value
                                                 :property-missing-value
                                                 :has-property-or-default-value)))))}}
 

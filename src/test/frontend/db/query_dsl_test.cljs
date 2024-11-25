@@ -237,7 +237,7 @@ prop-d:: [[nada]]"}])
      {:properties
       {:checkbox {:block/schema {:type :checkbox}
                   :build/properties
-                  {:logseq.property/checkbox-default-value true}}}
+                  {:logseq.property/scalar-default-value true}}}
       :classes {:Class1 {:build/schema-properties [:checkbox]}}
       :pages-and-blocks
       [{:page {:block/title "page1"}

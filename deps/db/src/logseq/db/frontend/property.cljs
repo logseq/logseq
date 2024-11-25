@@ -152,11 +152,11 @@
                                             :public? false
                                             :hide? true
                                             :view-context :property}}
-   :logseq.property/checkbox-default-value {:title "Checkbox default value"
-                                            :schema {:type :checkbox
-                                                     :public? false
-                                                     :hide? true
-                                                     :view-context :property}}
+   :logseq.property/scalar-default-value {:title "Non ref type default value"
+                                          :schema {:type :any
+                                                   :public? false
+                                                   :hide? true
+                                                   :view-context :property}}
    :logseq.property.class/properties {:title "Tag Properties"
                                       :schema {:type :property
                                                :cardinality :many

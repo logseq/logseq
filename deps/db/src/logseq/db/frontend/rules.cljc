@@ -180,8 +180,8 @@
       [(= ?prop-v "N/A")]
       [?prop-e ?default-p ?default-v]]
 
-    :property-checkbox-default-value
-    '[(property-checkbox-default-value ?b ?prop-e ?default-p ?val)
+    :property-scalar-default-value
+    '[(property-scalar-default-value ?b ?prop-e ?default-p ?val)
       (property-missing-value ?b ?prop-e ?default-p ?default-v)
       [(missing? $ ?prop-e :db/valueType)]
       [?prop-e ?default-p ?val]]
@@ -201,7 +201,7 @@
        (or
         (and
          [(missing? $ ?prop-e :db/valueType)]
-         (property-checkbox-default-value ?b ?prop-e :logseq.property/checkbox-default-value ?val))
+         (property-scalar-default-value ?b ?prop-e :logseq.property/scalar-default-value ?val))
         (and
          [?prop-e :db/valueType :db.type/ref]
          (property-default-value ?b ?prop-e :logseq.property/default-value ?val)))]]
@@ -219,7 +219,7 @@
        [?b ?prop _]
        (and (object-has-class-property? ?b ?prop)
             (or [?prop-e :logseq.property/default-value _]
-                [?prop-e :logseq.property/checkbox-default-value _])))]
+                [?prop-e :logseq.property/scalar-default-value _])))]
 
     ;; Checks if a property exists for simple queries. Supports default values
     :has-simple-query-property
@@ -316,8 +316,8 @@
    :has-simple-query-property #{:has-property-or-default-value}
    :has-private-simple-query-property #{:has-property-or-default-value}
    :property-default-value #{:existing-property-value :property-missing-value}
-   :property-checkbox-default-value #{:existing-property-value :property-missing-value}
-   :property-value #{:property-default-value :property-checkbox-default-value}
+   :property-scalar-default-value #{:existing-property-value :property-missing-value}
+   :property-value #{:property-default-value :property-scalar-default-value}
    :simple-query-property #{:property-value}
    :private-simple-query-property #{:property-value}})
 
