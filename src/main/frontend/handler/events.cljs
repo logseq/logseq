@@ -175,7 +175,6 @@
          (repo-config-handler/restore-repo-config! graph)
          (when-not (= :draw (state/get-current-route))
            (route-handler/redirect-to-home!))
-         (state/pub-event! [:graph/ready graph])
          (if db-based?
            (rtc-handler/<rtc-start! graph)
            (file-sync-restart!))
