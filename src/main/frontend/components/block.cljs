@@ -3372,11 +3372,7 @@
                    (when order-list? " is-order-list")
                    (when (string/blank? title) " is-blank")
                    (when original-block " embed-block"))
-       :haschild (str (boolean has-child?))
-       :on-focus (fn []
-                   (when (:property-default-value? config)
-                     (when-let [f (:on-block-content-pointer-down config)]
-                       (f))))}
+       :haschild (str (boolean has-child?))}
 
        (:property-default-value? config)
        (assoc :data-is-property-default-value (:property-default-value? config))
