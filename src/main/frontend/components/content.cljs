@@ -64,7 +64,7 @@
       {:key "delete"
        :on-click #(do (editor-handler/delete-selection %)
                       (state/hide-custom-context-menu!)
-                    (shui/popup-hide!))}
+                      (shui/popup-hide!))}
 
       (t :editor/delete-selection)
       (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/delete)))
@@ -165,15 +165,15 @@
                           (p/let [exists? (page-handler/<template-exists? title)]
                             (if exists?
                               (notification/show!
-                                [:p (t :context-menu/template-exists-warning)]
-                                :error)
+                               [:p (t :context-menu/template-exists-warning)]
+                               :error)
                               (p/do!
-                                (property-handler/set-block-property! repo block-id (pu/get-pid :logseq.property/template) title)
-                                (when (false? template-including-parent?)
-                                  (property-handler/set-block-property! repo block-id
-                                    (pu/get-pid :logseq.property/template-including-parent)
-                                    false))
-                                (shui/popup-hide!)))))))]
+                               (property-handler/set-block-property! repo block-id (pu/get-pid :logseq.property/template) title)
+                               (when (false? template-including-parent?)
+                                 (property-handler/set-block-property! repo block-id
+                                                                       (pu/get-pid :logseq.property/template-including-parent)
+                                                                       false))
+                               (shui/popup-hide!)))))))]
         (state/clear-edit!)
         [:<>
          [:div.px-4.py-2.text-sm {:on-click (fn [e] (util/stop e))}
@@ -183,7 +183,7 @@
             :on-key-down (fn [e]
                            (util/stop-propagation e)
                            (when (and (= "Enter" (util/ekey e))
-                                   (not (string/blank? (util/trim-safe @input))))
+                                      (not (string/blank? (util/trim-safe @input))))
                              (submit!)))
             :on-change (fn [e]
                          (reset! input (util/evalue e)))}]
@@ -192,7 +192,7 @@
           (ui/button (t :submit) :on-click submit!)]
          (shui/dropdown-menu-separator)])
       (shui/dropdown-menu-item
-        {:key "Make a Template"
+       {:key "Make a Template"
         :on-click (fn [e]
                     (util/stop e)
                     (reset! edit? true))}
@@ -200,7 +200,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content <
   shortcut/disable-all-shortcuts
-  [_target block-id]
+  [_target block-id property-default-value?]
   (let [repo (state/get-current-repo)
         db? (config/db-based-graph? repo)]
     (when-let [block (db/entity [:block/uuid block-id])]
@@ -265,18 +265,20 @@
                         #(export/export-blocks [block-id] {:whiteboard? false})))}
           (t :content/copy-export-as))
 
-         (shui/dropdown-menu-item
-          {:key "Cut"
-           :on-click (fn [_e]
-                       (editor-handler/cut-block! block-id))}
-          (t :editor/cut)
-          (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/cut)))
+         (when-not property-default-value?
+           (shui/dropdown-menu-item
+            {:key "Cut"
+             :on-click (fn [_e]
+                         (editor-handler/cut-block! block-id))}
+            (t :editor/cut)
+            (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/cut))))
 
-         (shui/dropdown-menu-item
-          {:key "delete"
-           :on-click #(editor-handler/delete-block-aux! block)}
-          (t :editor/delete-selection)
-          (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/delete)))
+         (when-not property-default-value?
+           (shui/dropdown-menu-item
+            {:key "delete"
+             :on-click #(editor-handler/delete-block-aux! block)}
+            (t :editor/delete-selection)
+            (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/delete))))
 
          (shui/dropdown-menu-separator)
 

@@ -1,5 +1,5 @@
 (ns logseq.db.frontend.rules-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [deftest is testing are]]
             [datascript.core :as d]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.test.helper :as db-test]))
@@ -9,6 +9,24 @@
   (d/q (into query [:in '$ '%])
        db
        (rules/extract-rules rules/db-query-dsl-rules)))
+
+(deftest get-full-deps
+  (let [default-value-deps #{:property-default-value
+                             :property-missing-value
+                             :existing-property-value
+                             :object-has-class-property}
+        property-value-deps (conj default-value-deps :property-value :property-scalar-default-value)
+        property-deps (conj property-value-deps :simple-query-property)
+        task-deps #{:property :task}
+        priority-deps #{:property :priority}
+        task-priority-deps  #{:property :task :priority}]
+    (are [x y] (= (#'rules/get-full-deps x rules/rules-dependencies) y)
+      [:property-default-value] default-value-deps
+      [:property-value] property-value-deps
+      [:simple-query-property] property-deps
+      [:task] task-deps
+      [:priority] priority-deps
+      [:task :priority] task-priority-deps)))
 
 (deftest has-property-rule
   (let [conn (db-test/create-conn-with-blocks
@@ -107,8 +125,8 @@
                [:user.property/number-many 5]
                [:user.property/foo "bar"]
                [:user.property/page-many "Page A"]}
-             (->> (q-with-rules '[:find ?p ?v
-                                  :where (property ?b ?p ?v) [?b :block/title "Page"]]
+             (->> (q-with-rules '[:find ?p ?val
+                                  :where (property ?b ?p ?val) [?b :block/title "Page"]]
                                 @conn)
                   set))
           "property can bind to property and property value args")

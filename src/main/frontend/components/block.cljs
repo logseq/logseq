@@ -2770,7 +2770,10 @@
                                             (.preventDefault e)
 
                                             :else
-                                            (block-content-on-pointer-down e block block-id content edit-input-id config))))))]
+                                            (let [f (:on-block-content-pointer-down config)]
+                                              (if (fn? f)
+                                                (f e)
+                                                (block-content-on-pointer-down e block block-id content edit-input-id config))))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :key (str "block-content-" uuid)}
@@ -3369,7 +3372,14 @@
                    (when order-list? " is-order-list")
                    (when (string/blank? title) " is-blank")
                    (when original-block " embed-block"))
-       :haschild (str (boolean has-child?))}
+       :haschild (str (boolean has-child?))
+       :on-focus (fn []
+                   (when (:property-default-value? config)
+                     (when-let [f (:on-block-content-pointer-down config)]
+                       (f))))}
+
+       (:property-default-value? config)
+       (assoc :data-is-property-default-value (:property-default-value? config))
 
        original-block
        (assoc :originalblockid (str (:block/uuid original-block)))

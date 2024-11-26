@@ -334,18 +334,24 @@
   (let [k (if db-graph? (->db-keyword-property (nth e 1)) (->file-keyword-property (nth e 1)))
         v (nth e 2)
         v' (if db-graph? (->db-property-value k v) (->file-property-value v))]
-    (if private-property?
-      {:query (list 'private-property '?b k v')
-       :rules [:private-property]}
+    (if db-graph?
+      (if private-property?
+        {:query (list 'private-simple-query-property '?b k v')
+         :rules [:private-simple-query-property]}
+        {:query (list 'simple-query-property '?b k v')
+         :rules [:simple-query-property]})
       {:query (list 'property '?b k v')
        :rules [:property]})))
 
 (defn- build-property-one-arg
   [e {:keys [db-graph? private-property?]}]
   (let [k (if db-graph? (->db-keyword-property (nth e 1)) (->file-keyword-property (nth e 1)))]
-    (if private-property?
-      {:query (list 'has-private-property '?b k)
-       :rules [:has-private-property]}
+    (if db-graph?
+      (if private-property?
+        {:query (list 'has-private-simple-query-property '?b k)
+         :rules [:has-private-simple-query-property]}
+        {:query (list 'has-simple-query-property '?b k)
+         :rules [:has-simple-query-property]})
       {:query (list 'has-property '?b k)
        :rules [:has-property]})))
 

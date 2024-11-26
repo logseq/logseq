@@ -437,7 +437,7 @@
                       (shui/tabler-icon "trash" {:size 17})))]]]))
 
 (rum/defc icon-picker
-  [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts]}]
+  [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts]}]
   (let [*trigger-ref (rum/use-ref nil)
         content-fn
         (if config/publishing?
@@ -458,19 +458,22 @@
     ;; trigger
     (let [has-icon? (some? icon-value)]
       (shui/button
-       {:ref *trigger-ref
-        :variant (if has-icon? :ghost :text)
-        :size :sm
-        :class (if has-icon? "px-1 leading-none" "font-normal text-sm px-[0.5px] opacity-50")
-        :on-click (fn [^js e]
-                    (when-not disabled?
-                      (shui/popup-show! (.-target e) content-fn
-                                        (medley/deep-merge
-                                         {:align :start
-                                          :id :ls-icon-picker
-                                          :content-props {:class "ls-icon-picker"
-                                                          :onEscapeKeyDown #(.preventDefault %)}}
-                                         popup-opts))))}
+       (merge
+        {:ref *trigger-ref
+         :variant :ghost
+         :size :sm
+         :class (if has-icon? "px-1 leading-none text-muted-foreground hover:text-foreground"
+                    "font-normal text-sm px-[0.5px] text-muted-foreground hover:text-foreground")
+         :on-click (fn [^js e]
+                     (when-not disabled?
+                       (shui/popup-show! (.-target e) content-fn
+                                         (medley/deep-merge
+                                          {:align :start
+                                           :id :ls-icon-picker
+                                           :content-props {:class "ls-icon-picker"
+                                                           :onEscapeKeyDown #(.preventDefault %)}}
+                                          popup-opts))))}
+        button-opts)
        (if has-icon?
          (if (vector? icon-value)       ; hiccup
            icon-value

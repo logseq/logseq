@@ -43,17 +43,23 @@
               db)
          first)))
 
+(defn- extract-rules
+  [rules]
+  (rules/extract-rules rules/db-query-dsl-rules
+                       rules
+                       {:deps rules/rules-dependencies}))
+
 (defn- find-block-by-property [db property]
   (d/q '[:find [(pull ?b [*]) ...]
          :in $ ?prop %
          :where (has-property ?b ?prop)]
-       db property (rules/extract-rules rules/db-query-dsl-rules [:has-property])))
+       db property (extract-rules [:has-property])))
 
 (defn- find-block-by-property-value [db property property-value]
   (->> (d/q '[:find [(pull ?b [*]) ...]
               :in $ ?prop ?prop-value %
               :where (property ?b ?prop ?prop-value)]
-            db property property-value (rules/extract-rules rules/db-query-dsl-rules [:property]))
+            db property property-value (extract-rules [:property]))
        first))
 
 (defn- find-page-by-name [db name]
