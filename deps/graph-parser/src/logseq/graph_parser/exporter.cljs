@@ -100,7 +100,9 @@
 
 (defn- convert-tag? [tag-name {:keys [convert-all-tags? tag-classes]}]
   (and (or convert-all-tags?
-           (contains? tag-classes tag-name))
+           (contains? tag-classes tag-name)
+           ;; built-in tags that always convert
+           (contains? #{"card"} tag-name))
        ;; Disallow tags as it breaks :block/tags
        (not (contains? #{"tags"} tag-name))))
 
@@ -636,6 +638,8 @@
    :now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting
    ;; deprecated in db graphs
    :macros :logseq.query/nlp-date
+   :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
+   :card-ease-factor :card-last-score
    :logseq.color :logseq.table.borders :logseq.table.stripes :logseq.table.max-width
    :logseq.table.version :logseq.table.compact :logseq.table.headers :logseq.table.hover])
 
@@ -643,10 +647,8 @@
   "Updates page and block properties before their property types are inferred"
   [properties class-related-properties]
   (let [dissoced-props (concat ignored-built-in-properties
-                               ;; TODO: Add import support for these dissoced built-in properties
-                               [:title :created-at :updated-at
-                                :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
-                                :card-ease-factor :card-last-score]
+                               ;; TODO: Deal with these dissoced built-in properties
+                               [:title :created-at :updated-at]
                                class-related-properties)]
     (->> (apply dissoc properties dissoced-props)
          (keep (fn [[prop val]]

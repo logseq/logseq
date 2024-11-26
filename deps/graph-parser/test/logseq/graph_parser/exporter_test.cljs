@@ -193,11 +193,12 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 23 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
-      (is (= 23 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 24 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 24 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
+      (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 10
@@ -325,8 +326,9 @@
               :logseq.property.linked-references/excludes #{"ref2"}}
              (select-keys (readable-properties @conn (find-page-by-name @conn "chat-gpt"))
                           [:logseq.property.linked-references/excludes :logseq.property.linked-references/includes]))
-          "linked ref filters set correctly")
+          "linked ref filters set correctly"))
 
+    (testing "built-in classes and their properties"
       ;; Queries
       (is (= {:logseq.property.table/sorting [{:id :user.property/prop-num, :asc? false}]
               :logseq.property.view/type "Table View"
@@ -346,7 +348,12 @@
           "Advanced query has correct query properties")
       (is (= "tasks with todo and doing"
              (:block/title (find-block-by-content @conn #"tasks with")))
-          "Advanced query has custom title migrated"))
+          "Advanced query has custom title migrated")
+
+      ;; Cards
+      (is (= {:block/tags [:logseq.class/Card]}
+             (readable-properties @conn (find-block-by-content @conn "card 1")))
+          "None of the card properties are imported since they are deprecated"))
 
     (testing "tags convert to classes"
       (is (= :user.class/Quotes___life
@@ -479,6 +486,10 @@
                          :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                   count))
         "Correct number of user classes")
+
+    (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
+    (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
+    (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
 
     (testing "replacing refs in :block/title when :remove-inline-tags? set"
       (is (= 2
