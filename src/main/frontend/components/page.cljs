@@ -473,23 +473,24 @@
                            (state/set-state! :page-title/context {:page (:block/title page)
                                                                   :page-entity page})))
       :on-click (fn [e]
-                  (when-not (= (.-nodeName (.-target e)) "INPUT")
-                    (.preventDefault e)
-                    (when (gobj/get e "shiftKey")
-                      (state/sidebar-add-block!
-                       (state/get-current-repo)
-                       (:db/id page)
-                       :page))))}
+                  (when-not (some-> e (.-target) (.closest ".ls-properties-area"))
+                    (when-not (= (.-nodeName (.-target e)) "INPUT")
+                      (.preventDefault e)
+                      (when (gobj/get e "shiftKey")
+                        (state/sidebar-add-block!
+                          (state/get-current-repo)
+                          (:db/id page)
+                          :page)))))}
 
      [:div.w-full.relative
       (component-block/block-container
-       {:page-title? true
-        :page-title-actions-cp (when (and with-actions? (not= (:db/id (state/get-edit-block)) (:db/id page))) db-page-title-actions)
-        :hide-title? sidebar?
-        :sidebar? sidebar?
-        :hide-children? true
-        :container-id container-id
-        :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))}
+        {:page-title? true
+         :page-title-actions-cp (when (and with-actions? (not= (:db/id (state/get-edit-block)) (:db/id page))) db-page-title-actions)
+         :hide-title? sidebar?
+         :sidebar? sidebar?
+         :hide-children? true
+         :container-id container-id
+         :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))}
        page)]]))
 
 (defn- page-mouse-over
