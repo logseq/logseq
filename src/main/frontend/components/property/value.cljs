@@ -723,8 +723,10 @@
                       (set (remove #(= (:db/ident %) :logseq.property/empty-placeholder) value-block))
                       value-block)
         default-value (:logseq.property/default-value property)
-        default-value? (and (= (:db/id value-block) (:db/id default-value))
-                            (not= (:db/ident property) :logseq.property/default-value))]
+        default-value? (and
+                        (:db/id default-value)
+                        (= (:db/id value-block) (:db/id default-value))
+                        (not= (:db/ident property) :logseq.property/default-value))]
     (if (seq value-block)
       [:div.property-block-container.content.w-full
        (let [config {:id (str (if multiple-values?
