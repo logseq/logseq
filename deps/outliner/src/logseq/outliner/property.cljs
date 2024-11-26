@@ -36,8 +36,7 @@
            multiple-values? (= :db.cardinality/many (:db/cardinality property))
            retract-multiple-values? (and multiple-values? (sequential? value))
            multiple-values-empty? (and (sequential? old-value)
-                                       (= 1 (count old-value))
-                                       (= :logseq.property/empty-placeholder (:db/ident (first old-value))))
+                                       (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
            block (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                         property-id value)
            block-tx-data (cond-> block
