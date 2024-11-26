@@ -70,7 +70,7 @@
                                    (let [result (query-react/custom-query-result-transform query-result remove-blocks query-m)]
                                      (if (and query-result (coll? result) (:block/uuid (first result)))
                                        (cond-> result
-                                         (get query-m :remove-block-children? true)
+                                         (and (not (:db-graph? config)) (get query-m :remove-block-children? true))
                                          tree/filter-top-level-blocks)
                                        result)))
         group-by-page? (get-group-by-page query-m config)

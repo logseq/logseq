@@ -149,7 +149,7 @@
       ;; for audio record
       :editor/record-status                  "NONE"
 
-      :editor/code-block-context             {}
+      :editor/code-block-context             nil
       :editor/latest-shortcut                (atom nil)
 
       :history/paused?                       (atom false)
@@ -293,6 +293,7 @@
       :rtc/downloading-graph-uuid            nil
       :rtc/graphs                            []
       :rtc/online-info                       (atom {})
+      :rtc/asset-downloading?                (atom {})
 
       :user/info                             {:UserGroups (storage/get :user-groups)}
       :encryption/graph-parsing?             false

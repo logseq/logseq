@@ -184,7 +184,7 @@
                 parts (remove #(string/blank? %) parts)]
             (util/string-join-path (reverse parts))))))))
 
-(rum/defcs asset-loader
+(rum/defcs file-based-asset-loader
   < rum/reactive
   (rum/local nil ::exist?)
   (rum/local false ::loading?)
@@ -460,13 +460,14 @@
   (rum/local nil ::src)
   [state config title href metadata full_text]
   (let [src (::src state)
-        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
+        repo (state/get-current-repo)
+        granted? (state/sub [:nfs/user-granted? repo])
         href (config/get-local-asset-absolute-path href)
-        db-based? (config/db-based-graph? (state/get-current-repo))]
-    (when (and (or granted?
+        db-based? (config/db-based-graph? repo)]
+    (when (and (or db-based?
+                   granted?
                    (util/electron?)
-                   (mobile-util/native-platform?)
-                   db-based?)
+                   (mobile-util/native-platform?))
                (nil? @src))
       (p/then (assets-handler/<make-asset-url href) #(reset! src %)))
 
@@ -488,16 +489,19 @@
 
         (cond
           (contains? config/audio-formats ext)
-          (asset-loader @src
-                        #(audio-cp @src))
+          (if db-based?
+            (audio-cp @src)
+            (file-based-asset-loader @src #(audio-cp @src)))
 
           (contains? config/video-formats ext)
           [:video {:src @src
                    :controls true}]
 
           (contains? (common-config/img-formats) ext)
-          (asset-loader @src
-                        #(resizable-image config title @src metadata full_text true))
+          (if db-based?
+            (resizable-image config title @src metadata full_text true)
+            (file-based-asset-loader @src
+                                     #(resizable-image config title @src metadata full_text true)))
 
           (and db-based? (contains? (common-config/text-formats) ext) (:asset-block config))
           (let [file-name (str (:block/title (:asset-block config)) "." (name ext))]
@@ -1012,14 +1016,40 @@
     (when draw-component
       (draw-component {:file file :block-uuid block-uuid}))))
 
-(rum/defc asset-cp
-  [config block]
-  (let [asset-type (:logseq.property.asset/type block)]
-    (asset-link (assoc config :asset-block block)
-                (:block/title block)
-                (path/path-join (str "../" common-config/local-assets-dir) (str (:block/uuid block) "." asset-type))
-                nil
-                nil)))
+(rum/defcs asset-cp < rum/reactive
+  (rum/local nil ::file-exists?)
+  {:will-mount (fn [state]
+                 (let [block (last (:rum/args state))
+                       asset-type (:logseq.property.asset/type block)
+                       path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))
+                       timeout (js/setTimeout
+                                #(p/let [result (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path)]
+                                   (reset! (::file-exists? state) result))
+                                500)]
+                   (assoc state ::timeout timeout)))
+   :will-unmount (fn [state]
+                   (when-let [timeout (::timeout state)]
+                     (js/clearTimeout timeout))
+                   state)}
+  [state config block]
+  (let [asset-type (:logseq.property.asset/type block)
+        file (str (:block/uuid block) "." asset-type)
+        file-exists? @(::file-exists? state)
+        downloading? (state/sub :rtc/asset-downloading?
+                                {:path-in-sub-atom (str (:block/uuid block))})]
+    (cond
+      (or file-exists? (false? downloading?))
+      (asset-link (assoc config :asset-block block)
+                  (:block/title block)
+                  (path/path-join (str "../" common-config/local-assets-dir) file)
+                  nil
+                  nil)
+
+      (or downloading? (false? file-exists?))
+      [:div.opacity-75 "Downloading asset"]
+
+      :else
+      nil)))
 
 (defn- img-audio-video?
   [block]
