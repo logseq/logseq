@@ -731,7 +731,6 @@
                                 (:block/uuid block)
                                 (:block/uuid value-block)))
                      :container-id container-id
-                     :property-default-value? default-value?
                      :editor-box (state/get-component :editor/box)
                      :property-block? true
                      :on-block-content-pointer-down (when default-value?
@@ -740,7 +739,7 @@
          (if (set? value-block)
            (blocks-container config (ldb/sort-by-order value-block))
            (rum/with-key
-             (block-container config value-block)
+             (block-container (assoc config :property-default-value? default-value?) value-block)
              (str (:db/id property) "-" (:block/uuid value-block)))))]
       [:div
        {:tabIndex 0
