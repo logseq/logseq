@@ -729,15 +729,27 @@
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
-        end-block (last top-level-blocks)]
+        end-block (last top-level-blocks)
+        delete-one-block? (or (= 1 (count top-level-blocks)) (= start-block end-block))]
     (when (seq top-level-blocks)
-      (if (or
-           (= 1 (count top-level-blocks))
-           (= start-block end-block))
-        (delete-block conn txs-state start-block)
-        (doseq [id block-ids]
-          (let [node (d/entity @conn id)]
-            (otree/-del node txs-state conn)))))
+      (let [from-property (:logseq.property/created-from-property start-block)
+            default-value-property? (and (:logseq.property/default-value from-property)
+                                         (not= (:db/id start-block)
+                                               (:db/id (:logseq.property/default-value from-property))))]
+        (cond
+          (and delete-one-block? default-value-property?)
+          (let [datoms (d/datoms @conn :avet (:db/ident from-property) (:db/id start-block))
+                tx-data (map (fn [d] {:db/id (:e d)
+                                      (:db/ident from-property) :logseq.property/empty-placeholder}) datoms)]
+            (when (seq tx-data) (swap! txs-state concat tx-data)))
+
+          delete-one-block?
+          (delete-block conn txs-state start-block)
+
+          :else
+          (doseq [id block-ids]
+            (let [node (d/entity @conn id)]
+              (otree/-del node txs-state conn))))))
     {:tx-data @txs-state}))
 
 (defn- move-to-original-position?

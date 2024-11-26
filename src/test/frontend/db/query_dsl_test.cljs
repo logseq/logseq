@@ -19,9 +19,12 @@
 ;; ============
 
 (def dsl-query*
-  "When $EXAMPLE set, prints query result of build query. Useful for
-   documenting examples and debugging"
-  (if (some? js/process.env.EXAMPLE)
+  "Overrides dsl-query/query with ENV variables. When $EXAMPLE is set, prints query
+  result of build query. This is useful for documenting examples and debugging.
+   When $DB_QUERY_TYPE is set, runs query tests against other versions of simple query e.g.
+   more basic property rules"
+  (cond
+    (some? js/process.env.EXAMPLE)
     (fn dsl-query-star [& args]
       (let [old-build-query query-dsl/build-query]
         (with-redefs [query-dsl/build-query
@@ -30,6 +33,24 @@
                           (println "EXAMPLE:" (pr-str (:query res)))
                           res))]
           (apply query-dsl/query args))))
+    (some? js/process.env.DB_QUERY_TYPE)
+    (fn dsl-query-star [& args]
+      (let [old-build-property @#'query-dsl/build-property]
+        (with-redefs [query-dsl/build-property
+                      (fn [& args']
+                        (let [m (apply old-build-property args')
+                              m' (cond
+                                   (= (:rules m) [:simple-query-property])
+                                   {:rules [:property]
+                                    :query (apply list 'property (rest (:query m)))}
+                                   (= (:rules m) [:has-simple-query-property])
+                                   {:rules [:has-property]
+                                    :query (apply list 'has-property (rest (:query m)))}
+                                   :else
+                                   m)]
+                          m'))]
+          (apply query-dsl/query args))))
+    :else
     query-dsl/query))
 
 (defn- ->smart-query
@@ -148,9 +169,9 @@ prop-d:: [[nada]]"}])
               (dsl-query "(property prop-d no-space-link)")))
       "Blocks have property value with no space")
 
-  (is (= ["b3" "b4"]
-         (map (comp first str/split-lines :block/title)
-              (dsl-query "(property prop-d)")))
+  (is (= #{"b3" "b4"}
+         (set (map (comp first str/split-lines :block/title)
+                   (dsl-query "(property prop-d)"))))
       "Blocks that have a property"))
 
 (deftest block-property-queries
@@ -182,6 +203,60 @@ prop-d:: [[nada]]"}])
     (is (= ["b3"]
            (map :block/title (dsl-query "(property \"zzz name!\")")))
         "filter can handle property name")))
+
+(when (and js/process.env.DB_GRAPH (not js/process.env.DB_QUERY_TYPE))
+  (deftest property-default-type-default-value-queries
+    (load-test-files-for-db-graph
+     {:properties
+      {:default {:block/schema {:type :default}
+                 :build/properties
+                 {:logseq.property/default-value "foo"}
+                 :build/properties-ref-types {:entity :number}}}
+      :classes {:Class1 {:build/schema-properties [:default]}}
+      :pages-and-blocks
+      [{:page {:block/title "page1"}
+        :blocks [{:block/title "b1"
+                  :build/properties {:default "foo"}}
+                 {:block/title "b2"
+                  :build/properties {:default "bar"}}
+                 {:block/title "b3"
+                  :build/tags [:Class1]}]}]})
+
+    (is (= ["b3" "b2" "b1"]
+           (map :block/title (dsl-query "(property :user.property/default)")))
+        "Blocks with any :default property or tagged with a tag that has that default-value property")
+    (is (= ["b1" "b3"]
+           (map :block/title (dsl-query "(property :user.property/default \"foo\")")))
+        "Blocks with :default property value or tagged with a tag that has that default-value property value")
+    (is (= ["b2"]
+           (map :block/title (dsl-query "(property :user.property/default \"bar\")")))
+        "Blocks with :default property value and not tagged with a tag that has that default-value property value"))
+
+  (deftest property-checkbox-type-default-value-queries
+    (load-test-files-for-db-graph
+     {:properties
+      {:checkbox {:block/schema {:type :checkbox}
+                  :build/properties
+                  {:logseq.property/scalar-default-value true}}}
+      :classes {:Class1 {:build/schema-properties [:checkbox]}}
+      :pages-and-blocks
+      [{:page {:block/title "page1"}
+        :blocks [{:block/title "b1"
+                  :build/properties {:checkbox true}}
+                 {:block/title "b2"
+                  :build/properties {:checkbox false}}
+                 {:block/title "b3"
+                  :build/tags [:Class1]}]}]})
+
+    (is (= ["b3" "b2" "b1"]
+           (map :block/title (dsl-query "(property :user.property/checkbox)")))
+        "Blocks with any :checkbox property or tagged with a tag that has that default-value property")
+    (is (= ["b1" "b3"]
+           (map :block/title (dsl-query "(property :user.property/checkbox true)")))
+        "Blocks with :checkbox property value or tagged with a tag that has that default-value property value")
+    (is (= ["b2"]
+           (map :block/title (dsl-query "(property :user.property/checkbox false)")))
+        "Blocks with :checkbox property value and not tagged with a tag that has that default-value property value")))
 
 (deftest block-property-query-performance
   (let [pages (->> (repeat 10 {:tags ["tag1" "tag2"]})
@@ -264,10 +339,10 @@ prop-d:: [[nada]]"}])
         "Boolean false")))
 
 (when-not js/process.env.DB_GRAPH
- (deftest page-property-queries
-   (testing "page property tests with default config"
-     (test-helper/with-config {}
-       (page-property-queries-test)))))
+  (deftest page-property-queries
+    (testing "page property tests with default config"
+      (test-helper/with-config {}
+        (page-property-queries-test)))))
 
 (deftest task-queries
   (load-test-files [{:file/path "pages/page1.md"

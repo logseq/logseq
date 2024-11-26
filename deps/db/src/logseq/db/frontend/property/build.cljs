@@ -6,25 +6,27 @@
             [logseq.db.frontend.property.type :as db-property-type]))
 
 (defn- closed-value-new-block
-  [block-id value property]
+  [block-id block-type value property]
   (let [property-id (:db/ident property)]
     (merge {:block/type "closed value"
             :block/format :markdown
             :block/uuid block-id
             :block/page property-id
             :block/closed-value-property property-id
-            :logseq.property/created-from-property property-id
+            :logseq.property/created-from-property (if (= property-id :logseq.property/default-value)
+                                                     [:block/uuid block-id]
+                                                     property-id)
             :block/parent property-id}
-           (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
+           (if (db-property-type/property-value-content? block-type property)
              {:property.value/content value}
              {:block/title value}))))
 
 (defn build-closed-value-block
   "Builds a closed value block to be transacted"
-  [block-uuid block-value property {:keys [db-ident icon]}]
+  [block-uuid block-type block-value property {:keys [db-ident icon]}]
   (assert block-uuid (uuid? block-uuid))
   (cond->
-   (closed-value-new-block block-uuid block-value property)
+   (closed-value-new-block block-uuid block-type block-value property)
     (and db-ident (keyword? db-ident))
     (assoc :db/ident db-ident)
 
@@ -36,10 +38,11 @@
 
 (defn closed-values->blocks
   [property]
-  (map (fn [{uuid' :uuid :keys [db-ident value icon]}]
+  (map (fn [{uuid' :uuid :keys [db-ident value icon schema]}]
          (cond->
           (build-closed-value-block
            uuid'
+           (:type schema)
            value
            property
            {:db-ident db-ident :icon icon})
@@ -71,9 +74,11 @@
                      ;; page block
                       (:db/id block))
         :block/parent (:db/id block)
-        :logseq.property/created-from-property (or (:db/id property) {:db/ident (:db/ident property)})
+        :logseq.property/created-from-property (if (= (:db/ident property) :logseq.property/default-value)
+                                                 (:db/id block)
+                                                 (or (:db/id property) {:db/ident (:db/ident property)}))
         :block/order (db-order/gen-key)}
-       (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
+       (if (db-property-type/property-value-content? (get-in block [:block/schema :type]) property)
          {:property.value/content value}
          {:block/title value}))
       sqlite-util/block-with-timestamps))

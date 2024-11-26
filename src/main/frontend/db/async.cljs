@@ -8,6 +8,7 @@
             [frontend.db.file-based.async :as file-async]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
+            [logseq.db.frontend.rules :as rules]
             [frontend.persist-db.browser :as db-browser]
             [datascript.core :as d]
             [frontend.db.react :as react]
@@ -93,15 +94,20 @@
   "For db graphs, returns property value ids for given property db-ident.
    Separate from file version because values are lazy loaded"
   [graph property-id]
-  (let [empty-id (:db/id (db/entity :logseq.property/empty-placeholder))]
-    (<q graph {:transact-db? false}
-        '[:find [?v ...]
-          :in $ ?property-id ?empty-id
-          :where
-          [?b ?property-id ?v]
-          [(not= ?v ?empty-id)]]
-        property-id
-        empty-id)))
+  (let [default-value-id (:db/id (:logseq.property/default-value (db/entity property-id)))
+        empty-id (:db/id (db/entity :logseq.property/empty-placeholder))]
+    (p/let [result (<q graph {:transact-db? false}
+                       '[:find [?v ...]
+                         :in $ ?property-id ?empty-id
+                         :where
+                         [?b ?property-id ?v]
+                         [(not= ?v ?empty-id)]]
+                       property-id
+                       empty-id)]
+      (if default-value-id
+        ;; put default value the first
+        (concat [default-value-id] result)
+        result))))
 
 (comment
   (defn <get-block-property-value-entity
@@ -265,9 +271,11 @@
   [graph property-ident]
   (<q graph {:transact-db? true}
       '[:find [(pull ?b [*]) ...]
-        :in $ ?property-ident
+        :in $ % ?prop
         :where
-        [?b ?property-ident]]
+        (has-property-or-default-value? ?b ?prop)]
+      (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
+                           {:deps rules/rules-dependencies})
       property-ident))
 
 (defn <get-tag-objects

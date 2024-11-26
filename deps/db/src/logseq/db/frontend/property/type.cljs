@@ -28,6 +28,14 @@
   "Valid property types that can change cardinality"
   #{:default :number :url :date :node})
 
+(def default-value-ref-property-types
+  "Valid ref property :type for default value support"
+  #{:default :number :checkbox})
+
+(def text-ref-property-types
+  "Valid ref property :types that support text"
+  #{:default :url :entity})
+
 (assert (set/subset? cardinality-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
 
@@ -188,3 +196,11 @@
     (url? val) :url
     (contains? #{true false} val) :checkbox
     :else :default))
+
+(defn property-value-content?
+  "Whether property value should be stored in :property.value/content"
+  [block-type property]
+  (or
+   (original-value-ref-property-types (get-in property [:block/schema :type]))
+   (and (= (:db/ident property) :logseq.property/default-value)
+        (original-value-ref-property-types block-type))))

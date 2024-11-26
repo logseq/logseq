@@ -416,29 +416,20 @@ a.control-link {
       @apply flex items-center gap-1 relative;
 
       .ls-icon-grip-vertical {
-        @apply opacity-50 cursor-move active:opacity-80;
+        @apply cursor-move;
       }
 
       > strong {
         @apply text-sm px-0.5 flex-grow cursor-pointer font-normal
-        select-none active:opacity-60;
+        select-none;
       }
 
       > .ui__button {
-        @apply !p-0 !w-7 !h-7 overflow-hidden flex-shrink-0;
+          @apply !p-0 !w-5 !h-5 overflow-hidden flex-shrink-0 text-muted-foreground hover:text-foreground;
       }
 
-      > a.del {
-        @apply items-center absolute right-0 top-0 px-1 py-[7px] scale-90 hidden
-        opacity-80 hover:opacity-100 active:opacity-80 text-gray-08 hover:text-red-700;
-      }
-
-      &:hover a.del {
-        @apply flex;
-      }
-
-      &:hover .ls-icon-grip-vertical {
-        @apply opacity-80;
+      > .del {
+        @apply hover:text-red-700;
       }
     }
   }

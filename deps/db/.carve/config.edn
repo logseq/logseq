@@ -13,5 +13,6 @@
                   logseq.db.frontend.schema
                   logseq.db.frontend.validate
                   logseq.db.test.helper
-                  logseq.db]
+                  logseq.db
+                  logseq.db.frontend.property.type]
  :report {:format :ignore}}

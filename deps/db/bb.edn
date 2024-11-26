@@ -31,9 +31,15 @@
            (concat (mapcat val rules/rules)
                    ;; TODO: Update linter to handle false positive on ?str-val for :property
                    (rules/extract-rules (dissoc rules/query-dsl-rules :property))
-                   ;; TODO: Update linter to handle false positive on :task, :priority, :property and :private-property
-                   (rules/extract-rules (dissoc rules/db-query-dsl-rules :task :priority :property :private-property)))))}}
+                   ;; TODO: Update linter to handle false positive on :task, :priority, :*property* rules
+                   (rules/extract-rules (dissoc rules/db-query-dsl-rules
+                                                :task :priority
+                                                :property :simple-query-property :private-property
+                                                :property-scalar-default-value
+                                                :property-missing-value
+                                                :has-property-or-default-value)))))}}
 
  :tasks/config
  {:large-vars
-  {:max-lines-count 50}}}
+  {:max-lines-count 50
+   :metadata-exceptions #{:large-vars/doc-var}}}}
