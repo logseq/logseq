@@ -48,6 +48,17 @@
     (m/reductions {} value)
     (m/latest identity))))
 
+(defn concurrent-exec-flow
+  "Return a flow.
+  Concurrent exec `f` on `flow` with max concurrent count `par`.
+  - `(f v)` return a task.
+  - `v` is value from `flow`"
+  [par flow f]
+  (assert (pos-int? par))
+  (m/ap
+    (let [v (m/?> par flow)]
+      (m/? (f v)))))
+
 (comment
   (defn debounce
     [duration-ms flow]
