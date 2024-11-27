@@ -1232,7 +1232,7 @@
   [config id label]
   (if (= (:block/uuid (:block config)) id)
     [:span.warning.text-sm "Self reference"]
-    (if-let [block-id (if (uuid? id) id (parse-uuid id))]
+    (if-let [block-id (and id (if (uuid? id) id (parse-uuid id)))]
       (if (state/sub-async-query-loading (str block-id))
         [:span "Loading..."]
         (let [block (db/entity [:block/uuid block-id])
