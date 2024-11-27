@@ -1,8 +1,10 @@
 .ls-table {
+  .asset-container {
+    @apply my-1;
+  }
+
   img {
-    max-height: 48px;
-    min-width: 120px;
-    overflow-y: hidden;
+    @apply max-h-[200px] !max-w-[80px] overflow-hidden;
   }
 
   .ls-block {
