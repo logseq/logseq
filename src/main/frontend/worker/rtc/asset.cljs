@@ -191,6 +191,23 @@
                           (map :block/uuid asset-ops)
                           (concat (keys asset-uuid->url) remove-asset-uuids))))))
 
+(defn- new-task--throttle-download-assets
+  "Concurrent download assets with limited max concurrent count"
+  [repo asset-uuid->url asset-uuid->asset-type]
+  (->> (fn [[asset-uuid url]]
+         (m/sp
+           (let [r (ldb/read-transit-str
+                    (c.m/<?
+                     (.rtc-download-asset
+                      ^js @worker-state/*main-thread
+                      repo (str asset-uuid) (get asset-uuid->asset-type asset-uuid) url)))]
+             (when-let [edata (:ex-data r)]
+               ;; if download-url return 404, ignore this asset
+               (when (not= 404 (:status (:data edata)))
+                 (throw (ex-info "download asset failed" r)))))))
+       (c.m/concurrent-exec-flow 5 (m/seed asset-uuid->url))
+       (m/reduce (constantly nil))))
+
 (defn- new-task--pull-remote-asset-updates
   [repo get-ws-create-task conn graph-uuid add-log-fn asset-update-ops]
   (m/sp
@@ -221,17 +238,7 @@
           (c.m/<? (.unlinkAsset ^js @worker-state/*main-thread repo (str asset-uuid) asset-type)))
         (when (seq asset-uuid->url)
           (add-log-fn :rtc.asset.log/download-assets {:asset-uuids (keys asset-uuid->url)}))
-        (doseq [[asset-uuid get-url] asset-uuid->url]
-          (prn :start-download-asset asset-uuid)
-          (let [r (ldb/read-transit-str
-                   (c.m/<?
-                    (.rtc-download-asset
-                     ^js @worker-state/*main-thread
-                     repo (str asset-uuid) (get asset-uuid->asset-type asset-uuid) get-url)))]
-            (when-let [edata (:ex-data r)]
-              ;; if download-url return 404, ignore this asset
-              (when (not= 404 (:status (:data edata)))
-                (throw (ex-info "download asset failed" r))))))))))
+        (m/? (new-task--throttle-download-assets repo asset-uuid->url asset-uuid->asset-type))))))
 
 (defn- get-all-asset-blocks
   [db]
