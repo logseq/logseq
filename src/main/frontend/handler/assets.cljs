@@ -276,51 +276,47 @@
   [repo asset-block-uuid-str asset-type checksum put-url]
   (assert (and asset-type checksum))
   (m/sp
-    (let [asset-file (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
-          *progress-flow (atom nil)
-          http-task (http/put put-url {:headers {"x-amz-meta-checksum" checksum
-                                                 "x-amz-meta-type" asset-type}
-                                       :body asset-file
-                                       :with-credentials? false
-                                       :*progress-flow *progress-flow})]
-      (c.m/run-task
-       (m/reduce (fn [_ v]
-                   (prn :debug-upload v)
-                   (state/update-state!
-                    :rtc/asset-upload-download-progress
-                    (fn [m] (assoc m asset-block-uuid-str v))))
-                 @*progress-flow)
-       :upload-asset-progress
-       :succ (constantly nil))
-      (let [{:keys [status] :as r} (m/? http-task)]
-        (when-not (http/unexceptional-status? status)
-          {:ex-data {:type :rtc.exception/upload-asset-failed :data r}})))))
+   (let [asset-file (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
+         *progress-flow (atom nil)
+         http-task (http/put put-url {:headers {"x-amz-meta-checksum" checksum
+                                                "x-amz-meta-type" asset-type}
+                                      :body asset-file
+                                      :with-credentials? false
+                                      :*progress-flow *progress-flow})]
+     (c.m/run-task
+      (m/reduce (fn [_ v]
+                  (prn :debug-upload v)
+                  (state/update-state!
+                   :rtc/asset-upload-download-progress
+                   (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
+                @*progress-flow)
+      :upload-asset-progress
+      :succ (constantly nil))
+     (let [{:keys [status] :as r} (m/? http-task)]
+       (when-not (http/unexceptional-status? status)
+         {:ex-data {:type :rtc.exception/upload-asset-failed :data r}})))))
 
 (defn new-task--rtc-download-asset
   [repo asset-block-uuid-str asset-type get-url]
-  (state/update-state! :rtc/asset-downloading? (fn [m] (assoc m asset-block-uuid-str true)))
   (m/sp
-    (let [*progress-flow (atom nil)
-          http-task (http/get get-url {:with-credentials? false
-                                       :response-type :array-buffer
-                                       :*progress-flow *progress-flow})]
-      (c.m/run-task
-       (m/reduce (fn [_ v]
-                   (prn :debug-download v)
-                   (state/update-state!
-                    :rtc/asset-upload-download-progress
-                    (fn [m] (assoc m asset-block-uuid-str v))))
-                 @*progress-flow)
-       :download-asset-progress
-       :succ (constantly nil))
-      (let [{:keys [status body] :as r} (m/? http-task)]
-        (if-not (http/unexceptional-status? status)
-          (do
-            (state/update-state! :rtc/asset-downloading? (fn [m] (assoc m asset-block-uuid-str false))) ; TODO: :failed
-            {:ex-data {:type :rtc.exception/download-asset-failed :data r}})
-          (do (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body))
-              (state/update-state! :rtc/asset-downloading? (fn [m] (assoc m asset-block-uuid-str false)))
-              nil))))))
+   (let [*progress-flow (atom nil)
+         http-task (http/get get-url {:with-credentials? false
+                                      :response-type :array-buffer
+                                      :*progress-flow *progress-flow})]
+     (c.m/run-task
+      (m/reduce (fn [_ v]
+                  (prn :debug-download v)
+                  (state/update-state!
+                   :rtc/asset-upload-download-progress
+                   (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
+                @*progress-flow)
+      :download-asset-progress
+      :succ (constantly nil))
+     (let [{:keys [status body] :as r} (m/? http-task)]
+       (if-not (http/unexceptional-status? status)
+         {:ex-data {:type :rtc.exception/download-asset-failed :data r}}
+         (do (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body))
+             nil))))))
 
 (comment
   ;; read asset

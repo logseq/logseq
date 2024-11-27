@@ -1035,10 +1035,13 @@
   (let [asset-type (:logseq.property.asset/type block)
         file (str (:block/uuid block) "." asset-type)
         file-exists? @(::file-exists? state)
-        downloading? (state/sub :rtc/asset-downloading?
-                                {:path-in-sub-atom (str (:block/uuid block))})]
+        repo (state/get-current-repo)
+        {:keys [direction loaded total]} (state/sub :rtc/asset-upload-download-progress
+                                                    {:path-in-sub-atom [repo (str (:block/uuid block))]})
+        downloading? (and (= direction :download) (not= loaded total))
+        download-finished? (and (= direction :download) (= loaded total))]
     (cond
-      (or file-exists? (false? downloading?))
+      (or file-exists? download-finished?)
       (asset-link (assoc config :asset-block block)
                   (:block/title block)
                   (path/path-join (str "../" common-config/local-assets-dir) file)
@@ -1046,7 +1049,7 @@
                   nil)
 
       (or downloading? (false? file-exists?))
-      [:div.opacity-75 "Downloading asset"]
+      (shui/skeleton {:class "h-[125px] w-[250px] rounded-xl"})
 
       :else
       nil)))
