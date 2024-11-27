@@ -2,7 +2,7 @@
   "Websocket wrapped by missionary.
   based on
   https://github.com/ReilySiegel/missionary-websocket/blob/master/src/com/reilysiegel/missionary/websocket.cljs"
-  (:require [cljs-http.client :as http]
+  (:require [cljs-http-missionary.client :as http]
             [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
@@ -158,7 +158,7 @@
     (m/ap
       (let [resp (m/?> f)]
         (if-let [s3-presign-url (:s3-presign-url resp)]
-          (let [{:keys [status body]} (c.m/<? (http/get s3-presign-url {:with-credentials? false}))]
+          (let [{:keys [status body]} (m/? (http/get s3-presign-url {:with-credentials? false}))]
             (if (http/unexceptional-status? status)
               (rtc-const/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
               {:req-id (:req-id resp)

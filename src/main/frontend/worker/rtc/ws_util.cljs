@@ -1,7 +1,6 @@
 (ns frontend.worker.rtc.ws-util
   "Add RTC related logic to the function based on ws."
-  (:require [cljs-http.client :as http]
-            [frontend.common.missionary-util :as c.m]
+  (:require [cljs-http-missionary.client :as http]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.ws :as ws]
@@ -31,7 +30,7 @@
          len (.-length (utf8/encode message-str))]
      (when (< 100000 len)
        (let [{:keys [url key]} (m/? (ws/send&recv ws {:action "presign-put-temp-s3-obj"}))
-             {:keys [status] :as resp} (c.m/<? (http/put url {:body message-str :with-credentials? false}))]
+             {:keys [status] :as resp} (m/? (http/put url {:body message-str :with-credentials? false}))]
          (when-not (http/unexceptional-status? status)
            (throw (ex-info "failed to upload apply-ops message" {:resp resp})))
          key)))))
