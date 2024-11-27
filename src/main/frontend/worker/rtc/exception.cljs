@@ -58,7 +58,6 @@ the server will put it to s3 and return its presigned-url to clients.")
 (def ex-unknown-server-error
   (ex-info "Unknown server error" {:type :rtc.exception/unknown-server-error}))
 
-
 (defn ->map
   [e]
   (when-let [data (ex-data e)]
