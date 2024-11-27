@@ -294,6 +294,7 @@
       :rtc/graphs                            []
       :rtc/online-info                       (atom {})
       :rtc/asset-downloading?                (atom {})
+      :rtc/asset-upload-download-progress    (atom {})
 
       :user/info                             {:UserGroups (storage/get :user-groups)}
       :encryption/graph-parsing?             false
