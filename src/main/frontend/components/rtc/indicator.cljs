@@ -94,7 +94,7 @@
         [:div.flex.flex-col.gap-1.text-sm
          (for [{:keys [block percent]} uploading]
            [:div.flex.flex-row.gap-1.items-center
-            (indicator-progress-pie percent)
+            (ui/indicator-progress-pie percent)
             (:block/title block)])]])]))
 
 (rum/defcs details < rum/reactive
