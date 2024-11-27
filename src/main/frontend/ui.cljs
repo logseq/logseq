@@ -1142,6 +1142,16 @@
    (shui/skeleton {:class "h-6 w-full"})
    (shui/skeleton {:class "h-6 w-full"})])
 
+(rum/defc indicator-progress-pie
+  [percentage]
+  (let [*el (rum/use-ref nil)]
+    (rum/use-effect!
+     #(when-let [^js el (rum/deref *el)]
+        (set! (.. el -style -backgroundImage)
+              (util/format "conic-gradient(var(--ls-pie-fg-color) %s%, var(--ls-pie-bg-color) %s%)" percentage percentage)))
+     [percentage])
+    [:span.cp__file-sync-indicator-progress-pie {:ref *el}]))
+
 (comment
   (rum/defc emoji-picker
     [opts]

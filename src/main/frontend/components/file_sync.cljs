@@ -168,17 +168,6 @@
       (ui/button "Cancel" :background "gray" :class "opacity-50" :on-click close-fn)
       (ui/button "Create remote graph" :on-click on-confirm)]]))
 
-(rum/defc indicator-progress-pie
-  [percentage]
-
-  (let [*el (rum/use-ref nil)]
-    (rum/use-effect!
-     #(when-let [^js el (rum/deref *el)]
-        (set! (.. el -style -backgroundImage)
-              (util/format "conic-gradient(var(--ls-pie-fg-color) %s%, var(--ls-pie-bg-color) %s%)" percentage percentage)))
-     [percentage])
-    [:span.cp__file-sync-indicator-progress-pie {:ref *el}]))
-
 (rum/defc last-synced-cp < rum/reactive
   []
   (let [last-synced-at (state/sub [:file-sync/graph-state
@@ -456,7 +445,7 @@
                                           percent (or (:percent progress) 0)]
                                       (if (and (number? percent)
                                                (< percent 100))
-                                        (indicator-progress-pie percent)
+                                        (ui/indicator-progress-pie percent)
                                         (ui/icon "circle-check")))
                                     (ui/icon "arrow-narrow-down"))}) downloading-files)
 
@@ -480,7 +469,7 @@
                                           percent (or (:percent progress) 0)]
                                       (if (and (number? percent)
                                                (< percent 100))
-                                        (indicator-progress-pie percent)
+                                        (ui/indicator-progress-pie percent)
                                         (ui/icon "circle-check")))
                                     (ui/icon "arrow-up"))}) uploading-files)
 
