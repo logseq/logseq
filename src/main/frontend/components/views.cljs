@@ -1007,15 +1007,17 @@
       filters))))
 
 (rum/defc new-record-button < rum/static
-  [table]
-  (ui/tooltip
-   (shui/button
-    {:variant "ghost"
-     :class "!px-1 text-muted-foreground"
-     :size :sm
-     :on-click (get-in table [:data-fns :add-new-object!])}
-    (ui/icon "upload"))
-   [:div "New record"]))
+  [table view-entity]
+  (let [asset? (and (:logseq.property/built-in? view-entity)
+                 (= (:block/name view-entity) "asset"))]
+    (ui/tooltip
+      (shui/button
+        {:variant "ghost"
+         :class "!px-1 text-muted-foreground"
+         :size :sm
+         :on-click (get-in table [:data-fns :add-new-object!])}
+        (ui/icon (if asset? "upload" "plus")))
+      [:div "New record"])))
 
 (rum/defc add-new-row < rum/static
   [table]
@@ -1261,7 +1263,7 @@
 
        (more-actions columns table)
 
-       (when add-new-object! (new-record-button table))]]
+       (when add-new-object! (new-record-button table view-entity))]]
 
      (filters-row table)
 
