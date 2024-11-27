@@ -18,7 +18,6 @@
         [])
        (apply str)))
 
-
 (defn hash-blocks
   [block-entities & {:keys [selected-keys]
                      :or {selected-keys [:block/uuid

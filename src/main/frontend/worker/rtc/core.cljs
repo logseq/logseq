@@ -34,22 +34,22 @@
   - `push-asset-upload-updates`"
   [get-ws-create-task]
   (m/ap
-   (loop []
-     (let [ws (m/? get-ws-create-task)
-           x (try
-               (m/?> (m/eduction
-                      (filter (fn [data]
-                                (contains?
-                                 #{"online-users-updated"
-                                   "push-updates"
-                                   "push-asset-upload-updates"}
-                                 (:req-id data))))
-                      (ws/recv-flow ws)))
-               (catch js/CloseEvent _
-                 sentinel))]
-       (if (identical? x sentinel)
-         (recur)
-         x)))))
+    (loop []
+      (let [ws (m/? get-ws-create-task)
+            x (try
+                (m/?> (m/eduction
+                       (filter (fn [data]
+                                 (contains?
+                                  #{"online-users-updated"
+                                    "push-updates"
+                                    "push-asset-upload-updates"}
+                                  (:req-id data))))
+                       (ws/recv-flow ws)))
+                (catch js/CloseEvent _
+                  sentinel))]
+        (if (identical? x sentinel)
+          (recur)
+          x)))))
 
 (defn- create-local-updates-check-flow
   "Return a flow: emit if need to push local-updates"
@@ -68,19 +68,19 @@
   [interval-ms flow]
   (let [v {:type :pull-remote-updates}
         clock-flow (m/ap
-                    (loop []
-                      (m/amb
-                       (m/? (m/sleep interval-ms v))
-                       (recur))))]
+                     (loop []
+                       (m/amb
+                        (m/? (m/sleep interval-ms v))
+                        (recur))))]
     (m/ap
-     (m/amb
-      v
-      (let [_ (m/?< (->> flow
-                         (m/reductions {} nil)
-                         (m/latest identity)))]
-        (try
-          (m/?< clock-flow)
-          (catch Cancelled _ (m/amb))))))))
+      (m/amb
+       v
+       (let [_ (m/?< (->> flow
+                          (m/reductions {} nil)
+                          (m/latest identity)))]
+         (try
+           (m/?< clock-flow)
+           (catch Cancelled _ (m/amb))))))))
 
 (defn- create-mixed-flow
   "Return a flow that emits all kinds of events:
@@ -107,13 +107,13 @@
   [*current-ws]
   (m/relieve
    (m/ap
-    (let [ws (m/?< (m/watch *current-ws))]
-      (try
-        (if ws
-          (m/?< (ws/create-mws-state-flow ws))
-          (m/amb))
-        (catch Cancelled _
-          (m/amb)))))))
+     (let [ws (m/?< (m/watch *current-ws))]
+       (try
+         (if ws
+           (m/?< (ws/create-mws-state-flow ws))
+           (m/amb))
+         (catch Cancelled _
+           (m/amb)))))))
 
 (defn- create-rtc-state-flow
   [ws-state-flow]
@@ -131,16 +131,16 @@
   we need to ensure that no two concurrent rtc-loop-tasks are modifying `conn` at the same time"
   [started-dfv task]
   (m/sp
-   (when-not (compare-and-set! *rtc-lock nil true)
-     (let [e (ex-info "Must not run multiple rtc-loops, try later"
-                      {:type :rtc.exception/lock-failed
-                       :missionary/retry true})]
-       (started-dfv e)
-       (throw e)))
-   (try
-     (m/? task)
-     (finally
-       (reset! *rtc-lock nil)))))
+    (when-not (compare-and-set! *rtc-lock nil true)
+      (let [e (ex-info "Must not run multiple rtc-loops, try later"
+                       {:type :rtc.exception/lock-failed
+                        :missionary/retry true})]
+        (started-dfv e)
+        (throw e)))
+    (try
+      (m/? task)
+      (finally
+        (reset! *rtc-lock nil)))))
 
 (defn- create-rtc-loop
   "Return a map with [:rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
@@ -227,30 +227,30 @@
   [repo token]
   (m/sp
    ;; ensure device metadata existing first
-   (m/? (worker-device/new-task--ensure-device-metadata! token))
-   (if-let [conn (worker-state/get-datascript-conn repo)]
-     (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
-       (let [user-uuid (:sub (worker-util/parse-jwt token))
-             config (worker-state/get-config repo)
-             date-formatter (common-config/get-date-formatter config)
-             {:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users onstarted-task]}
-             (create-rtc-loop graph-uuid repo conn date-formatter token)
-             canceler (c.m/run-task rtc-loop-task :rtc-loop-task)
-             start-ex (m/? onstarted-task)]
-         (if-let [start-ex (:ex-data start-ex)]
-           (r.ex/->map start-ex)
-           (do (reset! *rtc-loop-metadata {:repo repo
-                                           :graph-uuid graph-uuid
-                                           :user-uuid user-uuid
-                                           :rtc-state-flow rtc-state-flow
-                                           :*rtc-auto-push? *rtc-auto-push?
-                                           :*online-users *online-users
-                                           :*rtc-lock *rtc-lock
-                                           :canceler canceler})
-               nil)))
-       (r.ex/->map r.ex/ex-local-not-rtc-graph))
-     (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
-                                               :repo repo})))))
+    (m/? (worker-device/new-task--ensure-device-metadata! token))
+    (if-let [conn (worker-state/get-datascript-conn repo)]
+      (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
+        (let [user-uuid (:sub (worker-util/parse-jwt token))
+              config (worker-state/get-config repo)
+              date-formatter (common-config/get-date-formatter config)
+              {:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users onstarted-task]}
+              (create-rtc-loop graph-uuid repo conn date-formatter token)
+              canceler (c.m/run-task rtc-loop-task :rtc-loop-task)
+              start-ex (m/? onstarted-task)]
+          (if-let [start-ex (:ex-data start-ex)]
+            (r.ex/->map start-ex)
+            (do (reset! *rtc-loop-metadata {:repo repo
+                                            :graph-uuid graph-uuid
+                                            :user-uuid user-uuid
+                                            :rtc-state-flow rtc-state-flow
+                                            :*rtc-auto-push? *rtc-auto-push?
+                                            :*online-users *online-users
+                                            :*rtc-lock *rtc-lock
+                                            :canceler canceler})
+                nil)))
+        (r.ex/->map r.ex/ex-local-not-rtc-graph))
+      (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
+                                                :repo repo})))))
 
 (defn rtc-stop
   []
@@ -274,11 +274,11 @@
   [token graph-uuid]
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
     (m/sp
-     (let [{:keys [ex-data]}
-           (m/? (ws-util/send&recv get-ws-create-task
-                                   {:action "delete-graph" :graph-uuid graph-uuid}))]
-       (when ex-data (prn ::delete-graph-failed graph-uuid ex-data))
-       (boolean (nil? ex-data))))))
+      (let [{:keys [ex-data]}
+            (m/? (ws-util/send&recv get-ws-create-task
+                                    {:action "delete-graph" :graph-uuid graph-uuid}))]
+        (when ex-data (prn ::delete-graph-failed graph-uuid ex-data))
+        (boolean (nil? ex-data))))))
 
 (defn new-task--get-user-info
   "Return a task that return users-info about the graph."
@@ -351,11 +351,11 @@
 (defn new-task--upload-graph
   [token repo remote-graph-name]
   (m/sp
-   (if-let [conn (worker-state/get-datascript-conn repo)]
-     (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-       (m/? (r.upload-download/new-task--upload-graph get-ws-create-task repo conn remote-graph-name)))
-     (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
-                                               :repo repo})))))
+    (if-let [conn (worker-state/get-datascript-conn repo)]
+      (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
+        (m/? (r.upload-download/new-task--upload-graph get-ws-create-task repo conn remote-graph-name)))
+      (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
+                                                :repo repo})))))
 
 (defn new-task--request-download-graph
   [token graph-uuid]
