@@ -285,7 +285,6 @@
                                       :*progress-flow *progress-flow})]
      (c.m/run-task
       (m/reduce (fn [_ v]
-                  (prn :debug-upload v)
                   (state/update-state!
                    :rtc/asset-upload-download-progress
                    (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
@@ -305,7 +304,6 @@
                                       :*progress-flow *progress-flow})]
      (c.m/run-task
       (m/reduce (fn [_ v]
-                  (prn :debug-download v)
                   (state/update-state!
                    :rtc/asset-upload-download-progress
                    (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
