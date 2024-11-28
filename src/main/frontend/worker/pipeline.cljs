@@ -22,7 +22,8 @@
 
 (defn- compute-block-path-refs-tx
   [{:keys [tx-meta] :as tx-report} blocks]
-  (when (or (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
+  (when (or (:rtc-tx? tx-meta)
+            (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
             (:from-disk? tx-meta)
             (:new-graph? tx-meta))
     (outliner-pipeline/compute-block-path-refs-tx tx-report blocks)))
