@@ -18,6 +18,7 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -238,20 +239,22 @@
                            (route-handler/redirect-to-page! (:block/uuid property))
                            (.preventDefault e)))
       :on-click (fn [^js/MouseEvent e]
-                  (shui/popup-show! (.-target e)
-                                    (fn []
-                                      (property-config/dropdown-editor property block {:debug? (.-altKey e)
-                                                                                       :class-schema? class-schema?}))
-                                    {:content-props
-                                     {:class "ls-property-dropdown-editor as-root"
-                                      :onEscapeKeyDown (fn [e]
-                                                         (util/stop e)
-                                                         (shui/popup-hide!)
-                                                         (when-let [input (state/get-input)]
-                                                           (.focus input)))}
-                                     :align "start"
-                                     :as-dropdown? true}))}
-     (block-container {:property? true} property))))
+                  (if (state/editing?)
+                    (editor-handler/escape-editing {:select? true})
+                    (shui/popup-show! (.-target e)
+                      (fn []
+                        (property-config/dropdown-editor property block {:debug? (.-altKey e)
+                                                                         :class-schema? class-schema?}))
+                      {:content-props
+                       {:class "ls-property-dropdown-editor as-root"
+                        :onEscapeKeyDown (fn [e]
+                                           (util/stop e)
+                                           (shui/popup-hide!)
+                                           (when-let [input (state/get-input)]
+                                             (.focus input)))}
+                       :align "start"
+                       :as-dropdown? true})))}
+      (block-container {:property? true} property))))
 
 (rum/defc property-key-cp < rum/static
   [block property {:keys [other-position? class-schema?]}]
