@@ -25,7 +25,7 @@
 
 (sr/defkeyword :block/title
   "Title or content string of the blocks.
-in db-version, page-references(e.g. [[page-name]]) are stored as [[~^uuid]]."
+in db-version, page-references(e.g. [[page-name]]) are stored as [[uuid]]."
   :string)
 
 (sr/defkeyword :block/raw-title

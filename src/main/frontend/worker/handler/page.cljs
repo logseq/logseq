@@ -46,7 +46,7 @@
   [repo page-entity]
   (when (sqlite-util/db-based-graph? repo)
     (let [refs (:block/_refs page-entity)
-          id-ref->page #(db-content/special-id-ref->page % [page-entity])]
+          id-ref->page #(db-content/content-id-ref->page % [page-entity])]
       (when (seq refs)
         (let [tx-data (mapcat (fn [{:block/keys [raw-title] :as ref}]
                                 ;; block content

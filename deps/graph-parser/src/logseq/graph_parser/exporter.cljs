@@ -825,7 +825,7 @@
                                   ;; ignore deadline related refs that don't affect content
                                             (and (keyword? %) (db-malli-schema/internal-ident? %))))
                                (map #(add-uuid-to-page-map % page-names-to-uuids)))]
-                 (db-content/refs->special-id-ref (:block/title block) refs {:replace-tag? false}))))
+                 (db-content/title-ref->id-ref (:block/title block) refs {:replace-tag? false}))))
       block)))
 
 (defn- fix-pre-block-references
