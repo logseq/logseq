@@ -36,6 +36,9 @@ the server will put it to s3 and return its presigned-url to clients.")
 (sr/defkeyword :rtc.exception/not-allowed
   "this api-call is not allowed")
 
+(sr/defkeyword :rtc.exception/ws-timeout
+  "websocket timeout")
+
 (def ex-remote-graph-not-exist
   (ex-info "remote graph not exist" {:type :rtc.exception/remote-graph-not-exist}))
 
