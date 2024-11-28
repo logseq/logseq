@@ -751,8 +751,8 @@
                                                            :block/title "FIX unknown page"
                                                            :block/name "fix unknown page"}])
                                            "Unknown title")
-                                         (re-find db-content/special-id-ref-pattern s)
-                                         (db-content/special-id-ref->page s (:block/refs page-entity))
+                                         (re-find db-content/id-ref-pattern s)
+                                         (db-content/content-id-ref->page s (:block/refs page-entity))
                                          :else
                                          s)
                                      s (if tag? (str "#" s) s)]
@@ -904,11 +904,7 @@
                  *result (atom nil)
                  page-name (or (:block/uuid page)
                                (when-let [s (:block/name page)]
-                                 (let [s (string/trim s)
-                                       s (if (string/starts-with? s db-content/page-ref-special-chars)
-                                           (common-util/safe-subs s 2)
-                                           s)]
-                                   s)))
+                                 (string/trim s)))
                  page-entity (if (e/entity? page) page (db/get-page page-name))]
              (if page-entity
                (reset! *result page-entity)
@@ -1060,10 +1056,7 @@
   [html-export? uuid-or-title* {:keys [nested-link? show-brackets? id] :as config} label]
   (when uuid-or-title*
     (let [uuid-or-title (if (string? uuid-or-title*)
-                          (as-> (string/trim uuid-or-title*) s
-                            (if (string/starts-with? s db-content/page-ref-special-chars)
-                              (common-util/safe-subs s 2)
-                              s))
+                          (string/trim uuid-or-title*)
                           uuid-or-title*)
           show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
           contents-page? (= "contents" (string/lower-case (str id)))

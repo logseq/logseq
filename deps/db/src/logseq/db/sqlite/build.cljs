@@ -138,7 +138,7 @@
                                                            (throw (ex-info (str "No uuid for page ref name" (pr-str %)) {})))
                                                        :block/title %)
                                             ref-names)]
-                       {:block/title (db-content/refs->special-id-ref (:block/title m) block-refs {:replace-tag? false})
+                       {:block/title (db-content/title-ref->id-ref (:block/title m) block-refs {:replace-tag? false})
                         :block/refs block-refs})))))))
 
 (defn- build-properties-tx [properties page-uuids all-idents]
