@@ -136,7 +136,7 @@
   (let [content (or (:block/raw-title block)
                     (:block/title block))]
     (when (string? content)
-      (->> (db-content/get-matched-special-ids content)
+      (->> (db-content/get-matched-ids content)
            (map (fn [id]
                   (when-let [e (d/entity db [:block/uuid id])]
                     (:db/id e))))))))

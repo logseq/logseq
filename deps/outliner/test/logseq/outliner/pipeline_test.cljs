@@ -8,7 +8,7 @@
             [logseq.outliner.pipeline :as outliner-pipeline]
             [clojure.string :as string]
             [logseq.db.test.helper :as db-test]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.common.util.page-ref :as page-ref]))
 
 (defn- get-blocks [db]
   (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name :db/id]}])
@@ -64,4 +64,4 @@
     (assert block)
     (is (= [(:db/id block)]
            (outliner-pipeline/block-content-refs @conn
-                                                 {:block/title (str "ref to " (db-content/block-id->special-id-ref (:block/uuid block)))})))))
+                                                 {:block/title (str "ref to " (page-ref/->page-ref (:block/uuid block)))})))))

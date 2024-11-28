@@ -171,8 +171,8 @@ independent of format as format specific heading characters are stripped"
                   (let [block (db-utils/entity repo block-id)
                         ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
                     (= (-> block-content
-                           (db-content/special-id-ref->page-ref ref-tags)
-                           (db-content/special-id-ref->page ref-tags)
+                           (db-content/id-ref->title-ref ref-tags)
+                           (db-content/content-id-ref->page ref-tags)
                            heading-content->route-name)
                        (string/lower-case external-content))))
                 (rules/extract-rules rules/db-query-dsl-rules [:has-property]))

@@ -41,13 +41,11 @@
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.graph-parser.db :as gp-db]
             [logseq.graph-parser.text :as text]
-            [promesa.core :as p]
-            [logseq.db.frontend.content :as db-content]))
+            [promesa.core :as p]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
@@ -363,11 +361,7 @@
                                               [page (db/get-page page)])))
                                         [chosen' chosen-result])
             ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
-                       (cond
-                         db-based?
-                         (db-content/block-id->special-id-ref (:block/uuid chosen-result))
-                         :else
-                         (block-ref/->block-ref (:block/uuid chosen-result)))
+                       (page-ref/->page-ref (:block/uuid chosen-result))
                        (get-page-ref-text chosen'))
             result (when db-based?
                      (when-not (de/entity? chosen-result)

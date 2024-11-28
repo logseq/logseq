@@ -66,7 +66,7 @@
         result (-> block
                    (merge (if level {:block/level level} {}))
                    (assoc :block/title
-                          (db-content/refs->special-id-ref (:block/title block) (:block/refs block))))]
+                          (db-content/title-ref->id-ref (:block/title block) (:block/refs block))))]
     result))
 
 (defn save-file!

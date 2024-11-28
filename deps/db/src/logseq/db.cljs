@@ -15,9 +15,9 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
-            [logseq.common.util.namespace :as ns-util])
+            [logseq.common.util.namespace :as ns-util]
+            [logseq.common.util.page-ref :as page-ref])
   (:refer-clojure :exclude [object?]))
 
 (defonce *transact-fn (atom nil))
@@ -588,8 +588,7 @@
 (defn inline-tag?
   [block-raw-title tag]
   (assert (string? block-raw-title) "block-raw-title should be a string")
-  (or (string/includes? block-raw-title (str "#" (db-content/block-id->special-id-ref (:block/uuid tag))))
-      (string/includes? block-raw-title (str "#" db-content/page-ref-special-chars (:block/uuid tag)))))
+  (string/includes? block-raw-title (str "#" (page-ref/->page-ref (:block/uuid tag)))))
 
 (defonce node-display-type-classes
   #{:logseq.class/Code-block :logseq.class/Math-block :logseq.class/Quote-block})

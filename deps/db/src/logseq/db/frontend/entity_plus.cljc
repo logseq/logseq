@@ -34,7 +34,7 @@
        (let [result (lookup-entity e k default-value)
              refs (:block/refs e)
              result' (if (and (string? result) refs)
-                       (db-content/special-id-ref->page-ref result refs)
+                       (db-content/id-ref->title-ref result refs)
                        result)]
          (or result' default-value))))))
 
@@ -104,7 +104,7 @@
   [^js this]
   (let [v @(.-cache this)
         v' (if (:block/title v)
-             (assoc v :block/title (db-content/special-id-ref->page-ref (:block/title v) (:block/refs this)))
+             (assoc v :block/title (db-content/id-ref->title-ref (:block/title v) (:block/refs this)))
              v)]
     (concat (seq v')
             (seq (.-kv this)))))

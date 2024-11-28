@@ -5,8 +5,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]
             [clojure.string :as string]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn- replace-ref-with-deleted-block-title
   [block ref-raw-title]
@@ -19,11 +18,6 @@
 
             (string/replace (block-ref/->block-ref (str (:block/uuid block)))
                             block-content)
-
-                                               ;; Replace object
-            (string/replace (db-content/block-id->special-id-ref (:block/uuid block))
-                            block-content)
-                                               ;; Replace non-object
             (string/replace (page-ref/->page-ref (str (:block/uuid block)))
                             block-content))))
 
