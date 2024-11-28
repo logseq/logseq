@@ -29,7 +29,8 @@
 
 (defn- rebuild-block-refs
   [repo {:keys [tx-meta db-after]} blocks]
-  (when (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
+  (when (or (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
+            (:rtc-tx? tx-meta))
     (mapcat (fn [block]
               (when (d/entity db-after (:db/id block))
                 (let [date-formatter (worker-state/get-date-formatter repo)
