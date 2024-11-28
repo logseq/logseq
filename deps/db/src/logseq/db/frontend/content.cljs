@@ -30,9 +30,13 @@
       (reduce
        (fn [content ref]
          (if (:block/title ref)
-           (string/replace content
-                           (page-ref/->page-ref (:block/uuid ref))
-                           (page-ref/->page-ref (:block/title ref)))
+           (let [content' (if (not (string/includes? (:block/title ref) " "))
+                            (string/replace content
+                                            (str "#" (page-ref/->page-ref (:block/uuid ref)))
+                                            (str "#" (:block/title ref)))
+                            content)]
+             (string/replace content' (page-ref/->page-ref (:block/uuid ref))
+                             (page-ref/->page-ref (:block/title ref))))
            content))
        content
        refs)
@@ -47,9 +51,8 @@
 
 (defn- replace-tag-ref
   [content page-name id]
-  (let [[page wrapped-id] (if (string/includes? page-name " ")
-                            (map page-ref/->page-ref [page-name id])
-                            [page-name id])
+  (let [page (if (string/includes? page-name " ") (page-ref/->page-ref page-name) page-name)
+        wrapped-id (page-ref/->page-ref id)
         page-name (common-util/format "#%s" page)
         r (common-util/format "#%s" wrapped-id)]
     ;; hash tag parsing rules https://github.com/logseq/mldoc/blob/701243eaf9b4157348f235670718f6ad19ebe7f8/test/test_markdown.ml#L631
@@ -105,7 +108,7 @@
       item)
     item))
 
-(defn replace-tags-with-page-refs
+(defn replace-tags-with-id-refs
   "Replace tags in content with page-ref ids. Ignore case because tags in
   content can have any case and still have a valid ref"
   [content tags]
@@ -116,7 +119,7 @@
         (-> content
             ;; #[[favorite book]]
             (common-util/replace-ignore-case
-             (str "#" page-ref/left-brackets (:block/title tag) page-ref/right-brackets)
+             (str "#" (page-ref/->page-ref (:block/title tag)))
              id-ref)
             ;; #book
             (common-util/replace-ignore-case (str "#" (:block/title tag)) id-ref))))

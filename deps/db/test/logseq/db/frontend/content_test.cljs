@@ -5,7 +5,7 @@
 (deftest replace-tags-with-page-refs
   (testing "tags with overlapping names get replaced correctly"
     (is (= "string [[foo]] string2 [[foo-bar]]"
-           (db-content/replace-tags-with-page-refs
+           (db-content/replace-tags-with-id-refs
             "string #foo string2 #foo-bar"
             [{:block/title "foo" :block/uuid "foo"}
              {:block/title "foo-bar" :block/uuid "foo-bar"}])))))

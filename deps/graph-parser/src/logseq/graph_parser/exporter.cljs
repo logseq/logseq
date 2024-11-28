@@ -228,7 +228,7 @@
                            (map :block/title)))
               true
               (update :block/title
-                      db-content/replace-tags-with-page-refs
+                      db-content/replace-tags-with-id-refs
                       (->> original-tags
                            (remove convert-tag?')
                            (map #(add-uuid-to-page-map % (:page-names-to-uuids per-file-state)))))
