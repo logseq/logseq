@@ -37,7 +37,7 @@
                              (-> block
                                  (dissoc :block/tags)
                                  (update :block/title (fn [title]
-                                                        (let [title' (db-content/replace-tags-with-page-refs title refs)]
+                                                        (let [title' (db-content/replace-tags-with-id-refs title refs)]
                                                           (db-content/title-ref->id-ref title' refs)))))))))]
       (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
 
