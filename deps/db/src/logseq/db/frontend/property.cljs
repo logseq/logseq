@@ -208,7 +208,7 @@
                                  :schema {:type :keyword :hide? true}}
    :logseq.property.pdf/hl-color
    {:title "Annotation color"
-    :schema {:type :default}
+    :schema {:type :default :hide? true}
     :closed-values
     (mapv (fn [[db-ident value]]
             {:db-ident db-ident
@@ -220,7 +220,7 @@
            [:logseq.property/color.blue "blue"]
            [:logseq.property/color.purple "purple"]])}
    :logseq.property.pdf/hl-page {:title "Annotation page"
-                                 :schema {:type :raw-number}}
+                                 :schema {:type :raw-number :hide? true}}
    :logseq.property.pdf/hl-image {:title "Annotation image"
                                   :schema {:type :entity :hide? true}}
    :logseq.property.pdf/hl-value {:title "Annotation data"
