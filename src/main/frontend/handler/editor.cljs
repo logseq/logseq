@@ -64,7 +64,8 @@
             [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.outliner.property :as outliner-property]))
+            [logseq.outliner.property :as outliner-property]
+            [datascript.core :as d]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -3444,12 +3445,13 @@
 (defn- db-collapsable?
   [block]
   (let [class-properties (:classes-properties (outliner-property/get-block-classes-properties (db/get-db) (:db/id block)))
-        properties (->> (keys (:block/properties block))
+        properties (->> (map :a (d/datoms (db/get-db) :eavt (:db/id block)))
                         (map db/entity)
                         (concat class-properties)
                         (remove (fn [e] (db-property/db-attribute-properties (:db/ident e))))
                         (remove outliner-property/property-with-other-position?)
-                        (remove (fn [e] (:hide? (:block/schema e)))))]
+                        (remove (fn [e] (:hide? (:block/schema e))))
+                        (remove nil?))]
     (or (seq properties)
         (ldb/class-instance? (db/entity :logseq.class/Query) block))))
 
