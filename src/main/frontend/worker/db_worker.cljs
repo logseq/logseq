@@ -302,6 +302,9 @@
                                        :search search-db
                                        :client-ops client-ops-db})
       (.exec db "PRAGMA locking_mode=exclusive")
+      (.exec db "PRAGMA journal_mode=WAL")
+      (.exec client-ops-db "PRAGMA locking_mode=exclusive")
+      (.exec client-ops-db "PRAGMA journal_mode=WAL")
       (sqlite-common-db/create-kvs-table! db)
       (when-not @*publishing? (sqlite-common-db/create-kvs-table! client-ops-db))
       (db-migrate/migrate-sqlite-db db)
@@ -321,10 +324,10 @@
             (d/transact! conn initial-data {:initial-db? true})))
 
         (when-not db-based?
-         (try
-           (when-not (ldb/page-exists? @conn common-config/views-page-name "page")
-             (ldb/transact! conn (sqlite-create-graph/build-initial-views)))
-           (catch :default _e)))
+          (try
+            (when-not (ldb/page-exists? @conn common-config/views-page-name "page")
+              (ldb/transact! conn (sqlite-create-graph/build-initial-views)))
+            (catch :default _e)))
 
         ;; (gc-kvs-table! db)
         (try
