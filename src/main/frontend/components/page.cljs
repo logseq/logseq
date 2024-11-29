@@ -254,7 +254,7 @@
          (if (and db-based? (or (ldb/class? block) (ldb/property? block)))
            [:div.mt-4.ml-2.-mb-1
             (ui/foldable
-             [:div.font-medium.opacity-50 {:class "pl-0.5"} "Notes"]
+             [:div.font-medium.as-toggle {:class "pl-0.5"} "Notes"]
              [:div.ml-1.-mb-2 blocks]
              {:disable-on-pointer-down? true})]
            blocks))])))
