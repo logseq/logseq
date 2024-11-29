@@ -377,7 +377,7 @@ These tasks are specific to database graphs. For these tasks there is a one time
   ```sh
   $ bb dev:db-query woot '[:find (pull ?b [*]) :where (block-content ?b "Dogma")]'
   DB contains 833 datoms
-  [{:block/tx-id 536870923, :block/link #:db{:id 100065}, :block/uuid #uuid "65565c26-f972-4400-bce4-a15df488784d", :block/updated-at 1700158508564, :block/order "a0", :block/refs [#:db{:id 100064}], :block/created-at 1700158502056, :block/format :markdown, :block/tags [#:db{:id 100064}], :block/title "Dogma #~^65565c2a-b1c5-4dc8-a0f0-81b786bc5c6d", :db/id 100090, :block/path-refs [#:db{:id 100051} #:db{:id 100064}], :block/parent #:db{:id 100051}, :block/page #:db{:id 100051}}]
+  [{:block/tx-id 536870923, :block/link #:db{:id 100065}, :block/uuid #uuid "65565c26-f972-4400-bce4-a15df488784d", :block/updated-at 1700158508564, :block/order "a0", :block/refs [#:db{:id 100064}], :block/created-at 1700158502056, :block/format :markdown, :block/tags [#:db{:id 100064}], :block/title "Dogma #[[65565c2a-b1c5-4dc8-a0f0-81b786bc5c6d]]", :db/id 100090, :block/path-refs [#:db{:id 100051} #:db{:id 100064}], :block/parent #:db{:id 100051}, :block/page #:db{:id 100051}}]
   ```
 
 * `dev:db-transact` - Run a `d/transact!` against the queried results of a DB graph

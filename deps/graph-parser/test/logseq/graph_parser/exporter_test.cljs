@@ -20,7 +20,8 @@
             [logseq.db.test.helper :as db-test]
             [logseq.db.frontend.rules :as rules]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.graph-parser.block :as gp-block]))
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.db.frontend.content :as db-content]))
 
 ;; Helpers
 ;; =======
@@ -495,7 +496,7 @@
       (is (= 2
              (->> (find-block-by-content @conn #"replace with same start string")
                   :block/title
-                  (re-seq #"\[\[~\^\S+\]\]")
+                  (re-seq db-content/id-ref-pattern)
                   distinct
                   count))
           "A block with ref names that start with same string has 2 distinct refs")
@@ -503,7 +504,7 @@
       (is (= 1
              (->> (find-block-by-content @conn #"replace case insensitive")
                   :block/title
-                  (re-seq #"\[\[~\^\S+\]\]")
+                  (re-seq db-content/id-ref-pattern)
                   distinct
                   count))
           "A block with different case of same ref names has 1 distinct ref"))
