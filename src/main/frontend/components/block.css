@@ -388,6 +388,10 @@
   &:hover {
     background: var(--lx-accent-04-alpha, var(--ls-secondary-background-color, hsl(var(--primary)/.4)));
   }
+
+  .asset-block-wrap {
+    @apply inline-block;
+  }
 }
 
 .page-ref {
