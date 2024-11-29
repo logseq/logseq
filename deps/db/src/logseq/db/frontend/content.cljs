@@ -6,10 +6,15 @@
             [logseq.common.util :as common-util]
             [logseq.db.frontend.entity-util :as entity-util]))
 
-#_(defonce page-ref-special-chars "~^")
-
-(defonce id-ref-pattern
-  #"\[\[([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]\]")
+;; [[uuid]]
+(def id-ref-pattern
+  (re-pattern
+   (str
+    "\\[\\["
+    "("
+    common-util/uuid-pattern
+    ")"
+    "\\]\\]")))
 
 (defn content-id-ref->page
   "Convert id ref backs to page name using refs."
