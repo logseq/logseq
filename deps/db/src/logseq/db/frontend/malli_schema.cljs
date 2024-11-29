@@ -1,7 +1,6 @@
 (ns logseq.db.frontend.malli-schema
   "Malli schemas and fns for logseq.db.frontend.*"
-  (:require [clojure.walk :as walk]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -98,14 +97,6 @@
           ;; also valid if value is empty-placeholder
           (empty-placeholder-value? db property property-val)))))
 
-(defn update-properties-in-schema
-  "Needs to be called on the DB schema to add the datascript db to it"
-  [db-schema db]
-  (walk/postwalk (fn [e]
-                   (let [meta' (meta e)]
-                     (if (:add-db meta') (partial e db) e)))
-                 db-schema))
-
 (def required-properties
   "Set of properties required by a schema and that are validated directly in a schema instead
    of validate-property-value"
@@ -197,6 +188,11 @@
 ;; ==================
 ;; These schemas should be data vars to remain as simple and reusable as possible
 
+
+(def ^:dynamic *db-for-validate-fns*
+  "Used by validate-fns which need db as input"
+  nil)
+
 (def property-tuple
   "A tuple of a property map and a property value. This schema
    has 1 metadata hook which is used to inject a datascript db later"
@@ -205,8 +201,8 @@
    (map (fn [[prop-type value-schema]]
           [prop-type
            (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)]
-             [:fn (with-meta (fn [db tuple]
-                               (validate-property-value db schema-fn tuple)) {:add-db true})])])
+             [:fn (fn [tuple]
+                    (validate-property-value *db-for-validate-fns* schema-fn tuple))])])
         db-property-type/built-in-validation-schemas)))
 
 (def block-properties
