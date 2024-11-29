@@ -494,7 +494,7 @@
 
     .block-content-or-editor-wrap {
       .positioned-properties {
-        @apply relative top-[3px];
+        @apply relative top-[2px];
       }
     }
   }

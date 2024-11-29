@@ -211,13 +211,13 @@ html.is-native-ios {
 }
 
 .ls-dummy-block {
-  @apply mb-[20px] pt-[5px] pb-[3px] h-[29px];
+  @apply mb-[20px] pt-[5px] pb-[3px] h-[28px];
 
   &.selected {
   }
 
   .bullet {
-    @apply relative -top-[2px] left-[-2px];
+    @apply relative -top-[3px] left-[-2px];
   }
 
   .text {
@@ -255,4 +255,8 @@ html.is-native-ios {
   .add-button-link-wrap {
     @apply visible;
   }
+}
+
+.ls-page-blocks {
+  @apply min-h-[57px];
 }
