@@ -176,8 +176,9 @@
                                   (vreset! *el-top (+ (-> target (.getBoundingClientRect) (.-top))
                                                       (.-scrollTop container)))))
            update-footer! (fn []
-                            (when table-footer
-                              (set! (. (.-style table-footer) -width) (str (.-scrollWidth table) "px"))))
+                            (let [tw (.-scrollWidth table)]
+                              (when (and table-footer (number? tw) (> tw 0))
+                                (set! (. (.-style table-footer) -width) (str tw "px")))))
            update-target! (fn []
                             (if (.contains target-cls "ls-fixed")
                               (let [^js rect (-> table (.getBoundingClientRect))
