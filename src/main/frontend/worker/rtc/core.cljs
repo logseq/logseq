@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.core
   "Main(use missionary) ns for rtc related fns"
   (:require [frontend.common.missionary-util :as c.m]
+            [frontend.worker.device :as worker-device]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.client-op :as client-op]
@@ -16,8 +17,7 @@
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [malli.core :as ma]
-            [missionary.core :as m]
-            [frontend.worker.device :as worker-device])
+            [missionary.core :as m])
   (:import [missionary Cancelled]))
 
 (def ^:private rtc-state-schema
@@ -306,7 +306,7 @@
                                           :block-uuids [block-uuid]
                                           :graph-uuid graph-uuid}))))
 
-(def ^:private create-get-state-flow
+(def ^:private create-get-state-flow*
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
       (let [{rtc-lock :*rtc-lock :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *online-users]}
@@ -330,6 +330,8 @@
               (rtc-log-and-state/create-local-t-flow graph-uuid)
               (rtc-log-and-state/create-remote-t-flow graph-uuid))))
           (catch Cancelled _))))))
+
+(def ^:private create-get-state-flow (c.m/throttle 300 create-get-state-flow*))
 
 (defn new-task--get-debug-state
   []
@@ -415,4 +417,16 @@
     (def a (atom 1))
     (def f1 (m/watch a))
     (def f2 (create-pull-remote-updates-flow 5000 f1))
-    (def cancel (c.m/run-task (m/reduce (fn [_ v] (prn :v v)) f2) :xxx))))
+    (def cancel (c.m/run-task (m/reduce (fn [_ v] (prn :v v)) f2) :xxx)))
+
+  (defn sleep-emit [delays]
+    (m/ap (let [n (m/?> (m/seed delays))
+                r (m/? (m/sleep n n))]
+            (prn :xxx r (t/now))
+            r)))
+
+  (def cancel
+    ((->> (m/sample vector
+                    (m/latest identity (m/reductions {} 0  (sleep-emit [1000 1 2])))
+                    (sleep-emit [2000 3000 1000]))
+          (m/reduce (fn [_ v] (prn :v v)))) prn prn)))
