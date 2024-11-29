@@ -13,7 +13,10 @@
             [logseq.common.util :as common-util]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.order :as db-order]
-            [logseq.common.uuid :as common-uuid]))
+            [logseq.common.uuid :as common-uuid]
+            [clojure.string :as string]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.common.util.page-ref :as page-ref]))
 
 ;; TODO: fixes/rollback
 ;; Frontend migrations
@@ -385,6 +388,35 @@
            [:db/add (:e d) :block/tags :logseq.class/pdf-annotation])
          datoms)))))
 
+(defn- replace-special-id-ref-with-id-ref
+  [conn _search-db]
+  (let [db @conn
+        ref-special-chars "~^"
+        id-ref-pattern (re-pattern
+                        (str "(?i)" "~\\^" "(" common-util/uuid-pattern ")"))
+        datoms (d/datoms db :avet :block/title)]
+    (keep
+     (fn [{:keys [e v]}]
+       (when (string/includes? v ref-special-chars)
+         (let [entity (d/entity db e)]
+           (cond
+             (and (ldb/page? entity)
+                  (re-find db-content/id-ref-pattern v))
+             [:db/retractEntity e]
+
+             (string/includes? v (str ref-special-chars page-ref/left-brackets))
+             (let [title' (string/replace v (str ref-special-chars page-ref/left-brackets) page-ref/left-brackets)]
+               (prn :debug {:old-title v :new-title title'})
+               {:db/id e
+                :block/title title'})
+
+             (re-find id-ref-pattern v)
+             (let [title' (string/replace v id-ref-pattern (page-ref/->page-ref "$1"))]
+               (prn :debug {:old-title v :new-title title'})
+               {:db/id e
+                :block/title title'})))))
+     datoms)))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -461,7 +493,8 @@
                      :block/created-at :block/updated-at
                      :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content]}]
    [47 {:fix replace-hidden-type-with-schema}]
-   [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]])
+   [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]
+   [49 {:fix replace-special-id-ref-with-id-ref}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
