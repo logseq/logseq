@@ -32,19 +32,21 @@
 
 (defn id-ref->title-ref
   "Convert id ref backs to page name refs using refs."
-  [content* refs]
+  [content* refs search?]
   (let [content (str content*)]
     (if (re-find id-ref-pattern content)
       (reduce
        (fn [content ref]
          (if (:block/title ref)
-           (let [content' (if (not (string/includes? (:block/title ref) " "))
-                            (string/replace content
-                                            (str "#" (page-ref/->page-ref (:block/uuid ref)))
-                                            (str "#" (:block/title ref)))
-                            content)]
-             (string/replace content' (page-ref/->page-ref (:block/uuid ref))
-                             (page-ref/->page-ref (:block/title ref))))
+           (if (or (entity-util/page? ref) search?)
+             (let [content' (if (not (string/includes? (:block/title ref) " "))
+                              (string/replace content
+                                              (str "#" (page-ref/->page-ref (:block/uuid ref)))
+                                              (str "#" (:block/title ref)))
+                              content)]
+               (string/replace content' (page-ref/->page-ref (:block/uuid ref))
+                               (page-ref/->page-ref (:block/title ref))))
+             content)
            content))
        content
        (sort-refs refs))
@@ -114,7 +116,7 @@
   (if (entity-util/db-based-graph? db)
     (if-let [content (:block/title item)]
       (let [refs (:block/refs (d/entity db eid))]
-        (assoc item :block/title (id-ref->title-ref content refs)))
+        (assoc item :block/title (id-ref->title-ref content refs false)))
       item)
     item))
 

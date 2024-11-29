@@ -29,25 +29,27 @@
         db-based? (db-based-graph? db)]
     (if (and db-based? (= "journal" (:block/type e)))
       (get-journal-title db e)
-      (or
-       (get (.-kv e) k)
-       (let [result (lookup-entity e k default-value)
-             refs (:block/refs e)
-             result' (if (and (string? result) refs)
-                       (db-content/id-ref->title-ref result refs)
-                       result)]
-         (or result' default-value))))))
+      (let [search? (get (.-kv e) :block.temp/search?)]
+        (or
+         (when-not (and search? (= k :block/title))
+           (get (.-kv e) k))
+         (let [result (lookup-entity e k default-value)
+               refs (:block/refs e)
+               result' (if (and (string? result) refs)
+                         (db-content/id-ref->title-ref result refs search?)
+                         result)]
+           (or result' default-value)))))))
 
 (defn- lookup-kv-with-default-value
   [db ^Entity e k default-value]
   (or
-            ;; from kv
+   ;; from kv
    (get (.-kv e) k)
-            ;; from db
+   ;; from db
    (let [result (lookup-entity e k default-value)]
      (if (some? result)
        result
-                ;; property default value
+       ;; property default value
        (when (qualified-keyword? k)
          (when-let [property (d/entity db k)]
            (let [schema (lookup-entity property :block/schema nil)]
@@ -77,7 +79,8 @@
 
            ;; cache :block/title
            :block/title
-           (or (:block.temp/cached-title @(.-cache e))
+           (or (when-not (get (.-kv e) :block.temp/search?)
+                 (:block.temp/cached-title @(.-cache e)))
                (let [title (get-block-title e k default-value)]
                  (vreset! (.-cache e) (assoc @(.-cache e)
                                              :block.temp/cached-title title))
@@ -104,7 +107,7 @@
   [^js this]
   (let [v @(.-cache this)
         v' (if (:block/title v)
-             (assoc v :block/title (db-content/id-ref->title-ref (:block/title v) (:block/refs this)))
+             (assoc v :block/title (db-content/id-ref->title-ref (:block/title v) (:block/refs this) (:block.temp/search? this)))
              v)]
     (concat (seq v')
             (seq (.-kv this)))))
