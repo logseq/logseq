@@ -677,8 +677,8 @@
      (try
        (worker-util/profile
         "apply outliner ops"
-        (let [ops (edn/read-string ops-str)
-              opts (edn/read-string opts-str)
+        (let [ops (ldb/read-transit-str ops-str)
+              opts (ldb/read-transit-str opts-str)
               result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
           (ldb/write-transit-str result)))
        (catch :default e
