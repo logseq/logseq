@@ -27,7 +27,9 @@
   [refs]
   (sort-by
    (fn [ref]
-     (not (boolean (re-find page-ref/page-ref-without-nested-re (:block/title ref)))))
+     [(boolean (re-find page-ref/page-ref-without-nested-re (:block/title ref)))
+      (:block/title ref)])
+   >
    refs))
 
 (defn id-ref->title-ref
