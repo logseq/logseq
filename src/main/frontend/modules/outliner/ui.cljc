@@ -31,10 +31,11 @@
                (when (and worker# (seq r#))
                  (let [request-id# (state/get-worker-next-request-id)
                        request# #(.apply-outliner-ops ^Object worker# (state/get-current-repo)
-                                                      (pr-str r#)
-                                                      (pr-str (assoc ~opts
-                                                                     :request-id request-id#
-                                                                     :editor-info editor-info#)))
+                                                      (logseq.db/write-transit-str r#)
+                                                      (logseq.db/write-transit-str
+                                                       (assoc ~opts
+                                                              :request-id request-id#
+                                                              :editor-info editor-info#)))
                        response# (state/add-worker-request! request-id# request#)]
 
                    response#)))))))))
