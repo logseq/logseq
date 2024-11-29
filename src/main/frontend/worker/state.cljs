@@ -10,7 +10,6 @@
 (sr/defkeyword :undo/repo->page-block-uuid->redo-ops
   "{repo {<page-block-uuid> [op1 op2 ...]}}")
 
-
 (defonce *main-thread (atom nil))
 
 (defonce *state (atom {:worker/object nil
@@ -120,7 +119,3 @@
 (defn set-rtc-downloading-graph!
   [value]
   (swap! *state assoc :rtc/downloading-graph? value))
-
-(defn rtc-downloading-graph?
-  []
-  (:rtc/downloading-graph? @*state))
