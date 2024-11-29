@@ -224,7 +224,7 @@ DROP TRIGGER IF EXISTS blocks_au;
       ;; (let [content (if (and db-based? (seq (:block/properties block)))
       ;;                 (str content (when (not= content "") "\n") (get-db-properties-str db properties))
       ;;                 content)])
-    (let [title (ldb/get-title-with-parents block)]
+    (let [title (ldb/get-title-with-parents (assoc block :block.temp/search? true))]
       (when uuid
         {:id (str uuid)
          :page (str (or (:block/uuid page) uuid))
