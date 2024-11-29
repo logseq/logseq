@@ -404,14 +404,14 @@
                   (re-find db-content/id-ref-pattern v))
              [:db/retractEntity e]
 
-             (string/includes? v (str ref-special-chars page-ref/left-brackets))
-             (let [title' (string/replace v (str ref-special-chars page-ref/left-brackets) page-ref/left-brackets)]
+             (string/includes? v (str page-ref/left-brackets ref-special-chars))
+             (let [title' (string/replace v (str page-ref/left-brackets ref-special-chars) page-ref/left-brackets)]
                (prn :debug {:old-title v :new-title title'})
                {:db/id e
                 :block/title title'})
 
              (re-find id-ref-pattern v)
-             (let [title' (string/replace v id-ref-pattern (page-ref/->page-ref "$1"))]
+             (let [title' (string/replace v id-ref-pattern "$1")]
                (prn :debug {:old-title v :new-title title'})
                {:db/id e
                 :block/title title'})))))
