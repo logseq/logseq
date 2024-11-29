@@ -600,7 +600,11 @@
                                             title-trigger?
                                             (assoc :on-pointer-down on-pointer-down
                                                    :class "cursor"))
-      [:div.flex.flex-row.items-center
+      [:div.flex.flex-row.items-center.ls-foldable-header
+       {:on-click (fn [^js e]
+                    (let [^js target (.-target e)]
+                      (when (some-> target (.closest ".as-toggle"))
+                        (reset! collapsed? (not @collapsed?)))))}
        (when-not (mobile-util/native-platform?)
          [:a.block-control.opacity-50.hover:opacity-100.mr-2
           (cond->
