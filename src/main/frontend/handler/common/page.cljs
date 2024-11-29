@@ -20,7 +20,6 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.db-based.editor :as db-editor-handler]
-            [logseq.db.frontend.content :as db-content]
             [logseq.common.util.page-ref :as page-ref]
             [frontend.handler.notification :as notification]))
 
