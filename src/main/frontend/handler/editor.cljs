@@ -1507,6 +1507,37 @@
             (reset! *asset-uploading? false)
             (reset! *asset-uploading-process 0))))))
 
+(defn- write-file!
+  [repo dir file file-rpath file-name]
+  (if (util/electron?)
+    (if-let [from (not-empty (.-path file))]
+      (-> (js/window.apis.copyFileToAssets dir file-rpath from)
+          (p/catch #(js/console.error "Debug: Copy Asset Error#" %)))
+      (-> (p/let [buffer (.arrayBuffer file)]
+            (fs/write-file! repo dir file-rpath buffer {:skip-compare? false}))
+          (p/catch #(js/console.error "Debug: Writing Asset #" %))))
+    (->
+     (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
+            (cond
+              (mobile-util/native-platform?)
+                          ;; capacitor fs accepts Blob, File implements Blob
+              (p/let [buffer (.arrayBuffer file)
+                      content (base64/encodeByteArray (js/Uint8Array. buffer))
+                      fpath (path/path-join dir file-rpath)]
+                (capacitor-fs/<write-file-with-base64 fpath content))
+
+              (config/db-based-graph? repo) ;; memory-fs
+              (p/let [buffer (.arrayBuffer file)
+                      content (js/Uint8Array. buffer)]
+                (fs/write-file! repo dir file-rpath content nil))
+
+              :else
+              (throw (ex-info "Paste failed"
+                              {:file-name file-name}))))
+     (p/catch (fn [error]
+                (prn :paste-file-error)
+                (js/console.error error))))))
+
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
 
@@ -1539,13 +1570,7 @@
                    insert-opts {:custom-uuid block-id
                                 :edit-block? false
                                 :properties properties}
-                   _ (when (util/electron?)
-                       (if-let [from (not-empty (.-path file))]
-                         (-> (js/window.apis.copyFileToAssets dir file-rpath from)
-                             (p/catch #(js/console.error "Debug: Copy Asset Error#" %)))
-                         (-> (p/let [buffer (.arrayBuffer file)]
-                               (fs/write-file! repo dir file-rpath buffer {:skip-compare? false}))
-                             (p/catch #(js/console.error "Debug: Writing Asset #" %)))))
+                   _ (write-file! repo dir file file-rpath file-name)
                    edit-block (state/get-edit-block)
                    insert-to-current-block-page? (and (:block/uuid edit-block) (string/blank? (state/get-edit-content)) (not pdf-area?))
                    insert-opts' (if insert-to-current-block-page?
@@ -1558,32 +1583,8 @@
                    new-entity (db/entity [:block/uuid (:block/uuid result)])]
              (when insert-to-current-block-page?
                (state/clear-edit!))
-             (if new-entity
-               (if (util/electron?)
-                 new-entity
-                 (->
-                  (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
-                         (cond
-                           (mobile-util/native-platform?)
-                          ;; capacitor fs accepts Blob, File implements Blob
-                           (p/let [buffer (.arrayBuffer file)
-                                   content (base64/encodeByteArray (js/Uint8Array. buffer))
-                                   fpath (path/path-join dir file-rpath)]
-                             (capacitor-fs/<write-file-with-base64 fpath content))
-
-                           (config/db-based-graph? repo) ;; memory-fs
-                           (p/let [buffer (.arrayBuffer file)
-                                   content (js/Uint8Array. buffer)]
-                             (fs/write-file! repo dir file-rpath content nil))
-
-                           :else
-                           (throw (ex-info "Paste failed"
-                                           {:file-name file-name})))
-                         new-entity)
-                  (p/catch (fn [error]
-                             (prn :paste-file-error)
-                             (js/console.error error)))))
-               (throw (ex-info "Can't save asset" {:files files}))))))))))
+             (or new-entity
+                 (throw (ex-info "Can't save asset" {:files files}))))))))))
 
 (defn db-upload-assets!
   "Paste asset and insert link to current editing block"

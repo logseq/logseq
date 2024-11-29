@@ -1021,16 +1021,10 @@
   {:will-mount (fn [state]
                  (let [block (last (:rum/args state))
                        asset-type (:logseq.property.asset/type block)
-                       path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))
-                       timeout (js/setTimeout
-                                #(p/let [result (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path)]
-                                   (reset! (::file-exists? state) result))
-                                500)]
-                   (assoc state ::timeout timeout)))
-   :will-unmount (fn [state]
-                   (when-let [timeout (::timeout state)]
-                     (js/clearTimeout timeout))
-                   state)}
+                       path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))]
+                   (p/let [result (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path)]
+                     (reset! (::file-exists? state) result))
+                   state))}
   [state config block]
   (let [asset-type (:logseq.property.asset/type block)
         file (str (:block/uuid block) "." asset-type)
