@@ -68,6 +68,11 @@
              (catch Cancelled _
                (m/amb)))))))
 
+(defn throttle [dur-ms >in]
+  (m/ap
+    (let [x (m/?> (m/relieve {} >in))]
+      (m/amb x (do (m/? (m/sleep dur-ms)) (m/amb))))))
+
 (defn run-task
   "Return the canceler"
   [task key & {:keys [succ fail]}]
