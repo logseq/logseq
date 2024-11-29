@@ -258,5 +258,5 @@ html.is-native-ios {
 }
 
 .ls-page-blocks {
-  @apply min-h-[57px];
+  @apply min-h-[60px] -mb-2;
 }
