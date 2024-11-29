@@ -22,6 +22,14 @@
    content
    refs))
 
+(defn- sort-refs
+  "Nested pages first"
+  [refs]
+  (sort-by
+   (fn [ref]
+     (not (boolean (re-find page-ref/page-ref-without-nested-re (:block/title ref)))))
+   refs))
+
 (defn id-ref->title-ref
   "Convert id ref backs to page name refs using refs."
   [content* refs]
@@ -39,7 +47,7 @@
                              (page-ref/->page-ref (:block/title ref))))
            content))
        content
-       refs)
+       (sort-refs refs))
       content)))
 
 (defn get-matched-ids
@@ -84,13 +92,15 @@
   [title refs & {:keys [replace-tag?]
                  :or {replace-tag? true}}]
   (assert (string? title))
-  (let [refs' (map
-               (fn [ref]
-                 (if (and (vector? ref) (= :block/uuid (first ref)))
-                   {:block/uuid (second ref)
-                    :block/title (str (first ref))}
-                   ref))
-               refs)]
+  (let [refs' (->>
+               (map
+                (fn [ref]
+                  (if (and (vector? ref) (= :block/uuid (first ref)))
+                    {:block/uuid (second ref)
+                     :block/title (str (first ref))}
+                    ref))
+                refs)
+               sort-refs)]
     (reduce
      (fn [content {uuid' :block/uuid :block/keys [title] :as block}]
        (let [title' (or (:block.temp/original-page-name block) title)]
@@ -124,5 +134,5 @@
             ;; #book
             (common-util/replace-ignore-case (str "#" (:block/title tag)) id-ref))))
     content
-    (sort-by :block/title > tags))
+    (sort-refs tags))
    (string/trim)))
