@@ -4,7 +4,8 @@
   (:require [datascript.core :as d]
             [clojure.set :as set]
             [logseq.common.util.macro :as macro-util]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.frontend.entity-util :as entity-util]
+            [clojure.string :as string]))
 
 ;; Config vars
 ;; ===========
@@ -27,6 +28,14 @@
   "Valid property types that can change cardinality"
   #{:default :number :url :date :node})
 
+(def default-value-ref-property-types
+  "Valid ref property :type for default value support"
+  #{:default :number :checkbox})
+
+(def text-ref-property-types
+  "Valid ref property :types that support text"
+  #{:default :url :entity})
+
 (assert (set/subset? cardinality-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
 
@@ -37,12 +46,12 @@
   "Property value ref types where the refed entity stores its value in
   :property.value/content e.g. :number is stored as a number. new value-ref-property-types
   should default to this as it allows for more querying power"
-  #{:number :url})
+  #{:number})
 
 (def value-ref-property-types
   "Property value ref types where the refed entities either store their value in
   :property.value/content or :block/title (for :default)"
-  (into #{:default} original-value-ref-property-types))
+  (into #{:default :url} original-value-ref-property-types))
 
 (def user-ref-property-types
   "User ref types. Property values that users see are stored in either
@@ -82,12 +91,13 @@
   (macro-util/macro? s))
 
 (defn- url-entity?
+  "Empty string, url or macro url"
   [db val {:keys [new-closed-value?]}]
   (if new-closed-value?
     (or (url? val) (macro-url? val))
     (when-let [ent (d/entity db val)]
-      (or (url? (:property.value/content ent))
-          (macro-url? (:property.value/content ent))))))
+      (let [title (:block/title ent)]
+        (or (string/blank? title) (url? title) (macro-url? title))))))
 
 (defn- entity?
   [db id]
@@ -186,3 +196,11 @@
     (url? val) :url
     (contains? #{true false} val) :checkbox
     :else :default))
+
+(defn property-value-content?
+  "Whether property value should be stored in :property.value/content"
+  [block-type property]
+  (or
+   (original-value-ref-property-types (get-in property [:block/schema :type]))
+   (and (= (:db/ident property) :logseq.property/default-value)
+        (original-value-ref-property-types block-type))))

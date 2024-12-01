@@ -47,7 +47,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.rum :as frontend-rum]))
+            [frontend.rum :as frontend-rum]
+            [dommy.core :as dom]))
 
 (defn- get-page-name
   [state]
@@ -86,11 +87,12 @@
            (not sidebar?))
       (when (and (string/blank? (:block/title block))
                  (not preview?))
-        (editor-handler/edit-block! block :max))))
-  state)
+        (editor-handler/edit-block! block :max)))))
 
 (rum/defc page-blocks-inner <
-  {:did-mount open-root-block!}
+  {:did-mount (fn [state]
+                (open-root-block! state)
+                state)}
   [page-e blocks config sidebar? whiteboard? _block-uuid]
   (when page-e
     (let [hiccup (component-block/->hiccup blocks config {})]
@@ -171,20 +173,26 @@
           "Click here to edit..."]]]))))
 
 (rum/defc add-button
-  [args]
-  [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
-   {:on-click (fn [] (editor-handler/api-insert-new-block! "" args))
-    :on-key-down (fn [e]
-                   (when (= "Enter" (util/ekey e))
-                     (editor-handler/api-insert-new-block! "" args))
-                   (util/stop e))
-    :tab-index 0}
-   [:div.flex.flex-row
-    [:div.block {:style {:height      20
-                         :width       20
-                         :margin-left 2}}
-     [:a.add-button-link.block
-      (ui/icon "circle-plus")]]]])
+  [args container-id]
+  (let [*bullet-ref (rum/use-ref nil)]
+    [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
+     {:on-click (fn [e]
+                  (util/stop e)
+                  (state/set-state! :editor/container-id container-id)
+                  (editor-handler/api-insert-new-block! "" args))
+      :on-mouse-over #(dom/add-class! (rum/deref *bullet-ref) "opacity-50")
+      :on-mouse-leave #(dom/remove-class! (rum/deref *bullet-ref) "opacity-50")
+      :on-key-down (fn [e]
+                     (util/stop e)
+                     (when (= "Enter" (util/ekey e))
+                       (state/set-state! :editor/container-id container-id)
+                       (editor-handler/api-insert-new-block! "" args)))
+      :tab-index 0}
+     [:div.flex.flex-row
+      [:div.flex.items-center {:style {:height 28
+                                       :margin-left 2}}
+       [:span.bullet-container.cursor.opacity-0.transition-opacity.ease-in.duration-100 {:ref *bullet-ref}
+        [:span.bullet]]]]]))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
@@ -213,42 +221,43 @@
 
                      :else
                      children)
-          *loading? (:*loading? config)
-          loading? (when *loading? (rum/react *loading?))
           db-based? (config/db-based-graph? repo)]
       [:<>
-       (when (and db-based? (or (ldb/class? block) (ldb/property? block)))
-         [:div.font-medium.mt-8.ml-1.pb-3.opacity-50
-          "Notes"])
+       (let [blocks (cond
+                      (and
+                       (not block?)
+                       (empty? children) page-e)
+                      (dummy-block page-e)
 
-       (cond
-         loading?
-         nil
-
-         (and
-          (not loading?)
-          (not block?)
-          (empty? children) page-e)
-         (dummy-block page-e)
-
-         :else
-         (let [document-mode? (state/sub :document/mode?)
-               hiccup-config (merge
-                              {:id (if block? (str block-id) page-name)
-                               :db/id (:db/id block)
-                               :block? block?
-                               :editor-box editor/box
-                               :document/mode? document-mode?}
-                              config)
-               config (common-handler/config-with-document-mode hiccup-config)
-               blocks (if block? [block] (db/sort-by-order children block))]
-           [:div
-            (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
-            (when-not config/publishing?
-              (let [args (if block-id
-                           {:block-uuid block-id}
-                           {:page page-name})]
-                (add-button args)))]))])))
+                      :else
+                      (let [document-mode? (state/sub :document/mode?)
+                            hiccup-config (merge
+                                           {:id (if block? (str block-id) page-name)
+                                            :db/id (:db/id block)
+                                            :block? block?
+                                            :editor-box editor/box
+                                            :document/mode? document-mode?}
+                                           config)
+                            config (common-handler/config-with-document-mode hiccup-config)
+                            blocks (if block? [block] (db/sort-by-order children block))]
+                        (let [add-button? (not (or config/publishing?
+                                                 (let [last-child-id (model/get-block-deep-last-open-child-id (db/get-db) (:db/id (last blocks)))
+                                                       block' (if last-child-id (db/entity last-child-id) (last blocks))]
+                                                   (string/blank? (:block/title block')))))]
+                          [:div
+                           {:class (when add-button? "show-add-button")}
+                           (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
+                           (let [args (if block-id
+                                        {:block-uuid block-id}
+                                        {:page page-name})]
+                             (add-button args (:container-id config)))])))]
+         (if (and db-based? (or (ldb/class? block) (ldb/property? block)))
+           [:div.mt-4.ml-2.-mb-1
+            (ui/foldable
+             [:div.font-medium.as-toggle {:class "pl-0.5"} "Notes"]
+             [:div.ml-1.-mb-2 blocks]
+             {:disable-on-pointer-down? true})]
+           blocks))])))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -420,48 +429,69 @@
                                                                                            (:block/format page))))
                        :else title))])]])))))
 
-(rum/defcs db-page-title < rum/reactive
-  (rum/local false ::hover?)
-  [state page whiteboard-page? sidebar? container-id]
-  (let [*hover? (::hover? state)
-        hover? (rum/react *hover?)]
-    [:div.ls-page-title.flex.flex-1.w-full.content.items-start
+(rum/defc db-page-title-actions
+  [page]
+  [:div.absolute.-top-3.left-0.opacity-0.db-page-title-actions
+   [:div.flex.flex-row.items-center.gap-2
+    (when-not (:logseq.property/icon (db/entity (:db/id page)))
+      (shui/button
+       {:variant :outline
+        :size :sm
+        :class "px-2 py-0 h-4 text-xs text-muted-foreground"
+        :on-click (fn [e]
+                    (state/pub-event! [:editor/new-property {:property-key "Icon"
+                                                             :block page
+                                                             :target (.-target e)}]))}
+       "Add icon"))
+
+    (shui/button
+     {:variant :outline
+      :size :sm
+      :class "px-2 py-0 h-4 text-xs text-muted-foreground"
+      :on-click (fn [e]
+                  (state/pub-event! [:editor/new-property {:block page
+                                                           :target (.-target e)}]))}
+     "Set node property")]])
+
+(rum/defc db-page-title
+  [page whiteboard-page? sidebar? container-id]
+  (let [[with-actions? set-with-actions!] (rum/use-state false)
+        *el (rum/use-ref nil)]
+
+    (rum/use-effect!
+     (fn []
+       (when (and (not config/publishing?)
+                  (some-> (rum/deref *el) (.closest "#main-content-container")))
+         (set-with-actions! true)))
+     [])
+
+    [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
+      :ref *el
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)
-                                                                  :page-entity page})))}
+                                                                  :page-entity page})))
+      :on-click (fn [e]
+                  (when-not (some-> e (.-target) (.closest ".ls-properties-area"))
+                    (when-not (= (.-nodeName (.-target e)) "INPUT")
+                      (.preventDefault e)
+                      (when (gobj/get e "shiftKey")
+                        (state/sidebar-add-block!
+                          (state/get-current-repo)
+                          (:db/id page)
+                          :page)))))}
 
-     [:div.w-full.relative {:on-mouse-over #(reset! *hover? true)
-                            :on-mouse-leave (fn []
-                                              (reset! *hover? false))}
-      (when hover?
-        [:div.absolute.-top-3.left-0.fade-in
-         [:div.flex.flex-row.items-center.gap-2
-          (when-not (:logseq.property/icon (db/entity (:db/id page)))
-            (shui/button
-             {:variant :outline
-              :size :sm
-              :class "px-2 py-0 h-4 text-xs text-muted-foreground"
-              :on-click (fn [e]
-                          (state/pub-event! [:editor/new-property {:property-key "Icon"
-                                                                   :block page
-                                                                   :target (.-target e)}]))}
-             "Add icon"))
-
-          (shui/button
-           {:variant :outline
-            :size :sm
-            :class "px-2 py-0 h-4 text-xs text-muted-foreground"
-            :on-click (fn [e]
-                        (state/pub-event! [:editor/new-property {:block page
-                                                                 :target (.-target e)}]))}
-           "Set property")]])
-      (component-block/block-container {:page-title? true
-                                        :hide-title? sidebar?
-                                        :hide-children? true
-                                        :container-id container-id
-                                        :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))} page)]]))
+     [:div.w-full.relative
+      (component-block/block-container
+        {:page-title? true
+         :page-title-actions-cp (when (and with-actions? (not= (:db/id (state/get-edit-block)) (:db/id page))) db-page-title-actions)
+         :hide-title? sidebar?
+         :sidebar? sidebar?
+         :hide-children? true
+         :container-id container-id
+         :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))}
+       page)]]))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -531,14 +561,6 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
-  (rum/local false ::main-ready?)
-  {:did-mount (fn [state]
-                (assoc state ::main-ready-timer
-                       (js/setTimeout #(reset! (::main-ready? state) true) 32)))
-   :will-unmount (fn [state]
-                   (some-> (::main-ready-timer state)
-                           (js/clearTimeout))
-                   state)}
   [state {:keys [repo page-name preview? sidebar? linked-refs? unlinked-refs? config] :as option}]
   (when-let [path-page-name (get-path-page-name state page-name)]
     (let [current-repo (state/sub :git/current-repo)
@@ -603,10 +625,10 @@
               (db-page/configure-property page))
 
             (when (and db-based? class-page?)
-              (objects/class-objects page))
+              (objects/class-objects page {:current-page? option :sidebar? sidebar?}))
 
             (when (and db-based? (ldb/property? page))
-              (objects/property-related-objects page))
+              (objects/property-related-objects page (:current-page? option)))
 
             (when (and block? (not sidebar?) (not whiteboard?))
               (let [config (merge config {:id "block-parent"
@@ -619,8 +641,8 @@
                                                       :container-id (:container-id state)
                                                       :whiteboard? whiteboard?}))]])
 
-         (when (and (not preview?) @(::main-ready? state))
-           [:div.ls-page-appendix-els {:style {:padding-left 9}}
+         (when (not preview?)
+           [:div {:style {:padding-left 9}}
             (when today?
               (today-queries repo today? sidebar?))
 
@@ -644,7 +666,11 @@
               (when (and (not journal?) (not db-based?))
                 (hierarchy/structures (:block/title page))))
 
-            (when-not (or whiteboard? unlinked-refs? sidebar? home? (and block? (not db-based?)))
+            (when-not (or whiteboard? unlinked-refs?
+                          sidebar?
+                          home?
+                          (or class-page? property-page?)
+                          (and block? (not db-based?)))
               [:div {:key "page-unlinked-references"}
                (reference/unlinked-references page)])])]))))
 
@@ -655,7 +681,9 @@
                  preview-or-sidebar? (or (:preview? option) (:sidebar? option))
                  page-name' (get-sanity-page-name state page-name)
                  page-uuid? (util/uuid-string? page-name')
-                 *loading? (atom true)]
+                 *loading? (atom true)
+                 page (db/get-page page-name')]
+             (when page (reset! *loading? false))
              (p/let [page-block (db-async/<get-block (state/get-current-repo) page-name')]
                (reset! *loading? false)
                (if (not page-block)
@@ -666,9 +694,13 @@
                      (route-handler/update-page-title-and-label! (state/get-route-match))))))
              (assoc state
                     ::page-name page-name'
-                    ::loading? *loading?)))}
+                    ::loading? *loading?)))
+   :will-unmount (fn [state]
+                   (state/set-state! :editor/virtualized-scroll-fn nil)
+                   state)}
   [state option]
-  (page-inner (assoc option :*loading? (::loading? state))))
+  (when-not (rum/react (::loading? state))
+    (page-inner option)))
 
 (rum/defcs page-cp
   [state option]

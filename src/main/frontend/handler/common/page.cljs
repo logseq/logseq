@@ -20,7 +20,6 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.db-based.editor :as db-editor-handler]
-            [logseq.db.frontend.content :as db-content]
             [logseq.common.util.page-ref :as page-ref]
             [frontend.handler.notification :as notification]))
 
@@ -54,8 +53,7 @@
              has-tags? (and db-based? (seq (:block/tags parsed-result)))
              title' (if has-tags?
                       (some-> (first
-                               (or (common-util/split-first (str "#" db-content/page-ref-special-chars) (:block/title parsed-result))
-                                   (common-util/split-first (str "#" page-ref/left-brackets db-content/page-ref-special-chars) (:block/title parsed-result))))
+                               (common-util/split-first (str "#" page-ref/left-brackets) (:block/title parsed-result)))
                               string/trim)
                       title)]
        (if (and has-tags? (nil? title'))
@@ -77,7 +75,6 @@
                (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
                  (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
                page))))))))
-
 
 ;; favorite fns
 ;; ============
@@ -129,16 +126,13 @@
 (defn <db-favorite-page!
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (let [favorites-page (db/get-page common-config/favorites-page-name)]
-    (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
-      (p/do!
-       (when-not favorites-page (ldb/create-favorites-page!
- (state/get-current-repo)))
-       (ui-outliner-tx/transact!
-        {:outliner-op :insert-blocks}
-        (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]
-                                    (db/get-page common-config/favorites-page-name)
-                                    {}))))))
+  (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
+    (p/do!
+     (ui-outliner-tx/transact!
+      {:outliner-op :insert-blocks}
+      (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]
+                                  (db/get-page common-config/favorites-page-name)
+                                  {})))))
 
 (defn <db-unfavorite-page!
   [page-block-uuid]
@@ -148,9 +142,7 @@
      {:outliner-op :delete-blocks}
      (outliner-op/delete-blocks! [block] {}))))
 
-
 ;; favorites fns end ================
-
 
 (defn <delete!
   "Deletes a page. If delete is successful calls ok-handler. Otherwise calls error-handler
@@ -183,7 +175,6 @@
 
 ;; other fns
 ;; =========
-
 
 (defn after-page-deleted!
   [repo page-name file-path tx-meta]

@@ -184,7 +184,9 @@
 (defn jump-to-anchor!
   [anchor-text]
   (when anchor-text
-    (js/setTimeout #(ui-handler/highlight-element! anchor-text) 200)))
+    (js/setTimeout #(ui-handler/highlight-element! anchor-text) 200)
+    (when-let [f (:editor/virtualized-scroll-fn @state/state)]
+      (f))))
 
 (defn set-route-match!
   [route]

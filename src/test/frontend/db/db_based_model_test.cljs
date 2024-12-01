@@ -4,7 +4,8 @@
             [frontend.db :as db]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
-            [logseq.outliner.property :as outliner-property]))
+            [logseq.outliner.property :as outliner-property]
+            [logseq.db.frontend.class :as db-class]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -24,7 +25,11 @@
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (test-helper/create-page! "class1" opts)
         _ (test-helper/create-page! "class2" opts)]
-    (is (= ["Card" "Cards" "Journal" "Query" "Root Tag" "Task" "class1" "class2"] (sort (map :block/title (model/get-all-classes repo)))))))
+    (is (= (set
+            (concat
+             (map :title (vals db-class/built-in-classes))
+             ["class1" "class2"]))
+           (set (map :block/title (model/get-all-classes repo)))))))
 
 (deftest ^:fix-me get-class-objects-test
   (let [opts {:redirect? false :create-first-block? false :class? true}

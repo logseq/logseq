@@ -207,32 +207,39 @@
 
 (defn- fix-tag-ids
   "Fix or remove tags related when entered via `Escape`"
-  [m {:keys [db-graph?]}]
-  (let [refs (set (map :block/name (seq (:block/refs m))))
+  [m db {:keys [db-graph?]}]
+  (let [refs (set (keep :block/name (seq (:block/refs m))))
         tags (seq (:block/tags m))]
-    (if (and refs tags)
+    (if (and (seq refs) tags)
       (update m :block/tags
               (fn [tags]
-                (cond->>
-                 ;; Update :block/tag to reference ids from :block/refs
-                 (map (fn [tag]
-                        (if (contains? refs (:block/name tag))
-                          (assoc tag :block/uuid
-                                 (:block/uuid
-                                  (first (filter (fn [r] (= (:block/name tag)
-                                                            (:block/name r)))
-                                                 (:block/refs m)))))
-                          tag))
-                      tags)
+                (let [tags (map (fn [tag] (or (and (:db/id tag)
+                                                   (let [e (d/entity db (:db/id tag))]
+                                                     (select-keys e [:db/id :block/uuid :block/title :block/name])))
+                                              tag))
+                                tags)]
+                  (cond->>
+                   ;; Update :block/tag to reference ids from :block/refs
+                   (map (fn [tag]
+                          (if (contains? refs (:block/name tag))
+                            (assoc tag :block/uuid
+                                   (:block/uuid
+                                    (first (filter (fn [r] (= (:block/name tag)
+                                                              (:block/name r)))
+                                                   (:block/refs m)))))
+                            tag))
+                        tags)
 
-                  db-graph?
-                  ;; Remove tags changing case with `Escape`
-                  ((fn [tags']
-                     (let [ref-titles (set (map :block/title (:block/refs m)))
-                           lc-ref-titles (set (map string/lower-case ref-titles))]
-                       (remove #(and (not (contains? ref-titles (:block/title %)))
-                                     (contains? lc-ref-titles (string/lower-case (:block/title %))))
-                               tags')))))))
+                    db-graph?
+                    ;; Remove tags changing case with `Escape`
+                    ((fn [tags']
+                       (let [ref-titles (set (map :block/title (:block/refs m)))
+                             lc-ref-titles (set (map string/lower-case ref-titles))]
+                         (remove (fn [tag]
+                                   (when-let [title (:block/title tag)]
+                                     (and (not (contains? ref-titles title))
+                                          (contains? lc-ref-titles (string/lower-case title)))))
+                                 tags'))))))))
       m)))
 
 (defn- remove-tags-when-title-changed
@@ -264,13 +271,16 @@
                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?)
                  common-util/remove-nils
                  block-with-updated-at
-                 (fix-tag-ids {:db-graph? db-based?}))
+                 (fix-tag-ids @conn {:db-graph? db-based?}))
           db @conn
           db-id (:db/id this)
           block-uuid (:block/uuid this)
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
           page? (ldb/page? block-entity)
+          m* (if (and db-based? (:block/title m*))
+               (update m* :block/title common-util/clear-markdown-heading)
+               m*)
           block-title (:block/title m*)
           page-title-changed? (and page? block-title
                                    (not= block-title (:block/title block-entity)))
@@ -327,11 +337,6 @@
                              (vec (concat txs other-tx)))))
         (swap! txs-state conj
                (dissoc m :db/other-tx)))
-
-      ;; delete heading property for db-based-graphs
-      (when (and db-based? (integer? (:logseq.property/heading block-entity))
-                 (not (some-> (:block/title data) (string/starts-with? "#"))))
-        (swap! txs-state (fn [txs] (conj (vec txs) [:db/retract (:db/id block-entity) :logseq.property/heading]))))
 
       ;; delete tags when title changed
       (when (and db-based? (:block/tags block-entity) block-entity)
@@ -558,7 +563,6 @@
                      (d/entity db (:db/id target-block))
                      (when (:block/uuid target-block)
                        (d/entity db [:block/uuid (:block/uuid target-block)])))]
-    [block sibling?]
     (let [linked (:block/link block)
           up-down? (= outliner-op :move-blocks-up-down)
           [block sibling?] (cond
@@ -718,7 +722,6 @@
   "Delete blocks from the tree.
   `blocks` need to be sorted by left&parent(from top to bottom)"
   [conn blocks]
-  [:pre [(seq blocks)]]
   (let [top-level-blocks (filter-top-level-blocks @conn blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
         top-level-blocks (->> (get-top-level-blocks top-level-blocks non-consecutive?)
@@ -726,15 +729,27 @@
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
-        end-block (last top-level-blocks)]
+        end-block (last top-level-blocks)
+        delete-one-block? (or (= 1 (count top-level-blocks)) (= start-block end-block))]
     (when (seq top-level-blocks)
-      (if (or
-           (= 1 (count top-level-blocks))
-           (= start-block end-block))
-        (delete-block conn txs-state start-block)
-        (doseq [id block-ids]
-          (let [node (d/entity @conn id)]
-            (otree/-del node txs-state conn)))))
+      (let [from-property (:logseq.property/created-from-property start-block)
+            default-value-property? (and (:logseq.property/default-value from-property)
+                                         (not= (:db/id start-block)
+                                               (:db/id (:logseq.property/default-value from-property))))]
+        (cond
+          (and delete-one-block? default-value-property?)
+          (let [datoms (d/datoms @conn :avet (:db/ident from-property) (:db/id start-block))
+                tx-data (map (fn [d] {:db/id (:e d)
+                                      (:db/ident from-property) :logseq.property/empty-placeholder}) datoms)]
+            (when (seq tx-data) (swap! txs-state concat tx-data)))
+
+          delete-one-block?
+          (delete-block conn txs-state start-block)
+
+          :else
+          (doseq [id block-ids]
+            (let [node (d/entity @conn id)]
+              (otree/-del node txs-state conn))))))
     {:tx-data @txs-state}))
 
 (defn- move-to-original-position?

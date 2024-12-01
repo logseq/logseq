@@ -22,5 +22,5 @@
                        logseq/outliner {:local/root "../outliner"}}
          :main-opts   ["-m" "cljs-test-runner.main"]}
 
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}
               :main-opts    ["-m" "clj-kondo.main"]}}}

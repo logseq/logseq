@@ -141,8 +141,7 @@
 (defn db-based-query
   []
   [[:editor/input "" {:last-pattern command-trigger}]
-   [:editor/set-property :block/tags :logseq.class/Query]
-   [:editor/set-property :logseq.property/query ""]])
+   [:editor/run-query-command]])
 
 (defn file-based-query
   []
@@ -154,6 +153,16 @@
   (if (config/db-based-graph? (state/get-current-repo))
     (db-based-query)
     (file-based-query)))
+
+(defn- calc-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    [[:editor/input "" {:last-pattern command-trigger}]
+     [:editor/upsert-type-block :code "calc"]
+     [:codemirror/focus]]
+    [[:editor/input "```calc\n\n```" {:type "block"
+                                      :backward-pos 4}]
+     [:codemirror/focus]]))
 
 (defn ->block
   ([type]
@@ -189,14 +198,14 @@
      [:editor/set-property :block/tags :logseq.class/Query]
      [:editor/set-property :logseq.property/query ""]
      [:editor/set-property-on-block-property :logseq.property/query :logseq.property.node/display-type :code]
-     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/mode "clojure"]]
+     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/lang "clojure"]]
     (->block "query")))
 
 (defn db-based-code-block
   []
   [[:editor/input "" {:last-pattern command-trigger}]
-   [:editor/set-property :logseq.property.node/display-type :code]
-   [:codemirror/focus]])
+   [:editor/upsert-type-block :code]
+   [:editor/exit]])
 
 (defn file-based-code-block
   []
@@ -339,10 +348,11 @@
        ["Quote"
         (quote-block-steps)
         "Create a quote block"
-        :icon/quote-block]
+        :icon/quote]
        ["Math block"
         (math-block-steps)
-        "Create a latex block"]]
+        "Create a latex block"
+        :icon/math]]
 
       (headings)
 
@@ -408,9 +418,9 @@
        (when-not db?
          ["Zotero" (zotero-steps) "Import Zotero journal article" :icon/circle-letter-z])
        ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
-       ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
-                                                       :backward-pos 4}]
-                      [:codemirror/focus]] "Insert a calculator" :icon/calculator]
+       ["Calculator"
+        (calc-steps)
+        "Insert a calculator" :icon/calculator]
        (when-not db?
          ["Draw" (fn []
                    (let [file (draw/file-name)
@@ -753,6 +763,11 @@
       (when block-property-value
         (db-property-handler/set-block-property! (:db/id block-property-value) property-id value)))))
 
+(defmethod handle-step :editor/upsert-type-block [[_ type lang]]
+  (when (config/db-based-graph? (state/get-current-repo))
+    (when-let [block (state/get-edit-block)]
+      (state/pub-event! [:editor/upsert-type-block {:block block :type type :lang lang}]))))
+
 (defn- file-based-set-priority
   [priority]
   (when-let [input-id (state/get-edit-input-id)]
@@ -785,6 +800,9 @@
     (state/pub-event! [:editor/new-property {:property-key "Deadline"}])
     (handle-step [:editor/show-date-picker :deadline])))
 
+(defmethod handle-step :editor/run-query-command [[_]]
+  (state/pub-event! [:editor/run-query-command]))
+
 (defmethod handle-step :editor/insert-properties [[_ _] _format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
@@ -800,33 +818,27 @@
         (property-file/goto-properties-end-when-file-based format current-input)
         (cursor/move-cursor-backward current-input 3)))))
 
-(defonce markdown-heading-pattern #"^#+\s+")
-(defn set-markdown-heading
+(defn file-based-set-markdown-heading
   [content heading]
   (let [heading-str (apply str (repeat heading "#"))]
-    (if (util/safe-re-find markdown-heading-pattern content)
-      (string/replace-first content
-                            markdown-heading-pattern
-                            (str heading-str " "))
+    (if (util/safe-re-find common-util/markdown-heading-pattern content)
+      (common-util/clear-markdown-heading content)
       (str heading-str " " (string/triml content)))))
 
-(defn clear-markdown-heading
-  [content]
-  [:pre (string? content)]
-  (string/replace-first content
-                        markdown-heading-pattern
-                        ""))
+(def clear-markdown-heading common-util/clear-markdown-heading)
 
 (defmethod handle-step :editor/set-heading [[_ heading]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [current-block (state/get-edit-block)
             format (:block/format current-block)]
-        (if (= format :markdown)
-          (let [edit-content (gobj/get current-input "value")
-                new-content (set-markdown-heading edit-content heading)]
-            (state/set-edit-content! input-id new-content))
-          (state/pub-event! [:editor/set-org-mode-heading current-block heading]))))))
+        (if (config/db-based-graph?)
+          (state/pub-event! [:editor/set-heading current-block heading])
+          (if (= format :markdown)
+            (let [edit-content (gobj/get current-input "value")
+                  new-content (file-based-set-markdown-heading edit-content heading)]
+              (state/set-edit-content! input-id new-content))
+            (state/pub-event! [:editor/set-heading current-block heading])))))))
 
 (defmethod handle-step :editor/search-page [_]
   (state/set-editor-action! :page-search))

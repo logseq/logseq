@@ -3,15 +3,16 @@
   (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [cljs-bean.core :as bean]
-            [cljs.core.async :as async]
             [clojure.edn :as edn]
             [clojure.string :as string]
             [datascript.core :as d]
-            [datascript.storage :refer [IStorage]]
+            [datascript.storage :refer [IStorage] :as storage]
             [frontend.common.file.core :as common-file]
+            [frontend.worker.crypt :as worker-crypt]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.db.migrate :as db-migrate]
+            [frontend.worker.device :as worker-device]
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
             [frontend.worker.handler.page :as worker-page]
@@ -24,15 +25,17 @@
             [frontend.worker.state :as worker-state] ;; [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.undo-redo2 :as undo-redo]
             [frontend.worker.util :as worker-util]
+            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.op :as outliner-op]
-            [goog.object :as gobj]
+            [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [promesa.core :as p]
             [shadow.cljs.modern :refer [defclass]]))
 
@@ -46,7 +49,7 @@
 (defn- check-worker-scope!
   []
   (when (or (gobj/get js/self "React")
-          (gobj/get js/self "module$react"))
+            (gobj/get js/self "module$react"))
     (throw (js/Error. "[db-worker] React is forbidden in worker scope!"))))
 
 (defn- <get-opfs-pool
@@ -87,6 +90,37 @@
 (defn- <import-db
   [^js pool data]
   (.importDb ^js pool repo-path data))
+
+(defn- get-all-datoms-from-sqlite-db
+  [db]
+  (some->> (.exec db #js {:sql "select * from kvs"
+                          :rowMode "array"})
+           bean/->clj
+           (mapcat
+            (fn [[_addr content _addresses]]
+              (let [content' (sqlite-util/transit-read content)
+                    datoms (when (map? content')
+                             (:keys content'))]
+                datoms)))
+           distinct
+           (map (fn [[e a v t]]
+                  (d/datom e a v t)))))
+
+(defn- rebuild-db-from-datoms!
+  "Persistent-sorted-set has been broken, used addresses can't be found"
+  [datascript-conn sqlite-db]
+  (let [datoms (get-all-datoms-from-sqlite-db sqlite-db)
+        db (d/init-db [] db-schema/schema-for-db-based-graph
+                      {:storage (storage/storage @datascript-conn)})
+        db (d/db-with db
+                      (map (fn [d]
+                             [:db/add (:e d) (:a d) (:v d) (:t d)]) datoms))]
+    (prn :debug :rebuild-db-from-datoms :datoms-count (count datoms))
+    ;; export db first
+    (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
+    (worker-util/post-message :export-current-db [])
+    (.exec sqlite-db #js {:sql "delete from kvs"})
+    (d/reset-conn! datascript-conn db)))
 
 (comment
   (defn- gc-kvs-table!
@@ -144,8 +178,6 @@
           (assoc data :addresses addresses)
           data)))))
 
-(defonce sqlite-writes-chan (async/chan 10000))
-
 (defn new-sqlite-storage
   "Update sqlite-cli/new-sqlite-storage when making changes"
   [repo _opts]
@@ -168,17 +200,10 @@
                            :$content (sqlite-util/transit-write data')
                            :$addresses addresses}))
                   addr+data-seq)]
-        (if (worker-state/rtc-downloading-graph?)
-          (upsert-addr-content! repo data delete-addrs) ; sync writes when downloading whole graph
-          (async/go (async/>! sqlite-writes-chan [repo data delete-addrs])))))
+        (upsert-addr-content! repo data delete-addrs)))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
-
-(async/go-loop []
-  (let [args (async/<! sqlite-writes-chan)]
-    (apply upsert-addr-content! args))
-  (recur))
 
 (defn new-sqlite-client-ops-storage
   [repo]
@@ -226,8 +251,19 @@
 
 (defn close-db!
   [repo]
-  (let [{:keys [db search client-ops]} (@*sqlite-conns repo)]
+  (let [{:keys [db search client-ops]} (get @*sqlite-conns repo)]
     (close-db-aux! repo db search client-ops)))
+
+(defn reset-db!
+  [repo db-transit-str]
+  (when-let [conn (get @*datascript-conns repo)]
+    (let [new-db (ldb/read-transit-str db-transit-str)
+          new-db' (update new-db :eavt (fn [^BTSet s]
+                                         (set! (.-storage s) (.-storage (:eavt @conn)))
+                                         s))]
+      (d/reset-conn! conn new-db' {:reset-conn! true})
+      (d/reset-schema! conn (:schema new-db))
+      nil)))
 
 (defn- get-dbs
   [repo]
@@ -246,41 +282,51 @@
       [db search-db client-ops-db])))
 
 (defn- create-or-open-db!
-  [repo {:keys [config]}]
+  [repo {:keys [config import-type]}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db] (get-dbs repo)
             storage (new-sqlite-storage repo {})
-            client-ops-storage (new-sqlite-client-ops-storage repo)]
+            client-ops-storage (when-not @*publishing? (new-sqlite-client-ops-storage repo))
+            db-based? (sqlite-util/db-based-graph? repo)]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
                                        :client-ops client-ops-db})
       (.exec db "PRAGMA locking_mode=exclusive")
+      (.exec db "PRAGMA journal_mode=WAL")
+      (.exec client-ops-db "PRAGMA locking_mode=exclusive")
+      (.exec client-ops-db "PRAGMA journal_mode=WAL")
       (sqlite-common-db/create-kvs-table! db)
-      (sqlite-common-db/create-kvs-table! client-ops-db)
+      (when-not @*publishing? (sqlite-common-db/create-kvs-table! client-ops-db))
       (db-migrate/migrate-sqlite-db db)
-      (db-migrate/migrate-sqlite-db client-ops-db)
+      (when-not @*publishing? (db-migrate/migrate-sqlite-db client-ops-db))
       (search/create-tables-and-triggers! search-db)
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)
-            client-ops-conn (sqlite-common-db/get-storage-conn client-ops-storage client-op/schema-in-db)
+            client-ops-conn (when-not @*publishing? (sqlite-common-db/get-storage-conn client-ops-storage client-op/schema-in-db))
             initial-data-exists? (and (d/entity @conn :logseq.class/Root)
                                       (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type))))]
         (swap! *datascript-conns assoc repo conn)
         (swap! *client-ops-conns assoc repo client-ops-conn)
-        (when (and (sqlite-util/db-based-graph? repo) (not initial-data-exists?))
+        (when (and db-based? (not initial-data-exists?))
           (let [config (or config {})
-                initial-data (sqlite-create-graph/build-db-initial-data config)]
+                initial-data (sqlite-create-graph/build-db-initial-data config
+                                                                        (when import-type {:import-type import-type}))]
             (d/transact! conn initial-data {:initial-db? true})))
 
-        (try
-          (when-not (ldb/page-exists? @conn common-config/views-page-name "hidden")
-            (ldb/create-views-page! conn))
-          (catch :default _e))
+        (when-not db-based?
+          (try
+            (when-not (ldb/page-exists? @conn common-config/views-page-name "page")
+              (ldb/transact! conn (sqlite-create-graph/build-initial-views)))
+            (catch :default _e)))
 
         ;; (gc-kvs-table! db)
-        (db-migrate/migrate conn search-db)
+        (try
+          (db-migrate/migrate conn search-db)
+          (catch :default _e
+            (when db-based?
+              (rebuild-db-from-datoms! conn db))))
 
-        (db-listener/listen-db-changes! repo conn)))))
+        (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 
 (defn- iter->vec [iter']
   (when iter'
@@ -392,12 +438,11 @@
 
   (createOrOpenDB
    [_this repo opts-str]
-   (let [{:keys [close-other-db? config]
-          :or {close-other-db? true}} (ldb/read-transit-str opts-str)]
+   (let [{:keys [close-other-db?] :or {close-other-db? true} :as opts} (ldb/read-transit-str opts-str)]
      (p/do!
       (when close-other-db?
         (close-other-dbs! repo))
-      (create-or-open-db! repo {:config config}))))
+      (create-or-open-db! repo (dissoc opts :close-other-db?)))))
 
   (getMaxTx
    [_this repo]
@@ -551,6 +596,10 @@
    [_this repo]
    (close-db! repo))
 
+  (resetDB
+   [_this repo db-transit]
+   (reset-db! repo db-transit))
+
   (unsafeUnlinkDB
    [_this repo]
    (p/let [pool (<get-opfs-pool repo)
@@ -618,8 +667,8 @@
      (try
        (worker-util/profile
         "apply outliner ops"
-        (let [ops (edn/read-string ops-str)
-              opts (edn/read-string opts-str)
+        (let [ops (ldb/read-transit-str ops-str)
+              opts (ldb/read-transit-str opts-str)
               result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
           (ldb/write-transit-str result)))
        (catch :default e
@@ -773,6 +822,33 @@
    (with-write-transit-str
      (js/Promise. (rtc-core/new-task--snapshot-list token graph-uuid))))
 
+  (rtc-get-graph-keys
+   [this repo]
+   (with-write-transit-str
+     (worker-crypt/get-graph-keys-jwk repo)))
+
+  (rtc-sync-current-graph-encrypted-aes-key
+   [this token device-uuids-transit-str]
+   (with-write-transit-str
+     (js/Promise.
+      (worker-device/new-task--sync-current-graph-encrypted-aes-key
+       token device-uuids-transit-str))))
+
+  (device-list-devices
+   [this token]
+   (with-write-transit-str
+     (js/Promise. (worker-device/new-task--list-devices token))))
+
+  (device-remove-device-public-key
+   [this token device-uuid key-name]
+   (with-write-transit-str
+     (js/Promise. (worker-device/new-task--remove-device-public-key token device-uuid key-name))))
+
+  (device-remove-device
+   [this token device-uuid]
+   (with-write-transit-str
+     (js/Promise. (worker-device/new-task--remove-device token device-uuid))))
+
   (undo
    [_this repo _page-block-uuid-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -832,7 +908,8 @@
     (worker-state/set-worker-object! obj)
     (file/<ratelimit-file-writes!)
     (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
-    (Comlink/expose obj)))
+    (Comlink/expose obj)
+    (reset! worker-state/*main-thread (Comlink/wrap js/self))))
 
 (comment
   (defn <remove-all-files!

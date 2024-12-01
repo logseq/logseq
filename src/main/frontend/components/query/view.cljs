@@ -4,7 +4,6 @@
             [frontend.db :as db]
             [logseq.db :as ldb]
             [rum.core :as rum]
-            [frontend.util :as util]
             [frontend.mixins :as mixins]))
 
 (defn- columns
@@ -13,7 +12,7 @@
        distinct
        (map db/entity)
        (ldb/sort-by-order)
-       (views/build-columns config)))
+       ((fn [cs] (views/build-columns config cs {:add-tags-column? false})))))
 
 (defn- result->entities
   [result]
@@ -32,14 +31,21 @@
 
 (rum/defcs query-result < rum/static mixins/container-id
   (rum/local nil ::result)
+  {:will-remount (fn [old-state new-state]
+                   (let [*result (::result new-state)
+                         [_config view-entity old-result] (:rum/args old-state)
+                         [_config _view-entity new-result] (:rum/args old-state)]
+                     (when-not (= old-result new-result)
+                       (reset! *result (init-result new-result view-entity))))
+                   new-state)}
   [state config view-entity result]
   (let [*result (::result state)
         result' (or @*result (init-result result view-entity))
         columns' (columns (assoc config :container-id (::container-id state)) result')]
     [:div.query-result.w-full
-     {:on-pointer-down util/stop-propagation}
      (views/view view-entity
                  {:title-key :views.table/live-query-title
                   :data result'
-                  :set-data! #(reset! *result %)
+                  :set-data! (fn [data]
+                               (when (seq data) (reset! *result data)))
                   :columns columns'})]))

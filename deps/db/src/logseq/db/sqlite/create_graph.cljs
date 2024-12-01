@@ -8,7 +8,9 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.config :as common-config]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn- mark-block-as-built-in [block]
   (assoc block :logseq.property/built-in? true))
@@ -16,18 +18,19 @@
 (defn build-initial-properties*
   [built-in-properties]
   (mapcat
-   (fn [[db-ident {:keys [schema title closed-values] :as m}]]
+   (fn [[db-ident {:keys [schema title closed-values properties] :as m}]]
      (let [prop-name (or title (name (:name m)))
            blocks (if closed-values
                     (db-property-build/build-closed-values
                      db-ident
                      prop-name
                      {:db/ident db-ident :block/schema schema :closed-values closed-values}
-                     {})
+                     {:properties properties})
                     [(sqlite-util/build-new-property
                       db-ident
                       schema
-                      {:title prop-name})])]
+                      {:title prop-name
+                       :properties properties})])]
        blocks))
    (dissoc built-in-properties :logseq.property/built-in?)))
 
@@ -100,17 +103,53 @@
   [db-ident->properties]
   (build-initial-classes* db-class/built-in-classes db-ident->properties))
 
+(defn build-initial-views
+  "Builds initial blocks used for storing views. Used by db and file graphs"
+  []
+  (let [page-id (common-uuid/gen-uuid)]
+    [(sqlite-util/block-with-timestamps
+      {:block/uuid page-id
+       :block/name common-config/views-page-name
+       :block/title common-config/views-page-name
+       :block/type "page"
+       :block/schema {:public? false}
+       :block/format :markdown
+       :logseq.property/built-in? true})
+     (sqlite-util/block-with-timestamps
+      {:block/uuid (common-uuid/gen-uuid)
+       :block/title "All Pages Default View"
+       :block/format :markdown
+       :block/parent [:block/uuid page-id]
+       :block/order (db-order/gen-key nil)
+       :block/page [:block/uuid page-id]
+       :logseq.property/view-for [:block/uuid page-id]
+       :logseq.property/built-in? true})]))
+
+(defn- build-favorites-page
+  []
+  [(sqlite-util/block-with-timestamps
+    {:block/uuid (common-uuid/gen-uuid)
+     :block/name common-config/favorites-page-name
+     :block/title common-config/favorites-page-name
+     :block/type "page"
+     :block/schema {:public? false}
+     :block/format :markdown
+     :logseq.property/built-in? true})])
+
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
-  [config-content]
-  (let [initial-data [(sqlite-util/kv :logseq.kv/db-type "db")
-                      (sqlite-util/kv :logseq.kv/schema-version db-schema/version)
-                      (sqlite-util/kv :logseq.kv/graph-initial-schema-version db-schema/version)
-                      (sqlite-util/kv :logseq.kv/graph-created-at (common-util/time-ms))
-                      ;; Empty property value used by db.type/ref properties
-                      {:db/ident :logseq.property/empty-placeholder}
-                      {:db/ident :logseq.class/Root}]
+  [config-content & {:keys [import-type]}]
+  (let [initial-data (cond->
+                      [(sqlite-util/kv :logseq.kv/db-type "db")
+                       (sqlite-util/kv :logseq.kv/schema-version db-schema/version)
+                       (sqlite-util/kv :logseq.kv/graph-initial-schema-version db-schema/version)
+                       (sqlite-util/kv :logseq.kv/graph-created-at (common-util/time-ms))
+                       ;; Empty property value used by db.type/ref properties
+                       {:db/ident :logseq.property/empty-placeholder}
+                       {:db/ident :logseq.class/Root}]
+                       import-type
+                       (into (sqlite-util/import-tx import-type)))
         initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content
@@ -131,7 +170,8 @@
         default-classes (build-initial-classes db-ident->properties)
         default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
                            (map mark-block-as-built-in))
+        hidden-pages (concat (build-initial-views) (build-favorites-page))
         tx (vec (concat initial-data properties-tx default-classes
-                        initial-files default-pages))]
+                        initial-files default-pages hidden-pages))]
     (validate-tx-for-duplicate-idents tx)
     tx))

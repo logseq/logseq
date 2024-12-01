@@ -16,13 +16,20 @@
   ([]
    (when-let [runtime-id (->> (api/repl-runtimes :app)
                               (filter (fn [runtime] (= :browser-worker (:host runtime))))
-                              first
-                              :client-id)]
-     (prn :worker-runtime-id runtime-id)
+                              (map :client-id)
+                              (apply max))]
      (worker-repl runtime-id)))
-  ([runtime-id]
-   (assert runtime-id "runtime-id shouldn't be empty")
-   (api/repl :app {:runtime-id runtime-id})))
+  ([runtime-id-or-which]
+   (assert runtime-id-or-which "runtime-id shouldn't be empty")
+   (if
+    (number? runtime-id-or-which)
+     (do (prn :worker-runtime-id runtime-id-or-which)
+         (api/repl :app {:runtime-id runtime-id-or-which}))
+     (let [runtime-ids (->> (api/repl-runtimes :app)
+                            (filter (fn [runtime] (= :browser-worker (:host runtime))))
+                            (map :client-id))
+           runtime-id (apply (if (= :old runtime-id-or-which) min max) runtime-ids)]
+       (worker-repl runtime-id)))))
 
 (defn runtime-id-list
   []

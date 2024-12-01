@@ -83,12 +83,16 @@
   (->> properties
        (keep (fn [[k v]]
                (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
-                 (when (and (db-property-type/value-ref-property-types built-in-type)
-                            ;; closed values are referenced by their :db/ident so no need to create values
-                            (not (get-in db-property/built-in-properties [k :closed-values])))
+                 (if (and (db-property-type/value-ref-property-types built-in-type)
+                          ;; closed values are referenced by their :db/ident so no need to create values
+                          (not (get-in db-property/built-in-properties [k :closed-values])))
                    (let [property-map {:db/ident k
                                        :block/schema {:type built-in-type}}]
-                     [property-map v]))
+                     [property-map v])
+                   (when-let [built-in-type' (get (:build/properties-ref-types new-block) built-in-type)]
+                     (let [property-map {:db/ident k
+                                         :block/schema {:type built-in-type'}}]
+                       [property-map v])))
                  (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :block/schema :type]))
                             ;; TODO: Support translate-property-value without this hack
                             (not (vector? v)))
@@ -134,7 +138,7 @@
                                                            (throw (ex-info (str "No uuid for page ref name" (pr-str %)) {})))
                                                        :block/title %)
                                             ref-names)]
-                       {:block/title (db-content/refs->special-id-ref (:block/title m) block-refs {:replace-tag? false})
+                       {:block/title (db-content/title-ref->id-ref (:block/title m) block-refs {:replace-tag? false})
                         :block/refs block-refs})))))))
 
 (defn- build-properties-tx [properties page-uuids all-idents]
@@ -159,7 +163,8 @@
                                                                              {:block-uuid (:block/uuid prop-m)
                                                                               :title (:block/title prop-m)})
                                              {:db/id (or (property-db-ids prop-name)
-                                                         (throw (ex-info "No :db/id for property" {:property prop-name})))})
+                                                         (throw (ex-info "No :db/id for property" {:property prop-name})))}
+                                             (select-keys prop-m [:build/properties-ref-types]))
                                       pvalue-tx-m (->property-value-tx-m new-block (:build/properties prop-m) properties all-idents)]
                                   (cond-> []
                                     (seq pvalue-tx-m)
@@ -248,6 +253,8 @@
     [:block/schema [:map
                     [:type :keyword]]]
     [:build/properties {:optional true} User-properties]
+    [:build/properties-ref-types {:optional true}
+     [:map-of :keyword :keyword]]
     [:build/closed-values
      {:optional true}
      [:vector [:map
@@ -543,7 +550,7 @@
                              classes-tx
                              pages-and-blocks-tx))))
 
-(defn build-blocks-tx
+(defn ^:large-vars/doc-var build-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a map
  with two keys of transactable data for use with d/transact!. The :init-tx key
  must be transacted first and the :block-props-tx can be transacted after.
@@ -572,6 +579,8 @@
      * :build/properties - Define properties on a property page.
      * :build/closed-values - Define closed values with a vec of maps. A map contains keys :uuid, :value and :icon.
      * :build/schema-classes - Vec of class name keywords. Defines a property's range classes
+     * :build/properties-ref-types - Map of internal ref types to public ref types that are valid only for this property.
+       Useful when remapping value ref types e.g. for :logseq.property/default-value
    * :classes - This is a map to configure classes where the keys are class name keywords
      and the values are maps of datascript attributes e.g. `{:block/title \"Foo\"}`.
      Additional keys available:

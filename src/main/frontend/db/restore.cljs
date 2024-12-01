@@ -27,8 +27,10 @@
 
     (println ::restore-graph! "loads" (count initial-data) "datoms in" (t/in-millis (t/interval start-time end-time)) "ms")
 
+    (state/pub-event! [:graph/restored repo])
     (state/set-state! :graph/loading? false)
     (state/pub-event! [:ui/re-render-root])
+
     ;; (async/go
     ;;   (async/<! (async/timeout 100))
     ;;   (db-async/<fetch-all-pages repo))

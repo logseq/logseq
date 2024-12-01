@@ -164,9 +164,9 @@
                         (with-parent db)
                         (with-block-refs db)
                         (with-block-link db))
-            block' (if (and page? (not (or children? nested-children?)))
-                     block'
-                     (mark-block-fully-loaded block'))]
+            block' (if (or children? nested-children?)
+                     (mark-block-fully-loaded block')
+                     block')]
         (cond->
          {:block block'
           :properties (property-with-values db block)}
@@ -217,8 +217,7 @@
             (->> (d/datoms db :avet :block/type type')
                  (mapcat (fn [d]
                            (d/datoms db :eavt (:e d))))))
-          [
-           ;; property and class pages are pulled from `get-all-pages` already
+          [;; property and class pages are pulled from `get-all-pages` already
            ;; "property" "class"
            "closed value"]))
 
@@ -256,6 +255,7 @@
                          (when-let [e (d/entity db id)]
                            (d/datoms db :eavt (:db/id e))))
                        [:logseq.kv/db-type :logseq.kv/graph-uuid :logseq.property/empty-placeholder
+                        :logseq.kv/latest-code-lang
                         :logseq.kv/graph-backup-folder])
         favorites (when db-graph? (get-favorites db))
         views (when db-graph? (get-views-data db))
@@ -298,10 +298,10 @@
         (string/replace ":" "+3A+")
         (string/replace "/" "++"))
     (-> db-name
-       (string/replace sqlite-util/db-version-prefix "")
-       (string/replace "/" "_")
-       (string/replace "\\" "_")
-       (string/replace ":" "_"))));; windows
+        (string/replace sqlite-util/db-version-prefix "")
+        (string/replace "/" "_")
+        (string/replace "\\" "_")
+        (string/replace ":" "_"))));; windows
 
 (defn get-db-full-path
   [graphs-dir db-name]

@@ -10,77 +10,81 @@
             [clojure.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.components.cmdk.core :as cmdk]
             [frontend.components.block :as block]
-            [frontend.components.settings :as settings]
+            [frontend.components.cmdk.core :as cmdk]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.git :as git-component]
             [frontend.components.plugins :as plugin]
-            [frontend.components.shell :as shell]
-            [frontend.components.whiteboard :as whiteboard]
-            [frontend.components.user.login :as login]
-            [frontend.components.repo :as repo]
             [frontend.components.property.dialog :as property-dialog]
+            [frontend.components.repo :as repo]
+            [frontend.components.select :as select]
+            [frontend.components.settings :as settings]
+            [frontend.components.shell :as shell]
+            [frontend.components.user.login :as login]
+            [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [logseq.shui.ui :as shui]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.persist :as db-persist]
             [frontend.db.transact :as db-transact]
+            [frontend.extensions.fsrs :as fsrs]
             [frontend.extensions.srs :as srs]
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as fs-watcher]
+            [frontend.handler.code :as code-handler]
+            [frontend.handler.common.page :as page-common-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.export :as export]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.shell :as shell-handler]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.file-based.nfs :as nfs-handler]
-            [frontend.handler.code :as code-handler]
-            [frontend.handler.db-based.rtc :as rtc-handler]
-            [frontend.handler.graph :as graph-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.instrumentation.sentry :as sentry-event]
+            [frontend.modules.outliner.pipeline :as pipeline]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.shortcut.core :as st]
+            [frontend.persist-db :as persist-db]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.quick-capture :as quick-capture]
+            [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]
-            [lambdaisland.glogi :as log]
-            [rum.core :as rum]
-            [frontend.rum :as r]
-            [frontend.persist-db.browser :as db-browser]
-            [frontend.modules.outliner.pipeline :as pipeline]
-            [frontend.date :as date]
             [logseq.db :as ldb]
-            [frontend.persist-db :as persist-db]
-            [frontend.handler.export :as export]
-            [frontend.extensions.fsrs :as fsrs]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; TODO: should we move all events here?
 
@@ -171,7 +175,6 @@
          (repo-config-handler/restore-repo-config! graph)
          (when-not (= :draw (state/get-current-route))
            (route-handler/redirect-to-home!))
-         (state/pub-event! [:graph/ready graph])
          (if db-based?
            (rtc-handler/<rtc-start! graph)
            (file-sync-restart!))
@@ -306,15 +309,16 @@
     (plugin/open-select-theme!)
     (route-handler/go-to-search! :themes)))
 
-(defmethod handle :modal/toggle-appearance-modal [_]
-  (let [label "customize-appearance"]
-    (if (shui/dialog-get label)
-      (shui/dialog-close! label)
-      (shui/dialog-open!
-       #(settings/modal-appearance-inner)
-       {:id      label
-        :overlay-props {:label label}
-        :label   label}))))
+(defmethod handle :ui/toggle-appearance [_]
+  (let [popup-id "appearance_settings"]
+    (if (gdom/getElement popup-id)
+      (shui/popup-hide! popup-id)
+      (shui/popup-show!
+       (gdom/getElement "dots-menu")
+       (fn []
+         (settings/appearance))
+       {:id popup-id
+        :align :end}))))
 
 (defmethod handle :modal/set-git-username-and-email [[_ _content]]
   (shui/dialog-open! git-component/set-git-username-and-email))
@@ -391,11 +395,12 @@
     (shui/dialog-open! shell/shell)))
 
 (defmethod handle :go/search [_]
-  (state/set-modal! cmdk/cmdk-modal
-                    {:fullscreen? true
-                     :close-btn?  false
-                     :panel?      false
-                     :label "ls-modal-search"}))
+  (shui/dialog-open!
+   cmdk/cmdk-modal
+   {:id :ls-dialog-cmdk
+    :align :top
+    :content-props {:class "ls-dialog-cmdk"}
+    :close-btn? false}))
 
 (defmethod handle :go/plugins [_]
   (plugin/open-plugins-modal!))
@@ -663,7 +668,7 @@
            template
            {:target page}))))))
 
-(defmethod handle :editor/set-org-mode-heading [[_ block heading]]
+(defmethod handle :editor/set-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]
     (editor-handler/set-heading! id heading)))
 
@@ -711,6 +716,7 @@
   (file-sync-stop!))
 
 (defmethod handle :graph/restored [[_ graph]]
+  (when graph (assets-handler/ensure-assets-dir! graph))
   (mobile/init!)
   (rtc-handler/<rtc-start! graph)
   (fsrs/update-due-cards-count)
@@ -780,6 +786,15 @@
    {:id :new-db-graph
     :title [:h2 "Create a new graph"]
     :style {:max-width "500px"}}))
+
+(defmethod handle :dialog-select/graph-open []
+  (select/dialog-select! :graph-open))
+
+(defmethod handle :dialog-select/graph-remove []
+  (select/dialog-select! :graph-remove))
+
+(defmethod handle :dialog-select/db-graph-replace []
+  (select/dialog-select! :db-graph-replace))
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
   (persist-db/export-current-graph! {:succ-notification? true}))
@@ -885,65 +900,118 @@
 (defmethod handle :editor/save-code-editor [_]
   (code-handler/save-code-editor!))
 
+(defmethod handle :editor/focus-code-editor [[_ editing-block container]]
+  (when-let [^js cm (util/get-cm-instance container)]
+    (when-not (.hasFocus cm)
+      (let [cursor-pos (some-> (:editor/cursor-range @state/state) (deref) (count))
+            direction (:block.editing/direction editing-block)
+            pos (:block.editing/pos editing-block)
+            to-line (case direction
+                      :up (.lastLine cm)
+                      (case pos
+                        :max (.lastLine cm)
+                        0))]
+                 ;; move to friendly cursor
+        (doto cm
+          (.focus)
+          (.setCursor to-line (or cursor-pos 0)))))))
+
 (defmethod handle :editor/toggle-children-number-list [[_ block]]
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
+(defn- editor-new-property [block target opts]
+  (let [editing-block (state/get-edit-block)
+        pos (state/get-edit-pos)
+        edit-block-or-selected (if editing-block
+                                 [editing-block]
+                                 (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
+        current-block (when-let [s (state/get-current-page)]
+                        (when (util/uuid-string? s)
+                          (db/entity [:block/uuid (uuid s)])))
+        blocks (or (when block [block])
+                   edit-block-or-selected
+                   (when current-block [current-block]))
+        opts' (cond-> opts
+                editing-block
+                (assoc :original-block editing-block
+                       :edit-original-block
+                       (fn [{:keys [editing-default-property?]}]
+                         (when editing-block
+                           (let [content (:block/title (db/entity (:db/id editing-block)))
+                                 esc? (= "Escape" (state/get-ui-last-key-code))
+                                 [content' pos] (cond
+                                                  esc?
+                                                  [nil pos]
+                                                  (and (>= (count content) pos)
+                                                       (>= pos 2)
+                                                       (= (util/nth-safe content (dec pos))
+                                                          (util/nth-safe content (- pos 2))
+                                                          ";"))
+                                                  [(str (common-util/safe-subs content 0 (- pos 2))
+                                                        (common-util/safe-subs content pos))
+                                                   (- pos 2)]
+                                                  :else
+                                                  [nil pos])]
+                             (when content'
+                               (if editing-default-property?
+                                 (editor-handler/save-block! (state/get-current-repo) (:block/uuid editing-block) content')
+                                 (editor-handler/edit-block! editing-block (or pos :max)
+                                                             (cond-> {}
+                                                               content'
+                                                               (assoc :custom-content content'))))))))))]
+    (when (seq blocks)
+      (let [target' (or target
+                        (some-> (state/get-edit-input-id)
+                                (gdom/getElement))
+                        (first (state/get-selection-blocks)))]
+        (if target'
+          (shui/popup-show! target'
+                            #(property-dialog/dialog blocks opts')
+                            {:align "start"
+                             :auto-focus? true})
+          (shui/dialog-open! #(property-dialog/dialog blocks opts')
+                             {:id :property-dialog
+                              :align "start"}))))))
+
 (defmethod handle :editor/new-property [[_ {:keys [block target] :as opts}]]
+  (when-not config/publishing?
+    (p/do!
+     (editor-handler/save-current-block!)
+     (editor-new-property block target opts))))
+
+(defmethod handle :editor/upsert-type-block [[_ {:keys [block type lang update-current-block?]}]]
   (p/do!
-   (editor-handler/save-current-block!)
-   (let [editing-block (state/get-edit-block)
-         pos (state/get-edit-pos)
-         edit-block-or-selected (if editing-block
-                                  [editing-block]
-                                  (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
-         current-block (when-let [s (state/get-current-page)]
-                         (when (util/uuid-string? s)
-                           (db/entity [:block/uuid (uuid s)])))
-         blocks (or (when block [block])
-                    edit-block-or-selected
-                    (when current-block [current-block]))
-         opts' (cond-> opts
-                 editing-block
-                 (assoc :original-block editing-block
-                        :edit-original-block
-                        (fn [{:keys [editing-default-property?]}]
-                          (when editing-block
-                            (let [content (:block/title (db/entity (:db/id editing-block)))
-                                  esc? (= "Escape" (state/get-ui-last-key-code))
-                                  [content' pos] (cond
-                                                   esc?
-                                                   [nil pos]
-                                                   (and (>= (count content) pos)
-                                                        (>= pos 2)
-                                                        (= (util/nth-safe content (dec pos))
-                                                           (util/nth-safe content (- pos 2))
-                                                           ";"))
-                                                   [(str (common-util/safe-subs content 0 (- pos 2))
-                                                         (common-util/safe-subs content pos))
-                                                    (- pos 2)]
-                                                   :else
-                                                   [nil pos])]
-                              (when content'
-                                (if editing-default-property?
-                                  (editor-handler/save-block! (state/get-current-repo) (:block/uuid editing-block) content')
-                                  (editor-handler/edit-block! editing-block (or pos :max)
-                                                              (cond-> {}
-                                                                content'
-                                                                (assoc :custom-content content'))))))))))]
-     (when (seq blocks)
-       (let [target' (or target
-                         (some-> (state/get-edit-input-id)
-                                 (gdom/getElement))
-                         (first (state/get-selection-blocks)))]
-         (if target'
-           (shui/popup-show! target'
-                             #(property-dialog/dialog blocks opts')
-                             {:align "start"
-                              :auto-focus? true})
-           (shui/dialog-open! #(property-dialog/dialog blocks opts')
-                              {:id :property-dialog
-                               :align "start"})))))))
+   (when-not update-current-block?
+     (editor-handler/save-current-block!))
+   (when-not update-current-block?
+     (p/delay 16))
+   (let [block (db/entity (:db/id block))
+         block-type (:logseq.property.node/display-type block)
+         block-title (:block/title block)
+         latest-code-lang (or lang
+                              (:kv/value (db/entity :logseq.kv/latest-code-lang)))
+         turn-type! #(if (and (= (keyword type) :code) latest-code-lang)
+                       (db-property-handler/set-block-properties!
+                        (:block/uuid %)
+                        {:logseq.property.node/display-type (keyword type)
+                         :logseq.property.code/lang latest-code-lang})
+                       (db-property-handler/set-block-property!
+                        (:block/uuid %) :logseq.property.node/display-type (keyword type)))]
+     (p/let [block (if (or (not (nil? block-type))
+                           (and (not update-current-block?) (not (string/blank? block-title))))
+                     (p/let [result (ui-outliner-tx/transact!
+                                     {:outliner-op :insert-blocks}
+                                     ;; insert a new block
+                                     (let [[_p _ block'] (editor-handler/insert-new-block-aux! {} block "")]
+                                       (turn-type! block')))
+                             result' (ldb/read-transit-str result)]
+                       (when-let [id (:block/uuid (first (:blocks result')))]
+                         (db/entity [:block/uuid id])))
+                     (p/do!
+                      (turn-type! block)
+                      (db/entity [:block/uuid (:block/uuid block)])))]
+       (js/setTimeout #(editor-handler/edit-block! block :max) 100)))))
 
 (rum/defc multi-tabs-dialog
   []
@@ -986,6 +1054,13 @@
     (pipeline/invoke-hooks (assoc data :tx-data tx-data))
 
     nil))
+
+(defmethod handle :db/export-sqlite [_]
+  (export/export-repo-as-sqlite-db! (state/get-current-repo))
+  nil)
+
+(defmethod handle :editor/run-query-command [_]
+  (editor-handler/run-query-command!))
 
 (defn run!
   []

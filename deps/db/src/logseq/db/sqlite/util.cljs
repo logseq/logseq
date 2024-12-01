@@ -80,7 +80,7 @@
    * :title - Case sensitive property name. Defaults to deriving this from db-ident
    * :block-uuid - :block/uuid for property"
   ([db-ident prop-schema] (build-new-property db-ident prop-schema {}))
-  ([db-ident prop-schema {:keys [title block-uuid ref-type?]}]
+  ([db-ident prop-schema {:keys [title block-uuid ref-type? properties]}]
    (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
@@ -105,7 +105,9 @@
         (seq classes)
         (assoc :property/schema.classes classes)
         (or ref-type? (contains? db-property-type/all-ref-property-types (:type prop-schema)))
-        (assoc :db/valueType :db.type/ref))))))
+        (assoc :db/valueType :db.type/ref)
+        (seq properties)
+        (merge properties))))))
 
 (defn build-new-class
   "Build a standard new class so that it is consistent across contexts"
@@ -136,3 +138,10 @@
   {:pre [(= "logseq.kv" (namespace k))]}
   {:db/ident k
    :kv/value value})
+
+(defn import-tx
+  "Creates tx for an import given an import-type"
+  [import-type]
+  [(kv :logseq.kv/import-type import-type)
+   ;; Timestamp is useful as this can occur much later than :logseq.kv/graph-created-at
+   (kv :logseq.kv/imported-at (common-util/time-ms))])

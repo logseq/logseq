@@ -95,8 +95,7 @@
            (page-handler/init-commands!)
 
            (watch-for-date!)
-           (when (util/electron?) (file-handler/watch-for-current-graph-dir!))
-           (state/pub-event! [:graph/restored (state/get-current-repo)])))
+           (when (util/electron?) (file-handler/watch-for-current-graph-dir!))))
         (p/catch (fn [error]
                    (log/error :exception error))))))
 
@@ -125,6 +124,7 @@
   (state/set-component! :block/embed block/block-embed)
   (state/set-component! :block/page-cp block/page-cp)
   (state/set-component! :block/inline-text block/inline-text)
+  (state/set-component! :block/asset-cp block/asset-cp)
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 

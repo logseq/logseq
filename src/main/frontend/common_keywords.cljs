@@ -2,7 +2,6 @@
   "There are some keywords scattered throughout the codebase."
   (:require [frontend.common.schema-register :include-macros true :as sr]))
 
-
 (sr/defkeyword :block/uuid
   "block's uuid"
   :uuid)
@@ -13,7 +12,7 @@
 
 (sr/defkeyword :block/type
   "block type"
-  [:enum "page" "property" "class" "whiteboard" "hidden"])
+  [:enum "page" "property" "class" "whiteboard"])
 
 (sr/defkeyword :block/parent
   "page blocks don't have this attr")
@@ -26,7 +25,7 @@
 
 (sr/defkeyword :block/title
   "Title or content string of the blocks.
-in db-version, page-references(e.g. [[page-name]]) are stored as [[~^uuid]]."
+in db-version, page-references(e.g. [[page-name]]) are stored as [[uuid]]."
   :string)
 
 (sr/defkeyword :block/raw-title

@@ -12,46 +12,13 @@
             [logseq.db.frontend.delete-blocks :as delete-blocks] ;; Load entity extensions
             [logseq.db.frontend.entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
-            [logseq.common.util.namespace :as ns-util])
+            [logseq.common.util.namespace :as ns-util]
+            [logseq.common.util.page-ref :as page-ref])
   (:refer-clojure :exclude [object?]))
-
-;; Use it as an input argument for datalog queries
-(def block-attrs
-  '[:db/id
-    :block/uuid
-    :block/parent
-    :block/order
-    :block/collapsed?
-    :block/format
-    :block/refs
-    :block/_refs
-    :block/path-refs
-    :block/tags
-    :block/link
-    :block/title
-    :block/marker
-    :block/priority
-    :block/properties
-    :block/properties-order
-    :block/properties-text-values
-    :block/pre-block?
-    :block/scheduled
-    :block/deadline
-    :block/repeated?
-    :block/created-at
-    :block/updated-at
-    ;; TODO: remove this in later releases
-    :block/heading-level
-    :block/file
-    :logseq.property/parent
-    {:block/page [:db/id :block/name :block/title :block/journal-day]}
-    {:block/_parent ...}])
 
 (defonce *transact-fn (atom nil))
 (defn register-transact-fn!
@@ -108,6 +75,7 @@
              (throw e))))))))
 
 (def page? entity-util/page?)
+(def internal-page? entity-util/internal-page?)
 (def class? entity-util/class?)
 (def property? entity-util/property?)
 (def closed-value? entity-util/closed-value?)
@@ -115,6 +83,7 @@
 (def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
 (def object? entity-util/object?)
+(def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
 
 (defn sort-by-order
@@ -477,12 +446,10 @@
   [db]
   (->>
    (d/datoms db :avet :block/name)
-   (distinct)
-   (map #(d/entity db (:e %)))
-   (filter page?)
-   (remove hidden?)
-   (remove (fn [page]
-             (common-util/uuid-string? (:block/name page))))))
+   (keep (fn [d]
+           (let [e (d/entity db (:e d))]
+             (when-not (hidden? e)
+               e))))))
 
 (defn built-in?
   "Built-in page or block"
@@ -504,7 +471,7 @@
   [page]
   (cond (property? page)
         (not (public-built-in-property? page))
-        (or (class? page) (= "page" (:block/type page)))
+        (or (class? page) (internal-page? page))
         false
         ;; Default to true for closed value and future internal types.
         ;; Other types like whiteboard are not considered because they aren't built-in
@@ -514,47 +481,12 @@
 (def write-transit-str sqlite-util/write-transit-str)
 (def read-transit-str sqlite-util/read-transit-str)
 
-(defn create-favorites-page!
-
-  "Creates hidden favorites page for storing favorites"
-  [repo]
-  (transact!
-   repo
-   [(sqlite-util/block-with-timestamps
-     {:block/uuid (common-uuid/gen-uuid)
-      :block/name common-config/favorites-page-name
-      :block/title common-config/favorites-page-name
-      :block/type "hidden"
-      :block/format :markdown})]))
-
 (defn build-favorite-tx
   "Builds tx for a favorite block in favorite page"
   [favorite-uuid]
   {:block/link [:block/uuid favorite-uuid]
    :block/title ""
    :block/format :markdown})
-
-(defn create-views-page!
-  "Creates hidden all pages for storing views"
-  [conn]
-  (let [page-id (common-uuid/gen-uuid)]
-    (transact!
-     conn
-     [(sqlite-util/block-with-timestamps
-       {:block/uuid page-id
-        :block/name common-config/views-page-name
-        :block/title common-config/views-page-name
-        :block/type "hidden"
-        :block/format :markdown})
-      (sqlite-util/block-with-timestamps
-       {:block/uuid (common-uuid/gen-uuid)
-        :block/title "All Pages Default View"
-        :block/format :markdown
-        :block/parent [:block/uuid page-id]
-        :block/order (db-order/gen-key nil)
-        :block/page [:block/uuid page-id]
-        :logseq.property/view-for [:block/uuid page-id]
-        :logseq.property/built-in? true})])))
 
 (defn get-key-value
   [db key-ident]
@@ -656,5 +588,23 @@
 (defn inline-tag?
   [block-raw-title tag]
   (assert (string? block-raw-title) "block-raw-title should be a string")
-  (or (string/includes? block-raw-title (str "#" (db-content/block-id->special-id-ref (:block/uuid tag))))
-      (string/includes? block-raw-title (str "#" db-content/page-ref-special-chars (:block/uuid tag)))))
+  (string/includes? block-raw-title (str "#" (page-ref/->page-ref (:block/uuid tag)))))
+
+(defonce node-display-type-classes
+  #{:logseq.class/Code-block :logseq.class/Math-block :logseq.class/Quote-block})
+
+(defn get-class-ident-by-display-type
+  [display-type]
+  (case display-type
+    :code :logseq.class/Code-block
+    :math :logseq.class/Math-block
+    :quote :logseq.class/Quote-block
+    nil))
+
+(defn get-display-type-by-class-ident
+  [class-ident]
+  (case class-ident
+    :logseq.class/Code-block :code
+    :logseq.class/Math-block :math
+    :logseq.class/Quote-block :quote
+    nil))

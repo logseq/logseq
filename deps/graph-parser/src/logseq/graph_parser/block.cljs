@@ -298,13 +298,16 @@
 
 (def convert-page-if-journal (memoize convert-page-if-journal-impl))
 
+;; Hack to detect export as some fns are too deeply nested to be refactored to get explicit option
+(def *export-to-db-graph? (atom false))
+
 (defn- page-name-string->map
   [original-page-name db date-formatter
    {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check?]}]
   (let [db-based? (ldb/db-based-graph? db)
         original-page-name (common-util/remove-boundary-slashes original-page-name)
         [original-page-name' page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
-        namespace? (and (not db-based?)
+        namespace? (and (or (not db-based?) @*export-to-db-graph?)
                         (not (boolean (text/get-nested-page-name original-page-name')))
                         (text/namespace-page? original-page-name'))
         page-entity (when (and db (not skip-existing-page-check?))
@@ -317,8 +320,8 @@
                :block/title original-page-name'}
               (when (and original-page-name
                          (not= (string/lower-case original-page-name)
-                               (string/lower-case original-page-name')))
-
+                               (string/lower-case original-page-name'))
+                         (not @*export-to-db-graph?))
                 {:block.temp/original-page-name original-page-name})
               (if (and class? page-entity (:db/ident page-entity))
                 {:block/uuid (:block/uuid page-entity)
@@ -433,7 +436,7 @@
 
 (defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} db date-formatter parse-block]
-  (let [db-based? (ldb/db-based-graph? db)
+  (let [db-based? (and (ldb/db-based-graph? db) (not *export-to-db-graph?))
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))

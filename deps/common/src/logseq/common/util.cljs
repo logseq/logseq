@@ -228,11 +228,11 @@
   "Reads an edn string and returns nil if it fails to parse"
   ([content]
    (safe-read-string {} content))
-  ([opts content]
+  ([{:keys [log-error?] :or {log-error? true} :as opts} content]
    (try
-     (reader/read-string opts content)
+     (reader/read-string (dissoc opts :log-error?) content)
      (catch :default e
-       (log/error :parse/read-string-failed e)
+       (when log-error? (log/error :parse/read-string-failed e))
        nil))))
 
 (defn safe-read-map-string
@@ -367,3 +367,10 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
                 (vreset! seen-ids #{})
                 (recur (conj r id) rest-ids* (first rest-ids*))))))]
     (mapv id->elem sorted-ids)))
+
+(defonce markdown-heading-pattern #"^#+\s+")
+
+(defn clear-markdown-heading
+  [content]
+  {:pre [(string? content)]}
+  (string/replace-first content markdown-heading-pattern ""))

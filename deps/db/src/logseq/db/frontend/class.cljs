@@ -1,11 +1,13 @@
 (ns logseq.db.frontend.class
   "Class related fns for DB graphs and frontend/datascript usage"
   (:require [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.db-ident :as db-ident]))
+            [logseq.db.frontend.db-ident :as db-ident]
+            [flatland.ordered.map :refer [ordered-map]]))
 
 (def ^:large-vars/data-var built-in-classes
   "Map of built-in classes for db graphs with their :db/ident as keys"
-  {:logseq.class/Root {:title "Root Tag"}
+  (ordered-map
+   :logseq.class/Root {:title "Root Tag"}
 
    :logseq.class/Task
    {:title "Task"
@@ -29,8 +31,40 @@
     :properties {:logseq.property/icon {:type :tabler-icon :id "search"}
                  :logseq.property/parent :logseq.class/Query}}
 
-   ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project
-   })
+   :logseq.class/Asset
+   {:title "Asset"
+    :properties {;; :logseq.property/icon {:type :tabler-icon :id "file"}
+                 :logseq.property.class/hide-from-node true
+                 :logseq.property.view/type :logseq.property.view/type.gallery}
+    :schema {:properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]
+             :required-properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]}}
+
+   :logseq.class/Code-block
+   {:title "Code"
+    :properties {:logseq.property.class/hide-from-node true}
+    :schema {:properties [:logseq.property.node/display-type :logseq.property.code/lang]}}
+
+   :logseq.class/Quote-block
+   {:title "Quote"
+    :properties {:logseq.property.class/hide-from-node true}
+    :schema {:properties [:logseq.property.node/display-type]}}
+
+   :logseq.class/Math-block
+   {:title "Math"
+    :properties {:logseq.property.class/hide-from-node true}
+    :schema {:properties [:logseq.property.node/display-type]}}
+
+   :logseq.class/Pdf-annotation
+   {:title "PDF Annotation"
+    :properties {:logseq.property.class/hide-from-node true}
+    :schema {:properties [:logseq.property/ls-type :logseq.property.pdf/hl-color :logseq.property/asset
+                          :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value
+                          :logseq.property.pdf/hl-type :logseq.property.pdf/hl-image]
+             :required-properties [:logseq.property/ls-type :logseq.property.pdf/hl-color :logseq.property/asset
+                                   :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value]}}
+
+;; TODO: Add more classes such as :book, :paper, :movie, :music, :project)
+   ))
 
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.

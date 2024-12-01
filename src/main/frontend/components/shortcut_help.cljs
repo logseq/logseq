@@ -75,7 +75,7 @@
                   :link [:a {:href "https://www.example.com"} "Link"]
                   :del [:del (t :strikethrough)]
                   :mark [:mark (t :highlight)]
-                  :latex (latex/latex "help-latex" "E = mc^2" true false)
+                  :latex (latex/latex "E = mc^2" true false)
                   :code [:code (t :code)]
                   :pre (highlight/highlight "help-highlight" {:data-lang "clojure"} "(println \"Hello world!\")")
                   :img [:img {:style {:float "right" :width 32 :height 32}
@@ -92,8 +92,7 @@
              [:tr
               [:td.text-left [(if (= :pre name) :pre :code) (get raw name)]]
               [:td.text-right (get rendered name)]])
-        list)]]))
-
+           list)]]))
 
 (rum/defc shortcut-page
   [{:keys [show-title?]

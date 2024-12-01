@@ -20,6 +20,7 @@
    [frontend.persist-db :as persist-db]
    [cljs-bean.core :as bean]
    [frontend.handler.export.common :as export-common-handler]
+   [frontend.handler.assets :as assets-handler]
    [logseq.db.sqlite.common-db :as sqlite-common-db]
    [logseq.db :as ldb]
    [frontend.idb :as idb]
@@ -33,7 +34,8 @@
   (when-let [db (db/get-db repo)]
     (let [{:keys [asset-filenames html]}
           (publish-html/build-html db
-                                   {:app-state (select-keys @state/state
+                                   {:repo repo
+                                    :app-state (select-keys @state/state
                                                             [:ui/theme
                                                              :ui/sidebar-collapsed-blocks])
                                     :repo-config (get-in @state/state [:config repo])
@@ -52,7 +54,20 @@
           (.setAttribute anchor "download" "index.html")
           (.click anchor))))))
 
-(defn export-repo-as-zip!
+(defn db-based-export-repo-as-zip!
+  [repo]
+  (p/let [db-data (persist-db/<export-db repo {:return-data? true})
+          filename "db.sqlite"
+          repo-name (sqlite-common-db/sanitize-db-name repo)
+          assets (assets-handler/<get-all-assets)
+          files (cons [filename db-data] assets)
+          zipfile (zip/make-zip repo-name files repo)]
+    (when-let [anchor (gdom/getElement "download-as-zip")]
+      (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+      (.setAttribute anchor "download" (.-name zipfile))
+      (.click anchor))))
+
+(defn file-based-export-repo-as-zip!
   [repo]
   (p/let [files (export-common-handler/<get-file-contents repo "md")
           [owner repo-name] (util/get-git-owner-and-repo repo)
@@ -60,10 +75,16 @@
           files (map (fn [{:keys [path content]}] [path content]) files)]
     (when (seq files)
       (p/let [zipfile (zip/make-zip repo-name files repo)]
-        (when-let [anchor (gdom/getElement "download")]
+        (when-let [anchor (gdom/getElement "download-as-zip")]
           (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
           (.setAttribute anchor "download" (.-name zipfile))
           (.click anchor))))))
+
+(defn export-repo-as-zip!
+  [repo]
+  (if (config/db-based-graph? repo)
+    (db-based-export-repo-as-zip! repo)
+    (file-based-export-repo-as-zip! repo)))
 
 (defn- export-file-on-mobile [data path]
   (p/catch
@@ -75,7 +96,6 @@
     (fn [error]
       (notification/show! "Export failed!" :error)
       (log/error :export-file-failed error))))
-
 
 ;; FIXME: All uses of :block/properties in this ns
 (defn- dissoc-properties [m ks]
@@ -189,11 +209,10 @@
   (p/let [data (persist-db/<export-db repo {:return-data? true})
           filename (file-name repo "sqlite")
           url (js/URL.createObjectURL (js/Blob. #js [data]))]
-    (when-not (mobile-util/native-platform?)
-      (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
-        (.setAttribute anchor "href" url)
-        (.setAttribute anchor "download" filename)
-        (.click anchor)))))
+    (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
+      (.setAttribute anchor "href" url)
+      (.setAttribute anchor "download" filename)
+      (.click anchor))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Export to roam json ;;

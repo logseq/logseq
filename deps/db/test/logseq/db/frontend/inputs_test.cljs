@@ -7,7 +7,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.inputs :as db-inputs]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
+            [logseq.db.test.helper :as db-test]))
 
 (defn- custom-query [db {:keys [inputs query input-options]}]
   (let [q-args (cond-> (mapv #(db-inputs/resolve-input db % input-options) inputs)
@@ -97,14 +97,11 @@
         ":parent-block input resolves to parent of current blocks's :db/id")))
 
 (deftest resolve-input-for-journal-date-inputs
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-        _ (sqlite-build/create-blocks
-           conn
-           [{:page {:build/journal 20230101}
-             :blocks [{:block/title "b1"}]}
-            {:page {:build/journal 20230107}
-             :blocks [{:block/title "b2"}]}])]
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:build/journal 20230101}
+                :blocks [{:block/title "b1"}]}
+               {:page {:build/journal 20230107}
+                :blocks [{:block/title "b2"}]}])]
     (is (= ["b2"]
            (with-redefs [t/today (constantly (t/date-time 2023 1 7))]
              (map :block/title
@@ -148,13 +145,10 @@
 
 (deftest resolve-input-for-query-page
   (let [current-date (t/date-time 2023 1 1)
-        conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-        _ (sqlite-build/create-blocks
-           conn
-           [{:page {:build/journal 20221231} :blocks [{:block/title "-1d"}]}
-            {:page {:build/journal 20230101} :blocks [{:block/title "now"}]}
-            {:page {:build/journal 20230102} :blocks [{:block/title "+1d"}]}])
+        conn (db-test/create-conn-with-blocks
+              [{:page {:build/journal 20221231} :blocks [{:block/title "-1d"}]}
+               {:page {:build/journal 20230101} :blocks [{:block/title "now"}]}
+               {:page {:build/journal 20230102} :blocks [{:block/title "+1d"}]}])
         db @conn]
     (is (= ["now"] (blocks-on-journal-page-from-block-with-content db :current-page "now" current-date))
         ":current-page resolves to the stateful page when called from a block on the stateful page")
@@ -179,19 +173,16 @@
                                 :where (between ?b ?start ?end)]}))))
 
 (deftest resolve-input-for-relative-date-queries
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-        _ (sqlite-build/create-blocks
-           conn
-           [{:page {:build/journal 20220101} :blocks [{:block/title "-1y"}]}
-            {:page {:build/journal 20221201} :blocks [{:block/title "-1m"}]}
-            {:page {:build/journal 20221225} :blocks [{:block/title "-1w"}]}
-            {:page {:build/journal 20221231} :blocks [{:block/title "-1d"}]}
-            {:page {:build/journal 20230101} :blocks [{:block/title "now"}]}
-            {:page {:build/journal 20230102} :blocks [{:block/title "+1d"}]}
-            {:page {:build/journal 20230108} :blocks [{:block/title "+1w"}]}
-            {:page {:build/journal 20230201} :blocks [{:block/title "+1m"}]}
-            {:page {:build/journal 20240101} :blocks [{:block/title "+1y"}]}])
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:build/journal 20220101} :blocks [{:block/title "-1y"}]}
+               {:page {:build/journal 20221201} :blocks [{:block/title "-1m"}]}
+               {:page {:build/journal 20221225} :blocks [{:block/title "-1w"}]}
+               {:page {:build/journal 20221231} :blocks [{:block/title "-1d"}]}
+               {:page {:build/journal 20230101} :blocks [{:block/title "now"}]}
+               {:page {:build/journal 20230102} :blocks [{:block/title "+1d"}]}
+               {:page {:build/journal 20230108} :blocks [{:block/title "+1w"}]}
+               {:page {:build/journal 20230201} :blocks [{:block/title "+1m"}]}
+               {:page {:build/journal 20240101} :blocks [{:block/title "+1y"}]}])
         db @conn]
     (with-redefs [t/today (constantly (t/date-time 2023 1 1))]
       (is (= ["now" "-1d" "-1w" "-1m" "-1y"] (blocks-journaled-between-inputs db :-365d :today))

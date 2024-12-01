@@ -29,54 +29,77 @@
         db-based? (db-based-graph? db)]
     (if (and db-based? (= "journal" (:block/type e)))
       (get-journal-title db e)
-      (or
-       (get (.-kv e) k)
-       (let [result (lookup-entity e k default-value)
-             result' (if (string? result)
-                       (db-content/special-id-ref->page-ref result
-                                                            (:block/refs e))
-                       result)]
-         (or result' default-value))))))
+      (let [search? (get (.-kv e) :block.temp/search?)]
+        (or
+         (when-not (and search? (= k :block/title))
+           (get (.-kv e) k))
+         (let [result (lookup-entity e k default-value)
+               refs (:block/refs e)
+               result' (if (and (string? result) refs)
+                         (db-content/id-ref->title-ref result refs search?)
+                         result)]
+           (or result' default-value)))))))
+
+(defn- lookup-kv-with-default-value
+  [db ^Entity e k default-value]
+  (or
+   ;; from kv
+   (get (.-kv e) k)
+   ;; from db
+   (let [result (lookup-entity e k default-value)]
+     (if (some? result)
+       result
+       ;; property default value
+       (when (qualified-keyword? k)
+         (when-let [property (d/entity db k)]
+           (let [schema (lookup-entity property :block/schema nil)]
+             (if (= :checkbox (:type schema))
+               (lookup-entity property :logseq.property/scalar-default-value nil)
+               (lookup-entity property :logseq.property/default-value nil)))))))))
 
 (defn lookup-kv-then-entity
   ([e k] (lookup-kv-then-entity e k nil))
   ([^Entity e k default-value]
    (try
      (when k
-       (case k
-         :block/raw-title
-         (let [db (.-db e)]
+       (let [db (.-db e)]
+         (case k
+           :block/raw-title
            (if (and (db-based-graph? db) (= "journal" (:block/type e)))
              (get-journal-title db e)
-             (lookup-entity e :block/title default-value)))
+             (lookup-entity e :block/title default-value))
 
-         :block/properties
-         (let [db (.-db e)]
+           :block/properties
            (if (db-based-graph? db)
              (lookup-entity e :block/properties
                             (->> (into {} e)
                                  (filter (fn [[k _]] (db-property/property? k)))
                                  (into {})))
-             (lookup-entity e :block/properties nil)))
+             (lookup-entity e :block/properties nil))
 
-         :block/title
-         (get-block-title e k default-value)
+           ;; cache :block/title
+           :block/title
+           (or (when-not (get (.-kv e) :block.temp/search?)
+                 (:block.temp/cached-title @(.-cache e)))
+               (let [title (get-block-title e k default-value)]
+                 (vreset! (.-cache e) (assoc @(.-cache e)
+                                             :block.temp/cached-title title))
+                 title))
 
-         :block/_parent
-         (->> (lookup-entity e k default-value)
-              (remove (fn [e] (or (:logseq.property/created-from-property e)
-                                  (:block/closed-value-property e))))
-              seq)
+           :block/_parent
+           (->> (lookup-entity e k default-value)
+                (remove (fn [e] (or (:logseq.property/created-from-property e)
+                                    (:block/closed-value-property e))))
+                seq)
 
-         :block/_raw-parent
-         (lookup-entity e :block/_parent default-value)
+           :block/_raw-parent
+           (lookup-entity e :block/_parent default-value)
 
-         :property/closed-values
-         (->> (lookup-entity e :block/_closed-value-property default-value)
-              (sort-by :block/order))
+           :property/closed-values
+           (->> (lookup-entity e :block/_closed-value-property default-value)
+                (sort-by :block/order))
 
-         (or (get (.-kv e) k)
-             (lookup-entity e k default-value))))
+           (lookup-kv-with-default-value db e k default-value))))
      (catch :default e
        (js/console.error e)))))
 
@@ -84,7 +107,7 @@
   [^js this]
   (let [v @(.-cache this)
         v' (if (:block/title v)
-             (assoc v :block/title (db-content/special-id-ref->page-ref (:block/title v) (:block/refs this)))
+             (assoc v :block/title (db-content/id-ref->title-ref (:block/title v) (:block/refs this) (:block.temp/search? this)))
              v)]
     (concat (seq v')
             (seq (.-kv this)))))

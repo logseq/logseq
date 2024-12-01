@@ -9,11 +9,14 @@
 
 (defn resolve-styles!
   [^js doc]
-  (doseq [r ["./css/style.css"]]
-    (let [^js link (js/document.createElement "link")]
-      (set! (.-rel link) "stylesheet")
-      (set! (.-href link) r)
-      (.appendChild (.-head doc) link))))
+  (when-let [styles (keep #(when (some-> % (.-href) (.endsWith "style.css"))
+                             (.-href %))
+                          (seq js/document.styleSheets))]
+    (doseq [r styles]
+      (let [^js link (js/document.createElement "link")]
+        (set! (.-rel link) "stylesheet")
+        (set! (.-href link) r)
+        (.appendChild (.-head doc) link)))))
 
 (defn resolve-own-document
   [^js viewer]
@@ -107,7 +110,7 @@
                 (state/set-state! :pdf/system-win? true)
                 ;; NOTE: must do ipc in new window
                 (some-> (.-apis win)
-                  (.doAction (bean/->js [:window/open-blank-callback :pdf]))))))]
+                        (.doAction (bean/->js [:window/open-blank-callback :pdf]))))))]
 
       (js/setTimeout
        (fn []

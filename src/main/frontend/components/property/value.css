@@ -1,4 +1,4 @@
-.property-value-inner:not([data-type="default"]):not([data-type="property"]) {
+.property-value-inner:not([data-type="default"]):not([data-type="url"]):not([data-type="property"]) {
   @apply cursor-pointer;
   &:hover, .as-scalar-value-wrap:hover {
     @apply bg-gray-02 rounded transition-[background-color] duration-300;

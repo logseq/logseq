@@ -1,13 +1,4 @@
 .cp__page {
-  &-inner-wrap {
-    &.is-node-page:not([data-ready]) {
-      .ls-page-blocks,
-      .ls-page-appendix-els {
-        @apply invisible;
-      }
-    }
-  }
-
   &-publish-actions {
     background-color: var(--ls-primary-background-color);
     padding: 50px 0;
@@ -141,6 +132,10 @@ html.is-native-iphone-without-notch {
   cursor: e-resize;
 }
 
+.ls-all-pages {
+  max-width: 1400px;
+}
+
 .add-button-link {
   opacity: 0;
   color: var(--ls-primary-text-color);
@@ -216,13 +211,13 @@ html.is-native-ios {
 }
 
 .ls-dummy-block {
-  @apply mb-[20px] pt-[5px] pb-[3px] h-[29px];
+  @apply mb-[20px] pt-[5px] pb-[3px] h-[28px];
 
   &.selected {
   }
 
   .bullet {
-    @apply relative -top-[2px] left-[-2px];
+    @apply relative -top-[3px] left-[-2px];
   }
 
   .text {
@@ -250,4 +245,18 @@ html.is-native-ios {
   .page-linked > .content {
     @apply pt-2;
   }
+}
+
+.add-button-link-wrap {
+  @apply invisible;
+}
+
+.show-add-button {
+  .add-button-link-wrap {
+    @apply visible;
+  }
+}
+
+.ls-page-blocks {
+  @apply min-h-[60px] -mb-2;
 }

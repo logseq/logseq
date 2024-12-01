@@ -173,6 +173,7 @@
              logseq.db.frontend.validate db-validate
              logseq.db.sqlite.cli sqlite-cli
              logseq.db.sqlite.util sqlite-util
+             logseq.db.test.helper db-test
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
              logseq.graph-parser.db gp-db
@@ -211,7 +212,6 @@
            frontend.namespaces/import-vars potemkin/import-vars
            ;; src/test
            frontend.test.helper/deftest-async clojure.test/deftest
-           frontend.test.helper/with-reset cljs.test/async
            frontend.worker.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
            frontend.react/defc clojure.core/defn
            frontend.common.schema-register/defkeyword cljs.spec.alpha/def}

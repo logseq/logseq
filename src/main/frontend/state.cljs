@@ -2,12 +2,17 @@
   "Provides main application state, fns associated to set and state based rum
   cursors"
   (:require [cljs-bean.core :as bean]
-            [cljs.core.async :as async :refer [<! >!]]
+            [cljs.core.async :as async :refer [>!]]
             [cljs.spec.alpha :as s]
+            [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.db.conn-state :as db-conn-state]
+            [frontend.db.transact :as db-transact]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rum :as r]
             [frontend.spec.storage :as storage-spec]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -15,17 +20,12 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
-            [frontend.db.transact :as db-transact]
-            [medley.core :as medley]
-            [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.rum :as r]
+            [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
-            [clojure.set :as set]
-            [frontend.db.conn-state :as db-conn-state]
-            [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce *profile-state
   (atom {}))
@@ -70,14 +70,6 @@
       ;; modals
       :modal/dropdowns                       {}
       :modal/id                              nil
-      :modal/label                           ""
-      :modal/show?                           false
-      :modal/panel-content                   nil
-      :modal/payload                         nil
-      :modal/fullscreen?                     false
-      :modal/close-btn?                      nil
-      :modal/close-backdrop?                 true
-      :modal/subsets                         []
 
       ;; ui
       :ui/viewport                           {}
@@ -157,15 +149,16 @@
       ;; for audio record
       :editor/record-status                  "NONE"
 
-      :editor/code-block-context             {}
+      :editor/code-block-context             nil
       :editor/latest-shortcut                (atom nil)
 
       :history/paused?                       (atom false)
       :editor/cursor-range                   (atom nil)
       :editor/container-id                   (atom nil)
       :editor/next-edit-block                (atom nil)
+      :editor/raw-mode-block                 (atom nil)
+      :editor/virtualized-scroll-fn          nil
 
-      :selection/mode                        (atom false)
       ;; Warning: blocks order is determined when setting this attribute
       :selection/blocks                      (atom [])
       :selection/start-block                 (atom nil)
@@ -300,6 +293,7 @@
       :rtc/downloading-graph-uuid            nil
       :rtc/graphs                            []
       :rtc/online-info                       (atom {})
+      :rtc/asset-upload-download-progress    (atom {})
 
       :user/info                             {:UserGroups (storage/get :user-groups)}
       :encryption/graph-parsing?             false
@@ -326,7 +320,8 @@
       :ui/select-query-cache                 (atom {})
       :favorites/updated?                    (atom 0)
       :db/async-query-loading                (atom #{})
-      :db/async-queries                      (atom {})})))
+      :db/async-queries                      (atom {})
+      :db/latest-transacted-entity-uuids     (atom {})})))
 
 ;; Block ast state
 ;; ===============
@@ -384,8 +379,8 @@
                       [(<= ?d ?today)]]
              :inputs [:14d :today]
              :result-transform '(fn [result]
-                                 (sort-by (fn [h]
-                                            (get h :block/priority "Z")) result))
+                                  (sort-by (fn [h]
+                                             (get h :block/priority "Z")) result))
              :group-by-page? false
              :collapsed? false}
             {:title "📅 NEXT"
@@ -443,10 +438,10 @@
   (->> configs
        (filter map?)
        (apply merge-with
-         (fn merge-config [current new]
-           (if (and (map? current) (map? new))
-             (merge current new)
-             new)))))
+              (fn merge-config [current new]
+                (if (and (map? current) (map? new))
+                  (merge current new)
+                  new)))))
 
 (defn get-global-config
   []
@@ -482,13 +477,13 @@ should be done through this fn in order to get global config and config defaults
   (or (not @publishing?) (:publishing/enable-editing? (get-config))))
 
 (defonce built-in-macros
-         {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
+  {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
 
 (defn get-macros
   []
   (merge
-    built-in-macros
-    (:macros (get-config))))
+   built-in-macros
+   (:macros (get-config))))
 
 (defn set-assets-alias-enabled!
   [v]
@@ -534,9 +529,9 @@ should be done through this fn in order to get global config and config defaults
    (get-preferred-format (get-current-repo)))
   ([repo-url]
    (keyword
-     (or
-      (common-config/get-preferred-format (get-config repo-url))
-      (get-in @state [:me :preferred_format] "markdown")))))
+    (or
+     (common-config/get-preferred-format (get-config repo-url))
+     (get-in @state [:me :preferred_format] "markdown")))))
 
 (defn markdown?
   []
@@ -546,16 +541,16 @@ should be done through this fn in order to get global config and config defaults
 (defn get-pages-directory
   []
   (or
-    (when-let [repo (get-current-repo)]
-      (:pages-directory (get-config repo)))
-    "pages"))
+   (when-let [repo (get-current-repo)]
+     (:pages-directory (get-config repo)))
+   "pages"))
 
 (defn get-journals-directory
   []
   (or
-    (when-let [repo (get-current-repo)]
-      (:journals-directory (get-config repo)))
-    "journals"))
+   (when-let [repo (get-current-repo)]
+     (:journals-directory (get-config repo)))
+   "journals"))
 
 (defn get-whiteboards-directory
   []
@@ -576,13 +571,13 @@ should be done through this fn in order to get global config and config defaults
 (defn get-preferred-workflow
   []
   (keyword
-    (or
-      (when-let [workflow (:preferred-workflow (get-config))]
-        (let [workflow (name workflow)]
-          (if (util/safe-re-find #"now|NOW" workflow)
-            :now
-            :todo)))
-      (get-in @state [:me :preferred_workflow] :now))))
+   (or
+    (when-let [workflow (:preferred-workflow (get-config))]
+      (let [workflow (name workflow)]
+        (if (util/safe-re-find #"now|NOW" workflow)
+          :now
+          :todo)))
+    (get-in @state [:me :preferred_workflow] :now))))
 
 (defn get-preferred-todo
   []
@@ -601,8 +596,8 @@ should be done through this fn in order to get global config and config defaults
     (if (sqlite-util/db-based-graph? repo)
       (when-let [conn (db-conn-state/get-conn repo)]
         (get (d/entity @conn :logseq.class/Journal)
-           :logseq.property.journal/title-format
-           "MMM do, yyyy"))
+             :logseq.property.journal/title-format
+             "MMM do, yyyy"))
       (common-config/get-date-formatter (get-config)))))
 
 (defn shortcuts []
@@ -626,18 +621,18 @@ should be done through this fn in order to get global config and config defaults
 (defn get-ref-open-blocks-level
   []
   (or
-    (when-let [value (:ref/default-open-blocks-level (get-config))]
-      (when (integer? value)
-        value))
-    2))
+   (when-let [value (:ref/default-open-blocks-level (get-config))]
+     (when (integer? value)
+       value))
+   2))
 
 (defn get-linked-references-collapsed-threshold
   []
   (or
-    (when-let [value (:ref/linked-references-collapsed-threshold (get-config))]
-      (when (integer? value)
-        value))
-    100))
+   (when-let [value (:ref/linked-references-collapsed-threshold (get-config))]
+     (when (integer? value)
+       value))
+   100))
 
 (defn get-export-bullet-indentation
   []
@@ -1065,6 +1060,18 @@ Similar to re-frame subscriptions"
    (when block-id
      (sub :editor/content {:path-in-sub-atom block-id}))))
 
+(defn set-selection-start-block!
+  [start-block]
+  (set-state! :selection/start-block start-block))
+
+(defn get-selection-start-block
+  []
+  (or @(get @state :selection/start-block)
+      (when-let [edit-block (get-edit-block)]
+        (let [id (str "ls-block-" (:block/uuid edit-block))]
+          (set-selection-start-block! id)
+          id))))
+
 (defn get-cursor-range
   []
   @(:editor/cursor-range @state))
@@ -1133,14 +1140,6 @@ Similar to re-frame subscriptions"
   (when-let [input (get-input)]
     (util/get-selection-start input)))
 
-(defn get-selection-start-block
-  []
-  @(get @state :selection/start-block))
-
-(defn set-selection-start-block!
-  [start-block]
-  (set-state! :selection/start-block start-block))
-
 (defn get-selection-direction
   []
   @(:selection/direction @state))
@@ -1192,17 +1191,11 @@ Similar to re-frame subscriptions"
   ([blocks direction]
    (when (seq blocks)
      (let [blocks (vec (remove nil? blocks))]
-       (set-state! :selection/mode true)
        (set-selection-blocks-aux! blocks)
        (when direction (set-state! :selection/direction direction))))))
 
-(defn into-selection-mode!
-  []
-  (set-state! :selection/mode true))
-
 (defn state-clear-selection!
   []
-  (set-state! :selection/mode false)
   (set-state! :selection/blocks nil)
   (set-state! :selection/direction nil)
   (set-state! :selection/start-block nil)
@@ -1219,14 +1212,10 @@ Similar to re-frame subscriptions"
       (some-> (first (get-selection-blocks))
               (gobj/get "id"))))
 
-(defn in-selection-mode?
-  []
-  @(:selection/mode @state))
-
 (defn selection?
   "True sense of selection mode with valid selected block"
   []
-  (and (in-selection-mode?) (seq (get-selection-blocks))))
+  (seq (get-selection-blocks)))
 
 (defn conj-selection-block!
   [block-or-blocks direction]
@@ -1238,13 +1227,11 @@ Similar to re-frame subscriptions"
 
 (defn drop-selection-block!
   [block]
-  (set-state! :selection/mode true)
   (set-selection-blocks-aux! (-> (remove #(= block %) (get-unsorted-selection-blocks))
                                  vec)))
 
 (defn drop-selection-blocks-starts-with!
   [block]
-  (set-state! :selection/mode true)
   (let [blocks (get-unsorted-selection-blocks)
         blocks' (-> (take-while (fn [b] (not= (.-id b) (.-id block))) blocks)
                     vec
@@ -1255,7 +1242,6 @@ Similar to re-frame subscriptions"
   []
   (let [blocks @(:selection/blocks @state)
         blocks' (vec (butlast blocks))]
-    (set-state! :selection/mode true)
     (set-selection-blocks-aux! blocks')
     (last blocks)))
 
@@ -1301,6 +1287,15 @@ Similar to re-frame subscriptions"
                                      (util/drop-nth idx blocks))))
   (when (empty? (:sidebar/blocks @state))
     (hide-right-sidebar!)))
+
+(defn sidebar-remove-deleted-block!
+  [ids]
+  (let [ids-set (set ids)]
+    (update-state! :sidebar/blocks (fn [items]
+                                     (remove (fn [[repo id _]]
+                                               (and (= repo (get-current-repo)) (contains? ids-set id))) items)))
+    (when (empty? (:sidebar/blocks @state))
+      (hide-right-sidebar!))))
 
 (defn sidebar-remove-rest!
   [db-id]
@@ -1463,12 +1458,12 @@ Similar to re-frame subscriptions"
   []
   (when (util/electron?)
     (js/window.apis.setUpdatesCallback
-      (fn [_ args]
-        (let [data (bean/->clj args)
-              pending? (not= (:type data) "completed")]
-          (set-state! :electron/updater-pending? pending?)
-          (when pending? (set-state! :electron/updater data))
-          nil)))))
+     (fn [_ args]
+       (let [data (bean/->clj args)
+             pending? (not= (:type data) "completed")]
+         (set-state! :electron/updater-pending? pending?)
+         (when pending? (set-state! :electron/updater data))
+         nil)))))
 
 (defn set-file-component!
   [component]
@@ -1518,110 +1513,10 @@ Similar to re-frame subscriptions"
 
 (defn modal-opened?
   []
-  (:modal/show? @state))
+  (shui-dialog/has-modal?))
 
-(declare set-modal!)
-(declare close-modal!)
-
-(defn get-sub-modals
-  []
-  (:modal/subsets @state))
-
-(defn set-sub-modal!
-  ([panel-content]
-   (set-sub-modal! panel-content
-                   {:close-btn? true}))
-  ([panel-content {:keys [id label payload close-btn? close-backdrop? show? center?] :as opts}]
-   (if (not (modal-opened?))
-     (set-modal! panel-content opts)
-     (let [modals (:modal/subsets @state)
-           idx (and id (first (keep-indexed #(when (= (:modal/id %2) id) %1)
-                                            modals)))
-           input (medley/filter-vals
-                   #(not (nil? %1))
-                   {:modal/id            id
-                    :modal/label         (if label (name label) "")
-                    :modal/class         (if center? "as-center" "")
-                    :modal/payload       payload
-                    :modal/show?         (if (boolean? show?) show? true)
-                    :modal/panel-content panel-content
-                    :modal/close-btn?    close-btn?
-                    :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)})]
-       (swap! state update-in
-         [:modal/subsets (or idx (count modals))]
-              merge input)
-       (:modal/subsets @state)))))
-
-(defn close-sub-modal!
-  ([] (close-sub-modal! nil))
-  ([all?-a-id]
-   (if (true? all?-a-id)
-     (swap! state assoc :modal/subsets [])
-     (let [id     all?-a-id
-           mid    (:modal/id @state)
-           modals (:modal/subsets @state)]
-       (if (and id (not (string/blank? mid)) (= id mid))
-         (close-modal!)
-         (when-let [idx (if id (first (keep-indexed #(when (= (:modal/id %2) id) %1) modals))
-                          (dec (count modals)))]
-           (swap! state assoc :modal/subsets (into [] (medley/remove-nth idx modals)))))))
-   (:modal/subsets @state)))
-
-(defn set-modal!
-  ([modal-panel-content]
-   (set-modal! modal-panel-content
-               {:fullscreen? false
-                :close-btn?  true}))
-  ([modal-panel-content {:keys [id label payload fullscreen? close-btn? close-backdrop? center? panel?
-                                container-overflow-visible? style]}]
-   (let [opened? (modal-opened?)
-         style (if container-overflow-visible?
-                 (merge style {:overflow "visible"})
-                 style)]
-     (when opened?
-       (close-modal!))
-     (when (seq (get-sub-modals))
-       (close-sub-modal! true))
-
-     (async/go
-       (when opened?
-         (<! (async/timeout 100)))
-       (swap! state assoc
-              :modal/id id
-              :modal/label (if label (name label) "")
-              :modal/class (if center? "as-center" "")
-              :modal/show? (boolean modal-panel-content)
-              :modal/panel-content modal-panel-content
-              :modal/payload payload
-              :modal/fullscreen? fullscreen?
-              :modal/panel? (if (boolean? panel?) panel? true)
-              :modal/close-btn? close-btn?
-              :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)
-              :modal/style style)))
-   nil))
-
-(defn close-dropdowns!
-  []
-  (let [close-fns (vals (:modal/dropdowns @state))]
-    (doseq [f close-fns]
-      (try (f) (catch :default _e nil)))))
-
-(defn close-modal!
-  [& {:keys [force?]
-      :or {force? false}}]
-  (when (or force? (not (:error/multiple-tabs-access-opfs? @state)))
-    (close-dropdowns!)
-    (if (seq (get-sub-modals))
-      (close-sub-modal!)
-      (swap! state assoc
-             :modal/id nil
-             :modal/label ""
-             :modal/payload nil
-             :modal/show? false
-             :modal/fullscreen? false
-             :modal/panel-content nil
-             :modal/dropdowns {}
-             :ui/open-select nil))))
+(defn close-modal! []
+  (shui/dialog-close!))
 
 (defn get-reactive-custom-queries-chan
   []
@@ -1639,7 +1534,7 @@ Similar to re-frame subscriptions"
 (defn toggle-left-sidebar!
   []
   (set-left-sidebar-open!
-    (not (get-left-sidebar-open?))))
+   (not (get-left-sidebar-open?))))
 
 (defn set-developer-mode!
   [value]
@@ -1726,7 +1621,7 @@ Similar to re-frame subscriptions"
   (when-let [resource (get-plugin-resource pid type key)]
     (let [resource (assoc resource (keyword attr) val)]
       (set-state!
-        [:plugin/installed-resources (keyword pid) (keyword type) key] resource)
+       [:plugin/installed-resources (keyword pid) (keyword type) key] resource)
       resource)))
 
 (defn get-plugin-services
@@ -1791,8 +1686,8 @@ Similar to re-frame subscriptions"
      (set-state!
       [:plugin/installed-hooks hook]
       (assoc
-        ((fnil identity {}) (get-in @state [:plugin/installed-hooks hook]))
-        pid opts)) true)))
+       ((fnil identity {}) (get-in @state [:plugin/installed-hooks hook]))
+       pid opts)) true)))
 
 (defn uninstall-plugin-hook
   [pid hook-or-all]
@@ -2033,7 +1928,7 @@ Similar to re-frame subscriptions"
    (set-selection-blocks! blocks direction)))
 
 (defn set-editing!
-  [edit-input-id content block cursor-range & {:keys [move-cursor? container-id property-block]
+  [edit-input-id content block cursor-range & {:keys [db move-cursor? container-id property-block direction event pos]
                                                :or {move-cursor? true}}]
   (when-not (exists? js/process)
     (if (> (count content)
@@ -2043,39 +1938,43 @@ Similar to re-frame subscriptions"
           (util/scroll-to-element (gobj/get (first elements) "id")))
         (exit-editing-and-set-selected-blocks! elements))
       (when (and edit-input-id block
-                   (or
-                    (publishing-enable-editing?)
-                    (not @publishing?)))
-          (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-                container (util/get-block-container block-element)
-                block (if container
-                        (assoc block
-                               :block.temp/container (gobj/get container "id"))
-                        block)
-                content (string/trim (or content ""))]
-            (assert (and container-id (:block/uuid block))
-                    "container-id or block uuid is missing")
-            (set-state! :editor/block-refs #{})
-            (if property-block
-              (set-editing-block-id! [container-id (:block/uuid property-block) (:block/uuid block)])
-              (set-editing-block-id! [container-id (:block/uuid block)]))
-            (set-state! :editor/container-id container-id)
-            (set-state! :editor/block block)
-            (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
-            (set-state! :editor/last-key-code nil)
-            (set-state! :editor/set-timestamp-block nil)
-            (set-state! :editor/cursor-range cursor-range)
+                 (or
+                  (publishing-enable-editing?)
+                  (not @publishing?)))
+        (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+              container (util/get-block-container block-element)
+              block (if container
+                      (assoc block
+                             :block.temp/container (gobj/get container "id"))
+                      block)
+              block (assoc block :block.editing/direction direction
+                           :block.editing/event event
+                           :block.editing/pos pos)
+              content (string/trim (or content ""))]
+          (assert (and container-id (:block/uuid block))
+                  "container-id or block uuid is missing")
+          (set-state! :editor/block-refs #{})
+          (if property-block
+            (set-editing-block-id! [container-id (:block/uuid property-block) (:block/uuid block)])
+            (set-editing-block-id! [container-id (:block/uuid block)]))
+          (set-state! :editor/container-id container-id)
+          (set-state! :editor/block block)
+          (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
+          (set-state! :editor/last-key-code nil)
+          (set-state! :editor/set-timestamp-block nil)
+          (set-state! :editor/cursor-range cursor-range)
+          (when (= :code (:logseq.property.node/display-type (d/entity db (:db/id block))))
+            (pub-event! [:editor/focus-code-editor block block-element]))
+          (when-let [input (gdom/getElement edit-input-id)]
+            (let [pos (count cursor-range)]
+              (when content
+                (util/set-change-value input content))
 
-            (when-let [input (gdom/getElement edit-input-id)]
-              (let [pos (count cursor-range)]
-                (when content
-                  (util/set-change-value input content))
+              (when (and move-cursor? (not (block-component-editing?)))
+                (cursor/move-cursor-to input pos))
 
-                (when move-cursor?
-                  (cursor/move-cursor-to input pos))
-
-                (when (or (util/mobile?) (mobile-util/native-platform?))
-                  (set-state! :mobile/show-action-bar? false)))))))))
+              (when (or (util/mobile?) (mobile-util/native-platform?))
+                (set-state! :mobile/show-action-bar? false)))))))))
 
 (defn action-bar-open?
   []
@@ -2126,10 +2025,10 @@ Similar to re-frame subscriptions"
   ([theme?] (get-enabled?-installed-plugins theme? true false false))
   ([theme? enabled? include-unpacked? include-all?]
    (filterv
-     #(and (if include-unpacked? true (:iir %))
-           (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
-           (or include-all? (if (boolean? theme?) (= (boolean theme?) (:theme %)) true)))
-     (vals (:plugin/installed-plugins @state)))))
+    #(and (if include-unpacked? true (:iir %))
+          (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
+          (or include-all? (if (boolean? theme?) (= (boolean theme?) (:theme %)) true)))
+    (vals (:plugin/installed-plugins @state)))))
 
 (defn lsp-enabled?-or-theme
   []
@@ -2194,7 +2093,6 @@ Similar to re-frame subscriptions"
     (->> (sub :sidebar/blocks)
          (filter #(= (first %) current-repo)))))
 
-
 (defn toggle-collapsed-block!
   [block-id]
   (let [current-repo (get-current-repo)]
@@ -2205,13 +2103,17 @@ Similar to re-frame subscriptions"
   (let [current-repo (get-current-repo)]
     (set-state! [:ui/collapsed-blocks current-repo block-id] value)))
 
-(defn sub-collapsed
+(defn sub-block-collapsed
   [block-id]
   (sub [:ui/collapsed-blocks (get-current-repo) block-id]))
 
+(defn get-block-collapsed
+  [block-id]
+  (get-in @state [:ui/collapsed-blocks (get-current-repo) block-id]))
+
 (defn get-modal-id
   []
-  (:modal/id @state))
+  (shui-dialog/get-last-modal-id))
 
 (defn set-auth-id-token
   [id-token]
@@ -2277,7 +2179,7 @@ Similar to re-frame subscriptions"
   [m]
   (update-state! [:graph/parsing-state (get-current-repo)]
                  (if (fn? m) m
-                   (fn [old-value] (merge old-value m)))))
+                     (fn [old-value] (merge old-value m)))))
 
 (defn http-proxy-enabled-or-val? []
   (when-let [{:keys [type protocol host port] :as agent-opts} (sub [:electron/user-cfgs :settings/agent])]

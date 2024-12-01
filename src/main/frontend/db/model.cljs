@@ -23,7 +23,37 @@
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
 
-(def block-attrs ldb/block-attrs)
+(def file-graph-block-attrs
+  "In file graphs, use it to replace '*' for datalog queries"
+  '[:db/id
+    :block/uuid
+    :block/parent
+    :block/order
+    :block/collapsed?
+    :block/format
+    :block/refs
+    :block/_refs
+    :block/path-refs
+    :block/tags
+    :block/link
+    :block/title
+    :block/marker
+    :block/priority
+    :block/properties
+    :block/properties-order
+    :block/properties-text-values
+    :block/pre-block?
+    :block/scheduled
+    :block/deadline
+    :block/repeated?
+    :block/created-at
+    :block/updated-at
+    ;; TODO: remove this in later releases
+    :block/heading-level
+    :block/file
+    :logseq.property/parent
+    {:block/page [:db/id :block/name :block/title :block/journal-day]}
+    {:block/_parent ...}])
 
 (def hidden-page? ldb/hidden?)
 
@@ -141,8 +171,8 @@ independent of format as format specific heading characters are stripped"
                   (let [block (db-utils/entity repo block-id)
                         ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
                     (= (-> block-content
-                           (db-content/special-id-ref->page-ref ref-tags)
-                           (db-content/special-id-ref->page ref-tags)
+                           (db-content/id-ref->title-ref ref-tags true)
+                           (db-content/content-id-ref->page ref-tags)
                            heading-content->route-name)
                        (string/lower-case external-content))))
                 (rules/extract-rules rules/db-query-dsl-rules [:has-property]))
@@ -213,17 +243,17 @@ independent of format as format specific heading characters are stripped"
 (def sort-by-order ldb/sort-by-order)
 
 (defn sub-block
-  [id & {:keys [ref?]}]
+  [id]
   (when-let [repo (state/get-current-repo)]
     (when id
       (let [ref (react/q repo [:frontend.worker.react/block id]
                          {:query-fn (fn [_]
                                       (let [e (db-utils/entity id)]
                                         [e (:block/tx-id e)]))}
-                         nil)]
-        (if ref?
-          ref
-          (-> ref react first))))))
+                         nil)
+            e (-> ref react first)]
+        (when-let [id (:db/id e)]
+          (db-utils/entity id))))))
 
 (defn sort-by-order-recursive
   [form]
@@ -356,7 +386,7 @@ independent of format as format specific heading characters are stripped"
   [page-name type]
   (let [repo (state/get-current-repo)]
     (when-let [db (conn/get-db repo)]
-     (ldb/page-exists? db page-name type))))
+      (ldb/page-exists? db page-name type))))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?
@@ -388,9 +418,9 @@ independent of format as format specific heading characters are stripped"
   [repo block-uuid]
   (when-let [db (conn/get-db repo)]
     (let [ids (ldb/get-block-children-ids db block-uuid)]
-     (when (seq ids)
-       (let [ids' (map (fn [id] [:block/uuid id]) ids)]
-         (db-utils/pull-many repo '[*] ids'))))))
+      (when (seq ids)
+        (let [ids' (map (fn [id] [:block/uuid id]) ids)]
+          (db-utils/pull-many repo '[*] ids'))))))
 
 (defn get-block-and-children
   [repo block-uuid]
@@ -587,7 +617,7 @@ independent of format as format specific heading characters are stripped"
              [?block :block/path-refs ?ref-page]]
            db
            pages
-           (butlast block-attrs))
+           (butlast file-graph-block-attrs))
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))
           db-utils/group-by-page
           (map (fn [[k blocks]]
@@ -720,16 +750,16 @@ independent of format as format specific heading characters are stripped"
 (defn get-all-whiteboards
   [repo]
   (d/q
-    '[:find [(pull ?page [:db/id
-                          :block/uuid
-                          :block/name
-                          :block/title
-                          :block/created-at
-                          :block/updated-at]) ...]
-      :where
-      [?page :block/name]
-      [?page :block/type "whiteboard"]]
-    (conn/get-db repo)))
+   '[:find [(pull ?page [:db/id
+                         :block/uuid
+                         :block/name
+                         :block/title
+                         :block/created-at
+                         :block/updated-at]) ...]
+     :where
+     [?page :block/name]
+     [?page :block/type "whiteboard"]]
+   (conn/get-db repo)))
 
 (defn get-whiteboard-id-nonces
   [repo page-id]
@@ -791,10 +821,13 @@ independent of format as format specific heading characters are stripped"
 (defn get-property-related-objects
   [repo property-id]
   (when-let [property (db-utils/entity repo property-id)]
-    (->> (d/q '[:find [?objects ...]
-                :in $ ?prop
-                :where [?objects ?prop]]
+    (->> (d/q '[:find [?b ...]
+                :in $ % ?prop
+                :where
+                (has-property-or-default-value? ?b ?prop)]
               (conn/get-db repo)
+              (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
+                                   {:deps rules/rules-dependencies})
               (:db/ident property))
          (map #(db-utils/entity repo %)))))
 
@@ -803,14 +836,14 @@ independent of format as format specific heading characters are stripped"
   (d/q '[:find ?page ?parent
          :where
          [?page :block/namespace ?parent]]
-    (conn/get-db repo)))
+       (conn/get-db repo)))
 
 (defn get-all-namespace-parents
   [repo]
   (let [db (conn/get-db repo)]
     (->> (get-all-namespace-relation repo)
-        (map (fn [[_ ?parent]]
-               (db-utils/entity db ?parent))))))
+         (map (fn [[_ ?parent]]
+                (db-utils/entity db ?parent))))))
 
 ;; Ignore files with empty blocks for now
 (defn get-pages-relation
@@ -885,5 +918,4 @@ independent of format as format specific heading characters are stripped"
        '[:find [(pull ?b [*]) ...]
          :where
          [?b :block/uuid]]
-        (conn/get-db repo))))
-  )
+       (conn/get-db repo)))))

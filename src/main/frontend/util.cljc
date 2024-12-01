@@ -688,13 +688,13 @@
    ;; for widen char
    (defn safe-dec-current-pos-from-end
      [input current-pos]
-     (if-let [len (and (string? input) (.-length input))]
+     (if-let [len (and (number? current-pos) (string? input) (.-length input))]
        (if-let [input (and (>= len 2) (<= current-pos len)
                            (.substring input (max (- current-pos 20) 0) current-pos))]
          (try
            (let [^js splitter (GraphemeSplitter.)
-                 ^js input (.splitGraphemes splitter input)]
-             (- current-pos (.-length (.pop input))))
+                 ^js input' (.splitGraphemes splitter input)]
+             (- current-pos (.-length (.pop input'))))
            (catch :default e
              (js/console.error e)
              (dec current-pos)))
@@ -705,7 +705,7 @@
    ;; for widen char
    (defn safe-inc-current-pos-from-start
      [input current-pos]
-     (if-let [len (and (string? input) (.-length input))]
+     (if-let [len (and (number? current-pos) (string? input) (.-length input))]
        (if-let [input (and (>= len 2) (<= current-pos len)
                            (.substr input current-pos 20))]
          (try
@@ -1509,13 +1509,6 @@ Arg *stop: atom, reset to true to stop the loop"
   [pred coll]
   `(vec (remove ~pred ~coll)))
 
-#?(:cljs
-   (defn safe-with-meta
-     [o meta]
-     (if (satisfies? IMeta o)
-       (with-meta o meta)
-       o)))
-
 ;; from rum
 #?(:cljs
    (def schedule
@@ -1543,3 +1536,9 @@ Arg *stop: atom, reset to true to stop the loop"
                 (js->clj)
                 (into {})
                 (walk/keywordize-keys)))))))
+
+#?(:cljs
+   (defn get-cm-instance
+     [^js target]
+     (when target
+       (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))

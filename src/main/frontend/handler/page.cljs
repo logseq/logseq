@@ -41,7 +41,6 @@
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.graph-parser.db :as gp-db]
@@ -230,19 +229,18 @@
 
 (defn get-all-pages
   [repo]
-  (let [graph-specific-hidden?
-        (if (config/db-based-graph? repo)
+  (let [db-based? (config/db-based-graph? repo)
+        graph-specific-hidden?
+        (if db-based?
           (fn [p]
             (and (ldb/property? p) (ldb/built-in? p)))
           (fn [p]
             (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
-    (->> (db/get-all-pages repo)
-         (remove (fn [p]
-                   (let [name (:block/name p)]
-                     (or (util/uuid-string? name)
-                         (common-config/draw? name)
-                         (graph-specific-hidden? p)))))
-         (common-handler/fix-pages-timestamps))))
+    (cond->>
+     (->> (db/get-all-pages repo)
+          (remove graph-specific-hidden?))
+      (not db-based?)
+      (common-handler/fix-pages-timestamps))))
 
 (defn get-filters
   [page]
@@ -363,11 +361,7 @@
                                               [page (db/get-page page)])))
                                         [chosen' chosen-result])
             ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
-                       (cond
-                         db-based?
-                         (page-ref/->page-ref (:block/uuid chosen-result))
-                         :else
-                         (block-ref/->block-ref (:block/uuid chosen-result)))
+                       (page-ref/->page-ref (:block/uuid chosen-result))
                        (get-page-ref-text chosen'))
             result (when db-based?
                      (when-not (de/entity? chosen-result)

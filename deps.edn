@@ -47,7 +47,9 @@
                                               ;; when PR merged
                                               ;; https://github.com/open-spaced-repetition/cljc-fsrs/pull/5
                                               :git/url "https://github.com/rcmerci/cljc-fsrs"}
-  tick/tick                             {:mvn/version "0.7.5"}}
+  tick/tick                              {:mvn/version "0.7.5"}
+  io.github.rcmerci/cljs-http-missionary {:git/url "https://github.com/RCmerci/cljs-http-missionary"
+                                          :git/sha "d61ce7e29186de021a2a453a8cee68efb5a88440"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.132"}
@@ -77,5 +79,5 @@
                    :main-opts ["-m" "cljs-test-runner.main" "-d" "src/bench" "-n" "frontend.benchmark-test-runner"]}
 
            ;; Use :replace-deps for tools. See https://github.com/clj-kondo/clj-kondo/issues/1536#issuecomment-1013006889
-           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
+           :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}
                        :main-opts  ["-m" "clj-kondo.main"]}}}

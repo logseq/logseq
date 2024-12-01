@@ -75,7 +75,7 @@
                  (let [page? (ldb/page? block)
                        from-property (:logseq.property/created-from-property block)
                        parents' (when-not page?
-                                 (ldb/get-block-parents db-after (:block/uuid block) {}))
+                                  (ldb/get-block-parents db-after (:block/uuid block) {}))
                        parents-refs (->> (cond->>
                                           (mapcat :block/path-refs parents')
                                            from-property
@@ -136,7 +136,7 @@
   (let [content (or (:block/raw-title block)
                     (:block/title block))]
     (when (string? content)
-      (->> (db-content/get-matched-special-ids content)
+      (->> (db-content/get-matched-ids content)
            (map (fn [id]
                   (when-let [e (d/entity db [:block/uuid id])]
                     (:db/id e))))))))
@@ -147,8 +147,11 @@
   (let [private-built-in-props (set (keep (fn [[k v]] (when-not (get-in v [:schema :public?]) k))
                                           db-property/built-in-properties))
         ;; explicit lookup in order to be nbb compatible
-        properties (->> (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties)
-                        (into {}))
+        properties (->
+                    (->> (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties)
+                         (into {}))
+                    ;; both page and parent shouldn't be counted as refs
+                    (dissoc :block/parent :block/page))
         property-key-refs (->> (keys properties)
                                (remove private-built-in-props))
         page-or-object? (fn [block]

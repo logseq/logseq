@@ -98,7 +98,8 @@ generate asset-change events.")
     (d/unlisten! conn ::listen-db-changes!)
     (prn :listen-db-changes! (keys handlers) :repo repo)
     (d/listen! conn ::listen-db-changes!
-               (fn [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
+               (fn listen-db-changes!-inner
+                 [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
                  (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)
                        pipeline-replace? (:pipeline-replace? tx-meta)
                        in-batch-tx-mode? (:batch-tx/batch-tx-mode? tx-meta)]

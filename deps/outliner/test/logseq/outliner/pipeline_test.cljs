@@ -6,7 +6,9 @@
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.outliner.db-pipeline :as db-pipeline]
             [logseq.outliner.pipeline :as outliner-pipeline]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.db.test.helper :as db-test]
+            [logseq.common.util.page-ref :as page-ref]))
 
 (defn- get-blocks [db]
   (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name :db/id]}])
@@ -54,3 +56,12 @@
               {:block/title "grandchild"
                :path-ref-names #{"page1" "bar" "baz" "bing"}}]
              updated-blocks)))))
+
+(deftest block-content-refs
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"} :blocks [{:block/title "b1"}]}])
+        block (db-test/find-block-by-content @conn "b1")]
+    (assert block)
+    (is (= [(:db/id block)]
+           (outliner-pipeline/block-content-refs @conn
+                                                 {:block/title (str "ref to " (page-ref/->page-ref (:block/uuid block)))})))))

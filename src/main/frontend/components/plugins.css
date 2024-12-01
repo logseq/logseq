@@ -628,19 +628,13 @@
 
 .cp__themes {
   &-installed {
-    margin: -2rem;
-    outline: none;
-    padding: .5rem;
+    @apply outline-none -m-4;
 
     .it {
-      user-select: none;
-      border: 1px solid transparent;
-      margin-bottom: 4px;
-      cursor: pointer;
-      opacity: .8;
+      @apply select-none border-transparent mb-1 cursor-pointer opacity-80;
 
       .name {
-        font-weight: 600;
+        @apply font-semibold;
       }
 
       &:hover, &.is-active {

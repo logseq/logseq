@@ -2,7 +2,8 @@
   "Main datascript schemas for the Logseq app"
   (:require [clojure.set :as set]))
 
-(def version 28)
+(def version 49)
+
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
   {:db/ident        {:db/unique :db.unique/identity}
@@ -117,9 +118,7 @@
                                   :db/cardinality :db.cardinality/many}
     :property/schema.classes {:db/valueType :db.type/ref
                               :db/cardinality :db.cardinality/many}
-    :property.value/content {}
-    :asset/uuid {:db/unique :db.unique/identity}
-    :asset/meta {}}))
+    :property.value/content {}}))
 
 (def retract-attributes
   #{:block/refs

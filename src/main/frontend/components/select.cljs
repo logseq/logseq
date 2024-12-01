@@ -1,13 +1,14 @@
 (ns frontend.components.select
   "Generic component for fuzzy searching items to select an item. See
   select-config to add a new use or select-type for this component. To use the
-  new select-type, set :ui/open-select to the select-type. See
-  :graph/open command for an example."
+  new select-type, create an event that calls `select/dialog-select!` with the
+  select-type. See the :graph/open command for a full example."
   (:require [frontend.modules.shortcut.core :as shortcut]
             [frontend.context.i18n :refer [t]]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [rum.core :as rum]
@@ -21,17 +22,23 @@
   [result chosen? multiple-choices? *selected-choices]
   (let [value (if (map? result) (or (:label result)
                                     (:value result)) result)
-        selected-choices (rum/react *selected-choices)]
-    [:div.flex.flex-row.justify-between.w-full {:class (when chosen? "chosen")}
-     [:div.flex.flex-row.items-center.gap-1
-      (when multiple-choices?
-        (ui/checkbox {:checked (boolean (selected-choices (:value result)))
-                      :on-click (fn [e]
-                                  (.preventDefault e))}))
-      value]
-     (when (and (map? result) (:id result))
-       [:div.tip.flex
-        [:code.opacity-20.bg-transparent (:id result)]])]))
+        header (:header result)
+        selected-choices (rum/react *selected-choices)
+        row [:div.flex.flex-row.justify-between.w-full {:class (when chosen? "chosen")}
+             [:div.flex.flex-row.items-center.gap-1
+              (when multiple-choices?
+                (ui/checkbox {:checked (boolean (selected-choices (:value result)))
+                              :on-click (fn [e]
+                                          (.preventDefault e))}))
+              value]
+             (when (and (map? result) (:id result))
+               [:div.tip.flex
+                [:code.opacity-20.bg-transparent (:id result)]])]]
+    (if header
+      [:div.flex.flex-col.gap-1
+       header
+       row]
+      row)))
 
 (rum/defcs ^:large-vars/cleanup-todo select
   "Provides a select dropdown powered by a fuzzy search. Takes the following options:
@@ -58,7 +65,7 @@
                        (reset! (::selected-choices new-state) choices))
                      new-state))
    :will-unmount (fn [state]
-                   (state/set-state! [:ui/open-select] nil)
+                   (shui/dialog-close! :ls-select-modal)
                    state)}
   [state {:keys [items limit on-chosen empty-placeholder
                  prompt-key input-default-placeholder close-modal?
@@ -126,29 +133,30 @@
                                                     (reset! input v)
                                                     (and (fn? on-input) (on-input v))))}
                                   input-opts')]])
-        results-container [:div.py-1
+        results-container [:div
+                           {:class (when (seq search-result) "py-1")}
                            [:div.item-results-wrap
                             (ui/auto-complete
                              search-result
                              {:item-render       (or item-cp (fn [result chosen?]
                                                                (render-item result chosen? multiple-choices? *selected-choices)))
                               :class             "cp__select-results"
-                              :on-chosen         (fn [raw-chosen]
+                              :on-chosen         (fn [raw-chosen e]
                                                    (reset! input "")
                                                    (let [chosen (extract-chosen-fn raw-chosen)]
                                                      (if multiple-choices?
                                                        (if (selected-choices chosen)
                                                          (do
                                                            (swap! *selected-choices disj chosen)
-                                                           (when on-chosen (on-chosen chosen false @*selected-choices)))
+                                                           (when on-chosen (on-chosen chosen false @*selected-choices e)))
                                                          (do
                                                            (swap! *selected-choices conj chosen)
-                                                           (when on-chosen (on-chosen chosen true @*selected-choices))))
+                                                           (when on-chosen (on-chosen chosen true @*selected-choices e))))
                                                        (do
                                                          (when (and close-modal? (not multiple-choices?))
                                                            (state/close-modal!))
                                                          (when on-chosen
-                                                           (on-chosen chosen true @*selected-choices))))))
+                                                           (on-chosen chosen true @*selected-choices e))))))
                               :empty-placeholder (empty-placeholder t)})]
 
                            (when (and multiple-choices? (fn? on-apply))
@@ -206,7 +214,7 @@
                           [:div.mb-2 (t :select.graph/empty-placeholder-description)]
                           (ui/button
                            (t :select.graph/add-graph)
-                            :href (rfe/href :graphs)
+                           :href (rfe/href :graphs)
                            :on-click state/close-modal!)])}
    :graph-remove
    {:items-fn (fn []
@@ -223,24 +231,29 @@
    {:items-fn (fn []
                 (let [current-repo (state/get-current-repo)]
                   (->> (state/get-repos)
-                      (remove (fn [{:keys [url]}]
+                       (remove (fn [{:keys [url]}]
                                 ;; Can't replace current graph as ui wouldn't reload properly
-                                (or (= url current-repo) (not (config/db-based-graph? url)))))
-                      (map (fn [{:keys [url] :as original-graph}]
-                             {:value (text-util/get-graph-name-from-path url)
-                              :id (config/get-repo-dir url)
-                              :graph url
-                              :original-graph original-graph})))))
+                                 (or (= url current-repo) (not (config/db-based-graph? url)))))
+                       (map (fn [{:keys [url] :as original-graph}]
+                              {:value (text-util/get-graph-name-from-path url)
+                               :id (config/get-repo-dir url)
+                               :graph url
+                               :original-graph original-graph})))))
     :on-chosen #(dev-common-handler/import-chosen-graph (:graph %))}})
 
-(rum/defc select-modal < rum/reactive
-  []
-  (when-let [select-type (state/sub [:ui/open-select])]
-    (let [select-type-config (get (select-config) select-type)]
-      (state/set-modal!
+(defn dialog-select!
+  [select-type]
+  (when select-type
+    (let [select-type-config (get (select-config) select-type)
+          on-chosen' (:on-chosen select-type-config)]
+      (shui/dialog-open!
        #(select (-> select-type-config
+                    (assoc :on-chosen (fn [it]
+                                        (on-chosen' it)
+                                        (shui/dialog-close-all!)))
                     (select-keys [:on-chosen :empty-placeholder :prompt-key])
                     (assoc :items ((:items-fn select-type-config)))))
-       {:fullscreen? false
-        :close-btn?  false}))
-    nil))
+       {:id :ls-select-modal
+        :close-btn?  false
+        :align :top
+        :content-props {:class "ls-dialog-select"}}))))

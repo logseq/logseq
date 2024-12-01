@@ -58,9 +58,7 @@
   (sort-rows rows sorting columns))
 
 (defn rows
-  [{:keys [columns sorting row-filter]
+  [{:keys [row-filter]
     :as opts}]
-  (let [rows' (:rows opts)
-        rows' (if row-filter (filter row-filter rows') rows')]
-    (cond-> rows'
-      (seq sorting) (sort-rows sorting columns))))
+  (let [rows' (:rows opts)]
+    (if row-filter (filter row-filter rows') rows')))

@@ -40,8 +40,8 @@
           :title "Change backup folder"
           :on-click (fn []
                       (p/do!
-                        (db/transact! [[:db/retractEntity :logseq.kv/graph-backup-folder]])
-                        (reset! *backup-folder nil)))
+                       (db/transact! [[:db/retractEntity :logseq.kv/graph-backup-folder]])
+                       (reset! *backup-folder nil)))
           :size :sm}
          (ui/icon "edit"))]
        (shui/button
@@ -68,7 +68,6 @@
                        (export/auto-db-backup! repo {:backup-now? false})))}
         "Backup now"))]))
 
-
 (rum/defc export
   []
   (when-let [current-repo (state/get-current-repo)]
@@ -85,21 +84,24 @@
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-json! current-repo)}
             (t :export-json)]])
-        (when (config/db-based-graph? current-repo)
+        (when db-based?
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
             (t :export-sqlite-db)]])
-        (when (config/db-based-graph? current-repo)
+        (when db-based?
+          [:div
+           [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
+            (t :export-zip)]])
+        (when db-based?
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-debug-json! current-repo)}
             "Export debug JSON"]
            [:p.text-sm.opacity-70 "Any sensitive data will be removed in the exported json file, you can send it to us for debugging."]])
 
-        (when-not db-based?
-          (when (util/electron?)
-            [:div
-             [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
-              (t :export-public-pages)]]))
+        (when (util/electron?)
+          [:div
+           [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
+            (t :export-public-pages)]])
         (when-not (or (mobile-util/native-platform?) db-based?)
           [:div
            [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
@@ -116,19 +118,7 @@
         (when (and db-based? util/web-platform? (utils/nfsSupported))
           [:div
            [:hr]
-           (auto-backup)])]
-
-       [:a#download-as-edn-v2.hidden]
-       [:a#download-as-json-v2.hidden]
-       [:a#download-as-json-debug.hidden]
-       [:a#download-as-sqlite-db.hidden]
-       [:a#download-as-roam-json.hidden]
-       [:a#download-as-html.hidden]
-       [:a#download-as-zip.hidden]
-       [:a#export-as-markdown.hidden]
-       [:a#export-as-opml.hidden]
-       [:a#convert-markdown-to-unordered-list-or-heading.hidden]])))
-
+           (auto-backup)])]])))
 
 (def *export-block-type (atom :text))
 

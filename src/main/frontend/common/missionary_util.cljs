@@ -1,8 +1,10 @@
 (ns frontend.common.missionary-util
   "Utils based on missionary. Used by frontend and worker namespaces"
   (:require-macros [frontend.common.missionary-util])
-  (:require [clojure.core.async :as a]
-            [missionary.core :as m])
+  (:require [cljs.core.async.impl.channels]
+            [clojure.core.async :as a]
+            [missionary.core :as m]
+            [promesa.protocols :as pt])
   ;; (:import [missionary Cancelled])
   )
 
@@ -46,6 +48,17 @@
     (m/reductions {} value)
     (m/latest identity))))
 
+(defn concurrent-exec-flow
+  "Return a flow.
+  Concurrent exec `f` on `flow` with max concurrent count `par`.
+  - `(f v)` return a task.
+  - `v` is value from `flow`"
+  [par flow f]
+  (assert (pos-int? par))
+  (m/ap
+    (let [v (m/?> par flow)]
+      (m/? (f v)))))
+
 (comment
   (defn debounce
     [duration-ms flow]
@@ -54,6 +67,11 @@
         (try (m/? (m/sleep duration-ms x))
              (catch Cancelled _
                (m/amb)))))))
+
+(defn throttle [dur-ms >in]
+  (m/ap
+    (let [x (m/?> (m/relieve {} >in))]
+      (m/amb x (do (m/? (m/sleep dur-ms)) (m/amb))))))
 
 (defn run-task
   "Return the canceler"
@@ -71,14 +89,35 @@
   completing with true when put is accepted, or false if port was closed."
     [c x] (doto (m/dfv) (->> (a/put! c x)))))
 
-(defn <!
-  "Return a task that takes from given channel,
-  completing with value when take is accepted, or nil if port was closed."
-  [c] (doto (m/dfv) (->> (a/take! c))))
+(comment
+  (defn await-promise
+    "Returns a task completing with the result of given promise"
+    [p]
+    (let [v (m/dfv)]
+      (.then p #(v (fn [] %)) #(v (fn [] (throw %))))
+      (m/absolve v))))
 
-(defn await-promise
-  "Returns a task completing with the result of given promise"
-  [p]
-  (let [v (m/dfv)]
-    (.then p #(v (fn [] %)) #(v (fn [] (throw %))))
-    (m/absolve v)))
+(defn <!
+  "Return a task.
+  if arg is a channel, takes from given channel, completing with value when take is accepted, or nil if port was closed.
+  if arg is a promise, completing with the result of given promise.
+  if arg is a missionary task, just return it"
+  [chan-or-promise-or-task]
+  (cond
+    ;; async
+    (instance? cljs.core.async.impl.channels/ManyToManyChannel chan-or-promise-or-task)
+    (doto (m/dfv) (->> (a/take! chan-or-promise-or-task)))
+
+    ;; promise
+    (or (instance? js/Promise chan-or-promise-or-task)
+        (satisfies? pt/IPromise chan-or-promise-or-task))
+    (let [v (m/dfv)]
+      (.then chan-or-promise-or-task #(v (fn [] %)) #(v (fn [] (throw %))))
+      (m/absolve v))
+
+    ;; missionary task
+    (fn? chan-or-promise-or-task)
+    chan-or-promise-or-task
+
+    :else
+    (throw (ex-info "Unsupported arg" {:type (type chan-or-promise-or-task)}))))

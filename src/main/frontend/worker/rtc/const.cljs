@@ -154,6 +154,7 @@
         [:op :keyword]
         [:block-uuid :uuid]]]]]]
    [:asset-uuid->url {:optional true} [:map-of :uuid :string]]
+   [:uploaded-assets {:optional true} [:map-of :uuid :map]]
    [:ex-data {:optional true} [:map [:type :keyword]]]
    [:ex-message {:optional true} :string]])
 
@@ -260,7 +261,53 @@
       [:req-id :string]
       [:action :string]
       [:graph-uuid :string]
-      [:asset-uuids [:sequential :uuid]]]]]))
+      [:asset-uuids [:sequential :uuid]]]]
+    ["delete-assets"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :string]
+      [:asset-uuids [:sequential :uuid]]]]
+    ["get-user-devices"
+     [:map
+      [:req-id :string]
+      [:action :string]]]
+    ["add-user-device"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:device-name :string]]]
+    ["remove-user-device"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:device-uuid :uuid]]]
+    ["update-user-device-name"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:device-uuid :uuid]
+      [:device-name :string]]]
+    ["add-device-public-key"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:device-uuid :uuid]
+      [:key-name :string]
+      [:public-key :string]]]
+    ["remove-device-public-key"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:device-uuid :uuid]
+      [:key-name :string]]]
+    ["sync-encrypted-aes-key"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:device-uuid->encrypted-aes-key [:map-of :uuid :string]]
+      [:graph-uuid :uuid]]]]))
+
 (def data-to-ws-encoder (m/encoder data-to-ws-schema (mt/transformer
                                                       mt/string-transformer
                                                       (mt/key-transformer {:encode m/-keyword->string}))))

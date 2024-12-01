@@ -2,6 +2,7 @@
   "System-component-like ns that defines listeners by event name to receive ipc
   messages from electron's main process"
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.db.model :as db-model]
@@ -123,15 +124,21 @@
                  (fn [^js data]
                    (let [sync-id (.-syncId data)
                          method  (.-method data)
+                         ns-method (some-> method (string/split "@"))
+                         ns' (first ns-method)
+                         method' (last ns-method)
                          args    (.-args data)
-                         ret-fn! #(ipc/invoke (str :electron.server/sync! sync-id) %)]
+                         ret-fn! #(ipc/invoke (str :electron.server/sync! sync-id) %)
+                         app? (contains? #{"app" "editor"} ns')
+                         ^js sdk1 (aget js/window.logseq "api")
+                         ^js sdk2 (aget js/window.logseq "sdk")]
 
                      (try
                        (println "invokeLogseqAPI:" method)
-                       (let [^js apis (aget js/window.logseq "api")]
-                         (when-not (aget apis method)
+                       (let [^js methodTarget (if app? sdk1 (aget sdk2 ns'))]
+                         (when-not methodTarget
                            (throw (js/Error. (str "MethodNotExist: " method))))
-                         (-> (p/promise (apply js-invoke apis method args))
+                         (-> (p/promise (apply js-invoke methodTarget method' args))
                              (p/then #(ret-fn! %))
                              (p/catch #(ret-fn! {:error %}))))
                        (catch js/Error e

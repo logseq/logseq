@@ -8,12 +8,12 @@
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.test.helper :as db-test]))
 
 (deftest new-graph-db-idents
   (testing "a new graph follows :db/ident conventions for"
-    (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (let [conn (db-test/create-conn)
           ident-ents (->> (d/q '[:find (pull ?b [:db/ident :block/type])
                                  :where [?b :db/ident]]
                                @conn)
@@ -41,25 +41,30 @@
                  (remove #(= "closed value" (:block/type %)) closed-value-ents))
               "All property names that contain a '.' are closed values")
           (is (= #{}
-                 (set/difference closed-value-properties (set default-idents)))
+                 (set/difference
+                  (set (remove #{:logseq.property/color} closed-value-properties))
+                  (set default-idents)))
               "All closed values start with a prefix that is a property name"))))))
 
 (deftest new-graph-marks-built-ins
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+  (let [conn (db-test/create-conn)
         idents (->> (d/q '[:find [(pull ?b [:db/ident :logseq.property/built-in?]) ...]
                            :where [?b :db/ident]]
                          @conn)
                     ;; only kv's and empty property value aren't marked because
                     ;; they aren't user facing
                     (remove #(or (= "logseq.kv" (namespace (:db/ident %)))
-                                 (= :logseq.property/empty-placeholder (:db/ident %)))))]
+                                 (= :logseq.property/empty-placeholder (:db/ident %)))))
+        pages (d/q '[:find [(pull ?b [:logseq.property/built-in? :block/title]) ...]
+                     :where [?b :block/type "page"]]
+                   @conn)]
     (is (= [] (remove :logseq.property/built-in? idents))
-        "All entities with :db/ident have built-in property (except for kv idents)")))
+        "All entities with :db/ident have built-in property (except for kv idents)")
+    (is (= [] (remove :logseq.property/built-in? pages))
+        "All default internal pages should have built-in property")))
 
 (deftest new-graph-creates-class
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+  (let [conn (db-test/create-conn)
         task (d/entity @conn :logseq.class/Task)]
     (is (ldb/class? task)
         "Task class has correct type")
@@ -69,8 +74,7 @@
         "Each task property has correct type")))
 
 (deftest new-graph-is-valid
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+  (let [conn (db-test/create-conn)
         validation (db-validate/validate-db! @conn)]
     ;; For debugging
     ;; (println (count (:errors validation)) "errors of" (count (:entities validation)))

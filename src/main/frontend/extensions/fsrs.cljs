@@ -175,13 +175,13 @@
                                          [:dd "We got the answer wrong. Automatically means that we have forgotten the card. This is a lapse in memory."]]
                                         [:dl
                                          [:dt "Hard"]
-                                         [:dd "The answer was only partially correct and/or we took too long to recall it."]]
+                                         [:dd "The answer was correct but we were not confident about it and/or took too long to recall."]]
                                         [:dl
                                          [:dt "Good"]
-                                         [:dd "The answer was correct but we were not confident about it."]]
+                                         [:dd "The answer was correct but we took some mental effort to recall it."]]
                                         [:dl
                                          [:dt "Easy"]
-                                         [:dd "The answer was correct and we were confident and quick in our recall."]]])
+                                         [:dd "The answer was correct and we were confident and quick in our recall without mental effort."]]])
                                      {:align "start"}))}
       (ui/icon "info-circle"))]))
 
@@ -274,10 +274,21 @@
                                 (:block/title card-entity)))))))
 
         [:span.text-sm.opacity-50 (str (min (inc @*card-index) (count @*block-ids)) "/" (count @*block-ids))]]
-       (if-let [block-id (nth block-ids @*card-index nil)]
-         [:div.flex.flex-col
-          (card-view repo block-id *card-index *phase)]
-         [:p (t :flashcards/modal-finished)])])))
+       (let [block-id (nth block-ids @*card-index nil)]
+         (cond
+           block-id
+           [:div.flex.flex-col
+            (card-view repo block-id *card-index *phase)]
+
+           (empty? block-ids)
+           [:div.ls-card.content.ml-2
+            [:h2.font-medium (t :flashcards/modal-welcome-title)]
+
+            [:div
+             [:p (t :flashcards/modal-welcome-desc-1)]]]
+
+           :else
+           [:p (t :flashcards/modal-finished)]))])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
 (def ^:private new-task--update-due-cards-count

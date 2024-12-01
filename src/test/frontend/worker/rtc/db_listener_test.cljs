@@ -131,7 +131,7 @@
                               :create-first-block? false})
         (is (some? (d/pull @conn '[*] [:block/uuid page-uuid])))
         (is (= {page-uuid #{:update-page :update}}
-               (ops-coll=>block-uuid->op-types (client-op/get&remove-all-ops repo)))))
+               (ops-coll=>block-uuid->op-types (client-op/get&remove-all-block-ops repo)))))
       (testing "add blocks to this page"
         (let [target-entity (d/entity @conn [:block/uuid page-uuid])]
           (batch-tx/with-batch-tx-mode conn
@@ -147,7 +147,7 @@
           (is (=
                {block-uuid1 #{:move :update}
                 block-uuid2 #{:move :update}}
-               (ops-coll=>block-uuid->op-types (client-op/get&remove-all-ops repo))))))
+               (ops-coll=>block-uuid->op-types (client-op/get&remove-all-block-ops repo))))))
 
       (testing "delete a block"
         (batch-tx/with-batch-tx-mode conn
@@ -156,4 +156,4 @@
 
         (is (=
              {block-uuid1 #{:remove}}
-             (ops-coll=>block-uuid->op-types (client-op/get&remove-all-ops repo))))))))
+             (ops-coll=>block-uuid->op-types (client-op/get&remove-all-block-ops repo))))))))

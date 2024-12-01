@@ -211,6 +211,7 @@ li p:last-child,
 .external-link {
   text-decoration: none;
   border-bottom: 1px solid;
+  word-break: break-all;
 
   &:hover {
     cursor: alias;
@@ -425,7 +426,7 @@ p.warning {
 }
 
 .text-warning {
-  @apply text-yellow-500 dark:text-yellow-500/70;
+  @apply text-yellow-600 dark:text-yellow-500/70;
 }
 
 .bg-warning {
@@ -446,12 +447,30 @@ span.error {
   @apply bg-red-rx-04-alpha;
 }
 
+a.error,
+span.error {
+  @apply bg-red-rx-04-alpha text-red-rx-09 dark:bg-red-rx-06-alpha
+  dark:text-red-rx-10 rounded px-1.5 py-[2px] leading-none;
+}
+
+.text-error {
+  @apply text-red-rx-09;
+}
+
+.bg-error {
+  @apply bg-red-rx-04-alpha;
+}
+
+.text-success {
+  @apply text-green-rx-09;
+}
+
+.bg-success {
+  @apply bg-green-rx-04-alpha;
+}
+
 img.small {
-  display: inline;
-  width: 20px;
-  height: 20px;
-  margin-top: 0;
-  margin-bottom: 0;
+  @apply inline w-5 h-5 m-0;
 }
 
 a.tag {
@@ -469,7 +488,7 @@ a.tag {
 }
 
 .preview-ref-link {
-  @apply inline-block;
+  @apply inline;
 
   & + &, & + a.tag, a.tag + & {
     @apply mx-[3px];
@@ -477,12 +496,6 @@ a.tag {
 
   .block-title-wrap.as-heading {
     @apply my-0 pb-0;
-  }
-
-  .page-ref {
-    .ui__icon.ti {
-      @apply relative left-[2px] top-[5px];
-    }
   }
 }
 
