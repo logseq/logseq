@@ -8,7 +8,7 @@
 (defn- closed-value-new-block
   [block-id block-type value property]
   (let [property-id (:db/ident property)]
-    (merge {:block/type "closed value"
+    (merge {:block/tags [:logseq.class/Closed-Value]
             :block/format :markdown
             :block/uuid block-id
             :block/page property-id

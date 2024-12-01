@@ -353,7 +353,6 @@
     :block/updated-at
     :block/created-at
     :block/alias
-    :block/type
     :block/schema
     :block/tags
     :block/link

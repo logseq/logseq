@@ -301,10 +301,11 @@
 (rum/defc page-title-editor < rum/reactive
   [page {:keys [*input-value *title-value *edit? untitled? page-name old-name whiteboard-page?]}]
   (let [input-ref (rum/create-ref)
+        tag-idents (map :db/ident (:block/tags page))
         collide? #(and (not= (util/page-name-sanity-lc page-name)
                              (util/page-name-sanity-lc @*title-value))
-                       (db/page-exists? page-name (:block/type page))
-                       (db/page-exists? @*title-value (:block/type page)))
+                       (db/page-exists? page-name tag-idents)
+                       (db/page-exists? @*title-value tag-idents))
         rollback-fn #(let [old-name (if untitled? "" old-name)]
                        (reset! *title-value old-name)
                        (gobj/set (rum/deref input-ref) "value" old-name)
