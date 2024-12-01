@@ -138,7 +138,7 @@
   [db val]
   (when-let [ent (d/entity db val)]
     (and (some? (:block/title ent))
-         (= (:block/type ent) "journal"))))
+         (entity-util/journal? ent))))
 
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"

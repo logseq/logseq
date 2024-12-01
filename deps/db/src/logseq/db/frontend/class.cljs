@@ -9,6 +9,12 @@
   (ordered-map
    :logseq.class/Root {:title "Root Tag"}
 
+   :logseq.class/Page {:title "Page"}
+   :logseq.class/Whiteboard {:title "Whiteboard"}
+   :logseq.class/Class {:title "Tag"}
+   :logseq.class/Property {:title "Property"}
+   :logseq.class/Closed-Value {:title "Closed Value"}
+
    :logseq.class/Task
    {:title "Task"
     :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}

@@ -10,8 +10,8 @@
    (reset-max-key! *max-key key))
   ([max-key-atom key]
    (when (and key (or (nil? @max-key-atom)
-                     (> (compare key @max-key-atom) 0)))
-    (reset! max-key-atom key))))
+                      (> (compare key @max-key-atom) 0)))
+     (reset! max-key-atom key))))
 
 (defn gen-key
   ([]
@@ -50,7 +50,7 @@
                 (when (and (< (compare (:block/order e) (:block/order value)) 0)
                            (not= (:db/id e) (:db/id value)))
                   (:block/order e))) values))
-      (let [properties (->> (d/datoms db :avet :block/type "property")
+      (let [properties (->> (d/datoms db :avet :block/tags :logseq.class/Property)
                             (map (fn [d] (d/entity db (:e d))))
                             (sort-by :block/order)
                             reverse)]
@@ -68,7 +68,7 @@
                 (when (and (> (compare (:block/order e) (:block/order value)) 0)
                            (not= (:db/id e) (:db/id value)))
                   (:block/order e))) values))
-      (let [properties (->> (d/datoms db :avet :block/type "property")
+      (let [properties (->> (d/datoms db :avet :block/tags :logseq.class/Property)
                             (map (fn [d] (d/entity db (:e d))))
                             (sort-by :block/order))]
         (some (fn [property]

@@ -48,12 +48,6 @@
                                         :schema {:type :any
                                                  :public? false
                                                  :hide? true}}
-   :block/type           {:title "Node Type"
-                          :attribute :block/type
-                          :schema {:type :string
-                                   :public? false
-                                   :hide? true}
-                          :queryable? true}
    :block/schema         {:title "Node schema"
                           :attribute :block/schema
                           :schema {:type :map
@@ -436,7 +430,7 @@
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"
-  #{:block/alias :block/tags :block/type :block/schema :block/parent
+  #{:block/alias :block/tags :block/schema :block/parent
     :block/order :block/collapsed? :block/page
     :block/refs :block/path-refs :block/link
     :block/title :block/closed-value-property

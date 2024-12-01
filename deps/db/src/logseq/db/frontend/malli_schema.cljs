@@ -188,7 +188,6 @@
 ;; ==================
 ;; These schemas should be data vars to remain as simple and reusable as possible
 
-
 (def ^:dynamic *db-for-validate-fns*
   "Used by validate-fns which need db as input"
   nil)
@@ -228,7 +227,6 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/title :string]
-   [:block/type [:enum "page" "class" "property" "whiteboard" "journal"]]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]
@@ -364,7 +362,7 @@
   (vec
    (concat
     [:map]
-    [[:block/type [:= "closed value"]]
+    [;; [:block/tags [:= :logseq.class/Closed-Value]]
      ;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
      [:block/title {:optional true} :string]

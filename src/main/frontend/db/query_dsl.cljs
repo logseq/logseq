@@ -323,7 +323,7 @@
     (or (some->> (name property-name)
                  (db-utils/q '[:find [(pull ?b [:db/ident]) ...]
                                :in $ ?title
-                               :where [?b :block/type "property"] [?b :block/title ?title]])
+                               :where [?b :block/tags :logseq.class/Property] [?b :block/title ?title]])
                  first
                  :db/ident)
         ;; Don't return nil as that incorrectly matches all properties
