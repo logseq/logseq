@@ -11,11 +11,11 @@
 (def ^:private closed-db-schema-validator (m/validator (mu/closed-schema db-malli-schema/DB)))
 (def ^:private closed-db-schema-explainer (m/explainer (mu/closed-schema db-malli-schema/DB)))
 
-(defn- get-schema-validator
+(defn get-schema-validator
   [closed-schema?]
   (if closed-schema? closed-db-schema-validator db-schema-validator))
 
-(defn- get-schema-explainer
+(defn get-schema-explainer
   [closed-schema?]
   (if closed-schema? closed-db-schema-explainer db-schema-explainer))
 
@@ -117,7 +117,8 @@
                   ;; Remove some UI interactions adding this e.g. import
                   #(dissoc % :block.temp/fully-loaded?)
                   (db-malli-schema/update-properties-in-ents db ent-maps*))
-        errors (-> ent-maps closed-db-schema-explainer :errors)]
+        errors (binding [db-malli-schema/*db-for-validate-fns* db]
+                 (-> ent-maps closed-db-schema-explainer :errors))]
     (cond-> {:datom-count (count datoms)
              :entities ent-maps}
       (some? errors)
