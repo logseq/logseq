@@ -1,33 +1,34 @@
 (ns frontend.components.header
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.components.export :as export]
+            [frontend.components.file-sync :as fs-sync]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
-            [frontend.components.server :as server]
             [frontend.components.right-sidebar :as sidebar]
+            [frontend.components.rtc.indicator :as rtc-indicator]
+            [frontend.components.server :as server]
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
             [frontend.handler :as handler]
-            [frontend.components.file-sync :as fs-sync]
-            [frontend.components.rtc.indicator :as rtc-indicator]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.page :as page-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
-            [logseq.shui.util :as shui-util]
             [frontend.util :as util]
             [frontend.version :refer [version]]
+            [logseq.db :as ldb]
+            [logseq.shui.ui :as shui]
+            [logseq.shui.util :as shui-util]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [clojure.string :as string]
-            [frontend.db :as db]
-            [logseq.db :as ldb]))
+            [rum.core :as rum]))
 
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
@@ -151,7 +152,7 @@
 
                   ;; Disable login on Web until RTC is ready
                   (when (and (not login?)
-                             @user-handler/*show-login-button?
+                             (storage/get :login-enabled)
                              ;; (or (not util/web-platform?)
                              ;;     config/dev?
                              ;;     @user-handler/*show-login-button?)
