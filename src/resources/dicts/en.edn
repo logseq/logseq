@@ -783,6 +783,7 @@
   :editor/copy-current-file "Copy current file"
   :editor/copy-page-url "Copy page url"
   :ui/toggle-wide-mode "Toggle wide mode"
+  :ui/highlight-recent-blocks "Toggle highlight recent blocks"
   :editor/toggle-display-all-properties "Toggle display all properties"
   :ui/select-theme-color "Select available theme colors"
   :ui/goto-plugins "Go to plugins dashboard"

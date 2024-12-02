@@ -318,6 +318,9 @@
       :system/info                           {}
       ;; Whether block is selected
       :ui/select-query-cache                 (atom {})
+      :ui/toggle-highlight-recent-blocks?    (atom false)
+      :ui/highlight-recent-days              (atom (or (storage/get :ui/highlight-recent-days)
+                                                       3))
       :favorites/updated?                    (atom 0)
       :db/async-query-loading                (atom #{})
       :db/async-queries                      (atom {})
@@ -1559,6 +1562,11 @@ Similar to re-frame subscriptions"
     (set-state! :document/mode? (not mode))
     (storage/set :document/mode? (not mode))))
 
+(defn toggle-highlight-recent-blocks!
+  []
+  (let [value @(:ui/toggle-highlight-recent-blocks? @state)]
+    (set-state! :ui/toggle-highlight-recent-blocks? (not value))))
+
 (defn shortcut-tooltip-enabled?
   []
   (get @state :ui/shortcut-tooltip?))
@@ -2353,3 +2361,13 @@ Similar to re-frame subscriptions"
   [ref-entity]
   (let [refs! (:editor/block-refs @state)]
     (swap! refs! conj ref-entity)))
+
+(defn get-highlight-recent-days
+  []
+  @(:ui/highlight-recent-days @state))
+
+(defn set-highlight-recent-days!
+  [days]
+  (prn :debug :set :days days)
+  (reset! (:ui/highlight-recent-days @state) days)
+  (storage/set :ui/highlight-recent-days days))

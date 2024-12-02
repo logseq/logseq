@@ -28,7 +28,10 @@
             [logseq.shui.ui :as shui]
             [logseq.shui.util :as shui-util]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [dommy.core :as d]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]))
 
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
@@ -240,6 +243,73 @@
          {:on-click #(handler/quit-and-install-new-version!)}
          (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
 
+(defn- clear-recent-highlight!
+  []
+  (let [nodes (d/by-class "recent-block")]
+    (when (seq nodes)
+      (doseq [node nodes]
+        (d/remove-class! node "recent-block")))))
+
+(rum/defc recent-slider-inner
+  []
+  (let [[recent-days set-recent-days!] (rum/use-state (state/get-highlight-recent-days))
+        [thumb-ref set-thumb-ref!] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (when thumb-ref
+         (.focus ^js thumb-ref)))
+     [thumb-ref])
+    (rum/use-effect!
+     (fn []
+       (let [all-nodes (d/by-class "ls-block")
+             recent-node (fn [node]
+                           (let [id (some-> (d/attr node "blockid") uuid)
+                                 block (db/entity [:block/uuid id])]
+                             (when block
+                               (t/after?
+                                (tc/from-long (:block/updated-at block))
+                                (t/ago (t/days recent-days))))))
+             recent-nodes (filter recent-node all-nodes)
+             old-nodes (remove recent-node all-nodes)]
+         (when (seq recent-nodes)
+           (doseq [node recent-nodes]
+             (d/add-class! node "recent-block")))
+         (when (seq old-nodes)
+           (doseq [node old-nodes]
+             (d/remove-class! node "recent-block")))))
+     [recent-days])
+    (shui/slider
+     {:class "relative flex w-full touch-none select-none items-center w-[30%]"
+      :default-value #js [3 100]
+      :on-value-change (fn [result]
+                         (set-recent-days! (first result))
+                         (state/set-highlight-recent-days! (first result)))
+      :minStepsBetweenThumbs 1}
+     (shui/slider-track
+      {:class "relative h-2 w-full grow overflow-hidden rounded-full bg-secondary"})
+     (shui/tooltip-provider
+      (shui/tooltip
+       (shui/tooltip-trigger
+        {:as-child true
+         :on-click (fn [e] (.preventDefault e))}
+        (shui/slider-thumb
+         {:ref set-thumb-ref!
+          :class "block h-4 w-4 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none"}))
+       (shui/tooltip-content
+        {:onPointerDownOutside (fn [e] (.preventDefault e))}
+        (str "Highlight recent blocks"
+             (when (not= recent-days 0)
+               (str ": " recent-days " days ago")))))))))
+
+(rum/defc recent-slider < rum/reactive
+  {:will-update (fn [state]
+                  (when-not @(:ui/toggle-highlight-recent-blocks? @state/state)
+                    (clear-recent-highlight!))
+                  state)}
+  []
+  (when (state/sub :ui/toggle-highlight-recent-blocks?)
+    (recent-slider-inner)))
+
 (rum/defc ^:large-vars/cleanup-todo header < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]
   (let [_ (state/sub [:user/info :UserGroups])
@@ -284,6 +354,10 @@
               (ui/icon "search" {:size ui/icon-size})])))]]
 
      [:div.r.flex.drag-region
+      (when (and (config/db-based-graph? current-repo)
+                 (user-handler/team-member?))
+        (recent-slider))
+
       (when (and current-repo
                  (user-handler/logged-in?)
                  (config/db-based-graph? current-repo)
