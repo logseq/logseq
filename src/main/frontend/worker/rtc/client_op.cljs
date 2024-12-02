@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.client-op
   "Store client-ops in a persisted datascript"
   (:require [datascript.core :as d]
+            [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.state :as worker-state]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -237,15 +238,17 @@
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (letfn [(datom-count [db]
               (count (get-all-block-ops* db)))]
-      (m/relieve
-       (m/observe
-        (fn ctor [emit!]
-          (d/listen! conn :create-pending-ops-count-flow
-                     (fn [{:keys [db-after]}]
-                       (emit! (datom-count db-after))))
-          (emit! (datom-count @conn))
-          (fn dtor []
-            (d/unlisten! conn :create-pending-ops-count-flow))))))))
+      (let [db-updated-flow
+            (m/observe
+             (fn ctor [emit!]
+               (d/listen! conn :create-pending-ops-count-flow #(emit! true))
+               (emit! true)
+               (fn dtor []
+                 (d/unlisten! conn :create-pending-ops-count-flow))))]
+        (m/ap
+          (let [_ (m/?> (c.m/throttle 100 db-updated-flow))]
+            ;; throttle db-updated-flow, because `datom-count` is a time-consuming fn
+            (datom-count @conn)))))))
 
 ;;; asset ops
 (defn add-asset-ops
