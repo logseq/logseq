@@ -80,7 +80,8 @@
                                                                       (let [refs (:block/_refs page)]
                                                                         (and (or (zero? (count refs))
                                                                                  (= #{db-id} (set (map :db/id refs))))
-                                                                             (not (some #{"class" "property"} (:block/type page))))))}))]
+                                                                             (not (ldb/class? page))
+                                                                             (not (ldb/property? page)))))}))]
       (when (seq orphaned-pages)
         (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
           (swap! txs-state (fn [state] (vec (concat state tx)))))))))

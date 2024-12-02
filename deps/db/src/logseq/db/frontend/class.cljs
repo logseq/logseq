@@ -10,9 +10,19 @@
    :logseq.class/Root {:title "Root Tag"}
 
    :logseq.class/Page {:title "Page"}
-   :logseq.class/Whiteboard {:title "Whiteboard"}
-   :logseq.class/Class {:title "Tag"}
-   :logseq.class/Property {:title "Property"}
+
+   :logseq.class/Tag
+   {:title "Tag"
+    :properties {:block/tags :logseq.class/Page}}
+
+   :logseq.class/Whiteboard
+   {:title "Whiteboard"
+    :properties {:block/tags :logseq.class/Page}}
+
+   :logseq.class/Property
+   {:title "Property"
+    :properties {:block/tags :logseq.class/Page}}
+
    :logseq.class/Closed-Value {:title "Closed Value"}
 
    :logseq.class/Task
@@ -21,7 +31,8 @@
 
    :logseq.class/Journal
    {:title "Journal"
-    :properties {:logseq.property.journal/title-format "MMM do, yyyy"}}
+    :properties {:block/tags :logseq.class/Page
+                 :logseq.property.journal/title-format "MMM do, yyyy"}}
 
    :logseq.class/Query
    {:title "Query"

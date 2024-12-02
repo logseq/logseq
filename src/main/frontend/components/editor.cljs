@@ -156,7 +156,7 @@
                            ;; reorder, shortest and starts-with first.
                            (let [matched-pages-with-new-page
                                  (fn [partial-matched-pages]
-                                   (if (or (db/page-exists? q (if db-tag? #{:logseq.class/Class} #{:logseq.class/Page}))
+                                   (if (or (db/page-exists? q (if db-tag? #{:logseq.class/Tag} #{:logseq.class/Page}))
                                            (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
                                      partial-matched-pages
                                      (if db-tag?

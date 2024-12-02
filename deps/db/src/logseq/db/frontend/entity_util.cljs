@@ -23,7 +23,7 @@
 
 (defn class?
   [entity]
-  (has-tag? entity :logseq.class/Class))
+  (has-tag? entity :logseq.class/Tag))
 
 (defn property?
   [entity]
