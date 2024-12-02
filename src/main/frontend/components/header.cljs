@@ -153,7 +153,6 @@
                   ;; Disable login on Web until RTC is ready
                   (when (and (not login?)
                              (or
-                              config/dev?
                               (storage/get :login-enabled)
                               (not util/web-platform?)))
                     {:title (t :login)
@@ -287,7 +286,8 @@
      [:div.r.flex.drag-region
       (when (and current-repo
                  (user-handler/logged-in?)
-                 (config/db-based-graph? current-repo))
+                 (config/db-based-graph? current-repo)
+                 (user-handler/team-member?))
         [:<>
          (rum/with-key (rtc-collaborators)
            (str "collab-" current-repo))
