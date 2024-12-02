@@ -1061,3 +1061,7 @@ html.is-mac {
     }
   }
 }
+
+.recent-block .bullet-container .bullet {
+  border: 2px solid;
+}

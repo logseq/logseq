@@ -510,6 +510,8 @@
    :ui/toggle-document-mode                 {:binding "t d"
                                              :fn      state/toggle-document-mode!}
 
+   :ui/highlight-recent-blocks              {:fn      state/toggle-highlight-recent-blocks!}
+
    :ui/toggle-settings                      {:binding (if mac? ["t s" "mod+,"] "t s")
                                              :fn      ui-handler/toggle-settings-modal!}
 
@@ -777,6 +779,7 @@
           :go/next-journal
           :go/prev-journal
           :ui/toggle-document-mode
+          :ui/highlight-recent-blocks
           :ui/toggle-settings
           :ui/toggle-right-sidebar
           :ui/toggle-left-sidebar
@@ -921,7 +924,7 @@
      :editor/toggle-open-blocks
      :editor/toggle-number-list
      :ui/toggle-wide-mode
-     :ui/toggle-document-mode
+     :ui/highlight-recent-blocks
      :ui/toggle-brackets
      :ui/toggle-theme
      :ui/toggle-left-sidebar
