@@ -27,7 +27,7 @@
   [^Entity e k default-value]
   (let [db (.-db e)
         db-based? (db-based-graph? db)]
-    (if (and db-based? (= "journal" (:block/type e)))
+    (if (and db-based? (entity-util/journal? e))
       (get-journal-title db e)
       (let [search? (get (.-kv e) :block.temp/search?)]
         (or
@@ -65,7 +65,7 @@
        (let [db (.-db e)]
          (case k
            :block/raw-title
-           (if (and (db-based-graph? db) (= "journal" (:block/type e)))
+           (if (and (db-based-graph? db) (entity-util/journal? e))
              (get-journal-title db e)
              (lookup-entity e :block/title default-value))
 

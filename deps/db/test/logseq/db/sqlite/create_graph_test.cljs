@@ -14,7 +14,7 @@
 (deftest new-graph-db-idents
   (testing "a new graph follows :db/ident conventions for"
     (let [conn (db-test/create-conn)
-          ident-ents (->> (d/q '[:find (pull ?b [:db/ident :block/type])
+          ident-ents (->> (d/q '[:find (pull ?b [:db/ident :block/tags])
                                  :where [?b :db/ident]]
                                @conn)
                           (map first))
@@ -38,7 +38,7 @@
                                            (map #(keyword (namespace %) (string/replace (name %) #".[^.]+$" "")))
                                            set)]
           (is (= []
-                 (remove #(= "closed value" (:block/type %)) closed-value-ents))
+                 (remove ldb/closed-value? closed-value-ents))
               "All property names that contain a '.' are closed values")
           (is (= #{}
                  (set/difference
@@ -56,7 +56,7 @@
                     (remove #(or (= "logseq.kv" (namespace (:db/ident %)))
                                  (= :logseq.property/empty-placeholder (:db/ident %)))))
         pages (d/q '[:find [(pull ?b [:logseq.property/built-in? :block/title]) ...]
-                     :where [?b :block/type "page"]]
+                     :where [?b :block/tags :logseq.class/Page]]
                    @conn)]
     (is (= [] (remove :logseq.property/built-in? idents))
         "All entities with :db/ident have built-in property (except for kv idents)")

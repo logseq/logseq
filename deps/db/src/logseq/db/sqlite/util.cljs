@@ -91,7 +91,7 @@
      (block-with-timestamps
       (cond->
        {:db/ident db-ident'
-        :block/type "property"
+        :block/tags #{:logseq.class/Property}
         :block/format :markdown
         :block/schema (merge {:type :default} (dissoc prop-schema :classes :cardinality))
         :block/name (common-util/page-name-sanity-lc (name prop-name))
@@ -115,7 +115,7 @@
   {:pre [(qualified-keyword? (:db/ident block))]}
   (block-with-timestamps
    (cond-> (merge block
-                  {:block/type "class"
+                  {:block/tags #{:logseq.class/Class}
                    :block/format :markdown})
      (and (not= (:db/ident block) :logseq.class/Root)
           (nil? (:logseq.property/parent block)))
@@ -129,7 +129,7 @@
     :block/title page-name
     :block/uuid (d/squuid)
     :block/format :markdown
-    :block/type "page"}))
+    :block/tags #{:logseq.class/Page}}))
 
 (defn kv
   "Creates a key-value pair tx with the key and value respectively stored under
