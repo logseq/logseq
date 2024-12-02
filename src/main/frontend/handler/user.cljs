@@ -321,3 +321,10 @@
             :beta (alpha-or-beta-user?)
             :alpha (alpha-user?)
             false)))))
+
+(def *show-login-button? (atom false))
+(defn ^:export show-login
+  "temp fn to enable login button"
+  ([] (show-login true))
+  ([x]
+   (reset! *show-login-button? x)))
