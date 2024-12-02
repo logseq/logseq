@@ -29,16 +29,16 @@
                   (ex-message e)))))))
 
 (def class-parents-data
-  [{:block/type "class"
+  [{:block/tags :logseq.class/Class
     :block/title "x"
     :block/name "x"
     :block/uuid #uuid "6c353967-f79b-4785-b804-a39b81d72461"}
-   {:block/type "class"
+   {:block/tags :logseq.class/Class
     :block/title "y"
     :block/name "y"
     :block/uuid #uuid "7008db08-ba0c-4aa9-afc6-7e4783e40a99"
     :logseq.property/parent [:block/uuid #uuid "6c353967-f79b-4785-b804-a39b81d72461"]}
-   {:block/type "class"
+   {:block/tags :logseq.class/Class
     :block/title "z"
     :block/name "z"
     :block/uuid #uuid "d95f2912-a7af-41b9-8ed5-28861f7fc0be"

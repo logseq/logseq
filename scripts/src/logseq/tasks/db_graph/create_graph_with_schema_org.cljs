@@ -376,7 +376,7 @@
                             (map (fn [m]
                                    (let [props (->> (db-property/properties m)
                                                     (into {}))]
-                                     (cond-> (select-keys m [:block/name :block/type :block/title :block/schema :db/ident
+                                     (cond-> (select-keys m [:block/name :block/tags :block/title :block/schema :db/ident
                                                              :logseq.property.class/properties :logseq.property/parent
                                                              :db/cardinality :property/schema.classes :block/refs])
                                        (seq props)

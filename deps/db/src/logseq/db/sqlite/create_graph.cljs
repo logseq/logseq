@@ -10,7 +10,8 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.config :as common-config]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn- mark-block-as-built-in [block]
   (assoc block :logseq.property/built-in? true))
@@ -52,14 +53,15 @@
                    ;; Adding built-ins must come after initial properties
                    [(mark-block-as-built-in' built-in-property)]
                    (map mark-block-as-built-in' properties)
-                   (keep #(when (= "closed value" (:block/type %)) (mark-block-as-built-in' %))
+                   (keep #(when (entity-util/closed-value? %)
+                            (mark-block-as-built-in' %))
                          properties))]
     (doseq [m tx]
       (when-let [block-uuid (and (:db/ident m) (:block/uuid m))]
         (assert (string/starts-with? (str block-uuid) "00000002") m)))
 
     {:tx tx
-     :properties (filter #(= (:block/type %) "property") properties)}))
+     :properties (filter entity-util/property? properties)}))
 
 (def built-in-pages-names
   #{"Contents"})
@@ -111,7 +113,7 @@
       {:block/uuid page-id
        :block/name common-config/views-page-name
        :block/title common-config/views-page-name
-       :block/type "page"
+       :block/tags [:logseq.class/Page]
        :block/schema {:public? false}
        :block/format :markdown
        :logseq.property/built-in? true})
@@ -131,7 +133,7 @@
     {:block/uuid (common-uuid/gen-uuid)
      :block/name common-config/favorites-page-name
      :block/title common-config/favorites-page-name
-     :block/type "page"
+     :block/tags [:logseq.class/Page]
      :block/schema {:public? false}
      :block/format :markdown
      :logseq.property/built-in? true})])

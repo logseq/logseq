@@ -12,8 +12,10 @@
 
 (defn- has-tag?
   [entity tag-ident]
-  (some (fn [t] (or (= (:db/ident t) tag-ident)
-                    (= t tag-ident))) (:block/tags entity)))
+  (let [tags (:block/tags entity)]
+    (some (fn [t] (or (= (:db/ident t) tag-ident)
+                      (= t tag-ident)))
+          (if (coll? tags) tags [tags]))))
 
 (defn internal-page?
   [entity]

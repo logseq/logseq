@@ -536,7 +536,7 @@
 
 (defn get-all-properties
   [db]
-  (->> (d/datoms db :avet :block/type "property")
+  (->> (d/datoms db :avet :block/tags :logseq.class/Property)
        (map (fn [d]
               (d/entity db (:e d))))))
 
@@ -555,7 +555,7 @@
 
 (defn get-title-with-parents
   [entity]
-  (if (contains? #{"page" "class"} (:block/type entity))
+  (if (or (entity-util/class? entity) (entity-util/internal-page? entity))
     (let [parents' (->> (get-page-parents entity)
                         (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
                         vec)]
