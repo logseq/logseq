@@ -618,7 +618,12 @@
 
   (exportDB
    [_this repo]
-   (<export-db-file repo))
+   ;; Force WAL to checkpoint
+   ;; TODO: support `sqlite3_wal_checkpoint`
+   (p/do!
+    (close-db! repo)
+    (create-or-open-db! repo {})
+    (<export-db-file repo)))
 
   (importDb
    [this repo data]
