@@ -182,7 +182,7 @@
     (if (db-based-graph? db)
       ;; Classes and properties are case sensitive
       (let [tags (if (coll? tags) (set tags) #{tags})]
-        (if (set/intersection #{:logseq.class/Class :logseq.class/Property} tags)
+        (if (set/intersection #{:logseq.class/Tag :logseq.class/Property} tags)
           (seq
            (d/q
             '[:find [?p ...]

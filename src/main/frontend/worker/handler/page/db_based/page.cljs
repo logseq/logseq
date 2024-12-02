@@ -18,7 +18,7 @@
 
 (defn- build-page-tx [conn properties page {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)
-    (let [type-tag (cond class? :logseq.class/Class
+    (let [type-tag (cond class? :logseq.class/Tag
                          whiteboard? :logseq.class/Whiteboard
                          :else :logseq.class/Page)
           tags' (conj tags type-tag)
@@ -170,7 +170,7 @@
         date-formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
         title (sanitize-title title*)
         type (cond class?
-                   :logseq.class/Class
+                   :logseq.class/Tag
                    whiteboard?
                    :logseq.class/Whiteboard
                    today-journal?

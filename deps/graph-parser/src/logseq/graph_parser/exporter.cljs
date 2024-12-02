@@ -113,7 +113,7 @@
   (if block-ns
     (->> (d/q '[:find [?b ...]
                 :in $ ?name
-                :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Class] [?b :block/name ?name]]
+                :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
               db
               (ns-util/get-last-part full-name))
          (map #(d/entity db %))
@@ -125,7 +125,7 @@
     (first
      (d/q '[:find [?uuid ...]
             :in $ ?name
-            :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Class] [?b :block/name ?name]]
+            :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
           db
           full-name))))
 
@@ -989,7 +989,7 @@
                                                          (all-existing-page-uuids (::original-name m))
                                                          (all-existing-page-uuids (:block/name m)))]
                                       (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
-                                      (when (or (= "class" (:block/type m))
+                                      (when (or (ldb/class? m)
                                                 ;; Don't build a new page if it overwrites an existing class
                                                 (not (some-> (get @(:all-idents import-state)
                                                                   (some-> (or (::original-title m) (:block/title m))
@@ -1129,7 +1129,7 @@
                                                               (get-property-schema @(:property-schemas import-state) kw-name)
                                                               {:title (name kw-name)})]
                  (assert existing-page-uuid)
-                 (merge (select-keys new-prop [:block/type :block/schema :db/ident :db/index :db/cardinality :db/valueType])
+                 (merge (select-keys new-prop [:block/tags :block/schema :db/ident :db/index :db/cardinality :db/valueType])
                         {:block/uuid existing-page-uuid})))
              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
         ;; Save properties on new property pages separately as they can contain new properties and thus need to be
@@ -1137,7 +1137,7 @@
         property-page-properties-tx (keep (fn [b]
                                             (when-let [page-properties (not-empty (db-property/properties b))]
                                               (merge page-properties {:block/uuid (:block/uuid b)
-                                                                      :block/type "property"})))
+                                                                      :block/tags (conj (:block/tags page-properties) :logseq.class/Property)})))
                                           properties-tx)]
     {:pages-tx pages-tx'
      :property-pages-tx (concat property-pages-tx converted-property-pages-tx)
@@ -1384,7 +1384,7 @@
 (defn- export-class-properties
   [conn repo-or-conn]
   (let [user-classes (->> (d/q '[:find (pull ?b [:db/id :db/ident])
-                                 :where [?b :block/type "class"]] @conn)
+                                 :where [?b :block/tags :logseq.class/Tag]] @conn)
                           (map first)
                           (remove #(db-class/built-in-classes (:db/ident %))))
         class-to-prop-uuids
@@ -1396,7 +1396,7 @@
                     [(contains? ?user-classes ?class)]
                     [?b ?prop _]
                     [?prop-e :db/ident ?prop]
-                    [?prop-e :block/type "property"]]
+                    [?prop-e :block/tags :logseq.class/Property]]
                   @conn
                   (set (map :db/ident user-classes)))
              (remove #(ldb/built-in? (d/entity @conn (second %))))

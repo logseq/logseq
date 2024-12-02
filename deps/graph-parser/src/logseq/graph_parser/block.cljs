@@ -390,7 +390,7 @@
                                   [page nil]))]
       (when page
         (if (ldb/db-based-graph? db)
-          (let [tags (if class? [:logseq.class/Class]
+          (let [tags (if class? [:logseq.class/Tag]
                          (or (:block/tags page)
                              [:logseq.class/Page]))]
             (assoc page :block/tags tags))

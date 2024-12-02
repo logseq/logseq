@@ -553,7 +553,7 @@
           (when (seq values)
             (let [value-property-tx (map (fn [id]
                                            {:db/id id
-                                            :block/type "closed value"
+                                            :block/tags :logseq.class/Closed-Value
                                             :block/closed-value-property (:db/id property)})
                                          (map :db/id values))
                   property-tx (outliner-core/block-with-updated-at {:db/id (:db/id property)})]
