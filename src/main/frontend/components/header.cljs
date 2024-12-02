@@ -100,7 +100,7 @@
          "platform="
          (js/encodeURIComponent platform))))
 
-(rum/defc toolbar-dots-menu < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo toolbar-dots-menu < rum/reactive
   [{:keys [current-repo t]}]
   (let [page (some-> (sidebar/get-current-page) db/get-page)
         page-menu (if (ldb/page? page)
