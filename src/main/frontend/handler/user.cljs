@@ -264,6 +264,10 @@
 
 ;;; user groups
 
+(defn team-member?
+  []
+  (contains? (state/user-groups) "team"))
+
 (defn alpha-user?
   []
   (or config/dev?

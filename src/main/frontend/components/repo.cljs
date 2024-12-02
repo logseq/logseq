@@ -456,7 +456,7 @@
        :ref input-ref
        :placeholder "your graph name"
        :on-key-down submit!})
-     (when (user-handler/logged-in?)
+     (when (user-handler/team-member?)
        [:div.flex.flex-row.items-center.gap-1
         (shui/checkbox
          {:id "rtc-sync"
