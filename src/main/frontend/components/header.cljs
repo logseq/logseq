@@ -278,28 +278,37 @@
            (doseq [node old-nodes]
              (d/remove-class! node "recent-block")))))
      [recent-days])
-    (shui/slider
-     {:class "relative flex w-full touch-none select-none items-center w-[30%]"
-      :default-value #js [3 100]
-      :on-value-change (fn [result]
-                         (set-recent-days! (first result))
-                         (state/set-highlight-recent-days! (first result)))
-      :minStepsBetweenThumbs 1}
-     (shui/slider-track
-      {:class "relative h-2 w-full grow overflow-hidden rounded-full bg-secondary"})
-     (shui/tooltip-provider
-      (shui/tooltip
-       (shui/tooltip-trigger
-        {:as-child true
-         :on-click (fn [e] (.preventDefault e))}
-        (shui/slider-thumb
-         {:ref set-thumb-ref!
-          :class "block h-4 w-4 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none"}))
-       (shui/tooltip-content
-        {:onPointerDownOutside (fn [e] (.preventDefault e))}
-        (str "Highlight recent blocks"
-             (when (not= recent-days 0)
-               (str ": " recent-days " days ago")))))))))
+    [:div.flex.flex-row.gap-1.items-center
+     {:class "w-[32%]"}
+     (shui/slider
+      {:class "relative flex w-full touch-none select-none items-center "
+       :default-value #js [3 100]
+       :on-value-change (fn [result]
+                          (set-recent-days! (first result))
+                          (state/set-highlight-recent-days! (first result)))
+       :minStepsBetweenThumbs 1}
+      (shui/slider-track
+       {:class "relative h-2 w-full grow overflow-hidden rounded-full bg-secondary"})
+      (shui/tooltip-provider
+       (shui/tooltip
+        (shui/tooltip-trigger
+         {:as-child true
+          :on-click (fn [e] (.preventDefault e))}
+         (shui/slider-thumb
+          {:ref set-thumb-ref!
+           :class "block h-4 w-4 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none"}))
+        (shui/tooltip-content
+         {:onPointerDownOutside (fn [e] (.preventDefault e))}
+         (str "Highlight recent blocks"
+              (when (not= recent-days 0)
+                (str ": " recent-days " days ago")))))))
+     (shui/button
+      {:variant :ghost
+       :size :sm
+       :title "Quit highlight recent blocks"
+       :class "opacity-50 hover:opacity-100"
+       :on-click (fn [] (state/toggle-highlight-recent-blocks!))}
+      (ui/icon "x" {:size 16}))]))
 
 (rum/defc recent-slider < rum/reactive
   {:will-update (fn [state]

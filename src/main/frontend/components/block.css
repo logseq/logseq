@@ -1062,6 +1062,7 @@ html.is-mac {
   }
 }
 
-.recent-block .bullet-container .bullet {
-  border: 2px solid;
+.recent-block {
+  transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
+  background-color: var(--ls-secondary-background-color, var(--rx-gray-03));
 }
