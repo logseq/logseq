@@ -152,11 +152,10 @@
 
                   ;; Disable login on Web until RTC is ready
                   (when (and (not login?)
-                             (storage/get :login-enabled)
-                             ;; (or (not util/web-platform?)
-                             ;;     config/dev?
-                             ;;     @user-handler/*show-login-button?)
-                             )
+                             (or
+                              config/dev?
+                              (storage/get :login-enabled)
+                              (not util/web-platform?)))
                     {:title (t :login)
                      :options {:on-click #(state/pub-event! [:user/login])}
                      :icon (ui/icon "user")})
