@@ -1,29 +1,28 @@
 (ns frontend.handler.db-based.rtc
   "RTC handler"
-  (:require [frontend.common.missionary-util :as c.m]
-            [frontend.config :as config]
+  (:require [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [missionary.core :as m]
             [promesa.core :as p]))
 
-(defn new-task--rtc-create-graph!
+(defn <rtc-create-graph!
   [repo]
-  (m/sp
-    (when-let [^js worker @state/*db-worker]
-      (m/? user-handler/task--ensure-id&access-token)
-      (let [token (state/get-auth-id-token)
-            repo-name (sqlite-common-db/sanitize-db-name repo)]
-        (c.m/<? (.rtc-async-upload-graph worker repo token repo-name))))))
+  (when-let [^js worker @state/*db-worker]
+    (p/do!
+     (js/Promise. user-handler/task--ensure-id&access-token)
+     (let [token (state/get-auth-id-token)
+           repo-name (sqlite-common-db/sanitize-db-name repo)]
+       (.rtc-async-upload-graph worker repo token repo-name)))))
 
 (defn <rtc-delete-graph!
   [graph-uuid]
   (when-let [^js worker @state/*db-worker]
-    (user-handler/<wrap-ensure-id&access-token
+    (p/do!
+     (js/Promise. user-handler/task--ensure-id&access-token)
      (let [token (state/get-auth-id-token)]
        (.rtc-delete-graph worker token graph-uuid)))))
 
@@ -31,23 +30,23 @@
   [graph-name graph-uuid timeout-ms]
   (when-let [^js worker @state/*db-worker]
     (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
-    (user-handler/<wrap-ensure-id&access-token
-     (p/let [token (state/get-auth-id-token)
-             download-info-uuid* (.rtc-request-download-graph worker token graph-uuid)
-             download-info-uuid (ldb/read-transit-str download-info-uuid*)
-             result (.rtc-wait-download-graph-info-ready worker token download-info-uuid graph-uuid timeout-ms)
-             {:keys [_download-info-uuid
-                     download-info-s3-url
-                     _download-info-tx-instant
-                     _download-info-t
-                     _download-info-created-at]
-              :as result} (ldb/read-transit-str result)]
-       (->
-        (when (not= result :timeout)
-          (assert (some? download-info-s3-url) result)
-          (.rtc-download-graph-from-s3 worker graph-uuid graph-name download-info-s3-url))
-        (p/finally
-          #(state/set-state! :rtc/downloading-graph-uuid nil)))))))
+    (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+            token (state/get-auth-id-token)
+            download-info-uuid* (.rtc-request-download-graph worker token graph-uuid)
+            download-info-uuid (ldb/read-transit-str download-info-uuid*)
+            result (.rtc-wait-download-graph-info-ready worker token download-info-uuid graph-uuid timeout-ms)
+            {:keys [_download-info-uuid
+                    download-info-s3-url
+                    _download-info-tx-instant
+                    _download-info-t
+                    _download-info-created-at]
+             :as result} (ldb/read-transit-str result)]
+      (->
+       (when (not= result :timeout)
+         (assert (some? download-info-s3-url) result)
+         (.rtc-download-graph-from-s3 worker graph-uuid graph-name download-info-s3-url))
+       (p/finally
+         #(state/set-state! :rtc/downloading-graph-uuid nil))))))
 
 (defn <rtc-stop!
   []
@@ -78,23 +77,22 @@
 
 (defn <get-remote-graphs
   []
-  (let [^js worker @state/*db-worker]
-    (user-handler/<wrap-ensure-id&access-token
-     (let [token (state/get-auth-id-token)]
-       (when worker
-         (p/let [result (.rtc-get-graphs worker token)
-                 graphs (ldb/read-transit-str result)
-                 result (->> graphs
-                             (remove (fn [graph] (= (:graph-status graph) "deleting")))
-                             (mapv (fn [graph]
-                                     (merge
-                                      (let [url (str config/db-version-prefix (:graph-name graph))]
-                                        {:url url
-                                         :GraphName (:graph-name graph)
-                                         :GraphUUID (:graph-uuid graph)
-                                         :rtc-graph? true})
-                                      (dissoc graph :graph-uuid :graph-name)))))]
-           (state/set-state! :rtc/graphs result)))))))
+  (when-let [^js worker @state/*db-worker]
+    (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+            token (state/get-auth-id-token)
+            result (.rtc-get-graphs worker token)
+            graphs (ldb/read-transit-str result)
+            result (->> graphs
+                        (remove (fn [graph] (= (:graph-status graph) "deleting")))
+                        (mapv (fn [graph]
+                                (merge
+                                 (let [url (str config/db-version-prefix (:graph-name graph))]
+                                   {:url url
+                                    :GraphName (:graph-name graph)
+                                    :GraphUUID (:graph-uuid graph)
+                                    :rtc-graph? true})
+                                 (dissoc graph :graph-uuid :graph-name)))))]
+      (state/set-state! :rtc/graphs result))))
 
 (defn <rtc-get-users-info
   []

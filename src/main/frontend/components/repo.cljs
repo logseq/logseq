@@ -1,29 +1,28 @@
 (ns frontend.components.repo
-  (:require [frontend.config :as config]
+  (:require [cljs.core.async :as async :refer [<! go]]
+            [clojure.string :as string]
+            [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.file-sync :as file-sync]
+            [frontend.handler.graph :as graph]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.user :as user-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.util.text :as text-util]
-            [promesa.core :as p]
-            [electron.ipc :as ipc]
-            [goog.object :as gobj]
-            [cljs.core.async :as async :refer [go <!]]
-            [clojure.string :as string]
-            [frontend.handler.file-sync :as file-sync]
-            [frontend.handler.notification :as notification]
             [frontend.util.fs :as fs-util]
-            [frontend.handler.user :as user-handler]
+            [frontend.util.text :as text-util]
+            [goog.object :as gobj]
             [logseq.shui.ui :as shui]
-            [frontend.handler.db-based.rtc :as rtc-handler]
-            [frontend.handler.graph :as graph]
-            [frontend.common.async-util :as async-util]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
@@ -432,7 +431,7 @@
                              (->
                               (p/do
                                 (state/set-state! :rtc/uploading? true)
-                                (js/Promise. (rtc-handler/new-task--rtc-create-graph! repo))
+                                (rtc-handler/<rtc-create-graph! repo)
                                 (state/set-state! :rtc/uploading? false)
                                 (rtc-handler/<rtc-start! repo))
                               (p/catch (fn [error]
