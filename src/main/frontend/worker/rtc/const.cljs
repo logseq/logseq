@@ -83,6 +83,7 @@
    [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
    [:s3-presign-url {:optional true} :string]
    [:server-schema-version {:optional true} :int]
+   [:server-builtin-db-idents {:optional true} [:set :keyword]]
    [:server-only-db-ident-blocks {:optional true} [:maybe :string] ;;transit
     ]
    [:users {:optional true} [:sequential
@@ -249,7 +250,11 @@
                          [:map
                           [:db/ident :keyword]
                           [::m/default extra-attr-map-schema]]]]]]
-
+    ["get-graph-skeleton"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :string]]]
     ["get-assets-upload-urls"
      [:map
       [:req-id :string]

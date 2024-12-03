@@ -62,7 +62,8 @@
           (let [t (client-op/get-local-tx repo)]
             (when (or (nil? @*last-calibrate-t)
                       (< 500 (- t @*last-calibrate-t)))
-              (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid conn t))
+              ;; (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid conn t))
+              (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid @conn))
               (reset! *last-calibrate-t t)))
           (swap! *sent assoc ws true))
         ws))))
