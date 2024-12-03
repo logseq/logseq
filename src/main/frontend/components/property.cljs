@@ -242,19 +242,19 @@
                   (if (state/editing?)
                     (editor-handler/escape-editing {:select? true})
                     (shui/popup-show! (.-target e)
-                      (fn []
-                        (property-config/dropdown-editor property block {:debug? (.-altKey e)
-                                                                         :class-schema? class-schema?}))
-                      {:content-props
-                       {:class "ls-property-dropdown-editor as-root"
-                        :onEscapeKeyDown (fn [e]
-                                           (util/stop e)
-                                           (shui/popup-hide!)
-                                           (when-let [input (state/get-input)]
-                                             (.focus input)))}
-                       :align "start"
-                       :as-dropdown? true})))}
-      (block-container {:property? true} property))))
+                                      (fn []
+                                        (property-config/dropdown-editor property block {:debug? (.-altKey e)
+                                                                                         :class-schema? class-schema?}))
+                                      {:content-props
+                                       {:class "ls-property-dropdown-editor as-root"
+                                        :onEscapeKeyDown (fn [e]
+                                                           (util/stop e)
+                                                           (shui/popup-hide!)
+                                                           (when-let [input (state/get-input)]
+                                                             (.focus input)))}
+                                       :align "start"
+                                       :as-dropdown? true})))}
+     (block-container {:property? true} property))))
 
 (rum/defc property-key-cp < rum/static
   [block property {:keys [other-position? class-schema?]}]
@@ -463,7 +463,7 @@
               class-properties? (assoc :class (if (:logseq.property.class/properties block)
                                                 "ml-2 -mt-1"
                                                 "-ml-1")))
-            (when-not (or block? class-properties? property-desc)
+            (when-not (or block? class-properties? (and property-desc (:class-schema? opts)))
               [:div {:class "pl-1.5 -mr-[3px] opacity-60"}
                [:span.bullet-container [:span.bullet]]])
             [:div.flex.flex-1
