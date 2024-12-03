@@ -1,91 +1,53 @@
 (ns frontend.worker.rtc.skeleton
   "Validate skeleton data between server and client"
-  (:require [datascript.core :as d]
-            [frontend.common.missionary-util :as c.m]
+  (:require [clojure.data :as data]
+            [datascript.core :as d]
             [frontend.worker.rtc.ws-util :as ws-util]
-            [logseq.db :as ldb]
+            [frontend.worker.util :as worker-util]
             [missionary.core :as m]))
-
-(defn- block-ref-type-attributes
-  [db-schema]
-  (->> db-schema
-       (keep (fn [[k v]]
-               (when (and (keyword? k)
-                          (= :db.type/ref (:db/valueType v)))
-                 k)))
-       set))
-
-(defn- block-card-many-attributes
-  [db-schema]
-  (->> db-schema
-       (keep (fn [[k v]]
-               (when (and (keyword? k)
-                          (= :db.cardinality/many (:db/cardinality v)))
-                 k)))
-       set))
-
-(defn- get-builtin-db-ident-blocks
-  [db]
-  (let [db-schema (d/schema db)
-        block-ref-type-attrs (block-ref-type-attributes db-schema)
-        block-card-many-attrs (block-card-many-attributes db-schema)
-        pull-pattern ['* (into {} (map (fn [k] [k [:block/uuid]]) block-ref-type-attrs))]
-        block-ids (->> (d/q '[:find ?b
-                              :in $
-                              :where
-                              [?b :db/ident]
-                              [?b :block/uuid]
-                              [?b :logseq.property/built-in?]]
-                            db)
-                       (apply concat))]
-    (map (fn [m]
-           (into {}
-                 (keep
-                  (fn [[k v]]
-                    (when-not (contains? #{:db/id} k)
-                      (let [v-converter
-                            (case [(contains? block-ref-type-attrs k)
-                                   (contains? block-card-many-attrs k)]
-                              [true true] (partial map :block/uuid)
-                              [true false] :block/uuid
-                              [false true] (partial map ldb/write-transit-str)
-                              [false false] ldb/write-transit-str)
-                            v* (v-converter v)
-                            v** (if (contains? #{:db/ident :block/order} k)
-                                  (ldb/read-transit-str v*)
-                                  v*)]
-                        [k v**]))))
-                 m))
-         (d/pull-many db pull-pattern block-ids))))
 
 (defn- get-schema-version
   [db]
   (:kv/value (d/entity db :logseq.kv/schema-version)))
 
+(defn- get-builtin-db-idents
+  [db]
+  (d/q '[:find [?i ...]
+         :in $
+         :where
+         [?b :db/ident ?i]
+         [?b :block/uuid]
+         [?b :logseq.property/built-in?]]
+       db))
+
 (defn new-task--calibrate-graph-skeleton
-  [get-ws-create-task graph-uuid conn t]
-  (c.m/backoff
-   (take 4 c.m/delays)
-   (m/sp
-     (let [db @conn
-           db-ident-blocks (get-builtin-db-ident-blocks db)
-           r (m/? (ws-util/send&recv get-ws-create-task
-                                     {:action "calibrate-graph-skeleton"
-                                      :graph-uuid graph-uuid
-                                      :t t
-                                      :db-ident-blocks db-ident-blocks
-                                      :schema-version (get-schema-version db)}))]
-       (if-let [remote-ex (:ex-data r)]
-         (case (:type remote-ex)
-           :graph-lock-failed
-           (throw (ex-info "retry calibrate-graph-skeleton" {:missionary/retry true}))
+  [get-ws-create-task graph-uuid db]
+  (m/sp
+    (let [r (m/? (ws-util/send&recv get-ws-create-task
+                                    {:action "get-graph-skeleton"
+                                     :graph-uuid graph-uuid}))]
+      (if-let [remote-ex (:ex-data r)]
+        (case (:type remote-ex)
+          :graph-lock-failed
+          (throw (ex-info "retry calibrate-graph-skeleton" {:missionary/retry true}))
           ;; else
-           (do (prn {:remote-ex remote-ex})
-               (throw (ex-info "Unavailable2" {:remote-ex remote-ex}))))
-         (let [server-only-db-ident-blocks (some-> (:server-only-db-ident-blocks r)
-                                                   ldb/read-transit-str)]
-           (when (seq server-only-db-ident-blocks)
-             (throw (ex-info "different graph skeleton between server and client"
-                             {:type :rtc.exception/different-graph-skeleton
-                              :server-schema-version (:server-schema-version r)
-                              :server-only-db-ident-blocks server-only-db-ident-blocks})))))))))
+          (do (prn {:remote-ex remote-ex})
+              (throw (ex-info "Unavailable2" {:remote-ex remote-ex}))))
+        (let [{:keys [server-schema-version server-builtin-db-idents]} r
+              client-builtin-db-idents (set (get-builtin-db-idents db))
+              client-schema-version (get-schema-version db)]
+          (when (not= client-schema-version server-schema-version)
+            (worker-util/post-message :notification
+                                      [[:div
+                                        [:p (str :client-schema-version client-schema-version)]
+                                        [:p (str :server-schema-version server-schema-version)]]
+                                       :error]))
+
+          (let [[client-only server-only _]
+                (data/diff client-builtin-db-idents server-builtin-db-idents)]
+            (when (or (seq client-only) (seq server-only))
+              (worker-util/post-message :notification
+                                        [[:div
+                                          [:p (str :client-only-db-idents client-only)]
+                                          [:p (str :server-only-db-idents server-only)]]
+                                         :error]))))))))
