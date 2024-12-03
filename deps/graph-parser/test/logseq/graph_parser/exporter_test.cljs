@@ -183,7 +183,7 @@
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)
-          ;; Simulate frontend path-refs being calculated
+          ;; Calculate refs and path-refs like frontend
           _ (db-pipeline/add-listener conn)
           assets (atom [])
           {:keys [import-state]} (import-file-graph-to-db file-graph-dir conn {:assets assets :convert-all-tags? true})]
@@ -452,6 +452,12 @@
       (is (= "logbook block" (:block/title (find-block-by-content @conn #"logbook block")))))
 
     (testing "block refs and path-refs"
+      (let [page (find-page-by-name @conn "chat-gpt")]
+        (is (set/subset?
+             #{"type" "LargeLanguageModel"}
+             (->> page :block/refs (map #(:block/title (d/entity @conn (:db/id %)))) set))
+            "Correct :block/refs for property and its values on a page"))
+
       (let [block (find-block-by-content @conn "old todo block")]
         (is (set/subset?
              #{:logseq.task/status :logseq.class/Task}
@@ -459,14 +465,14 @@
                   :block/path-refs
                   (map #(:db/ident (d/entity @conn (:db/id %))))
                   set))
-            "Correct :block/refs")
+            "Correct :block/refs for block")
         (is (set/subset?
              #{:logseq.task/status :logseq.class/Task}
              (->> block
                   :block/path-refs
                   (map #(:db/ident (d/entity @conn (:db/id %))))
                   set))
-            "Correct :block/path-refs")))
+            "Correct :block/path-refs for block")))
 
     (testing "whiteboards"
       (let [block-with-props (find-block-by-content @conn #"block with props")]
