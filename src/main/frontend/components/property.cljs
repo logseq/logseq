@@ -333,13 +333,15 @@
         *show-new-property-config? (::show-new-property-config? state)
         *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
-        block-type (keyword (get block :block/type :block))
         page? (ldb/page? block)
+        block-types (let [types (ldb/get-entity-types block)]
+                      (cond-> types
+                        (and page? (not (contains? types :page)))
+                        (conj :page)
+                        (empty? types)
+                        #{:block}))
         exclude-properties (fn [m]
-                             (let [view-context (get-in m [:block/schema :view-context] :all)
-                                   block-types (if (and page? (not= block-type :page))
-                                                 #{:page block-type}
-                                                 #{block-type})]
+                             (let [view-context (get-in m [:block/schema :view-context] :all)]
                                (or (contains? #{:logseq.property/query} (:db/ident m))
                                    (and (not page?) (contains? #{:block/alias} (:db/ident m)))
                                    ;; Filters out properties from being in wrong :view-context and :never view-contexts
