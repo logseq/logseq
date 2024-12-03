@@ -3762,7 +3762,7 @@
           (highlight/html-export attr code)
 
           :else
-          (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
+          (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojurescript"} language) "clojure" language)]
             [:div.ui-fenced-code-editor.flex.flex-1
              {:ref (fn [el]
                      (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))
