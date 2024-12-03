@@ -506,7 +506,7 @@
                              (when (and property-type (not= property-type :node))
                                (if (= property-type :page)
                                  (not (db/page? node))
-                                 (not= property-type (some-> (:block/type node) keyword))))))
+                                 (not (contains? (ldb/get-entity-types node) property-type))))))
                        result)))))
 
         options (map (fn [node]

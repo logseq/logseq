@@ -85,6 +85,7 @@
 (def object? entity-util/object?)
 (def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
+(def get-entity-types entity-util/get-entity-types)
 
 (defn sort-by-order
   [blocks]
