@@ -512,7 +512,10 @@
         options (map (fn [node]
                        (let [id (or (:value node) (:db/id node))
                              [header label] (if (integer? id)
-                                              (let [title (subs (title/block-unique-title node) 0 256)
+                                              (let [node-title (if (seq (:property/schema.classes property))
+                                                                 (:block/title node)
+                                                                 (title/block-unique-title node))
+                                                    title (subs node-title 0 256)
                                                     node (or (db/entity id) node)
                                                     icon (get-node-icon node)
                                                     header (when-not (db/page? node)

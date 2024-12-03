@@ -11,8 +11,7 @@
             [frontend.storage :as storage]
             [logseq.graph-parser.db :as gp-db]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db :as ldb]
-            [frontend.components.title :as title]))
+            [logseq.db :as ldb]))
 
 (defn- build-links
   [links]
@@ -45,7 +44,7 @@
                    size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
                (cond->
                 {:id (str (:db/id p))
-                 :label (title/block-unique-title p)
+                 :label page-title
                  :size size
                  :color color
                  :block/created-at (:block/created-at p)}
@@ -72,8 +71,8 @@
 (defn- normalize-page-name
   [{:keys [nodes links]}]
   (let [nodes' (->> (remove-uuids-and-files! nodes)
-                   (util/distinct-by (fn [node] (:id node)))
-                   (remove nil?))]
+                    (util/distinct-by (fn [node] (:id node)))
+                    (remove nil?))]
     {:nodes nodes'
      :links links}))
 
@@ -207,15 +206,15 @@
   (let [search-nodes (fn [forward?]
                        (let [links (group-by (if forward? :source :target) links)]
                          (loop [nodes nodes
-                               level level]
-                          (if (zero? level)
-                            nodes
-                            (recur (distinct (apply concat nodes
-                                               (map
-                                                 (fn [id]
-                                                   (->> (get links id) (map (if forward? :target :source))))
-                                                 nodes)))
-                                   (dec level))))))
+                                level level]
+                           (if (zero? level)
+                             nodes
+                             (recur (distinct (apply concat nodes
+                                                     (map
+                                                      (fn [id]
+                                                        (->> (get links id) (map (if forward? :target :source))))
+                                                      nodes)))
+                                    (dec level))))))
         nodes (concat (search-nodes true) (search-nodes false))
         nodes (set nodes)]
     (update graph :nodes
