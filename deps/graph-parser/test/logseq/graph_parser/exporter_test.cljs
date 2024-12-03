@@ -171,6 +171,7 @@
   (p/let [file-graph-dir "test/resources/docs-0.10.9"
           _ (docs-graph-helper/clone-docs-repo-if-not-exists file-graph-dir "v0.10.9")
           conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
           {:keys [import-state]}
           (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true})]
 

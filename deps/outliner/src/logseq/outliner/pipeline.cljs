@@ -6,7 +6,8 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.entity-plus :as entity-plus]))
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.outliner.datascript-report :as ds-report]))
 
 (defn filter-deleted-blocks
   [datoms]
@@ -184,3 +185,29 @@
          ;; Remove alias ref to avoid recursive display bugs
          (remove #(contains? (set (map :db/id (:block/alias block))) %))
          (remove nil?))))
+
+(defn- rebuild-block-refs-tx
+  [{:keys [db-after]} blocks]
+  (mapcat (fn [block]
+            (when (d/entity db-after (:db/id block))
+              (let [refs (db-rebuild-block-refs db-after block)]
+                (when (seq refs)
+                  [[:db/retract (:db/id block) :block/refs]
+                   {:db/id (:db/id block)
+                    :block/refs refs}]))))
+          blocks))
+
+(defn transact-new-db-graph-refs
+  "Transacts :block/refs and :block/path-refs for a new or imported DB graph"
+  [conn tx-report]
+  (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
+        refs-tx-report (when-let [refs-tx (and (seq blocks) (rebuild-block-refs-tx tx-report blocks))]
+                         (ldb/transact! conn refs-tx {:pipeline-replace? true}))
+        blocks' (if refs-tx-report
+                  (keep (fn [b] (d/entity (:db-after refs-tx-report) (:db/id b))) blocks)
+                  blocks)
+        block-path-refs-tx (distinct (compute-block-path-refs-tx tx-report blocks'))
+        path-refs-tx-report (when (seq block-path-refs-tx)
+                              (ldb/transact! conn block-path-refs-tx {:pipeline-replace? true}))]
+    {:refs-tx-report refs-tx-report
+     :path-refs-tx-export path-refs-tx-report}))

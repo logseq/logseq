@@ -1277,7 +1277,7 @@
         {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
         (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
-        main-props-tx-report (d/transact! conn property-pages-tx {:new-graph? true})
+        main-props-tx-report (d/transact! conn property-pages-tx {::new-graph? true})
 
         classes-tx @(:classes-tx tx-options)
         ;; Build indices
@@ -1298,12 +1298,11 @@
         tx' (common-util/fast-remove-nils tx)
         ;; _ (prn :tx-counts (map count (vector whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx)))
         ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :tx tx'}))
-        ;; :new-graph? needed for :block/path-refs to be calculated
-        main-tx-report (d/transact! conn tx' {:new-graph? true})
+        main-tx-report (d/transact! conn tx' {::new-graph? true})
 
         upstream-properties-tx
         (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
-        upstream-tx-report (when (seq upstream-properties-tx) (d/transact! conn upstream-properties-tx {:new-graph? true}))]
+        upstream-tx-report (when (seq upstream-properties-tx) (d/transact! conn upstream-properties-tx {::new-graph? true}))]
 
     ;; Return all tx-reports that occurred in this fn as UI needs to know what changed
     [main-props-tx-report main-tx-report upstream-tx-report]))
