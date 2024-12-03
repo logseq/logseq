@@ -104,7 +104,7 @@
              blocks)
      distinct)))
 
-(defn compute-block-path-refs-tx
+(defn ^:api compute-block-path-refs-tx
   "Main fn for computing path-refs"
   [tx-report blocks]
   (let [refs-tx (compute-block-path-refs tx-report blocks)
