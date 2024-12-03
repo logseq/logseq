@@ -23,7 +23,8 @@
 
 (defn class?
   [entity]
-  (has-tag? entity :logseq.class/Tag))
+  (or (= (:db/ident entity) :logseq.class/Tag)
+      (has-tag? entity :logseq.class/Tag)))
 
 (defn property?
   [entity]

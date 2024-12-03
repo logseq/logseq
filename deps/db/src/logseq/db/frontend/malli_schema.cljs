@@ -434,27 +434,29 @@
   (into
    [:multi {:dispatch (fn [d]
                         ;; order matters as some block types are a subset of others e.g. :whiteboard
-                        (cond
-                          (entity-util/property? d)
-                          :property
-                          (entity-util/class? d)
-                          :class
-                          (entity-util/hidden? d)
-                          :hidden
-                          (entity-util/whiteboard? d)
-                          :normal-page
-                          (entity-util/page? d)
-                          :normal-page
-                          (entity-util/asset? d)
-                          :asset-block
-                          (:file/path d)
-                          :file-block
-                          (:block/uuid d)
-                          :block
-                          (= (:db/ident d) :logseq.property/empty-placeholder)
-                          :property-value-placeholder
-                          (:db/ident d)
-                          :db-ident-key-value))}]
+                        (let [db *db-for-validate-fns*
+                              d (if (:block/uuid d) (d/entity db [:block/uuid (:block/uuid d)]) d)]
+                          (cond
+                            (entity-util/property? d)
+                            :property
+                            (entity-util/class? d)
+                            :class
+                            (entity-util/hidden? d)
+                            :hidden
+                            (entity-util/whiteboard? d)
+                            :normal-page
+                            (entity-util/page? d)
+                            :normal-page
+                            (entity-util/asset? d)
+                            :asset-block
+                            (:file/path d)
+                            :file-block
+                            (:block/uuid d)
+                            :block
+                            (= (:db/ident d) :logseq.property/empty-placeholder)
+                            :property-value-placeholder
+                            (:db/ident d)
+                            :db-ident-key-value)))}]
    {:property property-page
     :class class-page
     :hidden hidden-page
