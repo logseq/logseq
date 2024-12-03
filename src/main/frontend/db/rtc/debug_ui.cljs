@@ -20,7 +20,7 @@
 (defn- stop
   []
   (let [^object worker @db-browser/*worker]
-    (.rtc-stop2 worker))
+    (.rtc-stop worker))
   (reset! debug-state nil))
 
 (rum/defcs ^:large-vars/cleanup-todo rtc-debug-ui < rum/reactive
@@ -60,7 +60,7 @@
        {:size :sm
         :on-click (fn [_]
                     (let [^object worker @db-browser/*worker]
-                      (p/let [result (.rtc-get-debug-state2 worker)
+                      (p/let [result (.rtc-get-debug-state worker)
                               new-state (ldb/read-transit-str result)]
                         (swap! debug-state (fn [old] (merge old new-state))))))}
        (shui/tabler-icon "refresh") "state")
@@ -71,7 +71,7 @@
         (fn [_]
           (let [token (state/get-auth-id-token)
                 ^object worker @db-browser/*worker]
-            (p/let [result (.rtc-get-graphs2 worker token)
+            (p/let [result (.rtc-get-graphs worker token)
                     graph-list (ldb/read-transit-str result)]
               (swap! debug-state assoc
                      :remote-graphs
@@ -115,7 +115,7 @@
          :on-click (fn []
                      (let [token (state/get-auth-id-token)
                            ^object worker @db-browser/*worker]
-                       (.rtc-start2 worker (state/get-current-repo) token)))}
+                       (.rtc-start worker (state/get-current-repo) token)))}
         (shui/tabler-icon "player-play") "start")
 
        [:div.my-2.flex
@@ -145,9 +145,9 @@
                                       user-email (when-not user-uuid (:grant-access-to-user debug-state*))]
                                   (when-let [graph-uuid (:graph-uuid debug-state*)]
                                     (let [^object worker @db-browser/*worker]
-                                      (.rtc-grant-graph-access2 worker token graph-uuid
-                                                                (some-> user-uuid vector ldb/write-transit-str)
-                                                                (some-> user-email vector ldb/write-transit-str))))))})
+                                      (.rtc-grant-graph-access worker token graph-uuid
+                                                               (some-> user-uuid vector ldb/write-transit-str)
+                                                               (some-> user-email vector ldb/write-transit-str))))))})
 
         [:b "➡️"]
         [:input.form-input.my-2.py-1
@@ -215,7 +215,7 @@
                                     token (state/get-auth-id-token)
                                     remote-graph-name (:upload-as-graph-name debug-state*)
                                     ^js worker @db-browser/*worker]
-                                (.rtc-async-upload-graph2 worker repo token remote-graph-name)))})
+                                (.rtc-async-upload-graph worker repo token remote-graph-name)))})
       [:b "➡️"]
       [:input.form-input.my-2.py-1.w-32
        {:on-change (fn [e] (swap! debug-state assoc :upload-as-graph-name (util/evalue e)))
@@ -232,7 +232,7 @@
                                 (let [token (state/get-auth-id-token)
                                       ^object worker @db-browser/*worker]
                                   (prn ::delete-graph graph-uuid)
-                                  (.rtc-delete-graph2 worker token graph-uuid))))})
+                                  (.rtc-delete-graph worker token graph-uuid))))})
 
       (shui/select
        {:on-value-change (fn [v]

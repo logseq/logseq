@@ -4,5 +4,5 @@
 
 (defmacro <?
   "Like m/?, but async channel or promise as arg"
-  [chan-or-promise]
-  `(m/? (<! ~chan-or-promise)))
+  [chan-or-promise-or-task]
+  `(m/? (<! ~chan-or-promise-or-task)))
