@@ -425,7 +425,7 @@
 
 (def hidden-editable-block-properties
   "Properties that are hidden in a block (block property)"
-  (into #{:logseq.query/nlp-date}
+  (into #{:logseq.query/nlp-date :logseq.text-color}
         gp-property/editable-view-and-table-properties))
 
 (assert (set/subset? hidden-editable-block-properties (gp-property/editable-built-in-properties))

@@ -75,6 +75,14 @@
   [color]
   (some #{color} built-in-colors))
 
+(defn html-attr-merger
+  [left right]
+  (cond 
+    (and (string? left) (string? right)) (str left " " right)
+    (and (vector? left) (vector? right)) (concat left right)
+    (and (map? left) (map? right)) (merge left right)
+    :else right)) ; default merge behaviour
+
 (rum/defc menu-background-color
   [add-bgcolor-fn rm-bgcolor-fn]
   [:div.flex.flex-row.justify-between.py-1.px-2.items-center

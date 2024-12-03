@@ -107,11 +107,12 @@
 
   (testing "built-in properties parse as expected"
     (are [k v y] (= (parse-property k v {}) y)
-         :id "62e98716-9c0b-4253-83e7-7f8e8a23fe19" "62e98716-9c0b-4253-83e7-7f8e8a23fe19"
-         :filters "{\"product process\" true}" "{\"product process\" true}"
-         :collapsed "false" false
-         :created-at "1609233702047" 1609233702047
-         :background-color "#533e7d" "#533e7d")))
+      :id "62e98716-9c0b-4253-83e7-7f8e8a23fe19" "62e98716-9c0b-4253-83e7-7f8e8a23fe19"
+      :filters "{\"product process\" true}" "{\"product process\" true}"
+      :collapsed "false" false
+      :created-at "1609233702047" 1609233702047
+      :background-color "#533e7d" "#533e7d"
+      :logseq.text-color "#fabada" "#fabada")))
 
 
 #_(cljs.test/test-ns 'logseq.graph-parser.text-test)
