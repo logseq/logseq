@@ -420,23 +420,25 @@
 (defn- replace-block-type-with-tags
   [conn _search-db]
   (let [db @conn
-        datoms (d/datoms db :block/type)
+        block-type-entity (d/entity db :block/type)
+        datoms (d/datoms db :avet :block/type)
         journal-entity (d/entity db :logseq.class/Journal)
-        tx-data (map (fn [{:keys [e _a v]}]
-                       (let [tag (case v
-                                   "page" :logseq.class/Page
-                                   "class" :logseq.class/Tag
-                                   "property" :logseq.class/Property
-                                   "journal" :logseq.class/Journal
-                                   "whiteboard" :logseq.class/Whiteboard
-                                   "closed value" :logseq.class/Closed-Value
-                                   (throw (ex-info "unsupported block/type" {:type v})))]
-                         [[:db/retract e :block/type]
-                          [:db/add e :block/tags tag]])) datoms)]
+        tx-data (mapcat (fn [{:keys [e _a v]}]
+                          (let [tag (case v
+                                      "page" :logseq.class/Page
+                                      "class" :logseq.class/Tag
+                                      "property" :logseq.class/Property
+                                      "journal" :logseq.class/Journal
+                                      "whiteboard" :logseq.class/Whiteboard
+                                      "closed value" :logseq.class/Closed-Value
+                                      (throw (ex-info "unsupported block/type" {:type v})))]
+                            [[:db/retract e :block/type]
+                             [:db/add e :block/tags tag]])) datoms)]
     (concat
-     ;; set journal's parent to `#Page`
-     [[:db/add (:db/id journal-entity) :logseq.property/parent :logseq.class/Page]]
-     tx-data)))
+     ;; set journal's tag to `#Page`
+     [[:db/add (:db/id journal-entity) :block/tags :logseq.class/Page]]
+     tx-data
+     [[:db/retractEntity (:db/id block-type-entity)]])))
 
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the

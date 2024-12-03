@@ -7,13 +7,11 @@
 (def ^:large-vars/data-var built-in-classes
   "Map of built-in classes for db graphs with their :db/ident as keys"
   (ordered-map
+   :logseq.class/Tag {:title "Tag"}
+
    :logseq.class/Root {:title "Root Tag"}
 
    :logseq.class/Page {:title "Page"}
-
-   :logseq.class/Tag
-   {:title "Tag"
-    :properties {:block/tags :logseq.class/Page}}
 
    :logseq.class/Whiteboard
    {:title "Whiteboard"
