@@ -123,9 +123,20 @@
 (sr/defkeyword :persist-op?
   "tx-meta option, generate rtc ops when not nil (default true)")
 
+(defn- entity-datoms=>a->add?->v->t
+  [entity-datoms]
+  (reduce
+   (fn [m datom]
+     (let [[_e a v t add?] datom]
+       (assoc-in m [a add? v] t)))
+   {} entity-datoms))
+
 (defmethod db-listener/listen-db-changes :gen-rtc-ops
-  [_ {:keys [_tx-data tx-meta db-before db-after
-             repo _id->attr->datom e->a->add?->v->t same-entity-datoms-coll]}]
+  [_ {:keys [_tx-data tx-meta db-before db-after repo
+             same-entity-datoms-coll id->same-entity-datoms]}]
   (when (and (client-op/rtc-db-graph? repo)
              (:persist-op? tx-meta true))
-    (generate-rtc-ops repo db-before db-after same-entity-datoms-coll e->a->add?->v->t)))
+    (let [e->a->add?->v->t (update-vals
+                            id->same-entity-datoms
+                            entity-datoms=>a->add?->v->t)]
+      (generate-rtc-ops repo db-before db-after same-entity-datoms-coll e->a->add?->v->t))))

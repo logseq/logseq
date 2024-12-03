@@ -4,7 +4,6 @@
             [frontend.db.conn :as conn]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
-            [frontend.worker.db-listener :as worker-db-listener]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.db-listener :as subject]
@@ -24,7 +23,7 @@
   [tx-data]
   (let [datom-vec-coll (map vec tx-data)
         id->same-entity-datoms (group-by first datom-vec-coll)]
-    (update-vals id->same-entity-datoms #'worker-db-listener/entity-datoms=>a->add?->v->t)))
+    (update-vals id->same-entity-datoms #'subject/entity-datoms=>a->add?->v->t)))
 
 (deftest entity-datoms=>ops-test
   (testing "remove whiteboard page-block"
