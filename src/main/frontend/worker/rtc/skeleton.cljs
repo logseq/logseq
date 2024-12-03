@@ -42,12 +42,13 @@
                                         [:p (str :client-schema-version client-schema-version)]
                                         [:p (str :server-schema-version server-schema-version)]]
                                        :error]))
-
           (let [[client-only server-only _]
                 (data/diff client-builtin-db-idents server-builtin-db-idents)]
             (when (or (seq client-only) (seq server-only))
               (worker-util/post-message :notification
-                                        [[:div
-                                          [:p (str :client-only-db-idents client-only)]
-                                          [:p (str :server-only-db-idents server-only)]]
+                                        [(cond-> [:div]
+                                           (seq client-only)
+                                           (conj [:p (str :client-only-db-idents client-only)])
+                                           (seq server-only)
+                                           (conj [:p (str :server-only-db-idents server-only)]))
                                          :error]))))))))
