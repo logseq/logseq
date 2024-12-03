@@ -112,8 +112,7 @@
            :block/namespace :block/properties-text-values :block/pre-block? :recent/pages :block/file
            :block/properties :block/properties-order :block/repeated? :block/deadline :block/scheduled :block/priority
            :block/marker :block/macros
-           ;; :block/type
-           )
+           :block/type)
    {:block/name {:db/index true}        ; remove db/unique for :block/name
     ;; closed value
     :block/closed-value-property {:db/valueType :db.type/ref
