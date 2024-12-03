@@ -316,7 +316,7 @@
  :settings-page/custom-date-format "Tercih edilen tarih biçimi"
  :settings-page/custom-date-format-warning "Yeniden dizin oluşturma gerekli! Mevcut günlük referansları bozulabilir!"
  :settings-page/custom-date-format-notification "Bu değişikliğin etkili olması için grafınızın yeniden dizin olusturması gerekir"
- :settings-page/preferred-pasting-file-hint "Etkinleştirildiğinde, internetten bir resim yapıştırmak görüntüyü indirir ve ekler. Devre dışı bırakıldığında, bağlantıyı görüntüye yapıştırır."
+ :settings-page/preferred-pasting-file-hint "Etkinleştirildiğinde, internetten bir resim yapıştırmak görüntüyü indirir ve ekler. Devre dışı bırakıldığında sadece resim bağlantısı yapıştırılır."
  :settings-page/preferred-file-format "Tercih edilen dosya biçimi"
  :settings-page/preferred-workflow "Tercih edilen iş akışı"
  :settings-page/preferred-pasting-file "Dosya yapıştırmayı tercih et"

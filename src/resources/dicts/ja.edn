@@ -14,7 +14,7 @@
  :on-boarding/welcome-whiteboard-modal-skip "スキップ"
  :on-boarding/welcome-whiteboard-modal-start "ホワイトボードを使い始める"
  :on-boarding/tour-whiteboard-home "{1} ホワイトボードのホーム"
- :on-boarding/tour-whiteboard-home-description "すぐに見つけられるように、また簡単に新規作成したり削除したりできるように、ホワイトボードは専用の欄が用意されています。"
+ :on-boarding/tour-whiteboard-home-description "すぐに見つけられるように、また簡単に新規作成したり削除したりできるように、ホワイトボードは専用のボタンが用意されています。"
  :on-boarding/tour-whiteboard-new "{1} ホワイトボードを新規作成する"
  :on-boarding/tour-whiteboard-new-description "ホワイトボードの新規作成には、複数の方法があります。ダッシュボードのちょうどこの位置に配置されたボタンもその一つです。"
  :handbook/title "ヘルプ"
@@ -221,6 +221,25 @@
  :page/updated-at "更新日時 "
  :page/backlinks "バックリンク"
  :linked-references/filter-search "リンクされたページを検索"
+ :linked-references/unexpected-error "リンクによる参照: 予期していないエラーです。先にグラフのインデックスを再構築してください。"
+ :linked-references/filter-heading "絞り込む"
+ :linked-references/filter-directions "クリックすると含むもの、Shiftを押しながらクリックすると含まないものを検索します。もう一度クリックすると取り消します。"
+ :linked-references/filter-includes "含む: "
+ :linked-references/filter-excludes "含まない: "
+ :linked-references/reference-count (fn [filtered-count total]
+                                      ;; 1 Linked Reference
+                                      ;; 1 of 1 Linked Reference
+                                      ;; 2 of 5 Linked References
+                                      (str
+                                       total
+                                       (when filtered-count
+                                         (str "個中" filtered-count))
+                                       "個のリンクによる参照"))
+ :unlinked-references/reference-count (fn [total]
+                                        ;; 1 Unlinked Reference
+                                        ;; 5 Unlinked References
+                                        (str total
+                                             "個のリンクでない参照"))
  :editor/block-search "ブロックを検索"
  :text/image "画像"
  :asset/show-in-folder "画像のフォルダを開く"
@@ -268,6 +287,7 @@
  :settings-page/git-desc-1 "ページの編集履歴を見たい場合は、右上の端にある横向き三点ボタンをクリックし、「ページ履歴の確認」を選択してください。"
  :settings-page/git-desc-2 "玄人なユーザーには、バージョンコントロールとして"
  :settings-page/git-desc-3 " の利用も用意しています。Gitの利用はご自身の責任で行ってください。一般的なGitの問題について、Logseqチームはサポートしません。"
+ :settings-page/git-commit-on-close "ウィンドウを閉じたときにGitにコミットする"
  :settings-page/git-switcher-label "Gitの自動コミットを有効化"
  :settings-page/git-commit-delay "Gitの自動コミット間隔（秒）"
  :settings-page/edit-config-edn "config.ednを編集"
@@ -459,6 +479,7 @@
  :whiteboard/toggle-grid "格子の表示/非表示"
  :whiteboard/snap-to-grid "図形を格子に合わせる"
  :whiteboard/toggle-pen-mode "ペンモードを切り替える"
+ :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "個の参照" "個の参照"))
  :flashcards/modal-welcome-title "フラッシュカードを作成する時間です！"
  :flashcards/modal-welcome-desc-1 "ブロックに「#card」を追加することでカードとすることができます。また、「/cloze」で穴埋めを追加できます。"
  :flashcards/modal-welcome-desc-2 "ドキュメントを見るには、"
@@ -720,6 +741,7 @@
  :command.editor/delete-selection "選択したブロックを削除"
  :command.editor/expand-block-children "子ブロックを展開する"
  :command.editor/collapse-block-children "子ブロックを折り畳む"
+ :command.editor/toggle-block-children "展開する/折り畳む"
  :command.editor/indent "インデント"
  :command.editor/outdent "アウトデント"
  :command.editor/copy "コピー"
@@ -758,6 +780,10 @@
  :command.whiteboard/group "選択範囲のグループ化"
  :command.whiteboard/ungroup "選択範囲のグループ化解除"
  :command.whiteboard/toggle-grid "キャンバスの格子の表示を切り替える"
+ :command.whiteboard/clone-right "右に複製"
+ :command.whiteboard/clone-left "左に複製"
+ :command.whiteboard/clone-up "上に複製"
+ :command.whiteboard/clone-down "下に複製"
  :command.ui/toggle-brackets "ブラケットの表示／非表示"
  :command.go/electron-find-in-page "ページ内で文字列検索"
  :command.go/electron-jump-to-the-next "文字列検索で次を検索"
@@ -797,6 +823,8 @@
  :command.ui/toggle-help "ヘルプの表示／非表示"
  :command.ui/toggle-theme "テーマの切り替え"
  :command.ui/toggle-contents "目次の開閉"
+ :command.ui/accent-color-reset   "アクセントカラーをリセット"
+ :command.ui/accent-colors-picker "アクセントカラーを選択する"
 
  :command.command/toggle-favorite "お気に入りへ追加／削除"
  :command.editor/open-file-in-default-app "ファイルを既定のアプリで開く"
