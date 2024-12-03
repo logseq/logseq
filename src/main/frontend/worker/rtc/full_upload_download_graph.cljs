@@ -257,6 +257,35 @@
                                      :persist-op? false})
     (transact-block-refs! repo)))
 
+(defn- blocks-resolve-temp-id
+  [blocks]
+  (let [uuids (map :block/uuid blocks)
+        idents (map :db/ident blocks)
+        ids (map :db/id blocks)
+        id->uuid (zipmap ids uuids)
+        id->ident (zipmap ids idents)
+        id-tx-data (map (fn [id]
+                          (let [uuid' (id->uuid id)
+                                ident (id->ident id)]
+                            (cond-> {:block/uuid uuid'}
+                              ident
+                              (assoc :db/ident ident)))) ids)
+        id-ref-exists? (fn [v] (and (string? v) (or (get id->ident v) (get id->uuid v))))
+        blocks-tx-data (map (fn [block]
+                              (->> (map (fn [[k v]]
+                                          (let [v (cond
+                                                    (id-ref-exists? v)
+                                                    (or (get id->ident v) [:block/uuid (get id->uuid v)])
+
+                                                    (and (sequential? v) (every? id-ref-exists? v))
+                                                    (map (fn [id] (or (get id->ident id) [:block/uuid (get id->uuid id)])) v)
+
+                                                    :else
+                                                    v)]
+                                            [k v])) (dissoc block :db/id))
+                                   (into {}))) blocks)]
+    (concat id-tx-data blocks-tx-data)))
+
 (defn- new-task--transact-remote-all-blocks
   [all-blocks repo graph-uuid]
   (let [{:keys [t blocks]} all-blocks
@@ -271,7 +300,7 @@
         blocks (fill-block-fields blocks)
         [schema-blocks normal-blocks] (blocks->schema-blocks+normal-blocks blocks)
         tx-data (concat
-                 normal-blocks
+                 (blocks-resolve-temp-id normal-blocks)
                  [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}])
         init-tx-data (concat [{:db/ident :logseq.kv/db-type :kv/value "db"}]
                              schema-blocks)
