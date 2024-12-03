@@ -115,8 +115,10 @@
   {:pre [(qualified-keyword? (:db/ident block))]}
   (block-with-timestamps
    (cond-> (merge block
-                  {:block/tags #{:logseq.class/Tag}
-                   :block/format :markdown})
+                  (cond->
+                   {:block/format :markdown}
+                    (not= (:db/ident block) :logseq.class/Tag)
+                    (assoc :block/tags #{:logseq.class/Tag})))
      (and (not= (:db/ident block) :logseq.class/Root)
           (nil? (:logseq.property/parent block)))
      (assoc :logseq.property/parent :logseq.class/Root))))
