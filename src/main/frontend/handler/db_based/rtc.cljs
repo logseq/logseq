@@ -1,29 +1,31 @@
 (ns frontend.handler.db-based.rtc
   "RTC handler"
-  (:require [frontend.config :as config]
+  (:require [frontend.common.missionary-util :as c.m]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
-
-(defn <rtc-create-graph!
+(defn new-task--rtc-create-graph!
   [repo]
-  (when-let [^js worker @state/*db-worker]
-    (user-handler/<wrap-ensure-id&access-token
-     (let [token (state/get-auth-id-token)
-           repo-name (sqlite-common-db/sanitize-db-name repo)]
-       (.rtc-async-upload-graph2 worker repo token repo-name)))))
+  (m/sp
+    (when-let [^js worker @state/*db-worker]
+      (m/? user-handler/task--ensure-id&access-token)
+      (let [token (state/get-auth-id-token)
+            repo-name (sqlite-common-db/sanitize-db-name repo)]
+        (c.m/<? (.rtc-async-upload-graph worker repo token repo-name))))))
 
 (defn <rtc-delete-graph!
   [graph-uuid]
   (when-let [^js worker @state/*db-worker]
     (user-handler/<wrap-ensure-id&access-token
      (let [token (state/get-auth-id-token)]
-       (.rtc-delete-graph2 worker token graph-uuid)))))
+       (.rtc-delete-graph worker token graph-uuid)))))
 
 (defn <rtc-download-graph!
   [graph-name graph-uuid timeout-ms]
@@ -50,17 +52,17 @@
 (defn <rtc-stop!
   []
   (when-let [^js worker @state/*db-worker]
-    (.rtc-stop2 worker)))
+    (.rtc-stop worker)))
 
 (defn <rtc-start!
   [repo]
   (when-let [^js worker @state/*db-worker]
     (when (ldb/get-graph-rtc-uuid (db/get-db repo))
-      (user-handler/<wrap-ensure-id&access-token
-        ;; TODO: `<rtc-stop!` can return a chan so that we can remove timeout
+      (p/do!
+       (js/Promise. user-handler/task--ensure-id&access-token)
        (<rtc-stop!)
        (let [token (state/get-auth-id-token)]
-         (p/let [result (.rtc-start2 worker repo token)
+         (p/let [result (.rtc-start worker repo token)
                  start-ex (ldb/read-transit-str result)
                  _ (case (:type (:ex-data start-ex))
                      (:rtc.exception/not-rtc-graph
@@ -70,7 +72,7 @@
                      :rtc.exception/lock-failed
                      (js/setTimeout #(<rtc-start! repo) 1000)
 
-                     ;; else
+                      ;; else
                      nil)]
            nil))))))
 
@@ -80,7 +82,7 @@
     (user-handler/<wrap-ensure-id&access-token
      (let [token (state/get-auth-id-token)]
        (when worker
-         (p/let [result (.rtc-get-graphs2 worker token)
+         (p/let [result (.rtc-get-graphs worker token)
                  graphs (ldb/read-transit-str result)
                  result (->> graphs
                              (remove (fn [graph] (= (:graph-status graph) "deleting")))
@@ -100,7 +102,7 @@
     (when-let [^js worker @state/*db-worker]
       (p/let [token (state/get-auth-id-token)
               repo (state/get-current-repo)
-              result (.rtc-get-users-info2 worker token graph-uuid)
+              result (.rtc-get-users-info worker token graph-uuid)
               result (ldb/read-transit-str result)]
         (state/set-state! :rtc/users-info {repo result})))))
 
@@ -110,9 +112,9 @@
     (let [token (state/get-auth-id-token)]
       (->
        (p/do!
-        (.rtc-grant-graph-access2 worker token graph-uuid
-                                  (ldb/write-transit-str [])
-                                  (ldb/write-transit-str [email]))
+        (.rtc-grant-graph-access worker token graph-uuid
+                                 (ldb/write-transit-str [])
+                                 (ldb/write-transit-str [email]))
         (notification/show! (str "Invitation sent!") :success))
        (p/catch (fn [e]
                   (notification/show! (str "Something wrong, please try again.") :error)

@@ -430,13 +430,11 @@
                          (p/let [repo (repo-handler/new-db! @*graph-name)]
                            (when @*cloud?
                              (->
-                              (p/do!
-                               (state/set-state! :rtc/uploading? true)
-                               (async-util/c->p (rtc-handler/<rtc-create-graph! repo))
-                               (state/set-state! :rtc/uploading? false)
-                                ;; No need to wait for rtc-start since it's a go loop that'll
-                                ;; return a value once it's stopped
-                               (and (rtc-handler/<rtc-start! repo) false))
+                              (p/do
+                                (state/set-state! :rtc/uploading? true)
+                                (js/Promise. (rtc-handler/new-task--rtc-create-graph! repo))
+                                (state/set-state! :rtc/uploading? false)
+                                (rtc-handler/<rtc-start! repo))
                               (p/catch (fn [error]
                                          (reset! *creating-db? false)
                                          (state/set-state! :rtc/uploading? false)
