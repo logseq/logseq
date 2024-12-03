@@ -1,7 +1,7 @@
 (ns frontend.components.repo
-  (:require [cljs.core.async :as async :refer [<! go]]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.common.async-util :as async-util]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -119,14 +119,15 @@
                                action-confirm-fn! (if only-cloud?
                                                     (fn []
                                                       (when (or manager? (not db-graph?))
-                                                        (let [delete-graph (if db-graph?
-                                                                             rtc-handler/<rtc-delete-graph!
-                                                                             file-sync/<delete-graph)]
+                                                        (let [<delete-graph (if db-graph?
+                                                                              rtc-handler/<rtc-delete-graph!
+                                                                              (fn [graph-uuid]
+                                                                                (async-util/c->p (file-sync/<delete-graph graph-uuid))))]
                                                           (state/set-state! [:file-sync/remote-graphs :loading] true)
-                                                          (go (<! (delete-graph GraphUUID))
-                                                              (state/delete-repo! repo)
-                                                              (state/delete-remote-graph! repo)
-                                                              (state/set-state! [:file-sync/remote-graphs :loading] false)))))
+                                                          (p/do! (<delete-graph GraphUUID)
+                                                                 (state/delete-repo! repo)
+                                                                 (state/delete-remote-graph! repo)
+                                                                 (state/set-state! [:file-sync/remote-graphs :loading] false)))))
                                                     unlink-or-remote-fn!)
                                confirm-fn!
                                (fn []
