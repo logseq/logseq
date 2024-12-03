@@ -8,6 +8,7 @@
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
+            [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
@@ -124,6 +125,16 @@ default = false")
                                      :tx-meta (:tx-meta tx-report)
                                      :tx-data full-tx-data
                                      :db-before (:db-before tx-report))]
+          {:tx-report final-tx-report})
+
+        (::gp-exporter/new-graph? tx-meta)
+        (let [{:keys [refs-tx-report path-refs-tx-report]}
+              (outliner-pipeline/transact-new-db-graph-refs conn tx-report)
+              full-tx-data (concat (:tx-data tx-report)
+                                   (:tx-data refs-tx-report)
+                                   (:tx-data path-refs-tx-report))
+              final-tx-report (-> (or path-refs-tx-report refs-tx-report tx-report)
+                                  (assoc :tx-data full-tx-data))]
           {:tx-report final-tx-report})
 
         :else
