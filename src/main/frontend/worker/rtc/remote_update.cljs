@@ -350,42 +350,42 @@
 
 (defn- diff-block-kv->tx-data
   [db db-schema e k local-v remote-v]
-  (let [k-schema (get db-schema k)
-        ref? (= :db.type/ref (:db/valueType k-schema))
-        card-many? (= :db.cardinality/many (:db/cardinality k-schema))]
-    (case [ref? card-many?]
-      [true true]
-      (let [[local-only remote-only] (data/diff (set local-v) (set remote-v))]
-        (cond-> []
-          (seq local-only) (concat (map (fn [block-uuid] [:db/retract e k [:block/uuid block-uuid]]) local-only))
-          (seq remote-only) (concat (keep (fn [block-uuid]
-                                            (when-let [db-id (:db/id (d/entity db [:block/uuid block-uuid]))]
-                                              [:db/add e k db-id])) remote-only))))
+  (when-let [k-schema (get db-schema k)]
+    (let [ref? (= :db.type/ref (:db/valueType k-schema))
+          card-many? (= :db.cardinality/many (:db/cardinality k-schema))]
+      (case [ref? card-many?]
+        [true true]
+        (let [[local-only remote-only] (data/diff (set local-v) (set remote-v))]
+          (cond-> []
+            (seq local-only) (concat (map (fn [block-uuid] [:db/retract e k [:block/uuid block-uuid]]) local-only))
+            (seq remote-only) (concat (keep (fn [block-uuid]
+                                              (when-let [db-id (:db/id (d/entity db [:block/uuid block-uuid]))]
+                                                [:db/add e k db-id])) remote-only))))
 
-      [true false]
-      (let [remote-block-uuid (if (coll? remote-v) (first remote-v) remote-v)]
-        (when (not= local-v remote-block-uuid)
-          (if (nil? remote-block-uuid)
-            [[:db/retract e k]]
-            (when-let [db-id (:db/id (d/entity db [:block/uuid remote-block-uuid]))]
-              [[:db/add e k db-id]]))))
+        [true false]
+        (let [remote-block-uuid (if (coll? remote-v) (first remote-v) remote-v)]
+          (when (not= local-v remote-block-uuid)
+            (if (nil? remote-block-uuid)
+              [[:db/retract e k]]
+              (when-let [db-id (:db/id (d/entity db [:block/uuid remote-block-uuid]))]
+                [[:db/add e k db-id]]))))
 
-      [false false]
-      (let [remote-v* (if (coll? remote-v)
-                        (first (map ldb/read-transit-str remote-v))
-                        (ldb/read-transit-str remote-v))]
-        (when (not= local-v remote-v*)
-          (if (nil? remote-v*)
-            [[:db/retract e k]]
-            [[:db/add e k remote-v*]])))
+        [false false]
+        (let [remote-v* (if (coll? remote-v)
+                          (first (map ldb/read-transit-str remote-v))
+                          (ldb/read-transit-str remote-v))]
+          (when (not= local-v remote-v*)
+            (if (nil? remote-v*)
+              [[:db/retract e k]]
+              [[:db/add e k remote-v*]])))
 
-      [false true]
-      (let [_ (assert (or (nil? remote-v) (coll? remote-v)) {:remote-v remote-v :a k :e e})
-            remote-v* (set (map ldb/read-transit-str remote-v))
-            [local-only remote-only] (data/diff (set local-v) remote-v*)]
-        (cond-> []
-          (seq local-only) (concat (map (fn [v] [:db/retract e k v]) local-only))
-          (seq remote-only) (concat (map (fn [v] [:db/add e k v]) remote-only)))))))
+        [false true]
+        (let [_ (assert (or (nil? remote-v) (coll? remote-v)) {:remote-v remote-v :a k :e e})
+              remote-v* (set (map ldb/read-transit-str remote-v))
+              [local-only remote-only] (data/diff (set local-v) remote-v*)]
+          (cond-> []
+            (seq local-only) (concat (map (fn [v] [:db/retract e k v]) local-only))
+            (seq remote-only) (concat (map (fn [v] [:db/add e k v]) remote-only))))))))
 
 (defn- diff-block-map->tx-data
   [db e local-block-map remote-block-map]
