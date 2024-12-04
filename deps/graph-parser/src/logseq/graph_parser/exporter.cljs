@@ -259,10 +259,6 @@
           (assoc :logseq.task/status status-ident)
           (update :block/title string/replace-first (re-pattern (str marker "\\s*")) "")
           (update :block/tags (fnil conj []) :logseq.class/Task)
-          ;; FIXME: block/refs property calculation should be handled by a listener
-          (update :block/refs (fn [refs]
-                                (into (remove #(= marker (:block/title %)) refs)
-                                      [:logseq.class/Task :logseq.task/status])))
           (dissoc :block/marker)))
     block))
 
@@ -279,10 +275,6 @@
       (-> block
           (assoc :logseq.task/priority priority-value)
           (update :block/title string/replace-first (re-pattern (str "\\[#" priority "\\]" "\\s*")) "")
-          ;; FIXME: block/refs property calculation should be handled by a listener
-          (update :block/refs (fn [refs]
-                                (into (remove #(= priority (:block/title %)) refs)
-                                      [:logseq.task/priority])))
           (dissoc :block/priority)))
     block))
 
@@ -309,7 +301,6 @@
       {:block
        (-> block
            (assoc :logseq.task/deadline [:block/uuid (:block/uuid deadline-page)])
-           (update :block/refs (fnil into []) [:logseq.task/deadline [:block/uuid (:block/uuid deadline-page)]])
            (dissoc :block/deadline :block/scheduled :block/repeated?))
        :properties-tx (when-not existing-journal-page [deadline-page])})
     {:block block :properties-tx []}))
