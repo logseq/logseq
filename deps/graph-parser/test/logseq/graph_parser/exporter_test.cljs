@@ -451,28 +451,32 @@
       (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (find-block-by-content @conn #"multiline block"))))
       (is (= "logbook block" (:block/title (find-block-by-content @conn #"logbook block")))))
 
-    (testing "block refs and path-refs"
+    (testing ":block/refs and :block/path-refs"
       (let [page (find-page-by-name @conn "chat-gpt")]
         (is (set/subset?
              #{"type" "LargeLanguageModel"}
              (->> page :block/refs (map #(:block/title (d/entity @conn (:db/id %)))) set))
-            "Correct :block/refs for property and its values on a page"))
+            "Page has correct property and property value :block/refs")
+        (is (set/subset?
+             #{"type" "LargeLanguageModel"}
+             (->> page :block/path-refs (map #(:block/title (d/entity @conn (:db/id %)))) set))
+            "Page has correct property and property value :block/path-refs"))
 
       (let [block (find-block-by-content @conn "old todo block")]
         (is (set/subset?
              #{:logseq.task/status :logseq.class/Task}
              (->> block
-                  :block/path-refs
+                  :block/refs
                   (map #(:db/ident (d/entity @conn (:db/id %))))
                   set))
-            "Correct :block/refs for block")
+            "Block has correct task tag and property :block/refs")
         (is (set/subset?
              #{:logseq.task/status :logseq.class/Task}
              (->> block
                   :block/path-refs
                   (map #(:db/ident (d/entity @conn (:db/id %))))
                   set))
-            "Correct :block/path-refs for block")))
+            "Block has correct task tag and property :block/path-refs")))
 
     (testing "whiteboards"
       (let [block-with-props (find-block-by-content @conn #"block with props")]
