@@ -966,16 +966,17 @@
              opts          {:url           url
                             :password      (or doc-password "")
                             :ownerDocument (.-ownerDocument loader-el)
-                            :cMapUrl       "./js/pdfjs/cmaps/"
+                            :cMapUrl       (str (if (some-> js/location.host (string/ends-with? "logseq.com"))
+                                                  "./static/" "./") "js/pdfjs/cmaps/")
                             ;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.9.179/cmaps/"
-                            :cMapPacked    true}]
-
+                            :cMapPacked true}]
+         (js-debugger)
          (set-loader-state! {:status :loading})
 
          (-> (get-doc$ (clj->js opts))
-             (p/then (fn [doc]
-                       (set-loader-state! {:pdf-document doc :status :completed})))
-             (p/catch #(set-loader-state! {:error %})))
+           (p/then (fn [doc]
+                     (set-loader-state! {:pdf-document doc :status :completed})))
+           (p/catch #(set-loader-state! {:error %})))
          #()))
      [url doc-password])
 
