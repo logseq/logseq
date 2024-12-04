@@ -1,11 +1,16 @@
 (ns frontend.components.header
   (:require [cljs-bean.core :as bean]
+            [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
             [clojure.string :as string]
+            [dommy.core :as d]
+            [frontend.common.missionary-util :as c.m]
             [frontend.components.export :as export]
             [frontend.components.file-sync :as fs-sync]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
             [frontend.components.right-sidebar :as sidebar]
+            [frontend.components.rtc.flows :as rtc-flows]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.components.server :as server]
             [frontend.components.settings :as settings]
@@ -27,11 +32,9 @@
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [logseq.shui.util :as shui-util]
+            [missionary.core :as m]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [dommy.core :as d]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [rum.core :as rum]))
 
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
@@ -45,11 +48,24 @@
                    (route-handler/redirect-to-home!))}
      (ui/icon "home" {:size ui/icon-size})]))
 
-(rum/defc rtc-collaborators < rum/reactive
-  []
+(rum/defcs rtc-collaborators <
+  rum/reactive
+  (rum/local nil ::online-users)
+  (rum/local nil ::online-users-canceler)
+  {:will-mount (fn [state]
+                 (reset!
+                  (::online-users-canceler state)
+                  (c.m/run-task
+                   (m/reduce (fn [_ v] (reset! (::online-users state) v)) rtc-flows/rtc-online-users-flow)
+                   :fetch-online-users :succ (constantly nil)))
+                 state)
+   :will-unmount (fn [state]
+                   (when @(::online-users-canceler state) (@(::online-users-canceler state)))
+                   (reset! (::online-users state) nil)
+                   state)}
+  [state]
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
-        online-users (->> (get (state/sub :rtc/users-info) (state/get-current-repo))
-                          (filter :user-online?))]
+        online-users @(::online-users state)]
     (when rtc-graph-id
       [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01
        [:a.opacity-70.text-xs
