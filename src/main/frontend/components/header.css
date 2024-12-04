@@ -327,6 +327,11 @@ html.is-zoomed-native-ios {
   -webkit-app-region: drag;
 }
 
+.recent-slider {
+  user-select: initial;
+  -webkit-app-region: no-drag
+}
+
 /* TODO: remote for prod */
 .theme-container-inner:not(.ls-left-sidebar-open) {
   .cp__header > .l {
