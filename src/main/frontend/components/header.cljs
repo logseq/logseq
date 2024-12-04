@@ -51,7 +51,7 @@
         online-users (->> (get (state/sub :rtc/users-info) (state/get-current-repo))
                           (filter :user-online?))]
     (when rtc-graph-id
-      [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01.px-2.flex-1.ml-2
+      [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01
        [:a.opacity-70.text-xs
         {:class "pt-[3px] pr-1"
          :on-click #(shui/dialog-open!
@@ -278,7 +278,7 @@
            (doseq [node old-nodes]
              (d/remove-class! node "recent-block")))))
      [recent-days])
-    [:div.flex.flex-row.gap-1.items-center
+    [:div.recent-slider.flex.flex-row.gap-1.items-center
      {:class "w-[32%]"}
      (shui/slider
       {:class "relative flex w-full touch-none select-none items-center "
@@ -363,15 +363,12 @@
               (ui/icon "search" {:size ui/icon-size})])))]]
 
      [:div.r.flex.drag-region
-      (when (and (config/db-based-graph? current-repo)
-                 (user-handler/team-member?))
-        (recent-slider))
-
       (when (and current-repo
                  (user-handler/logged-in?)
                  (config/db-based-graph? current-repo)
                  (user-handler/team-member?))
         [:<>
+         (recent-slider)
          (rum/with-key (rtc-collaborators)
            (str "collab-" current-repo))
          (rtc-indicator/indicator)])
