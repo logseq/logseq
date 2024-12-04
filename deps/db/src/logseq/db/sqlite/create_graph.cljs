@@ -174,7 +174,10 @@
         default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
                            (map mark-block-as-built-in))
         hidden-pages (concat (build-initial-views) (build-favorites-page))
-        tx (vec (concat initial-data properties-tx default-classes
+        depend-class? (fn [c] (when (contains? #{:logseq.class/Property :logseq.class/Tag :logseq.class/Closed-Value} (:db/ident c)) c))
+        depend-classes (filter depend-class? default-classes)
+        other-classes (remove depend-class? default-classes)
+        tx (vec (concat initial-data depend-classes properties-tx other-classes
                         initial-files default-pages hidden-pages))]
     (validate-tx-for-duplicate-idents tx)
     tx))
