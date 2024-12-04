@@ -642,9 +642,11 @@
                                     (route-handler/redirect-to-page! (:block/uuid property)))}})])
 
      (when (and owner-block
-                (not (and
-                      (ldb/class? owner-block)
-                      (contains? #{:logseq.property/parent} (:db/ident property)))))
+                ;; Any property should be removable from Tag Properties
+                (or class-schema?
+                    (not (and
+                          (ldb/class? owner-block)
+                          (contains? #{:logseq.property/parent} (:db/ident property))))))
        (dropdown-editor-menuitem
         {:id :delete-property :icon :x
          :title (if class-schema? "Delete property from tag" "Delete property from node")
