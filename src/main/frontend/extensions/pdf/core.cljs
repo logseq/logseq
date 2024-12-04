@@ -970,7 +970,6 @@
                                                   "./static/" "./") "js/pdfjs/cmaps/")
                             ;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.9.179/cmaps/"
                             :cMapPacked true}]
-         (js-debugger)
          (set-loader-state! {:status :loading})
 
          (-> (get-doc$ (clj->js opts))
