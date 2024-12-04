@@ -129,7 +129,6 @@ when undo this op, this original entity-map will be transacted back into db")
       (seq (:block/tags m)) (update :block/tags (partial mapv :block/uuid))
       (:block/link m)       (update :block/link :block/uuid))))
 
-
 (defn- reverse-op
   "return ops"
   [db op]
@@ -252,7 +251,6 @@ when undo this op, this original entity-map will be transacted back into db")
        (:block/parent entity)
        (:block/left entity)))
 
-
 (defmulti ^:private reverse-apply-op (fn [op _conn _repo] (first op)))
 (defmethod reverse-apply-op :default
   [_ _ _]
@@ -301,7 +299,6 @@ when undo this op, this original entity-map will be transacted back into db")
           (set (keep :block/uuid (:block/_parent block-entity)))
           block-uuid-set)))
       block-entities))))
-
 
 (defmethod reverse-apply-op ::insert-blocks
   [op conn repo]
@@ -401,7 +398,6 @@ when undo this op, this original entity-map will be transacted back into db")
       insert-op               (conj insert-op)
       (seq other-ops)         (conj-vec other-ops)
       (seq sorted-remove-ops) (conj-vec sorted-remove-ops))))
-
 
 (defn undo
   [repo page-block-uuid conn]
@@ -547,8 +543,9 @@ when undo this op, this original entity-map will be transacted back into db")
         (push-undo-ops repo page-block-uuid (if gen-boundary-op? (vec (cons boundary ops')) ops'))))))
 
 (defmethod db-listener/listen-db-changes :gen-undo-ops
-  [_ {:keys [_tx-data tx-meta db-before db-after
-             repo id->attr->datom same-entity-datoms-coll]}]
+  [_
+   {:keys [repo id->attr->datom same-entity-datoms-coll]}
+   {:keys [_tx-data tx-meta db-before db-after]}]
   (when (:gen-undo-ops? tx-meta true)
     (generate-undo-ops repo db-before db-after same-entity-datoms-coll id->attr->datom
                        (:gen-undo-boundary-op? tx-meta true)
@@ -588,5 +585,4 @@ when undo this op, this original entity-map will be transacted back into db")
                                     :n n})))
 
   (remove-watch (:undo/repo->page-block-uuid->undo-ops @worker-state/*state) :xxx)
-  (remove-watch (:undo/repo->page-block-uuid->redo-ops @worker-state/*state) :xxx)
-  )
+  (remove-watch (:undo/repo->page-block-uuid->redo-ops @worker-state/*state) :xxx))

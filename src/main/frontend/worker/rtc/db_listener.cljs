@@ -132,8 +132,9 @@
    {} entity-datoms))
 
 (defmethod db-listener/listen-db-changes :gen-rtc-ops
-  [_ {:keys [_tx-data tx-meta db-before db-after repo
-             same-entity-datoms-coll id->same-entity-datoms]}]
+  [_
+   {:keys [repo same-entity-datoms-coll id->same-entity-datoms]}
+   {:keys [_tx-data tx-meta db-before db-after]}]
   (when (and (client-op/rtc-db-graph? repo)
              (:persist-op? tx-meta true))
     (let [e->a->add?->v->t (update-vals

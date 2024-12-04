@@ -31,7 +31,7 @@ generate asset-change events.")
 
 (defn- sync-db-to-main-thread
   "Return tx-report"
-  [{:keys [tx-meta repo conn] :as tx-report}]
+  [repo conn {:keys [tx-meta] :as tx-report}]
   (let [{:keys [from-disk?]} tx-meta
         result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
         tx-report' (:tx-report result)]
@@ -57,7 +57,7 @@ generate asset-change events.")
 
 (comment
   (defmethod listen-db-changes :debug-listen-db-changes
-    [_ {:keys [tx-data tx-meta]}]
+    [_ {} {:keys [tx-data tx-meta]}]
     (prn :debug-listen-db-changes)
     (prn :tx-data tx-data)
     (prn :tx-meta tx-meta)))
@@ -95,11 +95,11 @@ generate asset-change events.")
                        (cond
                          (and in-batch-tx-mode?
                               (not (:batch-tx/exit? tx-meta)))
-                         ;; in-batch-mode & not end
+                         ;; still in batch mode
                          (vswap! *batch-all-txs into tx-data)
 
                          in-batch-tx-mode?
-                         ;; in-batch-mode & end
+                         ;; exit batch mode
                          (when-let [tx-data (not-empty (get-batch-txs))]
                            (vreset! *batch-all-txs [])
                            (let [db-before (batch-tx/get-batch-db-before)
@@ -108,26 +108,20 @@ generate asset-change events.")
                                                   :tx-data tx-data
                                                   :db-before db-before
                                                   :tx-meta tx-meta)
-                                 args* (assoc tx-report
-                                              :repo repo
-                                              :conn conn)
-                                 tx-report' (when sync-db-to-main-thread?
-                                              (sync-db-to-main-thread args*))
-                                 args** (if tx-report'
-                                          (assoc tx-report' :repo repo)
-                                          args*)
-                                 args*** (into args** (additional-args (:tx-data args**)))]
+                                 tx-report' (if sync-db-to-main-thread?
+                                              (sync-db-to-main-thread repo conn tx-report)
+                                              tx-report)
+                                 opt (into {:repo repo}
+                                           (additional-args (:tx-data tx-report')))]
                              (doseq [[k handler-fn] handlers]
-                               (handler-fn k args***))))
+                               (handler-fn k opt tx-report'))))
 
-                         (and (not in-batch-tx-mode?) (seq tx-data))
+                         (seq tx-data)
                          ;; raw transact
-                         (let [args* (assoc tx-report :repo repo :conn conn)
-                               tx-report' (when sync-db-to-main-thread?
-                                            (sync-db-to-main-thread args*))
-                               args** (if tx-report'
-                                        (assoc tx-report' :repo repo)
-                                        args*)
-                               args*** (into args** (additional-args (:tx-data args**)))]
+                         (let [tx-report' (if sync-db-to-main-thread?
+                                            (sync-db-to-main-thread repo conn tx-report)
+                                            tx-report)
+                               opt (into {:repo repo}
+                                         (additional-args (:tx-data tx-report')))]
                            (doseq [[k handler-fn] handlers]
-                             (handler-fn k args***)))))))))))
+                             (handler-fn k opt tx-report')))))))))))
