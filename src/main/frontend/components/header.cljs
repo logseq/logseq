@@ -67,17 +67,17 @@
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
         online-users @(::online-users state)]
     (when rtc-graph-id
-      [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01
-       [:a.opacity-70.text-xs
-        {:class "pt-[3px] pr-1"
+      [:div.rtc-collaborators.flex.gap-1.text-sm.py-2.bg-gray-01.items-center
+       (shui/button
+        {:variant :ghost
+         :size :sm
+         :class "px-2 opacity-50 hover:opacity-100"
          :on-click #(shui/dialog-open!
                      (fn []
                        [:div.p-2.-mb-8
                         [:h1.text-3xl.-mt-2.-ml-2 "Collaborators:"]
                         (settings/settings-collaboration)]))}
-        (if (not (seq online-users))
-          (shui/tabler-icon "user-plus")
-          (shui/tabler-icon "user-plus"))]
+        (shui/tabler-icon "user-plus"))
        (when (seq online-users)
          (for [{user-email :user/email
                 user-name :user/name
@@ -85,7 +85,7 @@
                :let [color (shui-util/uuid-color user-uuid)]]
            (when user-name
              (shui/avatar
-              {:class "w-6 h-6"
+              {:class "w-5 h-5"
                :style {:app-region "no-drag"}
                :title user-email}
               (shui/avatar-fallback
