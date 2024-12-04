@@ -189,7 +189,7 @@ default = false")
                 full-tx-data (concat (:tx-data tx-report)
                                      (:tx-data refs-tx-report)
                                      (:tx-data tx-report'))
-                final-tx-report (assoc tx-report' :tx-data full-tx-data)
+                final-tx-report (assoc tx-report' :tx-data full-tx-data :tx-meta tx-meta)
                 affected-query-keys (when-not (:importing? context)
                                       (worker-react/get-affected-queries-keys final-tx-report))]
             {:tx-report final-tx-report
