@@ -390,7 +390,7 @@ jobs:
 
   build-macos-x64:
     needs: [ compile-cljs ]
-    runs-on: macos-11
+    runs-on: macos-latest
 
     steps:
       - name: Download The Static Asset
@@ -466,7 +466,7 @@ jobs:
 
   build-macos-arm64:
     needs: [ compile-cljs ]
-    runs-on: macos-11
+    runs-on: macos-latest
 
     steps:
       - name: Download The Static Asset

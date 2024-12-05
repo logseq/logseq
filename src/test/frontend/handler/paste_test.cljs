@@ -122,6 +122,22 @@
           (is (= expected-paste result))
           (reset))))))
 
+(deftest-async editor-on-paste-with-twitter-is-now-x-lol
+  (testing "Formatted paste for the site formerly known as twitter link should paste macro wrapped as twitter"
+    (let [clipboard "https://x.com/chiefnoah13/status/1792677792506843462"
+          expected-paste "{{twitter https://x.com/chiefnoah13/status/1792677792506843462}}"]
+      (test-helper/with-reset
+        reset
+        [commands/delete-selection! (constantly nil)
+         commands/simple-insert! (fn [_input text] (p/resolved text))
+         util/stop (constantly nil)
+         util/get-selected-text (constantly "")
+         html-parser/convert (constantly nil)]
+        (p/let [result ((paste-handler/editor-on-paste! nil)
+                        #js {:clipboardData #js {:getData (constantly clipboard)}})]
+          (is (= expected-paste result))
+          (reset))))))
+
 (deftest-async editor-on-paste-with-text-over-link
   (testing "Paste text over a selected formatted link"
     (let [actual-text (atom nil)

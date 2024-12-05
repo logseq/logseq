@@ -124,7 +124,9 @@
 (defmethod handle :user/login [[_ host-ui?]]
   (if (or host-ui? (not util/electron?))
     (js/window.open config/LOGIN-URL)
-    (login/open-login-modal!)))
+    (if (mobile-util/native-platform?)
+      (route-handler/redirect! {:to :user-login})
+      (login/open-login-modal!))))
 
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (db/set-key-value repo :ast/version db-schema/ast-version)
