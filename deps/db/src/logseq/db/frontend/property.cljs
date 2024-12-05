@@ -474,6 +474,11 @@
   [s]
   (string/includes? s ".property"))
 
+(defn user-class-namespace?
+  "Determines if namespace string is a user class"
+  [s]
+  (string/includes? s ".class"))
+
 (defn property?
   "Determines if ident kw is a property visible to user"
   [k]
@@ -481,6 +486,7 @@
     (and k-name
          (or (contains? logseq-property-namespaces k-name)
              (user-property-namespace? k-name)
+             (user-class-namespace? k-name)
              ;; disallow private db-attribute-properties as they cause unwanted refs
              ;; and appear noisily in debugging contexts
              (and (keyword? k) (contains? public-db-attribute-properties k))))))

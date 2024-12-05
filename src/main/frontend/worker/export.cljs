@@ -6,8 +6,7 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.outliner.tree :as otree]
             [cljs-bean.core :as bean]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [clojure.string :as string]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- safe-keywordize
   [block]
