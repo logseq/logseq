@@ -166,8 +166,8 @@
                          :on-input-change (fn [new-value]
                                             (reset! *db-id new-value))
                          :on-input-blur (fn [new-value]
-                                            (state/sidebar-replace-block! [repo db-id block-type]
-                                                                          [repo new-value block-type]))})
+                                          (state/sidebar-replace-block! [repo db-id block-type]
+                                                                        [repo new-value block-type]))})
        (str init-key))]
 
     :page-slide-view
@@ -196,26 +196,29 @@
         multi-items? (> block-count 1)]
 
     (menu-content
-      {:on-click toggle-fn :class "w-48" :align "end"}
+     {:on-click toggle-fn :class "w-48" :align "end"}
 
-      (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-close-others)))
-      (when multi-items? (menu-item {:on-click (fn []
-                                                 (state/clear-sidebar-blocks!)
-                                                 (state/hide-right-sidebar!))} (t :right-side-bar/pane-close-all)))
-      (when (and (not collapsed?) multi-items?) [:hr.menu-separator])
-      (when-not collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse)))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others)))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all)))
-      (when (and collapsed? multi-items?) [:hr.menu-separator])
-      (when collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand)))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :right-side-bar/pane-expand-all)))
-      (when (= type :page) [:hr.menu-separator])
-      (when (= type :page)
-        (let [name (:block/name (db/entity db-id))]
-          (menu-item {:href (if (db-model/whiteboard-page? name)
-                              (rfe/href :whiteboard {:name name})
-                              (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page)))))))
+     (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-close-others)))
+     (when multi-items? (menu-item {:on-click (fn []
+                                                (state/clear-sidebar-blocks!)
+                                                (state/hide-right-sidebar!))} (t :right-side-bar/pane-close-all)))
+     (when (and (not collapsed?) multi-items?) [:hr.menu-separator])
+     (when-not collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all)))
+     (when (and collapsed? multi-items?) [:hr.menu-separator])
+     (when collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :right-side-bar/pane-expand-all)))
+     (when (= type :page) [:hr.menu-separator])
+     (when (= type :page)
+       (let [name (:block/name (db/entity db-id))]
+         (menu-item {:on-click
+                     (fn []
+                       (let [link (if (db-model/whiteboard-page? name)
+                                    (rfe/href :whiteboard {:name name})
+                                    (rfe/href :page {:name name}))]
+                         (util/open-url link)))} (t :right-side-bar/pane-open-as-page)))))))
 
 (rum/defc drop-indicator
   [idx drag-to]
@@ -283,21 +286,21 @@
                 title]]
               [:.item-actions.flex.items-center
                (shui/dropdown-menu
-                 (shui/dropdown-menu-trigger
-                   {:as-child true}
-                   (shui/button
-                     {:title   (t :right-side-bar/pane-more)
-                      :class   "px-3"
-                      :variant :text}
-                     (ui/icon "dots")))
-                 (x-menu-content db-id idx block-type collapsed? block-count #() true))
+                (shui/dropdown-menu-trigger
+                 {:as-child true}
+                 (shui/button
+                  {:title   (t :right-side-bar/pane-more)
+                   :class   "px-3"
+                   :variant :text}
+                  (ui/icon "dots")))
+                (x-menu-content db-id idx block-type collapsed? block-count #() true))
 
                (shui/button
-                 {:title    (t :right-side-bar/pane-close)
-                  :variant  :text
-                  :class "px-3"
-                  :on-click #(state/sidebar-remove-block! idx)}
-                 (ui/icon "x"))]]
+                {:title    (t :right-side-bar/pane-close)
+                 :variant  :text
+                 :class "px-3"
+                 :on-click #(state/sidebar-remove-block! idx)}
+                (ui/icon "x"))]]
 
              [:div {:role            "region"
                     :id              (str "sidebar-panel-content-" idx)
@@ -400,11 +403,11 @@
      [])
 
     (rum/use-effect!
-      (fn []
+     (fn []
         ;; sidebar animation duration
-        (js/setTimeout
-          #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
-      [sidebar-open?])
+       (js/setTimeout
+        #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
+     [sidebar-open?])
 
     [:.resizer
      {:ref              el-ref
@@ -459,9 +462,9 @@
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
-            (rum/with-key
-              (sidebar-item repo idx db-id block-type block-count)
-              (str "sidebar-block-" db-id)))
+           (rum/with-key
+             (sidebar-item repo idx db-id block-type block-count)
+             (str "sidebar-block-" db-id)))
          [:div.p-4
           [:span.font-medium.opacity-50 "Loading ..."]])]]]))
 

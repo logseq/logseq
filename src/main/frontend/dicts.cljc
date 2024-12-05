@@ -47,6 +47,7 @@
    :zh-CN   (edn-resource "dicts/zh-cn.edn")
    :zh-Hant (edn-resource "dicts/zh-hant.edn")
    :af      (edn-resource "dicts/af.edn")
+   :ca      (edn-resource "dicts/ca.edn")
    :es      (edn-resource "dicts/es.edn")
    :nb-NO   (edn-resource "dicts/nb-no.edn")
    :pt-BR   (edn-resource "dicts/pt-br.edn")
@@ -60,7 +61,8 @@
    :sk      (edn-resource "dicts/sk.edn")
    :uk      (edn-resource "dicts/uk.edn")
    :fa      (edn-resource "dicts/fa.edn")
-   :id      (edn-resource "dicts/id.edn")})
+   :id      (edn-resource "dicts/id.edn")
+   :cs      (edn-resource "dicts/cs.edn")})
 
 (def languages
   "List of languages presented to user"
@@ -71,6 +73,7 @@
    {:label "简体中文" :value :zh-CN}
    {:label "繁體中文" :value :zh-Hant}
    {:label "Afrikaans" :value :af}
+   {:label "Català" :value :ca}
    {:label "Español" :value :es}
    {:label "Norsk (bokmål)" :value :nb-NO}
    {:label "Polski" :value :pl}
@@ -84,7 +87,8 @@
    {:label "한국어" :value :ko}
    {:label "Slovenčina" :value :sk}
    {:label "فارسی" :value :fa}
-   {:label "Bahasa Indonesia" :value :id}])
+   {:label "Bahasa Indonesia" :value :id}
+   {:label "Čeština" :value :cs}])
 
 (assert (= (set (keys dicts)) (set (map :value languages)))
         "List of user-facing languages must match list of dictionaries")
