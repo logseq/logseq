@@ -7,6 +7,10 @@
     @apply max-h-[200px] !max-w-[80px] overflow-hidden;
   }
 
+  a.tag {
+    @apply text-sm whitespace-nowrap;
+  }
+
   .ls-block {
     @apply w-full py-0;
   }
