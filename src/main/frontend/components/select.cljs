@@ -29,7 +29,8 @@
               (when multiple-choices?
                 (ui/checkbox {:checked (boolean (selected-choices (:value result)))
                               :on-click (fn [e]
-                                          (.preventDefault e))}))
+                                          (.preventDefault e))
+                              :disabled (:disabled? result)}))
               value]
              (when (and (map? result) (:id result))
                [:div.tip.flex

@@ -34,7 +34,8 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.set :as set]))
 
 (rum/defc property-empty-btn-value
   [property & opts]
@@ -532,7 +533,10 @@
                                 :header header
                                 :label-value (:block/title node)
                                 :label label
-                                :value id))) nodes)
+                                :value id
+                                :disabled? (and tags? (contains?
+                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard} ldb/internal-tags)
+                                                       (:db/ident node)))))) nodes)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
         opts' (cond->
                (merge

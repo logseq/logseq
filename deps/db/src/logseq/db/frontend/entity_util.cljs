@@ -82,4 +82,4 @@
 
 (def internal-tags
   #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag
-    :logseq.class/Closed-Value})
+    :logseq.class/Closed-Value :logseq.class/Asset})
