@@ -80,13 +80,16 @@
      {:variant "text"
       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
       :on-click #(column-toggle-sorting! column)}
-     (:name column)
-     (case asc?
+      (let [title (str (:name column))]
+        [:span {:title title
+                :class "max-w-full overflow-hidden text-ellipsis"}
+         title])
+      (case asc?
        true
        (ui/icon "arrow-up")
        false
        (ui/icon "arrow-down")
-       [:div {:style {:width 18 :height 18}}]))))
+       nil))))
 
 (defn- timestamp-cell-cp
   [_table row column]
@@ -326,7 +329,7 @@
      (fn []
        (when-let [el (and (fn? js/window.interact) (rum/deref *el))]
          (let [*field-rect (atom nil)
-               min-width 120
+               min-width 40
                max-width 500]
            (-> (js/interact el)
                (.draggable
