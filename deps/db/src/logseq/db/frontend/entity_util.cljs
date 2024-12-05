@@ -78,7 +78,7 @@
                      :logseq.class/Journal :journal
                      :logseq.class/Whiteboard :whiteboard
                      :logseq.class/Page :page}]
-    (set (map ident->type (:block/tags entity)))))
+    (set (map #(ident->type (:db/ident %)) (:block/tags entity)))))
 
 (def internal-tags
   #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag
