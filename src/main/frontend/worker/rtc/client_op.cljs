@@ -120,60 +120,76 @@
          {:block-uuid block-uuid
           :av-coll (concat av-coll1 av-coll2)}]))))
 
-(defn add-ops*
-  [conn ops]
-  (let [ops (ops-coercer ops)]
-    (letfn [(already-removed? [remove-op t]
-              (some-> remove-op second (> t)))
-            (add-after-remove? [move-op t]
-              (some-> move-op second (> t)))]
-      (doseq [op ops]
-        (let [[op-type t value] op
-              {:keys [block-uuid]} value
-              exist-block-ops-entity (d/entity @conn [:block/uuid block-uuid])
-              e (:db/id exist-block-ops-entity)
-              tx-data
-              (case op-type
-                :move
-                (let [remove-op (get exist-block-ops-entity :remove)]
-                  (when-not (already-removed? remove-op t)
-                    (cond-> [{:block/uuid block-uuid
-                              :move op}]
-                      remove-op (conj [:db.fn/retractAttribute e :remove]))))
-                :update
-                (let [remove-op (get exist-block-ops-entity :remove)]
-                  (when-not (already-removed? remove-op t)
-                    (let [origin-update-op (get exist-block-ops-entity :update)
-                          op* (if origin-update-op (merge-update-ops origin-update-op op) op)]
-                      (cond-> [{:block/uuid block-uuid
-                                :update op*}]
-                        remove-op (conj [:db.fn/retractAttribute e :remove])))))
-                :remove
-                (let [move-op (get exist-block-ops-entity :move)]
-                  (when-not (add-after-remove? move-op t)
-                    (cond-> [{:block/uuid block-uuid
-                              :remove op}]
-                      move-op (conj [:db.fn/retractAttribute e :move]))))
-                :update-page
-                (let [remove-page-op (get exist-block-ops-entity :remove-page)]
-                  (when-not (already-removed? remove-page-op t)
-                    (cond-> [{:block/uuid block-uuid
-                              :update-page op}]
-                      remove-page-op (conj [:db.fn/retractAttribute e :remove-page]))))
-                :remove-page
-                (let [update-page-op (get exist-block-ops-entity :update-page)]
-                  (when-not (add-after-remove? update-page-op t)
-                    (cond-> [{:block/uuid block-uuid
-                              :remove-page op}]
-                      update-page-op (conj [:db.fn/retractAttribute e :update-page])))))]
-          (when (seq tx-data)
-            (d/transact! conn tx-data)))))))
+(defn- generate-block-ops-tx-data
+  [client-ops-db ops]
+  (let [sorted-ops (sort-by second ops)
+        block-uuids (map (fn [[_op-type _t value]] (:block-uuid value)) sorted-ops)
+        ents (d/pull-many client-ops-db '[*] (map (fn [block-uuid] [:block/uuid block-uuid]) block-uuids))
+        op-types [:move :update :remove :update-page :remove-page]
+        init-block-uuid->op-type->op
+        (into {}
+              (map (fn [ent]
+                     [(:block/uuid ent)
+                      (into {}
+                            (keep
+                             (fn [op-type]
+                               (when-let [op (get ent op-type)]
+                                 [op-type op])))
+                            op-types)]))
+              ents)
+        block-uuid->op-type->op
+        (reduce
+         (fn [r op]
+           (let [[op-type _t value] op
+                 block-uuid (:block-uuid value)]
+             (case op-type
+               :move
+               (-> r
+                   (update block-uuid assoc :remove :retract)
+                   (assoc-in [block-uuid :move] op))
+               :update
+               (-> r
+                   (update block-uuid assoc :remove :retract)
+                   (update-in [block-uuid :update] (fn [old-op]
+                                                     (if old-op
+                                                       (merge-update-ops old-op op)
+                                                       op))))
+               :remove
+               (-> r
+                   (update block-uuid assoc :move :retract :update :retract)
+                   (assoc-in [block-uuid :remove] op))
+               :update-page
+               (-> r
+                   (update block-uuid assoc :remove-page :retract)
+                   (assoc-in [block-uuid :update-page] op))
+               :remove-page
+               (-> r
+                   (update block-uuid assoc :update-page :retract)
+                   (assoc-in [block-uuid :remove-page] op)))))
+         init-block-uuid->op-type->op sorted-ops)]
+    (mapcat
+     (fn [[block-uuid op-type->op]]
+       (let [tmpid (str block-uuid)]
+         (when-let [tx-data
+                    (not-empty
+                     (keep
+                      (fn [[op-type op]]
+                        (cond
+                          (= :retract op)
+                          [:db.fn/retractAttribute [:block/uuid block-uuid] op-type]
+                          (some? op)
+                          [:db/add tmpid op-type op]))
+                      op-type->op))]
+           (cons [:db/add tmpid :block/uuid block-uuid] tx-data))))
+     block-uuid->op-type->op)))
 
 (defn add-ops
   [repo ops]
-  (let [conn (worker-state/get-client-ops-conn repo)]
+  (let [conn (worker-state/get-client-ops-conn repo)
+        ops (ops-coercer ops)]
     (assert (some? conn) repo)
-    (add-ops* conn ops)))
+    (when-let [tx-data (not-empty (generate-block-ops-tx-data @conn ops))]
+      (d/transact! conn tx-data))))
 
 (defn- get-all-block-ops*
   "Return e->op-map"
