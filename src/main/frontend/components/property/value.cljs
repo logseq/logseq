@@ -969,7 +969,9 @@
   (let [type (get schema :type :default)
         date? (= type :date)
         *el (rum/use-ref nil)
-        items (if (de/entity? v) #{v} v)]
+        items (cond->> (if (de/entity? v) #{v} v)
+                (= (:db/ident property) :block/tags)
+                (remove (fn [v] (contains? ldb/internal-tags (:db/ident v)))))]
     (rum/use-effect!
      (fn []
        (when editing?

@@ -14,6 +14,7 @@
             [frontend.util :as util :refer [react]]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.graph-parser.db :as gp-db]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
@@ -803,7 +804,9 @@ independent of format as format specific heading characters are stripped"
   (let [db (conn/get-db repo)
         classes (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
                      (map (fn [d]
-                            (db-utils/entity db (:e d)))))]
+                            (db-utils/entity db (:e d))))
+                     (remove (fn [d]
+                               (contains? entity-util/internal-tags (:db/ident d)))))]
     (if except-root-class?
       (keep (fn [e] (when-not (= :logseq.class/Root (:db/ident e)) e)) classes)
       classes)))
