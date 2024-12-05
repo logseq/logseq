@@ -822,6 +822,9 @@
        (= value :logseq.property/empty-placeholder)
        (property-empty-btn-value property)
 
+       closed-values?
+       (closed-value-item value opts)
+
        (or (ldb/page? value)
            (and (seq (:block/tags value))
                 ;; FIXME: page-cp should be renamed to node-cp and
@@ -838,9 +841,6 @@
        (contains? #{:node :class :property :page} type)
        (when-let [reference (state/get-component :block/reference)]
          (reference {} (:block/uuid value)))
-
-       closed-values?
-       (closed-value-item value opts)
 
        (de/entity? value)
        (when-some [content (str (db-property/property-value-content value))]
