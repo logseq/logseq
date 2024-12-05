@@ -560,6 +560,41 @@
        (plugins/hook-ui-slot :page-head-actions-slotted nil)
        (plugins/hook-ui-items :pagebar)])))
 
+(rum/defc tabs
+  [page opts]
+  (let [class? (ldb/class? page)
+        property? (ldb/property? page)
+        both? (and class? property?)
+        default-tab (cond
+                      both?
+                      "tag"
+                      class?
+                      "tag"
+                      :else
+                      "property")]
+    (shui/tabs
+     {:defaultValue default-tab
+      :class (str "w-full")}
+     (when both?
+       (shui/tabs-list
+        {:class "h-8"}
+        (shui/tabs-trigger
+         {:value "tag"
+          :class "py-1 text-xs"}
+         "Tagged nodes")
+        (shui/tabs-trigger
+         {:value "property"
+          :class "py-1 text-xs"}
+         "Nodes with property")))
+     (when class?
+       (shui/tabs-content
+        {:value "tag"}
+        (objects/class-objects page opts)))
+     (when property?
+       (shui/tabs-content
+        {:value "property"}
+        (objects/property-related-objects page (:current-page? opts)))))))
+
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query mixins/container-id
   (rum/local false ::all-collapsed?)
@@ -629,11 +664,8 @@
               (when (and db-based? (ldb/property? page))
                 (db-page/configure-property page))
 
-              (when (and db-based? class-page?)
-                (objects/class-objects page {:current-page? option :sidebar? sidebar?}))
-
-              (when (and db-based? (ldb/property? page))
-                (objects/property-related-objects page (:current-page? option)))
+              (when (and db-based? (or class-page? (ldb/property? page)))
+                (tabs page {:current-page? option :sidebar? sidebar?}))
 
               (when (and block? (not sidebar?) (not whiteboard?))
                 (let [config (merge config {:id "block-parent"
