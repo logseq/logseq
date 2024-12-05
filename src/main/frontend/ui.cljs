@@ -534,9 +534,10 @@
                        ;:on-pointer-down #(util/stop %)
                      :on-click (fn [e]
                                  (util/stop e)
-                                 (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                   (on-shift-chosen item)
-                                   (on-chosen item e)))}
+                                 (when-not (:disabled? item)
+                                   (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                     (on-shift-chosen item)
+                                     (on-chosen item e))))}
                     (if item-render (item-render item chosen?) item)))]]
 
             (let [group-name (and (fn? get-group-name) (get-group-name item))]

@@ -2618,14 +2618,15 @@
                      :tag? true
                      :disable-preview? true)
               tag)
-     [:a.close.flex.transition-opacity.duration-300.ease-in
-      {:class (if @*hover? "!opacity-100" "!opacity-0")
-       :title "Remove this tag"
-       :on-pointer-down
-       (fn [e]
-         (util/stop e)
-         (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
-      (ui/icon "x" {:size 15})]]))
+     (when-not (ldb/internal-tags (:db/ident tag))
+       [:a.close.flex.transition-opacity.duration-300.ease-in
+        {:class (if @*hover? "!opacity-100" "!opacity-0")
+         :title "Remove this tag"
+         :on-pointer-down
+         (fn [e]
+           (util/stop e)
+           (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
+        (ui/icon "x" {:size 15})])]))
 
 (rum/defc tags-cp
   "Tags without inline or hidden tags"
@@ -2654,13 +2655,14 @@
                                                  (fn []
                                                    (for [tag block-tags]
                                                      [:div.flex.flex-row.items-center.gap-1
-                                                      (shui/button
-                                                       {:title "Remove tag"
-                                                        :variant :ghost
-                                                        :class "!p-1 text-muted-foreground"
-                                                        :size :sm
-                                                        :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
-                                                       (ui/icon "X" {:size 14}))
+                                                      (when-not (ldb/internal-tags (:db/ident tag))
+                                                        (shui/button
+                                                         {:title "Remove tag"
+                                                          :variant :ghost
+                                                          :class "!p-1 text-muted-foreground"
+                                                          :size :sm
+                                                          :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
+                                                         (ui/icon "X" {:size 14})))
                                                       (page-cp (assoc config
                                                                       :tag? true
                                                                       :disable-preview? true
