@@ -12,7 +12,7 @@ on:
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
   JAVA_VERSION: '11'
 
 jobs:
