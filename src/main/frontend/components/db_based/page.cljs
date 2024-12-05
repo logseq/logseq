@@ -9,7 +9,7 @@
 (rum/defc configure-property < rum/reactive db-mixins/query
   [page]
   (let [page (db/sub-block (:db/id page))]
-    [:div.pb-4.-ml-1
+    [:div.-ml-1
      (shui/button
       {:variant "ghost"
        :class "opacity-50 hover:opacity-90"
