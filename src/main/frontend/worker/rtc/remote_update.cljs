@@ -229,17 +229,34 @@
   (doseq [op remove-page-ops]
     (worker-page/delete! repo conn (:block-uuid op) {:persist-op? false})))
 
+(defn- get-schema-ref+cardinality
+  [db-schema attr]
+  (when-let [k-schema (get db-schema attr)]
+    [(= :db.type/ref (:db/valueType k-schema))
+     (= :db.cardinality/many (:db/cardinality k-schema))]))
+
 (defn- patch-remote-attr-map-by-local-av-coll
   [attr-map av-coll]
-  (let [a->add->v+t (reduce
-                     (fn [m [a v t add?]]
-                       (assoc-in m [a add?] [v t]))
-                     {} av-coll)]
+  (let [a->add->v-set
+        (reduce
+         (fn [m [a v _t add?]]
+           (let [{add-vset true retract-vset false} (get m a {true #{} false #{}})]
+             (assoc m a {true ((if add? conj disj) add-vset v)
+                         false ((if add? disj conj) retract-vset v)})))
+         {} av-coll)]
     (into attr-map
           (keep
-           (fn [[remote-a _remote-v]]
-             (when-let [v (get-in a->add->v+t [remote-a true 0])]
-               [remote-a v])))
+           (fn [[remote-a remote-v]]
+             (when-let [{add-vset true retract-vset false} (get a->add->v-set remote-a)]
+               [remote-a
+                (if (coll? remote-v)
+                  (-> (set remote-v)
+                      (set/union add-vset)
+                      (set/difference retract-vset)
+                      vec)
+                  (cond
+                    (seq add-vset) (first add-vset)
+                    (contains? retract-vset remote-v) nil))])))
           attr-map)))
 
 (defn- update-remote-data-by-local-unpushed-ops
@@ -350,42 +367,40 @@
 
 (defn- diff-block-kv->tx-data
   [db db-schema e k local-v remote-v]
-  (when-let [k-schema (get db-schema k)]
-    (let [ref? (= :db.type/ref (:db/valueType k-schema))
-          card-many? (= :db.cardinality/many (:db/cardinality k-schema))]
-      (case [ref? card-many?]
-        [true true]
-        (let [[local-only remote-only] (data/diff (set local-v) (set remote-v))]
-          (cond-> []
-            (seq local-only) (concat (map (fn [block-uuid] [:db/retract e k [:block/uuid block-uuid]]) local-only))
-            (seq remote-only) (concat (keep (fn [block-uuid]
-                                              (when-let [db-id (:db/id (d/entity db [:block/uuid block-uuid]))]
-                                                [:db/add e k db-id])) remote-only))))
+  (when-let [[ref? card-many?] (get-schema-ref+cardinality db-schema k)]
+    (case [ref? card-many?]
+      [true true]
+      (let [[local-only remote-only] (data/diff (set local-v) (set remote-v))]
+        (cond-> []
+          (seq local-only) (concat (map (fn [block-uuid] [:db/retract e k [:block/uuid block-uuid]]) local-only))
+          (seq remote-only) (concat (keep (fn [block-uuid]
+                                            (when-let [db-id (:db/id (d/entity db [:block/uuid block-uuid]))]
+                                              [:db/add e k db-id])) remote-only))))
 
-        [true false]
-        (let [remote-block-uuid (if (coll? remote-v) (first remote-v) remote-v)]
-          (when (not= local-v remote-block-uuid)
-            (if (nil? remote-block-uuid)
-              [[:db/retract e k]]
-              (when-let [db-id (:db/id (d/entity db [:block/uuid remote-block-uuid]))]
-                [[:db/add e k db-id]]))))
+      [true false]
+      (let [remote-block-uuid (if (coll? remote-v) (first remote-v) remote-v)]
+        (when (not= local-v remote-block-uuid)
+          (if (nil? remote-block-uuid)
+            [[:db/retract e k]]
+            (when-let [db-id (:db/id (d/entity db [:block/uuid remote-block-uuid]))]
+              [[:db/add e k db-id]]))))
 
-        [false false]
-        (let [remote-v* (if (coll? remote-v)
-                          (first (map ldb/read-transit-str remote-v))
-                          (ldb/read-transit-str remote-v))]
-          (when (not= local-v remote-v*)
-            (if (nil? remote-v*)
-              [[:db/retract e k]]
-              [[:db/add e k remote-v*]])))
+      [false false]
+      (let [remote-v* (if (coll? remote-v)
+                        (first (map ldb/read-transit-str remote-v))
+                        (ldb/read-transit-str remote-v))]
+        (when (not= local-v remote-v*)
+          (if (nil? remote-v*)
+            [[:db/retract e k]]
+            [[:db/add e k remote-v*]])))
 
-        [false true]
-        (let [_ (assert (or (nil? remote-v) (coll? remote-v)) {:remote-v remote-v :a k :e e})
-              remote-v* (set (map ldb/read-transit-str remote-v))
-              [local-only remote-only] (data/diff (set local-v) remote-v*)]
-          (cond-> []
-            (seq local-only) (concat (map (fn [v] [:db/retract e k v]) local-only))
-            (seq remote-only) (concat (map (fn [v] [:db/add e k v]) remote-only))))))))
+      [false true]
+      (let [_ (assert (or (nil? remote-v) (coll? remote-v)) {:remote-v remote-v :a k :e e})
+            remote-v* (set (map ldb/read-transit-str remote-v))
+            [local-only remote-only] (data/diff (set local-v) remote-v*)]
+        (cond-> []
+          (seq local-only) (concat (map (fn [v] [:db/retract e k v]) local-only))
+          (seq remote-only) (concat (map (fn [v] [:db/add e k v]) remote-only)))))))
 
 (defn- diff-block-map->tx-data
   [db e local-block-map remote-block-map]
@@ -410,32 +425,29 @@
   (let [db-schema (d/schema db)
         local-block-map (->> ent
                              (filter (comp update-op-watched-attr? first))
-                             (map (fn [[k v]]
-                                    (let [k-schema (get db-schema k)
-                                          ref? (= :db.type/ref (:db/valueType k-schema))
-                                          card-many? (= :db.cardinality/many (:db/cardinality k-schema))]
-                                      [k
-                                       (case [ref? card-many?]
-                                         [true true]
-                                         (keep (fn [x] (when-let [e (:db/id x)] (:block/uuid (d/entity db e)))) v)
-                                         [true false]
-                                         (let [v* (some->> (:db/id v) (d/entity db) :block/uuid)]
-                                           (assert (some? v*) v)
-                                           v*)
-                                         ;; else
-                                         v)])))
+                             (keep (fn [[k v]]
+                                     (when-let [[ref? card-many?] (get-schema-ref+cardinality db-schema k)]
+                                       [k
+                                        (case [ref? card-many?]
+                                          [true true]
+                                          (keep (fn [x] (when-let [e (:db/id x)] (:block/uuid (d/entity db e)))) v)
+                                          [true false]
+                                          (let [v* (some->> (:db/id v) (d/entity db) :block/uuid)]
+                                            (assert (some? v*) v)
+                                            v*)
+                                          ;; else
+                                          v)])))
                              (into {}))
         remote-block-map (->> op-value
                               (filter (comp update-op-watched-attr? first))
-                              (map (fn [[k v]]
+                              (keep (fn [[k v]]
                                      ;; all non-built-in attrs is card-many in remote-op,
                                      ;; convert them according to the client db-schema
-                                     (let [k-schema (get db-schema k)
-                                           card-many? (= :db.cardinality/many (:db/cardinality k-schema))]
-                                       [k
-                                        (if (and (coll? v) (not card-many?))
-                                          (first v)
-                                          v)])))
+                                      (when-let [[_ref? card-many?] (get-schema-ref+cardinality db-schema k)]
+                                        [k
+                                         (if (and (coll? v) (not card-many?))
+                                           (first v)
+                                           v)])))
                               (into {}))]
     (diff-block-map->tx-data db (:db/id ent) local-block-map remote-block-map)))
 
