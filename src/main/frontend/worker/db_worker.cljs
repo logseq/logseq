@@ -281,20 +281,23 @@
             client-ops-db (new (.-OpfsSAHPoolDb pool) (str "client-ops-" repo-path))]
       [db search-db client-ops-db])))
 
+(defn- enable-sqlite-wal-mode!
+  [^Object db]
+  (.exec db "PRAGMA locking_mode=exclusive")
+  (.exec db "PRAGMA journal_mode=WAL"))
+
 (defn- create-or-open-db!
   [repo {:keys [config import-type]}]
   (when-not (worker-state/get-sqlite-conn repo)
-    (p/let [[db search-db client-ops-db] (get-dbs repo)
+    (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage repo {})
             client-ops-storage (when-not @*publishing? (new-sqlite-client-ops-storage repo))
             db-based? (sqlite-util/db-based-graph? repo)]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
                                        :client-ops client-ops-db})
-      (.exec db "PRAGMA locking_mode=exclusive")
-      (.exec db "PRAGMA journal_mode=WAL")
-      (.exec client-ops-db "PRAGMA locking_mode=exclusive")
-      (.exec client-ops-db "PRAGMA journal_mode=WAL")
+      (doseq [db' dbs]
+        (enable-sqlite-wal-mode! db'))
       (sqlite-common-db/create-kvs-table! db)
       (when-not @*publishing? (sqlite-common-db/create-kvs-table! client-ops-db))
       (db-migrate/migrate-sqlite-db db)
