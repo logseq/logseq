@@ -81,5 +81,5 @@
     (set (map #(ident->type (:db/ident %)) (:block/tags entity)))))
 
 (def internal-tags
-  #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag
+  #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag :logseq.class/Root
     :logseq.class/Closed-Value :logseq.class/Asset})
