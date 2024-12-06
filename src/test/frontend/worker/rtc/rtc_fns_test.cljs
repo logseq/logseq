@@ -78,7 +78,10 @@
               {:op :update-attrs
                :self uuid1
                :block/title "update content"}}
-             r)))))
+             r))))
+  (testing "case5: card-many attr"
+    ;; (assert false :TODO)
+    ))
 
 (deftest ^:fix-me apply-remote-move-ops-test
   (let [repo (state/get-current-repo)
