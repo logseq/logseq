@@ -196,7 +196,7 @@
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
-                 (let [page-e (second (:rum/args state))
+                 (let [page-e (first (:rum/args state))
                        page-name (:block/name page-e)]
                    (when (and page-name
                               (db/journal-page? page-name)
@@ -204,7 +204,7 @@
                                   (date/journal-title->int (date/today))))
                      (state/pub-event! [:journal/insert-template page-name])))
                  state)}
-  [state repo page-e {:keys [sidebar? whiteboard?] :as config}]
+  [state page-e {:keys [sidebar? whiteboard?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
@@ -220,44 +220,35 @@
                      (remove (fn [b] (some? (get b (:db/ident block)))) children)
 
                      :else
-                     children)
-          db-based? (config/db-based-graph? repo)]
-      [:<>
-       (let [blocks (cond
-                      (and
-                       (not block?)
-                       (empty? children) page-e)
-                      (dummy-block page-e)
+                     children)]
+      (cond
+        (and
+         (not block?)
+         (empty? children) page-e)
+        (dummy-block page-e)
 
-                      :else
-                      (let [document-mode? (state/sub :document/mode?)
-                            hiccup-config (merge
-                                           {:id (if block? (str block-id) page-name)
-                                            :db/id (:db/id block)
-                                            :block? block?
-                                            :editor-box editor/box
-                                            :document/mode? document-mode?}
-                                           config)
-                            config (common-handler/config-with-document-mode hiccup-config)
-                            blocks (if block? [block] (db/sort-by-order children block))]
-                        (let [add-button? (not (or config/publishing?
-                                                   (let [last-child-id (model/get-block-deep-last-open-child-id (db/get-db) (:db/id (last blocks)))
-                                                         block' (if last-child-id (db/entity last-child-id) (last blocks))]
-                                                     (string/blank? (:block/title block')))))]
-                          [:div
-                           {:class (when add-button? "show-add-button")}
-                           (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
-                           (let [args (if block-id
-                                        {:block-uuid block-id}
-                                        {:page page-name})]
-                             (add-button args (:container-id config)))])))]
-         (if (and db-based? (or (ldb/class? block) (ldb/property? block)))
-           [:div.mt-4.ml-2.-mb-1
-            (ui/foldable
-             [:div.font-medium.as-toggle {:class "pl-0.5"} "Notes"]
-             [:div.ml-1.-mb-2 blocks]
-             {:disable-on-pointer-down? true})]
-           blocks))])))
+        :else
+        (let [document-mode? (state/sub :document/mode?)
+              hiccup-config (merge
+                             {:id (if block? (str block-id) page-name)
+                              :db/id (:db/id block)
+                              :block? block?
+                              :editor-box editor/box
+                              :document/mode? document-mode?}
+                             config)
+              config (common-handler/config-with-document-mode hiccup-config)
+              blocks (if block? [block] (db/sort-by-order children block))]
+          (let [add-button? (not (or config/publishing?
+                                     (let [last-child-id (model/get-block-deep-last-open-child-id (db/get-db) (:db/id (last blocks)))
+                                           block' (if last-child-id (db/entity last-child-id) (last blocks))]
+                                       (string/blank? (:block/title block')))))]
+            [:div
+             {:class (when add-button? "show-add-button")}
+             (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
+             (let [args (if block-id
+                          {:block-uuid block-id}
+                          {:page page-name})]
+               (add-button args (:container-id config)))]))))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -560,9 +551,17 @@
        (plugins/hook-ui-slot :page-head-actions-slotted nil)
        (plugins/hook-ui-items :pagebar)])))
 
+(rum/defc rotating-arrow
+  [collapsed?]
+  [:span
+   {:class (if collapsed? "rotating-arrow collapsed" "rotating-arrow not-collapsed")}
+   (svg/caret-right)])
+
 (rum/defc tabs
   [page opts]
-  (let [class? (ldb/class? page)
+  (let [[collapsed? set-collapsed!] (rum/use-state false)
+        [control-display? set-control-display!] (rum/use-state false)
+        class? (ldb/class? page)
         property? (ldb/property? page)
         both? (and class? property?)
         default-tab (cond
@@ -572,32 +571,45 @@
                       "tag"
                       :else
                       "property")]
-    (shui/tabs
-     {:defaultValue default-tab
-      :class (str "w-full")}
-     (when (or both? property?)
-       (shui/tabs-list
-        {:class "h-8"}
-        (when class?
-          (shui/tabs-trigger
-           {:value "tag"
-            :class "py-1 text-xs"}
-           "Tagged nodes"))
-        (when property?
-          (shui/tabs-trigger
-           {:value "property"
-            :class "py-1 text-xs"}
-           "Nodes with property"))
-        (when property?
-          (db-page/configure-property page))))
-     (when class?
-       (shui/tabs-content
-        {:value "tag"}
-        (objects/class-objects page opts)))
-     (when property?
-       (shui/tabs-content
-        {:value "property"}
-        (objects/property-related-objects page (:current-page? opts)))))))
+    [:div.page-tabs
+     (shui/tabs
+      {:defaultValue default-tab
+       :class (str "w-full")}
+      (when (or both? property?)
+        [:div.flex.flex-row.gap-1.items-center.-ml-4
+         {:on-mouse-over #(set-control-display! true)
+          :on-mouse-out #(set-control-display! false)}
+         [:a
+          {:class (if (or control-display? collapsed?)
+                    "opacity-50 hover:opacity-100"
+                    "opacity-0")
+           :on-click #(set-collapsed! (not collapsed?))}
+          (rotating-arrow collapsed?)]
+         (shui/tabs-list
+          {:class "h-8"}
+          (when class?
+            (shui/tabs-trigger
+             {:value "tag"
+              :class "py-1 text-xs"}
+             "Tagged nodes"))
+          (when property?
+            (shui/tabs-trigger
+             {:value "property"
+              :class "py-1 text-xs"}
+             "Nodes with property"))
+          (when property?
+            (db-page/configure-property page)))])
+
+      (when-not collapsed?
+        [:<>
+         (when class?
+           (shui/tabs-content
+            {:value "tag"}
+            (objects/class-objects page opts)))
+         (when property?
+           (shui/tabs-content
+            {:value "property"}
+            (objects/property-related-objects page (:current-page? opts))))]))]))
 
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query mixins/container-id
@@ -665,19 +677,19 @@
                                           :preview? preview?})))
                  (lsp-pagebar-slot)])
 
-              (when (and db-based? (or class-page? (ldb/property? page)))
-                (tabs page {:current-page? option :sidebar? sidebar?}))
-
               (when (and block? (not sidebar?) (not whiteboard?))
                 (let [config (merge config {:id "block-parent"
                                             :block? true})]
                   [:div.mb-4
                    (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
+              (when (and db-based? (or class-page? (ldb/property? page)))
+                (tabs page {:current-page? option :sidebar? sidebar?}))
+
               [:div.ls-page-blocks
-               (page-blocks-cp repo page (merge option {:sidebar? sidebar?
-                                                        :container-id (:container-id state)
-                                                        :whiteboard? whiteboard?}))]])
+               (page-blocks-cp page (merge option {:sidebar? sidebar?
+                                                   :container-id (:container-id state)
+                                                   :whiteboard? whiteboard?}))]])
 
            (when (not preview?)
              [:div {:style {:padding-left 9}}
