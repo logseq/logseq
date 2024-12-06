@@ -37,15 +37,15 @@
            retract-multiple-values? (and multiple-values? (sequential? value))
            multiple-values-empty? (and (sequential? old-value)
                                        (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
-           block (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
+           block' (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                         property-id value)
-           block-tx-data (cond-> block
-                           status?
+           block-tx-data (cond-> block'
+                           (and status? (not (ldb/class-instance? (d/entity @conn :logseq.class/Task) block)))
                            (assoc :block/tags :logseq.class/Task))]
        [(when multiple-values-empty?
-          [:db/retract (:db/id block) property-id :logseq.property/empty-placeholder])
+          [:db/retract (:db/id block') property-id :logseq.property/empty-placeholder])
         (when retract-multiple-values?
-          [:db/retract (:db/id block) property-id])
+          [:db/retract (:db/id block') property-id])
         block-tx-data]))))
 
 (defn- get-property-value-schema
