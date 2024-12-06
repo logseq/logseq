@@ -93,5 +93,6 @@
   [db page-m]
   {:pre [(string? (:block/title page-m))]}
   (let [db-ident (create-user-class-ident-from-name (:block/title page-m))
-        db-ident' (db-ident/ensure-unique-db-ident db db-ident)]
+        db-ident' (or (:db/ident page-m)
+                      (db-ident/ensure-unique-db-ident db db-ident))]
     (sqlite-util/build-new-class (assoc page-m :db/ident db-ident'))))

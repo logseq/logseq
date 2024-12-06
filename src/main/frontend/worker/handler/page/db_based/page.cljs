@@ -169,15 +169,24 @@
   (let [db @conn
         date-formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
         title (sanitize-title title*)
-        type (cond class?
-                   :logseq.class/Tag
-                   whiteboard?
-                   :logseq.class/Whiteboard
-                   today-journal?
-                   :logseq.class/Journal
-                   :else
-                   :logseq.class/Page)]
-    (when-not (ldb/page-exists? db title #{type})
+        types (cond class?
+                    #{:logseq.class/Tag :logseq.class/Property :logseq.class/Page}
+                    whiteboard?
+                    #{:logseq.class/Whiteboard}
+                    today-journal?
+                    #{:logseq.class/Journal}
+                    :else
+                    #{:logseq.class/Page})]
+    (if-let [existing-page-id (first (ldb/page-exists? db title types))]
+      (let [existing-page (d/entity db existing-page-id)
+            tx-meta {:persist-op? persist-op?
+                     :outliner-op :save-block}]
+        (when (and class?
+                   (not (ldb/class? existing-page))
+                   (or (ldb/property? existing-page) (ldb/internal-page? existing-page)))
+          ;; convert existing property or page to class
+          (let [tx-data (db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :db/ident :block/created-at]))]
+            (ldb/transact! conn tx-data tx-meta))))
       (let [format    :markdown
             page      (-> (gp-block/page-name->map title @conn true date-formatter
                                                    {:class? class?
