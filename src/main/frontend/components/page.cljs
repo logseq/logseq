@@ -575,17 +575,21 @@
     (shui/tabs
      {:defaultValue default-tab
       :class (str "w-full")}
-     (when both?
+     (when (or both? property?)
        (shui/tabs-list
         {:class "h-8"}
-        (shui/tabs-trigger
-         {:value "tag"
-          :class "py-1 text-xs"}
-         "Tagged nodes")
-        (shui/tabs-trigger
-         {:value "property"
-          :class "py-1 text-xs"}
-         "Nodes with property")))
+        (when class?
+          (shui/tabs-trigger
+           {:value "tag"
+            :class "py-1 text-xs"}
+           "Tagged nodes"))
+        (when property?
+          (shui/tabs-trigger
+           {:value "property"
+            :class "py-1 text-xs"}
+           "Nodes with property"))
+        (when property?
+          (db-page/configure-property page))))
      (when class?
        (shui/tabs-content
         {:value "tag"}
@@ -660,9 +664,6 @@
                                           :fmt-journal? fmt-journal?
                                           :preview? preview?})))
                  (lsp-pagebar-slot)])
-
-              (when (and db-based? (ldb/property? page))
-                (db-page/configure-property page))
 
               (when (and db-based? (or class-page? (ldb/property? page)))
                 (tabs page {:current-page? option :sidebar? sidebar?}))
