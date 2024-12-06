@@ -7,30 +7,31 @@
 (def ^:large-vars/data-var built-in-classes
   "Map of built-in classes for db graphs with their :db/ident as keys"
   (ordered-map
-   :logseq.class/Tag {:title "Tag"}
-
    :logseq.class/Root {:title "Root Tag"}
 
    :logseq.class/Page {:title "Page"}
 
-   :logseq.class/Whiteboard
-   {:title "Whiteboard"
-    :properties {:block/tags :logseq.class/Page}}
+   :logseq.class/Tag {:title "Tag"
+                      :properties {:logseq.property/parent :logseq.class/Page}}
 
    :logseq.class/Property
    {:title "Property"
-    :properties {:block/tags :logseq.class/Page}}
+    :properties {:logseq.property/parent :logseq.class/Page}}
+
+   :logseq.class/Journal
+   {:title "Journal"
+    :properties {:logseq.property/parent :logseq.class/Page
+                 :logseq.property.journal/title-format "MMM do, yyyy"}}
+
+   :logseq.class/Whiteboard
+   {:title "Whiteboard"
+    :properties {:logseq.property/parent :logseq.class/Page}}
 
    :logseq.class/Closed-Value {:title "Closed Value"}
 
    :logseq.class/Task
    {:title "Task"
     :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}
-
-   :logseq.class/Journal
-   {:title "Journal"
-    :properties {:block/tags :logseq.class/Page
-                 :logseq.property.journal/title-format "MMM do, yyyy"}}
 
    :logseq.class/Query
    {:title "Query"
