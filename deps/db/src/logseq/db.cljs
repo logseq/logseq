@@ -451,7 +451,7 @@
    (d/datoms db :avet :block/name)
    (keep (fn [d]
            (let [e (d/entity db (:e d))]
-             (when-not (hidden? e)
+             (when-not (or (hidden? e) (internal-tags (:db/ident e)))
                e))))))
 
 (defn built-in?
