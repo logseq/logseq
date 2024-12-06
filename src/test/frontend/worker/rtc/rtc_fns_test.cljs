@@ -79,9 +79,40 @@
                :self uuid1
                :block/title "update content"}}
              r))))
-  (testing "case5: card-many attr"
-    ;; (assert false :TODO)
-    ))
+  (testing "case5: card-many+ref attr"
+    (let [[uuid1 uuid2] (repeatedly random-uuid)
+          affected-blocks-map
+          {uuid1
+           {:op :update-attrs
+            :self uuid1
+            :parents [uuid2]
+            :user.property/ppp [#uuid "6752bdee-7963-4a6a-84a4-86cd456b470c"
+                                #uuid "6752bdf0-ee32-40af-8abb-3f8d179ba367"]}}
+          unpushed-ops
+          [[:update 536871132
+            {:block-uuid uuid1
+             :av-coll
+             [[:user.property/ppp
+               #uuid "6752bdee-7963-4a6a-84a4-86cd456b470c"
+               536871128
+               true]
+              [:user.property/ppp
+               #uuid "6752bdf0-ee32-40af-8abb-3f8d179ba367"
+               536871132
+               false]
+              [:user.property/ppp
+               #uuid "6752bdf0-ee32-40af-8abb-3f8d179ba888"
+               536871132
+               true]]}]]
+          r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
+      (is (= {uuid1
+              {:op :update-attrs
+               :self uuid1
+               :parents [uuid2]
+               :user.property/ppp
+               [#uuid "6752bdee-7963-4a6a-84a4-86cd456b470c"
+                #uuid "6752bdf0-ee32-40af-8abb-3f8d179ba888"]}}
+             r)))))
 
 (deftest ^:fix-me apply-remote-move-ops-test
   (let [repo (state/get-current-repo)
