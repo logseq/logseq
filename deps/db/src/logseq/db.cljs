@@ -576,8 +576,8 @@
         tags-ids (set (map :db/id tags))]
     (or
      (contains? tags-ids (:db/id class))
-     (let [class-parents (get-classes-parents tags)]
-       (contains? (set/union class-parents tags-ids) (:db/id class))))))
+     (let [class-parent-ids (set (map :db/id (get-classes-parents tags)))]
+       (contains? (set/union class-parent-ids tags-ids) (:db/id class))))))
 
 (defn get-all-pages-views
   [db]
