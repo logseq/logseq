@@ -3,11 +3,17 @@
             [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.model :as db-model]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.windows :refer [resolve-own-container] :as pdf-windows]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
+            [frontend.config :as config]
+            [frontend.db.conn :as conn]
+            [logseq.publishing.db :as publish-db]
+            [frontend.db.utils :as db-utils]
+            [frontend.db.async :as db-async]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -371,6 +377,24 @@
                        outline-data)]
          [:section.is-empty "No outlines"])])))
 
+(rum/defc area-image-for-db
+  [repo id]
+  (let [[src set-src!] (rum/use-state nil)]
+    (rum/use-effect!
+      (fn []
+        (p/let [_ (db-async/<get-block repo id {:children? false})
+                block (db-model/get-block-by-uuid id)]
+          (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
+                                              (conn/get-db (state/get-current-repo))
+                                              block
+                                              (db-utils/pull (:db/id (:block/page block)))))]
+            (-> asset-path' (assets-handler/<make-asset-url)
+              (p/then #(set-src! %))))))
+      [])
+
+    (when (string? src)
+      [:p.area-wrap [:img {:src src}]])))
+
 (rum/defc pdf-highlights-list
   [^js viewer]
 
@@ -378,7 +402,9 @@
     (rum/with-context
       [hls-state *highlights-ctx*]
       (let [hls (sort-by :page (or (seq (:initial-hls hls-state))
-                                   (:latest-hls hls-state)))]
+                                   (:latest-hls hls-state)))
+            repo (state/get-current-repo)
+            db-graph? (config/db-based-graph? repo)]
 
         (for [{:keys [id content properties page] :as hl} hls
               :let [goto-ref! #(pdf-assets/goto-block-ref! hl)]]
@@ -400,11 +426,13 @@
              (ui/icon "external-link")]]
 
            (if-let [img-stamp (:image content)]
-             (let [fpath (pdf-assets/resolve-area-image-file
-                          img-stamp (state/get-current-pdf) hl)
-                   fpath (assets-handler/<make-asset-url fpath)]
-               [:p.area-wrap
-                [:img {:src fpath}]])
+             (if db-graph?
+               (area-image-for-db repo id)
+               (let [fpath (pdf-assets/resolve-area-image-file
+                             img-stamp (state/get-current-pdf) hl)
+                     fpath (assets-handler/<make-asset-url fpath)]
+                 [:p.area-wrap
+                  [:img {:src fpath}]]))
              [:p.text-wrap (:text content)])])))))
 
 (rum/defc pdf-outline-&-highlights
