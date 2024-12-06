@@ -134,46 +134,48 @@ default = false")
                                    (:tx-data refs-tx-report)
                                    (:tx-data path-refs-tx-report))
               final-tx-report (-> (or path-refs-tx-report refs-tx-report tx-report)
-                                  (assoc :tx-data full-tx-data))]
+                                  (assoc :tx-data full-tx-data
+                                         :tx-meta tx-meta
+                                         :db-before (:db-before tx-report)))]
           {:tx-report final-tx-report})
 
         :else
         (try
           (let [display-blocks-tx-data (add-missing-properties-to-typed-display-blocks (:db-after tx-report) (:tx-data tx-report))
-                tx-report (if (seq display-blocks-tx-data)
-                            (let [result (ldb/transact! conn display-blocks-tx-data {:pipeline-replace? true})]
-                              (assoc tx-report
-                                     :tx-data (concat (:tx-data tx-report) (:tx-data result))
-                                     :db-after (:db-after result)))
-                            tx-report)
-                {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
+                tx-report* (if (seq display-blocks-tx-data)
+                             (let [result (ldb/transact! conn display-blocks-tx-data {:pipeline-replace? true})]
+                               (assoc tx-report
+                                      :tx-data (concat (:tx-data tx-report) (:tx-data result))
+                                      :db-after (:db-after result)))
+                             tx-report)
+                {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report*)
                 _ (when (sqlite-util/local-file-based-graph? repo)
                     (let [page-ids (distinct (map :db/id pages))]
                       (doseq [page-id page-ids]
                         (when (d/entity @conn page-id)
                           (file/sync-to-file repo page-id tx-meta)))))
-                deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
+                deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*)))
                 deleted-assets (keep (fn [id]
-                                       (let [e (d/entity (:db-before tx-report) [:block/uuid id])]
+                                       (let [e (d/entity (:db-before tx-report*) [:block/uuid id])]
                                          (when (ldb/asset? e)
                                            {:block/uuid (:block/uuid e)
                                             :ext (:logseq.property.asset/type e)}))) deleted-block-uuids)
                 blocks' (remove (fn [b] (deleted-block-uuids (:block/uuid b))) blocks)
                 block-refs (when (seq blocks')
-                             (rebuild-block-refs repo tx-report blocks'))
+                             (rebuild-block-refs repo tx-report* blocks'))
                 refs-tx-report (when (seq block-refs)
                                  (ldb/transact! conn block-refs {:pipeline-replace? true}))
                 replace-tx (concat
                           ;; block path refs
                             (when (seq blocks')
-                              (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report))
+                              (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))
                                     blocks' (keep (fn [b] (d/entity db-after (:db/id b))) blocks')]
-                                (compute-block-path-refs-tx tx-report blocks')))
+                                (compute-block-path-refs-tx tx-report* blocks')))
 
                           ;; update block/tx-id
                             (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
                                                          (concat pages blocks))
-                                  tx-id (get-in (or refs-tx-report tx-report) [:tempids :db/current-tx])]
+                                  tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
                               (keep (fn [b]
                                       (when-let [db-id (:db/id b)]
                                         {:db/id db-id
@@ -184,12 +186,15 @@ default = false")
                                (when-not (or (exists? js/process)
                                              (:skip-store-conn tx-meta false))
                                  (d/store @conn))
-                               tx-report))
-                _ (validate-db! repo conn tx-report tx-meta context)
-                full-tx-data (concat (:tx-data tx-report)
+                               tx-report*))
+                _ (validate-db! repo conn tx-report* tx-meta context)
+                full-tx-data (concat (:tx-data tx-report*)
                                      (:tx-data refs-tx-report)
                                      (:tx-data tx-report'))
-                final-tx-report (assoc tx-report' :tx-data full-tx-data :tx-meta tx-meta)
+                final-tx-report (assoc tx-report'
+                                       :tx-data full-tx-data
+                                       :tx-meta tx-meta
+                                       :db-before (:db-before tx-report))
                 affected-query-keys (when-not (:importing? context)
                                       (worker-react/get-affected-queries-keys final-tx-report))]
             {:tx-report final-tx-report
