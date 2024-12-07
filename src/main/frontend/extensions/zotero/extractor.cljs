@@ -6,7 +6,7 @@
             [frontend.extensions.zotero.schema :as schema]
             [frontend.extensions.zotero.setting :as setting]
             [frontend.util :as util]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]))
 
 (defn item-type [item] (-> item :data :item-type))
 
@@ -21,11 +21,11 @@
     (when citation
       (string/trim (string/replace citation "Citation Key: " "")))))
 
-(defn title [item] (-> item :data :title))
+(defn ->title [item] (-> item :data :title))
 
-(defn item-key [item] (:key item))
+(defn ->item-key [item] (:key item))
 
-(defn page-name [item]
+(defn ->page-name [item]
   (let [page-title
         (case (item-type item)
           "case"
@@ -35,14 +35,14 @@
           "statute"
           (-> item :data :name-of-act)
           ;; default use title
-          (title item))
+          (->title item))
         citekey (citation-key item)]
     (if (and (setting/setting :prefer-citekey?)
              (not (string/blank? citekey)))
       (str (setting/setting :page-insert-prefix) citekey)
       (str (setting/setting :page-insert-prefix) page-title))))
 
-(defn authors [item]
+(defn ->authors [item]
   (let [creators (-> item :data :creators)
         authors
         (into []
@@ -53,7 +53,7 @@
               creators)]
     (distinct authors)))
 
-(defn tags [item]
+(defn ->tags [item]
   (let [tags
         (->> (-> item :data :tags)
              (mapv (fn [{:keys [tag]}] (string/trim tag)))
@@ -115,11 +115,11 @@
        ", "
        (markdown-link "Web library" (web-link item))))
 
-(defn properties [item]
+(defn ->properties [item]
   (let [type    (item-type item)
         fields  (schema/fields type)
-        authors (authors item)
-        tags    (tags item)
+        authors (->authors item)
+        tags    (->tags item)
         links   (zotero-links item)
         date    (date->journal item)
         data    (-> item :data
@@ -133,7 +133,7 @@
                                 :item-type (page-ref/->page-ref type))
                          (dissoc :creators :abstract-note)
                          (rename-keys {:title :original-title})
-                         (assoc :title (page-name item)))]
+                         (assoc :title (->page-name item)))]
     (->> data
          (remove (comp (fn [v] (or (string/blank? v) (empty? v))) second))
          (into {}))))
@@ -157,7 +157,7 @@
       (str
        (markdown-link title (local-link item))
        " "
-       (zotero-imported-file-macro (item-key item) filename))
+       (zotero-imported-file-macro (->item-key item) filename))
       "linked_file"
       (str
        (markdown-link title (local-link item))
@@ -167,14 +167,14 @@
       (str
        (markdown-link title url)
        " "
-       (zotero-imported-file-macro (item-key item) filename))
+       (zotero-imported-file-macro (->item-key item) filename))
       "linked_url"
       (markdown-link title url))))
 
 (defmethod extract :default
   [item]
-  (let [page-name  (page-name item)
-        properties (properties item)
+  (let [page-name  (->page-name item)
+        properties (->properties item)
         abstract-note (-> item :data :abstract-note)]
     {:page-name  page-name
      :properties properties

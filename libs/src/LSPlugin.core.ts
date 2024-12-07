@@ -55,6 +55,7 @@ declare global {
   interface Window {
     LSPluginCore: LSPluginCore
     DOMPurify: typeof DOMPurify
+    $$callerPluginID: string | undefined
   }
 }
 
@@ -339,6 +340,7 @@ function initApiProxyHandlers(pluginLocal: PluginLocal) {
     let ret: any
 
     try {
+      window.$$callerPluginID = pluginLocal.id
       ret = await invokeHostExportedApi.apply(pluginLocal, [
         payload.method,
         ...payload.args,
@@ -347,6 +349,8 @@ function initApiProxyHandlers(pluginLocal: PluginLocal) {
       ret = {
         [LSPMSG_ERROR_TAG]: e,
       }
+    } finally {
+      window.$$callerPluginID = undefined
     }
 
     if (pluginLocal.shadow) {

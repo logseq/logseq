@@ -1,0 +1,21 @@
+;; Script that generates classes and properties for a demo of inferring properties.
+;; To generate this graph:
+;; bb dev:db-create inferred deps/db/create_graph/inferred.edn
+;;
+;; To try the demo in the UI, in any page type:
+;; - Good Will Hunting #Movie #Ben-Affleck
+;; or
+;; - DB 3 #Meeting #Tienson
+{:auto-create-ontology? true
+ :classes {:Movie {:build/schema-properties [:actor :comment]}
+           :Meeting {:build/schema-properties [:attendee :duration]}}
+ :properties
+ {:actor {:block/schema {:type :node :cardinality :many}
+          :build/schema-classes [:Person]}
+  :attendee {:block/schema {:type :node :cardinality :many}
+             :build/schema-classes [:Person]}}
+ :pages-and-blocks
+ [{:page {:block/title "Matt-Damon" :build/tags [:Person]}}
+  {:page {:block/title "Ben-Affleck" :build/tags [:Person]}}
+  {:page {:block/title "Tienson" :build/tags [:Person]}}
+  {:page {:block/title "Zhiyuan" :build/tags [:Person]}}]}

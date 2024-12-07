@@ -14,8 +14,9 @@
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
             [hiccups.runtime :as h]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [promesa.core :as p]))
+            [frontend.format.mldoc :as mldoc]
+            [promesa.core :as p]
+            [frontend.config :as config]))
 
 ;;; *opml-state*
 (def ^:private ^:dynamic
@@ -401,7 +402,7 @@
                                :remove-tags? (contains? remove-options :tag)
                                :keep-only-level<=N (:keep-only-level<=N other-options)}})
               *opml-state* *opml-state*]
-      (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
+      (let [ast (mldoc/->edn content format)
             ast (mapv common/remove-block-ast-pos ast)
             ast (removev common/Properties-block-ast? ast)
             keep-level<=n (get-in *state* [:export-options :keep-only-level<=N])
@@ -432,42 +433,48 @@
 
 (defn export-blocks-as-opml
   "options: see also `export-blocks-as-markdown`"
-  [repo root-block-uuids-or-page-name options]
-  {:pre [(or (coll? root-block-uuids-or-page-name)
-             (string? root-block-uuids-or-page-name))]}
+  [repo root-block-uuids-or-page-uuid options]
+  {:pre [(or (coll? root-block-uuids-or-page-uuid)
+             (uuid? root-block-uuids-or-page-uuid))]}
   (util/profile
    :export-blocks-as-opml
    (let [content
-         (if (string? root-block-uuids-or-page-name)
+         (if (uuid? root-block-uuids-or-page-uuid)
            ;; page
-           (common/get-page-content root-block-uuids-or-page-name)
-           (common/root-block-uuids->content repo root-block-uuids-or-page-name))
-         title (if (string? root-block-uuids-or-page-name)
-                 root-block-uuids-or-page-name
+           (common/get-page-content root-block-uuids-or-page-uuid)
+           (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+         title (if (uuid? root-block-uuids-or-page-uuid)
+                 (:block/title (db/entity [:block/uuid root-block-uuids-or-page-uuid]))
                  "untitled")
-         first-block (db/entity [:block/uuid (first root-block-uuids-or-page-name)])
+         first-block (and (coll? root-block-uuids-or-page-uuid)
+                          (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
          format (or (:block/format first-block) (state/get-preferred-format))]
      (export-helper content format options :title title))))
 
-(defn export-files-as-opml
+(defn- export-files-as-opml
   "options see also `export-blocks-as-opml`"
   [files options]
   (mapv
-   (fn [{:keys [path content names format]}]
-     (when (first names)
+   (fn [{:keys [path content title format]}]
+     (when (and title (not (string/blank? content)))
        (util/profile (print-str :export-files-as-opml path)
-                     [path (export-helper content format options :title (first names))])))
+                     [path (export-helper content format options :title title)])))
    files))
 
 (defn export-repo-as-opml!
   [repo]
-  (when-let [files (common/get-file-contents-with-suffix repo)]
-    (let [files (export-files-as-opml files nil)
-          zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
-      (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-        (when-let [anchor (gdom/getElement "export-as-opml")]
-          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-          (.setAttribute anchor "download" (.-name zipfile))
-          (.click anchor))))))
+  (p/let [files (common/<get-file-contents repo "opml")]
+    (when (seq files)
+      (let [repo (-> repo
+                     (string/replace config/db-version-prefix "")
+                     (string/replace config/local-db-prefix ""))
+            files (->> (export-files-as-opml files nil)
+                       (clojure.core/remove nil?))
+            zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
+          (when-let [anchor (gdom/getElement "export-as-opml")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor)))))))
 
 ;;; export fns (ends)
