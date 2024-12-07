@@ -726,7 +726,7 @@ Some bindings in this fn:
     (pre-transform q')))
 
 (def db-block-attrs
-  "Like ldb/block-attrs but for query dsl an db graphs"
+  "Block attributes for db graph queries"
   ;; '*' needed as we need to pull user properties and don't know their names in advance
   '[*
     {:block/page [:db/id :block/name :block/title :block/journal-day]}

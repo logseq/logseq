@@ -232,30 +232,46 @@
           future-day (some->> (t/plus current-day (t/days future-days))
                               (tf/unparse date-format)
                               (parse-long))]
-      (when future-day
-        (when-let [repo (state/get-current-repo)]
-          (p/let [result (<q repo {}
-                             '[:find [(pull ?block ?block-attrs) ...]
-                               :in $ ?day ?future ?block-attrs
-                               :where
-                               (or
-                                [?block :block/scheduled ?d]
-                                [?block :block/deadline ?d])
-                               [(get-else $ ?block :block/repeated? false) ?repeated]
-                               [(get-else $ ?block :block/marker "NIL") ?marker]
-                               [(not= ?marker "DONE")]
-                               [(not= ?marker "CANCELED")]
-                               [(not= ?marker "CANCELLED")]
-                               [(<= ?d ?future)]
-                               (or-join [?repeated ?d ?day]
-                                        [(true? ?repeated)]
-                                        [(>= ?d ?day)])]
-                             date
-                             future-day
-                             db-model/file-graph-block-attrs)]
-            (->> result
-                 db-model/sort-by-order-recursive
-                 db-utils/group-by-page)))))))
+      (when-let [repo (and future-day (state/get-current-repo))]
+        (p/let [result
+                (if (config/db-based-graph? repo)
+                  (<q repo {}
+                      '[:find [(pull ?block ?block-attrs) ...]
+                        :in $ ?day ?future ?block-attrs
+                        :where
+                        [?block :logseq.task/deadline ?deadline]
+                        [?deadline :block/journal-day ?d]
+                        [?block :logseq.task/status ?status]
+                        [?status :db/ident ?status-ident]
+                        [(not= ?status-ident :logseq.task/status.done)]
+                        [(not= ?status-ident :logseq.task/status.canceled)]
+                        [(<= ?d ?future)]
+                        [(>= ?d ?day)]]
+                      date
+                      future-day
+                      '[*])
+                  (<q repo {}
+                      '[:find [(pull ?block ?block-attrs) ...]
+                        :in $ ?day ?future ?block-attrs
+                        :where
+                        (or
+                         [?block :block/scheduled ?d]
+                         [?block :block/deadline ?d])
+                        [(get-else $ ?block :block/repeated? false) ?repeated]
+                        [(get-else $ ?block :block/marker "NIL") ?marker]
+                        [(not= ?marker "DONE")]
+                        [(not= ?marker "CANCELED")]
+                        [(not= ?marker "CANCELLED")]
+                        [(<= ?d ?future)]
+                        (or-join [?repeated ?d ?day]
+                                 [(true? ?repeated)]
+                                 [(>= ?d ?day)])]
+                      date
+                      future-day
+                      db-model/file-graph-block-attrs))]
+          (->> result
+               db-model/sort-by-order-recursive
+               db-utils/group-by-page))))))
 
 (defn <get-tag-pages
   [graph tag-id]
