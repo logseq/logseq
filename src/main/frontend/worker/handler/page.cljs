@@ -30,7 +30,7 @@
 
    * :create-first-block?      - when true, create an empty block if the page is empty.
    * :uuid                     - when set, use this uuid instead of generating a new one.
-   * :class?                   - when true, adds a :block/tags ':logseq.class/Class'
+   * :class?                   - when true, adds a :block/tags ':logseq.class/Tag'
    * :whiteboard?              - when true, adds a :block/tags ':logseq.class/Whiteboard'
    * :tags                     - tag uuids that are added to :block/tags
    * :persist-op?              - when true, add an update-page op
