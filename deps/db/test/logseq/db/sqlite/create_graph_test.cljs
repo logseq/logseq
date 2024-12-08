@@ -14,10 +14,10 @@
 (deftest new-graph-db-idents
   (testing "a new graph follows :db/ident conventions for"
     (let [conn (db-test/create-conn)
-          ident-ents (->> (d/q '[:find (pull ?b [:db/ident :block/tags])
+          ident-ents (->> (d/q '[:find [?b ...]
                                  :where [?b :db/ident]]
                                @conn)
-                          (map first))
+                          (map (fn [id] (d/entity @conn id))))
           default-idents (map :db/ident ident-ents)]
       (is (> (count default-idents) 45)
           "Approximate number of default idents is correct")

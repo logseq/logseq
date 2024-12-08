@@ -109,7 +109,7 @@
     (testing "Validate pages"
       (let [pages (->> (d/q '[:find [?b ...] :where
                               [?b :block/title]
-                              (or [?b :block/tags :logseq.class/Class]
+                              (or [?b :block/tags :logseq.class/Tag]
                                   [?b :block/tags :logseq.class/Property]
                                   [?b :block/tags :logseq.class/Page]
                                   [?b :block/tags :logseq.class/Journal]

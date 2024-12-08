@@ -209,7 +209,7 @@
           "Correct number of pages with block content")
       (is (= 11 (->> @conn
                      (d/q '[:find [?ident ...]
-                            :where [?b :block/tags :logseq.class/Class] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                            :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
           "Correct number of user classes")
       (is (= 4 (count (d/datoms @conn :avet :block/tags :logseq.class/Whiteboard))))
@@ -501,7 +501,7 @@
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
     (is (= 0 (->> @conn
                   (d/q '[:find [?ident ...]
-                         :where [?b :block/tags :logseq.class/Class] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                         :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                   count))
         "Correct number of user classes")
 
@@ -562,7 +562,7 @@
              (:block/tags (readable-properties @conn block)))
           "tagged block has configured tag imported as a class")
 
-      (is (= :logseq.class/Class (:db/ident (first (:block/tags tag-page))))
+      (is (= :logseq.class/Tag (:db/ident (first (:block/tags tag-page))))
           "configured tag page in :tag-classes is a class")
       (is (and another-tag-page (not (ldb/class? another-tag-page)))
           "unconfigured tag page is not a class")
@@ -586,7 +586,7 @@
     (is (= #{:user.class/Property :user.class/Movie :user.class/Class :user.class/Tool}
            (->> @conn
                 (d/q '[:find [?ident ...]
-                       :where [?b :block/tags :logseq.class/Class] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                       :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                 set))
         "All classes are correctly defined by :type")
 
@@ -608,7 +608,7 @@
           "tagged block can have another property that references the same class it is tagged with,
            without creating a duplicate class")
 
-      (is (= :logseq.class/Class (:db/ident (first (:block/tags tag-page))))
+      (is (= :logseq.class/Tag (:db/ident (first (:block/tags tag-page))))
           "configured tag page derived from :property-classes is a class")
       (is (nil? (find-page-by-name @conn "type"))
           "No page exists for configured property")
@@ -654,7 +654,7 @@
              :user.class/Class :user.class/Tool :user.class/Whiteboard___Tool}
            (->> @conn
                 (d/q '[:find [?ident ...]
-                       :where [?b :block/tags :logseq.class/Class] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                       :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                 set))
         "All classes are correctly defined by :type")
 
