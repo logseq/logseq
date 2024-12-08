@@ -188,7 +188,6 @@
 ;; ==================
 ;; These schemas should be data vars to remain as simple and reusable as possible
 
-
 (def ^:dynamic *db-for-validate-fns*
   "Used by validate-fns which need db as input"
   nil)
@@ -228,7 +227,6 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/title :string]
-   [:block/type [:enum "page" "class" "property" "whiteboard" "journal"]]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]
@@ -364,8 +362,7 @@
   (vec
    (concat
     [:map]
-    [[:block/type [:= "closed value"]]
-     ;; for built-in properties
+    [;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
      [:block/title {:optional true} :string]
      [:property.value/content {:optional true} [:or :string :double]]
@@ -436,27 +433,29 @@
   (into
    [:multi {:dispatch (fn [d]
                         ;; order matters as some block types are a subset of others e.g. :whiteboard
-                        (cond
-                          (entity-util/property? d)
-                          :property
-                          (entity-util/class? d)
-                          :class
-                          (entity-util/hidden? d)
-                          :hidden
-                          (entity-util/whiteboard? d)
-                          :normal-page
-                          (entity-util/page? d)
-                          :normal-page
-                          (entity-util/asset? d)
-                          :asset-block
-                          (:file/path d)
-                          :file-block
-                          (:block/uuid d)
-                          :block
-                          (= (:db/ident d) :logseq.property/empty-placeholder)
-                          :property-value-placeholder
-                          (:db/ident d)
-                          :db-ident-key-value))}]
+                        (let [db *db-for-validate-fns*
+                              d (if (:block/uuid d) (d/entity db [:block/uuid (:block/uuid d)]) d)]
+                          (cond
+                            (entity-util/property? d)
+                            :property
+                            (entity-util/class? d)
+                            :class
+                            (entity-util/hidden? d)
+                            :hidden
+                            (entity-util/whiteboard? d)
+                            :normal-page
+                            (entity-util/page? d)
+                            :normal-page
+                            (entity-util/asset? d)
+                            :asset-block
+                            (:file/path d)
+                            :file-block
+                            (:block/uuid d)
+                            :block
+                            (= (:db/ident d) :logseq.property/empty-placeholder)
+                            :property-value-placeholder
+                            (:db/ident d)
+                            :db-ident-key-value)))}]
    {:property property-page
     :class class-page
     :hidden hidden-page

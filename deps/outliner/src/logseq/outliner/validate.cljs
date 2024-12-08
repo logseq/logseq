@@ -49,13 +49,13 @@
                                 :in $ ?eid ?title
                                 :where
                                 [?b :block/title ?title]
-                                [?b :block/type "property"]
+                                [?b :block/tags :logseq.class/Property]
                                 [(not= ?b ?eid)]]
                               '[:find [?b ...]
                                 :in $ ?eid ?title
                                 :where
                                 [?b :block/title ?title]
-                                [?b :block/type "property"]
+                                [?b :block/tags :logseq.class/Property]
                                 [(missing? $ ?b :logseq.property/built-in?)]
                                 [(not= ?b ?eid)]])
                             db
@@ -113,14 +113,14 @@
 
     :else
     (when-let [_res (seq (d/q '[:find [?b ...]
-                                :in $ ?eid ?type ?title
+                                :in $ ?eid [?tag ...] ?title
                                 :where
                                 [?b :block/title ?title]
-                                [?b :block/type ?type]
+                                [?b :block/tags ?tag]
                                 [(not= ?b ?eid)]]
                               db
                               (:db/id entity)
-                              (:block/type entity)
+                              (map :db/id (:block/tags entity))
                               new-title))]
       (throw (ex-info "Duplicate page without tag"
                       {:type :notification

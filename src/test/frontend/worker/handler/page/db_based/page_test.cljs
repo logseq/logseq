@@ -44,9 +44,12 @@
             "Child class with new parent has correct parents")
 
         (worker-db-page/create! conn "foo/class1/baz3" {:split-namespace? true})
-        (is (= #{"class" "page"}
-               (set (d/q '[:find [?type ...]
-                           :where [?b :block/type ?type] [?b :block/title "class1"]] @conn)))
+        (is (= #{"Class" "Page"}
+               (set (d/q '[:find [?tag-type ...]
+                           :where
+                           [?b :block/title "class1"]
+                           [?b :block/tags ?t]
+                           [?t :block/title ?tag-title]] @conn)))
             "Using an existing class page in a multi-parent namespace doesn't allow a page to have a class parent and instead creates a new page")))
 
     (testing "Child pages with same name and different parents"

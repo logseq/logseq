@@ -13,30 +13,29 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.text :as text]
-            [logseq.outliner.validate :as outliner-validate]))
+            [logseq.outliner.validate :as outliner-validate]
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn- build-page-tx [conn properties page {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)
-    (let [page (assoc page :block/type (cond class? "class"
-                                             whiteboard? "whiteboard"
-                                             (:block/type page) (:block/type page)
-                                             :else "page"))
-          page' (cond-> page
-                  (seq tags)
-                  (update :block/tags
-                          (fnil into [])
-                          (mapv (fn [tag]
-                                  (let [v (if (uuid? tag)
-                                            (d/entity @conn [:block/uuid tag])
-                                            tag)]
-                                    (cond
-                                      (de/entity? v)
-                                      (:db/id v)
-                                      (map? v)
-                                      (:db/id v)
-                                      :else
-                                      v)))
-                                tags)))
+    (let [type-tag (cond class? :logseq.class/Tag
+                         whiteboard? :logseq.class/Whiteboard
+                         :else :logseq.class/Page)
+          tags' (conj tags type-tag)
+          page' (update page :block/tags
+                        (fnil into [])
+                        (mapv (fn [tag]
+                                (let [v (if (uuid? tag)
+                                          (d/entity @conn [:block/uuid tag])
+                                          tag)]
+                                  (cond
+                                    (de/entity? v)
+                                    (:db/id v)
+                                    (map? v)
+                                    (:db/id v)
+                                    :else
+                                    v)))
+                              tags'))
           property-vals-tx-m
           ;; Builds property values for built-in properties like logseq.property.pdf/file
           (db-property-build/build-property-values-tx-m
@@ -95,10 +94,12 @@
 
 (defn- split-namespace-pages
   [db page date-formatter]
-  (let [{:block/keys [title] block-uuid :block/uuid block-type :block/type} page]
+  (let [{:block/keys [title] block-uuid :block/uuid} page]
     (->>
-     (if (and (contains? #{"page" "class"} block-type) (ns-util/namespace-page? title))
-       (let [class? (= block-type "class")
+     (if (and (or (entity-util/class? page)
+                  (entity-util/page? page))
+              (ns-util/namespace-page? title))
+       (let [class? (entity-util/class? page)
              parts (->> (string/split title ns-util/parent-re)
                         (map string/trim)
                         (remove string/blank?))
@@ -168,15 +169,24 @@
   (let [db @conn
         date-formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
         title (sanitize-title title*)
-        type (cond class?
-                   "class"
-                   whiteboard?
-                   "whiteboard"
-                   today-journal?
-                   "journal"
-                   :else
-                   "page")]
-    (when-not (ldb/page-exists? db title type)
+        types (cond class?
+                    #{:logseq.class/Tag :logseq.class/Property :logseq.class/Page}
+                    whiteboard?
+                    #{:logseq.class/Whiteboard}
+                    today-journal?
+                    #{:logseq.class/Journal}
+                    :else
+                    #{:logseq.class/Page})]
+    (if-let [existing-page-id (first (ldb/page-exists? db title types))]
+      (let [existing-page (d/entity db existing-page-id)
+            tx-meta {:persist-op? persist-op?
+                     :outliner-op :save-block}]
+        (when (and class?
+                   (not (ldb/class? existing-page))
+                   (or (ldb/property? existing-page) (ldb/internal-page? existing-page)))
+          ;; convert existing property or page to class
+          (let [tx-data (db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :db/ident :block/created-at]))]
+            (ldb/transact! conn tx-data tx-meta))))
       (let [format    :markdown
             page      (-> (gp-block/page-name->map title @conn true date-formatter
                                                    {:class? class?
@@ -191,7 +201,7 @@
                              [page nil])]
         (when page
           ;; Don't validate journal names because they can have '/'
-          (when (not= "journal" type)
+          (when (not= :logseq.class/Journal type)
             (outliner-validate/validate-page-title-characters (str (:block/title page)) {:node page})
             (doseq [parent parents]
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))

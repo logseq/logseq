@@ -4,7 +4,8 @@
                      [frontend.db.transact]
                      [frontend.db.conn]
                      [logseq.outliner.op]
-                     [frontend.modules.outliner.op])))
+                     [frontend.modules.outliner.op]
+                     [logseq.db])))
 
 (defmacro transact!
   [opts & body]

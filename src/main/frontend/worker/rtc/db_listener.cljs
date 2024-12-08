@@ -22,7 +22,7 @@
 
 (def ^:private watched-attrs
   #{:block/title :block/created-at :block/updated-at :block/alias
-    :block/tags :block/type :block/schema :block/link :block/journal-day
+    :block/tags :block/schema :block/link :block/journal-day
     :property/schema.classes :property.value/content
     :db/index :db/valueType :db/cardinality})
 

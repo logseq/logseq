@@ -113,7 +113,7 @@
   (if block-ns
     (->> (d/q '[:find [?b ...]
                 :in $ ?name
-                :where [?b :block/uuid ?uuid] [?b :block/type "class"] [?b :block/name ?name]]
+                :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
               db
               (ns-util/get-last-part full-name))
          (map #(d/entity db %))
@@ -125,7 +125,7 @@
     (first
      (d/q '[:find [?uuid ...]
             :in $ ?name
-            :where [?b :block/uuid ?uuid] [?b :block/type "class"] [?b :block/name ?name]]
+            :where [?b :block/uuid ?uuid] [?b :block/tags :logseq.class/Tag] [?b :block/name ?name]]
           db
           full-name))))
 
@@ -295,7 +295,6 @@
                                            (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config)))]
                                (assoc page-m
                                       :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
-                                      :block/type "journal"
                                       :block/journal-day date-int)))
                          (assoc :block/tags :logseq.class/Journal))]
       {:block
@@ -907,7 +906,7 @@
                 (:block/name %))
               (or (:block/uuid %)
                   (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name %)))
-                                  (select-keys % [:block/name :block/type]))))))
+                                  (select-keys % [:block/name :block/tags]))))))
        (into {})))
 
 (defn- build-existing-page
@@ -915,13 +914,10 @@
   (let [;; These attributes are not allowed to be transacted because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
-        allowed-attributes (into [:block/tags :block/alias :logseq.property/parent :block/type :db/ident]
+        allowed-attributes (into [:block/tags :block/alias :logseq.property/parent :db/ident]
                                  (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                        m))
-        block-changes (cond-> (select-keys m allowed-attributes)
-                        ;; disallow any type -> "page" but do allow any conversion to a non-page type
-                        (ldb/internal-page? m)
-                        (dissoc :block/type))]
+        block-changes (select-keys m allowed-attributes)]
     (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
       (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
                               ignored-attrs)}))
@@ -952,8 +948,8 @@
             (assoc :block/uuid (d/squuid))
             ;; only happens for few file built-ins like tags and alias
             (and (contains? all-built-in-names (keyword (:block/name page)))
-                 (not (:block/type page)))
-            (assoc :block/type "page")))]
+                 (not (:block/tags page)))
+            (assoc :block/tags :logseq.class/Page)))]
     (cond-> page'
       (:block/namespace page)
       ((fn [block']
@@ -993,7 +989,7 @@
                                                          (all-existing-page-uuids (::original-name m))
                                                          (all-existing-page-uuids (:block/name m)))]
                                       (build-existing-page (dissoc m ::original-name ::original-title) @conn page-uuid per-file-state options)
-                                      (when (or (= "class" (:block/type m))
+                                      (when (or (ldb/class? m)
                                                 ;; Don't build a new page if it overwrites an existing class
                                                 (not (some-> (get @(:all-idents import-state)
                                                                   (some-> (or (::original-title m) (:block/title m))
@@ -1133,7 +1129,7 @@
                                                               (get-property-schema @(:property-schemas import-state) kw-name)
                                                               {:title (name kw-name)})]
                  (assert existing-page-uuid)
-                 (merge (select-keys new-prop [:block/type :block/schema :db/ident :db/index :db/cardinality :db/valueType])
+                 (merge (select-keys new-prop [:block/tags :block/schema :db/ident :db/index :db/cardinality :db/valueType])
                         {:block/uuid existing-page-uuid})))
              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
         ;; Save properties on new property pages separately as they can contain new properties and thus need to be
@@ -1141,7 +1137,7 @@
         property-page-properties-tx (keep (fn [b]
                                             (when-let [page-properties (not-empty (db-property/properties b))]
                                               (merge page-properties {:block/uuid (:block/uuid b)
-                                                                      :block/type "property"})))
+                                                                      :block/tags (conj (:block/tags page-properties) :logseq.class/Property)})))
                                           properties-tx)]
     {:pages-tx pages-tx'
      :property-pages-tx (concat property-pages-tx converted-property-pages-tx)
@@ -1388,7 +1384,7 @@
 (defn- export-class-properties
   [conn repo-or-conn]
   (let [user-classes (->> (d/q '[:find (pull ?b [:db/id :db/ident])
-                                 :where [?b :block/type "class"]] @conn)
+                                 :where [?b :block/tags :logseq.class/Tag]] @conn)
                           (map first)
                           (remove #(db-class/built-in-classes (:db/ident %))))
         class-to-prop-uuids
@@ -1400,7 +1396,7 @@
                     [(contains? ?user-classes ?class)]
                     [?b ?prop _]
                     [?prop-e :db/ident ?prop]
-                    [?prop-e :block/type "property"]]
+                    [?prop-e :block/tags :logseq.class/Property]]
                   @conn
                   (set (map :db/ident user-classes)))
              (remove #(ldb/built-in? (d/entity @conn (second %))))
