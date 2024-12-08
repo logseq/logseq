@@ -362,8 +362,7 @@
   (vec
    (concat
     [:map]
-    [;; [:block/tags [:= :logseq.class/Closed-Value]]
-     ;; for built-in properties
+    [;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
      [:block/title {:optional true} :string]
      [:property.value/content {:optional true} [:or :string :double]]

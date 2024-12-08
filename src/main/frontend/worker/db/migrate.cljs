@@ -430,10 +430,12 @@
                                       "property" :logseq.class/Property
                                       "journal" :logseq.class/Journal
                                       "whiteboard" :logseq.class/Whiteboard
-                                      "closed value" :logseq.class/Closed-Value
+                                      "closed value" nil
                                       (throw (ex-info "unsupported block/type" {:type v})))]
-                            [[:db/retract e :block/type]
-                             [:db/add e :block/tags tag]])) datoms)]
+                            (cond->
+                             [[:db/retract e :block/type]]
+                              (some? tag)
+                              (conj [:db/add e :block/tags tag])))) datoms)]
     (concat
      ;; set journal's tag to `#Page`
      [[:db/add (:db/id journal-entity) :block/tags :logseq.class/Page]]
@@ -518,7 +520,7 @@
    [47 {:fix replace-hidden-type-with-schema}]
    [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]
    [49 {:fix replace-special-id-ref-with-id-ref}]
-   [50 {:classes [:logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard :logseq.class/Property :logseq.class/Closed-Value]}]
+   [50 {:classes [:logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard :logseq.class/Property]}]
    [51 {:fix replace-block-type-with-tags}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
