@@ -212,7 +212,7 @@
 
 (defn get-structured-datoms
   [db]
-  (->> (d/datoms db :avet :block/tags :logseq.class/Closed-Value)
+  (->> (d/datoms db :avet :block/closed-value-property)
        (mapcat (fn [d]
                  (d/datoms db :eavt (:e d))))))
 

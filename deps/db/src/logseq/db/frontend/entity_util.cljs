@@ -37,7 +37,7 @@
 
 (defn closed-value?
   [entity]
-  (has-tag? entity :logseq.class/Closed-Value))
+  (some? (:block/closed-value-property entity)))
 
 (defn journal?
   "Given a page entity or map, check if it is a journal page"
@@ -82,4 +82,4 @@
 
 (def internal-tags
   #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag :logseq.class/Root
-    :logseq.class/Closed-Value :logseq.class/Asset})
+    :logseq.class/Asset})

@@ -27,8 +27,6 @@
    {:title "Whiteboard"
     :properties {:logseq.property/parent :logseq.class/Page}}
 
-   :logseq.class/Closed-Value {:title "Closed Value"}
-
    :logseq.class/Task
    {:title "Task"
     :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}
