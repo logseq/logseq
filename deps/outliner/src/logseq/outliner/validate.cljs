@@ -5,7 +5,9 @@
             [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.common.date :as common-date]
-            [logseq.common.util.namespace :as ns-util]))
+            [logseq.common.util.namespace :as ns-util]
+            [datascript.impl.entity :as de]
+            [clojure.set :as set]))
 
 (defn ^:api validate-page-title-characters
   "Validates characters that must not be in a page title"
@@ -42,30 +44,6 @@
                      :payload {:message "Built-in pages can't be edited"
                                :type :warning}}))))
 
-(defn- validate-unique-for-property-page
-  [entity db new-title]
-  (when-let [_res (seq (d/q (if (:logseq.property/built-in? entity)
-                              '[:find [?b ...]
-                                :in $ ?eid ?title
-                                :where
-                                [?b :block/title ?title]
-                                [?b :block/tags :logseq.class/Property]
-                                [(not= ?b ?eid)]]
-                              '[:find [?b ...]
-                                :in $ ?eid ?title
-                                :where
-                                [?b :block/title ?title]
-                                [?b :block/tags :logseq.class/Property]
-                                [(missing? $ ?b :logseq.property/built-in?)]
-                                [(not= ?b ?eid)]])
-                            db
-                            (:db/id entity)
-                            new-title))]
-    (throw (ex-info "Duplicate property"
-                    {:type :notification
-                     :payload {:message (str "Another property named " (pr-str new-title) " already exists")
-                               :type :warning}}))))
-
 (defn- validate-unique-by-parent-and-name [db entity new-title]
   (when-let [_res (seq (d/q '[:find [?b ...]
                               :in $ ?eid ?type ?title
@@ -88,44 +66,33 @@
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (cond
-    (and (seq tags) (ldb/internal-page? entity))
-    (when-let [res (seq (d/q '[:find [?b ...]
-                               :in $ ?eid ?title [?tag-id ...]
-                               :where
-                               [?b :block/title ?title]
-                               [?b :block/tags ?tag-id]
-                               [(not= ?b ?eid)]]
-                             db
-                             (:db/id entity)
-                             new-title
-                             (map :db/id tags)))]
-      (throw (ex-info "Duplicate page by tag"
-                      {:type :notification
-                       :payload {:message (str "Another page named " (pr-str new-title) " already exists for tag "
-                                               (pr-str (->> res first (d/entity db) :block/tags first :block/title)))
-                                 :type :warning}})))
-
-    (ldb/property? entity)
-    (validate-unique-for-property-page entity db new-title)
+    (seq tags)
+    (when-let [another-id (first (d/q '[:find [?b ...]
+                                        :in $ ?eid ?title [?tag-id ...]
+                                        :where
+                                        [?b :block/title ?title]
+                                        [?b :block/tags ?tag-id]
+                                        [(not= ?b ?eid)]]
+                                      db
+                                      (:db/id entity)
+                                      new-title
+                                      (map :db/id tags)))]
+      (let [another (d/entity db another-id)
+            this-tags (set (map :db/ident tags))
+            another-tags (set (map :db/ident (:block/tags another)))
+            common-tag-ids (set/intersection this-tags another-tags)]
+        (when-not (and (= common-tag-ids #{:logseq.class/Page})
+                       (> (count this-tags) 1)
+                       (> (count another-tags) 1))
+          (throw (ex-info "Duplicate page"
+                          {:type :notification
+                           :payload {:message (str "Another page named " (pr-str new-title) " already exists for tags "
+                                                   (pr-str
+                                                    (map (fn [id] (:block/title (d/entity db id))) common-tag-ids)))
+                                     :type :warning}})))))
 
     (:logseq.property/parent entity)
-    (validate-unique-by-parent-and-name db entity new-title)
-
-    :else
-    (when-let [_res (seq (d/q '[:find [?b ...]
-                                :in $ ?eid [?tag ...] ?title
-                                :where
-                                [?b :block/title ?title]
-                                [?b :block/tags ?tag]
-                                [(not= ?b ?eid)]]
-                              db
-                              (:db/id entity)
-                              (map :db/id (:block/tags entity))
-                              new-title))]
-      (throw (ex-info "Duplicate page without tag"
-                      {:type :notification
-                       :payload {:message (str "Another page named " (pr-str new-title) " already exists")
-                                 :type :warning}})))))
+    (validate-unique-by-parent-and-name db entity new-title)))
 
 (defn ^:api validate-unique-by-name-tag-and-block-type
   "Validates uniqueness of nodes for the following cases:
@@ -133,8 +100,8 @@
    - Page names of other types are unique for their type e.g. their can be #Journal ('class') and Journal ('page')
    - Property names are unique and don't consider built-in property names"
   [db new-title entity]
-  (when (ldb/page? entity)
-    (validate-unique-for-page db new-title entity)))
+  (assert (ldb/page? entity) "`entity` is not a page")
+  (validate-unique-for-page db new-title entity))
 
 (defn ^:api validate-disallow-page-with-journal-name
   "Validates a non-journal page renamed to journal format"
