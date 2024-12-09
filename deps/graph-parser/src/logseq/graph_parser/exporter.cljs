@@ -949,7 +949,7 @@
             ;; only happens for few file built-ins like tags and alias
             (and (contains? all-built-in-names (keyword (:block/name page)))
                  (not (:block/tags page)))
-            (assoc :block/tags :logseq.class/Page)))]
+            (assoc :block/tags [:logseq.class/Page])))]
     (cond-> page'
       (:block/namespace page)
       ((fn [block']
