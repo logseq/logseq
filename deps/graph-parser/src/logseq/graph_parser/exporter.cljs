@@ -75,14 +75,16 @@
        {:db/ident db-ident}
        (let [m
              (if (:block/namespace class-block)
-             ;; Give namespaced tags a unique ident so they don't conflict with other tags
-               (-> (db-class/build-new-class db {:block/title (build-class-ident-name class-name)})
+               ;; Give namespaced tags a unique ident so they don't conflict with other tags
+               (-> (db-class/build-new-class db {:block/title (build-class-ident-name class-name)
+                                                 :block/tags (:block/tags class-block)})
                    (merge {:block/title class-name
                            :block/name (common-util/page-name-sanity-lc class-name)})
                    (build-new-namespace-page))
                (db-class/build-new-class db
-                                         {:block/title class-name
-                                          :block/name (common-util/page-name-sanity-lc class-name)}))]
+                                         (assoc {:block/title class-name
+                                                 :block/name (common-util/page-name-sanity-lc class-name)}
+                                                :block/tags (:block/tags class-block))))]
          (swap! all-idents assoc ident (:db/ident m))
          (with-meta m {:new-class? true}))))))
 
@@ -704,8 +706,9 @@
              (seq classes-from-properties)
              ;; Add a map of {:block.temp/new-class TAG} to be processed later
              (update :block/tags
-                     (fnil into [])
-                     (map #(hash-map :block.temp/new-class %) classes-from-properties)))
+                     (fn [tags]
+                       (let [tags' (if (sequential? tags) tags (set tags))]
+                         (into tags' (map #(hash-map :block.temp/new-class %) classes-from-properties))))))
            :properties-tx pvalues-tx})
         {:block block :properties-tx []})
       (update :block dissoc :block/properties :block/properties-text-values :block/properties-order :block/invalid-properties)))
