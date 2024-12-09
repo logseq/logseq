@@ -70,7 +70,7 @@
   ([db class-name all-idents]
    (find-or-create-class db class-name all-idents {}))
   ([db class-name all-idents class-block]
-   (let [ident (keyword "user.class" class-name)]
+   (let [ident (keyword class-name)]
      (if-let [db-ident (get @all-idents ident)]
        {:db/ident db-ident}
        (let [m
@@ -306,7 +306,7 @@
                                (assoc page-m
                                       :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
                                       :block/journal-day date-int)))
-                         (assoc :block/tags :logseq.class/Journal))]
+                         (assoc :block/tags #{:logseq.class/Journal}))]
       {:block
        (-> block
            (assoc :logseq.task/deadline [:block/uuid (:block/uuid deadline-page)])
@@ -1299,8 +1299,8 @@
                          (d/transact! conn tx' {::new-graph? true})
                          (catch :default e
                            (js/console.error e)
-                           (prn :db (ldb/write-transit-str @conn))
-                           (prn :tx (ldb/write-transit-str tx'))
+                           ;; (prn :db (ldb/write-transit-str @conn))
+                           ;; (prn :tx (ldb/write-transit-str tx'))
                            (throw e)))
 
         upstream-properties-tx
@@ -1318,7 +1318,11 @@
    {:keys [notify-user set-ui-state export-file]
     :or {set-ui-state (constantly nil)
          export-file (fn export-file [conn m opts]
-                       (add-file-to-db-graph conn (:file/path m) (:file/content m) opts))}
+                       (try
+                         (add-file-to-db-graph conn (:file/path m) (:file/content m) opts)
+                         (catch :default e
+                           (js/console.error e)
+                           (prn :debug "failed to parse " (:file/path m)))))}
     :as options}]
   ;; (prn :export-doc-file path idx)
   (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx] (inc idx))

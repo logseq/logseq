@@ -32,15 +32,18 @@
     (->> content
          (d/q '[:find [(pull ?b [*]) ...]
                 :in $ ?pattern
-                :where [?b :block/title ?content]
-                [(missing? $ ?b :block/tags)]
+                :where
+                [?b :block/title ?content]
+                [?b :block/page]
                 [(re-find ?pattern ?content)]]
               db)
          first)
     (->> content
          (d/q '[:find [(pull ?b [*]) ...]
                 :in $ ?content
-                :where [?b :block/title ?content] [(missing? $ ?b :block/tags)]]
+                :where
+                [?b :block/title ?content]
+                [?b :block/page]]
               db)
          first)))
 
@@ -64,12 +67,7 @@
        first))
 
 (defn- find-page-by-name [db name]
-  (->> name
-       (d/q '[:find [(pull ?b [*]) ...]
-              :in $ ?name
-              :where [?b :block/title ?name]]
-            db)
-       first))
+  (ldb/get-page db name))
 
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
@@ -157,7 +155,8 @@
                 [k
                  (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
                    (if (= :block/tags k)
-                     (mapv #(:db/ident (d/entity db (:db/id %))) v)
+                     (->> (mapv #(:db/ident (d/entity db (:db/id %))) v)
+                          (remove #{:logseq.class/Tag :logseq.class/Property}))
                      (if (db-property-type/all-ref-property-types built-in-type)
                        (db-property/ref->property-value-contents db v)
                        v))
@@ -272,12 +271,14 @@
                   set))
           "Block with properties has correct refs")
 
-      (is (= {:user.property/prop-num2 10}
+      (is (= {:user.property/prop-num2 10
+              :block/tags [:logseq.class/Page]}
              (readable-properties @conn (find-page-by-name @conn "new page")))
           "New page has correct properties")
       (is (= {:user.property/prop-bool true
               :user.property/prop-num 5
-              :user.property/prop-string "yeehaw"}
+              :user.property/prop-string "yeehaw"
+              :block/tags [:logseq.class/Page]}
              (readable-properties @conn (find-page-by-name @conn "some page")))
           "Existing page has correct properties")
 
@@ -361,7 +362,7 @@
              (:db/ident (find-page-by-name @conn "life")))
           "Namespaced tag's ident has hierarchy to make it unique")
 
-      (is (= ["Tag"]
+      (is (= ["Tag" "Page"]
              (d/q '[:find [?t-title ...]
                     :where
                     [?b :block/name "life"]
@@ -445,7 +446,7 @@
       (is (= #{:logseq.property/description :user.property/description}
              (set (d/q '[:find [?ident ...] :where [?b :db/ident ?ident] [?b :block/name "description"]] @conn)))
           "user description property is separate from built-in one")
-      (is (= #{"Page" "Class"}
+      (is (= #{"Page" "Tag"}
              (set (d/q '[:find [?t-title ...] :where
                          [?b :block/tags ?t]
                          [?b :block/name "task"]
@@ -549,7 +550,6 @@
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
-
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
 
