@@ -70,20 +70,21 @@
   ([db class-name all-idents]
    (find-or-create-class db class-name all-idents {}))
   ([db class-name all-idents class-block]
-   (if-let [db-ident (get @all-idents (keyword class-name))]
-     {:db/ident db-ident}
-     (let [m
-           (if (:block/namespace class-block)
+   (let [ident (keyword "user.class" class-name)]
+     (if-let [db-ident (get @all-idents ident)]
+       {:db/ident db-ident}
+       (let [m
+             (if (:block/namespace class-block)
              ;; Give namespaced tags a unique ident so they don't conflict with other tags
-             (-> (db-class/build-new-class db {:block/title (build-class-ident-name class-name)})
-                 (merge {:block/title class-name
-                         :block/name (common-util/page-name-sanity-lc class-name)})
-                 (build-new-namespace-page))
-             (db-class/build-new-class db
-                                       {:block/title class-name
-                                        :block/name (common-util/page-name-sanity-lc class-name)}))]
-       (swap! all-idents assoc (keyword class-name) (:db/ident m))
-       (with-meta m {:new-class? true})))))
+               (-> (db-class/build-new-class db {:block/title (build-class-ident-name class-name)})
+                   (merge {:block/title class-name
+                           :block/name (common-util/page-name-sanity-lc class-name)})
+                   (build-new-namespace-page))
+               (db-class/build-new-class db
+                                         {:block/title class-name
+                                          :block/name (common-util/page-name-sanity-lc class-name)}))]
+         (swap! all-idents assoc ident (:db/ident m))
+         (with-meta m {:new-class? true}))))))
 
 (defn- find-or-gen-class-uuid [page-names-to-uuids page-name db-ident & {:keys [temp-new-class?]}]
   (or (if temp-new-class?
@@ -142,22 +143,23 @@
       (assert (:block/uuid class-m') "Class must have a :block/uuid")
       [:block/uuid (:block/uuid class-m')])
     (when (convert-tag? (:block/name tag-block) user-options)
-      (let [existing-tag-uuid (find-existing-class db tag-block)]
+      (let [existing-tag-uuid (find-existing-class db tag-block)
+            internal-tag-conflict? (contains? #{"tag" "property" "page" "journal" "asset"} (:block/name tag-block))]
         (cond
           ;; Don't overwrite internal tags
-          (contains? #{"tag" "property" "page" "journal" "asset"} (:block/name tag-block))
-          [:block/uuid (common-uuid/gen-uuid)]
-
-          existing-tag-uuid
+          (and existing-tag-uuid (not internal-tag-conflict?))
           [:block/uuid existing-tag-uuid]
 
           :else
           ;; Creates or updates page within same tx
           (let [class-m (find-or-create-class db (:block/title tag-block) all-idents tag-block)
                 class-m' (-> (merge tag-block class-m
-                                    (when-not (:block/uuid tag-block)
-                                      {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (:block/name tag-block) (:db/ident class-m))}))
-                           ;; override with imported timestamps
+                                    (if internal-tag-conflict?
+                                      {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))}
+                                      (when-not (:block/uuid tag-block)
+                                        (let [id (find-or-gen-class-uuid page-names-to-uuids (:block/name tag-block) (:db/ident class-m))]
+                                          {:block/uuid id}))))
+                             ;; override with imported timestamps
                              (dissoc :block/created-at :block/updated-at)
                              (merge (add-missing-timestamps
                                      (select-keys tag-block [:block/created-at :block/updated-at])))
