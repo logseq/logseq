@@ -1221,8 +1221,9 @@
                                (->> pages
                                     ;; migrate previous attribute for :block/title
                                     (map #(-> %
-                                              (assoc :block/title (:block/original-name %))
-                                              (dissoc :block/original-name))))))
+                                              (assoc :block/title (or (:block/original-name %) (:block/title %))
+                                                     :block/tags #{:logseq.class/Whiteboard})
+                                              (dissoc :block/type :block/original-name))))))
               (update :blocks update-whiteboard-blocks format))
 
           :else
