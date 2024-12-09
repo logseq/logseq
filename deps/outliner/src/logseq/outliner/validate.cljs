@@ -6,7 +6,6 @@
             [logseq.db :as ldb]
             [logseq.common.date :as common-date]
             [logseq.common.util.namespace :as ns-util]
-            [datascript.impl.entity :as de]
             [clojure.set :as set]))
 
 (defn ^:api validate-page-title-characters
