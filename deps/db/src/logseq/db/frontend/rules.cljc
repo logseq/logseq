@@ -155,6 +155,7 @@
    (dissoc query-dsl-rules :namespace
            :page-property :has-page-property
            :page-tags :all-page-tags)
+   (dissoc rules :namespace)
    {:existing-property-value
     '[;; non-ref value
       [(existing-property-value ?b ?prop ?val)
@@ -210,7 +211,10 @@
     '[(object-has-class-property? ?b ?prop)
       [?prop-e :db/ident ?prop]
       [?t :logseq.property.class/properties ?prop-e]
-      [?b :block/tags ?t]]
+      [?b :block/tags ?tc]
+      (or
+       [(= ?t ?tc)]
+       (parent ?t ?tc))]
 
     :has-property-or-default-value
     '[(has-property-or-default-value? ?b ?prop)
@@ -313,6 +317,7 @@
    :priority #{:property}
    :property-missing-value #{:object-has-class-property}
    :has-property-or-default-value #{:object-has-class-property}
+   :object-has-class-property #{:parent}
    :has-simple-query-property #{:has-property-or-default-value}
    :has-private-simple-query-property #{:has-property-or-default-value}
    :property-default-value #{:existing-property-value :property-missing-value}
