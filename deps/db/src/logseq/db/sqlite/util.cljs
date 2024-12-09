@@ -118,7 +118,7 @@
                   (cond->
                    {:block/format :markdown}
                     (not= (:db/ident block) :logseq.class/Tag)
-                    (assoc :block/tags #{:logseq.class/Tag})))
+                    (assoc :block/tags (set (conj (:block/tags block) :logseq.class/Tag)))))
      (and (not= (:db/ident block) :logseq.class/Root)
           (nil? (:logseq.property/parent block)))
      (assoc :logseq.property/parent :logseq.class/Root))))

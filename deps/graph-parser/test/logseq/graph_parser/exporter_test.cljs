@@ -617,8 +617,8 @@
       (is (nil? (find-page-by-name @conn "type"))
           "No page exists for configured property")
 
-      (is (= [:user.class/Property]
-             (:block/tags (readable-properties @conn (find-page-by-name @conn "url"))))
+      (is (= #{:user.class/Property :logseq.class/Page}
+             (set (:block/tags (readable-properties @conn (find-page-by-name @conn "url")))))
           "tagged page has configured tag imported as a class"))))
 
 (deftest-async export-files-with-remove-inline-tags
