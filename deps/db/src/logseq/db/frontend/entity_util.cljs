@@ -1,7 +1,8 @@
 (ns logseq.db.frontend.entity-util
   "Lower level entity util fns used across db namespaces"
   (:require [datascript.core :as d]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [datascript.impl.entity :as de])
   (:refer-clojure :exclude [object?]))
 
 (defn db-based-graph?
@@ -63,7 +64,7 @@
   (when page
     (if (string? page)
       (string/starts-with? page "$$$")
-      (when (map? page)
+      (when (or (map? page) (de/entity? page))
         (false? (get-in page [:block/schema :public?]))))))
 
 (defn object?

@@ -18,6 +18,7 @@
 
 (deftest resolve-input-for-page-and-block-inputs
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
+        _ (d/transact! conn [{:db/ident :logseq.class/Page}])
         _ (sqlite-build/create-blocks
            conn
            [{:page {:block/title "page1"}
