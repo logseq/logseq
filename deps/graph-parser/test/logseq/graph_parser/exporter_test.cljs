@@ -201,10 +201,14 @@
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 10
-             (count (->> (d/q '[:find [(pull ?b [:block/title :block/tags]) ...]
-                                :where [?b :block/title] [_ :block/page ?b] (not [?b :logseq.property/built-in?])] @conn)
-                         (filter ldb/internal-page?))))
+      (is (= 11
+             (count (->> (d/q '[:find [?b ...]
+                                :where
+                                [?b :block/title]
+                                [_ :block/page ?b]
+                                (not [?b :logseq.property/built-in?])] @conn)
+                         (filter (fn [id]
+                                   (ldb/internal-page? (d/entity @conn id)))))))
           "Correct number of pages with block content")
       (is (= 11 (->> @conn
                      (d/q '[:find [?ident ...]
