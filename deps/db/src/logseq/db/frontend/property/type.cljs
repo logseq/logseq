@@ -167,10 +167,18 @@
 
    :string   string?
    :raw-number number?
-   :entity   entity?
-   :class    class-entity?
-   :property property-entity?
-   :page     page-entity?
+   :entity   [:fn
+              {:error/message "should be an Entity"}
+              entity?]
+   :class    [:fn
+              {:error/message "should be a Class"}
+              class-entity?]
+   :property [:fn
+              {:error/message "should be a Property"}
+              property-entity?]
+   :page     [:fn
+              {:error/message "should be a Page"}
+              page-entity?]
    :keyword  keyword?
    :map      map?
    ;; coll elements are ordered as it's saved as a vec
