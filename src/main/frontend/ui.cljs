@@ -556,8 +556,7 @@
               [:div
                [:div.ui__ac-group-name group]
                (render-f matched)]
-              (render-f matched))
-            (render-f matched))
+              (render-f matched)))
           (render-f matched))]
        (when empty-placeholder
          empty-placeholder))]))
