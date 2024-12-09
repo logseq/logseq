@@ -45,7 +45,7 @@
 
         (worker-db-page/create! conn "foo/class1/baz3" {:split-namespace? true})
         (is (= #{"Class" "Page"}
-               (set (d/q '[:find [?tag-type ...]
+               (set (d/q '[:find [?tag-title ...]
                            :where
                            [?b :block/title "class1"]
                            [?b :block/tags ?t]
