@@ -6,7 +6,7 @@
 
 (defn- find-block-by-content [conn content]
   (->> content
-       (d/q '[:find [(pull ?b [*]) ...]
+       (d/q '[:find [(pull ?b [* {:block/tags [:db/id :block/title :db/ident]}]) ...]
               :in $ ?content
               :where [?b :block/title ?content] [(missing? $ ?b :logseq.property/built-in?)]]
             @conn)
@@ -26,7 +26,7 @@
 
     (is (thrown-with-msg?
          js/Error
-         #"Duplicate property"
+         #"Duplicate page"
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
           "background-image"
@@ -41,7 +41,7 @@
 
     (is (thrown-with-msg?
          js/Error
-         #"Duplicate page by tag"
+         #"Duplicate page"
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
           "Apple"
@@ -56,7 +56,7 @@
 
     (is (thrown-with-msg?
          js/Error
-         #"Duplicate page without tag"
+         #"Duplicate page"
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
           "page1"
@@ -107,7 +107,15 @@
   (let [conn (db-test/create-conn)]
 
     (testing "Validate pages"
-      (let [pages (d/q '[:find [(pull ?b [*]) ...] :where [?b :block/title] [?b :block/type]] @conn)
+      (let [pages (->> (d/q '[:find [?b ...] :where
+                              [?b :block/title]
+                              (or [?b :block/tags :logseq.class/Tag]
+                                  [?b :block/tags :logseq.class/Property]
+                                  [?b :block/tags :logseq.class/Page]
+                                  [?b :block/tags :logseq.class/Journal]
+                                  [?b :block/tags :logseq.class/Whiteboard])] @conn)
+                       (map (fn [id]
+                              (d/entity @conn id))))
             page-errors (atom {})]
         (doseq [page pages]
           (try
@@ -123,9 +131,10 @@
             "Default pages shouldn't have any validation errors")))
 
     (testing "Validate property relationships"
-      (let [parent-child-pairs (d/q '[:find (pull ?parent [:block/title :block/type])
-                                      (pull ?child [:block/title :block/type])
+      (let [parent-child-pairs (d/q '[:find ?parent ?child
                                       :where [?child :logseq.property/parent ?parent]] @conn)]
-        (doseq [[parent child] parent-child-pairs]
-          (is (nil? (outliner-validate/validate-parent-property parent [child]))
-              (str "Parent and child page is valid: " (pr-str (:block/title parent)) " " (pr-str (:block/title child)))))))))
+        (doseq [[parent-id child-id] parent-child-pairs]
+          (let [parent (d/entity @conn parent-id)
+                child (d/entity @conn child-id)]
+            (is (nil? (outliner-validate/validate-parent-property parent [child]))
+                (str "Parent and child page is valid: " (pr-str (:block/title parent)) " " (pr-str (:block/title child))))))))))

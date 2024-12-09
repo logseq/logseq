@@ -155,7 +155,15 @@
    (dissoc query-dsl-rules :namespace
            :page-property :has-page-property
            :page-tags :all-page-tags)
-   {:existing-property-value
+   {:between
+    '[(between ?b ?start ?end)
+      [?b :block/page ?p]
+      [?p :block/tags :logseq.class/Journal]
+      [?p :block/journal-day ?d]
+      [(>= ?d ?start)]
+      [(<= ?d ?end)]]
+
+    :existing-property-value
     '[;; non-ref value
       [(existing-property-value ?b ?prop ?val)
        [?prop-e :db/ident ?prop]
@@ -225,7 +233,7 @@
     :has-simple-query-property
     '[(has-simple-query-property ?b ?prop)
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
+      [?prop-e :block/tags :logseq.class/Property]
       (has-property-or-default-value? ?b ?prop)
       [?prop-e :block/schema ?prop-schema]
       [(get ?prop-schema :public? true) ?public]
@@ -235,7 +243,7 @@
     :has-private-simple-query-property
     '[(has-private-simple-query-property ?b ?prop)
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
+      [?prop-e :block/tags :logseq.class/Property]
       (has-property-or-default-value? ?b ?prop)]
 
     ;; Checks if a property exists for any features that are not simple queries
@@ -243,7 +251,7 @@
     '[(has-property ?b ?prop)
       [?b ?prop _]
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
+      [?prop-e :block/tags :logseq.class/Property]
       [?prop-e :block/schema ?prop-schema]
       [(get ?prop-schema :public? true) ?public]
       [(= true ?public)]]
@@ -252,7 +260,7 @@
     :property
     '[(property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
+      [?prop-e :block/tags :logseq.class/Property]
       [?prop-e :block/schema ?prop-schema]
       [(get ?prop-schema :public? true) ?public]
       [(= true ?public)]
@@ -272,7 +280,7 @@
     :simple-query-property
     '[(simple-query-property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
+      [?prop-e :block/tags :logseq.class/Property]
       [?prop-e :block/schema ?prop-schema]
       [(get ?prop-schema :public? true) ?public]
       [(get ?prop-schema :type) ?type]
@@ -283,7 +291,7 @@
     :private-simple-query-property
     '[(private-simple-query-property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
+      [?prop-e :block/tags :logseq.class/Property]
       (property-value ?b ?prop-e ?val)]
 
     :tags

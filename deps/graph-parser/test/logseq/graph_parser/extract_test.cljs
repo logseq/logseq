@@ -145,6 +145,6 @@
         page (first pages)]
     (is (= (get-in page [:block/file :file/path]) "/whiteboards/foo.edn"))
     (is (= (:block/name page) "foo"))
-    (is (ldb/whiteboard? page))
+    (is (= (:block/type page) "whiteboard"))
     (is (= (:block/title page) "Foo"))
     (is (every? #(= (:block/parent %) [:block/uuid #uuid "a846e3b4-c41d-4251-80e1-be6978c36d8c"]) blocks))))

@@ -12,7 +12,8 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [datascript.impl.entity :as de]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db]))
 
 (defn- valid-tag?
   "Returns a boolean indicating whether the new tag passes all valid checks.
@@ -36,10 +37,10 @@
    {:outliner-op :save-block}
    (p/do!
     (editor-handler/save-current-block!)
-    ;; Check after save-current-block to get most up to date block content
+      ;; Check after save-current-block to get most up to date block content
     (when (valid-tag? repo (db/entity repo [:block/uuid block-id]) tag-entity)
       (let [tx-data [[:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
-                     ;; TODO: Move this to outliner.core to consistently add refs for tags
+                       ;; TODO: Move this to outliner.core to consistently add refs for tags
                      [:db/add [:block/uuid block-id] :block/refs (:db/id tag-entity)]]]
         (db/transact! repo tx-data {:outliner-op :save-block}))))))
 

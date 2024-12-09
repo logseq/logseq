@@ -8,14 +8,16 @@
             [logseq.outliner.pipeline :as outliner-pipeline]
             [clojure.string :as string]
             [logseq.db.test.helper :as db-test]
-            [logseq.common.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]
+            [clojure.set :as set]))
 
 (defn- get-blocks [db]
   (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name :db/id]}])
               :in $
-              :where [?b :block/title]
-              [(missing? $ ?b :logseq.property/built-in?)]
-              [(missing? $ ?b :block/type)]]
+              :where
+              [?b :block/page]
+              [?b :block/title]
+              [(missing? $ ?b :logseq.property/built-in?)]]
             db)
        (map first)))
 
@@ -48,13 +50,14 @@
           updated-blocks (->> (get-blocks @conn)
                               ;; Only keep enough of content to uniquely identify block
                               (map #(hash-map :block/title (re-find #"\w+" (:block/title %))
-                                              :path-ref-names (set (map :block/name (:block/path-refs %))))))]
+                                              :path-ref-names (set (map :block/name (:block/path-refs %))))))
+          page-tag-refs #{"tags" "page"}]
       (is (= [{:block/title "parent"
-               :path-ref-names #{"page1" "bar"}}
+               :path-ref-names (set/union page-tag-refs #{"page1" "bar"})}
               {:block/title "child"
-               :path-ref-names #{"page1" "bar" "baz"}}
+               :path-ref-names (set/union page-tag-refs #{"page1" "bar" "baz"})}
               {:block/title "grandchild"
-               :path-ref-names #{"page1" "bar" "baz" "bing"}}]
+               :path-ref-names (set/union page-tag-refs #{"page1" "bar" "baz" "bing"})}]
              updated-blocks)))))
 
 (deftest block-content-refs

@@ -34,7 +34,8 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.set :as set]))
 
 (rum/defc property-empty-btn-value
   [property & opts]
@@ -506,13 +507,16 @@
                              (when (and property-type (not= property-type :node))
                                (if (= property-type :page)
                                  (not (db/page? node))
-                                 (not= property-type (some-> (:block/type node) keyword))))))
+                                 (not (contains? (ldb/get-entity-types node) property-type))))))
                        result)))))
 
         options (map (fn [node]
                        (let [id (or (:value node) (:db/id node))
                              [header label] (if (integer? id)
-                                              (let [title (subs (title/block-unique-title node) 0 256)
+                                              (let [node-title (if (seq (:property/schema.classes property))
+                                                                 (:block/title node)
+                                                                 (title/block-unique-title node))
+                                                    title (subs node-title 0 256)
                                                     node (or (db/entity id) node)
                                                     icon (get-node-icon node)
                                                     header (when-not (db/page? node)
@@ -529,7 +533,10 @@
                                 :header header
                                 :label-value (:block/title node)
                                 :label label
-                                :value id))) nodes)
+                                :value id
+                                :disabled? (and tags? (contains?
+                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard} ldb/internal-tags)
+                                                       (:db/ident node)))))) nodes)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
         opts' (cond->
                (merge
@@ -815,6 +822,9 @@
        (= value :logseq.property/empty-placeholder)
        (property-empty-btn-value property)
 
+       closed-values?
+       (closed-value-item value opts)
+
        (or (ldb/page? value)
            (and (seq (:block/tags value))
                 ;; FIXME: page-cp should be renamed to node-cp and
@@ -831,9 +841,6 @@
        (contains? #{:node :class :property :page} type)
        (when-let [reference (state/get-component :block/reference)]
          (reference {} (:block/uuid value)))
-
-       closed-values?
-       (closed-value-item value opts)
 
        (de/entity? value)
        (when-some [content (str (db-property/property-value-content value))]
@@ -966,7 +973,9 @@
   (let [type (get schema :type :default)
         date? (= type :date)
         *el (rum/use-ref nil)
-        items (if (de/entity? v) #{v} v)]
+        items (cond->> (if (de/entity? v) #{v} v)
+                (= (:db/ident property) :block/tags)
+                (remove (fn [v] (contains? ldb/internal-tags (:db/ident v)))))]
     (rum/use-effect!
      (fn []
        (when editing?

@@ -101,7 +101,7 @@
 }
 
 .breadcrumb {
-  @apply flex flex-row items-center;
+  @apply flex flex-row items-center flex-wrap;
 
   .asset-container > img {
     height: 18px;

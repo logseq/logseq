@@ -32,15 +32,18 @@
     (->> content
          (d/q '[:find [(pull ?b [*]) ...]
                 :in $ ?pattern
-                :where [?b :block/title ?content]
-                [(missing? $ ?b :block/type)]
+                :where
+                [?b :block/title ?content]
+                [?b :block/page]
                 [(re-find ?pattern ?content)]]
               db)
          first)
     (->> content
          (d/q '[:find [(pull ?b [*]) ...]
                 :in $ ?content
-                :where [?b :block/title ?content] [(missing? $ ?b :block/type)]]
+                :where
+                [?b :block/title ?content]
+                [?b :block/page]]
               db)
          first)))
 
@@ -64,12 +67,7 @@
        first))
 
 (defn- find-page-by-name [db name]
-  (->> name
-       (d/q '[:find [(pull ?b [*]) ...]
-              :in $ ?name
-              :where [?b :block/title ?name]]
-            db)
-       first))
+  (ldb/get-page db name))
 
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
@@ -157,7 +155,8 @@
                 [k
                  (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
                    (if (= :block/tags k)
-                     (mapv #(:db/ident (d/entity db (:db/id %))) v)
+                     (->> (mapv #(:db/ident (d/entity db (:db/id %))) v)
+                          (remove #{:logseq.class/Tag :logseq.class/Property}))
                      (if (db-property-type/all-ref-property-types built-in-type)
                        (db-property/ref->property-value-contents db v)
                        v))
@@ -195,7 +194,6 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 24 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
       (is (= 24 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
@@ -203,17 +201,21 @@
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 10
-             (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
-                                :where [?b :block/title] [_ :block/page ?b] (not [?b :logseq.property/built-in?])] @conn)
-                         (filter ldb/internal-page?))))
+      (is (= 11
+             (count (->> (d/q '[:find [?b ...]
+                                :where
+                                [?b :block/title]
+                                [_ :block/page ?b]
+                                (not [?b :logseq.property/built-in?])] @conn)
+                         (filter (fn [id]
+                                   (ldb/internal-page? (d/entity @conn id)))))))
           "Correct number of pages with block content")
       (is (= 11 (->> @conn
                      (d/q '[:find [?ident ...]
-                            :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                            :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
           "Correct number of user classes")
-      (is (= 4 (count (d/datoms @conn :avet :block/type "whiteboard"))))
+      (is (= 4 (count (d/datoms @conn :avet :block/tags :logseq.class/Whiteboard))))
       (is (= 0 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
       (is (= 1 (count @assets))))
 
@@ -236,7 +238,7 @@
       (is (= 18
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
-                         :where [?b :block/type "property"]])
+                         :where [?b :block/tags :logseq.class/Property]])
                   (remove #(db-malli-schema/internal-ident? (:db/ident %)))
                   count))
           "Correct number of user properties")
@@ -248,7 +250,7 @@
                {:db/ident :user.property/startedat :block/schema {:type :date}}}
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident :block/schema]) ...]
-                         :where [?b :block/type "property"]])
+                         :where [?b :block/tags :logseq.class/Property]])
                   (filter #(contains? #{:prop-bool :prop-string :prop-num :rangeincludes :sameas :startedat}
                                       (keyword (name (:db/ident %)))))
                   set))
@@ -273,12 +275,14 @@
                   set))
           "Block with properties has correct refs")
 
-      (is (= {:user.property/prop-num2 10}
+      (is (= {:user.property/prop-num2 10
+              :block/tags [:logseq.class/Page]}
              (readable-properties @conn (find-page-by-name @conn "new page")))
           "New page has correct properties")
       (is (= {:user.property/prop-bool true
               :user.property/prop-num 5
-              :user.property/prop-string "yeehaw"}
+              :user.property/prop-string "yeehaw"
+              :block/tags [:logseq.class/Page]}
              (readable-properties @conn (find-page-by-name @conn "some page")))
           "Existing page has correct properties")
 
@@ -362,8 +366,12 @@
              (:db/ident (find-page-by-name @conn "life")))
           "Namespaced tag's ident has hierarchy to make it unique")
 
-      (is (= [{:block/type "class"}]
-             (d/q '[:find [(pull ?b [:block/type]) ...] :where [?b :block/name "life"]] @conn))
+      (is (= ["Tag" "Page"]
+             (d/q '[:find [?t-title ...]
+                    :where
+                    [?b :block/name "life"]
+                    [?b :block/tags ?t]
+                    [?t :block/title ?t-title]] @conn))
           "When a class is used and referenced on the same page, there should only be one instance of it")
 
       (is (= ["life"]
@@ -442,8 +450,11 @@
       (is (= #{:logseq.property/description :user.property/description}
              (set (d/q '[:find [?ident ...] :where [?b :db/ident ?ident] [?b :block/name "description"]] @conn)))
           "user description property is separate from built-in one")
-      (is (= #{"page" "class"}
-             (set (d/q '[:find [?type ...] :where [?b :block/type ?type] [?b :block/name "task"]] @conn)))
+      (is (= #{"Page" "Tag"}
+             (set (d/q '[:find [?t-title ...] :where
+                         [?b :block/tags ?t]
+                         [?b :block/name "task"]
+                         [?t :block/title ?t-title]] @conn)))
           "user page is separate from built-in class"))
 
     (testing "multiline blocks"
@@ -495,7 +506,7 @@
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
     (is (= 0 (->> @conn
                   (d/q '[:find [?ident ...]
-                         :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                         :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                   count))
         "Correct number of user classes")
 
@@ -543,7 +554,6 @@
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
-
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
 
@@ -556,7 +566,7 @@
              (:block/tags (readable-properties @conn block)))
           "tagged block has configured tag imported as a class")
 
-      (is (= "class" (:block/type tag-page))
+      (is (= :logseq.class/Tag (:db/ident (first (:block/tags tag-page))))
           "configured tag page in :tag-classes is a class")
       (is (and another-tag-page (not (ldb/class? another-tag-page)))
           "unconfigured tag page is not a class")
@@ -580,7 +590,7 @@
     (is (= #{:user.class/Property :user.class/Movie :user.class/Class :user.class/Tool}
            (->> @conn
                 (d/q '[:find [?ident ...]
-                       :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                       :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                 set))
         "All classes are correctly defined by :type")
 
@@ -602,13 +612,13 @@
           "tagged block can have another property that references the same class it is tagged with,
            without creating a duplicate class")
 
-      (is (= "class" (:block/type tag-page))
+      (is (= :logseq.class/Tag (:db/ident (first (:block/tags tag-page))))
           "configured tag page derived from :property-classes is a class")
       (is (nil? (find-page-by-name @conn "type"))
           "No page exists for configured property")
 
-      (is (= [:user.class/Property]
-             (:block/tags (readable-properties @conn (find-page-by-name @conn "url"))))
+      (is (= #{:user.class/Property :logseq.class/Page}
+             (set (:block/tags (readable-properties @conn (find-page-by-name @conn "url")))))
           "tagged page has configured tag imported as a class"))))
 
 (deftest-async export-files-with-remove-inline-tags
@@ -648,7 +658,7 @@
              :user.class/Class :user.class/Tool :user.class/Whiteboard___Tool}
            (->> @conn
                 (d/q '[:find [?ident ...]
-                       :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                       :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                 set))
         "All classes are correctly defined by :type")
 

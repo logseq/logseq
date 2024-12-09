@@ -323,7 +323,7 @@
     (or (some->> (name property-name)
                  (db-utils/q '[:find [(pull ?b [:db/ident]) ...]
                                :in $ ?title
-                               :where [?b :block/type "property"] [?b :block/title ?title]])
+                               :where [?b :block/tags :logseq.class/Property] [?b :block/title ?title]])
                  first
                  :db/ident)
         ;; Don't return nil as that incorrectly matches all properties
@@ -499,20 +499,20 @@
 (defn- build-file-query
   [e fe {:keys [sort-by]}]
   (cond
-       (= 'namespace fe)
-       (build-namespace e)
+    (= 'namespace fe)
+    (build-namespace e)
 
-       (= 'page-property fe)
-       (build-page-property e)
+    (= 'page-property fe)
+    (build-page-property e)
 
-       (= 'page-tags fe)
-       (build-page-tags e)
+    (= 'page-tags fe)
+    (build-page-tags e)
 
-       (= 'all-page-tags fe)
-       (build-all-page-tags)
+    (= 'all-page-tags fe)
+    (build-all-page-tags)
 
-       (= 'sort-by fe)
-       (build-sort-by e sort-by)))
+    (= 'sort-by fe)
+    (build-sort-by e sort-by)))
 
 (defn build-query
   "This fn converts a form/list in a query e.g. `(operator arg1 arg2)` to its datalog
