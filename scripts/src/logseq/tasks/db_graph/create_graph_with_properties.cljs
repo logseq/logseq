@@ -179,7 +179,7 @@
           (into (mapv #(vector (keyword (str (name %) "-closed"))
                                {:block/schema {:type %}
                                 :build/closed-values (closed-values-config (keyword (str (name %) "-closed")))})
-                      [:default :url :number #_:date]))
+                      [:default :url :number]))
           (into {}))}))
 
 (def spec

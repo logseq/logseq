@@ -141,45 +141,52 @@
                        {:block/title (db-content/title-ref->id-ref (:block/title m) block-refs {:replace-tag? false})
                         :block/refs block-refs})))))))
 
+(defn- build-property-tx
+  [properties page-uuids all-idents property-db-ids
+   [prop-name {:build/keys [schema-classes] :as prop-m}]]
+  (let [[new-block & additional-tx]
+        (if-let [closed-values (seq (map #(merge {:uuid (random-uuid)} %) (:build/closed-values prop-m)))]
+          (let [db-ident (get-ident all-idents prop-name)]
+            (db-property-build/build-closed-values
+             db-ident
+             prop-name
+             (assoc prop-m :db/ident db-ident :closed-values closed-values)
+             {:property-attributes
+              (merge {:db/id (or (property-db-ids prop-name)
+                                 (throw (ex-info "No :db/id for property" {:property prop-name})))}
+                     (select-keys prop-m [:build/properties-ref-types]))}))
+          [(merge (sqlite-util/build-new-property (get-ident all-idents prop-name)
+                                                  (:block/schema prop-m)
+                                                  {:block-uuid (:block/uuid prop-m)
+                                                   :title (:block/title prop-m)})
+                  {:db/id (or (property-db-ids prop-name)
+                              (throw (ex-info "No :db/id for property" {:property prop-name})))}
+                  (select-keys prop-m [:build/properties-ref-types]))])
+        pvalue-tx-m
+        (->property-value-tx-m new-block (:build/properties prop-m) properties all-idents)]
+    (cond-> []
+      (seq pvalue-tx-m)
+      (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+      true
+      (conj
+       (merge
+        new-block
+        (when-let [props (not-empty (:build/properties prop-m))]
+          (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) page-uuids all-idents))
+        (when (seq schema-classes)
+          {:property/schema.classes
+           (mapv #(hash-map :db/ident (get-ident all-idents %))
+                 schema-classes)})))
+      true
+      (into additional-tx))))
+
 (defn- build-properties-tx [properties page-uuids all-idents]
   (let [property-db-ids (->> (keys properties)
                              (map #(vector % (new-db-id)))
                              (into {}))
         new-properties-tx (vec
-                           (mapcat
-                            (fn [[prop-name {:build/keys [schema-classes] :as prop-m}]]
-                              (if-let [closed-values (seq (map #(merge {:uuid (random-uuid)} %) (:build/closed-values prop-m)))]
-                                (let [db-ident (get-ident all-idents prop-name)]
-                                  (db-property-build/build-closed-values
-                                   db-ident
-                                   prop-name
-                                   (assoc prop-m :db/ident db-ident :closed-values closed-values)
-                                   {:property-attributes
-                                    {:db/id (or (property-db-ids prop-name)
-                                                (throw (ex-info "No :db/id for property" {:property prop-name})))}}))
-                                (let [new-block
-                                      (merge (sqlite-util/build-new-property (get-ident all-idents prop-name)
-                                                                             (:block/schema prop-m)
-                                                                             {:block-uuid (:block/uuid prop-m)
-                                                                              :title (:block/title prop-m)})
-                                             {:db/id (or (property-db-ids prop-name)
-                                                         (throw (ex-info "No :db/id for property" {:property prop-name})))}
-                                             (select-keys prop-m [:build/properties-ref-types]))
-                                      pvalue-tx-m (->property-value-tx-m new-block (:build/properties prop-m) properties all-idents)]
-                                  (cond-> []
-                                    (seq pvalue-tx-m)
-                                    (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
-                                    true
-                                    (conj
-                                     (merge
-                                      new-block
-                                      (when-let [props (not-empty (:build/properties prop-m))]
-                                        (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) page-uuids all-idents))
-                                      (when (seq schema-classes)
-                                        {:property/schema.classes
-                                         (mapv #(hash-map :db/ident (get-ident all-idents %))
-                                               schema-classes)})))))))
-                            properties))]
+                           (mapcat (partial build-property-tx properties page-uuids all-idents property-db-ids)
+                                   properties))]
     new-properties-tx))
 
 (defn- build-classes-tx [classes properties-config uuid-maps all-idents]

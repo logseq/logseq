@@ -256,7 +256,39 @@ prop-d:: [[nada]]"}])
         "Blocks with :checkbox property value or tagged with a tag that has that default-value property value")
     (is (= ["b2"]
            (map :block/title (dsl-query "(property :user.property/checkbox false)")))
-        "Blocks with :checkbox property value and not tagged with a tag that has that default-value property value")))
+        "Blocks with :checkbox property value and not tagged with a tag that has that default-value property value"))
+
+  (deftest closed-property-default-value-queries
+    (load-test-files-for-db-graph
+     {:properties
+      {:status {:block/schema {:type :default}
+                :build/closed-values
+                [{:value "Todo" :uuid (random-uuid)}
+                 {:value "Doing" :uuid (random-uuid)}]
+                :build/properties
+                {:logseq.property/default-value "Todo"}
+                :build/properties-ref-types {:entity :number}}}
+      :classes {:Mytask {:build/schema-properties [:status]}
+                :Bug {:build/class-parent :Mytask}}
+      :pages-and-blocks
+      [{:page {:block/title "page1"}
+        :blocks [{:block/title "task1"
+                  :build/properties {:status "Doing"}
+                  :build/tags [:Mytask]}
+                 {:block/title "task2"
+                  :build/tags [:Mytask]}
+                 {:block/title "bug1"
+                  :build/properties {:status "Doing"}
+                  :build/tags [:Bug]}
+                 {:block/title "bug2"
+                  :build/tags [:Bug]}]}]})
+
+    (is (= ["task2" "bug2"]
+           (map :block/title (dsl-query "(property status \"Todo\")")))
+        "Blocks or tagged with or descended from a tag that has closed default-value property")
+    (is (= ["task1" "bug1"]
+           (map :block/title (dsl-query "(property status \"Doing\")")))
+        "Blocks or tagged with or descended from a tag that don't have closed default-value property value")))
 
 (deftest block-property-query-performance
   (let [pages (->> (repeat 10 {:tags ["tag1" "tag2"]})
@@ -739,7 +771,7 @@ created-at:: 1608968448116
   (require '[clojure.pprint :as pprint])
   (test-helper/start-test-db!)
 
-  (query-dsl/query test-db "(task done)")
+  (query-dsl/query test-helper/test-db "(task done)")
 
  ;; Useful for debugging
   (prn
@@ -747,7 +779,7 @@ created-at:: 1608968448116
     '[:find (pull ?b [*])
       :where
       [?b :block/name]]
-    (frontend.db/get-db test-db)))
+    (frontend.db/get-db test-helper/test-db)))
 
  ;; (or (priority a) (not (priority a)))
  ;; FIXME: Error: Insufficient bindings: #{?priority} not bound in [(contains? #{"A"} ?priority)]
@@ -759,7 +791,7 @@ created-at:: 1608968448116
       (or (and [?b :block/priority ?priority] [(contains? #{"A"} ?priority)])
           (not [?b :block/priority #{"A"}]
                [(contains? #{"A"} ?priority)]))]
-    (frontend.db/get-db test-db))))
+    (frontend.db/get-db test-helper/test-db))))
 
 (when-not js/process.env.DB_GRAPH
   (deftest namespace-queries
