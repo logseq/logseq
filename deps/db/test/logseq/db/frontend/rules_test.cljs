@@ -2,8 +2,7 @@
   (:require [cljs.test :refer [deftest is testing are]]
             [datascript.core :as d]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.test.helper :as db-test]
-            [logseq.db :as ldb]))
+            [logseq.db.test.helper :as db-test]))
 
 (defn q-with-rules [query db]
   ;; query assumes no :in given
