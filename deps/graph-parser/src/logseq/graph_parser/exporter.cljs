@@ -142,21 +142,29 @@
       (assert (:block/uuid class-m') "Class must have a :block/uuid")
       [:block/uuid (:block/uuid class-m')])
     (when (convert-tag? (:block/name tag-block) user-options)
-      (if-let [existing-tag-uuid (find-existing-class db tag-block)]
-        [:block/uuid existing-tag-uuid]
-        ;; Creates or updates page within same tx
-        (let [class-m (find-or-create-class db (:block/title tag-block) all-idents tag-block)
-              class-m' (-> (merge tag-block class-m
-                                  (when-not (:block/uuid tag-block)
-                                    {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (:block/name tag-block) (:db/ident class-m))}))
+      (let [existing-tag-uuid (find-existing-class db tag-block)]
+        (cond
+          ;; Don't overwrite internal tags
+          (contains? #{"tag" "property" "page" "journal" "asset"} (:block/name tag-block))
+          [:block/uuid (common-uuid/gen-uuid)]
+
+          existing-tag-uuid
+          [:block/uuid existing-tag-uuid]
+
+          :else
+          ;; Creates or updates page within same tx
+          (let [class-m (find-or-create-class db (:block/title tag-block) all-idents tag-block)
+                class-m' (-> (merge tag-block class-m
+                                    (when-not (:block/uuid tag-block)
+                                      {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (:block/name tag-block) (:db/ident class-m))}))
                            ;; override with imported timestamps
-                           (dissoc :block/created-at :block/updated-at)
-                           (merge (add-missing-timestamps
-                                   (select-keys tag-block [:block/created-at :block/updated-at])))
-                           (replace-namespace-with-parent page-names-to-uuids))]
-          (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
-          (assert (:block/uuid class-m') "Class must have a :block/uuid")
-          [:block/uuid (:block/uuid class-m')])))))
+                             (dissoc :block/created-at :block/updated-at)
+                             (merge (add-missing-timestamps
+                                     (select-keys tag-block [:block/created-at :block/updated-at])))
+                             (replace-namespace-with-parent page-names-to-uuids))]
+            (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
+            (assert (:block/uuid class-m') "Class must have a :block/uuid")
+            [:block/uuid (:block/uuid class-m')]))))))
 
 (defn- logseq-class-ident?
   [k]
@@ -1285,7 +1293,13 @@
         tx' (common-util/fast-remove-nils tx)
         ;; _ (prn :tx-counts (map count (vector whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx)))
         ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :tx tx'}))
-        main-tx-report (d/transact! conn tx' {::new-graph? true})
+        main-tx-report (try
+                         (d/transact! conn tx' {::new-graph? true})
+                         (catch :default e
+                           (js/console.error e)
+                           (prn :db (ldb/write-transit-str @conn))
+                           (prn :tx (ldb/write-transit-str tx'))
+                           (throw e)))
 
         upstream-properties-tx
         (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
