@@ -6,7 +6,7 @@
 
 (defn- find-block-by-content [conn content]
   (->> content
-       (d/q '[:find [(pull ?b [*]) ...]
+       (d/q '[:find [(pull ?b [* {:block/tags [:db/id :block/title :db/ident]}]) ...]
               :in $ ?content
               :where [?b :block/title ?content] [(missing? $ ?b :logseq.property/built-in?)]]
             @conn)
@@ -26,7 +26,7 @@
 
     (is (thrown-with-msg?
          js/Error
-         #"Duplicate property"
+         #"Duplicate page"
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
           "background-image"
@@ -41,7 +41,7 @@
 
     (is (thrown-with-msg?
          js/Error
-         #"Duplicate page by tag"
+         #"Duplicate page"
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
           "Apple"
@@ -56,7 +56,7 @@
 
     (is (thrown-with-msg?
          js/Error
-         #"Duplicate page without tag"
+         #"Duplicate page"
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
           "page1"
