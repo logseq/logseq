@@ -3,8 +3,8 @@
   --ls-tag-text-hover-opacity: 1;
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
-  --ls-main-content-max-width: 810px;
-  --ls-main-content-max-width-wide: 1280px;
+  --ls-main-content-max-width: 960px;
+  --ls-main-content-max-width-wide: 1440px;
   --ls-font-family: Inter;
   --ls-scrollbar-width: 6px;
   --ls-border-radius-low: 4px;
@@ -49,7 +49,7 @@ html[data-theme=light][data-color=logseq] {
   --ls-active-secondary-color: #00477c;
   --ls-block-properties-background-color: var(--ls-secondary-background-color);
   --ls-page-properties-background-color: var(--ls-secondary-background-color);
-  --ls-block-ref-link-text-color: #d8e1e8;
+  --ls-block-ref-link-text-color: var(--ls-link-text-color);
   --ls-border-color: #ccc;
   --ls-secondary-border-color: #e2e2e2;
   --ls-tertiary-border-color: rgba(200, 200, 200, 0.3);
@@ -90,12 +90,6 @@ html[data-theme=light][data-color=logseq] {
   --ls-pie-bg-color: #e1e1e1;
   --ls-pie-fg-color: #0a4a5d;
 
-  --ls-error-text-color: var(--color-red-700);
-  --ls-error-background-color: var(--color-red-100);
-  --ls-warning-text-color: var(--color-yellow-700);
-  --ls-warning-background-color: var(--color-yellow-100);
-  --ls-success-text-color: var(--color-green-800);
-  --ls-success-background-color: var(--color-green-100);
   --ls-focus-ring-color: rgba(66, 133, 244, 0.5);
   --ls-header-button-background: rgba(15, 20, 25, 1);
   --ls-left-sidebar-text-color: var(--lx-gray-12);
@@ -113,7 +107,7 @@ html[data-theme=dark][data-color=logseq] {
   --ls-active-secondary-color: #d0e8e8;
   --ls-block-properties-background-color: #06323e;
   --ls-page-properties-background-color: #06323e;
-  --ls-block-ref-link-text-color: #1a6376;
+  --ls-block-ref-link-text-color: #377f91;
   --ls-border-color: #0e5263;
   --ls-secondary-border-color: #126277;
   --ls-tertiary-border-color: rgba(0, 2, 0, 0.1);
@@ -154,12 +148,6 @@ html[data-theme=dark][data-color=logseq] {
   --ls-pie-bg-color: #01303b;
   --ls-pie-fg-color: #0b5869;
 
-  --ls-error-text-color: var(--color-red-400);
-  --ls-error-background-color: var(--color-red-900);
-  --ls-warning-text-color: var(--color-yellow-400);
-  --ls-warning-background-color: var(--color-yellow-900);
-  --ls-success-text-color: var(--color-green-100);
-  --ls-success-background-color: var(--color-green-900);
   --ls-focus-ring-color: rgba(18, 98, 119, 0.5);
   --ls-header-button-background: #dee4ea;
   --ls-left-sidebar-text-color: var(--lx-gray-11);

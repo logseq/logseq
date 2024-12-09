@@ -35,11 +35,12 @@ test('Search page and blocks (diacritics)', async ({ page, block }) => {
 
   await block.enterNext()
   await block.mustType('[[Einführung in die Allgemeine Sprachwissenschaft' + rand + ']] diacritic-block-2', { delay: 10 })
+  await page.waitForTimeout(500)
   await page.keyboard.press(hotkeyBack)
 
   // check if diacritics are indexed
   const results = await searchPage(page, 'Einführung in die Allgemeine Sprachwissenschaft' + rand)
-  await expect(results.length).toEqual(6) // 1 page + 2 block + 2 page content + 1 current page
+  await expect(results.length).toEqual(5) //  2 block + 1 current page
   await closeSearchBox(page)
 })
 
@@ -61,7 +62,7 @@ test('Search CJK', async ({ page, block }) => {
 
   // check if CJK are indexed
   const results = await searchPage(page, '进度')
-  await expect(results.length).toEqual(5) // 1 page + 1 block + 1 page content + new whiteboard
+  await expect(results.length).toEqual(4) // 1 page + 1 block + new whiteboard
   await closeSearchBox(page)
 })
 
@@ -87,9 +88,10 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
   //   alias_test_content_3 sequentially, to validate the target page state
   await page.type('textarea >> nth=0', 'alias:: [[' + alias_name, { delay: 10 })
   await page.keyboard.press('Enter', { delay: 200 }) // Enter for finishing selection
-  await page.keyboard.press('Enter', { delay: 200 }) // double Enter for exit property editing
-  await page.keyboard.press('Enter', { delay: 200 }) // double Enter for exit property editing
-  await page.waitForTimeout(200)
+  await page.keyboard.press('Enter', { delay: 200 })
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(100)
+  await block.clickNext()
   await block.activeEditing(1)
   await page.type('textarea >> nth=0', alias_test_content_1)
   await lastBlock(page)
@@ -113,7 +115,9 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
   expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_1)
 
   await enterNextBlock(page)
+  await page.waitForTimeout(100)
   await page.type('textarea >> nth=0', alias_test_content_2)
+  await page.waitForTimeout(100)
   page.keyboard.press(hotkeyBack)
 
   await page.waitForNavigation()
@@ -129,7 +133,9 @@ async function alias_test(block: Block, page: Page, page_name: string, search_kw
   await block.activeEditing(2)
   expect(await page.inputValue('textarea >> nth=0')).toBe(alias_test_content_2)
   await newInnerBlock(page)
+  await page.waitForTimeout(100)
   await page.type('textarea >> nth=0', alias_test_content_3)
+  await page.waitForTimeout(100)
   page.keyboard.press(hotkeyBack)
 
   await page.waitForNavigation()

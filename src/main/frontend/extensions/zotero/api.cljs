@@ -2,8 +2,8 @@
   (:require [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
             [cljs-http.client :as http]
-            [cljs.core.async
-             :refer [<! >! alt! chan close! go go-loop timeout]]
+            [cljs.core.async :as async
+             :refer [<! >! alt! chan close! go go-loop]]
             [clojure.string :as str]
             [frontend.util :as util]
             [frontend.extensions.zotero.setting :as setting]))
@@ -26,7 +26,7 @@
   (let [out (chan)]
     (go-loop [last-val nil]
       (let [val   (if (nil? last-val) (<! in) last-val)
-            timer (timeout ms)]
+            timer (async/timeout ms)]
         (alt!
           in ([v] (if v
                     (recur v)
@@ -56,17 +56,17 @@
           :start)
          "0")))))
 
-(defn results-count [headers]
+(defn get-results-count [headers]
   (-> (cske/transform-keys csk/->kebab-case-keyword headers)
       :total-results
       util/safe-parse-int))
 
 ;; "/users/475425/collections?v=3"
 (defn get*
-  ([config api]
-   (get* config api nil))
-  ([config api query-params]
-   (go (let [{:keys [api-version base type type-id api-key timeout]} config
+  ([config' api]
+   (get* config' api nil))
+  ([config' api query-params]
+   (go (let [{:keys [api-version base type type-id api-key timeout]} config'
              {:keys [success body headers] :as response}
              (<! (http/get (str base
                                 (if (= type :user)
@@ -84,7 +84,7 @@
            (let [result     (cske/transform-keys csk/->kebab-case-keyword body)
                  next-start (parse-start headers :next)
                  prev-start (parse-start headers :prev)
-                 results-count (results-count headers)]
+                 results-count (get-results-count headers)]
              (cond-> {:result result}
                next-start
                (assoc :next next-start)

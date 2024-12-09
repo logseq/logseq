@@ -21,7 +21,7 @@
   (let [error-message (atom nil)]
     (with-redefs [notification/show! (fn [msg _] (reset! error-message msg))
                   rfe/href (constantly "")]
-      (config-edn-common-handler/detect-deprecations "config.edn" config-body)
+      (config-edn-common-handler/detect-deprecations "config.edn" config-body {})
       (str @error-message))))
 
 (deftest validate-config-edn
