@@ -79,7 +79,7 @@ yarn watch
 # $ source logseq-py-env/bin/activate          
 
 
-# Attention if you run into this error and you are run ubuntu
+# Attention if you run into this error and you are running ubuntu
 # """The SUID sandbox helper binary was found, but is not configured correctly. Rather than run without sandboxing I'm aborting now.""
 # https://github.com/electron/electron/issues/42510#issuecomment-2171583086
 # The solution is to lift the restrictions that Ubuntu 24.04 implements in the AppImages.
