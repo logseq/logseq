@@ -2,7 +2,8 @@
   "Lower level entity util fns used across db namespaces"
   (:require [datascript.core :as d]
             [clojure.string :as string]
-            [datascript.impl.entity :as de])
+            [datascript.impl.entity :as de]
+            [clojure.set :as set])
   (:refer-clojure :exclude [object?]))
 
 (defn db-based-graph?
@@ -84,3 +85,7 @@
 (def internal-tags
   #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag :logseq.class/Root
     :logseq.class/Asset})
+
+(def type-tags
+  (set/union internal-tags
+             #{:logseq.class/Journal :logseq.class/Whiteboard}))

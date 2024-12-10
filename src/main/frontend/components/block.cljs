@@ -2618,7 +2618,7 @@
                      :tag? true
                      :disable-preview? true)
               tag)
-     (when-not (ldb/internal-tags (:db/ident tag))
+     (when-not (ldb/type-tags (:db/ident tag))
        [:a.close.flex.transition-opacity.duration-300.ease-in
         {:class (if @*hover? "!opacity-100" "!opacity-0")
          :title "Remove this tag"
@@ -2655,7 +2655,7 @@
                                                  (fn []
                                                    (for [tag block-tags]
                                                      [:div.flex.flex-row.items-center.gap-1
-                                                      (when-not (ldb/internal-tags (:db/ident tag))
+                                                      (when-not (ldb/type-tags (:db/ident tag))
                                                         (shui/button
                                                          {:title "Remove tag"
                                                           :variant :ghost
