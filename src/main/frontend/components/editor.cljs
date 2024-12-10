@@ -6,7 +6,6 @@
             [frontend.components.file-based.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
-            [frontend.components.title :as title]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -19,6 +18,7 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
+            [frontend.handler.block :as block-handler]
             [frontend.mixins :as mixins]
             [frontend.search :refer [fuzzy-search]]
             [frontend.state :as state]
@@ -215,7 +215,7 @@
                                             (if (ldb/class? target)
                                               (str (:block/title block) " -> alias: " (:block/title target))
                                               (:block/title block)))
-                                          (title/block-unique-title block))]
+                                          (block-handler/block-unique-title block))]
                               (search-handler/highlight-exact-query title q))]]))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                     "Search for a tag"
