@@ -1266,6 +1266,20 @@
                     p))))
       pages)))
 
+(defn- merge-pages-and-classes
+  "If a new tag is also in pages-tx, ensure that it only has one tag by removing
+  :logseq.class/Page from pages-tx"
+  [classes-tx pages-tx']
+  (if (seq classes-tx)
+    (let [class-map (into {} (map (juxt :block/uuid :block/title) classes-tx))]
+      (mapv (fn [page]
+              (if (some-> (get class-map (:block/uuid page))
+                          (= (:block/title page)))
+                (update page :block/tags (fn [tags] (vec (remove #(= % :logseq.class/Page) tags))))
+                page))
+            pages-tx'))
+    pages-tx'))
+
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -1308,8 +1322,9 @@
         main-props-tx-report (d/transact! conn property-pages-tx {::new-graph? true})
 
         classes-tx @(:classes-tx tx-options)
+        pages-tx'' (merge-pages-and-classes classes-tx pages-tx')
         ;; Build indices
-        pages-index (->> (map #(select-keys % [:block/uuid]) pages-tx')
+        pages-index (->> (map #(select-keys % [:block/uuid]) pages-tx'')
                          (concat (map #(select-keys % [:block/uuid]) classes-tx))
                          distinct)
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks-tx)
@@ -1322,7 +1337,7 @@
         blocks-index (set/union (set block-ids) (set block-refs-ids))
         ;; Order matters. pages-index and blocks-index needs to come before their corresponding tx for
         ;; uuids to be valid. Also upstream-properties-tx comes after blocks-tx to possibly override blocks
-        tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx)
+        tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx'' classes-tx blocks-index blocks-tx)
         tx' (common-util/fast-remove-nils tx)
         ;; _ (prn :tx-counts (map count (vector whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx)))
         ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :tx tx'}))
