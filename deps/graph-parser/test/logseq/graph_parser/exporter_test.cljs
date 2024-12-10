@@ -544,7 +544,7 @@
              (:block/tags (readable-properties @conn block)))
           "tagged block has configured tag imported as a class")
 
-      (is (= :logseq.class/Tag (:db/ident (first (:block/tags tag-page))))
+      (is (= [:logseq.class/Tag] (mapv :db/ident (:block/tags tag-page)))
           "configured tag page in :tag-classes is a class")
       (is (and another-tag-page (not (ldb/class? another-tag-page)))
           "unconfigured tag page is not a class")
@@ -590,7 +590,7 @@
           "tagged block can have another property that references the same class it is tagged with,
            without creating a duplicate class")
 
-      (is (= :logseq.class/Tag (:db/ident (first (:block/tags tag-page))))
+      (is (= [:logseq.class/Tag] (map :db/ident (:block/tags tag-page)))
           "configured tag page derived from :property-classes is a class")
       (is (nil? (db-test/find-page-by-title @conn "type"))
           "No page exists for configured property")
