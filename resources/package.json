@@ -62,6 +62,7 @@
   "resolutions": {
     "**/electron": "31.7.5",
     "**/node-abi": "3.68.0",
-    "**/node-gyp": "10.0.0"
+    "**/node-gyp": "10.0.0",
+    "string-width": "4.2.3"
   }
 }
