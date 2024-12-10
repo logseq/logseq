@@ -140,6 +140,7 @@
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
   [config-content & {:keys [import-type]}]
+  (assert (string? config-content))
   (let [initial-data (cond->
                       [(sqlite-util/kv :logseq.kv/db-type "db")
                        (sqlite-util/kv :logseq.kv/schema-version db-schema/version)
