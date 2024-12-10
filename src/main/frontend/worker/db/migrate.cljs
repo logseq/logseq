@@ -520,7 +520,7 @@
    [47 {:fix replace-hidden-type-with-schema}]
    [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]
    [49 {:fix replace-special-id-ref-with-id-ref}]
-   [50 {:classes [:logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard :logseq.class/Property]}]
+   [50 {:classes [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard]}]
    [51 {:fix replace-block-type-with-tags}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
@@ -547,9 +547,12 @@
                          (into {})
                          (#(sqlite-create-graph/build-initial-classes* % (zipmap properties properties)))
                          (map (fn [b] (assoc b :logseq.property/built-in? true))))
+        new-class-idents (keep (fn [class]
+                                 (when-let [db-ident (:db/ident class)]
+                                   {:db/ident db-ident})) new-classes)
         fixes (when (fn? fix)
                 (fix conn search-db))
-        tx-data (if db-based? (concat new-properties new-classes fixes) fixes)
+        tx-data (if db-based? (concat new-class-idents new-properties new-classes fixes) fixes)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
                   tx-data)]
