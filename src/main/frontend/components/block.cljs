@@ -700,9 +700,11 @@
      (when (and show-icon? (not tag?))
        (let [own-icon (get page-entity (pu/get-pid :logseq.property/icon))
              emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
-         (when own-icon
+         (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true
+                                                                       :not-text-or-page? true
+                                                                       :own-icon? true})]
            [:span {:class (str "icon-emoji-wrap " (when emoji? "as-emoji"))}
-            own-icon])))
+            icon])))
      [:span
       (if (and (coll? children) (seq children))
         (for [child children]
