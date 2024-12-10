@@ -568,7 +568,7 @@ jobs:
       - name: Sign Windows Executable
         run: |
           ls -lah ./builds
-          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.digicert.com ./builds/*.exe
+          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.sectigo.com ./builds/*.exe
         env:
           PASS: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
 
