@@ -202,6 +202,12 @@
       (cond-> block
         true
         (update :block/tags convert-tags-to-classes db per-file-state user-options all-idents)
+        ;; ensure pages are a Page
+        true
+        (update :block/tags (fn [tags]
+                              (if (seq (set/intersection (set tags) #{:logseq.class/Page :logseq.class/Journal :logseq.class/Whiteboard :logseq.class/Property}))
+                                tags
+                                (conj (vec tags) :logseq.class/Page))))
         (seq page-tags)
         (merge {:logseq.property/page-tags page-tags})))
     block))
@@ -1299,13 +1305,7 @@
         tx' (common-util/fast-remove-nils tx)
         ;; _ (prn :tx-counts (map count (vector whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx)))
         ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :tx tx'}))
-        main-tx-report (try
-                         (d/transact! conn tx' {::new-graph? true})
-                         (catch :default e
-                           (js/console.error e)
-                           ;; (prn :db (ldb/write-transit-str @conn))
-                           ;; (prn :tx (ldb/write-transit-str tx'))
-                           (throw e)))
+        main-tx-report (d/transact! conn tx' {::new-graph? true})
 
         upstream-properties-tx
         (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
@@ -1322,11 +1322,7 @@
    {:keys [notify-user set-ui-state export-file]
     :or {set-ui-state (constantly nil)
          export-file (fn export-file [conn m opts]
-                       (try
-                         (add-file-to-db-graph conn (:file/path m) (:file/content m) opts)
-                         (catch :default e
-                           (js/console.error e)
-                           (prn :debug "failed to parse " (:file/path m)))))}
+                       (add-file-to-db-graph conn (:file/path m) (:file/content m) opts))}
     :as options}]
   ;; (prn :export-doc-file path idx)
   (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
