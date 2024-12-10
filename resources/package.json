@@ -57,7 +57,8 @@
     "@electron/rebuild": "3.2.10",
     "electron": "31.7.5",
     "electron-builder": "^22.11.7",
-    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git"
+    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git",
+    "electron-devtools-installer": "^3.2.0"
   },
   "resolutions": {
     "**/electron": "31.7.5",
