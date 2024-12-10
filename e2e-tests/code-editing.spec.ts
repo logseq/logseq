@@ -271,6 +271,7 @@ test('Select codeblock language', async ({ page }) => {
   // Select Clojure from the dropdown menu
   await repeatKeyPress(page, 'ArrowDown', 6)
   await page.press('textarea >> nth=0', 'Enter', { delay: 10 })
+  await page.waitForTimeout(100)
   // expect the codeblock to be visible
   expect(await page.waitForSelector('.CodeMirror', { state: 'visible' }))
 

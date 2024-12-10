@@ -1,10 +1,11 @@
 (ns frontend.mobile.graph-picker
   (:require
    [clojure.string :as string]
+   [logseq.shui.ui :as shui]
    [rum.core :as rum]
    [frontend.ui :as ui]
    [frontend.handler.notification :as notification]
-   [frontend.handler.web.nfs :as web-nfs]
+   [frontend.handler.file-based.nfs :as nfs-handler]
    [frontend.handler.page :as page-handler]
    [frontend.util :as util]
    [frontend.modules.shortcut.core :as shortcut]
@@ -27,7 +28,7 @@
      (ui/toggle on? (fn []) true)]
     :class (str "toggle-item " (when on? "is-on"))
     :intent "logseq"
-    :on-mouse-down #(util/stop %)
+    :on-pointer-down #(util/stop %)
     :on-click #(when (fn? on-toggle)
                  (on-toggle (not on?)))))
 
@@ -63,7 +64,7 @@
                                                    (p/resolved nil))))
                                        (p/then
                                         (fn []
-                                          (web-nfs/ls-dir-files-with-path!
+                                          (nfs-handler/ls-dir-files-with-path!
                                            graph-path (merge
                                                        {:ok-handler
                                                         (fn []
@@ -116,16 +117,16 @@
 
          :intent "logseq"
          :on-click (fn []
-                     (state/close-modal!)
+                     (shui/dialog-close!)
                      (page-handler/ls-dir-files! shortcut/refresh!
-                                                 {:dir (when native-ios?
-                                                         (or
-                                                          (state/get-icloud-container-root-url)
-                                                          (state/get-local-container-root-url)))})))]
+                       {:dir (when native-ios?
+                               (or
+                                 (state/get-icloud-container-root-url)
+                                 (state/get-local-container-root-url)))})))]
 
        ;; step 1
        :new-graph
-       [:div.flex.flex-col.w-full.space-y-3.faster-fade-in
+       [:div.flex.flex-col.w-full.space-y-3.faster.fade-in
         [:input.form-input.block
          {:auto-focus  true
           :ref         *input-ref

@@ -17,3 +17,13 @@
   z-index: calc(var(--ls-z-index-level-1) + 1);
   width: 270px;
 }
+
+.ls-context-menu-content {
+  .menu-links-wrapper {
+    @apply border-none shadow-none overflow-visible;
+  }
+
+  [role=separator] {
+    @apply opacity-80;
+  }
+}

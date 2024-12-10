@@ -27,12 +27,12 @@
        (mapcat shortcut-helper/shortcuts->commands)))
 
 (defn get-commands []
-  (->> (get @state/state :command-palette/commands)
+  (->> @(get @state/state :command-palette/commands)
        (sort-by :id)))
 
 (defn get-commands-unique []
   (reduce #(assoc %1 (:id %2) %2) {}
-          (get @state/state :command-palette/commands)))
+          @(get @state/state :command-palette/commands)))
 
 (defn history
   ([] (or (try (storage/get "commands-history")
@@ -56,7 +56,6 @@
 
 (defn invoke-command [{:keys [id action] :as cmd}]
   (add-history cmd)
-  (state/close-modal!)
   (plugin-handler/hook-lifecycle-fn! id action))
 
 (defn top-commands [limit]

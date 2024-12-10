@@ -42,3 +42,7 @@ html[data-theme=light] a.toggle:hover {
     @apply opacity-100;
   }
 }
+
+.sidebar-panel-content {
+  @apply pt-3;
+}
