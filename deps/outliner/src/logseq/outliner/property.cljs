@@ -188,8 +188,11 @@
   [conn property-id v]
   (when (and (= property-id :block/tags) (ldb/type-tags (:db/ident (d/entity @conn v))))
     (throw (ex-info (str "Can't set tag with internal #" (:block/title (d/entity @conn v)))
-                    {:property-id property-id
-                     :v v}))))
+                    {:type :notification
+                     :payload {:message (str "Can't set tag with internal #" (:block/title (d/entity @conn v)))
+                               :type :error}
+                     :property-id property-id
+                     :property-value v}))))
 
 (defn- raw-set-block-property!
   "Adds the raw property pair (value not modified) to the given block if the property value is valid"
