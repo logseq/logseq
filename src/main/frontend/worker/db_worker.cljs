@@ -311,7 +311,7 @@
         (swap! *datascript-conns assoc repo conn)
         (swap! *client-ops-conns assoc repo client-ops-conn)
         (when (and db-based? (not initial-data-exists?))
-          (let [config (or config {})
+          (let [config (or config "")
                 initial-data (sqlite-create-graph/build-db-initial-data config
                                                                         (when import-type {:import-type import-type}))]
             (d/transact! conn initial-data {:initial-db? true})))
