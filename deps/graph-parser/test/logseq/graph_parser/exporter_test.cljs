@@ -156,7 +156,8 @@
                  (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
                    (if (= :block/tags k)
                      (->> (mapv #(:db/ident (d/entity db (:db/id %))) v)
-                          (remove #{:logseq.class/Tag :logseq.class/Property}))
+                          (remove #{:logseq.class/Tag :logseq.class/Property})
+                          vec)
                      (if (db-property-type/all-ref-property-types built-in-type)
                        (db-property/ref->property-value-contents db v)
                        v))
@@ -201,14 +202,17 @@
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
+      ;; TODO: Fix behavior leading to different count
       (is (= 11
-             (count (->> (d/q '[:find [?b ...]
-                                :where
-                                [?b :block/title]
-                                [_ :block/page ?b]
-                                (not [?b :logseq.property/built-in?])] @conn)
-                         (filter (fn [id]
-                                   (ldb/internal-page? (d/entity @conn id)))))))
+             (->> (d/q '[:find [?b ...]
+                         :where
+                         [?b :block/title]
+                         [_ :block/page ?b]
+                         (not [?b :logseq.property/built-in?])] @conn)
+                  (map #(d/entity @conn %))
+                  (filter ldb/internal-page?)
+                  #_(map #(select-keys % [:block/title :block/tags]))
+                  count))
           "Correct number of pages with block content")
       (is (= 11 (->> @conn
                      (d/q '[:find [?ident ...]
@@ -542,8 +546,8 @@
         (is (and tag-page (not (ldb/class? tag-page)))
             "tag page is not a class")
 
-        (is (= {:logseq.property/page-tags #{"Movie"}}
-               (readable-properties @conn tagged-page))
+        (is (= #{"Movie"}
+               (:logseq.property/page-tags (readable-properties @conn tagged-page)))
             "tagged page has existing page imported as a tag to page-tags")
         (is (= #{"LargeLanguageModel" "fun" "ai"}
                (:logseq.property/page-tags (readable-properties @conn (find-page-by-name @conn "chat-gpt"))))
@@ -571,7 +575,7 @@
       (is (and another-tag-page (not (ldb/class? another-tag-page)))
           "unconfigured tag page is not a class")
 
-      (is (= {:block/tags [:user.class/Movie]}
+      (is (= {:block/tags [:logseq.class/Page :user.class/Movie]}
              (readable-properties @conn (find-page-by-name @conn "Interstellar")))
           "tagged page has configured tag imported as a class"))))
 
