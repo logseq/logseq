@@ -2,8 +2,7 @@
   (:require [cljs.test :refer [deftest is are]]
             [logseq.graph-parser.extract :as extract]
             [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db :as ldb]))
+            [logseq.db.frontend.schema :as db-schema]))
 
 ;; This is a copy of frontend.util.fs/multiplatform-reserved-chars for reserved chars testing
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")

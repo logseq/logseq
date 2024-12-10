@@ -91,7 +91,8 @@
   (let [file-concepts (->>
                        ;; from logseq.db.frontend.schema
                        [:block/namespace :block/properties-text-values :block/pre-block :recent/pages :block/file :block/properties-order
-                        :block/repeated :block/deadline :block/scheduled :block/priority :block/marker :block/macros]
+                        :block/repeated :block/deadline :block/scheduled :block/priority :block/marker :block/macros
+                        :block/type]
                        (map str)
                        (into [;; e.g. block/properties :title
                               "block/properties :"
