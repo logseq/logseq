@@ -1246,6 +1246,25 @@
                [(:block/name %) (date-time-util/journal-day->ms journal-day)]))
        (into {})))
 
+(defn- remove-alias-if-equals-to-page-name
+  [pages]
+  (let [[page alias] (some (fn [page] (when (and (:block/namespace page) (:block/alias page))
+                                        [page (:block/alias page)])) pages)
+        page-last-part (when page (common-util/page-name-sanity-lc (ns-util/get-last-part (:block/name page))))
+        self-alias? (and (seq alias) (some #(= page-last-part (:block/name %)) alias))]
+    (if self-alias?
+      (->> pages
+           (remove (fn [p]
+                     (= (:block/name p) page-last-part)))
+           (map (fn [p]
+                  (if (= (:block/uuid p) (:block/uuid page))
+                    (-> page
+                        (dissoc :block/alias)
+                        (update :block/properties dissoc :alias)
+                        (update :block/properties-text-values dissoc :alias))
+                    p))))
+      pages)))
+
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -1263,11 +1282,12 @@
                       :as *options}]
   (let [options (assoc *options :notify-user notify-user :log-fn log-fn)
         {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
+        pages' (remove-alias-if-equals-to-page-name pages)
         tx-options (merge (build-tx-options options)
-                          {:journal-created-ats (build-journal-created-ats pages)})
+                          {:journal-created-ats (build-journal-created-ats pages')})
         old-properties (keys @(get-in options [:import-state :property-schemas]))
         ;; Build page and block txs
-        {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
+        {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages' blocks tx-options)
         whiteboard-pages (->> pages-tx
                               ;; support old and new whiteboards
                               (filter ldb/whiteboard?)

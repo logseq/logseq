@@ -201,9 +201,8 @@
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
 
-      ;; Don't count pages like url.md that have properties but no content
-      ;; TODO: Fix behavior leading to different count
-      (is (= 11
+      ;; `y`, `url` and `tool` have text or url blocks
+      (is (= 12
              (->> (d/q '[:find [?b ...]
                          :where
                          [?b :block/title]
