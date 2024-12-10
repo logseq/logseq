@@ -43,8 +43,7 @@
     "posthog-js": "1.10.2",
     "semver": "7.5.2",
     "socks-proxy-agent": "8.0.2",
-    "update-electron-app": "2.0.1",
-    "electron-devtools-installer": "3.2.0"
+    "update-electron-app": "2.0.1"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.3.1",

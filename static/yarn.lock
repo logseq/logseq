@@ -1939,7 +1939,7 @@ electron-deeplink@1.0.10:
     electron-log "^4.2.3"
     node-addon-api "^2.0.0"
 
-electron-devtools-installer@^3.2.0:
+electron-devtools-installer@3.2.0:
   version "3.2.0"
   resolved "https://registry.yarnpkg.com/electron-devtools-installer/-/electron-devtools-installer-3.2.0.tgz#acc48d24eb7033fe5af284a19667e73b78d406d0"
   integrity sha512-t3UczsYugm4OAbqvdImMCImIMVdFzJAHgbwHpkl5jmfu1izVgUcP/mnrPqJIpEeCK1uZGpt+yHgWEN+9EwoYhQ==
