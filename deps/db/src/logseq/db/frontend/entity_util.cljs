@@ -35,7 +35,11 @@
 (defn whiteboard?
   "Given a page entity or map, check if it is a whiteboard page"
   [entity]
-  (has-tag? entity :logseq.class/Whiteboard))
+  (or
+   ;; db based graph
+   (has-tag? entity :logseq.class/Whiteboard)
+   ;; file based graph
+   (= "whiteboard" (:block/type entity))))
 
 (defn closed-value?
   [entity]
@@ -48,11 +52,16 @@
 
 (defn page?
   [entity]
-  (or (internal-page? entity)
-      (class? entity)
-      (property? entity)
-      (whiteboard? entity)
-      (journal? entity)))
+  (or
+   ;; db based graph
+   (internal-page? entity)
+   (class? entity)
+   (property? entity)
+   (whiteboard? entity)
+   (journal? entity)
+
+   ;; file based graph
+   (contains? #{"page" "journal" "whiteboard"} (:block/type entity))))
 
 (defn asset?
   "Given an entity or map, check if it is an asset block"
