@@ -826,13 +826,15 @@ independent of format as format specific heading characters are stripped"
 (defn get-class-objects
   [repo class-id]
   (when-let [class (db-utils/entity repo class-id)]
-    (if (first (:logseq.property/_parent class))        ; has children classes
-      (let [all-classes (conj (->> (get-structured-children repo class-id)
-                                   (map #(db-utils/entity repo %)))
-                              class)]
-        (->> (mapcat :block/_tags all-classes)
-             distinct))
-      (:block/_tags class))))
+    (->>
+     (if (first (:logseq.property/_parent class))        ; has children classes
+       (let [all-classes (conj (->> (get-structured-children repo class-id)
+                                    (map #(db-utils/entity repo %)))
+                               class)]
+         (->> (mapcat :block/_tags all-classes)
+              distinct))
+       (:block/_tags class))
+     (remove ldb/hidden?))))
 
 (defn sub-class-objects
   [repo class-id]
@@ -853,7 +855,8 @@ independent of format as format specific heading characters are stripped"
               (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
                                    {:deps rules/rules-dependencies})
               (:db/ident property))
-         (map #(db-utils/entity repo %)))))
+         (map #(db-utils/entity repo %))
+         (remove ldb/hidden?))))
 
 (defn get-all-namespace-relation
   [repo]
