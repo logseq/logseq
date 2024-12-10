@@ -5,7 +5,6 @@
             [dommy.core :as d]
             [frontend.components.icon :as icon-component]
             [frontend.components.select :as select]
-            [frontend.components.title :as title]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -515,7 +514,7 @@
                              [header label] (if (integer? id)
                                               (let [node-title (if (seq (:property/schema.classes property))
                                                                  (:block/title node)
-                                                                 (title/block-unique-title node))
+                                                                 (block-handler/block-unique-title node))
                                                     title (subs node-title 0 256)
                                                     node (or (db/entity id) node)
                                                     icon (get-node-icon node)

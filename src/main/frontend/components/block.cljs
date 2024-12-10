@@ -20,7 +20,6 @@
             [frontend.components.query :as query]
             [frontend.components.query.builder :as query-builder-component]
             [frontend.components.svg :as svg]
-            [frontend.components.title :as title]
             [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -722,7 +721,7 @@
                                (->elem :span (map-inline config label))
 
                                show-unique-title?
-                               (title/block-unique-title page-entity)
+                               (block-handler/block-unique-title page-entity)
 
                                :else
                                (let [title (:block/title page-entity)
