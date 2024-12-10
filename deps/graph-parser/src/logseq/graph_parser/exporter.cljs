@@ -1156,7 +1156,8 @@
         property-page-properties-tx (keep (fn [b]
                                             (when-let [page-properties (not-empty (db-property/properties b))]
                                               (merge page-properties {:block/uuid (:block/uuid b)
-                                                                      :block/tags (conj (:block/tags page-properties) :logseq.class/Property)})))
+                                                                      :block/tags (-> (remove #(= :logseq.class/Page %) (:block/tags page-properties))
+                                                                                      (conj :logseq.class/Property))})))
                                           properties-tx)]
     {:pages-tx pages-tx'
      :property-pages-tx (concat property-pages-tx converted-property-pages-tx)
