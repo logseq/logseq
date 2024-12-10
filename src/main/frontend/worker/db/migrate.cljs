@@ -563,30 +563,31 @@
   "Migrate 'frontend' datascript schema and data. To add a new migration,
   add an entry to schema-version->updates and bump db-schema/version"
   [conn search-db]
-  (let [db @conn
-        version-in-db (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0)]
-    (cond
-      (= version-in-db db-schema/version)
-      nil
+  (when (ldb/db-based-graph? @conn)
+    (let [db @conn
+          version-in-db (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0)]
+      (cond
+        (= version-in-db db-schema/version)
+        nil
 
-      (< db-schema/version version-in-db) ; outdated client, db version could be synced from server
+        (< db-schema/version version-in-db) ; outdated client, db version could be synced from server
       ;; FIXME: notify users to upgrade to the latest version asap
-      nil
+        nil
 
-      (> db-schema/version version-in-db)
-      (try
-        (let [db-based? (ldb/db-based-graph? @conn)
-              updates (keep (fn [[v updates]]
-                              (when (and (< version-in-db v) (<= v db-schema/version))
-                                [v updates]))
-                            schema-version->updates)]
-          (println "DB schema migrated from" version-in-db)
-          (doseq [[v m] updates]
-            (upgrade-version! conn search-db db-based? v m)))
-        (catch :default e
-          (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))
-          (js/console.error e)
-          (throw e))))))
+        (> db-schema/version version-in-db)
+        (try
+          (let [db-based? (ldb/db-based-graph? @conn)
+                updates (keep (fn [[v updates]]
+                                (when (and (< version-in-db v) (<= v db-schema/version))
+                                  [v updates]))
+                              schema-version->updates)]
+            (println "DB schema migrated from" version-in-db)
+            (doseq [[v m] updates]
+              (upgrade-version! conn search-db db-based? v m)))
+          (catch :default e
+            (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))
+            (js/console.error e)
+            (throw e)))))))
 
 ;; Backend migrations
 ;; ==================
