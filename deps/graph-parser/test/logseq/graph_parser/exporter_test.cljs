@@ -132,9 +132,7 @@
                 [k
                  (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
                    (if (= :block/tags k)
-                     (->> (mapv #(:db/ident (d/entity db (:db/id %))) v)
-                          (remove #{:logseq.class/Tag :logseq.class/Property})
-                          vec)
+                     (mapv #(:db/ident (d/entity db (:db/id %))) v)
                      (if (db-property-type/all-ref-property-types built-in-type)
                        (db-property/ref->property-value-contents db v)
                        v))
@@ -597,9 +595,9 @@
       (is (nil? (db-test/find-page-by-title @conn "type"))
           "No page exists for configured property")
 
-      (is (= #{:user.class/Property :logseq.class/Page}
+      (is (= #{:user.class/Property :logseq.class/Property}
              (set (:block/tags (readable-properties @conn (db-test/find-page-by-title @conn "url")))))
-          "tagged page has configured tag imported as a class"))))
+          "tagged page has correct tags including one from option"))))
 
 (deftest-async export-files-with-remove-inline-tags
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
