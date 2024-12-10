@@ -200,10 +200,11 @@
                   (db/entity [:block/uuid (:block/uuid block)])
                   :else
                   block)
-        tags (remove (fn [t] (some-> (:block/raw-title block-e) (ldb/inline-tag? t)))
+        tags (remove (fn [t]
+                       (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
+                           (ldb/type-tags (:db/ident t))))
                      (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))]
-    (if (and (seq tags)
-             (not (ldb/journal? block)))
+    (if (seq tags)
       (str (:block/title block)
            " "
            (string/join
