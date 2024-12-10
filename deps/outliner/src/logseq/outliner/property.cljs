@@ -38,7 +38,7 @@
            multiple-values-empty? (and (sequential? old-value)
                                        (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
            block' (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
-                        property-id value)
+                         property-id value)
            block-tx-data (cond-> block'
                            (and status? (not (ldb/class-instance? (d/entity @conn :logseq.class/Task) block)))
                            (assoc :block/tags :logseq.class/Task))]
@@ -184,6 +184,13 @@
   [id]
   (if (uuid? id) [:block/uuid id] id))
 
+(defn- check-internal-tag-usage
+  [conn property-id v]
+  (when (and (= property-id :block/tags) (ldb/type-tags (:db/ident (d/entity @conn v))))
+    (throw (ex-info (str "Can't set tag with internal #" (:block/title (d/entity @conn v)))
+                    {:property-id property-id
+                     :v v}))))
+
 (defn- raw-set-block-property!
   "Adds the raw property pair (value not modified) to the given block if the property value is valid"
   [conn block property property-type new-value]
@@ -281,10 +288,13 @@
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (d/entity @conn block-eid)
         db-attribute? (some? (db-schema/schema-for-db-based-graph property-id))]
-    (if db-attribute?
+    (check-internal-tag-usage conn property-id v)
+    (cond
+      db-attribute?
       (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
         (ldb/transact! conn [{:db/id (:db/id block) property-id v}]
                        {:outliner-op :save-block}))
+      :else
       (let [property (d/entity @conn property-id)
             _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
             property-type (get-in property [:block/schema :type] :default)
@@ -301,6 +311,7 @@
   [conn block-ids property-id v]
   (assert property-id "property-id is nil")
   (throw-error-if-read-only-property property-id)
+  (check-internal-tag-usage conn property-id v)
   (let [block-eids (map ->eid block-ids)
         property (d/entity @conn property-id)
         _ (when (= (:db/ident property) :logseq.property/parent)
