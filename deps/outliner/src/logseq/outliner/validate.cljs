@@ -99,7 +99,6 @@
    - Page names of other types are unique for their type e.g. their can be #Journal ('class') and Journal ('page')
    - Property names are unique and don't consider built-in property names"
   [db new-title entity]
-  (assert (ldb/page? entity) "`entity` is not a page")
   (validate-unique-for-page db new-title entity))
 
 (defn ^:api validate-disallow-page-with-journal-name
