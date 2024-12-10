@@ -91,6 +91,27 @@ import { Toggle } from '@/components/ui/toggle'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import * as uniqolor from 'uniqolor'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupAction,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInput,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSkeleton,
+  SidebarMenuSub, SidebarMenuSubButton,
+  SidebarMenuSubItem, SidebarProvider, SidebarRail,
+  SidebarSeparator, SidebarTrigger, useSidebar
+} from '@/components/ui/sidebar'
 
 declare global {
   var LSUI: any
@@ -184,7 +205,19 @@ const shadui = {
   Tooltip, TooltipTrigger, TooltipArrow,
   TooltipContent, TooltipProvider, TooltipPortal,
   Toggle, ToggleGroup, ToggleGroupItem,
-  Avatar, AvatarImage, AvatarFallback
+  Avatar, AvatarImage, AvatarFallback,
+  Sidebar, SidebarContent, SidebarFooter,
+  SidebarGroup, SidebarGroupAction,
+  SidebarGroupContent, SidebarGroupLabel,
+  SidebarHeader, SidebarInput,
+  SidebarInset, SidebarMenu,
+  SidebarMenuAction, SidebarMenuBadge,
+  SidebarMenuButton, SidebarMenuItem,
+  SidebarMenuSkeleton, SidebarMenuSub,
+  SidebarMenuSubButton, SidebarMenuSubItem,
+  SidebarProvider, SidebarRail,
+  SidebarSeparator, SidebarTrigger,
+  useSidebar
 }
 
 function setupGlobals() {
