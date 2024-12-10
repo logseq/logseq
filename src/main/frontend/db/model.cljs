@@ -806,7 +806,7 @@ independent of format as format specific heading characters are stripped"
                      (map (fn [d]
                             (db-utils/entity db (:e d))))
                      (remove (fn [d]
-                               (contains? entity-util/internal-tags (:db/ident d)))))]
+                               (contains? entity-util/type-tags (:db/ident d)))))]
     (if except-root-class?
       (keep (fn [e] (when-not (= :logseq.class/Root (:db/ident e)) e)) classes)
       classes)))
