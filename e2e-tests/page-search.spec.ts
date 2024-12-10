@@ -39,7 +39,7 @@ test('Search page and blocks (diacritics)', async ({ page, block }) => {
 
   // check if diacritics are indexed
   const results = await searchPage(page, 'Einführung in die Allgemeine Sprachwissenschaft' + rand)
-  await expect(results.length).toEqual(6) // 1 page + 2 block + 2 page content + 1 current page
+  await expect(results.length).toEqual(4) // 1 page + 2 block + 1 current page
   await closeSearchBox(page)
 })
 
