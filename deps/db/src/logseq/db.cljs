@@ -17,7 +17,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.common.util.namespace :as ns-util]
-            [logseq.common.util.page-ref :as page-ref])
+            [logseq.common.util.page-ref :as page-ref]
+            [clojure.walk :as walk])
   (:refer-clojure :exclude [object?]))
 
 (defonce *transact-fn (atom nil))
@@ -40,11 +41,24 @@
              m))
          tx-data)))
 
+(defn assert-no-entities
+  [tx-data]
+  (walk/prewalk
+   (fn [f]
+     (if (de/entity? f)
+       (throw (ex-info "ldb/transact! doesn't support Entity"
+                       {:entity f
+                        :tx-data tx-data}))
+       f))
+   tx-data))
+
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
   ([repo-or-conn tx-data]
    (transact! repo-or-conn tx-data nil))
   ([repo-or-conn tx-data tx-meta]
+   (when goog.DEBUG
+     (assert-no-entities tx-data))
    (let [tx-data (map (fn [m]
                         (if (map? m)
                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
