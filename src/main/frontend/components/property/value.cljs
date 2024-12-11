@@ -974,7 +974,7 @@
         *el (rum/use-ref nil)
         items (cond->> (if (de/entity? v) #{v} v)
                 (= (:db/ident property) :block/tags)
-                (remove (fn [v] (contains? ldb/type-tags (:db/ident v)))))]
+                (remove (fn [v] (contains? ldb/hidden-tags (:db/ident v)))))]
     (rum/use-effect!
      (fn []
        (when editing?
