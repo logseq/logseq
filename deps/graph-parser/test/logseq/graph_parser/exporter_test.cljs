@@ -320,6 +320,14 @@
       (is (= #{"gpt"}
              (:block/alias (readable-properties @conn (db-test/find-page-by-title @conn "chat-gpt"))))
           "alias set correctly")
+      (is (= ["y"]
+             (->> (d/q '[:find [?b ...] :where [?b :block/title "y"] [?b :logseq.property/parent]]
+                       @conn)
+                  first
+                  (d/entity @conn)
+                  :block/alias
+                  (map :block/title)))
+          "alias set correctly on namespaced page")
 
       (is (= {:logseq.property.linked-references/includes #{"Oct 9th, 2024"}
               :logseq.property.linked-references/excludes #{"ref2"}}
