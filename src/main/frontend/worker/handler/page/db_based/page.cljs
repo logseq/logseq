@@ -215,7 +215,8 @@
                                       page-txs)
                                  (build-first-block-tx (:block/uuid (first page-txs)) format))
                 txs      (concat
-                          parents
+                          ;; transact doesn't support entities
+                          (remove de/entity? parents)
                           page-txs
                           first-block-tx)]
             (when (seq txs)
