@@ -394,8 +394,7 @@
                          (or (:block/tags page)
                              [:logseq.class/Page]))]
             (assoc page :block/tags tags))
-          (let [type (if class? "class" (or (:block/type page) "page"))]
-            (assoc page :block/type type)))))))
+          (assoc page :block/type (or (:block/type page) "page")))))))
 
 (defn- db-namespace-page?
   "Namespace page that're not journal pages"
