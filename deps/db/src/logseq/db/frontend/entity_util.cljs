@@ -48,7 +48,11 @@
 (defn journal?
   "Given a page entity or map, check if it is a journal page"
   [entity]
-  (has-tag? entity :logseq.class/Journal))
+  (or
+   ;; db based graph
+   (has-tag? entity :logseq.class/Journal)
+   ;; file based graph
+   (= "journal" (:block/type entity))))
 
 (defn page?
   [entity]

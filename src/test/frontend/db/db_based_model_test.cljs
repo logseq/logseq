@@ -5,7 +5,8 @@
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [logseq.outliner.property :as outliner-property]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db :as ldb]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -27,7 +28,9 @@
         _ (test-helper/create-page! "class2" opts)]
     (is (= (set
             (concat
-             (map :title (vals db-class/built-in-classes))
+             (map :title (vals (remove (fn [[ident _]]
+                                         (contains? ldb/type-tags ident))
+                                       db-class/built-in-classes)))
              ["class1" "class2"]))
            (set (map :block/title (model/get-all-classes repo)))))))
 
