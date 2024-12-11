@@ -8,6 +8,14 @@
   ;; (:import [missionary Cancelled])
   )
 
+(defn continue-flow
+  "ensure f is a continuous flow"
+  ([f] (continue-flow nil f))
+  ([init-value f]
+   (->> f
+        (m/reductions {} init-value)
+        (m/latest identity))))
+
 (def delays (reductions * 1000 (repeat 2)))
 
 (def ^:private retry-sentinel (js-obj))
@@ -45,8 +53,7 @@
         (m/amb
          (m/? (m/sleep interval-ms value))
          (recur))))
-    (m/reductions {} value)
-    (m/latest identity))))
+    (continue-flow value))))
 
 (defn concurrent-exec-flow
   "Return a flow.
@@ -79,9 +86,25 @@
   [task key & {:keys [succ fail]}]
   (task (or succ #(prn key :succ %)) (or fail #(js/console.log key %))))
 
-(defn run-task-throw
-  [task key & {:keys [succ]}]
-  (task (or succ #(prn key :succ %)) #(throw (ex-info "task failed" {:key key :e %}))))
+(comment
+  (defn run-task-throw
+    [task key & {:keys [succ]}]
+    (task (or succ #(prn key :succ %)) #(throw (ex-info "task failed" {:key key :e %})))))
+
+(defonce ^:private *background-task-cancelers ; key -> canceler
+  (volatile! {}))
+
+(defn run-background-task
+  "Run task.
+  will cancel last same key background-task,
+  useful when developing (to avoid: reload cljs then run multiple same tasks)"
+  [key task]
+  (when-let [canceler (get @*background-task-cancelers key)]
+    (canceler)
+    (vswap! *background-task-cancelers assoc key nil))
+  (let [canceler (run-task task key)]
+    (vswap! *background-task-cancelers assoc key canceler)
+    nil))
 
 (comment
   (defn >!
