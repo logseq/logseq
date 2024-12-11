@@ -241,7 +241,7 @@
   "it's complex to setup db-worker related stuff, when I only want to test rtc related logic"
   [repo init-tx-data other-tx-data]
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        db-initial-data (sqlite-create-graph/build-db-initial-data "{}")]
+        db-initial-data (sqlite-create-graph/build-db-initial-data "")]
     (swap! worker-state/*datascript-conns assoc repo conn)
     (d/transact! conn db-initial-data {:initial-db? true :skip-store-conn rtc-const/RTC-E2E-TEST})
     (db-listener/listen-db-changes! repo conn)
