@@ -466,7 +466,7 @@ jobs:
 
   build-macos-arm64:
     needs: [ compile-cljs ]
-    runs-on: macos-13
+    runs-on: macos-13-arm64
 
     steps:
       - name: Download The Static Asset
