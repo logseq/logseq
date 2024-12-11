@@ -10,7 +10,7 @@
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
             [frontend.components.right-sidebar :as sidebar]
-            [frontend.components.rtc.flows :as rtc-flows]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.components.server :as server]
             [frontend.components.settings :as settings]
