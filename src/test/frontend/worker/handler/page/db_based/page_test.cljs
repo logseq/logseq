@@ -40,7 +40,7 @@
             "Child class with new parent has correct parents")
 
         (worker-db-page/create! conn "foo/class1/baz3" {:split-namespace? true})
-        (is (= #{"tag" "Page"}
+        (is (= #{"Tag" "Page"}
                (set (d/q '[:find [?tag-title ...]
                            :where
                            [?b :block/title "class1"]
