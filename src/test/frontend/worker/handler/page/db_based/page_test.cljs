@@ -9,12 +9,8 @@
   (let [conn (db-test/create-conn)
         _ (worker-db-page/create! conn "movie" {:class? true})
         _ (worker-db-page/create! conn "Movie" {:class? true})
-        movie-class (->> (d/q '[:find [(pull ?b [*]) ...] :in $ ?title :where [?b :block/title ?title]]
-                              @conn "movie")
-                         first)
-        Movie-class (->> (d/q '[:find [(pull ?b [*]) ...] :in $ ?title :where [?b :block/title ?title]]
-                              @conn "Movie")
-                         first)]
+        movie-class (ldb/get-case-page @conn "movie")
+        Movie-class (ldb/get-case-page @conn "Movie")]
 
     (is (ldb/class? movie-class) "Creates a class")
     (is (ldb/class? Movie-class) "Creates another class with a different case sensitive name")
