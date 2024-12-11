@@ -250,7 +250,7 @@
 
     &.is-expand {
       .header .more {
-        opacity: 1;
+        opacity: .3;
         transform: rotate(-90deg);
       }
 
