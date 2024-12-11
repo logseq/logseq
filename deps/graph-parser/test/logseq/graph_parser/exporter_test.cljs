@@ -152,7 +152,14 @@
 
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
-    (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")))
+    (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
+    (is (= []
+             (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
+                         :where [?b :block/tags :logseq.class/Tag]]
+                       @conn)
+                  (map first)
+                  (remove #(= [{:db/ident :logseq.class/Tag}] (:block/tags %)))))
+          "All classes only have :logseq.class/Tag as their tag (and don't have Page)")))
 
 (deftest-async export-basic-graph-with-convert-all-tags
   ;; This graph will contain basic examples of different features to import
@@ -176,8 +183,8 @@
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
 
-      ;; `y`, `url` and `tool` have text or url blocks
-      (is (= 12
+      ;; Properties and tags aren't included in this count as they aren't a Page
+      (is (= 10
              (->> (d/q '[:find [?b ...]
                          :where
                          [?b :block/title]
@@ -266,7 +273,15 @@
 
       (is (= {:user.property/rating 5.5}
              (readable-properties @conn (db-test/find-block-by-content @conn ":rating float")))
-          "Block with float property imports as a float"))
+          "Block with float property imports as a float")
+
+      (is (= []
+             (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
+                         :where [?b :block/tags :logseq.class/Property]]
+                       @conn)
+                  (map first)
+                  (remove #(= [{:db/ident :logseq.class/Property}] (:block/tags %)))))
+          "All properties only have :logseq.class/Property as their tag (and don't have Page)"))
 
     (testing "built-in properties"
       (is (= [(:db/id (db-test/find-block-by-content @conn "original block"))]
@@ -344,18 +359,22 @@
              (:db/ident (db-test/find-page-by-title @conn "life")))
           "Namespaced tag's ident has hierarchy to make it unique")
 
-      (is (= ["Tag" "Page"]
-             (d/q '[:find [?t-title ...]
-                    :where
-                    [?b :block/name "life"]
-                    [?b :block/tags ?t]
-                    [?t :block/title ?t-title]] @conn))
+      (is (= [:logseq.class/Tag]
+             (map :db/ident (:block/tags (db-test/find-page-by-title @conn "life"))))
           "When a class is used and referenced on the same page, there should only be one instance of it")
 
       (is (= ["life"]
              (->> (:block/tags (db-test/find-block-by-content @conn #"with namespace tag"))
                   (mapv #(db-property/ref->property-value-contents @conn %))))
-          "Block tagged with namespace tag is only associated with leaf child tag"))
+          "Block tagged with namespace tag is only associated with leaf child tag")
+
+      (is (= []
+             (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
+                         :where [?b :block/tags :logseq.class/Tag]]
+                       @conn)
+                  (map first)
+                  (remove #(= [{:db/ident :logseq.class/Tag}] (:block/tags %)))))
+          "All classes only have :logseq.class/Tag as their tag (and don't have Page)"))
 
     (testing "namespaces"
       (let [expand-children (fn expand-children [ent parent]

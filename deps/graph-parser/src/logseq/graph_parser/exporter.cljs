@@ -1151,6 +1151,9 @@
                  (merge (select-keys new-prop [:block/tags :block/schema :db/ident :db/index :db/cardinality :db/valueType])
                         {:block/uuid existing-page-uuid})))
              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
+        ;; Could do this only for existing pages but the added complexity isn't worth reducing the tx noise
+        retract-page-tag-from-properties-tx (map #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)
+                                                  (concat property-pages-tx converted-property-pages-tx))
         ;; Save properties on new property pages separately as they can contain new properties and thus need to be
         ;; transacted separately the property pages
         property-page-properties-tx (keep (fn [b]
@@ -1160,7 +1163,7 @@
                                                                                       (conj :logseq.class/Property))})))
                                           properties-tx)]
     {:pages-tx pages-tx'
-     :property-pages-tx (concat property-pages-tx converted-property-pages-tx)
+     :property-pages-tx (concat property-pages-tx converted-property-pages-tx retract-page-tag-from-properties-tx)
      :property-page-properties-tx property-page-properties-tx}))
 
 (defn- update-whiteboard-blocks [blocks format]
@@ -1266,19 +1269,31 @@
                     p))))
       pages)))
 
-(defn- merge-pages-and-classes
-  "If a new tag is also in pages-tx, ensure that it only has one tag by removing
-  :logseq.class/Page from pages-tx"
-  [classes-tx pages-tx']
-  (if (seq classes-tx)
-    (let [class-map (into {} (map (juxt :block/uuid :block/title) classes-tx))]
-      (mapv (fn [page]
-              (if (some-> (get class-map (:block/uuid page))
-                          (= (:block/title page)))
-                (update page :block/tags (fn [tags] (vec (remove #(= % :logseq.class/Page) tags))))
-                page))
-            pages-tx'))
-    pages-tx'))
+(defn- clean-extra-invalid-tags
+  "If a page/class tx is an existing property or a new or existing class, ensure that
+  it only has one tag by removing :logseq.class/Page from its tx"
+  [db pages-tx' classes-tx]
+  ;; TODO: Improve perf if we tracked all created classes in atom
+  (let [existing-classes (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
+                              (map #(d/entity db (:e %)))
+                              (map :block/uuid)
+                              set)
+        classes (set/union existing-classes
+                           (set (map :block/uuid classes-tx)))
+        existing-properties (->> (d/datoms db :avet :block/tags :logseq.class/Property)
+                                 (map #(d/entity db (:e %)))
+                                 (map :block/uuid)
+                                 set)]
+    {:pages-tx
+     (mapv (fn [page]
+             (if (or (contains? classes (:block/uuid page))
+                     (contains? existing-properties (:block/uuid page)))
+               (update page :block/tags (fn [tags] (vec (remove #(= % :logseq.class/Page) tags))))
+               page))
+           pages-tx')
+     :retract-page-tag-from-classes-tx
+     (mapv #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)
+                                              classes-tx)}))
 
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
@@ -1318,11 +1333,13 @@
                        vec)
         {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
         (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options))
+        ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
         main-props-tx-report (d/transact! conn property-pages-tx {::new-graph? true})
 
         classes-tx @(:classes-tx tx-options)
-        pages-tx'' (merge-pages-and-classes classes-tx pages-tx')
+        {:keys [retract-page-tag-from-classes-tx] pages-tx'' :pages-tx} (clean-extra-invalid-tags @conn pages-tx' classes-tx)
+        classes-tx' (concat classes-tx retract-page-tag-from-classes-tx)
         ;; Build indices
         pages-index (->> (map #(select-keys % [:block/uuid]) pages-tx'')
                          (concat (map #(select-keys % [:block/uuid]) classes-tx))
@@ -1337,7 +1354,7 @@
         blocks-index (set/union (set block-ids) (set block-refs-ids))
         ;; Order matters. pages-index and blocks-index needs to come before their corresponding tx for
         ;; uuids to be valid. Also upstream-properties-tx comes after blocks-tx to possibly override blocks
-        tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx'' classes-tx blocks-index blocks-tx)
+        tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx'' classes-tx' blocks-index blocks-tx)
         tx' (common-util/fast-remove-nils tx)
         ;; _ (prn :tx-counts (map count (vector whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx)))
         ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :tx tx'}))
@@ -1345,6 +1362,7 @@
 
         upstream-properties-tx
         (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
+        ;; _ (when (seq upstream-properties-tx) (cljs.pprint/pprint {:upstream-properties-tx upstream-properties-tx}))
         upstream-tx-report (when (seq upstream-properties-tx) (d/transact! conn upstream-properties-tx {::new-graph? true}))]
 
     ;; Return all tx-reports that occurred in this fn as UI needs to know what changed
