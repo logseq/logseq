@@ -70,7 +70,7 @@
        {:on-click (fn [^js/MouseEvent _e]
                     (state/toggle-navigation-item-collapsed! class))}
        [:div.a name]
-       [:div.b (ui/icon "chevron-left" {:class "more" :size 14})]]
+       [:div.b (ui/icon "chevron-left" {:class "more" :size 15})]]
       (when child [:div.bd child])]]))
 
 (rum/defc page-name
@@ -119,7 +119,7 @@
                              (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))]))]
 
     ;; TODO: move to standalone component
-    [:a.flex.items-center.justify-between.relative.group.h-6
+    [:a.link-item.group
      (cond->
       {:on-click
        (fn [e]
@@ -134,7 +134,7 @@
                           (util/stop e))}
        (ldb/object? page)
        (assoc :title (title/block-unique-title page)))
-     [:span.page-icon.ml-3.justify-center icon]
+     [:span.page-icon icon]
      [:span.page-title {:class (when untitled? "opacity-50")
                         :style {:display "ruby"}}
       (cond
@@ -151,14 +151,14 @@
      (shui/button
       {:size :sm
        :variant :ghost
-       :class "absolute right-2 top-0 px-1.5 scale-75 opacity-30 hidden group-hover:block hover:opacity-80 active:opacity-100"
+       :class "absolute !bg-transparent right-1 top-0 px-1.5 scale-75 opacity-40 hidden group-hover:block hover:opacity-80 active:opacity-100"
        :on-click #(do
                     (shui/popup-show! (.-target %) (x-menu-content)
                                       {:as-dropdown? true
                                        :content-props {:on-click (fn [] (shui/popup-hide!))
                                                        :class "w-60"}})
                     (util/stop %))}
-      [:i.relative {:style {:top "1px"}} (shui/tabler-icon "dots")])]))
+      [:i.relative {:style {:top "4px"}} (shui/tabler-icon "dots")])]))
 
 ;; Fall back to default if icon is undefined or empty
 
@@ -168,8 +168,7 @@
         favorite-entities (page-handler/get-favorites)]
     (nav-content-item
      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
-      (ui/icon "star" {:size 16})
-      [:strong.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
+      [:strong.flex-1 (t :left-side-bar/nav-favorites)]]
 
      {:class "favorites"
       :count (count favorite-entities)
@@ -180,7 +179,7 @@
      (when (seq favorite-entities)
        (let [favorite-items (map
                              (fn [e]
-                               (let [icon (icon/get-node-icon-cp e {})]
+                               (let [icon (icon/get-node-icon-cp e {:size 15})]
                                  {:id (str (:db/id e))
                                   :value (:block/uuid e)
                                   :content [:li.favorite-item (page-name e icon false)]}))
@@ -195,9 +194,7 @@
   (let [pages (recent-handler/get-recent-pages)]
     (nav-content-item
      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
-      (ui/icon "history" {:size 16})
-      [:strong.flex-1.ml-2
-       (string/upper-case (t :left-side-bar/nav-recent-pages))]]
+      [:strong.flex-1 (t :left-side-bar/nav-recent-pages)]]
 
      {:class "recent"
       :count (count pages)}
@@ -210,7 +207,7 @@
           :draggable true
           :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
           :data-ref name}
-         (page-name page (icon/get-node-icon-cp page {}) true)])])))
+         (page-name page (icon/get-node-icon-cp page {:size 15}) true)])])))
 
 (rum/defc flashcards < db-mixins/query rum/reactive
   [srs-open?]
