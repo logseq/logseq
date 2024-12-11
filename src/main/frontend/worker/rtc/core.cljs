@@ -75,9 +75,7 @@
     (m/ap
       (m/amb
        v
-       (let [_ (m/?< (->> flow
-                          (m/reductions {} nil)
-                          (m/latest identity)))]
+       (let [_ (m/?< (c.m/continue-flow flow))]
          (try
            (m/?< clock-flow)
            (catch Cancelled _ (m/amb))))))))
@@ -218,7 +216,8 @@
    :*rtc-auto-push? nil
    :*online-users nil
    :*rtc-lock nil
-   :canceler nil})
+   :canceler nil
+   :*last-stop-exception nil})
 
 (defonce ^:private *rtc-loop-metadata (atom empty-rtc-loop-metadata))
 
@@ -235,7 +234,11 @@
               date-formatter (common-config/get-date-formatter config)
               {:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users onstarted-task]}
               (create-rtc-loop graph-uuid repo conn date-formatter token)
-              canceler (c.m/run-task rtc-loop-task :rtc-loop-task)
+              *last-stop-exception (atom nil)
+              canceler (c.m/run-task rtc-loop-task :rtc-loop-task
+                                     :fail (fn [e]
+                                             (reset! *last-stop-exception e)
+                                             (js/console.log :rtc-loop-task e)))
               start-ex (m/? onstarted-task)]
           (if-let [start-ex (:ex-data start-ex)]
             (r.ex/->map start-ex)
@@ -246,7 +249,8 @@
                                             :*rtc-auto-push? *rtc-auto-push?
                                             :*online-users *online-users
                                             :*rtc-lock *rtc-lock
-                                            :canceler canceler})
+                                            :canceler canceler
+                                            :*last-stop-exception *last-stop-exception})
                 nil)))
         (r.ex/->map r.ex/ex-local-not-rtc-graph))
       (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
@@ -309,7 +313,9 @@
 (def ^:private create-get-state-flow*
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
-      (let [{rtc-lock :*rtc-lock :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *online-users]}
+      (let [{rtc-lock :*rtc-lock
+             :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *online-users
+                    *last-stop-exception]}
             (m/?< rtc-loop-metadata-flow)]
         (try
           (when (and repo rtc-state-flow *rtc-auto-push? rtc-lock)
@@ -324,7 +330,8 @@
                  :rtc-state rtc-state
                  :rtc-lock rtc-lock
                  :auto-push? rtc-auto-push?
-                 :online-users online-users})
+                 :online-users online-users
+                 :last-stop-exception-ex-data (some-> *last-stop-exception deref ex-data)})
               rtc-state-flow (m/watch *rtc-auto-push?) (m/watch rtc-lock) (m/watch *online-users)
               (client-op/create-pending-block-ops-count-flow repo)
               (rtc-log-and-state/create-local-t-flow graph-uuid)
@@ -380,22 +387,12 @@
 ;;; ================ API (ends) ================
 
 ;;; subscribe state ;;;
+(c.m/run-background-task
+ :subscribe-state
+ (m/reduce
+  (fn [_ v] (worker-util/post-message :rtc-sync-state v))
+  create-get-state-flow))
 
-(defonce ^:private *last-subscribe-canceler (atom nil))
-(defn- subscribe-state
-  []
-  (when-let [canceler @*last-subscribe-canceler]
-    (canceler)
-    (reset! *last-subscribe-canceler nil))
-  (let [cancel (c.m/run-task
-                (m/reduce
-                 (fn [_ v] (worker-util/post-message :rtc-sync-state v))
-                 create-get-state-flow)
-                :subscribe-state)]
-    (reset! *last-subscribe-canceler cancel)
-    nil))
-
-(subscribe-state)
 
 (comment
   (do

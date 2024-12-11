@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.log-and-state
   "Fns to generate rtc related logs"
-  (:require [frontend.common.schema-register :as sr]
+  (:require [frontend.common.missionary-util :as c.m]
+            [frontend.common.schema-register :as sr]
             [frontend.worker.util :as worker-util]
             [malli.core :as ma]
             [missionary.core :as m]))
@@ -65,16 +66,14 @@
   [graph-uuid]
   (->> (m/watch *graph-uuid->local-t)
        (m/eduction (keep (fn [m] (get m (ensure-uuid graph-uuid)))))
-       (m/reductions {} nil)
-       (m/latest identity)))
+       c.m/continue-flow))
 
 (defn create-remote-t-flow
   [graph-uuid]
   {:pre [(some? graph-uuid)]}
   (->> (m/watch *graph-uuid->remote-t)
        (m/eduction (keep (fn [m] (get m (ensure-uuid graph-uuid)))))
-       (m/reductions {} nil)
-       (m/latest identity)))
+       c.m/continue-flow))
 
 (defn update-local-t
   [graph-uuid local-t]
