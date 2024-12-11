@@ -728,6 +728,15 @@
       (state/set-edit-content! input-id new-content)
       (save-block-if-changed! block new-content))))
 
+(defn cancel
+  [{:block/keys [marker content uuid] :as block}]
+  (let [new-content (string/replace-first content marker "CANCELED")
+        input-id (state/get-edit-input-id)]
+    (if (and input-id
+             (string/ends-with? input-id (str uuid)))
+      (state/set-edit-content! input-id new-content)
+      (save-block-if-changed! block new-content))))
+
 (defn get-selected-blocks
   []
   (distinct (seq (state/get-selection-blocks))))
