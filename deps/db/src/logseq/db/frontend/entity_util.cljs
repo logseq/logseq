@@ -99,6 +99,9 @@
   #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag :logseq.class/Root
     :logseq.class/Asset})
 
+(def hidden-tags
+  #{:logseq.class/Page :logseq.class/Root :logseq.class/Asset})
+
 (def type-tags
   (set/union internal-tags
              #{:logseq.class/Journal :logseq.class/Whiteboard}))

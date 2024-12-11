@@ -103,6 +103,7 @@
 (def get-entity-types entity-util/get-entity-types)
 (def internal-tags entity-util/internal-tags)
 (def type-tags entity-util/type-tags)
+(def hidden-tags entity-util/hidden-tags)
 
 (defn sort-by-order
   [blocks]
