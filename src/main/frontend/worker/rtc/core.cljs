@@ -387,22 +387,12 @@
 ;;; ================ API (ends) ================
 
 ;;; subscribe state ;;;
+(c.m/run-background-task
+ :subscribe-state
+ (m/reduce
+  (fn [_ v] (worker-util/post-message :rtc-sync-state v))
+  create-get-state-flow))
 
-(defonce ^:private *last-subscribe-canceler (atom nil))
-(defn- subscribe-state
-  []
-  (when-let [canceler @*last-subscribe-canceler]
-    (canceler)
-    (reset! *last-subscribe-canceler nil))
-  (let [cancel (c.m/run-task
-                (m/reduce
-                 (fn [_ v] (worker-util/post-message :rtc-sync-state v))
-                 create-get-state-flow)
-                :subscribe-state)]
-    (reset! *last-subscribe-canceler cancel)
-    nil))
-
-(subscribe-state)
 
 (comment
   (do
