@@ -1,12 +1,17 @@
 (ns frontend.handler.db-based.rtc
   "RTC handler"
-  (:require [frontend.config :as config]
+  (:require [cljs-time.core :as t]
+            [frontend.common.missionary-util :as c.m]
+            [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defn <rtc-create-graph!
@@ -54,12 +59,12 @@
     (.rtc-stop worker)))
 
 (defn <rtc-start!
-  [repo]
+  [repo & {:keys [stop-before-start?] :or {stop-before-start? true}}]
   (when-let [^js worker @state/*db-worker]
     (when (ldb/get-graph-rtc-uuid (db/get-db repo))
       (p/do!
        (js/Promise. user-handler/task--ensure-id&access-token)
-       (<rtc-stop!)
+       (when stop-before-start? (<rtc-stop!))
        (let [token (state/get-auth-id-token)]
          (p/let [result (.rtc-start worker repo token)
                  start-ex (ldb/read-transit-str result)
@@ -117,3 +122,17 @@
        (p/catch (fn [e]
                   (notification/show! (str "Something wrong, please try again.") :error)
                   (js/console.error e)))))))
+
+;;; background task: try to restart rtc-loop when possible,
+;;; triggered by `rtc-flows/rtc-try-restart-flow`
+(c.m/run-background-task
+ ::restart-rtc-task
+ (m/reduce
+  (constantly nil)
+  (m/ap
+    (let [{:keys [graph-uuid t]} (m/?> rtc-flows/rtc-try-restart-flow)]
+      (when (and graph-uuid t
+                 (= graph-uuid (ldb/get-graph-rtc-uuid (db/get-db)))
+                 (> 5000 (- (common-util/time-ms) t)))
+        (prn :trying-to-restart-rtc graph-uuid (t/now))
+        (c.m/<? (<rtc-start! (state/get-current-repo) :stop-before-start? false)))))))
