@@ -1959,7 +1959,7 @@
                :span.inline)]
     (->elem
      elem
-     (merge
+     (merge-with ui/html-attr-merger
       {:data-hl-type (:hl-type properties)}
       (when (and marker
                  (not (string/blank? marker))
@@ -2301,6 +2301,7 @@
         block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq title))
         block-type (or (:ls-type properties) :default)
         content (if (string? content) (string/trim content) "")
+        tx-color (:logseq.text-color properties)
         mouse-down-key (if (util/ios?)
                          :on-click
                          :on-mouse-down) ; TODO: it seems that Safari doesn't work well with on-mouse-down
@@ -2328,7 +2329,14 @@
                                ;; clear highlighted text
                                (util/clear-selection!)))}
        (not slide?)
-       (merge attrs))
+       (merge attrs)
+      
+       (not (nil? tx-color))
+       (merge (if (ui/built-in-color? tx-color)
+               {:data-logseq-property-text-color tx-color}
+               {:style {:color tx-color}})
+               )
+       )
 
      [:<>
       (when (> (count content) (state/block-content-max-length (state/get-current-repo)))
