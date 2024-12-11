@@ -83,7 +83,6 @@
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
     margin-top: 30px;
     width: 100%;
-    padding-top: var(--ls-win32-title-bar-height);
 
     > .fake-bar {
       @apply w-full px-5 pt-1 sm:hidden;
@@ -185,7 +184,7 @@
 
     .header {
       @apply px-2 h-[32px] flex justify-between items-center select-none sticky top-[-4px];
-      @apply cursor-pointer z-[2] active:opacity-80 rounded;
+      @apply cursor-pointer z-[2] active:opacity-80 rounded-md;
 
       background-color: var(--left-sidebar-bg-color);
 
@@ -207,7 +206,7 @@
       }
 
       .wrap-th {
-        @apply opacity-50;
+        @apply flex items-center text-sm font-medium opacity-50;
 
         > .ui__icon {
           @apply relative top-[-1px];
@@ -230,7 +229,7 @@
         }
 
         a {
-          @apply px-2 flex items-center justify-between relative h-[32px] w-full rounded;
+          @apply px-2 flex items-center justify-between relative h-[32px] w-full rounded-md;
 
           .page-title {
             @apply whitespace-nowrap hidden text-ellipsis flex-grow;
@@ -266,76 +265,12 @@
     }
   }
 
-  .create {
-    width: 100%;
-    padding: 4px 14px 14px;
-    background-image: linear-gradient(transparent, var(--ls-primary-background-color));
-    user-select: none;
-
-    @screen sm {
-      background-image: linear-gradient(transparent, or(--ls-left-sidebar-bottom-gradient, --lx-gray-02, --ls-secondary-background-color));
-
-      .dark & {
-        background-image: linear-gradient(transparent, or(--ls-left-sidebar-bottom-gradient, --lx-gray-01, --ls-secondary-background-color));
-      }
-    }
-
-    &-link {
-      background-color: var(--ls-primary-background-color);
-      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
-    }
-
-    .dropdown-wrapper {
-      top: initial;
-      right: initial;
-      bottom: calc(100% + 6px);
-      left: 0;
-      width: max-content;
-
-      @screen sm {
-        bottom: 0;
-        left: calc(100% + 6px);
-      }
-    }
-
-    #create-button {
-      @apply flex items-center justify-center p-2 text-sm font-medium rounded-md w-full border;
-      background-color: or(--ls-create-button-color, --lx-gray-03, --ls-secondary-background-color) !important;
-      border-color: transparent;
-
-      &:hover,
-      &:focus {
-        border-color: var(--ls-border-color);
-        background-color: or(--ls-create-button-color-focus, --lx-gray-03, --ls-primary-background-color) !important;
-      }
-
-      @screen sm {
-        background-color: or(--ls-create-button-color-sm, --lx-gray-03, --ls-primary-background-color) !important;
-
-        &:hover,
-        &:focus {
-          background-color: or(--ls-create-button-color-sm-focus, --lx-gray-04, --ls-secondary-background-color) !important;
-        }
-      }
-    }
-  }
-
-  .dark & {
-    --left-sidebar-bg-color: var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--secondary, var(--rx-gray-03-hsl)))));
-  }
-
   @screen sm {
     padding-top: 0;
     width: var(--ls-left-sidebar-width);
 
     > .wrap {
       margin-top: 52px;
-    }
-
-    .create {
-      &-link {
-        background-color: var(--ls-primary-background-color);
-      }
     }
   }
 }

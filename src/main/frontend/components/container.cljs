@@ -167,7 +167,7 @@
   (let [_favorites-updated? (state/sub :favorites/updated?)
         favorite-entities (page-handler/get-favorites)]
     (nav-content-item
-     [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
+     [:a.wrap-th
       [:strong.flex-1 (t :left-side-bar/nav-favorites)]]
 
      {:class "favorites"
@@ -193,8 +193,7 @@
   [t]
   (let [pages (recent-handler/get-recent-pages)]
     (nav-content-item
-     [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
-      [:strong.flex-1 (t :left-side-bar/nav-recent-pages)]]
+     [:a.wrap-th [:strong.flex-1 (t :left-side-bar/nav-recent-pages)]]
 
      {:class "recent"
       :count (count pages)}
