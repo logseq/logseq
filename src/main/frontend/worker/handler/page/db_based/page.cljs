@@ -14,7 +14,8 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.validate :as outliner-validate]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]))
 
 (defn- build-page-tx [conn properties page {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)
@@ -184,7 +185,7 @@
         (when (and class?
                    (not (ldb/class? existing-page))
                    (or (ldb/property? existing-page) (ldb/internal-page? existing-page)))
-          ;; convert existing property or page to class
+          ;; Convert existing user property or page to class
           (let [tx-data (db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :db/ident :block/created-at]))]
             (ldb/transact! conn tx-data tx-meta))))
       (let [format    :markdown
@@ -199,7 +200,9 @@
                              (let [pages (split-namespace-pages db page date-formatter)]
                                [(last pages) (butlast pages)])
                              [page nil])]
-        (when page
+        (when (and page (or (nil? (:db/ident page))
+                            ;; New page creation must not override built-in entities
+                            (not (db-malli-schema/internal-ident? (:db/ident page)))))
           ;; Don't validate journal names because they can have '/'
           (when (not= :logseq.class/Journal type)
             (outliner-validate/validate-page-title-characters (str (:block/title page)) {:node page})
