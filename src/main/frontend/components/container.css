@@ -67,9 +67,9 @@
   border-right: 1px solid var(--lx-gray-03, var(--ls-tertiary-background-color));
 
   > .wrap {
+    @apply flex flex-col gap-1 relative w-full mt-8;
+
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
-    margin-top: 30px;
-    width: 100%;
 
     > .fake-bar {
       @apply w-full px-5 pt-1 sm:hidden;
@@ -92,7 +92,7 @@
     }
   }
 
-  .nav-header {
+  .sidebar-navigations {
     @apply gap-0.5;
 
     a {
@@ -148,7 +148,12 @@
     }
   }
 
+  .nav-header-container {
+    @apply flex flex-col gap-1 px-4;
+  }
+
   .nav-contents-container {
+    @apply flex flex-col gap-1 pt-1;
     @apply px-3.5 relative h-full flex-grow-0 overflow-x-hidden overflow-y-auto;
 
     &.is-scrolled {
@@ -632,13 +637,6 @@
 
 .cp__sidebar-main-content[data-is-margin-less-pages='true'] {
   padding: 0;
-}
-
-.cp__menubar-repos {
-  .title-wrap {
-    line-height: 1.2em;
-    padding: 1px 0;
-  }
 }
 
 /* Workaround for Linux Intel GPU text rendering issue GH#7233 */
