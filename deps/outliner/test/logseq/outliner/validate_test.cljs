@@ -136,5 +136,5 @@
         (doseq [[parent-id child-id] parent-child-pairs]
           (let [parent (d/entity @conn parent-id)
                 child (d/entity @conn child-id)]
-            (is (nil? (outliner-validate/validate-parent-property parent [child]))
+            (is (nil? (#'outliner-validate/validate-parent-property-have-same-type parent [child]))
                 (str "Parent and child page is valid: " (pr-str (:block/title parent)) " " (pr-str (:block/title child))))))))))

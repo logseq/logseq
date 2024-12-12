@@ -296,6 +296,8 @@
         block (d/entity @conn block-eid)
         db-attribute? (some? (db-schema/schema-for-db-based-graph property-id))]
     (check-internal-tag-usage conn [block-eid] property-id v)
+    (when (= property-id :logseq.property/parent)
+      (outliner-validate/validate-parent-property v [block]))
     (cond
       db-attribute?
       (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself

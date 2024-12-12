@@ -698,9 +698,7 @@
                           (state/set-selection-blocks! [block])
                           (some-> js/document.activeElement (.blur)))
                         (d/remove-class! target "ls-popup-closed")))}
-       (let [remove-properties (cond-> #{:logseq.property/icon :logseq.property/query}
-                                 (ldb/built-in? block)
-                                 (conj :logseq.property/parent))
+       (let [remove-properties #{:logseq.property/icon :logseq.property/query}
              properties' (remove (fn [[k _v]] (contains? remove-properties k)) full-properties)]
          (properties-section block (if class-schema? properties properties') opts))
 

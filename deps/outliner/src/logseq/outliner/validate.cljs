@@ -6,7 +6,8 @@
             [logseq.db :as ldb]
             [logseq.common.date :as common-date]
             [logseq.common.util.namespace :as ns-util]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [logseq.db.frontend.class :as db-class]))
 
 (defn ^:api validate-page-title-characters
   "Validates characters that must not be in a page title"
@@ -118,7 +119,7 @@
   (validate-unique-by-name-tag-and-block-type db new-title existing-block-entity)
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
 
-(defn validate-parent-property
+(defn- validate-parent-property-have-same-type
   "Validates whether given parent and children are valid. Allows 'class' and
   'page' types to have a relationship with their own type. May consider allowing more
   page types if they don't cause systemic bugs"
@@ -131,3 +132,16 @@
                      :payload {:message "Can't set this page as a parent because the child page is a different type"
                                :type :warning}
                      :blocks (map #(select-keys % [:db/id :block/title]) (remove ldb/class? child-ents))}))))
+
+(defn- validate-parent-property-disallows-built-in-class-changes
+  [_parent-ent child-ents]
+  (when (some #(get db-class/built-in-classes (:db/ident %)) child-ents)
+    (throw (ex-info "Can't change the parent of a built-in tag"
+                    {:type :notification
+                     :payload {:message "Can't change the parent of a built-in tag"
+                               :type :warning} }))))
+
+(defn validate-parent-property
+  [parent-ent child-ents]
+  (validate-parent-property-disallows-built-in-class-changes parent-ent child-ents)
+  (validate-parent-property-have-same-type parent-ent child-ents))
