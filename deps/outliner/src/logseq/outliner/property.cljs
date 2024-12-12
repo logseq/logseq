@@ -185,8 +185,12 @@
   (if (uuid? id) [:block/uuid id] id))
 
 (defn- check-internal-tag-usage
-  [conn property-id v]
-  (when (and (= property-id :block/tags) (ldb/type-tags (:db/ident (d/entity @conn v))))
+  [conn block-eids property-id v]
+  (when (and (= property-id :block/tags) (ldb/type-tags (:db/ident (d/entity @conn v)))
+             ;; Allow assets to be tagged
+             (not (and
+                   (every? (fn [id] (ldb/asset? (d/entity @conn id))) block-eids)
+                   (= :logseq.class/Asset (:db/ident (d/entity @conn v))))))
     (throw (ex-info (str "Can't set tag with internal #" (:block/title (d/entity @conn v)))
                     {:type :notification
                      :payload {:message (str "Can't set tag with internal #" (:block/title (d/entity @conn v)))
@@ -291,7 +295,7 @@
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (d/entity @conn block-eid)
         db-attribute? (some? (db-schema/schema-for-db-based-graph property-id))]
-    (check-internal-tag-usage conn property-id v)
+    (check-internal-tag-usage conn [block-eid] property-id v)
     (cond
       db-attribute?
       (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
@@ -314,8 +318,8 @@
   [conn block-ids property-id v]
   (assert property-id "property-id is nil")
   (throw-error-if-read-only-property property-id)
-  (check-internal-tag-usage conn property-id v)
   (let [block-eids (map ->eid block-ids)
+        _ (check-internal-tag-usage conn block-eids property-id v)
         property (d/entity @conn property-id)
         _ (when (= (:db/ident property) :logseq.property/parent)
             (outliner-validate/validate-parent-property
