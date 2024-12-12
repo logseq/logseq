@@ -2286,10 +2286,11 @@ Similar to re-frame subscriptions"
 
 (defn sub-async-query-loading
   [k]
-  (assert (some? k))
-  (rum/react
-   (r/cached-derived-atom (:db/async-query-loading @state) [(get-current-repo) ::async-query (str k)]
-                          (fn [s] (contains? s (str k))))))
+  (assert (or (string? k) (uuid? k)))
+  (let [k* (str k)]
+    (rum/react
+     (r/cached-derived-atom (:db/async-query-loading @state) [(get-current-repo) ::async-query k*]
+                            (fn [s] (contains? s k*))))))
 
 (defn clear-async-query-state!
   []
