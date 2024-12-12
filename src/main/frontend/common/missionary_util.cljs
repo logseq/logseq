@@ -86,10 +86,9 @@
   [task key & {:keys [succ fail]}]
   (task (or succ #(prn key :succ %)) (or fail #(js/console.log key %))))
 
-(comment
-  (defn run-task-throw
-    [task key & {:keys [succ]}]
-    (task (or succ #(prn key :succ %)) #(throw (ex-info "task failed" {:key key :e %})))))
+(defn run-task-throw
+  [task key & {:keys [succ]}]
+  (task (or succ #(prn key :succ %)) #(throw (ex-info "task failed" {:key key :e %}))))
 
 (defonce ^:private *background-task-cancelers ; key -> canceler
   (volatile! {}))
