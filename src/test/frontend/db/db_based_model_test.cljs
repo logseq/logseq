@@ -29,7 +29,7 @@
     (is (= (set
             (concat
              (map :title (vals (remove (fn [[ident _]]
-                                         (contains? ldb/type-tags ident))
+                                         (contains? ldb/private-tags ident))
                                        db-class/built-in-classes)))
              ["class1" "class2"]))
            (set (map :block/title (model/get-all-classes repo)))))))

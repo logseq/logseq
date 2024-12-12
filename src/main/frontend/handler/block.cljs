@@ -202,7 +202,7 @@
                   block)
         tags (remove (fn [t]
                        (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
-                           (ldb/type-tags (:db/ident t))))
+                           (ldb/private-tags (:db/ident t))))
                      (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))]
     (if (seq tags)
       (str (:block/title block)

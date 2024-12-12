@@ -101,9 +101,9 @@
 (def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
 (def get-entity-types entity-util/get-entity-types)
-(def internal-tags entity-util/internal-tags)
-(def type-tags entity-util/type-tags)
-(def hidden-tags entity-util/hidden-tags)
+(def internal-tags db-class/internal-tags)
+(def private-tags db-class/private-tags)
+(def hidden-tags db-class/hidden-tags)
 
 (defn sort-by-order
   [blocks]

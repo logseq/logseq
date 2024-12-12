@@ -184,20 +184,6 @@
   [id]
   (if (uuid? id) [:block/uuid id] id))
 
-(defn- check-internal-tag-usage
-  [conn block-eids property-id v]
-  (when (and (= property-id :block/tags) (ldb/type-tags (:db/ident (d/entity @conn v)))
-             ;; Allow assets to be tagged
-             (not (and
-                   (every? (fn [id] (ldb/asset? (d/entity @conn id))) block-eids)
-                   (= :logseq.class/Asset (:db/ident (d/entity @conn v))))))
-    (throw (ex-info (str "Can't set tag with internal #" (:block/title (d/entity @conn v)))
-                    {:type :notification
-                     :payload {:message (str "Can't set tag with internal #" (:block/title (d/entity @conn v)))
-                               :type :error}
-                     :property-id property-id
-                     :property-value v}))))
-
 (defn- raw-set-block-property!
   "Adds the raw property pair (value not modified) to the given block if the property value is valid"
   [conn block property property-type new-value]
@@ -295,7 +281,8 @@
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (d/entity @conn block-eid)
         db-attribute? (some? (db-schema/schema-for-db-based-graph property-id))]
-    (check-internal-tag-usage conn [block-eid] property-id v)
+    (when (= property-id :block/tags)
+      (outliner-validate/validate-tags-property @conn [block-eid] v))
     (when (= property-id :logseq.property/parent)
       (outliner-validate/validate-parent-property v [block]))
     (cond
@@ -321,7 +308,8 @@
   (assert property-id "property-id is nil")
   (throw-error-if-read-only-property property-id)
   (let [block-eids (map ->eid block-ids)
-        _ (check-internal-tag-usage conn block-eids property-id v)
+        _ (when (= property-id :block/tags)
+            (outliner-validate/validate-tags-property @conn block-eids v))
         property (d/entity @conn property-id)
         _ (when (= (:db/ident property) :logseq.property/parent)
             (outliner-validate/validate-parent-property
