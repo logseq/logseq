@@ -59,13 +59,13 @@
             [frontend.extensions.fsrs :as fsrs]
             [logseq.common.util.namespace :as ns-util]))
 
-(rum/defc nav-content-item < rum/reactive
+(rum/defc nav-content-group < rum/reactive
   [name {:keys [class count]} child]
   (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])]
-    [:div.nav-content-item
+    [:div.nav-content-group
      {:class (util/classnames [class {:is-expand (not collapsed?)
                                       :has-children (and (number? count) (> count 0))}])}
-     [:div.nav-content-item-inner
+     [:div.nav-content-group-inner
       [:div.header.items-center
        {:on-click (fn [^js/MouseEvent _e]
                     (state/toggle-navigation-item-collapsed! class))}
@@ -166,7 +166,7 @@
   [t]
   (let [_favorites-updated? (state/sub :favorites/updated?)
         favorite-entities (page-handler/get-favorites)]
-    (nav-content-item
+    (nav-content-group
      [:a.wrap-th
       [:strong.flex-1 (t :left-side-bar/nav-favorites)]]
 
@@ -192,7 +192,7 @@
 (rum/defc recent-pages < rum/reactive db-mixins/query
   [t]
   (let [pages (recent-handler/get-recent-pages)]
-    (nav-content-item
+    (nav-content-group
      [:a.wrap-th [:strong.flex-1 (t :left-side-bar/nav-recent-pages)]]
 
      {:class "recent"
