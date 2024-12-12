@@ -876,7 +876,7 @@
   (ui/toggle enabled?
              (fn []
                (let [value (not enabled?)]
-                 (config-handler/set-config! :feature/enable-rtc? value)))
+                 (state/set-rtc-enabled! value)))
              true))
 
 (defn rtc-switcher-row [enabled?]
@@ -1121,7 +1121,7 @@
      (when (and (config/db-based-graph? current-repo)
                 (user-handler/team-member?))
        ;; FIXME: Wire this up again to RTC init calls
-       (rtc-switcher-row (state/enable-rtc? current-repo)))
+       (rtc-switcher-row (state/enable-rtc?)))
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2
         [:hr]
