@@ -1,6 +1,6 @@
 (ns logseq.outliner.validate
-  "Reusable DB graph validations for outliner level and above. Most validations throw
-  errors so the user action stops immediately to display a notification"
+  "Reusable DB graph validations for outliner level and above. Most validations
+  throw errors so the user action stops immediately to display a notification"
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db :as ldb]
@@ -133,15 +133,44 @@
                                :type :warning}
                      :blocks (map #(select-keys % [:db/id :block/title]) (remove ldb/class? child-ents))}))))
 
-(defn- validate-parent-property-disallows-built-in-class-changes
+(defn- disallow-built-in-class-parent-change
   [_parent-ent child-ents]
   (when (some #(get db-class/built-in-classes (:db/ident %)) child-ents)
     (throw (ex-info "Can't change the parent of a built-in tag"
                     {:type :notification
                      :payload {:message "Can't change the parent of a built-in tag"
-                               :type :warning} }))))
+                               :type :warning}}))))
 
 (defn validate-parent-property
   [parent-ent child-ents]
-  (validate-parent-property-disallows-built-in-class-changes parent-ent child-ents)
+  (disallow-built-in-class-parent-change parent-ent child-ents)
   (validate-parent-property-have-same-type parent-ent child-ents))
+
+(defn- disallow-node-cant-tag-with-private-tags
+  [db block-eids v]
+  (when (and (ldb/private-tags (:db/ident (d/entity db v)))
+             ;; Allow assets to be tagged
+             (not (and
+                   (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
+                   (= :logseq.class/Asset (:db/ident (d/entity db v))))))
+    (throw (ex-info (str "Can't set tag with built-in #" (:block/title (d/entity db v)))
+                    {:type :notification
+                     :payload {:message (str "Can't set tag with built-in #" (:block/title (d/entity db v)))
+                               :type :error}
+                     :property-id :block/tags
+                     :property-value v}))))
+
+(defn- disallow-tagging-a-built-in-class
+  [db block-eids]
+  (when-let [built-in-tag
+             (some #(when (get db-class/built-in-classes (:db/ident %)) %)
+                   (map #(d/entity db %) block-eids))]
+    (throw (ex-info (str "Can't add tag to built-in #" (:block/title built-in-tag))
+                    {:type :notification
+                     :payload {:message (str "Can't add tag on built-in #" (:block/title built-in-tag))
+                               :type :error}}))))
+
+(defn validate-tags-property
+  [db block-eids v]
+  (disallow-tagging-a-built-in-class db block-eids)
+  (disallow-node-cant-tag-with-private-tags db block-eids v))

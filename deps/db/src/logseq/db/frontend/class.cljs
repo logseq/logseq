@@ -2,6 +2,7 @@
   "Class related fns for DB graphs and frontend/datascript usage"
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.db-ident :as db-ident]
+            [clojure.set :as set]
             [flatland.ordered.map :refer [ordered-map]]))
 
 (def ^:large-vars/data-var built-in-classes
@@ -79,6 +80,21 @@
 
 ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project)
    ))
+
+(def internal-tags
+  "Built-in classes that are hidden on a node and all pages view"
+  #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag :logseq.class/Root
+    :logseq.class/Asset})
+
+(def private-tags
+  "Built-in classes that are private and should not be used by a user directly.
+  These used to be in :block/type"
+  (set/union internal-tags
+             #{:logseq.class/Journal :logseq.class/Whiteboard}))
+
+(def hidden-tags
+  "Built-in classes that are hidden in a few contexts like property values"
+  #{:logseq.class/Page :logseq.class/Root :logseq.class/Asset})
 
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.

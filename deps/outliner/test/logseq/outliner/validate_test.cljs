@@ -99,7 +99,33 @@
         class1 page1
         page1 class1
         property page1
-        property class1))))
+        property class1))
+
+    (testing "built-in tag can't have parent changed"
+      (is (thrown-with-msg?
+            js/Error
+            #"Can't change.*built-in"
+            (outliner-validate/validate-parent-property (d/entity @conn :logseq.class/Task)
+                                                        [(d/entity @conn :logseq.class/Cards)]))))))
+
+(deftest validate-tags-property
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "block"}]}]})
+        block (find-block-by-content conn "block")]
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't add tag.*Tag"
+         (outliner-validate/validate-tags-property @conn [:logseq.class/Tag] :logseq.class/Asset))
+        ":logseq.class/Tag must not be tagged by the user")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't set tag.*Page"
+         (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.class/Page))
+        "Nodes can't be tagged with type tags")))
 
 ;; Try as many of the validations against a new graph to confirm
 ;; that validations make sense and are valid for a new graph
