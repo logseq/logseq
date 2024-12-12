@@ -375,7 +375,8 @@
                                (or (contains? #{:logseq.property/query} (:db/ident m))
                                    (and (not page?) (contains? #{:block/alias} (:db/ident m)))
                                    ;; Filters out properties from being in wrong :view-context and :never view-contexts
-                                   (and (not= view-context :all) (not (contains? block-types view-context))))))
+                                   (and (not= view-context :all) (not (contains? block-types view-context)))
+                                   (and (ldb/built-in? block) (contains? #{:logseq.property/parent} (:db/ident m))))))
         property (rum/react *property)
         property-key (rum/react *property-key)]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
@@ -697,7 +698,10 @@
                           (state/set-selection-blocks! [block])
                           (some-> js/document.activeElement (.blur)))
                         (d/remove-class! target "ls-popup-closed")))}
-       (let [properties' (remove (fn [[k _v]] (contains? #{:logseq.property/icon :logseq.property/query} k)) full-properties)]
+       (let [remove-properties (cond-> #{:logseq.property/icon :logseq.property/query}
+                                 (ldb/built-in? block)
+                                 (conj :logseq.property/parent))
+             properties' (remove (fn [[k _v]] (contains? remove-properties k)) full-properties)]
          (properties-section block (if class-schema? properties properties') opts))
 
        (rum/with-key (new-property block opts) (str id "-add-property"))])))
