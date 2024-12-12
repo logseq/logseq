@@ -551,12 +551,6 @@
        (plugins/hook-ui-slot :page-head-actions-slotted nil)
        (plugins/hook-ui-items :pagebar)])))
 
-(rum/defc rotating-arrow
-  [collapsed?]
-  [:span
-   {:class (if collapsed? "rotating-arrow collapsed" "rotating-arrow not-collapsed")}
-   (svg/caret-right)])
-
 (rum/defc tabs
   [page opts]
   (let [class? (ldb/class? page)
