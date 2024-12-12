@@ -27,8 +27,7 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(defonce *profile-state
-  (atom {}))
+(defonce *profile-state (volatile! {}))
 
 (defonce *db-worker (atom nil))
 
@@ -830,7 +829,7 @@ Similar to re-frame subscriptions"
 
 (defn set-state!
   [path value & {:keys [path-in-sub-atom]}]
-  (swap! *profile-state update path inc)
+  (vswap! *profile-state update path inc)
   (let [path-coll?             (coll? path)
         get-fn                 (if path-coll? get-in get)
         s                      (get-fn @state path)
@@ -862,7 +861,7 @@ Similar to re-frame subscriptions"
 
 (defn update-state!
   [path f & {:keys [path-in-sub-atom]}]
-  (swap! *profile-state update path inc)
+  (vswap! *profile-state update path inc)
   (let [path-coll?             (coll? path)
         get-fn                 (if path-coll? get-in get)
         s                      (get-fn @state path)
