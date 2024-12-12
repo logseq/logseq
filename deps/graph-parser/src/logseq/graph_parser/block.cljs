@@ -347,10 +347,11 @@
                   {:block/created-at current-ms
                    :block/updated-at current-ms}))
               (if journal-day
-                (cond-> {:block/type "journal"
-                         :block/journal-day journal-day}
+                (cond-> {:block/journal-day journal-day}
                   db-based?
-                  (assoc :block/tags [:logseq.class/Journal]))
+                  (assoc :block/tags [:logseq.class/Journal])
+                  (not db-based?)
+                  (assoc :block/type "journal"))
                 {}))]
     [page page-entity]))
 
@@ -388,8 +389,12 @@
                                                  nil)]
                                   [page nil]))]
       (when page
-        (let [type (if class? "class" (or (:block/type page) "page"))]
-          (assoc page :block/type type))))))
+        (if (ldb/db-based-graph? db)
+          (let [tags (if class? [:logseq.class/Tag]
+                         (or (:block/tags page)
+                             [:logseq.class/Page]))]
+            (assoc page :block/tags tags))
+          (assoc page :block/type (or (:block/type page) "page")))))))
 
 (defn- db-namespace-page?
   "Namespace page that're not journal pages"

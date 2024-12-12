@@ -9,12 +9,8 @@
   (let [conn (db-test/create-conn)
         _ (worker-db-page/create! conn "movie" {:class? true})
         _ (worker-db-page/create! conn "Movie" {:class? true})
-        movie-class (->> (d/q '[:find [(pull ?b [*]) ...] :in $ ?title :where [?b :block/title ?title]]
-                              @conn "movie")
-                         first)
-        Movie-class (->> (d/q '[:find [(pull ?b [*]) ...] :in $ ?title :where [?b :block/title ?title]]
-                              @conn "Movie")
-                         first)]
+        movie-class (ldb/get-case-page @conn "movie")
+        Movie-class (ldb/get-case-page @conn "Movie")]
 
     (is (ldb/class? movie-class) "Creates a class")
     (is (ldb/class? Movie-class) "Creates another class with a different case sensitive name")
@@ -44,9 +40,12 @@
             "Child class with new parent has correct parents")
 
         (worker-db-page/create! conn "foo/class1/baz3" {:split-namespace? true})
-        (is (= #{"class" "page"}
-               (set (d/q '[:find [?type ...]
-                           :where [?b :block/type ?type] [?b :block/title "class1"]] @conn)))
+        (is (= #{"Tag" "Page"}
+               (set (d/q '[:find [?tag-title ...]
+                           :where
+                           [?b :block/title "class1"]
+                           [?b :block/tags ?t]
+                           [?t :block/title ?tag-title]] @conn)))
             "Using an existing class page in a multi-parent namespace doesn't allow a page to have a class parent and instead creates a new page")))
 
     (testing "Child pages with same name and different parents"

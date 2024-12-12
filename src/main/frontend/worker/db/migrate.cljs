@@ -417,6 +417,31 @@
                 :block/title title'})))))
      datoms)))
 
+(defn- replace-block-type-with-tags
+  [conn _search-db]
+  (let [db @conn
+        block-type-entity (d/entity db :block/type)
+        datoms (d/datoms db :avet :block/type)
+        journal-entity (d/entity db :logseq.class/Journal)
+        tx-data (mapcat (fn [{:keys [e _a v]}]
+                          (let [tag (case v
+                                      "page" :logseq.class/Page
+                                      "class" :logseq.class/Tag
+                                      "property" :logseq.class/Property
+                                      "journal" :logseq.class/Journal
+                                      "whiteboard" :logseq.class/Whiteboard
+                                      "closed value" nil
+                                      (throw (ex-info "unsupported block/type" {:type v})))]
+                            (cond->
+                             [[:db/retract e :block/type]]
+                              (some? tag)
+                              (conj [:db/add e :block/tags tag])))) datoms)]
+    (concat
+     ;; set journal's tag to `#Page`
+     [[:db/add (:db/id journal-entity) :block/tags :logseq.class/Page]]
+     tx-data
+     [[:db/retractEntity (:db/id block-type-entity)]])))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -494,7 +519,9 @@
                      :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content]}]
    [47 {:fix replace-hidden-type-with-schema}]
    [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]
-   [49 {:fix replace-special-id-ref-with-id-ref}]])
+   [49 {:fix replace-special-id-ref-with-id-ref}]
+   [50 {:classes [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard]}]
+   [51 {:fix replace-block-type-with-tags}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
@@ -520,9 +547,12 @@
                          (into {})
                          (#(sqlite-create-graph/build-initial-classes* % (zipmap properties properties)))
                          (map (fn [b] (assoc b :logseq.property/built-in? true))))
+        new-class-idents (keep (fn [class]
+                                 (when-let [db-ident (:db/ident class)]
+                                   {:db/ident db-ident})) new-classes)
         fixes (when (fn? fix)
                 (fix conn search-db))
-        tx-data (if db-based? (concat new-properties new-classes fixes) fixes)
+        tx-data (if db-based? (concat new-class-idents new-properties new-classes fixes) fixes)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
                   tx-data)]
@@ -533,30 +563,31 @@
   "Migrate 'frontend' datascript schema and data. To add a new migration,
   add an entry to schema-version->updates and bump db-schema/version"
   [conn search-db]
-  (let [db @conn
-        version-in-db (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0)]
-    (cond
-      (= version-in-db db-schema/version)
-      nil
+  (when (ldb/db-based-graph? @conn)
+    (let [db @conn
+          version-in-db (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0)]
+      (cond
+        (= version-in-db db-schema/version)
+        nil
 
-      (< db-schema/version version-in-db) ; outdated client, db version could be synced from server
+        (< db-schema/version version-in-db) ; outdated client, db version could be synced from server
       ;; FIXME: notify users to upgrade to the latest version asap
-      nil
+        nil
 
-      (> db-schema/version version-in-db)
-      (try
-        (let [db-based? (ldb/db-based-graph? @conn)
-              updates (keep (fn [[v updates]]
-                              (when (and (< version-in-db v) (<= v db-schema/version))
-                                [v updates]))
-                            schema-version->updates)]
-          (println "DB schema migrated from" version-in-db)
-          (doseq [[v m] updates]
-            (upgrade-version! conn search-db db-based? v m)))
-        (catch :default e
-          (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))
-          (js/console.error e)
-          (throw e))))))
+        (> db-schema/version version-in-db)
+        (try
+          (let [db-based? (ldb/db-based-graph? @conn)
+                updates (keep (fn [[v updates]]
+                                (when (and (< version-in-db v) (<= v db-schema/version))
+                                  [v updates]))
+                              schema-version->updates)]
+            (println "DB schema migrated from" version-in-db)
+            (doseq [[v m] updates]
+              (upgrade-version! conn search-db db-based? v m)))
+          (catch :default e
+            (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))
+            (js/console.error e)
+            (throw e)))))))
 
 ;; Backend migrations
 ;; ==================

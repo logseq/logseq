@@ -65,8 +65,6 @@
   @apply rounded-sm;
 
   &.title {
-    @apply mb-3;
-
     .block-main-container {
       @apply gap-2;
     }
@@ -258,5 +256,5 @@ html.is-native-ios {
 }
 
 .ls-page-blocks {
-  @apply min-h-[60px] -mb-2;
+  @apply min-h-[60px];
 }
