@@ -266,15 +266,18 @@
       (when (seq queries)
         [:div#today-queries.mt-10
          (for [query queries]
-           (rum/with-key
-             (ui/catch-error
-              (ui/component-error "Failed default query:" {:content (pr-str query)})
-              (query/custom-query (component-block/wrap-query-components
-                                   {:attr {:class "mt-10"}
-                                    :editor-box editor/box
-                                    :page page-cp})
-                                  query))
-             (str repo "-custom-query-" (:query query))))]))))
+           (let [query' (if (config/db-based-graph?)
+                          (assoc query :collapsed? true)
+                          query)]
+             (rum/with-key
+               (ui/catch-error
+                (ui/component-error "Failed default query:" {:content (pr-str query')})
+                (query/custom-query (component-block/wrap-query-components
+                                     {:attr {:class "mt-10"}
+                                      :editor-box editor/box
+                                      :page page-cp})
+                                    query'))
+               (str repo "-custom-query-" (:query query')))))]))))
 
 (rum/defc tagged-pages
   [repo tag tag-title]
