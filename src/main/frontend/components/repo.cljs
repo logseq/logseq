@@ -180,7 +180,9 @@
               (t :open-a-directory)
               :on-click #(state/pub-event! [:graph/setup-a-repo]))]))]]
 
-      (when (and (file-sync/enable-sync?) login?)
+      (when (and (or (file-sync/enable-sync?)
+                     (state/enable-rtc?))
+                 login?)
         [:div
          [:hr]
          [:div.flex.align-items.justify-between
