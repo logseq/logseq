@@ -575,7 +575,7 @@
      (shui/tabs
       {:defaultValue default-tab
        :class (str "w-full")}
-      (when (or both? property?)
+      (when (or class? property?)
         [:div.flex.flex-row.gap-1.items-center.-ml-4
          {:on-mouse-over #(set-control-display! true)
           :on-mouse-out #(set-control-display! false)}
