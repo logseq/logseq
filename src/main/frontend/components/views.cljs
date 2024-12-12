@@ -80,11 +80,11 @@
      {:variant "text"
       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
       :on-click #(column-toggle-sorting! column)}
-      (let [title (str (:name column))]
-        [:span {:title title
-                :class "max-w-full overflow-hidden text-ellipsis"}
-         title])
-      (case asc?
+     (let [title (str (:name column))]
+       [:span {:title title
+               :class "max-w-full overflow-hidden text-ellipsis"}
+        title])
+     (case asc?
        true
        (ui/icon "arrow-up")
        false
@@ -1237,39 +1237,42 @@
 
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
-     [:div.flex.flex-wrap.items-center.justify-between.gap-1
-      (when-not render-empty-title?
-        [:div.flex.flex-row.items-center.gap-2
-         (or
-          views-title
-          [:div.font-medium.opacity-50.text-sm
-           (t (or title-key :views.table/default-title)
-              (count (:rows table)))])])
-      [:div.view-actions.flex.items-center.gap-1
+     (ui/foldable
+      [:div.flex.flex-1.flex-wrap.items-center.justify-between.gap-1
+       (when-not render-empty-title?
+         [:div.flex.flex-row.items-center.gap-2
+          (or
+           views-title
+           [:div.font-medium.opacity-50.text-sm
+            (t (or title-key :views.table/default-title)
+               (count (:rows table)))])])
+       [:div.view-actions.flex.items-center.gap-1
 
-       (filter-properties columns table)
+        (filter-properties columns table)
 
-       (search input {:on-change set-input!
-                      :set-input! set-input!})
+        (search input {:on-change set-input!
+                       :set-input! set-input!})
 
-       [:div.text-muted-foreground.text-sm
-        (pv/property-value view-entity (db/entity :logseq.property.view/type)
-                           (db/entity display-type) {})]
+        [:div.text-muted-foreground.text-sm
+         (pv/property-value view-entity (db/entity :logseq.property.view/type)
+                            (db/entity display-type) {})]
 
-       (more-actions columns table)
+        (more-actions columns table)
 
-       (when add-new-object! (new-record-button table view-entity))]]
+        (when add-new-object! (new-record-button table view-entity))]]
+      (fn []
+        [:div.ls-view-body.flex.flex-col.gap-2.grid
+         (filters-row table)
 
-     (filters-row table)
+         (case display-type
+           :logseq.property.view/type.list
+           (list-view (:config option) view-entity (:rows table))
 
-     (case display-type
-       :logseq.property.view/type.list
-       (list-view (:config option) view-entity (:rows table))
+           :logseq.property.view/type.gallery
+           (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
 
-       :logseq.property.view/type.gallery
-       (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
-
-       (table-view table option row-selection add-new-object! *scroller-ref))]))
+           (table-view table option row-selection add-new-object! *scroller-ref))])
+      {:title-trigger? false})]))
 
 (rum/defcs view
   "Provides a view for data like query results and tagged objects, multiple
