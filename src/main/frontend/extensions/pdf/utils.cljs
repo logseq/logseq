@@ -22,12 +22,12 @@
   (bean/->clj (js-utils/getBoundingRect (bean/->js rects))))
 
 (defn viewport-to-scaled
-  [bounding ^js viewport]
-  (bean/->clj (js-utils/viewportToScaled (bean/->js bounding) viewport)))
+  [bounding ^js viewport ^js text-layer rotate]
+  (bean/->clj (js-utils/viewportToScaled (bean/->js bounding) viewport text-layer rotate)))
 
 (defn scaled-to-viewport
-  [bounding ^js viewport]
-  (bean/->clj (js-utils/scaledToViewport (bean/->js bounding) viewport)))
+  [bounding ^js viewport ^js text-layer rotate]
+  (bean/->clj (js-utils/scaledToViewport (bean/->js bounding) viewport text-layer rotate)))
 
 (defn optimize-client-reacts
   [rects]
@@ -35,18 +35,22 @@
     (bean/->clj (js-utils/optimizeClientRects (bean/->js rects)))))
 
 (defn vw-to-scaled-pos
-  [^js viewer {:keys [page bounding rects]}]
-  (when-let [^js viewport (.. viewer (getPageView (dec page)) -viewport)]
-    {:bounding (viewport-to-scaled bounding viewport)
-     :rects    (for [rect rects] (viewport-to-scaled rect viewport))
-     :page     page}))
+  [^js viewer {:keys [page bounding rects]} rotate]
+  (when-let [^js page-view (.. viewer (getPageView (dec page)))]
+    (let [^js viewport (.-viewport page-view)
+          ^js text-layer (.-textLayer page-view)]
+      {:bounding (viewport-to-scaled bounding viewport text-layer rotate)
+       :rects    (for [rect rects] (viewport-to-scaled rect viewport text-layer rotate))
+       :page     page})))
 
 (defn scaled-to-vw-pos
-  [^js viewer {:keys [page bounding rects]}]
-  (when-let [^js viewport (.. viewer (getPageView (dec page)) -viewport)]
-    {:bounding (scaled-to-viewport bounding viewport)
-     :rects    (for [rect rects] (scaled-to-viewport rect viewport))
-     :page     page}))
+  [^js viewer {:keys [page bounding rects]} rotate]
+  (when-let [^js page-view (.. viewer (getPageView (dec page)))]
+    (let [^js viewport (.-viewport page-view)
+          ^js text-layer (.-textLayer page-view)]
+      {:bounding (scaled-to-viewport bounding viewport text-layer rotate)
+       :rects    (for [rect rects] (scaled-to-viewport rect viewport text-layer rotate))
+       :page     page})))
 
 (defn get-page-bounding
   [^js viewer page-number]
