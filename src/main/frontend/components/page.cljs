@@ -559,9 +559,7 @@
 
 (rum/defc tabs
   [page opts]
-  (let [[collapsed? set-collapsed!] (rum/use-state false)
-        [control-display? set-control-display!] (rum/use-state false)
-        class? (ldb/class? page)
+  (let [class? (ldb/class? page)
         property? (ldb/property? page)
         both? (and class? property?)
         default-tab (cond
@@ -575,16 +573,8 @@
      (shui/tabs
       {:defaultValue default-tab
        :class (str "w-full")}
-      (when (or class? property?)
-        [:div.flex.flex-row.gap-1.items-center.-ml-4
-         {:on-mouse-over #(set-control-display! true)
-          :on-mouse-out #(set-control-display! false)}
-         [:a
-          {:class (if (or control-display? collapsed?)
-                    "opacity-50 hover:opacity-100"
-                    "opacity-0")
-           :on-click #(set-collapsed! (not collapsed?))}
-          (rotating-arrow collapsed?)]
+      (when (or both? property?)
+        [:div.flex.flex-row.gap-1.items-center
          (shui/tabs-list
           {:class "h-8"}
           (when class?
@@ -600,16 +590,14 @@
           (when property?
             (db-page/configure-property page)))])
 
-      (when-not collapsed?
-        [:<>
-         (when class?
-           (shui/tabs-content
-            {:value "tag"}
-            (objects/class-objects page opts)))
-         (when property?
-           (shui/tabs-content
-            {:value "property"}
-            (objects/property-related-objects page (:current-page? opts))))]))]))
+      (when class?
+        (shui/tabs-content
+         {:value "tag"}
+         (objects/class-objects page opts)))
+      (when property?
+        (shui/tabs-content
+         {:value "property"}
+         (objects/property-related-objects page (:current-page? opts)))))]))
 
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query mixins/container-id
