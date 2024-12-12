@@ -652,7 +652,9 @@
 
 (defn db-based-cycle-todo!
   [block]
-  (let [status-value (:logseq.task/status block)
+  (let [status-value (if (ldb/class-instance? (db/entity :logseq.class/Task) block)
+                       (:logseq.task/status block)
+                       (get block :logseq.task/status {}))
         next-status (case (:db/ident status-value)
                       :logseq.task/status.todo
                       :logseq.task/status.doing
