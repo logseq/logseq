@@ -41,7 +41,7 @@
 
 (defn convert-to-tag!
   [page-entity]
-  (if (db/page-exists? (:block/title page-entity) "class")
+  (if (db/page-exists? (:block/title page-entity) #{:logseq.class/Tag})
     (notification/show! (str "A tag with the name \"" (:block/title page-entity) "\" already exists.") :warning false)
     (let [class (db-class/build-new-class (db/get-db)
                                           {:db/id (:db/id page-entity)
