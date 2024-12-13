@@ -73,6 +73,21 @@
     (is (every? ldb/property? (:logseq.property.class/properties task))
         "Each task property has correct type")))
 
+(deftest new-graph-initializes-default-classes
+  (let [conn (db-test/create-conn)
+        child-classes (->> (d/q '[:find (pull ?b [:db/ident :logseq.property/parent]) :where [?b :logseq.property/parent]]
+                          @conn)
+                     (map first))]
+    (assert (seq child-classes) "Classes must be present")
+    (is (every? integer? (map #(get-in % [:logseq.property/parent :db/id]) child-classes))
+        "All parents of child classes must have valid :db/id")
+    (is (= (count child-classes)
+           (count (->> (conj child-classes {:db/ident :logseq.class/Root})
+                       (map #(d/entity @conn (:db/ident %)))
+                       (mapcat :logseq.property/_parent)
+                       set)))
+        "Reverse lookup of :logseq.property/parent correctly fetches number of child classes")))
+
 (deftest new-graph-is-valid
   (let [conn (db-test/create-conn)
         validation (db-validate/validate-db! @conn)]
