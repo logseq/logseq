@@ -289,6 +289,13 @@
                                 remote-op)]
                (assoc affected-blocks-map block-uuid remote-op*))
              affected-blocks-map))
+         :remove
+         ;; TODO: if this block's updated by others, we shouldn't remove it
+         ;; but now, we don't know who updated this block recv from remote
+         ;; once we have this attr(:block/updated-by, :block/created-by), we can finish this TODO
+         (let [block-uuid (:block-uuid local-op-value)]
+           (dissoc affected-blocks-map block-uuid))
+
          ;;else
          affected-blocks-map)))
    affected-blocks-map local-unpushed-ops))
