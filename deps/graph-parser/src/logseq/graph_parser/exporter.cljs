@@ -198,14 +198,15 @@
                                       ;; Ignore new class tags from extract e.g. :logseq.class/Journal
                                       (logseq-class-ident? %)))
                          (map #(vector :block/uuid (get-page-uuid (:page-names-to-uuids per-file-state) (:block/name %))))
-                         set)]
+                         set)
+          page-classes (into #{:logseq.class/Page} db-class/page-children-classes)]
       (cond-> block
         true
         (update :block/tags convert-tags-to-classes db per-file-state user-options all-idents)
         ;; ensure pages are a Page
         true
         (update :block/tags (fn [tags]
-                              (if (seq (set/intersection (set tags) #{:logseq.class/Page :logseq.class/Journal :logseq.class/Whiteboard :logseq.class/Property}))
+                              (if (seq (set/intersection (set tags) page-classes))
                                 tags
                                 (conj (vec tags) :logseq.class/Page))))
         (seq page-tags)
