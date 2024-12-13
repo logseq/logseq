@@ -71,7 +71,6 @@
              (->> (keep :db/ident tx)
                   frequencies
                   (keep (fn [[k v]] (when (> v 1) k)))
-                  (remove #{:logseq.class/Root})
                   seq)]
     (throw (ex-info (str "The following :db/idents are not unique and clobbered each other: "
                          (vec conflicting-idents))
@@ -149,8 +148,7 @@
                        (sqlite-util/kv :logseq.kv/graph-initial-schema-version db-schema/version)
                        (sqlite-util/kv :logseq.kv/graph-created-at (common-util/time-ms))
                        ;; Empty property value used by db.type/ref properties
-                       {:db/ident :logseq.property/empty-placeholder}
-                       {:db/ident :logseq.class/Root}]
+                       {:db/ident :logseq.property/empty-placeholder}]
                        import-type
                        (into (sqlite-util/import-tx import-type)))
         initial-files [{:block/uuid (d/squuid)
@@ -174,10 +172,15 @@
         default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
                            (map mark-block-as-built-in))
         hidden-pages (concat (build-initial-views) (build-favorites-page))
-        depend-class? (fn [c] (when (contains? #{:logseq.class/Property :logseq.class/Tag} (:db/ident c)) c))
-        depend-classes (filter depend-class? default-classes)
-        other-classes (remove depend-class? default-classes)
-        tx (vec (concat initial-data depend-classes properties-tx other-classes
+        ;; These classes bootstrap our tags and properties as they depend on each other e.g.
+        ;; Root <-> Tag, classes-tx depends on logseq.property/parent, properties-tx depends on Property
+        bootstrap-class? (fn [c] (contains? #{:logseq.class/Root :logseq.class/Property :logseq.class/Tag} (:db/ident c)))
+        bootstrap-classes (filter bootstrap-class? default-classes)
+        bootstrap-class-ids (map #(select-keys % [:db/ident :block/uuid]) bootstrap-classes)
+        classes-tx (concat (map #(dissoc % :db/ident) bootstrap-classes)
+                           (remove bootstrap-class? default-classes))
+        ;; Order of tx is critical. bootstrap-class-ids bootstraps properties-tx and classes-tx
+        tx (vec (concat bootstrap-class-ids initial-data properties-tx classes-tx
                         initial-files default-pages hidden-pages))]
     (validate-tx-for-duplicate-idents tx)
     tx))

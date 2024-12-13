@@ -10,14 +10,11 @@
   (ordered-map
    :logseq.class/Root {:title "Root Tag"}
 
+   :logseq.class/Tag {:title "Tag"}
+
+   :logseq.class/Property {:title "Property"}
+
    :logseq.class/Page {:title "Page"}
-
-   :logseq.class/Tag {:title "Tag"
-                      :properties {:logseq.property/parent :logseq.class/Page}}
-
-   :logseq.class/Property
-   {:title "Property"
-    :properties {:logseq.property/parent :logseq.class/Page}}
 
    :logseq.class/Journal
    {:title "Journal"
