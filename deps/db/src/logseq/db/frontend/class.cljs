@@ -5,6 +5,9 @@
             [clojure.set :as set]
             [flatland.ordered.map :refer [ordered-map]]))
 
+;; Main class vars
+;; ===============
+
 (def ^:large-vars/data-var built-in-classes
   "Map of built-in classes for db graphs with their :db/ident as keys"
   (ordered-map
@@ -78,6 +81,13 @@
 ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project)
    ))
 
+(def page-children-classes
+  "Children of :logseq.class/Page"
+  (set
+   (keep (fn [[class-ident m]]
+           (when (= (get-in m [:properties :logseq.property/parent]) :logseq.class/Page) class-ident))
+         built-in-classes)))
+
 (def internal-tags
   "Built-in classes that are hidden on a node and all pages view"
   #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag :logseq.class/Root
@@ -92,6 +102,9 @@
 (def hidden-tags
   "Built-in classes that are hidden in a few contexts like property values"
   #{:logseq.class/Page :logseq.class/Root :logseq.class/Asset})
+
+;; Helper fns
+;; ==========
 
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.
