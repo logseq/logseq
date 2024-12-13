@@ -164,8 +164,7 @@
 
 (defn- with-shared-schema-attrs
   [malli-schema]
-  (let [head (take 2 malli-schema)
-        api-schema-seq (drop 2 malli-schema)]
+  (let [[head api-schema-seq] (split-at 2 malli-schema)]
     (vec
      (concat
       head
