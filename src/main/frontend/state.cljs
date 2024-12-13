@@ -27,8 +27,7 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(defonce *profile-state
-  (atom {}))
+(defonce *profile-state (volatile! {}))
 
 (defonce *db-worker (atom nil))
 
@@ -830,7 +829,7 @@ Similar to re-frame subscriptions"
 
 (defn set-state!
   [path value & {:keys [path-in-sub-atom]}]
-  (swap! *profile-state update path inc)
+  (vswap! *profile-state update path inc)
   (let [path-coll?             (coll? path)
         get-fn                 (if path-coll? get-in get)
         s                      (get-fn @state path)
@@ -862,7 +861,7 @@ Similar to re-frame subscriptions"
 
 (defn update-state!
   [path f & {:keys [path-in-sub-atom]}]
-  (swap! *profile-state update path inc)
+  (vswap! *profile-state update path inc)
   (let [path-coll?             (coll? path)
         get-fn                 (if path-coll? get-in get)
         s                      (get-fn @state path)
@@ -2286,10 +2285,11 @@ Similar to re-frame subscriptions"
 
 (defn sub-async-query-loading
   [k]
-  (assert (some? k))
-  (rum/react
-   (r/cached-derived-atom (:db/async-query-loading @state) [(get-current-repo) ::async-query (str k)]
-                          (fn [s] (contains? s (str k))))))
+  (assert (or (string? k) (uuid? k)))
+  (let [k* (str k)]
+    (rum/react
+     (r/cached-derived-atom (:db/async-query-loading @state) [(get-current-repo) ::async-query k*]
+                            (fn [s] (contains? s k*))))))
 
 (defn clear-async-query-state!
   []

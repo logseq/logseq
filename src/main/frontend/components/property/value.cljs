@@ -756,7 +756,7 @@
            state)}
   [state value block property page-cp]
   (when value
-    (if (state/sub-async-query-loading value)
+    (if (state/sub-async-query-loading (:block/uuid value))
       [:div.text-sm.opacity-70 "loading"]
       (if-let [v-block (db/sub-block (:db/id value))]
         (let [class? (ldb/class? v-block)
