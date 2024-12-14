@@ -116,21 +116,16 @@
   }
 
   a.item {
-    @apply px-2 py-2 sm:py-1.5 select-none;
+    @apply flex items-center px-1.5 h-8 select-none;
 
     .ui__icon {
-      @apply flex justify-center;
-      width: 20px;
-      font-size: 16px;
-      margin-right: 8px;
-      opacity: .7;
-      position: relative;
+      @apply relative flex justify-center w-[20px] text-base mr-2 opacity-80;
     }
 
     .graph-icon .ui__icon {
       padding: 0;
       width: unset;
-      margin-right: 0px;
+      margin-right: 0;
     }
 
     .graph-icon {
@@ -139,11 +134,10 @@
     }
 
     &:hover, &.active {
-      background-color: var(--lx-gray-04, var(--color-level-3, var(--rx-gray-04)));
-      color: var(--lx-gray-12, var(--rx-gray-12));
+      background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
 
       .ui__icon {
-        opacity: .9;
+        @apply opacity-100;
       }
     }
   }
@@ -181,19 +175,25 @@
       background-color: var(--left-sidebar-bg-color);
 
       .ui__icon {
-        @apply flex justify-center;
-        width: 20px;
+        @apply flex justify-center w-[20px];
       }
 
-      &:hover {
-        background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
+      &.non-collapsable {
+        @apply cursor-default;
+      }
 
-        * {
-          opacity: 1 !important;
-        }
+      &:not(.non-collapsable) {
 
-        .more {
-          @apply opacity-80;
+        &:hover {
+          background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
+
+          * {
+            opacity: 1 !important;
+          }
+
+          .more {
+            @apply opacity-80;
+          }
         }
       }
 
