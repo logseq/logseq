@@ -135,11 +135,7 @@
     (testing "Validate pages"
       (let [pages (->> (d/q '[:find [?b ...] :where
                               [?b :block/title]
-                              (or [?b :block/tags :logseq.class/Tag]
-                                  [?b :block/tags :logseq.class/Property]
-                                  [?b :block/tags :logseq.class/Page]
-                                  [?b :block/tags :logseq.class/Journal]
-                                  [?b :block/tags :logseq.class/Whiteboard])] @conn)
+                              [?b :block/tags]] @conn)
                        (map (fn [id]
                               (d/entity @conn id))))
             page-errors (atom {})]
