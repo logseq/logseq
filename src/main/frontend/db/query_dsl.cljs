@@ -604,7 +604,7 @@ Some bindings in this fn:
                             (let [match' (string/replace (second matches) "#" tag-placeholder)]
                               (str "\"" page-ref/left-brackets match' page-ref/right-brackets "\"")))]
       (some-> s
-              (string/replace #"^(?!\")\[\[(.*?)\]\]" quoted-page-ref)
+              (string/replace #"\"?\[\[(.*?)\]\]\"?" quoted-page-ref)
               (string/replace text-util/between-re
                               (fn [[_ x]]
                                 (->> (string/split x #" ")
