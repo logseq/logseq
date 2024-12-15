@@ -2,6 +2,7 @@ import * as CSS from 'csstype'
 
 import EventEmitter from 'eventemitter3'
 import { LSPluginCaller } from './LSPlugin.caller'
+import { executeBinary, Child_process_config } from './ExecuteBinary.api'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginRequest } from './modules/LSPlugin.Request'
@@ -946,6 +947,15 @@ export interface ILSPluginThemeManager {
   ): Promise<void>
 }
 
+
+/**
+ * Execute binaries related APIs
+ */
+export interface IExecuteBinary {
+  execute: executeBinary,
+  config: Child_process_config
+}
+
 export type LSPluginUserEvents = 'ui:visible:changed' | 'settings:changed'
 
 export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
@@ -1101,6 +1111,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   Git: IGitProxy
   UI: IUIProxy
   Assets: IAssetsProxy
+  spawn: IExecuteBinary
 
   Request: LSPluginRequest
   FileStorage: LSPluginFileStorage
