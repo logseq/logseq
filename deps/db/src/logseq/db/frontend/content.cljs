@@ -32,8 +32,9 @@
   [refs]
   (sort-by
    (fn [ref]
-     [(boolean (re-find page-ref/page-ref-without-nested-re (:block/title ref)))
-      (:block/title ref)])
+     (when-let [title (and (map? ref) (:block/title ref))]
+       [(boolean (re-find page-ref/page-ref-without-nested-re (:block/title ref)))
+        title]))
    >
    refs))
 
