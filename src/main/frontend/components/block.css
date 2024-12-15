@@ -1062,3 +1062,8 @@ html.is-mac {
   transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
   background-color: var(--ls-secondary-background-color, var(--rx-gray-03));
 }
+
+.aspect-video {
+  width: auto;
+  aspect-ratio: 16 / 9;
+}
