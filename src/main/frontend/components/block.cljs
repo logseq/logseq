@@ -756,7 +756,7 @@
                                          (db-content/content-id-ref->page s (:block/refs page-entity))
                                          :else
                                          s)
-                                     s (if tag? (str "#" s) s)]
+                                     s (if (and tag? (not (:hide-tag-symbol? config))) (str "#" s) s)]
                                  (if (ldb/page? page-entity)
                                    s
                                    (block-title config page-entity))))]
@@ -2589,8 +2589,9 @@
 (rum/defcs block-tag <
   (rum/local false ::hover?)
   [state block tag config popup-opts]
-  (let [*hover? (::hover? state)]
-    [:div.block-tag
+  (let [*hover? (::hover? state)
+        hover? @*hover?]
+    [:div.block-tag.items-center
      {:key (str "tag-" (:db/id tag))
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)
@@ -2615,19 +2616,23 @@
                                :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
                               "Remove tag")])
                           popup-opts))}
-     (page-cp (assoc config
-                     :tag? true
-                     :disable-preview? true)
-              tag)
-     (when-not (ldb/private-tags (:db/ident tag))
-       [:a.close.flex.transition-opacity.duration-300.ease-in
+     (if (and hover? (not (ldb/private-tags (:db/ident tag))))
+       [:a.inline.close.flex.transition-opacity.duration-300.ease-in
         {:class (if @*hover? "!opacity-100" "!opacity-0")
          :title "Remove this tag"
          :on-pointer-down
          (fn [e]
            (util/stop e)
            (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
-        (ui/icon "x" {:size 15})])]))
+        (ui/icon "x" {:size 14
+                      :style {:margin-top 1}})]
+       [:a.hash-symbol {:style {:margin-left 5}}
+        "#"])
+     (page-cp (assoc config
+                     :disable-preview? true
+                     :tag? true
+                     :hide-tag-symbol? true)
+              tag)]))
 
 (rum/defc tags-cp
   "Tags without inline or hidden tags"
@@ -2645,7 +2650,7 @@
           tags-count (count block-tags)]
       (when (seq block-tags)
         (if (< tags-count 3)
-          [:div.block-tags
+          [:div.block-tags.gap-1
            (for [tag block-tags]
              (rum/with-key
                (block-tag block tag config popup-opts)
@@ -2676,7 +2681,7 @@
                               :tag? true
                               :disable-preview? true
                               :disable-click? true) tag)])
-           [:div.text-sm.opacity-50
+           [:div.text-sm.opacity-50.ml-1
             (str "+" (- tags-count 2))]])))))
 
 (rum/defc block-positioned-properties
