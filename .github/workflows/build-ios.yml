@@ -17,12 +17,12 @@ on:
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
   JAVA_VERSION: '11'
 
 jobs:
   build-app:
-    runs-on: macos-latest
+    runs-on: macos-13
     steps:
       - name: Check out Git repository
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
