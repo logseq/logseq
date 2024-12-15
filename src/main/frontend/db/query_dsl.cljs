@@ -499,20 +499,20 @@
 (defn- build-file-query
   [e fe {:keys [sort-by]}]
   (cond
-       (= 'namespace fe)
-       (build-namespace e)
+    (= 'namespace fe)
+    (build-namespace e)
 
-       (= 'page-property fe)
-       (build-page-property e)
+    (= 'page-property fe)
+    (build-page-property e)
 
-       (= 'page-tags fe)
-       (build-page-tags e)
+    (= 'page-tags fe)
+    (build-page-tags e)
 
-       (= 'all-page-tags fe)
-       (build-all-page-tags)
+    (= 'all-page-tags fe)
+    (build-all-page-tags)
 
-       (= 'sort-by fe)
-       (build-sort-by e sort-by)))
+    (= 'sort-by fe)
+    (build-sort-by e sort-by)))
 
 (defn build-query
   "This fn converts a form/list in a query e.g. `(operator arg1 arg2)` to its datalog
@@ -529,9 +529,13 @@ Some bindings in this fn:
    ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
          fe (when fe
-              (if (list? fe)
+              (cond
+                (list? fe)
                 fe
-                (symbol (string/lower-case (name fe)))))
+                (or (symbol? fe) (keyword? fe))
+                (symbol (string/lower-case (name fe)))
+                :else
+                (string/lower-case (str fe))))
          page-ref? (page-ref/page-ref? e)]
      (when (or
             (:db-graph? env)
@@ -600,7 +604,7 @@ Some bindings in this fn:
                             (let [match' (string/replace (second matches) "#" tag-placeholder)]
                               (str "\"" page-ref/left-brackets match' page-ref/right-brackets "\"")))]
       (some-> s
-              (string/replace page-ref/page-ref-re quoted-page-ref)
+              (string/replace #"\"?\[\[(.*?)\]\]\"?" quoted-page-ref)
               (string/replace text-util/between-re
                               (fn [[_ x]]
                                 (->> (string/split x #" ")
