@@ -319,6 +319,7 @@ a.control-link {
 }
 
 .property-select {
+  max-width: 600px;
   .menu-link:hover, a.menu-link.chosen {
     .iconTablerExtBacklog {
       @apply text-gray-08;
