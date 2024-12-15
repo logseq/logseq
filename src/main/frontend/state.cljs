@@ -1363,7 +1363,7 @@ Similar to re-frame subscriptions"
 (defn into-code-editor-mode!
   []
   (set-state! :editor/cursor-range nil)
-  (swap! state merge {:editor/code-mode? true}))
+  (swap! state assoc :editor/code-mode? true))
 
 (defn set-editor-last-pos!
   [new-pos]
