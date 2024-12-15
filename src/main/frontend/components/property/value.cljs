@@ -1010,7 +1010,7 @@
                            (do (some-> (rum/deref *el) (.click))
                                (util/stop e))
                            :dune))
-          :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
+          :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2"}
          (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
            (if (and (seq items) not-empty-value?)
              (concat

@@ -949,7 +949,7 @@ html.is-mac {
 
 .positioned-properties.block-right {
   button {
-    @apply whitespace-nowrap mr-0.5;
+    @apply whitespace-nowrap;
   }
 
   .block-title-wrap {
