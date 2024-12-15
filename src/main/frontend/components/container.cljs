@@ -198,7 +198,7 @@
 (rum/defc sidebar-graphs
   []
   [:div.sidebar-graphs
-   (repo/repos-dropdown)])
+   (repo/graphs-selector)])
 
 (rum/defc sidebar-navigations
   [{:keys [default-home route-match route-name srs-open? db-based?

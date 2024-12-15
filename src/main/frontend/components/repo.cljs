@@ -380,6 +380,18 @@
                            (when remote? [:span.pl-1 (ui/icon "cloud")])]
                           [:span.dropdown-caret]])))))
 
+(rum/defcs graphs-selector < rum/reactive
+  [_state]
+
+  [:div.cp__graphs-selector.flex.items-center.justify-between
+   [:a.flex.items-center.gap-1.select-none
+    [:span.thumb (shui/tabler-icon "database")]
+    [:strong (str "中文测试/" (state/get-current-repo))
+     (shui/tabler-icon "selector" {:size 18})]]
+
+   (shui/button {:variant :icon :class "p-1 opacity-40 relative top-[1px] -right-2 hover:opacity-70 active:opacity-100"}
+     (shui/tabler-icon "file-plus"))])
+
 (defn invalid-graph-name-warning
   []
   (notification/show!
