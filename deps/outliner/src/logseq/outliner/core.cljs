@@ -719,8 +719,7 @@
     (if reversed? (reverse top-level-blocks) top-level-blocks)))
 
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
-  "Delete blocks from the tree.
-  `blocks` need to be sorted by left&parent(from top to bottom)"
+  "Delete blocks from the tree."
   [conn blocks]
   (let [top-level-blocks (filter-top-level-blocks @conn blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
@@ -735,7 +734,8 @@
       (let [from-property (:logseq.property/created-from-property start-block)
             default-value-property? (and (:logseq.property/default-value from-property)
                                          (not= (:db/id start-block)
-                                               (:db/id (:logseq.property/default-value from-property))))]
+                                               (:db/id (:logseq.property/default-value from-property)))
+                                         (not (:block/closed-value-property start-block)))]
         (cond
           (and delete-one-block? default-value-property?)
           (let [datoms (d/datoms @conn :avet (:db/ident from-property) (:db/id start-block))
