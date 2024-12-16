@@ -596,7 +596,6 @@
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
         _ (doseq [class (::classes state)]
             (db/sub-block (:db/id class)))
-        page? (db/page? block)
         class? (ldb/class? block)
         block-properties (:block/properties block)
         properties (cond
