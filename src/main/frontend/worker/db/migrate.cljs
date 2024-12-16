@@ -421,7 +421,10 @@
   [conn _search-db]
   (let [db @conn
         block-type-entity (d/entity db :block/type)
-        datoms (d/datoms db :avet :block/type)
+        ;; Not using (d/datoms db :avet :block/type) here because some old graphs
+        ;; don't have :block/type indexed
+        datoms (->> (d/datoms db :eavt)
+                    (filter (fn [d] (= :block/type (:a d)))))
         journal-entity (d/entity db :logseq.class/Journal)
         tx-data (mapcat (fn [{:keys [e _a v]}]
                           (let [tag (case v
@@ -539,11 +542,11 @@
                             (into {})
                             sqlite-create-graph/build-initial-properties*
                             (map (fn [b] (assoc b :logseq.property/built-in? true))))
-        new-classes (->> (select-keys db-class/built-in-classes classes)
-                               ;; class already exists, this should never happen
-                         (remove (fn [[k _]]
-                                   (when (d/entity db k)
-                                     (assert (str "DB migration: class already exists " k)))))
+        classes' (->> (concat [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Journal :logseq.class/Whiteboard] classes)
+                      distinct)
+        new-classes (->> (select-keys db-class/built-in-classes classes')
+                         ;; class already exists, this should never happen
+                         (remove (fn [[k _]] (d/entity db k)))
                          (into {})
                          (#(sqlite-create-graph/build-initial-classes* % (zipmap properties properties)))
                          (map (fn [b] (assoc b :logseq.property/built-in? true))))
