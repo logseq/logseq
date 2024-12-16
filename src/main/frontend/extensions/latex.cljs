@@ -42,19 +42,19 @@
          (loader/load
           (config/asset-uri "/static/js/mhchem.min.js")
           (fn []
-            (some-> (when-let [enhancers (and config/lsp-enabled?
-                                              (seq (hook-extensions-enhancers-by-key :katex)))]
-                      (for [{f :enhancer} enhancers]
-                        (when (fn? f) (f js/window.katex))))
-                    (p/all)
-                    (p/finally (fn []
-                                 (reset! *loading? false)
-                                 (render! state)))))))
+            (-> (when-let [enhancers (and config/lsp-enabled?
+                                          (seq (hook-extensions-enhancers-by-key :katex)))]
+                  (for [{f :enhancer} enhancers]
+                    (when (fn? f) (f js/window.katex))))
+                (p/all)
+                (p/finally (fn []
+                             (reset! *loading? false)
+                             (render! state)))))))
        state))))
 
 (defn- state-&-load-and-render!
   [state]
-  (js/setTimeout #(load-and-render! state) 10)
+  (load-and-render! state)
   state)
 
 (rum/defcs latex < rum/reactive
