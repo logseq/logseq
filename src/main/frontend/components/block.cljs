@@ -3763,7 +3763,7 @@
 
           :else
           (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojurescript"} language) "clojure" language)]
-            [:div.ui-fenced-code-editor.flex.flex-1
+            [:div.ui-fenced-code-editor.flex.w-full
              {:ref (fn [el]
                      (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))
               :on-mouse-over #(dom/add-class! (rum/deref *actions-ref) "opacity-100")
