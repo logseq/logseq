@@ -464,14 +464,15 @@
                                    (reset! (:calc-atom state) (calc/eval-lines new-code))))))
         (.on editor "blur" (fn [cm e]
                              (when e (util/stop e))
-                             (when (or
-                                    (= :file (state/get-current-route))
-                                    (not (gobj/get cm "escPressed")))
-                               (code-handler/save-code-editor!))
-                             (state/set-block-component-editing-mode! false)
-                             (state/set-state! :editor/code-block-context nil)
-                             (vreset! *cursor-curr nil)
-                             (vreset! *cursor-prev nil)))
+                             (let [esc? (gobj/get cm "escPressed")]
+                               (when (or (= :file (state/get-current-route))
+                                       (not esc?))
+                                 (code-handler/save-code-editor!))
+                               (state/set-block-component-editing-mode! false)
+                               (state/set-state! :editor/code-block-context nil)
+                               (when (not esc?) (state/clear-edit!))
+                               (vreset! *cursor-curr nil)
+                               (vreset! *cursor-prev nil))))
         (.on editor "focus" (fn [_e]
                               (when (and
                                      (contains? #{:code} (:logseq.property.node/display-type code-block))
