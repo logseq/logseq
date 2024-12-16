@@ -278,7 +278,8 @@
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
           page? (ldb/page? block-entity)
-          m* (if (and db-based? (:block/title m*))
+          m* (if (and db-based? (:block/title m*)
+                      (not (:logseq.property.node/display-type block-entity)))
                (update m* :block/title common-util/clear-markdown-heading)
                m*)
           block-title (:block/title m*)
@@ -508,6 +509,23 @@
           orders (db-order/gen-n-keys (count blocks) start-order end-order)]
       orders)))
 
+(defn- update-property-ref-when-paste
+  [block uuids]
+  (let [id-lookup (fn [v] (and (vector? v) (= :block/uuid (first v))))
+        resolve-id (fn [v] [:block/uuid (get uuids (last v) (last v))])]
+    (reduce-kv
+     (fn [r k v]
+       (let [v' (cond
+                  (id-lookup v)
+                  (resolve-id v)
+                  (and (coll? v) (every? id-lookup v))
+                  (map resolve-id v)
+                  :else
+                  v)]
+         (assoc r k v')))
+     {}
+     block)))
+
 (defn- insert-blocks-aux
   [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? keep-block-order? outliner-op]}]
   (let [block-uuids (map :block/uuid blocks)
@@ -549,12 +567,13 @@
                               :block/uuid uuid'
                               :block/page target-page
                               :block/parent parent
-                              :block/order order}]
-                       (->
-                        (if (de/entity? block)
-                          (assoc m :block/level (:block/level block))
-                          (merge block m))
-                        (dissoc :db/id)))))
+                              :block/order order}
+                           result (->
+                                   (if (de/entity? block)
+                                     (assoc m :block/level (:block/level block))
+                                     (merge block m))
+                                   (dissoc :db/id))]
+                       (update-property-ref-when-paste result uuids))))
                  blocks)))
 
 (defn- get-target-block
@@ -719,8 +738,7 @@
     (if reversed? (reverse top-level-blocks) top-level-blocks)))
 
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
-  "Delete blocks from the tree.
-  `blocks` need to be sorted by left&parent(from top to bottom)"
+  "Delete blocks from the tree."
   [conn blocks]
   (let [top-level-blocks (filter-top-level-blocks @conn blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
@@ -735,7 +753,8 @@
       (let [from-property (:logseq.property/created-from-property start-block)
             default-value-property? (and (:logseq.property/default-value from-property)
                                          (not= (:db/id start-block)
-                                               (:db/id (:logseq.property/default-value from-property))))]
+                                               (:db/id (:logseq.property/default-value from-property)))
+                                         (not (:block/closed-value-property start-block)))]
         (cond
           (and delete-one-block? default-value-property?)
           (let [datoms (d/datoms @conn :avet (:db/ident from-property) (:db/id start-block))

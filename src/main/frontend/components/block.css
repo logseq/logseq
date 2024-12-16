@@ -1018,7 +1018,7 @@ html.is-mac {
 }
 
 .ls-code-editor-wrap {
-  @apply relative w-full;
+  @apply relative w-full overflow-hidden rounded;
 
   .extensions__code-lang {
     @apply hidden;
@@ -1061,4 +1061,9 @@ html.is-mac {
 .recent-block {
   transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
   background-color: var(--ls-secondary-background-color, var(--rx-gray-03));
+}
+
+.aspect-video {
+  aspect-ratio: 16 / 9;
+  height: auto;
 }

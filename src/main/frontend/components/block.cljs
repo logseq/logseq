@@ -3181,8 +3181,8 @@
   (block-drag-end event *move-to'))
 
 (defn- block-mouse-over
-  [e *control-show? block-id doc-mode?]
-  (when-not @*dragging?
+  [e block *control-show? block-id doc-mode?]
+  (when-not (or @*dragging? (= (:block/uuid block) (:block/uuid (state/get-edit-block))))
     (.preventDefault e)
     (reset! *control-show? true)
     (when-let [parent (gdom/getElement block-id)]
@@ -3407,7 +3407,7 @@
          :on-touch-cancel (fn [_e]
                             (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
          :on-mouse-enter (fn [e]
-                           (block-mouse-over e *control-show? block-id doc-mode?))
+                           (block-mouse-over e block *control-show? block-id doc-mode?))
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
@@ -3763,7 +3763,7 @@
 
           :else
           (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojurescript"} language) "clojure" language)]
-            [:div.ui-fenced-code-editor.flex.flex-1
+            [:div.ui-fenced-code-editor.flex.w-full
              {:ref (fn [el]
                      (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))
               :on-mouse-over #(dom/add-class! (rum/deref *actions-ref) "opacity-100")
