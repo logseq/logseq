@@ -171,7 +171,7 @@
         date-formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
         title (sanitize-title title*)
         types (cond class?
-                    #{:logseq.class/Tag :logseq.class/Property :logseq.class/Page}
+                    #{:logseq.class/Tag}
                     whiteboard?
                     #{:logseq.class/Whiteboard}
                     today-journal?
