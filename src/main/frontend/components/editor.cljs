@@ -35,7 +35,8 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [react-draggable]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.db.frontend.class :as db-class]))
 
 (defn filter-commands
   [page? commands]
@@ -156,7 +157,12 @@
                            ;; reorder, shortest and starts-with first.
                            (let [matched-pages-with-new-page
                                  (fn [partial-matched-pages]
-                                   (if (or (db/page-exists? q (if db-tag? #{:logseq.class/Tag} #{:logseq.class/Page}))
+                                   (if (or (db/page-exists? q (if db-tag?
+                                                                #{:logseq.class/Tag}
+                                                                ;; Page existence here should be the same as entity-util/page?.
+                                                                ;; Don't show 'New page' if a page has any of these tags
+                                                                (into #{:logseq.class/Page :logseq.class/Tag :logseq.class/Property}
+                                                                      db-class/page-children-classes)))
                                            (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
                                      partial-matched-pages
                                      (if db-tag?

@@ -201,9 +201,10 @@
   [db page-name tags]
   (when page-name
     (if (db-based-graph? db)
-      ;; Classes and properties are case sensitive
-      (let [tags (if (coll? tags) (set tags) #{tags})]
-        (if (seq (set/intersection #{:logseq.class/Tag :logseq.class/Property} tags))
+      (let [tags' (if (coll? tags) (set tags) #{tags})]
+        ;; Classes and properties are case sensitive and can be looked up
+        ;; as such in case-sensitive contexts e.g. no Page
+        (if (and (seq tags') (every? #{:logseq.class/Tag :logseq.class/Property} tags'))
           (seq
            (d/q
             '[:find [?p ...]
@@ -214,7 +215,7 @@
               [?tag :db/ident ?tag-ident]]
             db
             page-name
-            tags))
+            tags'))
           ;; TODO: Decouple db graphs from file specific :block/name
           (seq
            (d/q
@@ -226,7 +227,7 @@
               [?tag :db/ident ?tag-ident]]
             db
             (common-util/page-name-sanity-lc page-name)
-            tags))))
+            tags'))))
       (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))))
 
 (defn get-page
