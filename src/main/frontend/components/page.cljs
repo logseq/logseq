@@ -593,6 +593,23 @@
          {:value "property"}
          (objects/property-related-objects page (:current-page? opts)))))]))
 
+(rum/defc sidebar-page-properties
+  [config page]
+  (let [[collapsed? set-collapsed!] (rum/use-state true)]
+    [:div.ls-sidebar-page-properties.flex.flex-col.gap-2.mt-2
+     [:div
+      (shui/button
+       {:variant :ghost
+        :size :sm
+        :class "px-1 text-muted-foreground"
+        :on-click #(set-collapsed! (not collapsed?))}
+       [:span.text-xs (str (if collapsed? "Open" "Hide")) " properties"])]
+
+     (when-not collapsed?
+       [:<>
+        (component-block/db-properties-cp config page {:sidebar-properties? true})
+        [:hr.my-4]])]))
+
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query mixins/container-id
   (rum/local false ::all-collapsed?)
@@ -639,9 +656,8 @@
 
            (if (and whiteboard-page? (not sidebar?))
              [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
-             [:div.relative.grid.gap-4.page-inner
-              (when (or (and db-based? (not block?))
-                        (and (not db-based?) (not sidebar?) (not block?)))
+             [:div.relative.grid.gap-8.page-inner
+              (when-not (or block? sidebar?)
                 [:div.flex.flex-row.space-between
                  (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))
                    [:div.flex.flex-row.pr-2
@@ -658,6 +674,10 @@
                                           :fmt-journal? fmt-journal?
                                           :preview? preview?})))
                  (lsp-pagebar-slot)])
+
+              (when (and db-based? sidebar?)
+                [:div.-mb-8
+                 (sidebar-page-properties config page)])
 
               (when (and block? (not sidebar?) (not whiteboard?))
                 (let [config (merge config {:id "block-parent"
