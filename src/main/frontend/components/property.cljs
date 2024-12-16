@@ -425,7 +425,7 @@
 
 (rum/defcs new-property < rum/reactive
   [state block opts]
-  (when (and (not config/publishing?) (:class-schema? opts))
+  (when-not config/publishing?
     [:div.ls-new-property {:style {:margin-left 6 :margin-top 1}}
      [:a.fade-link.flex.jtrigger
       {:tab-index 0
@@ -586,7 +586,7 @@
    :will-remount (fn [state]
                    (let [block (db/entity (:db/id (::block state)))]
                      (assoc state ::classes (async-load-classes! block))))}
-  [state _target-block {:keys [class-schema?] :as opts}]
+  [state _target-block {:keys [class-schema? sidebar-properties?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
@@ -685,21 +685,38 @@
                                      (when (and class? (nil? (:logseq.property.class/properties block)))
                                        [[:logseq.property.class/properties nil]]))
                              remove-built-in-or-other-position-properties)]
-    (when-not (and (empty? full-properties) (not (:class-schema? opts)))
-      [:div.ls-properties-area
-       {:id id
-        :class (util/classnames [{:class-properties class-schema?
-                                  :ls-page-properties (and page? (not class-schema?))}])
-        :tab-index 0
-        :on-key-up #(when-let [block (and (= "Escape" (.-key %))
-                                          (.closest (.-target %) "[blockid]"))]
-                      (let [target (.-target %)]
-                        (when-not (d/has-class? target "ls-popup-closed")
-                          (state/set-selection-blocks! [block])
-                          (some-> js/document.activeElement (.blur)))
-                        (d/remove-class! target "ls-popup-closed")))}
-       (let [remove-properties #{:logseq.property/icon :logseq.property/query}
-             properties' (remove (fn [[k _v]] (contains? remove-properties k)) full-properties)]
-         (properties-section block (if class-schema? properties properties') opts))
+    (cond
+      (and (empty? full-properties) (not (:class-schema? opts)))
+      (when sidebar-properties?
+        (rum/with-key (new-property block opts) (str id "-add-property")))
 
-       (rum/with-key (new-property block opts) (str id "-add-property"))])))
+      :else
+      (let [remove-properties #{:logseq.property/icon :logseq.property/query}
+            properties' (remove (fn [[k _v]] (contains? remove-properties k)) full-properties)
+            properties'' (cond->> properties'
+                           (not class-schema?)
+                           (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
+            page? (ldb/page? block)]
+        [:div.ls-properties-area
+         {:id id
+          :class (util/classnames [{:class-properties class-schema?
+                                    :ls-page-properties (and page? (not class-schema?))}])
+          :tab-index 0
+          :on-key-up #(when-let [block (and (= "Escape" (.-key %))
+                                            (.closest (.-target %) "[blockid]"))]
+                        (let [target (.-target %)]
+                          (when-not (d/has-class? target "ls-popup-closed")
+                            (state/set-selection-blocks! [block])
+                            (some-> js/document.activeElement (.blur)))
+                          (d/remove-class! target "ls-popup-closed")))}
+         (properties-section block (if class-schema? properties properties'') opts)
+
+         (when page?
+           (rum/with-key (new-property block opts) (str id "-add-property")))
+
+         (when page?
+           (let [properties'' (filter (fn [[k _v]] (= k :logseq.property.class/properties)) properties')]
+             (when (seq properties'')
+               [:<>
+                (when-not class-schema? [:hr.my-4])
+                (properties-section block (if class-schema? properties properties'') opts)])))]))))

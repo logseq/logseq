@@ -604,28 +604,27 @@
   (rum/local false ::control?)
   [state {:keys [on-pointer-down header title-trigger? collapsed?]}]
   (let [control? (get state ::control?)]
-    [:div.content
+    [:div.ls-foldable-title.content
      [:div.flex-1.flex-row.foldable-title (cond->
                                            {:on-mouse-over #(reset! control? true)
                                             :on-mouse-out  #(reset! control? false)}
                                             title-trigger?
                                             (assoc :on-pointer-down on-pointer-down
                                                    :class "cursor"))
-      [:div.flex.flex-row.items-center.ls-foldable-header
+      [:div.flex.flex-row.items-center.ls-foldable-header.gap-1
        {:on-click (fn [^js e]
                     (let [^js target (.-target e)]
                       (when (some-> target (.closest ".as-toggle"))
                         (reset! collapsed? (not @collapsed?)))))}
        (when-not (mobile-util/native-platform?)
-         [:a.block-control.opacity-50.hover:opacity-100.mr-2
-          (cond->
-           {:style    {:width       14
-                       :height      16
-                       :margin-left -30}}
-            (not title-trigger?)
-            (assoc :on-pointer-down on-pointer-down))
-          [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
-           (rotating-arrow @collapsed?)]])
+         (let [style {:width 14 :height 16}]
+           [:a.ls-foldable-title-control.block-control.opacity-50.hover:opacity-100
+            (cond->
+             {:style style}
+              (not title-trigger?)
+              (assoc :on-pointer-down on-pointer-down))
+            [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
+             (rotating-arrow @collapsed?)]]))
        (if (fn? header)
          (header @collapsed?)
          header)]]]))
