@@ -949,17 +949,19 @@
               copied-blocks (cond->> (get-all-blocks-by-ids repo top-level-block-uuids)
                               db-based?
                               (map (fn [block]
-                                     (let [b (db/pull (:db/id block))]
-                                       (->> (map (fn [[k v]]
-                                                   (let [v' (cond
-                                                              (and (map? v) (:db/id v))
-                                                              [:block/uuid (:block/uuid (db/entity (:db/id v)))]
-                                                              (and (coll? v) (every? #(and (map? %) (:db/id %)) v))
-                                                              (set (map (fn [i] [:block/uuid (:block/uuid (db/entity (:db/id i)))]) v))
-                                                              :else
-                                                              v)]
-                                                     [k v'])) b)
-                                            (into {}))))))]
+                                     (let [b (db/entity (:db/id block))]
+                                       (->
+                                        (->> (map (fn [[k v]]
+                                                    (let [v' (cond
+                                                               (and (map? v) (:db/id v))
+                                                               [:block/uuid (:block/uuid (db/entity (:db/id v)))]
+                                                               (and (coll? v) (every? #(and (map? %) (:db/id %)) v))
+                                                               (set (map (fn [i] [:block/uuid (:block/uuid (db/entity (:db/id i)))]) v))
+                                                               :else
+                                                               v)]
+                                                      [k v'])) b)
+                                             (into {}))
+                                        (assoc :db/id (:db/id b)))))))]
           (common-handler/copy-to-clipboard-without-id-property! repo (:block/format block) content (when html? html) copied-blocks))
         (state/set-block-op-type! :copy)
         (notification/show! "Copied!" :success)))))

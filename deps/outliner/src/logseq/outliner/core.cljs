@@ -509,6 +509,23 @@
           orders (db-order/gen-n-keys (count blocks) start-order end-order)]
       orders)))
 
+(defn- update-property-ref-when-paste
+  [block uuids]
+  (let [id-lookup (fn [v] (and (vector? v) (= :block/uuid (first v))))
+        resolve-id (fn [v] [:block/uuid (get uuids (last v) (last v))])]
+    (reduce-kv
+     (fn [r k v]
+       (let [v' (cond
+                  (id-lookup v)
+                  (resolve-id v)
+                  (and (coll? v) (every? id-lookup v))
+                  (map resolve-id v)
+                  :else
+                  v)]
+         (assoc r k v')))
+     {}
+     block)))
+
 (defn- insert-blocks-aux
   [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? keep-block-order? outliner-op]}]
   (let [block-uuids (map :block/uuid blocks)
@@ -550,12 +567,13 @@
                               :block/uuid uuid'
                               :block/page target-page
                               :block/parent parent
-                              :block/order order}]
-                       (->
-                        (if (de/entity? block)
-                          (assoc m :block/level (:block/level block))
-                          (merge block m))
-                        (dissoc :db/id)))))
+                              :block/order order}
+                           result (->
+                                   (if (de/entity? block)
+                                     (assoc m :block/level (:block/level block))
+                                     (merge block m))
+                                   (dissoc :db/id))]
+                       (update-property-ref-when-paste result uuids))))
                  blocks)))
 
 (defn- get-target-block
