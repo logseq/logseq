@@ -9,7 +9,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.db.frontend.class :as db-class]))
 
 (deftest new-graph-db-idents
   (testing "a new graph follows :db/ident conventions for"
@@ -73,17 +74,14 @@
     (is (every? ldb/property? (:logseq.property.class/properties task))
         "Each task property has correct type")))
 
-(deftest new-graph-initializes-default-classes
-  (let [conn (db-test/create-conn)
-        child-classes (->> (d/q '[:find (pull ?b [:db/ident :logseq.property/parent]) :where [?b :logseq.property/parent]]
-                          @conn)
-                     (map first))]
-    (assert (seq child-classes) "Classes must be present")
-    (is (every? integer? (map #(get-in % [:logseq.property/parent :db/id]) child-classes))
-        "All parents of child classes must have valid :db/id")
-    (is (= (count child-classes)
-           (count (->> (conj child-classes {:db/ident :logseq.class/Root})
-                       (map #(d/entity @conn (:db/ident %)))
+(deftest new-graph-initializes-default-classes-correctly
+  (let [conn (db-test/create-conn)]
+    (is (= (count db-class/built-in-classes) (count (d/datoms @conn :avet :block/tags :logseq.class/Tag)))
+        "All built-in classes have a :logseq.class/Tag")
+
+    (is (= (count (dissoc db-class/built-in-classes :logseq.class/Root))
+           (count (->> (d/datoms @conn :avet :block/tags :logseq.class/Tag)
+                       (map #(d/entity @conn (:e %)))
                        (mapcat :logseq.property/_parent)
                        set)))
         "Reverse lookup of :logseq.property/parent correctly fetches number of child classes")))
