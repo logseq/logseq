@@ -1018,7 +1018,7 @@ html.is-mac {
 }
 
 .ls-code-editor-wrap {
-  @apply relative w-full;
+  @apply relative w-full overflow-hidden rounded;
 
   .extensions__code-lang {
     @apply hidden;
