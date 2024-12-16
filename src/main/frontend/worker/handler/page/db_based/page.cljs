@@ -204,7 +204,8 @@
                             ;; New page creation must not override built-in entities
                             (not (db-malli-schema/internal-ident? (:db/ident page)))))
           ;; Don't validate journal names because they can have '/'
-          (when (not= :logseq.class/Journal type)
+          (when-not (or (contains? types :logseq.class/Journal)
+                        (contains? (set (:block/tags page)) :logseq.class/Journal))
             (outliner-validate/validate-page-title-characters (str (:block/title page)) {:node page})
             (doseq [parent parents]
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
