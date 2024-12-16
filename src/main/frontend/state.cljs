@@ -1169,21 +1169,17 @@ Similar to re-frame subscriptions"
     (dom/remove-class! node "selected")))
 
 (defn mark-dom-blocks-as-selected
-  ([]
-   (mark-dom-blocks-as-selected (get-selection-block-ids)))
-  ([ids]
-   (doseq [id ids]
-     (doseq [node (array-seq (gdom/getElementsByClass (str "id" id)))]
-       (dom/add-class! node "selected")))))
+  [nodes]
+  (doseq [node nodes]
+    (dom/add-class! node "selected")))
 
 (defn- set-selection-blocks-aux!
   [blocks]
   (let [selected-ids (set (get-selected-block-ids @(:selection/blocks @state)))
         _ (set-state! :selection/blocks blocks)
         new-ids (set (get-selection-block-ids))
-        added (set/difference new-ids selected-ids)
         removed (set/difference selected-ids new-ids)]
-    (mark-dom-blocks-as-selected added)
+    (mark-dom-blocks-as-selected blocks)
     (doseq [id removed]
       (doseq [node (array-seq (gdom/getElementsByClass (str "id" id)))]
         (dom/remove-class! node "selected")))))
