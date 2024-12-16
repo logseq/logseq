@@ -238,29 +238,31 @@ export class ChildAPI {
       }
 
       // Reply to Parent
-      resolveValue(this.model, property, args).then((value) => {
-        ;(e.source as WindowProxy).postMessage(
-          {
-            property,
-            postmate: 'reply',
-            type: messageType,
-            uid,
-            value,
-          },
-          e.origin
-        )
-      }).catch((error) => {
-        ;(e.source as WindowProxy).postMessage(
-          {
-            property,
-            postmate: 'reply',
-            type: messageType,
-            uid,
-            error,
-          },
-          e.origin
-        )
-      })
+      resolveValue(this.model, property, args)
+        .then((value) => {
+          ;(e.source as WindowProxy).postMessage(
+            {
+              property,
+              postmate: 'reply',
+              type: messageType,
+              uid,
+              value,
+            },
+            e.origin
+          )
+        })
+        .catch((error) => {
+          ;(e.source as WindowProxy).postMessage(
+            {
+              property,
+              postmate: 'reply',
+              type: messageType,
+              uid,
+              error,
+            },
+            e.origin
+          )
+        })
     })
   }
 
