@@ -22,7 +22,7 @@
     (let [type-tag (cond class? :logseq.class/Tag
                          whiteboard? :logseq.class/Whiteboard
                          :else :logseq.class/Page)
-          tags' (conj tags type-tag)
+          tags' (if (:block/journal-day page) tags (conj tags type-tag))
           page' (update page :block/tags
                         (fnil into [])
                         (mapv (fn [tag]
