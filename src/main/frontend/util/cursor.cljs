@@ -130,10 +130,9 @@
     [input]
     (move-cursor-to input (line-beginning-pos input))))
 
-(comment
-  (defn move-cursor-to-start
-    [input]
-    (move-cursor-to input 0)))
+(defn move-cursor-to-start
+  [input]
+  (move-cursor-to input 0))
 
 (defn move-cursor-to-end
   [input]

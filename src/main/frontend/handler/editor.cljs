@@ -2720,7 +2720,15 @@
 
       (= input element)
       (cond
-        (and property? right? (cursor/end? input) (not= (get-in block [:block/schema :type]) :default))
+        (and property? right? (not (cursor/end? input)))
+        (cursor/move-cursor-to-end input)
+
+        (and property? left? (not (cursor/start? input)))
+        (cursor/move-cursor-to-start input)
+
+        (and property? right? (cursor/end? input)
+             (or (not= (get-in block [:block/schema :type]) :default)
+                 (seq (:property/closed-values block))))
         (let [pair (util/rec-get-node input "property-pair")
               jtrigger (when pair (dom/sel1 pair ".property-value-container .jtrigger"))]
           (when jtrigger
