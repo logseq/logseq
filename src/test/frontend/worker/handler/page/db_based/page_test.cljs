@@ -78,10 +78,23 @@
   (let [conn (db-test/create-conn)
         [_ page-uuid] (worker-db-page/create! conn "fooz" {})]
     (is (= "fooz" (:block/title (d/entity @conn [:block/uuid page-uuid])))
-        "Valid page created")
+        "Page created correctly")
 
     (is (thrown-with-msg?
          js/Error
          #"can't include \"/"
          (worker-db-page/create! conn "foo/bar" {}))
         "Page can't have '/'n title")))
+
+(deftest create-journal
+  (let [conn (db-test/create-conn)
+        [_ page-uuid] (worker-db-page/create! conn "Dec 16th, 2024" {})]
+
+    (is (= "Dec 16th, 2024" (:block/title (d/entity @conn [:block/uuid page-uuid])))
+        "Journal created correctly")
+
+    (is (= [:logseq.class/Journal]
+           (->> (d/entity @conn [:block/uuid page-uuid])
+                :block/tags
+                (map #(:db/ident (d/entity @conn (:db/id %))))))
+        "New journal only has Journal tag")))
