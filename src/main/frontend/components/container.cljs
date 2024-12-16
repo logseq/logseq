@@ -297,7 +297,7 @@
       (when (seq favorite-entities)
         (let [favorite-items (map
                                (fn [e]
-                                 (let [icon (icon/get-node-icon-cp e {:size 15})]
+                                 (let [icon (icon/get-node-icon-cp e {:size 16})]
                                    {:id (str (:db/id e))
                                     :value (:block/uuid e)
                                     :content [:li.favorite-item (page-name e icon false)]}))
@@ -324,7 +324,7 @@
            :draggable true
            :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
            :data-ref name}
-          (page-name page (icon/get-node-icon-cp page {:size 15}) true)])])))
+          (page-name page (icon/get-node-icon-cp page {:size 16}) true)])])))
 
 (defn get-default-home-if-valid
   []

@@ -67,7 +67,7 @@
   border-right: 1px solid var(--lx-gray-03, var(--ls-tertiary-background-color));
 
   > .wrap {
-    @apply flex flex-col gap-1 relative w-full mt-8;
+    @apply flex flex-col relative w-full mt-6;
 
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
 
@@ -143,12 +143,12 @@
   }
 
   .nav-header-container {
-    @apply flex flex-col gap-1 px-4;
+    @apply flex flex-col gap-1 px-3 mb-1;
   }
 
   .nav-contents-container {
     @apply flex flex-col gap-1 pt-1;
-    @apply px-3.5 relative h-full flex-grow-0 overflow-x-hidden overflow-y-auto;
+    @apply px-3 relative h-full flex-grow-0 overflow-x-hidden overflow-y-auto;
 
     &.is-scrolled {
       border-top: 1px solid var(--ls-tertiary-border-color);
@@ -211,7 +211,7 @@
     }
 
     .bd {
-      @apply py-1 overflow-y-auto hidden min-h-[40px];
+      @apply overflow-y-auto hidden;
 
       ul {
         @apply list-none p-0 m-0;

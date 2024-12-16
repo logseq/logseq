@@ -71,17 +71,20 @@
 
 .cp__graphs-selector {
   > a {
-    @apply flex items-center relative flex-1 overflow-hidden py-1 pr-4 opacity-90 active:opacity-70;
+    @apply flex items-center relative flex-1 overflow-hidden
+    pl-0.5 py-1 pr-4 opacity-90 active:opacity-70;
 
     > .thumb {
-      @apply w-7 h-7 overflow-hidden flex flex-shrink-0 items-center justify-center bg-blue-rx-04 rounded-md;
+      @apply w-6 h-6 overflow-hidden flex flex-shrink-0 items-center
+      justify-center bg-accent-03-alpha rounded;
     }
 
     > strong {
-      @apply whitespace-nowrap overflow-hidden text-ellipsis pl-1 font-semibold relative pr-4;
+      @apply whitespace-nowrap overflow-hidden text-ellipsis pl-1
+      font-medium relative pr-4 text-sm;
 
       > .ui__icon {
-        @apply absolute -right-1 top-1 opacity-80;
+        @apply absolute -right-1 top-[3px] opacity-80;
       }
     }
   }
