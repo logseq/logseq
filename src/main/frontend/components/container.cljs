@@ -60,16 +60,17 @@
             [logseq.common.util.namespace :as ns-util]))
 
 (rum/defc sidebar-content-group < rum/reactive
-  [name {:keys [class count more collapsable?]} child]
+  [name {:keys [class count more header-props enter-show-more? collapsable?]} child]
   (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])]
     [:div.nav-content-group
      {:class (util/classnames [class {:is-expand (not collapsed?)
                                       :has-children (and (number? count) (> count 0))}])}
      [:div.nav-content-group-inner
       [:div.header.items-center
-       (cond-> {}
-         (false? collapsable?)
-         (assoc :class "non-collapsable")
+       (cond-> (merge header-props
+                 {:class (util/classnames [(:class header-props)
+                                           {:non-collapsable (false? collapsable?)
+                                            :enter-show-more (true? enter-show-more?)}])})
 
          (not (false? collapsable?))
          (assoc :on-click (fn [^js/MouseEvent _e]
@@ -205,7 +206,12 @@
            enable-whiteboards?]}]
   (sidebar-content-group
     [:a.wrap-th [:strong.flex-1 "Navigations"]]
-    {:collapsable? false :more [:span]}
+    {:collapsable? false
+     :enter-show-more? true
+     :header-props {:on-click (fn [^js e] (when-let [^js _el (some-> (.-target e) (.closest ".as-edit"))]
+                                            (shui/popup-show! _el [:code "TODO: navigations filter"] {:as-dropdown? false})))}
+     :more [:a.as-edit {:class "!opacity-60 hover:!opacity-80 relative -top-0.5 -right-[9px]"}
+            (shui/tabler-icon "filter-edit" {:size 15})]}
     [:div.sidebar-navigations.flex.flex-col.mt-1
      (let [page (:page default-home)]
        (if (and page (not (state/enable-journals? (state/get-current-repo))))
@@ -230,23 +236,23 @@
             :icon "calendar"
             :shortcut :go/journals})))
 
-     (when db-based?
-       (let [tag-uuid (:block/uuid (db/entity :logseq.class/Task))]
-         (sidebar-item
-           {:class "task-view-nav"
-            :title (t :left-side-bar/tasks)
-            :href (rfe/href :page {:name tag-uuid})
-            :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
-            :icon "hash"})))
-
-     (when db-based?
-       (let [tag-uuid (:block/uuid (db/entity :logseq.class/Asset))]
-         (sidebar-item
-           {:class "asset-view-nav"
-            :title (t :left-side-bar/assets)
-            :href (rfe/href :page {:name tag-uuid})
-            :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
-            :icon "hash"})))
+     ;(when db-based?
+     ;  (let [tag-uuid (:block/uuid (db/entity :logseq.class/Task))]
+     ;    (sidebar-item
+     ;      {:class "task-view-nav"
+     ;       :title (t :left-side-bar/tasks)
+     ;       :href (rfe/href :page {:name tag-uuid})
+     ;       :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
+     ;       :icon "hash"})))
+     ;
+     ;(when db-based?
+     ;  (let [tag-uuid (:block/uuid (db/entity :logseq.class/Asset))]
+     ;    (sidebar-item
+     ;      {:class "asset-view-nav"
+     ;       :title (t :left-side-bar/assets)
+     ;       :href (rfe/href :page {:name tag-uuid})
+     ;       :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
+     ;       :icon "hash"})))
 
      (when enable-whiteboards?
        (when (or config/dev? (not db-based?))
@@ -277,8 +283,8 @@
         :title (t :right-side-bar/all-pages)
         :href (rfe/href :all-pages)
         :active (and (not srs-open?) (= route-name :all-pages))
-        :icon "files"})])
-  )
+        :icon "files"})]))
+
 
 (rum/defc favorites < rum/reactive
   []

@@ -179,7 +179,11 @@
       }
 
       &.non-collapsable {
-        @apply cursor-default;
+        @apply cursor-default active:opacity-100;
+
+        .wrap-th {
+          @apply cursor-default;
+        }
       }
 
       &:not(.non-collapsable) {
@@ -188,7 +192,7 @@
           background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
 
           * {
-            opacity: 1 !important;
+            @apply !opacity-100;
           }
 
           .more {
@@ -206,6 +210,16 @@
 
         > strong {
           @apply text-xs font-medium;
+        }
+      }
+
+      &.enter-show-more {
+        > .b {
+          @apply transition-opacity opacity-0 delay-300;
+        }
+
+        &:hover > .b {
+          @apply opacity-80;
         }
       }
     }
