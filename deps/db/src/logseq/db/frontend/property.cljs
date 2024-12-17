@@ -437,6 +437,11 @@
     :block/created-at :block/updated-at
     :logseq.property.attribute/kv-value :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content})
 
+(assert (= db-attribute-properties
+           (set (keep (fn [[k {:keys [attribute]}]] (when attribute k))
+                      built-in-properties)))
+        "All db attribute properties are configured in built-in-properties")
+
 (def private-db-attribute-properties
   "db-attribute properties that are not visible to user"
   (->> db-attribute-properties
@@ -450,11 +455,6 @@
 (def read-only-properties
   "Property values that shouldn't be updated"
   #{:logseq.property/built-in?})
-
-(assert (= db-attribute-properties
-           (set (keep (fn [[k {:keys [attribute]}]] (when attribute k))
-                      built-in-properties)))
-        "All db attribute properties are configured in built-in-properties")
 
 (def logseq-property-namespaces
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs" "logseq.task"
