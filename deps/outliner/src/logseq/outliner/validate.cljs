@@ -96,8 +96,8 @@
 
 (defn ^:api validate-unique-by-name-tag-and-block-type
   "Validates uniqueness of nodes for the following cases:
-   - Page names of type 'page' are unique by tag e.g. their can be Apple #Company and Apple #Fruit
-   - Page names of other types are unique for their type e.g. their can be #Journal ('class') and Journal ('page')"
+   - Page names are unique for a tag e.g. their can be Apple #Company and Apple #Fruit
+   - Page names are unique for a :logseq.property/parent"
   [db new-title entity]
   (when (ldb/page? entity)
     (validate-unique-for-page db new-title entity)))
