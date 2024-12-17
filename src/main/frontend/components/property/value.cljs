@@ -553,7 +553,10 @@
                                               "Choose nodes"
                                               :else
                                               "Choose node")
-                 :show-new-when-not-exact-match? (if (and parent-property? (contains? (set children-pages) (:db/id block)))
+                 :show-new-when-not-exact-match? (if (or (and parent-property? (contains? (set children-pages) (:db/id block)))
+                                                         ;; Don't allow creating private tags
+                                                         (seq (set/intersection (set (map :db/ident classes))
+                                                                                ldb/private-tags)))
                                                    false
                                                    true)
                  :extract-chosen-fn :value
