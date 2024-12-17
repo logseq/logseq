@@ -798,17 +798,26 @@ independent of format as format specific heading characters are stripped"
                     :nonce (:nonce shape)}))))))
 
 (defn get-all-classes
-  [repo & {:keys [except-root-class?]
-           :or {except-root-class? false}}]
+  [repo & {:keys [except-root-class? except-private-tags?]
+           :or {except-root-class? false
+                except-private-tags? true}}]
   (let [db (conn/get-db repo)
         classes (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
                      (map (fn [d]
                             (db-utils/entity db (:e d))))
                      (remove (fn [d]
-                               (contains? ldb/private-tags (:db/ident d)))))]
+                               (and except-private-tags?
+                                    (contains? ldb/private-tags (:db/ident d))))))]
     (if except-root-class?
       (keep (fn [e] (when-not (= :logseq.class/Root (:db/ident e)) e)) classes)
       classes)))
+
+(defn get-all-readable-classes
+  "Gets all classes that are used in a read only context e.g. querying or used
+  for property value selection. This should _not_ be used in a write context e.g.
+  adding a tag to a node or creating a new node with a tag"
+  [repo opts]
+  (get-all-classes repo (merge opts {:except-private-tags? false})))
 
 (defn get-structured-children
   [repo eid]
