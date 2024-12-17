@@ -414,8 +414,10 @@
       [:strong short-repo-name
        (shui/tabler-icon "selector" {:size 16})]]
 
-     (shui/button {:variant :icon :class "p-1 opacity-40 relative top-[1px] -right-2 hover:opacity-70 active:opacity-100"}
-       (shui/tabler-icon "file-plus"))]))
+     [:span
+      (shui/button {:variant :icon
+                    :on-click #(route-handler/go-to-search! :global :new-page)}
+        (shui/tabler-icon "file-plus"))]]))
 
 (defn invalid-graph-name-warning
   []

@@ -761,10 +761,14 @@
 
 (defn- input-placeholder
   [sidebar?]
-  (let [search-mode (:search/mode @state/state)]
+  (let [search-mode (:search/mode @state/state)
+        search-args (:search/args @state/state)]
     (cond
       (and (= search-mode :graph) (not sidebar?))
       "Add graph filter"
+
+      (= search-args :new-page)
+      "Type a page name to create"
 
       :else
       "What are you looking for?")))
@@ -949,6 +953,7 @@
                     ::input (atom (or (:initial-input opts) "")))))
    :will-unmount (fn [state]
                    (state/set-state! :search/mode nil)
+                   (state/set-state! :search/args nil)
                    state)}
   (mixins/event-mixin
    (fn [state]
