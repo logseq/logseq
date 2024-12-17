@@ -70,6 +70,15 @@
          (= :logseq.property/empty-placeholder (:db/ident (d/entity db property-val))))
     (= :logseq.property/empty-placeholder property-val)))
 
+(defn internal-ident?
+  "Determines if given ident is created by Logseq. All Logseq internal idents
+   must start with 'block' or 'logseq' to keep Logseq internals from leaking
+   across namespaces and to allow for users and 3rd party plugins to choose
+   any other namespace"
+  [ident]
+  (or (contains? db-property/db-attribute-properties ident)
+      (contains? logseq-ident-namespaces (namespace ident))))
+
 (defn validate-property-value
   "Validates the property value in a property tuple. The property value is
   expected to be a coll if the property has a :many cardinality. validate-fn is
@@ -77,7 +86,7 @@
   validate-fn varies by property type"
   [db validate-fn [{:block/keys [schema] :as property} property-val] & {:keys [new-closed-value?]}]
   ;; For debugging
-  ;; (when (not (string/starts-with? (namespace (:db/ident property)) "logseq.")) (prn :validate-val (dissoc property :property/closed-values) property-val))
+  ;; (when (not (internal-ident? (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
   (let [validate-fn' (if (db-property-type/property-types-with-db (:type schema))
                        (fn [value]
                          (validate-fn db value {:new-closed-value? new-closed-value?}))
@@ -170,15 +179,6 @@
   (mapv (fn [[db-id m]] (with-meta m {:db/id db-id}))
         (datoms->entity-maps datoms)))
 
-(defn internal-ident?
-  "Determines if given ident is created by Logseq. All Logseq internal idents
-   must start with 'block' or 'logseq' to keep Logseq internals from leaking
-   across namespaces and to allow for users and 3rd party plugins to choose
-   any other namespace"
-  [ident]
-  (or (contains? db-property/db-attribute-properties ident)
-      (contains? logseq-ident-namespaces (namespace ident))))
-
 (assert (every? #(re-find #"^(block|logseq\.)" (namespace %)) db-property/db-attribute-properties)
         "All db-attribute idents start with an internal namespace")
 (assert (every? #(re-find #"^logseq\." %) logseq-ident-namespaces)
@@ -219,7 +219,6 @@
    ;; Injected by update-properties-in-ents
    [:block/properties {:optional true} block-properties]
    [:block/refs {:optional true} [:set :int]]
-   [:block/tags {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]
    [:block/collapsed? {:optional true} :boolean]])
 
@@ -227,11 +226,7 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/title :string]
-   [:block/alias {:optional true} [:set :int]]
-    ;; TODO: Should this be here or in common?
-   [:block/path-refs {:optional true} [:set :int]]
-   ;; file-based
-   [:block/namespace {:optional true} :int]])
+   [:block/path-refs {:optional true} [:set :int]]])
 
 (def property-attrs
   "Common attributes for properties"
@@ -479,6 +474,7 @@
 (let [malli-many-ref-attrs (->> (concat property-attrs page-attrs block-attrs page-or-block-attrs (rest closed-value-block*))
                                 (filter #(= (last %) [:set :int]))
                                 (map first)
+                                (into db-property/public-db-attribute-properties)
                                 set)]
   (when-let [undeclared-ref-attrs (seq (remove malli-many-ref-attrs db-schema/card-many-ref-type-attributes))]
     (throw (ex-info (str "The malli DB schema is missing the following cardinality-many ref attributes from datascript's schema: "
