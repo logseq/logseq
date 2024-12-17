@@ -160,6 +160,8 @@
             db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
+        (outliner-validate/validate-page-title property-name {:node {:db/ident db-ident'}})
+        (outliner-validate/validate-page-title-characters property-name {:node {:db/ident db-ident'}})
         (ldb/transact! conn
                        [(sqlite-util/build-new-property db-ident' schema {:title k-name})]
                        {:outliner-op :new-property})
