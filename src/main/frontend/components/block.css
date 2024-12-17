@@ -967,7 +967,6 @@ html.is-mac {
   @apply flex flex-row flex-wrap self-start items-center;
   min-height: 24px;
   max-width: 256px;
-  margin-right: -16px;
 }
 
 .block-tag {
