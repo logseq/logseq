@@ -366,6 +366,7 @@
                                              {:logseq.property.class/properties [:block/title]}
                                              {:property/schema.classes [:block/title]}
                                              {:logseq.property/parent [:block/title]}
+                                             {:block/tags [:block/title]}
                                              {:block/refs [:block/title]}]) ...]
                             :in $
                             :where [?b :db/ident ?ident]]
@@ -381,6 +382,7 @@
                                                              :db/cardinality :property/schema.classes :block/refs])
                                        (seq props)
                                        (assoc :block/properties (-> (update-keys props name)
+                                                                    (dissoc "tags")
                                                                     (update-vals (fn [v]
                                                                                    (if (:db/id v)
                                                                                      (db-property/property-value-content (d/entity db (:db/id v)))
@@ -391,6 +393,8 @@
                                        (update :logseq.property/parent :block/title)
                                        (seq (:property/schema.classes m))
                                        (update :property/schema.classes #(set (map :block/title %)))
+                                       (seq (:block/tags m))
+                                       (update :block/tags #(set (map :block/title %)))
                                        (seq (:block/refs m))
                                        (update :block/refs #(set (map :block/title %)))))))
                             set)))))
