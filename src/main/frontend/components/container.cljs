@@ -208,7 +208,7 @@
         (tt (keyword "left-side-bar" name')
           (keyword "right-side-bar" name'))))))
 
-(rum/defc sidebar-navigations
+(rum/defc ^:large-vars/cleanup-todo sidebar-navigations
   [{:keys [default-home route-match route-name srs-open? db-based? enable-whiteboards?]}]
   (let [navs [:whiteboards :flashcards :graph-view :all-pages :tag/tasks :tag/assets]
         [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
