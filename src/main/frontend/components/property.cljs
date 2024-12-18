@@ -13,6 +13,7 @@
             [frontend.handler.property.util :as pu]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -99,7 +100,8 @@
                       add-class-property? (and (ldb/class? block) class-schema?)]
                 (when *property (reset! *property property))
                 (p/do!
-                 (when *show-new-property-config? (reset! *show-new-property-config? false))
+                 (when *show-new-property-config?
+                   (reset! *show-new-property-config? false))
                  (when (= (:type schema) :node) (reset! *show-class-select? true))
                  (components-pu/update-property! property property-name schema)
                  (cond
@@ -142,30 +144,42 @@
 (rum/defc property-select
   [exclude-properties select-opts]
   (let [[properties set-properties!] (rum/use-state nil)
+        [classes set-classes!] (rum/use-state nil)
         [excluded-properties set-excluded-properties!] (rum/use-state nil)]
     (rum/use-effect!
      (fn []
-       (p/let [properties (db-async/<db-based-get-all-properties (state/get-current-repo))]
+       (p/let [repo (state/get-current-repo)
+               properties (db-async/<db-based-get-all-properties repo)
+               classes (->> (db-model/get-all-classes repo)
+                            (remove ldb/built-in?))]
+         (set-classes! classes)
          (set-properties! (remove exclude-properties properties))
          (set-excluded-properties! (->> properties
                                         (filter exclude-properties)
                                         (map :block/title)
                                         set))))
      [])
-    [:div.ls-property-add.flex.flex-row.items-center.property-key
-     [:div.ls-property-key
-      (select/select (merge
-                      {:items (map (fn [x]
-                                     {:label (:block/title x)
-                                      :value (:block/uuid x)}) properties)
-                       :extract-fn :label
-                       :dropdown? false
-                       :close-modal? false
-                       :new-case-sensitive? true
-                       :show-new-when-not-exact-match? true
-                       :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
-                       :input-default-placeholder "Add or change property"}
-                      select-opts))]]))
+    (let [items (concat
+                 (map (fn [x]
+                        {:label (:block/title x)
+                         :value (:block/uuid x)}) properties)
+                 (map (fn [x]
+                        {:label (:block/title x)
+                         :value (:block/uuid x)
+                         :group "Tags"}) classes))]
+      [:div.ls-property-add.flex.flex-row.items-center.property-key
+       [:div.ls-property-key
+        (select/select (merge
+                        {:items items
+                         :grouped? true
+                         :extract-fn :label
+                         :dropdown? false
+                         :close-modal? false
+                         :new-case-sensitive? true
+                         :show-new-when-not-exact-match? true
+                         :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
+                         :input-default-placeholder "Add or change property"}
+                        select-opts))]])))
 
 (rum/defc property-icon
   [property property-type]
@@ -194,7 +208,7 @@
   (fn [{:keys [value label]}]
     (reset! *property-key (if (uuid? value) label value))
     (let [property (when (uuid? value) (db/entity [:block/uuid value]))]
-      (when (and *show-new-property-config? (not property))
+      (when (and *show-new-property-config? (not (ldb/property? property)))
         (reset! *show-new-property-config? true))
       (reset! *property property)
       (when property
@@ -221,10 +235,26 @@
                  (not (seq (:property/closed-values property))))
             (pv/<create-new-block! block property "")
 
+            ;; using class as property
+            (and property (ldb/class? property))
+            (let [schema (assoc (:block/schema property)
+                                :type :node)]
+              (p/do!
+               (db/transact! (state/get-current-repo)
+                             [{:db/id (:db/id property)
+                               :db/ident (:db/ident property)
+                               :db/cardinality :db.cardinality/one
+                               :db/valueType :db.type/ref
+                               :db/index true
+                               :block/tags :logseq.class/Property
+                               :block/schema schema
+                               :property/schema.classes (:db/id property)}]
+                             {:outliner-op :save-block})
+               (reset! *show-new-property-config? false)))
+
             (or (not= :default type)
                 (and (= :default type) (seq (:property/closed-values property))))
-            (p/do!
-             (reset! *show-new-property-config? false))))))))
+            (reset! *show-new-property-config? false)))))))
 
 (rum/defc property-key-title
   [block property class-schema?]
@@ -333,17 +363,20 @@
         *show-new-property-config? (::show-new-property-config? state)
         *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
-        block-type (keyword (get block :block/type :block))
         page? (ldb/page? block)
+        block-types (let [types (ldb/get-entity-types block)]
+                      (cond-> types
+                        (and page? (not (contains? types :page)))
+                        (conj :page)
+                        (empty? types)
+                        #{:block}))
         exclude-properties (fn [m]
-                             (let [view-context (get-in m [:block/schema :view-context] :all)
-                                   block-types (if (and page? (not= block-type :page))
-                                                 #{:page block-type}
-                                                 #{block-type})]
+                             (let [view-context (get-in m [:block/schema :view-context] :all)]
                                (or (contains? #{:logseq.property/query} (:db/ident m))
                                    (and (not page?) (contains? #{:block/alias} (:db/ident m)))
                                    ;; Filters out properties from being in wrong :view-context and :never view-contexts
-                                   (and (not= view-context :all) (not (contains? block-types view-context))))))
+                                   (and (not= view-context :all) (not (contains? block-types view-context)))
+                                   (and (ldb/built-in? block) (contains? #{:logseq.property/parent} (:db/ident m))))))
         property (rum/react *property)
         property-key (rum/react *property-key)]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
@@ -392,7 +425,7 @@
 
 (rum/defcs new-property < rum/reactive
   [state block opts]
-  (when (and (not config/publishing?) (:class-schema? opts))
+  (when-not config/publishing?
     [:div.ls-new-property {:style {:margin-left 6 :margin-top 1}}
      [:a.fade-link.flex.jtrigger
       {:tab-index 0
@@ -553,7 +586,7 @@
    :will-remount (fn [state]
                    (let [block (db/entity (:db/id (::block state)))]
                      (assoc state ::classes (async-load-classes! block))))}
-  [state _target-block {:keys [class-schema?] :as opts}]
+  [state _target-block {:keys [class-schema? sidebar-properties?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
@@ -563,7 +596,6 @@
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
         _ (doseq [class (::classes state)]
             (db/sub-block (:db/id class)))
-        page? (db/page? block)
         class? (ldb/class? block)
         block-properties (:block/properties block)
         properties (cond
@@ -652,20 +684,38 @@
                                      (when (and class? (nil? (:logseq.property.class/properties block)))
                                        [[:logseq.property.class/properties nil]]))
                              remove-built-in-or-other-position-properties)]
-    (when-not (and (empty? full-properties) (not (:class-schema? opts)))
-      [:div.ls-properties-area
-       {:id id
-        :class (util/classnames [{:class-properties class-schema?
-                                  :ls-page-properties (and page? (not class-schema?))}])
-        :tab-index 0
-        :on-key-up #(when-let [block (and (= "Escape" (.-key %))
-                                          (.closest (.-target %) "[blockid]"))]
-                      (let [target (.-target %)]
-                        (when-not (d/has-class? target "ls-popup-closed")
-                          (state/set-selection-blocks! [block])
-                          (some-> js/document.activeElement (.blur)))
-                        (d/remove-class! target "ls-popup-closed")))}
-       (let [properties' (remove (fn [[k _v]] (contains? #{:logseq.property/icon :logseq.property/query} k)) full-properties)]
-         (properties-section block (if class-schema? properties properties') opts))
+    (cond
+      (and (empty? full-properties) (not (:class-schema? opts)))
+      (when sidebar-properties?
+        (rum/with-key (new-property block opts) (str id "-add-property")))
 
-       (rum/with-key (new-property block opts) (str id "-add-property"))])))
+      :else
+      (let [remove-properties #{:logseq.property/icon :logseq.property/query}
+            properties' (remove (fn [[k _v]] (contains? remove-properties k)) full-properties)
+            properties'' (cond->> properties'
+                           (not class-schema?)
+                           (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
+            page? (ldb/page? block)]
+        [:div.ls-properties-area
+         {:id id
+          :class (util/classnames [{:class-properties class-schema?
+                                    :ls-page-properties (and page? (not class-schema?))}])
+          :tab-index 0
+          :on-key-up #(when-let [block (and (= "Escape" (.-key %))
+                                            (.closest (.-target %) "[blockid]"))]
+                        (let [target (.-target %)]
+                          (when-not (d/has-class? target "ls-popup-closed")
+                            (state/set-selection-blocks! [block])
+                            (some-> js/document.activeElement (.blur)))
+                          (d/remove-class! target "ls-popup-closed")))}
+         (properties-section block (if class-schema? properties properties'') opts)
+
+         (when page?
+           (rum/with-key (new-property block opts) (str id "-add-property")))
+
+         (when page?
+           (let [properties'' (filter (fn [[k _v]] (= k :logseq.property.class/properties)) properties')]
+             (when (seq properties'')
+               [:<>
+                (when-not class-schema? [:hr.my-4])
+                (properties-section block (if class-schema? properties properties'') opts)])))]))))

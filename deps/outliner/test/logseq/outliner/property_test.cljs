@@ -3,7 +3,8 @@
             [datascript.core :as d]
             [logseq.outliner.property :as outliner-property]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.db :as ldb]))
 
 (deftest upsert-property!
   (testing "Creates a property"
@@ -228,7 +229,7 @@
     (testing "Add choice successfully"
       (let [_ (outliner-property/upsert-closed-value! conn :user.property/num {:value 3})
             b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :property.value/content 3]] @conn))]
-        (is (= (:block/type b) "closed value"))
+        (is (ldb/closed-value? (d/entity @conn (:db/id b))))
         (is (= [2 3]
                (map db-property/closed-value-content (:block/_closed-value-property (d/entity @conn :user.property/num)))))))
 

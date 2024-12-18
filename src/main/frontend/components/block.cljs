@@ -20,7 +20,6 @@
             [frontend.components.query :as query]
             [frontend.components.query.builder :as query-builder-component]
             [frontend.components.svg :as svg]
-            [frontend.components.title :as title]
             [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -701,7 +700,9 @@
      (when (and show-icon? (not tag?))
        (let [own-icon (get page-entity (pu/get-pid :logseq.property/icon))
              emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
-         (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true :not-text-or-page? true})]
+         (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true
+                                                                       :not-text-or-page? true
+                                                                       :own-icon? true})]
            [:span {:class (str "icon-emoji-wrap " (when emoji? "as-emoji"))}
             icon])))
      [:span
@@ -722,7 +723,7 @@
                                (->elem :span (map-inline config label))
 
                                show-unique-title?
-                               (title/block-unique-title page-entity)
+                               (block-handler/block-unique-title page-entity)
 
                                :else
                                (let [title (:block/title page-entity)
@@ -755,7 +756,7 @@
                                          (db-content/content-id-ref->page s (:block/refs page-entity))
                                          :else
                                          s)
-                                     s (if tag? (str "#" s) s)]
+                                     s (if (and tag? (not (:hide-tag-symbol? config))) (str "#" s) s)]
                                  (if (ldb/page? page-entity)
                                    s
                                    (block-title config page-entity))))]
@@ -2588,8 +2589,9 @@
 (rum/defcs block-tag <
   (rum/local false ::hover?)
   [state block tag config popup-opts]
-  (let [*hover? (::hover? state)]
-    [:div.block-tag
+  (let [*hover? (::hover? state)
+        hover? @*hover?]
+    [:div.block-tag.items-center
      {:key (str "tag-" (:db/id tag))
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)
@@ -2614,18 +2616,23 @@
                                :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
                               "Remove tag")])
                           popup-opts))}
+     (if (and hover? (not (ldb/private-tags (:db/ident tag))))
+       [:a.inline.close.flex.transition-opacity.duration-300.ease-in
+        {:class (if @*hover? "!opacity-100" "!opacity-0")
+         :title "Remove this tag"
+         :on-pointer-down
+         (fn [e]
+           (util/stop e)
+           (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
+        (ui/icon "x" {:size 14
+                      :style {:margin-top 1}})]
+       [:a.hash-symbol {:style {:margin-left 5}}
+        "#"])
      (page-cp (assoc config
+                     :disable-preview? true
                      :tag? true
-                     :disable-preview? true)
-              tag)
-     [:a.close.flex.transition-opacity.duration-300.ease-in
-      {:class (if @*hover? "!opacity-100" "!opacity-0")
-       :title "Remove this tag"
-       :on-pointer-down
-       (fn [e]
-         (util/stop e)
-         (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
-      (ui/icon "x" {:size 15})]]))
+                     :hide-tag-symbol? true)
+              tag)]))
 
 (rum/defc tags-cp
   "Tags without inline or hidden tags"
@@ -2635,14 +2642,15 @@
                       (:block/tags block)
                       (remove (fn [t]
                                 (or (ldb/inline-tag? (:block/raw-title block) t)
-                                    (:logseq.property.class/hide-from-node t)))))
+                                    (:logseq.property.class/hide-from-node t)
+                                    (contains? ldb/internal-tags (:db/ident t))))))
           popup-opts {:align :end
                       :content-props {:on-click (fn [] (shui/popup-hide!))
                                       :class "w-60"}}
           tags-count (count block-tags)]
       (when (seq block-tags)
         (if (< tags-count 3)
-          [:div.block-tags
+          [:div.block-tags.gap-1
            (for [tag block-tags]
              (rum/with-key
                (block-tag block tag config popup-opts)
@@ -2653,13 +2661,14 @@
                                                  (fn []
                                                    (for [tag block-tags]
                                                      [:div.flex.flex-row.items-center.gap-1
-                                                      (shui/button
-                                                       {:title "Remove tag"
-                                                        :variant :ghost
-                                                        :class "!p-1 text-muted-foreground"
-                                                        :size :sm
-                                                        :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
-                                                       (ui/icon "X" {:size 14}))
+                                                      (when-not (ldb/private-tags (:db/ident tag))
+                                                        (shui/button
+                                                         {:title "Remove tag"
+                                                          :variant :ghost
+                                                          :class "!p-1 text-muted-foreground"
+                                                          :size :sm
+                                                          :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
+                                                         (ui/icon "X" {:size 14})))
                                                       (page-cp (assoc config
                                                                       :tag? true
                                                                       :disable-preview? true
@@ -2672,7 +2681,7 @@
                               :tag? true
                               :disable-preview? true
                               :disable-click? true) tag)])
-           [:div.text-sm.opacity-50
+           [:div.text-sm.opacity-50.ml-1
             (str "+" (- tags-count 2))]])))))
 
 (rum/defc block-positioned-properties
