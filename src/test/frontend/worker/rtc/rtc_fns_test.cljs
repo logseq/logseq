@@ -112,6 +112,48 @@
                :user.property/ppp
                [#uuid "6752bdee-7963-4a6a-84a4-86cd456b470c"
                 #uuid "6752bdf0-ee32-40af-8abb-3f8d179ba888"]}}
+             r))))
+  (testing "case6: toggle status"
+    (let [[uuid1 uuid2 status-value-uuid] (repeatedly random-uuid)
+          affected-blocks-map
+          {uuid1
+           {:op :update-attrs
+            :self uuid1
+            :parents [uuid2]}}
+          unpushed-ops
+          [[:update
+            536872312
+            {:block-uuid uuid1
+             :av-coll
+             [[:logseq.task/status status-value-uuid 536872312 true]]}]]
+          r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
+      (is (= {uuid1
+              {:op :update-attrs
+               :self uuid1
+               :parents [uuid2]
+               :logseq.task/status [status-value-uuid]}}
+             r))))
+  (testing "case7: toggle status(2)"
+    (let [[uuid1 uuid2 status-value-uuid1 status-value-uuid2] (repeatedly random-uuid)
+          affected-blocks-map
+          {uuid1
+           {:op :update-attrs
+            :self uuid1
+            :parents [uuid2]}}
+          unpushed-ops
+          [[:update
+            536872314
+            {:block-uuid uuid1
+             :av-coll
+             [[:logseq.task/status status-value-uuid1 536872312 true]
+              [:logseq.task/status status-value-uuid1 536872312 false]
+              [:logseq.task/status status-value-uuid2 536872314 true]]}]]
+          r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
+      (is (= {uuid1
+              {:op :update-attrs
+               :self uuid1
+               :parents [uuid2]
+               :logseq.task/status [status-value-uuid2]}}
              r)))))
 
 (deftest apply-remote-move-ops-test
