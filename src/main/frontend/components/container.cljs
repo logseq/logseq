@@ -17,7 +17,7 @@
             [frontend.components.content :as cp-content]
             [frontend.components.title :as title]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :refer [t tt]]
             [frontend.db :as db]
             [electron.ipc :as ipc]
             [frontend.db-mixins :as db-mixins]
@@ -78,22 +78,6 @@
        [:span.a name]
        [:span.b (or more (ui/icon "chevron-left" {:class "more" :size 15}))]]
       (when child [:div.bd child])]]))
-
-(rum/defc flashcards < db-mixins/query rum/reactive
-  [srs-open?]
-  (let [num (state/sub :srs/cards-due-count)]
-    [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
-     {:class (util/classnames [{:active srs-open?}])
-      :on-click #(do
-                   (fsrs/update-due-cards-count)
-                   (state/pub-event! [:modal/show-cards]))}
-     (ui/icon "infinity")
-     [:span.flex-1 (t :right-side-bar/flashcards)]
-     [:span.ml-1 (ui/render-keyboard-shortcut
-                   (ui/keyboard-shortcut-from-config :go/flashcards
-                     {:pick-first? true}))]
-     (when (and num (not (zero? num)))
-       [:span.ml-1.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
 
 (rum/defc page-name
   [page icon recent?]
@@ -183,9 +167,9 @@
        [:i.relative {:style {:top "4px"}} (shui/tabler-icon "dots")])]))
 
 (defn sidebar-item
-  [{:keys [on-click-handler class title icon icon-extension? active href shortcut]}]
+  [{:keys [on-click-handler class title icon icon-extension? active href shortcut more]}]
   [:div
-   {:class class}
+   {:class (util/classnames [class {:active active}])}
    [:a.item.group.flex.items-center.text-sm.font-medium.rounded-md
     {:on-click on-click-handler
      :class (when active "active")
@@ -193,7 +177,10 @@
     (ui/icon (str icon) {:extension? icon-extension?})
     [:span.flex-1 title]
     (when shortcut
-      [:span.ml-1 (ui/render-keyboard-shortcut (ui/keyboard-shortcut-from-config shortcut))])]])
+      [:span.ml-1
+       (ui/render-keyboard-shortcut
+         (ui/keyboard-shortcut-from-config shortcut {:pick-first? true}))])
+    more]])
 
 (rum/defc sidebar-graphs
   []
@@ -201,88 +188,108 @@
    (repo/graphs-selector)])
 
 (rum/defc sidebar-navigations
-  [{:keys [default-home route-match route-name srs-open? db-based?
-           enable-whiteboards?]}]
-  (sidebar-content-group
-    [:a.wrap-th [:strong.flex-1 "Navigations"]]
-    {:collapsable? false
-     :enter-show-more? true
-     :header-props {:on-click (fn [^js e] (when-let [^js _el (some-> (.-target e) (.closest ".as-edit"))]
-                                            (shui/popup-show! _el [:code "TODO: navigations filter"] {:as-dropdown? false})))}
-     :more [:a.as-edit {:class "!opacity-60 hover:!opacity-80 relative -top-0.5 -right-[9px]"}
-            (shui/tabler-icon "filter-edit" {:size 15})]}
-    [:div.sidebar-navigations.flex.flex-col.mt-1
-     (let [page (:page default-home)]
-       (if (and page (not (state/enable-journals? (state/get-current-repo))))
-         (sidebar-item
-           {:class "home-nav"
-            :title page
-            :on-click-handler route-handler/redirect-to-home!
-            :active (and (not srs-open?)
-                      (= route-name :page)
-                      (= page (get-in route-match [:path-params :name])))
-            :icon "home"
-            :shortcut :go/home})
-         (sidebar-item
-           {:class "journals-nav"
-            :active (and (not srs-open?)
-                      (or (= route-name :all-journals) (= route-name :home)))
-            :title (t :left-side-bar/journals)
-            :on-click-handler (fn [e]
-                                (if (gobj/get e "shiftKey")
-                                  (route-handler/sidebar-journals!)
-                                  (route-handler/go-to-journals!)))
-            :icon "calendar"
-            :shortcut :go/journals})))
+  [{:keys [default-home route-match route-name srs-open? db-based? enable-whiteboards?]}]
+  (let [navs [:whiteboards :flashcards :graph-view :all-pages :tag/tasks :tag/assets]
+        [checked-navs set-checked-navs!] (rum/use-state [:whiteboards :flashcards :graph-view :all-pages :tag/tasks])]
 
-     ;(when db-based?
-     ;  (let [tag-uuid (:block/uuid (db/entity :logseq.class/Task))]
-     ;    (sidebar-item
-     ;      {:class "task-view-nav"
-     ;       :title (t :left-side-bar/tasks)
-     ;       :href (rfe/href :page {:name tag-uuid})
-     ;       :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
-     ;       :icon "hash"})))
-     ;
-     ;(when db-based?
-     ;  (let [tag-uuid (:block/uuid (db/entity :logseq.class/Asset))]
-     ;    (sidebar-item
-     ;      {:class "asset-view-nav"
-     ;       :title (t :left-side-bar/assets)
-     ;       :href (rfe/href :page {:name tag-uuid})
-     ;       :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
-     ;       :icon "hash"})))
+    (rum/use-effect!
+      (fn []
+        (js/console.debug "==>> navs-checked:" checked-navs))
+      [checked-navs])
 
-     (when enable-whiteboards?
-       (when (or config/dev? (not db-based?))
-         (sidebar-item
-           {:class "whiteboard"
-            :title (t :right-side-bar/whiteboards)
-            :href (rfe/href :whiteboards)
-            :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
-            :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-            :icon "whiteboard"
-            :icon-extension? true
-            :shortcut :go/whiteboards})))
+    (sidebar-content-group
+      [:a.wrap-th [:strong.flex-1 "Navigations"]]
+      {:collapsable? false
+       :enter-show-more? true
+       :header-props {:on-click (fn [^js e] (when-let [^js _el (some-> (.-target e) (.closest ".as-edit"))]
+                                              (shui/popup-show! _el [:code "TODO: navigations filter"] {:as-dropdown? false})))}
+       :more [:a.as-edit {:class "!opacity-60 hover:!opacity-80 relative -top-0.5 -right-[9px]"}
+              (shui/tabler-icon "filter-edit" {:size 15})]}
+      [:div.sidebar-navigations.flex.flex-col.mt-1
+       ;; required custom home page
+       (let [page (:page default-home)]
+         (if (and page (not (state/enable-journals? (state/get-current-repo))))
+           (sidebar-item
+             {:class "home-nav"
+              :title page
+              :on-click-handler route-handler/redirect-to-home!
+              :active (and (not srs-open?)
+                        (= route-name :page)
+                        (= page (get-in route-match [:path-params :name])))
+              :icon "home"
+              :shortcut :go/home})
 
-     (when (state/enable-flashcards? (state/get-current-repo))
-       [:div.flashcards-nav
-        (flashcards srs-open?)])
+           (sidebar-item
+             {:class "journals-nav"
+              :active (and (not srs-open?)
+                        (or (= route-name :all-journals) (= route-name :home)))
+              :title (t :left-side-bar/journals)
+              :on-click-handler (fn [e]
+                                  (if (gobj/get e "shiftKey")
+                                    (route-handler/sidebar-journals!)
+                                    (route-handler/go-to-journals!)))
+              :icon "calendar"
+              :shortcut :go/journals})))
 
-     (sidebar-item
-       {:class "graph-view-nav"
-        :title (t :right-side-bar/graph-view)
-        :href (rfe/href :graph)
-        :active (and (not srs-open?) (= route-name :graph))
-        :icon "hierarchy"
-        :shortcut :go/graph-view})
+       (for [nav checked-navs]
+         (cond
+           (= nav :whiteboards)
+           (when enable-whiteboards?
+             (when (or config/dev? (not db-based?))
+               (sidebar-item
+                 {:class "whiteboard"
+                  :title (t :right-side-bar/whiteboards)
+                  :href (rfe/href :whiteboards)
+                  :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
+                  :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+                  :icon "whiteboard"
+                  :icon-extension? true
+                  :shortcut :go/whiteboards})))
 
-     (sidebar-item
-       {:class "all-pages-nav"
-        :title (t :right-side-bar/all-pages)
-        :href (rfe/href :all-pages)
-        :active (and (not srs-open?) (= route-name :all-pages))
-        :icon "files"})]))
+           (= nav :flashcards)
+           (when (state/enable-flashcards? (state/get-current-repo))
+             (let [num (state/sub :srs/cards-due-count)]
+               (sidebar-item
+                 {:class "flashcards-nav"
+                  :title (t :right-side-bar/flashcards)
+                  :icon "infinity"
+                  :shortcut :go/flashcards
+                  :active srs-open?
+                  :on-click-handler #(do (fsrs/update-due-cards-count)
+                                       (state/pub-event! [:modal/show-cards]))
+                  :more (when (and num (not (zero? num)))
+                          [:span.ml-1.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])})))
+
+           (= nav :graph-view)
+           (sidebar-item
+             {:class "graph-view-nav"
+              :title (t :right-side-bar/graph-view)
+              :href (rfe/href :graph)
+              :active (and (not srs-open?) (= route-name :graph))
+              :icon "hierarchy"
+              :shortcut :go/graph-view})
+
+           (= nav :all-pages)
+           (sidebar-item
+             {:class "all-pages-nav"
+              :title (t :right-side-bar/all-pages)
+              :href (rfe/href :all-pages)
+              :active (and (not srs-open?) (= route-name :all-pages))
+              :icon "files"})
+
+           (= (namespace nav) "tag")
+           (when db-based?
+             (let [name'' (name nav)
+                   name' (get {"assets" "Asset" "tasks" "Task"} name'')]
+               (when-let [tag-uuid (and name' (:block/uuid (db/entity (keyword "logseq.class" name'))))]
+                 (sidebar-item
+                   {:class (str "tag-view-nav " name'')
+                    :title (tt (keyword "left-side-bar" name'')
+                             (keyword "right-side-bar" name''))
+                    :href (rfe/href :page {:name tag-uuid})
+                    :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
+                    :icon "hash"}))))))
+       ])))
 
 (rum/defc sidebar-favorites < rum/reactive
   []
