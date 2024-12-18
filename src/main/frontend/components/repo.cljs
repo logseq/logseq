@@ -326,10 +326,11 @@
                                          (file-sync/load-session-graphs)
                                          (rtc-handler/<get-remote-graphs))}
                             (ui/icon "refresh" {:size 15}))))])
-        remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
-        repo-name (when current-repo (db/get-repo-name current-repo))]
+        _remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
+        _repo-name (when current-repo (db/get-repo-name current-repo))]
 
-    [:<>
+    [:div
+     {:class (when (<= (count repos) 1) "no-repos")}
      (header-fn)
      [:div.cp__repos-list-wrap
       (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
@@ -384,9 +385,9 @@
                  {:as-dropdown? true
                   :auto-focus? false
                   :align "start"
-                  :content-props {:class (str "repos-list " (when (<= (count repos) 1) " no-repos"))
+                  :content-props {:class "repos-list"
                                   :data-mode (when db-based? "db")}})))
-           :title repo-name}                                ;; show full path on hover
+           :title repo-name}      ;; show full path on hover
           [:div.flex.relative.graph-icon.rounded
            (shui/tabler-icon "database" {:size 15})]
 
@@ -413,6 +414,7 @@
                    (shui/popup-show! (.closest (.-target e) "a")
                      (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
                      {:as-dropdown? true
+                      :content-props {:class "repos-list"}
                       :align :start}))}
       [:span.thumb (shui/tabler-icon (if remote? "cloud" "database") {:size 16})]
       [:strong short-repo-name

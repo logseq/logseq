@@ -16,7 +16,7 @@
 
 .ui__dropdown-menu-content {
   &.repos-list {
-    @apply flex flex-col px-2 relative overflow-hidden min-w-[280px] sm:max-w-[320px];
+    @apply flex flex-col px-2 relative overflow-hidden min-w-[300px] sm:max-w-[400px];
 
     .ui__dropdown-menu-item {
       @apply overflow-hidden overflow-ellipsis;
@@ -26,7 +26,7 @@
       @apply max-h-80 overflow-scroll mx-[-8px] px-2 pb-2;
     }
 
-    &.no-repos {
+    .no-repos {
       .cp__repos-list-wrap {
         @apply hidden;
       }

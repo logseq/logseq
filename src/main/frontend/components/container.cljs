@@ -211,11 +211,13 @@
 (rum/defc sidebar-navigations
   [{:keys [default-home route-match route-name srs-open? db-based? enable-whiteboards?]}]
   (let [navs [:whiteboards :flashcards :graph-view :all-pages :tag/tasks :tag/assets]
-        [checked-navs set-checked-navs!] (rum/use-state [:whiteboards :flashcards :graph-view :all-pages :tag/tasks])]
+        [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
+                                                          [:whiteboards :flashcards :graph-view :all-pages :tag/tasks]))]
 
     (rum/use-effect!
       (fn []
-        (js/console.debug "==>> navs-checked:" checked-navs))
+        (when (vector? checked-navs)
+          (storage/set :ls-sidebar-navigations checked-navs)))
       [checked-navs])
 
     (sidebar-content-group
