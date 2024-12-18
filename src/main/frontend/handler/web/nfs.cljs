@@ -311,4 +311,4 @@
 
 (defn supported?
   []
-  (or (utils/nfsSupported) (util/electron?)))
+  (or (utils/nfsSupported) (util/electron?) (util/browser?)))

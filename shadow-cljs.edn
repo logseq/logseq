@@ -42,6 +42,9 @@
                           frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
                           frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
+                          frontend.config/ENABLE-PLUGINS-LOCAL #shadow/env ["ENABLE_PLUGINS_LOCAL" :as :bool :default true]
+                          frontend.config/CONFIG-LOCAL-PATH #shadow/env ["CONFIG_LOCAL_PATH" :default "dot-logseq"]
+                          frontend.config/PLUGINS-LOCAL-PATH #shadow/env ["PLUGINS_LOCAL_PATH" :default "plugins"]
                           ;; Set to switch file sync server to dev, set this to false in `yarn watch`
                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
                           frontend.config/TEST #shadow/env ["LOGSEQ_CI" :as :bool :default false]
