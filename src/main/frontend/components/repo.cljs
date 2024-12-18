@@ -404,6 +404,7 @@
         user-repos (state/get-repos)
         current-repo' (some->> user-repos (medley/find-first #(= current-repo (:url %))))
         repo-name (when current-repo (db/get-repo-name current-repo))
+        db-based? (config/db-based-graph? current-repo)
         remote? (:remote? current-repo')
         short-repo-name (if current-repo
                           (db/get-short-repo-name repo-name)
@@ -416,7 +417,7 @@
                      {:as-dropdown? true
                       :content-props {:class "repos-list"}
                       :align :start}))}
-      [:span.thumb (shui/tabler-icon (if remote? "cloud" "database") {:size 16})]
+      [:span.thumb (shui/tabler-icon (if remote? "cloud" (if db-based? "database" "folder")) {:size 16})]
       [:strong short-repo-name
        (shui/tabler-icon "selector" {:size 16})]]
 
