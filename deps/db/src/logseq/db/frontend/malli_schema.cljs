@@ -329,7 +329,8 @@
   (vec
    (concat
     [:map
-     [:db/ident user-property-ident]
+     ;; class-ident allows for a class to be used as a property
+     [:db/ident [:or user-property-ident class-ident]]
      [:block/schema user-property-schema]]
     property-attrs
     page-attrs
