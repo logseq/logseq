@@ -4,24 +4,16 @@
             [logseq.outliner.validate :as outliner-validate]
             [logseq.db.test.helper :as db-test]))
 
-(defn- find-block-by-content [conn content]
-  (->> content
-       (d/q '[:find [(pull ?b [* {:block/tags [:db/id :block/title :db/ident]}]) ...]
-              :in $ ?content
-              :where [?b :block/title ?content] [(missing? $ ?b :logseq.property/built-in?)]]
-            @conn)
-       first))
-
 (deftest validate-block-title-unique-for-properties
   (let [conn (db-test/create-conn-with-blocks
-              ;; use a property name that's same as built-in
-              {:properties {:background-image {:block/schema {:type :default}}}})]
+              {:properties {:color {:block/schema {:type :default}}
+                            :color2 {:block/schema {:type :default}}}})]
 
     (is (nil?
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
-          "background-color"
-          (assoc (find-block-by-content conn "background-image") :db/id 10000)))
+          (:block/title (d/entity @conn :logseq.property/background-color))
+          (d/entity @conn :user.property/color)))
         "Allow user property to have same name as built-in property")
 
     (is (thrown-with-msg?
@@ -29,14 +21,16 @@
          #"Duplicate page"
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
-          "background-image"
-          (assoc (find-block-by-content conn "background-image") :db/id 10000)))
+          "color"
+          (d/entity @conn :user.property/color2)))
         "Disallow duplicate user property")))
 
 (deftest validate-block-title-unique-for-pages
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}}
+               {:page {:block/title "another page"}}
                {:page {:block/title "Apple" :build/tags [:Company]}}
+               {:page {:block/title "Another Company" :build/tags [:Company]}}
                {:page {:block/title "Banana" :build/tags [:Fruit]}}])]
 
     (is (thrown-with-msg?
@@ -45,13 +39,13 @@
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
           "Apple"
-          (assoc (find-block-by-content conn "Apple") :db/id 10000)))
+          (db-test/find-page-by-title @conn "Another Company")))
         "Disallow duplicate page with tag")
     (is (nil?
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
           "Apple"
-          (find-block-by-content conn "Banana")))
+          (db-test/find-page-by-title @conn "Banana")))
         "Allow page with same name for different tag")
 
     (is (thrown-with-msg?
@@ -60,14 +54,14 @@
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
           "page1"
-          (assoc (find-block-by-content conn "page1") :db/id 10000)))
+          (db-test/find-page-by-title @conn "another page")))
         "Disallow duplicate page without tag")
 
     (is (nil?
          (outliner-validate/validate-unique-by-name-tag-and-block-type
           @conn
           "Apple"
-          (find-block-by-content conn "Fruit")))
+          (db-test/find-page-by-title @conn "Fruit")))
         "Allow class to have same name as a page")))
 
 (deftest validate-parent-property
@@ -77,11 +71,11 @@
                :pages-and-blocks
                [{:page {:block/title "page1"}}
                 {:page {:block/title "page2"}}]})
-        page1 (find-block-by-content conn "page1")
-        page2 (find-block-by-content conn "page2")
-        class1 (find-block-by-content conn "Class1")
-        class2 (find-block-by-content conn "Class2")
-        property (find-block-by-content conn "prop1")]
+        page1 (db-test/find-page-by-title @conn "page1")
+        page2 (db-test/find-page-by-title @conn "page2")
+        class1 (db-test/find-page-by-title @conn "Class1")
+        class2 (db-test/find-page-by-title @conn "Class2")
+        property (db-test/find-page-by-title @conn "prop1")]
 
     (testing "valid parent and child combinations"
       (is (nil? (outliner-validate/validate-parent-property page1 [page2]))
@@ -113,7 +107,7 @@
               {:pages-and-blocks
                [{:page {:block/title "page1"}
                  :blocks [{:block/title "block"}]}]})
-        block (find-block-by-content conn "block")]
+        block (db-test/find-block-by-content @conn "block")]
 
     (is (thrown-with-msg?
          js/Error
