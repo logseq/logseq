@@ -67,16 +67,27 @@
   [db new-title {:block/keys [tags] :as entity}]
   (cond
     (seq tags)
-    (when-let [another-id (first (d/q '[:find [?b ...]
-                                        :in $ ?eid ?title [?tag-id ...]
-                                        :where
-                                        [?b :block/title ?title]
-                                        [?b :block/tags ?tag-id]
-                                        [(not= ?b ?eid)]]
-                                      db
-                                      (:db/id entity)
-                                      new-title
-                                      (map :db/id tags)))]
+    (when-let [another-id (first
+                           (d/q (if (ldb/property? entity)
+                                  ;; Property names are unique in that they can
+                                  ;; have the same names as built-in property names
+                                  '[:find [?b ...]
+                                    :in $ ?eid ?title [?tag-id ...]
+                                    :where
+                                    [?b :block/title ?title]
+                                    [?b :block/tags ?tag-id]
+                                    [(missing? $ ?b :logseq.property/built-in?)]
+                                    [(not= ?b ?eid)]]
+                                  '[:find [?b ...]
+                                    :in $ ?eid ?title [?tag-id ...]
+                                    :where
+                                    [?b :block/title ?title]
+                                    [?b :block/tags ?tag-id]
+                                    [(not= ?b ?eid)]])
+                                db
+                                (:db/id entity)
+                                new-title
+                                (map :db/id tags)))]
       (let [another (d/entity db another-id)
             this-tags (set (map :db/ident tags))
             another-tags (set (map :db/ident (:block/tags another)))
@@ -86,9 +97,9 @@
                        (> (count another-tags) 1))
           (throw (ex-info "Duplicate page"
                           {:type :notification
-                           :payload {:message (str "Another page named " (pr-str new-title) " already exists for tags "
-                                                   (pr-str
-                                                    (map (fn [id] (:block/title (d/entity db id))) common-tag-ids)))
+                           :payload {:message (str "Another page named " (pr-str new-title) " already exists for tags: "
+                                                   (string/join ", "
+                                                                (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids)))
                                      :type :warning}})))))
 
     (:logseq.property/parent entity)
