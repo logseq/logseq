@@ -157,6 +157,17 @@
   (disallow-built-in-class-parent-change parent-ent child-ents)
   (validate-parent-property-have-same-type parent-ent child-ents))
 
+(defn- disallow-node-cant-tag-with-built-in-non-tags
+  [db _block-eids v]
+  (let [tag-ent (d/entity db v)]
+    (when (and (:logseq.property/built-in? tag-ent)
+               (not (ldb/class? tag-ent)))
+      (throw (ex-info (str "Can't set tag with built-in page that isn't a tag " (pr-str (:block/title tag-ent)))
+                    {:type :notification
+                     :payload {:message (str "Can't set tag with built-in page that isn't a tag " (pr-str (:block/title tag-ent)))
+                               :type :error}
+                     :property-value v})))))
+
 (defn- disallow-node-cant-tag-with-private-tags
   [db block-eids v]
   (when (and (ldb/private-tags (:db/ident (d/entity db v)))
@@ -171,7 +182,7 @@
                      :property-id :block/tags
                      :property-value v}))))
 
-(defn- disallow-tagging-a-built-in-class
+(defn- disallow-tagging-a-built-in-entity
   [db block-eids]
   (when-let [built-in-ent (some #(when (:logseq.property/built-in? %) %)
                                 (map #(d/entity db %) block-eids))]
@@ -182,5 +193,6 @@
 
 (defn validate-tags-property
   [db block-eids v]
-  (disallow-tagging-a-built-in-class db block-eids)
-  (disallow-node-cant-tag-with-private-tags db block-eids v))
+  (disallow-tagging-a-built-in-entity db block-eids)
+  (disallow-node-cant-tag-with-private-tags db block-eids v)
+  (disallow-node-cant-tag-with-built-in-non-tags db block-eids v))
