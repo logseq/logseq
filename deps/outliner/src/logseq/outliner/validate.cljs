@@ -173,12 +173,11 @@
 
 (defn- disallow-tagging-a-built-in-class
   [db block-eids]
-  (when-let [built-in-tag
-             (some #(when (get db-class/built-in-classes (:db/ident %)) %)
-                   (map #(d/entity db %) block-eids))]
-    (throw (ex-info (str "Can't add tag to built-in #" (:block/title built-in-tag))
+  (when-let [built-in-ent (some #(when (:logseq.property/built-in? %) %)
+                                (map #(d/entity db %) block-eids))]
+    (throw (ex-info (str "Can't add tag on built-in " (pr-str (:block/title built-in-ent)))
                     {:type :notification
-                     :payload {:message (str "Can't add tag on built-in #" (:block/title built-in-tag))
+                     :payload {:message (str "Can't add tag on built-in " (pr-str (:block/title built-in-ent)))
                                :type :error}}))))
 
 (defn validate-tags-property

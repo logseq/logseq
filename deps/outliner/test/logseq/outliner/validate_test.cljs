@@ -104,7 +104,8 @@
 
 (deftest validate-tags-property
   (let [conn (db-test/create-conn-with-blocks
-              {:pages-and-blocks
+              {:classes {:SomeTag {}}
+               :pages-and-blocks
                [{:page {:block/title "page1"}
                  :blocks [{:block/title "block"}]}]})
         block (db-test/find-block-by-content @conn "block")]
@@ -112,8 +113,20 @@
     (is (thrown-with-msg?
          js/Error
          #"Can't add tag.*Tag"
-         (outliner-validate/validate-tags-property @conn [:logseq.class/Tag] :logseq.class/Asset))
-        ":logseq.class/Tag must not be tagged by the user")
+         (outliner-validate/validate-tags-property @conn [:logseq.class/Tag] :user.class/SomeTag))
+        "built-in tag must not be tagged by the user")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't add tag.*Heading"
+         (outliner-validate/validate-tags-property @conn [:logseq.property/heading] :user.class/SomeTag))
+        "built-in property must not be tagged by the user")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't add tag.*Contents"
+         (outliner-validate/validate-tags-property @conn [(:db/id (db-test/find-page-by-title @conn "Contents"))] :user.class/SomeTag))
+        "built-in page must not be tagged by the user")
 
     (is (thrown-with-msg?
          js/Error
