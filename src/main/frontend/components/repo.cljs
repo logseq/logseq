@@ -410,7 +410,7 @@
                           (db/get-short-repo-name repo-name)
                           "Select a Graph")]
     [:div.cp__graphs-selector.flex.items-center.justify-between
-     [:a.flex.items-center.gap-1.select-none
+     [:a.item.flex.items-center.gap-1.select-none
       {:on-click (fn [^js e]
                    (shui/popup-show! (.closest (.-target e) "a")
                      (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
@@ -418,13 +418,8 @@
                       :content-props {:class "repos-list"}
                       :align :start}))}
       [:span.thumb (shui/tabler-icon (if remote? "cloud" (if db-based? "database" "folder")) {:size 16})]
-      [:strong short-repo-name
-       (shui/tabler-icon "selector" {:size 16})]]
-
-     [:span
-      (shui/button {:variant :icon
-                    :on-click #(route-handler/go-to-search! :global :new-page)}
-        (shui/tabler-icon "file-plus"))]]))
+      [:strong short-repo-name]
+      (shui/tabler-icon "selector" {:size 18})]]))
 
 (defn invalid-graph-name-warning
   []

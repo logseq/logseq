@@ -116,24 +116,21 @@
   }
 
   a.item {
-    @apply flex items-center px-1.5 h-8 select-none;
+    @apply flex items-center pl-1.5 pr-0.5 h-8 select-none;
 
     .ui__icon {
       @apply relative flex justify-center w-[20px] text-base mr-2 opacity-80;
     }
 
-    .graph-icon .ui__icon {
-      padding: 0;
-      width: unset;
-      margin-right: 0;
-    }
-
     .graph-icon {
-      margin-left: 3px;
-      margin-right: 11px;
+      @apply ml-[3px] mr-[11px];
+
+      .ui__icon {
+        @apply p-0 w-auto mr-0;
+      }
     }
 
-    &:hover, &.active {
+    &:hover, &.active, > .thumb {
       background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
 
       .ui__icon {
@@ -168,7 +165,7 @@
       @apply flex flex-col;
 
       > .hd {
-        @apply px-2 h-[32px] flex justify-between items-center select-none sticky top-[-4px];
+        @apply pl-2 pr-1 h-[32px] flex justify-between items-center select-none sticky top-[-4px];
         @apply cursor-pointer z-[2] active:opacity-80 rounded-md;
 
         background-color: var(--left-sidebar-bg-color);
@@ -253,9 +250,13 @@
       }
     }
 
+    .hd .more {
+      @apply transition-transform;
+    }
+
     &.is-expand {
       .hd .more {
-        @apply opacity-30 -rotate-90;
+        @apply opacity-40 rotate-90;
       }
 
       .bd {
@@ -265,7 +266,7 @@
 
     &.has-children:not(.is-expand) {
       .hd .more {
-        @apply opacity-40;
+        @apply opacity-50;
       }
     }
   }

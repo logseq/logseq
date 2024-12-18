@@ -76,7 +76,7 @@
          (assoc :on-click (fn [^js/MouseEvent _e]
                             (state/toggle-navigation-item-collapsed! class))))
        [:span.a name]
-       [:span.b (or more (ui/icon "chevron-left" {:class "more" :size 15}))]]
+       [:span.b (or more (ui/icon "chevron-right" {:class "more" :size 15}))]]
       (when child [:div.bd child])]]))
 
 (rum/defc page-name
@@ -157,7 +157,7 @@
      (shui/button
        {:size :sm
         :variant :ghost
-        :class "absolute !bg-transparent right-1 top-0 px-1.5 scale-75 opacity-40 hidden group-hover:block hover:opacity-80 active:opacity-100"
+        :class "absolute !bg-transparent right-0 top-0 px-1.5 scale-75 opacity-40 hidden group-hover:block hover:opacity-80 active:opacity-100"
         :on-click #(do
                      (shui/popup-show! (.-target %) (x-menu-content)
                        {:as-dropdown? true
@@ -231,7 +231,7 @@
                                                     :checked-navs checked-navs
                                                     :set-checked-navs! set-checked-navs!})
                                                 {:as-dropdown? false})))}
-       :more [:a.as-edit {:class "!opacity-60 hover:!opacity-80 relative -top-0.5 -right-[9px]"}
+       :more [:a.as-edit {:class "!opacity-60 hover:!opacity-80 relative -top-0.5 right-0"}
               (shui/tabler-icon "filter-edit" {:size 15})]}
       [:div.sidebar-navigations.flex.flex-col.mt-1
        ;; required custom home page

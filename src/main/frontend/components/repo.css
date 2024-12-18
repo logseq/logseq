@@ -70,22 +70,26 @@
 }
 
 .cp__graphs-selector {
-  > a {
+  > a.item {
     @apply flex items-center relative flex-1 overflow-hidden
-    pl-1 py-1 pr-4 opacity-90 active:opacity-70;
+    pl-1 py-1 pr-4 opacity-90 active:opacity-70 rounded-md;
 
     > .thumb {
       @apply w-6 h-6 overflow-hidden flex flex-shrink-0 items-center
-      justify-center bg-accent-03 rounded opacity-80 dark:opacity-50;
+      justify-center rounded opacity-80 dark:opacity-50;
+
+      > .ui__icon {
+        @apply mr-0;
+      }
     }
 
     > strong {
       @apply whitespace-nowrap overflow-hidden text-ellipsis pl-1
       font-medium relative pr-4 text-sm;
+    }
 
-      > .ui__icon {
-        @apply absolute -right-1 top-[3px] opacity-80;
-      }
+    > .ui__icon {
+      @apply absolute -right-1 top-2 opacity-60;
     }
   }
 
