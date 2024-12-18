@@ -142,11 +142,11 @@
     }
   }
 
-  .nav-header-container {
+  .sidebar-header-container {
     @apply flex flex-col gap-1 px-3 mb-1;
   }
 
-  .nav-contents-container {
+  .sidebar-contents-container {
     @apply flex flex-col gap-1 pt-1;
     @apply px-3 relative h-full flex-grow-0 overflow-x-hidden overflow-y-auto;
 
@@ -155,7 +155,7 @@
     }
   }
 
-  .nav-content-group {
+  .sidebar-content-group {
     &:not(:hover) {
       ::-webkit-scrollbar-thumb,
       ::-webkit-scrollbar,
@@ -166,107 +166,106 @@
 
     &-inner {
       @apply flex flex-col;
-    }
 
-    .header {
-      @apply px-2 h-[32px] flex justify-between items-center select-none sticky top-[-4px];
-      @apply cursor-pointer z-[2] active:opacity-80 rounded-md;
+      > .hd {
+        @apply px-2 h-[32px] flex justify-between items-center select-none sticky top-[-4px];
+        @apply cursor-pointer z-[2] active:opacity-80 rounded-md;
 
-      background-color: var(--left-sidebar-bg-color);
+        background-color: var(--left-sidebar-bg-color);
 
-      .ui__icon {
-        @apply flex justify-center w-[20px];
-      }
+        .ui__icon {
+          @apply flex justify-center w-[20px];
+        }
 
-      &.non-collapsable {
-        @apply cursor-default active:opacity-100;
+        &.non-collapsable {
+          @apply cursor-default active:opacity-100;
+
+          .wrap-th {
+            @apply cursor-default;
+          }
+        }
+
+        &:not(.non-collapsable) {
+
+          &:hover {
+            background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
+
+            * {
+              @apply !opacity-100;
+            }
+
+            .more {
+              @apply opacity-80;
+            }
+          }
+        }
 
         .wrap-th {
-          @apply cursor-default;
-        }
-      }
+          @apply flex items-center text-sm font-medium opacity-50;
 
-      &:not(.non-collapsable) {
-
-        &:hover {
-          background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
-
-          * {
-            @apply !opacity-100;
+          > .ui__icon {
+            @apply relative top-[-1px];
           }
 
-          .more {
+          > strong {
+            @apply text-xs font-medium;
+          }
+        }
+
+        &.enter-show-more {
+          > .b {
+            @apply transition-opacity opacity-0 delay-300;
+          }
+
+          &:hover > .b {
             @apply opacity-80;
           }
         }
       }
 
-      .wrap-th {
-        @apply flex items-center text-sm font-medium opacity-50;
+      > .bd {
+        @apply overflow-y-auto hidden;
 
-        > .ui__icon {
-          @apply relative top-[-1px];
-        }
+        ul {
+          @apply list-none p-0 m-0;
 
-        > strong {
-          @apply text-xs font-medium;
-        }
-      }
-
-      &.enter-show-more {
-        > .b {
-          @apply transition-opacity opacity-0 delay-300;
-        }
-
-        &:hover > .b {
-          @apply opacity-80;
-        }
-      }
-    }
-
-    .bd {
-      @apply overflow-y-auto hidden;
-
-      ul {
-        @apply list-none p-0 m-0;
-
-        li {
-          @apply m-0;
-        }
-
-        a {
-          @apply px-2 flex items-center justify-between relative h-[32px] w-full rounded-md;
-
-          .page-title {
-            @apply whitespace-nowrap hidden text-ellipsis flex-grow;
+          li {
+            @apply m-0;
           }
 
-          .page-icon {
-            @apply flex items-center;
-          }
+          a {
+            @apply px-2 flex items-center justify-between relative h-[32px] w-full rounded-md;
 
-          &:hover {
-            background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
-            opacity: 1;
+            .page-title {
+              @apply whitespace-nowrap hidden text-ellipsis flex-grow;
+            }
+
+            .page-icon {
+              @apply flex items-center;
+            }
+
+            &:hover {
+              background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
+              opacity: 1;
+            }
           }
         }
       }
     }
 
     &.is-expand {
-      .header .more {
-        opacity: .3;
-        transform: rotate(-90deg);
+      .hd .more {
+        @apply opacity-30 -rotate-90;
       }
 
       .bd {
-        display: block;
+        @apply block;
       }
     }
 
     &.has-children:not(.is-expand) {
-      .header .more {
-        opacity: .4;
+      .hd .more {
+        @apply opacity-40;
       }
     }
   }
@@ -651,13 +650,6 @@
 
 .cp__sidebar-main-content[data-is-margin-less-pages='true'] {
   padding: 0;
-}
-
-/* Workaround for Linux Intel GPU text rendering issue GH#7233 */
-.is-electron.is-linux .cp__menubar-repos {
-  .repo-switch, .nav-header .flex-1 {
-    position: relative;
-  }
 }
 
 @supports not (overflow-y: overlay) {

@@ -62,11 +62,11 @@
 (rum/defc sidebar-content-group < rum/reactive
   [name {:keys [class count more header-props enter-show-more? collapsable?]} child]
   (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])]
-    [:div.nav-content-group
+    [:div.sidebar-content-group
      {:class (util/classnames [class {:is-expand (not collapsed?)
                                       :has-children (and (number? count) (> count 0))}])}
-     [:div.nav-content-group-inner
-      [:div.header.items-center
+     [:div.sidebar-content-group-inner
+      [:div.hd.items-center
        (cond-> (merge header-props
                  {:class (util/classnames [(:class header-props)
                                            {:non-collapsable (false? collapsable?)
@@ -75,9 +75,8 @@
          (not (false? collapsable?))
          (assoc :on-click (fn [^js/MouseEvent _e]
                             (state/toggle-navigation-item-collapsed! class))))
-       [:div.a name]
-       [:div.b
-        (or more (ui/icon "chevron-left" {:class "more" :size 15}))]]
+       [:span.a name]
+       [:span.b (or more (ui/icon "chevron-left" {:class "more" :size 15}))]]
       (when child [:div.bd child])]]))
 
 (rum/defc flashcards < db-mixins/query rum/reactive
@@ -285,8 +284,7 @@
         :active (and (not srs-open?) (= route-name :all-pages))
         :icon "files"})]))
 
-
-(rum/defc favorites < rum/reactive
+(rum/defc sidebar-favorites < rum/reactive
   []
   (let [_favorites-updated? (state/sub :favorites/updated?)
         favorite-entities (page-handler/get-favorites)]
@@ -313,7 +311,7 @@
                             (page-handler/<reorder-favorites! favorites'))
              :parent-node :ul.favorites.text-sm}))))))
 
-(rum/defc recent-pages < rum/reactive db-mixins/query
+(rum/defc sidebar-recent-pages < rum/reactive db-mixins/query
   []
   (let [pages (recent-handler/get-recent-pages)]
     (sidebar-content-group
@@ -417,7 +415,7 @@
                       (close-fn)))}
 
       [:div.wrap
-       [:div.nav-header-container
+       [:div.sidebar-header-container
         ;; sidebar graphs
         (sidebar-graphs)
 
@@ -430,12 +428,12 @@
            :route-name route-name
            :srs-open? srs-open?})]
 
-       [:div.nav-contents-container
+       [:div.sidebar-contents-container
         {:on-scroll on-contents-scroll}
-        (favorites)
+        (sidebar-favorites)
 
         (when (not config/publishing?)
-          (recent-pages))]]]
+          (sidebar-recent-pages))]]]
 
      [:span.shade-mask
       (cond-> {:on-click close-fn}
