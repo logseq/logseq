@@ -113,30 +113,47 @@
    (set (get-in db-class/built-in-classes [:logseq.class/Asset :schema :required-properties]))
    #{:logseq.property/created-from-property}))
 
+(defn- property-entity->map
+  "Provide the minimal number of property attributes to validate the property
+  and to reduce noise in error messages. The resulting map should be the same as
+  what the frontend property since they both call validate-property-value"
+  [property]
+  ;; use explicit call to be nbb compatible
+  (let [closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
+    (cond-> (assoc (select-keys property [:db/ident :db/valueType :db/cardinality])
+                   :block/schema
+                   (select-keys (:block/schema property) [:type]))
+      (seq closed-values)
+      (assoc :property/closed-values closed-values))))
+
 (defn update-properties-in-ents
   "Prepares properties in entities to be validated by DB schema"
   [db ents]
-  (mapv
-   (fn [ent]
-     (reduce (fn [m [k v]]
-               (if-let [property (and (db-property/property? k)
-                                      ;; This allows schemas like property-value-block to require properties in
-                                      ;; their schema that they depend on
-                                      (not (contains? required-properties k))
-                                      (d/entity db k))]
-                 (update m :block/properties (fnil conj [])
-                         ;; use explicit call to be nbb compatible
-                         [(let [closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
-                            (cond-> (assoc (select-keys property [:db/ident :db/valueType :db/cardinality])
-                                           :block/schema
-                                           (select-keys (:block/schema property) [:type]))
-                              (seq closed-values)
-                              (assoc :property/closed-values closed-values)))
-                          v])
-                 (assoc m k v)))
-             {}
-             ent))
-   ents))
+  ;; required-properties allows schemas like property-value-block to require
+  ;; properties in their schema that they depend on
+  (let [exceptions-to-block-properties (conj required-properties :block/tags)
+        page-class-id (:db/id (d/entity db :logseq.class/Page))
+        private-tag-ids (set (map #(:db/id (d/entity db %)) db-class/private-tags))]
+    (mapv
+     (fn [ent]
+       (reduce (fn [m [k v]]
+                 (if-let [property (and (db-property/property? k)
+                                        (not (contains? exceptions-to-block-properties k))
+                                        (d/entity db k))]
+                   (update m :block/properties (fnil conj [])
+                           [(property-entity->map property) v])
+                   (if (= :block/tags k)
+                     ;; Provides additional options map to validation for data about current entity being tagged
+                     (let [property (d/entity db :block/tags)]
+                       (assoc m k [(property-entity->map property)
+                                   v
+                                   (merge (select-keys ent [:logseq.property/built-in?])
+                                          {:page-class-id page-class-id
+                                           :private-tag-ids private-tag-ids})]))
+                     (assoc m k v))))
+               {}
+               ent))
+     ents)))
 
 (defn datoms->entity-maps
   "Returns entity maps for given :eavt datoms indexed by db/id. Optional keys:
@@ -193,8 +210,7 @@
   nil)
 
 (def property-tuple
-  "A tuple of a property map and a property value. This schema
-   has 1 metadata hook which is used to inject a datascript db later"
+  "A tuple of a property map and a property value"
   (into
    [:multi {:dispatch #(-> % first :block/schema :type)}]
    (map (fn [[prop-type value-schema]]
@@ -210,6 +226,23 @@
   property with its property value that is valid for its type"
   [:sequential property-tuple])
 
+(def block-tags
+  [:and
+   property-tuple
+   ;; Important to keep data integrity of built-in entities. Ensure UI doesn't accidentally modify them
+   [:fn {:error/message "should only have one tag for a built-in entity"}
+    (fn [[_k v opts]]
+      (if (:logseq.property/built-in? opts)
+        (= 1 (count v))
+        true))]
+   ;; Ensure use of :logseq.class/Page is consistent and simple. Doing so reduces complexity elsewhere
+   ;; and allows for Page to exist as its own public concept later
+   #_[:fn {:error/message "should not have other built-in private tags when tagged with #Page"}
+    (fn [[_k v {:keys [page-class-id private-tag-ids]}]]
+      (if (contains? v page-class-id)
+        (empty? (set/intersection (disj v page-class-id) private-tag-ids))
+        true))]])
+
 (def page-or-block-attrs
   "Common attributes for page and normal blocks"
   [[:block/uuid :uuid]
@@ -218,6 +251,7 @@
    [:block/format [:enum :markdown]]
    ;; Injected by update-properties-in-ents
    [:block/properties {:optional true} block-properties]
+   [:block/tags {:optional true} block-tags]
    [:block/refs {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]
    [:block/collapsed? {:optional true} :boolean]])
