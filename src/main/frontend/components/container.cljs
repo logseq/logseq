@@ -187,6 +187,27 @@
   [:div.sidebar-graphs
    (repo/graphs-selector)])
 
+(rum/defc sidebar-navigations-edit-content
+  [{:keys [_id navs checked-navs set-checked-navs!]}]
+  (let [[local-navs set-local-navs!] (rum/use-state checked-navs)]
+
+    (rum/use-effect!
+      (fn []
+        (set-checked-navs! local-navs))
+      [local-navs])
+
+    (for [nav navs
+          :let [name' (name nav)]]
+      (shui/dropdown-menu-checkbox-item
+        {:checked (contains? (set local-navs) nav)
+         :onCheckedChange (fn [v] (set-local-navs!
+                                    (fn []
+                                      (if v
+                                        (conj local-navs nav)
+                                        (filterv #(not= nav %) local-navs)))))}
+        (tt (keyword "left-side-bar" name')
+          (keyword "right-side-bar" name'))))))
+
 (rum/defc sidebar-navigations
   [{:keys [default-home route-match route-name srs-open? db-based? enable-whiteboards?]}]
   (let [navs [:whiteboards :flashcards :graph-view :all-pages :tag/tasks :tag/assets]
@@ -202,7 +223,12 @@
       {:collapsable? false
        :enter-show-more? true
        :header-props {:on-click (fn [^js e] (when-let [^js _el (some-> (.-target e) (.closest ".as-edit"))]
-                                              (shui/popup-show! _el [:code "TODO: navigations filter"] {:as-dropdown? false})))}
+                                              (shui/popup-show! _el
+                                                #(sidebar-navigations-edit-content
+                                                   {:id (:id %) :navs navs
+                                                    :checked-navs checked-navs
+                                                    :set-checked-navs! set-checked-navs!})
+                                                {:as-dropdown? false})))}
        :more [:a.as-edit {:class "!opacity-60 hover:!opacity-80 relative -top-0.5 -right-[9px]"}
               (shui/tabler-icon "filter-edit" {:size 15})]}
       [:div.sidebar-navigations.flex.flex-col.mt-1
