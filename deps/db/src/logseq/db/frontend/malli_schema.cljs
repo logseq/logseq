@@ -228,6 +228,7 @@
 
 (def block-tags
   [:and
+   ;; FIXME: Display error message instead of 'unknown error'
    property-tuple
    ;; Important to keep data integrity of built-in entities. Ensure UI doesn't accidentally modify them
    [:fn {:error/message "should only have one tag for a built-in entity"}
