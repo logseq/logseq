@@ -201,11 +201,12 @@
                    100)))
 
 (defn go-to-search!
-  [search-mode]
-  (search-handler/clear-search! false)
-  (when search-mode
-    (state/set-search-mode! search-mode))
-  (state/pub-event! [:go/search]))
+  ([search-mode] (go-to-search! search-mode nil))
+  ([search-mode args]
+   (search-handler/clear-search! false)
+   (when search-mode
+     (state/set-search-mode! search-mode args))
+   (state/pub-event! [:go/search])))
 
 (defn sidebar-journals!
   []
