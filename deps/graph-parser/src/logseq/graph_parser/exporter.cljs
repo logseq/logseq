@@ -281,12 +281,12 @@
 (defn- update-block-deadline
   ":block/title doesn't contain DEADLINE.* text so unable to detect timestamp
   or repeater usage and notify user that they aren't supported"
-  [block db {:keys [user-config]}]
+  [block page-names-to-uuids {:keys [user-config]}]
   (if-let [date-int (or (:block/deadline block) (:block/scheduled block))]
-    (let [existing-journal-page (ffirst (d/q '[:find (pull ?b [:block/uuid])
-                                               :in $ ?journal-day
-                                               :where [?b :block/journal-day ?journal-day]]
-                                             db date-int))
+    (let [existing-journal-page (some->> (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config))
+                                         common-util/page-name-sanity-lc
+                                         (get @page-names-to-uuids)
+                                         (hash-map :block/uuid))
           deadline-page (->
                          (or existing-journal-page
                             ;; FIXME: Register new pages so that two different refs to same new page
@@ -842,7 +842,7 @@
   (let [;; needs to come before update-block-refs to detect new property schemas
         {:keys [block properties-tx]}
         (handle-block-properties block* db page-names-to-uuids (:block/refs block*) options)
-        {block-after-built-in-props :block deadline-properties-tx :properties-tx} (update-block-deadline block db options)
+        {block-after-built-in-props :block deadline-properties-tx :properties-tx} (update-block-deadline block page-names-to-uuids options)
         ;; :block/page should be [:block/page NAME]
         journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
         prepared-block (cond-> block-after-built-in-props
