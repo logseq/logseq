@@ -98,7 +98,7 @@ declare global {
 }
 
 const shadui = {
-  Link, Button, 
+  Link, Button,
   Slider, SliderTrack, SliderRange, SliderThumb,
   DropdownMenu,
   DropdownMenuContent,
@@ -184,7 +184,7 @@ const shadui = {
   Tooltip, TooltipTrigger, TooltipArrow,
   TooltipContent, TooltipProvider, TooltipPortal,
   Toggle, ToggleGroup, ToggleGroupItem,
-  Avatar, AvatarImage, AvatarFallback
+  Avatar, AvatarImage, AvatarFallback,
 }
 
 function setupGlobals() {

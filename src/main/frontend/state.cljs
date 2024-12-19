@@ -62,6 +62,7 @@
 
       :search/q                              ""
       :search/mode                           nil ; nil -> global mode, :graph -> add graph filter, etc.
+      :search/args                           nil
       :search/result                         nil
       :search/graph-filters                  []
       :search/engines                        {}
@@ -1084,8 +1085,10 @@ Similar to re-frame subscriptions"
   (set-state! :editor/cursor-range range))
 
 (defn set-search-mode!
-  [value]
-  (set-state! :search/mode value))
+  ([value] (set-search-mode! value nil))
+  ([value args]
+   (set-state! :search/mode value)
+   (set-state! :search/args args)))
 
 (defn set-editor-action!
   [value]
