@@ -144,50 +144,49 @@
       [error])
 
     [:div.cp__server-indicator
-     [:button.button.icon
-      {:on-click (fn [^js e]
-                   (shui/popup-show!
-                     (.-target e)
-                     (fn [{:keys [_close]}]
-                       (let [items [{:hr? true}
+     (shui/button-ghost-icon (if running? "api" "api-off")
+       {:on-click (fn [^js e]
+                    (shui/popup-show!
+                      (.-target e)
+                      (fn [{:keys [_close]}]
+                        (let [items [{:hr? true}
 
-                                    (cond
-                                      running?
-                                      {:title "Stop server"
-                                       :options {:on-click #(ipc/ipc :server/do :stop)}
-                                       :icon [:span.text-red-500.flex.items-center (ui/icon "player-stop")]}
+                                     (cond
+                                       running?
+                                       {:title "Stop server"
+                                        :options {:on-click #(ipc/ipc :server/do :stop)}
+                                        :icon [:span.text-red-500.flex.items-center (ui/icon "player-stop")]}
 
-                                      :else
-                                      {:title "Start server"
-                                       :options {:on-click #(ipc/ipc :server/do :restart)}
-                                       :icon [:span.text-green-500.flex.items-center (ui/icon "player-play")]})
+                                       :else
+                                       {:title "Start server"
+                                        :options {:on-click #(ipc/ipc :server/do :restart)}
+                                        :icon [:span.text-green-500.flex.items-center (ui/icon "player-play")]})
 
-                                    {:title "Authorization tokens"
-                                     :options {:on-click #(shui/dialog-open!
-                                                            (fn []
-                                                              (panel-of-tokens shui/dialog-close!)))}
-                                     :icon (ui/icon "key")}
+                                     {:title "Authorization tokens"
+                                      :options {:on-click #(shui/dialog-open!
+                                                             (fn []
+                                                               (panel-of-tokens shui/dialog-close!)))}
+                                      :icon (ui/icon "key")}
 
-                                    {:title "Server configurations"
-                                     :options {:on-click #(shui/dialog-open!
-                                                            (fn []
-                                                              (panel-of-configs shui/dialog-close!)))}
-                                     :icon (ui/icon "server-cog")}]]
+                                     {:title "Server configurations"
+                                      :options {:on-click #(shui/dialog-open!
+                                                             (fn []
+                                                               (panel-of-configs shui/dialog-close!)))}
+                                      :icon (ui/icon "server-cog")}]]
 
-                         (cons
-                           [:div.links-header.flex.justify-center.py-2
-                            [:span.ml-1.text-sm.opacity-70
-                             (if-not running?
-                               (string/upper-case (or (:status server-state) "stopped"))
-                               [:a.hover:underline {:href href} href])]]
-                           (for [{:keys [hr? title options icon]} items]
-                             (cond
-                               hr?
-                               (shui/dropdown-menu-separator)
+                          (cons
+                            [:div.links-header.flex.justify-center.py-2
+                             [:span.ml-1.text-sm.opacity-70
+                              (if-not running?
+                                (string/upper-case (or (:status server-state) "stopped"))
+                                [:a.hover:underline {:href href} href])]]
+                            (for [{:keys [hr? title options icon]} items]
+                              (cond
+                                hr?
+                                (shui/dropdown-menu-separator)
 
-                               :else
-                               (shui/dropdown-menu-item options
-                                 [:span.flex.items-center icon [:span.pl-1 title]]))))))
-                     {:as-dropdown? true
-                      :content-props {:onClick #(shui/popup-hide!)}}))}
-      (ui/icon (if running? "api" "api-off") {:size 22})]]))
+                                :else
+                                (shui/dropdown-menu-item options
+                                  [:span.flex.items-center icon [:span.pl-1 title]]))))))
+                      {:as-dropdown? true
+                       :content-props {:onClick #(shui/popup-hide!)}}))})]))

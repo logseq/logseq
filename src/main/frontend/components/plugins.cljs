@@ -1101,10 +1101,10 @@
                           {:as-dropdown? true
                            :content-props {:class "toolbar-plugins-manager-content"}}))}
 
-     [:a.button.relative.toolbar-plugins-manager-trigger
-      (ui/icon "puzzle" {:size 20})
-      (when badge-updates?
-        (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}}))]]))
+     (shui/button-ghost-icon :puzzle
+       {:class "flex relative toolbar-plugins-manager-trigger"}
+       (when badge-updates?
+         (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}})))]))
 
 (rum/defc header-ui-items-list-wrap
   [children]
