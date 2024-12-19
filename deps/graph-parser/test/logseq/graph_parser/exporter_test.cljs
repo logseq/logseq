@@ -301,6 +301,12 @@
              (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled")))
           "scheduled block converted to correct deadline")
 
+      (is (= 1 (count (d/q '[:find [(pull ?b [*]) ...]
+                             :in $ ?content
+                             :where [?b :block/title ?content]]
+                           @conn "Apr 1st, 2024")))
+          "Only one journal page exists when deadline is on same day as journal")
+
       (is (= {:logseq.task/priority "High"}
              (readable-properties @conn (db-test/find-block-by-content @conn "high priority")))
           "priority block has correct property")

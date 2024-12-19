@@ -1,7 +1,7 @@
 (ns logseq.shui.base.core
   (:require [logseq.shui.util :as util]
-            [cljs-bean.core :as bean]
-            [rum.core :as rum]))
+            [logseq.shui.icon.v2 :as tabler-icon]
+            [cljs-bean.core :as bean]))
 
 (def button-base (util/lsui-wrap "Button" {:static? false}))
 (def link (util/lsui-wrap "Link"))
@@ -48,3 +48,17 @@
                              (when (= "Enter" (.-key e))
                                (some-> (.-target e) (.click)))))]
     (apply button-base props children)))
+
+(defn button-icon
+  [variant icon-name {:keys [icon-props size] :as props} child]
+
+  (button (merge (dissoc props :icon-props :size)
+            {:variant variant
+             :data-button :icon
+             :style (when size {:width size :height size})})
+    [:<>
+     (tabler-icon/root (name icon-name) (merge {:size 20} icon-props)) child]))
+
+(def button-ghost-icon (partial button-icon :ghost))
+(def button-outline-icon (partial button-icon :outline))
+(def button-secondary-icon (partial button-icon :secondary))

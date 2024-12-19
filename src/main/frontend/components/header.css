@@ -177,7 +177,7 @@
 
   &:hover {
     @screen md {
-      background: var(--lx-gray-04, var(--ls-tertiary-background-color, var(--rx-gray-04)));
+      background: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
     }
   }
 }

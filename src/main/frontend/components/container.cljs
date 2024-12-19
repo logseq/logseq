@@ -170,11 +170,11 @@
   [{:keys [on-click-handler class title icon icon-extension? active href shortcut more]}]
   [:div
    {:class (util/classnames [class {:active active}])}
-   [:a.item.group.flex.items-center.text-sm.font-medium.rounded-md
+   [:a.item.group.flex.items-center.text-sm.rounded-md.font-medium
     {:on-click on-click-handler
      :class (when active "active")
      :href href}
-    (ui/icon (str icon) {:extension? icon-extension?})
+    (ui/icon (str icon) {:extension? icon-extension? :size 16})
     [:span.flex-1 title]
     (when shortcut
       [:span.ml-1
@@ -210,7 +210,9 @@
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-navigations
   [{:keys [default-home route-match route-name srs-open? db-based? enable-whiteboards?]}]
-  (let [navs [:whiteboards :flashcards :graph-view :all-pages :tag/tasks :tag/assets]
+  (let [navs (cond->> [:whiteboards :flashcards :graph-view :all-pages]
+               db-based?
+               (into [:tag/tasks :tag/assets]))
         [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:whiteboards :flashcards :graph-view :all-pages :tag/tasks]))]
 
@@ -338,7 +340,7 @@
                                (let [icon (icon/get-node-icon-cp e {:size 16})]
                                  {:id (str (:db/id e))
                                   :value (:block/uuid e)
-                                  :content [:li.favorite-item (page-name e icon false)]}))
+                                  :content [:li.favorite-item.font-medium (page-name e icon false)]}))
                              favorite-entities)]
          (dnd-component/items favorite-items
                               {:on-drag-end (fn [favorites']
@@ -356,7 +358,7 @@
 
      [:ul.text-sm
       (for [page pages]
-        [:li.recent-item.select-none
+        [:li.recent-item.select-none.font-medium
          {:key (str "recent-" (:db/id page))
           :title (block-handler/block-unique-title page)
           :draggable true
