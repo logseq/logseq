@@ -265,12 +265,6 @@ html.is-native-ipad {
     }
   }
 
-  .left-sidebar-inner  {
-    > .wrap {
-      padding-top: 20px;
-    }
-  }
-
   .cp__right-sidebar {
     &-settings {
       margin-top: -4px;

@@ -1,0 +1,9 @@
+{:lint-as {promesa.core/->          clojure.core/->
+           promesa.core/->>         clojure.core/->>
+           promesa.core/as->        clojure.core/as->
+           promesa.core/let         clojure.core/let
+           promesa.core/plet        clojure.core/let
+           promesa.core/loop        clojure.core/loop
+           promesa.core/recur       clojure.core/recur
+           promesa.core/with-redefs clojure.core/with-redefs
+           promesa.core/doseq       clojure.core/doseq}}
