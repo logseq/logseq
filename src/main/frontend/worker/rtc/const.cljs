@@ -223,6 +223,9 @@
       ["get-users-info"
        [:map
         [:graph-uuid :uuid]]]
+      ["inject-users-info"
+       [:map
+        [:graph-uuid :uuid]]]
       ["delete-graph"
        [:map
         [:graph-uuid :uuid]]]

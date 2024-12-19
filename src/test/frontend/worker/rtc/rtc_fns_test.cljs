@@ -17,7 +17,7 @@
   test-helper/db-based-start-and-destroy-db
   (worker-fixtures/listen-test-db-fixture [:sync-db-to-main-thread]))
 
-(deftest update-remote-data-by-local-unpushed-ops-test
+(deftest ^:large-vars/cleanup-todo update-remote-data-by-local-unpushed-ops-test
   (testing "case1"
     (let [[uuid1 uuid2] (repeatedly (comp str random-uuid))
           affected-blocks-map

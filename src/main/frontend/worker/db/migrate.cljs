@@ -523,8 +523,9 @@
    [47 {:fix replace-hidden-type-with-schema}]
    [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]
    [49 {:fix replace-special-id-ref-with-id-ref}]
-   [50 {:classes [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard]}]
-   [51 {:fix replace-block-type-with-tags}]])
+   [50 {:properties [:logseq.user/name :logseq.user/email :logseq.user/avatar]}]
+   [51 {:classes [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard]}]
+   [52 {:fix replace-block-type-with-tags}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

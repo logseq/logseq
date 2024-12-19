@@ -314,7 +314,7 @@
     (if (gdom/getElement popup-id)
       (shui/popup-hide! popup-id)
       (shui/popup-show!
-       (gdom/getElement "dots-menu")
+       (js/document.querySelector ".toolbar-dots-btn")
        (fn []
          (settings/appearance))
        {:id popup-id

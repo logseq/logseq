@@ -12,6 +12,10 @@
             [logseq.shui.table.core :as table-core]))
 
 (def button base-core/button)
+(def button-icon base-core/button-icon)
+(def button-ghost-icon base-core/button-ghost-icon)
+(def button-outline-icon base-core/button-outline-icon)
+(def button-secondary-icon base-core/button-secondary-icon)
 (def link base-core/link)
 (def trigger-as base-core/trigger-as)
 (def trigger-child-wrap base-core/trigger-child-wrap)
