@@ -494,7 +494,8 @@
                      :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content]}]
    [47 {:fix replace-hidden-type-with-schema}]
    [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]
-   [49 {:fix replace-special-id-ref-with-id-ref}]])
+   [49 {:fix replace-special-id-ref-with-id-ref}]
+   [50 {:properties [:logseq.user/name :logseq.user/email :logseq.user/avatar]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

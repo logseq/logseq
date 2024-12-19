@@ -421,7 +421,22 @@
                                 :schema
                                 {:type :map
                                  :hide? false ; TODO: show for debug now, hide it later
-                                 :public? false}}))
+                                 :public? false}}
+   :logseq.user/name {:title "User Name"
+                      :schema
+                      {:type :string
+                       :hide? false
+                       :public? true}}
+   :logseq.user/email {:title "User Email"
+                       :schema
+                       {:type :string
+                        :hide? false
+                        :public? true}}
+   :logseq.user/avatar {:title "User Avatar"
+                        :schema
+                        {:type :string
+                         :hide? false
+                         :public? true}}))
 
 (def built-in-properties
   (->> built-in-properties*
