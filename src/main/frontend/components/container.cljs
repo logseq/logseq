@@ -170,11 +170,11 @@
   [{:keys [on-click-handler class title icon icon-extension? active href shortcut more]}]
   [:div
    {:class (util/classnames [class {:active active}])}
-   [:a.item.group.flex.items-center.text-sm.font-medium.rounded-md
+   [:a.item.group.flex.items-center.text-sm.rounded-md
     {:on-click on-click-handler
      :class (when active "active")
      :href href}
-    (ui/icon (str icon) {:extension? icon-extension?})
+    (ui/icon (str icon) {:extension? icon-extension? :size 16})
     [:span.flex-1 title]
     (when shortcut
       [:span.ml-1
