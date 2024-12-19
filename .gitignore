@@ -41,6 +41,7 @@ resources/electron.js
 .clj-kondo/metosin/malli
 .clj-kondo/rewrite-clj
 .clj-kondo/taoensso
+.clj-kondo/funcool
 /libs/dist/
 charlie/
 .vscode

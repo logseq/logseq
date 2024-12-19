@@ -17,7 +17,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.common.util.namespace :as ns-util]
-            [logseq.common.util.page-ref :as page-ref])
+            [logseq.common.util.page-ref :as page-ref]
+            [clojure.walk :as walk])
   (:refer-clojure :exclude [object?]))
 
 (defonce *transact-fn (atom nil))
@@ -40,11 +41,25 @@
              m))
          tx-data)))
 
+(defn assert-no-entities
+  [tx-data]
+  (walk/prewalk
+   (fn [f]
+     (if (de/entity? f)
+       (throw (ex-info "ldb/transact! doesn't support Entity"
+                       {:entity f
+                        :tx-data tx-data}))
+       f))
+   tx-data))
+
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
   ([repo-or-conn tx-data]
    (transact! repo-or-conn tx-data nil))
   ([repo-or-conn tx-data tx-meta]
+   (when (and (exists? js/goog)
+              (aget js/goog "DEBUG"))
+     (assert-no-entities tx-data))
    (let [tx-data (map (fn [m]
                         (if (map? m)
                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
@@ -85,6 +100,10 @@
 (def object? entity-util/object?)
 (def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
+(def get-entity-types entity-util/get-entity-types)
+(def internal-tags db-class/internal-tags)
+(def private-tags db-class/private-tags)
+(def hidden-tags db-class/hidden-tags)
 
 (defn sort-by-order
   [blocks]
@@ -176,33 +195,39 @@
 (def db-based-graph? entity-util/db-based-graph?)
 
 (defn page-exists?
-  "Whether a page exists with the `type`."
-  [db page-name type']
+  "Returns truthy value if page exists.
+   For db graphs, returns all page db ids that given title and one of the given `tags`.
+   For file graphs, returns page entity if it exists"
+  [db page-name tags]
   (when page-name
     (if (db-based-graph? db)
-      ;; Classes and properties are case sensitive
-      (if (#{"class" "property"} type')
-        (seq
-         (d/q
-          '[:find [?p ...]
-            :in $ ?name ?type
-            :where
-            [?p :block/title ?name]
-            [?p :block/type ?type]]
-          db
-          page-name
-          type'))
-        ;; TODO: Decouple db graphs from file specific :block/name
-        (seq
-         (d/q
-          '[:find [?p ...]
-            :in $ ?name ?type
-            :where
-            [?p :block/name ?name]
-            [?p :block/type ?type]]
-          db
-          (common-util/page-name-sanity-lc page-name)
-          type')))
+      (let [tags' (if (coll? tags) (set tags) #{tags})]
+        ;; Classes and properties are case sensitive and can be looked up
+        ;; as such in case-sensitive contexts e.g. no Page
+        (if (and (seq tags') (every? #{:logseq.class/Tag :logseq.class/Property} tags'))
+          (seq
+           (d/q
+            '[:find [?p ...]
+              :in $ ?name [?tag-ident ...]
+              :where
+              [?p :block/title ?name]
+              [?p :block/tags ?tag]
+              [?tag :db/ident ?tag-ident]]
+            db
+            page-name
+            tags'))
+          ;; TODO: Decouple db graphs from file specific :block/name
+          (seq
+           (d/q
+            '[:find [?p ...]
+              :in $ ?name [?tag-ident ...]
+              :where
+              [?p :block/name ?name]
+              [?p :block/tags ?tag]
+              [?tag :db/ident ?tag-ident]]
+            db
+            (common-util/page-name-sanity-lc page-name)
+            tags'))))
       (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))))
 
 (defn get-page
@@ -448,7 +473,7 @@
    (d/datoms db :avet :block/name)
    (keep (fn [d]
            (let [e (d/entity db (:e d))]
-             (when-not (hidden? e)
+             (when-not (or (hidden? e) (internal-tags (:db/ident e)))
                e))))))
 
 (defn built-in?
@@ -535,7 +560,7 @@
 
 (defn get-all-properties
   [db]
-  (->> (d/datoms db :avet :block/type "property")
+  (->> (d/datoms db :avet :block/tags :logseq.class/Property)
        (map (fn [d]
               (d/entity db (:e d))))))
 
@@ -554,7 +579,7 @@
 
 (defn get-title-with-parents
   [entity]
-  (if (contains? #{"page" "class"} (:block/type entity))
+  (if (or (entity-util/class? entity) (entity-util/internal-page? entity))
     (let [parents' (->> (get-page-parents entity)
                         (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
                         vec)]

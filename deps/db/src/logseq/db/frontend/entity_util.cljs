@@ -1,7 +1,8 @@
 (ns logseq.db.frontend.entity-util
   "Lower level entity util fns used across db namespaces"
   (:require [datascript.core :as d]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [datascript.impl.entity :as de])
   (:refer-clojure :exclude [object?]))
 
 (defn db-based-graph?
@@ -10,36 +11,60 @@
   (when db
     (= "db" (:kv/value (d/entity db :logseq.kv/db-type)))))
 
-(defn page?
-  [block]
-  (contains? #{"page" "journal" "whiteboard" "class" "property"}
-             (:block/type block)))
+(defn- has-tag?
+  [entity tag-ident]
+  (let [tags (:block/tags entity)]
+    (some (fn [t] (or (= (:db/ident t) tag-ident)
+                      (= t tag-ident)))
+          (if (coll? tags) tags [tags]))))
 
 (defn internal-page?
   [entity]
-  (= (:block/type entity) "page"))
+  (has-tag? entity :logseq.class/Page))
 
 (defn class?
   [entity]
-  (= (:block/type entity) "class"))
+  (or (= (:db/ident entity) :logseq.class/Tag)
+      (has-tag? entity :logseq.class/Tag)))
 
 (defn property?
   [entity]
-  (= (:block/type entity) "property"))
-
-(defn closed-value?
-  [entity]
-  (= (:block/type entity) "closed value"))
+  (has-tag? entity :logseq.class/Property))
 
 (defn whiteboard?
   "Given a page entity or map, check if it is a whiteboard page"
-  [page]
-  (= (:block/type page) "whiteboard"))
+  [entity]
+  (or
+   ;; db based graph
+   (has-tag? entity :logseq.class/Whiteboard)
+   ;; file based graph
+   (= "whiteboard" (:block/type entity))))
+
+(defn closed-value?
+  [entity]
+  (some? (:block/closed-value-property entity)))
 
 (defn journal?
   "Given a page entity or map, check if it is a journal page"
-  [page]
-  (= (:block/type page) "journal"))
+  [entity]
+  (or
+   ;; db based graph
+   (has-tag? entity :logseq.class/Journal)
+   ;; file based graph
+   (= "journal" (:block/type entity))))
+
+(defn page?
+  [entity]
+  (or
+   ;; db based graph
+   (internal-page? entity)
+   (class? entity)
+   (property? entity)
+   (whiteboard? entity)
+   (journal? entity)
+
+   ;; file based graph
+   (contains? #{"page" "journal" "whiteboard"} (:block/type entity))))
 
 (defn asset?
   "Given an entity or map, check if it is an asset block"
@@ -52,9 +77,19 @@
   (when page
     (if (string? page)
       (string/starts-with? page "$$$")
-      (when (map? page)
+      (when (or (map? page) (de/entity? page))
         (false? (get-in page [:block/schema :public?]))))))
 
 (defn object?
   [node]
   (seq (:block/tags node)))
+
+(defn get-entity-types
+  "Get entity types from :block/tags"
+  [entity]
+  (let [ident->type {:logseq.class/Tag :class
+                     :logseq.class/Property :property
+                     :logseq.class/Journal :journal
+                     :logseq.class/Whiteboard :whiteboard
+                     :logseq.class/Page :page}]
+    (set (map #(ident->type (:db/ident %)) (:block/tags entity)))))

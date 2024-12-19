@@ -333,13 +333,6 @@ DROP TRIGGER IF EXISTS blocks_au;
   (create-tables-and-triggers! db))
 
 (comment
-  (defn- property-value-when-closed
-    "Returns property value if the given entity is type 'closed value' or nil"
-    [ent]
-    (when (= (:block/type ent) "closed value")
-      (:block/title ent))))
-
-(comment
   (defn- get-db-properties-str
     "Similar to db-pu/readable-properties but with a focus on making property values searchable"
     [db properties]

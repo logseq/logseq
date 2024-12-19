@@ -186,7 +186,6 @@
             :in $ ?today
             :where
             [?page :block/name ?page-name]
-            ;; [?page :block/type "journal"]
             [?page :block/journal-day ?journal-day]
             [(<= ?journal-day ?today)]]
           db
@@ -213,13 +212,9 @@
 
 (defn get-structured-datoms
   [db]
-  (mapcat (fn [type']
-            (->> (d/datoms db :avet :block/type type')
-                 (mapcat (fn [d]
-                           (d/datoms db :eavt (:e d))))))
-          [;; property and class pages are pulled from `get-all-pages` already
-           ;; "property" "class"
-           "closed value"]))
+  (->> (d/datoms db :avet :block/closed-value-property)
+       (mapcat (fn [d]
+                 (d/datoms db :eavt (:e d))))))
 
 (defn get-favorites
   "Favorites page and its blocks"

@@ -2,20 +2,35 @@
   "Class related fns for DB graphs and frontend/datascript usage"
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.db-ident :as db-ident]
+            [clojure.set :as set]
             [flatland.ordered.map :refer [ordered-map]]))
+
+;; Main class vars
+;; ===============
 
 (def ^:large-vars/data-var built-in-classes
   "Map of built-in classes for db graphs with their :db/ident as keys"
   (ordered-map
    :logseq.class/Root {:title "Root Tag"}
 
-   :logseq.class/Task
-   {:title "Task"
-    :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}
+   :logseq.class/Tag {:title "Tag"}
+
+   :logseq.class/Property {:title "Property"}
+
+   :logseq.class/Page {:title "Page"}
 
    :logseq.class/Journal
    {:title "Journal"
-    :properties {:logseq.property.journal/title-format "MMM do, yyyy"}}
+    :properties {:logseq.property/parent :logseq.class/Page
+                 :logseq.property.journal/title-format "MMM do, yyyy"}}
+
+   :logseq.class/Whiteboard
+   {:title "Whiteboard"
+    :properties {:logseq.property/parent :logseq.class/Page}}
+
+   :logseq.class/Task
+   {:title "Task"
+    :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}
 
    :logseq.class/Query
    {:title "Query"
@@ -66,6 +81,31 @@
 ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project)
    ))
 
+(def page-children-classes
+  "Children of :logseq.class/Page"
+  (set
+   (keep (fn [[class-ident m]]
+           (when (= (get-in m [:properties :logseq.property/parent]) :logseq.class/Page) class-ident))
+         built-in-classes)))
+
+(def internal-tags
+  "Built-in classes that are hidden on a node and all pages view"
+  #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag :logseq.class/Root
+    :logseq.class/Asset})
+
+(def private-tags
+  "Built-in classes that are private and should not be used by a user directly.
+  These used to be in :block/type"
+  (set/union internal-tags
+             #{:logseq.class/Journal :logseq.class/Whiteboard}))
+
+(def hidden-tags
+  "Built-in classes that are hidden in a few contexts like property values"
+  #{:logseq.class/Page :logseq.class/Root :logseq.class/Asset})
+
+;; Helper fns
+;; ==========
+
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.
    NOTE: Only use this when creating a db-ident for a new class."
@@ -78,5 +118,6 @@
   [db page-m]
   {:pre [(string? (:block/title page-m))]}
   (let [db-ident (create-user-class-ident-from-name (:block/title page-m))
-        db-ident' (db-ident/ensure-unique-db-ident db db-ident)]
+        db-ident' (or (:db/ident page-m)
+                      (db-ident/ensure-unique-db-ident db db-ident))]
     (sqlite-util/build-new-class (assoc page-m :db/ident db-ident'))))

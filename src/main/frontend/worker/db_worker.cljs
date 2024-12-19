@@ -318,7 +318,7 @@
 
         (when-not db-based?
           (try
-            (when-not (ldb/page-exists? @conn common-config/views-page-name "page")
+            (when-not (ldb/page-exists? @conn common-config/views-page-name #{:logseq.class/Page})
               (ldb/transact! conn (sqlite-create-graph/build-initial-views)))
             (catch :default _e)))
 

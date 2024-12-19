@@ -21,13 +21,14 @@
          :cell (fn [_table row _column]
                  (component-block/page-cp {} row))
          :type :string}
-        {:id :block/type
-         :name "Type"
-         :cell (fn [_table row _column]
-                 (let [type (get row :block/type)]
-                   [:div.capitalize (if (= type "class") "tag" type)]))
-         :get-value (fn [row] (get row :block/type))
-         :type :string}
+        (when (not (config/db-based-graph? (state/get-current-repo)))
+          {:id :block/type
+           :name "Page type"
+           :cell (fn [_table row _column]
+                   (let [type (get row :block/type)]
+                     [:div.capitalize type]))
+           :get-value (fn [row] (get row :block/type))
+           :type :string})
         {:id :block.temp/refs-count
          :name (t :page/backlinks)
          :cell (fn [_table row _column] (:block.temp/refs-count row))

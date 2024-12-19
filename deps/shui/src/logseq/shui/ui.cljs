@@ -110,6 +110,12 @@
 (def context-menu-sub-trigger (util/lsui-wrap "ContextMenuSubTrigger"))
 (def context-menu-radio-group (util/lsui-wrap "ContextMenuRadioGroup"))
 
+;; tabs
+(def tabs (util/lsui-wrap "Tabs"))
+(def tabs-list (util/lsui-wrap "TabsList"))
+(def tabs-trigger (util/lsui-wrap "TabsTrigger"))
+(def tabs-content (util/lsui-wrap "TabsContent"))
+
 (def dialog dialog-core/dialog)
 (def dialog-portal dialog-core/dialog-portal)
 (def dialog-overlay dialog-core/dialog-overlay)

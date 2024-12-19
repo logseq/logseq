@@ -55,7 +55,7 @@
   [graph & {:keys [remove-built-in-property? remove-non-queryable-built-in-property?]
             :or {remove-built-in-property? true
                  remove-non-queryable-built-in-property? false}}]
-  (let [result (->> (d/datoms (db/get-db graph) :avet :block/type "property")
+  (let [result (->> (d/datoms (db/get-db graph) :avet :block/tags :logseq.class/Property)
                     (map (fn [datom] (db/entity (:e datom))))
                     (sort-by (juxt ldb/built-in? :block/title)))]
     (cond->> result
