@@ -445,6 +445,14 @@
      tx-data
      [[:db/retractEntity (:db/id block-type-entity)]])))
 
+(defn- add-scheduled-to-task
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [e (d/entity db :logseq.class/Task)
+            eid (:db/id e)]
+        [[:db/add eid :logseq.property.class/properties :logseq.task/scheduled]]))))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -524,7 +532,9 @@
    [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]
    [49 {:fix replace-special-id-ref-with-id-ref}]
    [50 {:classes [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard]}]
-   [51 {:fix replace-block-type-with-tags}]])
+   [51 {:fix replace-block-type-with-tags}]
+   [52 {:properties [:logseq.task/scheduled :logseq.task/recur-frequency :logseq.task/recur-unit]
+        :fix add-scheduled-to-task}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
