@@ -141,6 +141,8 @@
                            [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
                             {:db/ident :logseq.kv/graph-local-tx :kv/value "0"}])
             (client-op/update-graph-uuid repo graph-uuid)
+            (client-op/remove-local-tx repo)
+            (client-op/add-all-exists-asset-as-ops repo)
             (crypt/store-graph-keys-jwk repo aes-key-jwk)
             (when-not rtc-const/RTC-E2E-TEST
               (let [^js worker-obj (:worker/object @worker-state/*state)]
