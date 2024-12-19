@@ -305,8 +305,37 @@
              :position :block-below}
     :properties {:logseq.property/hide-empty-value true}
     :queryable? true}
+   :logseq.task/scheduled
+   {:title "Scheduled"
+    :schema {:type :datetime
+             :public? true
+             :position :block-below}
+    :properties {:logseq.property/hide-empty-value true}
+    :queryable? true}
+   :logseq.task/recur-frequency
+   {:title "Recur frequency"
+    :schema {:type :number
+             :public? false}
+    :properties {:logseq.property/hide-empty-value true}
+    :queryable? true}
+   :logseq.task/recur-unit
+   {:title "Recur unit"
+    :schema {:type :number
+             :public? false}
+    :closed-values (mapv (fn [[db-ident value]]
+                           {:db-ident db-ident
+                            :value value
+                            :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
+                         [[:logseq.task/recur-unit.minute "Minute"]
+                          [:logseq.task/recur-unit.hour "Hour"]
+                          [:logseq.task/recur-unit.day "Day"]
+                          [:logseq.task/recur-unit.week "Week"]
+                          [:logseq.task/recur-unit.month "Month"]
+                          [:logseq.task/recur-unit.year "Year"]])
+    :properties {:logseq.property/hide-empty-value true}
+    :queryable? true}
 
-   ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
+;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 
    :logseq.property/icon {:title "Icon"
                           :schema {:type :map}}
