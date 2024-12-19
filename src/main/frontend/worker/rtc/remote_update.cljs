@@ -236,28 +236,41 @@
      (= :db.cardinality/many (:db/cardinality k-schema))]))
 
 (defn- patch-remote-attr-map-by-local-av-coll
-  [attr-map av-coll]
+  [remote-attr-map local-av-coll]
   (let [a->add->v-set
         (reduce
          (fn [m [a v _t add?]]
            (let [{add-vset true retract-vset false} (get m a {true #{} false #{}})]
              (assoc m a {true ((if add? conj disj) add-vset v)
                          false ((if add? disj conj) retract-vset v)})))
-         {} av-coll)]
-    (into attr-map
-          (keep
-           (fn [[remote-a remote-v]]
-             (when-let [{add-vset true retract-vset false} (get a->add->v-set remote-a)]
-               [remote-a
-                (if (coll? remote-v)
-                  (-> (set remote-v)
-                      (set/union add-vset)
-                      (set/difference retract-vset)
-                      vec)
-                  (cond
-                    (seq add-vset) (first add-vset)
-                    (contains? retract-vset remote-v) nil))])))
-          attr-map)))
+         {} local-av-coll)
+        updated-remote-attr-map1
+        (keep
+         (fn [[remote-a remote-v]]
+           (when-let [{add-vset true retract-vset false} (get a->add->v-set remote-a)]
+             [remote-a
+              (if (coll? remote-v)
+                (-> (set remote-v)
+                    (set/union add-vset)
+                    (set/difference retract-vset)
+                    vec)
+                (cond
+                  (seq add-vset) (first add-vset)
+                  (contains? retract-vset remote-v) nil))]))
+         remote-attr-map)
+        updated-remote-attr-map2
+        (keep
+         (fn [[a add->v-set]]
+           (when-let [ns (namespace a)]
+             (when (and (not (contains? #{"block"} ns))
+                        ;; FIXME: only handle non-block/xxx attrs,
+                        ;; because some :block/xxx attrs are card-one, we only generate card-many values here
+                        (not (contains? remote-attr-map a)))
+               (when-let [v-set (not-empty (get add->v-set true))]
+                 [a (vec v-set)]))))
+         a->add->v-set)]
+    (into remote-attr-map
+          (concat updated-remote-attr-map1 updated-remote-attr-map2))))
 
 (defn- update-remote-data-by-local-unpushed-ops
   "when remote-data request client to move/update/remove/... blocks,
