@@ -3,7 +3,6 @@
 
    Paths are denoted by `memory://`. No open-dir/get-files support."
   (:require [cljs-bean.core :as bean]
-            [frontend.db :as db]
             [frontend.fs.protocol :as protocol]
             [logseq.common.path :as path]
             [promesa.core :as p]))
@@ -45,7 +44,6 @@
       (p/catch (fn [_error]
                  (js/window.pfs.mkdir dir)))))
 
-
 (defn- <exists?
   "dir is path, without memory:// prefix for simplicity"
   [dir]
@@ -81,7 +79,6 @@
       (let [fpath (path/url-to-path dir)]
         (-> (js/window.pfs.mkdir fpath)
             (p/catch (fn [error] (println "(memory-fs)Mkdir error: " error)))))))
-
   (mkdir-recur! [_this dir]
     (when js/window.pfs
       (let [fpath (path/url-to-path dir)]
@@ -111,13 +108,16 @@
   (read-file [_this dir path options]
     (let [fpath (path/url-to-path (path/path-join dir path))]
       (js/window.pfs.readFile fpath (clj->js options))))
-  (write-file! [_this repo dir rpath content _opts]
+  (write-file! [_this _repo dir rpath content _opts]
     (p/let [fpath (path/url-to-path (path/path-join dir rpath))
             containing-dir (path/parent fpath)
             _ (<ensure-dir! containing-dir)
             _ (js/window.pfs.writeFile fpath content)]
-      (db/set-file-content! repo rpath content)
-      (db/set-file-last-modified-at! repo rpath (js/Date.))))
+
+      ;; TODO: store file metadata
+      ;; (db/set-file-content! repo rpath content)
+      ;; (db/set-file-last-modified-at! repo rpath (js/Date.))
+      ))
   (rename! [_this _repo old-path new-path]
     (let [old-path (path/url-to-path old-path)
           new-path (path/url-to-path new-path)]

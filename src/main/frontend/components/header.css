@@ -172,17 +172,12 @@
   transform: scale(0.9);
 }
 
-#repo-name {
-  @apply inline-flex items-center whitespace-nowrap;
-  max-width: 16ch;
-}
-
 .button {
   @apply h-8 px-2.5 py-1 rounded-md opacity-90 block select-none hover:opacity-100 active:opacity-80;
 
   &:hover {
     @screen md {
-      background: var(--lx-gray-04, var(--ls-tertiary-background-color, var(--rx-gray-04)));
+      background: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
     }
   }
 }
@@ -270,12 +265,6 @@ html.is-native-ipad {
     }
   }
 
-  .left-sidebar-inner  {
-    > .wrap {
-      padding-top: 20px;
-    }
-  }
-
   .cp__right-sidebar {
     &-settings {
       margin-top: -4px;
@@ -283,18 +272,6 @@ html.is-native-ipad {
 
     &-topbar {
       padding-top: 37px;
-    }
-
-    &-inner {
-      .resizer {
-        top: 30vh;
-        width: 12px;
-        height: 40vh;
-      }
-
-      .resizer:hover {
-        background-color: var(--ls-guideline-color, #ddd);
-      }
     }
   }
 }
@@ -342,4 +319,16 @@ html.is-zoomed-native-ios {
 .drag-region {
   user-select: none;
   -webkit-app-region: drag;
+}
+
+.recent-slider {
+  user-select: initial;
+  -webkit-app-region: no-drag
+}
+
+/* TODO: remote for prod */
+.theme-container-inner:not(.ls-left-sidebar-open) {
+  .cp__header > .l {
+    min-width: auto;
+  }
 }

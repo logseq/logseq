@@ -10,20 +10,38 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db :as db]
             [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.handler.db-based.property.util :as db-pu]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]
+            [frontend.db.conn :as conn]))
 
 (defn loaded? []
   js/window.Reveal)
 
 (defn- with-properties
   [m block]
-  (let [properties (:block/properties block)]
+  (let [repo (state/get-current-repo)
+        db-based? (config/db-based-graph? repo)
+        properties (if db-based?
+                     (as-> (db-property/properties block) properties
+                       (->> properties
+                            (keep (fn [[k v]]
+                                    ;; Don't inject hidden props like created-from-property
+                                    (when-not (:hide? (:block/schema (db/entity repo k)))
+                                      [k
+                                       (if (:db/id v)
+                                         ;; Can't use db-property-util/lookup b/c vals aren't entities
+                                         (db-property/ref->property-value-content (conn/get-db) v)
+                                         v)])))
+                            (into {})))
+                     (:block/properties block))]
     (if (seq properties)
       (merge m
              (update-keys
               properties
               (fn [k]
-                (-> (str "data-" (name k))
+                (-> (str "data-" (if db-based? (db-pu/get-property-name k) (name k)))
                     (string/replace "data-data-" "data-")))))
       m)))
 
@@ -85,15 +103,14 @@
                        (reset! *loading? false)
                        (render!)))))
                 state)}
-  [page-name]
-  (let [loading? (rum/react *loading?)
-        page (db/entity [:block/name page-name])
-        journal? (:journal? page)
+  [page]
+  (let [page-name (:block/title page)
+        loading? (rum/react *loading?)
+        journal? (ldb/journal? page)
         repo (state/get-current-repo)
-        blocks (-> (db/get-paginated-blocks repo (:db/id page)
-                                            {:limit 1000})
-                   (outliner-tree/blocks->vec-tree page-name))
-        blocks (if journal?
+        blocks (-> (db/get-page-blocks-no-cache repo (:db/id page))
+                   (outliner-tree/blocks->vec-tree (:db/id page)))
+        blocks (if (and journal? (not (config/db-based-graph? repo)))
                  (rest blocks)
                  blocks)
         blocks (map (fn [block]

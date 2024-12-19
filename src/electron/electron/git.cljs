@@ -13,12 +13,14 @@
 (def log-error (partial logger/error "[Git]"))
 
 (defn get-graph-git-dir
-  [graph-path]
+  [graph-path & {:keys [ensure-dir?]
+                 :or {ensure-dir? true}}]
   (when-let [graph-path (some-> graph-path
                                 (string/replace "/" "_")
                                 (string/replace ":" "comma"))]
-    (let [dir (.join node-path (.homedir os) ".logseq" "git" graph-path ".git")]
-      (. fs ensureDirSync dir)
+    (let [parent-dir (.join node-path (.homedir os) ".logseq" "git" graph-path)
+          dir (.join node-path parent-dir ".git")]
+      (when ensure-dir? (. fs ensureDirSync dir))
       dir)))
 
 (defn run-git!
@@ -43,7 +45,8 @@
   [graph-path]
   (try
     (let [p (.join node-path graph-path ".git")]
-      (.isDirectory (fs/statSync p)))
+      (when (fs/existsSync p)
+        (.isDirectory (fs/statSync p))))
     (catch :default _e
       nil)))
 
@@ -70,16 +73,23 @@
   [graph-path]
   (let [_ (remove-dot-git-file! graph-path)
         separate-git-dir (get-graph-git-dir graph-path)
+        dir-exists? (git-dir-exists? graph-path)
         args (cond
-               (git-dir-exists? graph-path)
+               dir-exists?
                ["init"]
                separate-git-dir
                ["init" (str "--separate-git-dir=" separate-git-dir)]
                :else
                ["init"])]
     (p/let [_ (run-git! graph-path (clj->js args))]
-      (when utils/win32?
-        (run-git! graph-path #js ["config" "core.safecrlf" "false"])))))
+      (p/do!
+       (when utils/win32?
+         (run-git! graph-path #js ["config" "core.safecrlf" "false"]))
+       (run-git! graph-path #js ["config" "diff.sqlite3.binary" "true"])
+       (run-git! graph-path #js ["config" "diff.sqlite3.textconv" "echo .dump | sqlite3"])
+       (let [path (node-path/join graph-path ".gitattributes")]
+         (when-not (fs/existsSync path)
+           (fs/writeFileSync path "*.sqlite diff=sqlite3")))))))
 
 (defn add-all!
   [graph-path]
@@ -125,7 +135,11 @@
 
 (defn short-status!
   [graph-path]
-  (run-git! graph-path #js ["status" "--porcelain"]))
+  (p/do!
+   (when-not (or (fs/existsSync (git-dir-exists? graph-path))
+                 (fs/existsSync (get-graph-git-dir graph-path {:ensure-dir? false})))
+     (init! graph-path))
+   (run-git! graph-path #js ["status" "--porcelain"])))
 
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?
@@ -166,9 +180,11 @@
                                                                     :payload error}))
                           (p/rejected error)))]
     (->
-     (p/let [_ (when (= (first args) "commit")
-                 (add-all! graph-path))
-             result (run-git! graph-path (clj->js args))]
+     (p/let [result (when (= (first args) "commit")
+                      (add-all! graph-path))
+             result (if (= (first args) "init")
+                      result
+                      (run-git! graph-path (clj->js args)))]
        (p/resolved result))
      (p/catch error-handler))))
 
