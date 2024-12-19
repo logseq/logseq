@@ -2,7 +2,9 @@
   "This ns is a system component that handles translation for the entire
   application. The ns dependencies for this ns must be small since it is used
   throughout the application."
-  (:require [frontend.dicts :as dicts]
+  (:require [clojure.string :as string]
+            [frontend.dicts :as dicts]
+            [medley.core :as medley]
             [tongue.core :as tongue]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]))
@@ -25,6 +27,14 @@
                                                      :arguments args
                                                      :lang preferred-language}}])
         (apply translate :en args)))))
+
+(defn tt
+  [& keys]
+  (some->
+   (medley/find-first
+    #(not (string/starts-with? (t %) "{Missing key"))
+    keys)
+   t))
 
 (defn- fetch-local-language []
   (.. js/window -navigator -language))

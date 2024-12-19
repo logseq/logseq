@@ -122,6 +122,8 @@
   {"(t (shortcut-helper/decorate-namespace" [] ;; shortcuts related so can ignore
    "(t (keyword" [:color/yellow :color/red :color/pink :color/green :color/blue
                   :color/purple :color/gray]
+   "(tt (keyword" [:left-side-bar/assets :left-side-bar/tasks]
+
    ;; from 3 files
    "(t (if" [:asset/show-in-folder :asset/open-in-browser
              :search-item/whiteboard :search-item/page
@@ -164,7 +166,7 @@
                                  ;; This currently assumes all ui translations
                                  ;; use (t and src/main. This can easily be
                                  ;; tweaked as needed
-                                 "grep -E -oh '\\(t :[^ )]+' -r src/main")
+                                 "grep -E -oh '\\(tt? :[^ )]+' -r src/main")
                           :out
                           string/split-lines
                           (map #(keyword (subs % 4)))
