@@ -48,18 +48,20 @@
             :block/title new-title
             :block/name (common-util/page-name-sanity-lc new-title)})))
 
-(defn- get-page-uuid [page-names-to-uuids page-name]
+(defn- get-page-uuid [page-names-to-uuids page-name ex-data']
   (or (get @page-names-to-uuids (if (string/includes? (str page-name) "#")
                                   (string/lower-case (gp-block/sanitize-hashtag-name page-name))
                                   page-name))
       (throw (ex-info (str "No uuid found for page name " (pr-str page-name))
-                      {:page-name page-name}))))
+                      (merge ex-data' {:page-name page-name})))))
 
 (defn- replace-namespace-with-parent [block page-names-to-uuids]
   (if (:block/namespace block)
     (-> (dissoc block :block/namespace)
         (assoc :logseq.property/parent
-               {:block/uuid (get-page-uuid page-names-to-uuids (get-in block [:block/namespace :block/name]))}))
+               {:block/uuid (get-page-uuid page-names-to-uuids
+                                           (get-in block [:block/namespace :block/name])
+                                           {:block block :block/namespace (:block/namespace block)})}))
     block))
 
 (defn- build-class-ident-name
@@ -185,7 +187,7 @@
                                       (convert-tag? (:block/name %) user-options)
                                       ;; Ignore new class tags from extract e.g. :logseq.class/Journal
                                       (logseq-class-ident? %)))
-                         (map #(vector :block/uuid (get-page-uuid (:page-names-to-uuids per-file-state) (:block/name %))))
+                         (map #(vector :block/uuid (get-page-uuid (:page-names-to-uuids per-file-state) (:block/name %) {:block %})))
                          set)]
       (cond-> block
         true
@@ -195,7 +197,7 @@
     block))
 
 (defn- add-uuid-to-page-map [m page-names-to-uuids]
-  (assoc m :block/uuid (get-page-uuid page-names-to-uuids (:block/name m))))
+  (assoc m :block/uuid (get-page-uuid page-names-to-uuids (:block/name m) {:block m})))
 
 (defn- content-without-tags-ignore-case
   "Ignore case because tags in content can have any case and still have a valid ref"
@@ -501,7 +503,7 @@
   [page-names-to-uuids property-values]
   (set (map #(vector :block/uuid
                      ;; assume for now a ref's :block/name can always be translated by lc helper
-                     (get-page-uuid page-names-to-uuids (common-util/page-name-sanity-lc %)))
+                     (get-page-uuid page-names-to-uuids (common-util/page-name-sanity-lc %) {:original-name %}))
             property-values)))
 
 (defn- handle-changed-property
@@ -601,7 +603,9 @@
       (swap! (:block-properties-text-values import-state)
              assoc
              ;; For pages, valid uuid is in page-names-to-uuids, not in block
-             (if (:block/name block) (get-page-uuid page-names-to-uuids ((some-fn ::original-name :block/name) block)) (:block/uuid block))
+             (if (:block/name block)
+               (get-page-uuid page-names-to-uuids ((some-fn ::original-name :block/name) block) {:block block})
+               (:block/uuid block))
              properties-text-values))
     ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
     (if (contains? props :template)
@@ -824,7 +828,7 @@
   [{:block/keys [parent] :as block} pre-blocks page-names-to-uuids]
   (cond-> block
     (and (vector? parent) (contains? pre-blocks (second parent)))
-    (assoc :block/parent [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)))])))
+    (assoc :block/parent [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)) {:block block :block/page (:block/page block)})])))
 
 (defn- fix-block-name-lookup-ref
   "Some graph-parser attributes return :block/name as a lookup ref. This fixes
@@ -832,9 +836,9 @@
   [block page-names-to-uuids]
   (cond-> block
     (= :block/name (first (:block/page block)))
-    (assoc :block/page [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)))])
+    (assoc :block/page [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)) {:block block :block/page (:block/page block)})])
     (:block/name (:block/parent block))
-    (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)))})))
+    (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)) {:block block :block/parent (:block/parent block)})})))
 
 (defn- build-block-tx
   [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
@@ -867,7 +871,7 @@
 (defn- update-page-alias
   [m page-names-to-uuids]
   (update m :block/alias (fn [aliases]
-                           (map #(vector :block/uuid (get-page-uuid page-names-to-uuids (:block/name %)))
+                           (map #(vector :block/uuid (get-page-uuid page-names-to-uuids (:block/name %) {:block %}))
                                 aliases))))
 
 (defn- build-new-page-or-class
