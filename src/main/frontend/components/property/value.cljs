@@ -318,10 +318,6 @@
                    (ui/hide-popups-until-preview-popup!)
                    (shui/dialog-close!)))))))]
     [:div.flex.flex-row.gap-2
-     (when datetime?
-       (repeat-setting block property value))
-     (when datetime?
-       (shui/separator {:orientation "vertical"}))
      [:div.flex.flex-col
       (ui/nlp-calendar
        (cond->
@@ -333,7 +329,11 @@
          :on-delete on-delete
          :on-day-click select-handler!}
          initial-month
-         (assoc :default-month initial-month)))]]))
+         (assoc :default-month initial-month)))]
+     (when datetime?
+       (shui/separator {:orientation "vertical"}))
+     (when datetime?
+       (repeat-setting block property value))]))
 
 (rum/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
