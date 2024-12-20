@@ -374,3 +374,13 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
   [content]
   {:pre [(string? content)]}
   (string/replace-first content markdown-heading-pattern ""))
+
+(defn block-with-timestamps
+  "Adds updated-at timestamp and created-at if it doesn't exist"
+  [block]
+  (let [updated-at (time-ms)
+        block (cond->
+               (assoc block :block/updated-at updated-at)
+                (nil? (:block/created-at block))
+                (assoc :block/created-at updated-at))]
+    block))

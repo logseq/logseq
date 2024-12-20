@@ -5,7 +5,32 @@
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.db-ident :as db-ident]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.common.util :as common-util]))
+
+(defn build-property-value-block
+  "Builds a property value entity given a block map/entity, a property entity or
+  ident and its property value"
+  [block property value]
+  (let [block-id (or (:db/id block) (:db/ident block))]
+    (-> (merge
+         {:block/uuid (d/squuid)
+          :block/format :markdown
+          :block/page (if (:block/page block)
+                        (:db/id (:block/page block))
+                        ;; page block
+                        block-id)
+          :block/parent block-id
+          :logseq.property/created-from-property (if (= (:db/ident property) :logseq.property/default-value)
+                                                   block-id
+                                                   (or (:db/id property) {:db/ident (:db/ident property)}))
+          :block/order (db-order/gen-key)}
+         (if (db-property-type/property-value-content? (get-in block [:block/schema :type]) property)
+           {:property.value/content value}
+           {:block/title value}))
+        common-util/block-with-timestamps)))
 
 ;; Main property vars
 ;; ==================
@@ -313,11 +338,18 @@
     :properties {:logseq.property/hide-empty-value true}
     :queryable? true}
    :logseq.task/recur-frequency
-   {:title "Recur frequency"
-    :schema {:type :number
-             :public? false}
-    :properties {:logseq.property/hide-empty-value true}
-    :queryable? true}
+   (let [schema {:type :number
+                 :public? false}]
+     {:title "Recur frequency"
+      :schema schema
+      :properties (let [block {:db/ident :logseq.task/recur-frequency
+                               :block/schema schema}
+                        property {:db/ident :logseq.property/default-value
+                                  :block/schema {:type :entity}}
+                        default-value (assoc (build-property-value-block block property 1) :db/id -1)]
+                    {:logseq.property/hide-empty-value true
+                     :logseq.property/default-value default-value})
+      :queryable? true})
    :logseq.task/recur-unit
    {:title "Recur unit"
     :schema {:type :number
@@ -332,7 +364,8 @@
                           [:logseq.task/recur-unit.week "Week"]
                           [:logseq.task/recur-unit.month "Month"]
                           [:logseq.task/recur-unit.year "Year"]])
-    :properties {:logseq.property/hide-empty-value true}
+    :properties {:logseq.property/hide-empty-value true
+                 :logseq.property/default-value :logseq.task/recur-unit.day}
     :queryable? true}
 
 ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project

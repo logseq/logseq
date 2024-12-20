@@ -197,9 +197,19 @@
                (d/datoms db :eavt (:db/id p)))))))
 
 (defn get-all-pages
+  "Get all pages including property page's default value"
   [db]
   (let [datoms (d/datoms db :avet :block/name)]
-    (mapcat (fn [d] (d/datoms db :eavt (:e d))) datoms)))
+    (mapcat (fn [d]
+              (let [datoms (d/datoms db :eavt (:e d))]
+                (mapcat
+                 (fn [d]
+                   (if (= (:a d) :logseq.property/default-value)
+                     (concat
+                      (d/datoms db :eavt (:v d))
+                      datoms)
+                     datoms))
+                 datoms))) datoms)))
 
 (defn get-page->refs-count
   [db]
