@@ -97,10 +97,10 @@
                      (let [user (user-uuid->user (:block/uuid user-block))
                            [diff-r1 diff-r2]
                            (data/diff
-                            (select-keys user-block [:logseq.user/name :logseq.user/email :logseq.user/avatar])
+                            (select-keys user-block [:logseq.property.user/name :logseq.property.user/email :logseq.property.user/avatar])
                             (update-keys
                              (select-keys user [:user/name :user/email :user/avatar])
-                             (fn [k] (keyword "logseq.user" (name k)))))]
+                             (fn [k] (keyword "logseq.property.user" (name k)))))]
                        (or (some? diff-r1) (some? diff-r2))))
                    user-blocks))
             (m/amb {:type :inject-users-info}
