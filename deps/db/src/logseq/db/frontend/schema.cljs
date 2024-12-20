@@ -2,7 +2,7 @@
   "Main datascript schemas for the Logseq app"
   (:require [clojure.set :as set]))
 
-(def version 50)
+(def version 51)
 
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
