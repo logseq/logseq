@@ -534,7 +534,7 @@
    [49 {:fix replace-special-id-ref-with-id-ref}]
    [50 {:classes [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard]}]
    [51 {:fix replace-block-type-with-tags}]
-   [52 {:properties [:logseq.task/scheduled :logseq.task/recur-frequency :logseq.task/recur-unit]
+   [52 {:properties [:logseq.task/scheduled :logseq.task/recur-frequency :logseq.task/recur-unit :logseq.task/repeated?]
         :fix add-scheduled-to-task}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]

@@ -321,7 +321,8 @@
            [:logseq.task/status.in-review "In Review" "InReview"]
            [:logseq.task/status.done "Done" "Done"]
            [:logseq.task/status.canceled "Canceled" "Cancelled"]])
-    :properties {:logseq.property/hide-empty-value true}
+    :properties {:logseq.property/hide-empty-value true
+                 :logseq.property/default-value :logseq.task/status.todo}
     :queryable? true}
    :logseq.task/deadline
    {:title "Deadline"
@@ -367,6 +368,10 @@
     :properties {:logseq.property/hide-empty-value true
                  :logseq.property/default-value :logseq.task/recur-unit.day}
     :queryable? true}
+   :logseq.task/repeated?
+   {:title "Repeated task?"
+    :schema {:type :checkbox
+             :hide? true}}
 
 ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 
