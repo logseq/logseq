@@ -430,7 +430,7 @@
 
 ;;; subscribe state ;;;
 (c.m/run-background-task
- :subscribe-state
+ ::subscribe-state
  (m/reduce
   (fn [_ v] (worker-util/post-message :rtc-sync-state v))
   create-get-state-flow))

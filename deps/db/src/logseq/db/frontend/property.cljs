@@ -436,7 +436,22 @@
                         :schema
                         {:type :string
                          :hide? false
-                         :public? true}}))
+                         :public? true}}
+   :logseq.property.user/name {:title "User Name"
+                               :schema
+                               {:type :string
+                                :hide? false
+                                :public? true}}
+   :logseq.property.user/email {:title "User Email"
+                                :schema
+                                {:type :string
+                                 :hide? false
+                                 :public? true}}
+   :logseq.property.user/avatar {:title "User Avatar"
+                                 :schema
+                                 {:type :string
+                                  :hide? false
+                                  :public? true}}))
 
 (def built-in-properties
   (->> built-in-properties*
