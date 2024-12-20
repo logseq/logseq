@@ -214,7 +214,7 @@
                db-based?
                (concat [:tag/tasks :tag/assets])
                (not db-based?)
-               (#(concat [:whiteboards] %)) )
+               (#(cons :whiteboards %)) )
         [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:whiteboards :flashcards :graph-view :all-pages]))]
 
