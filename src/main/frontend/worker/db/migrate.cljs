@@ -454,16 +454,6 @@
             eid (:db/id e)]
         [[:db/add eid :logseq.property.class/properties :logseq.task/scheduled]]))))
 
-(defn- add-repeat-default-values
-  [conn _search-db]
-  (let [db @conn]
-    (when (ldb/db-based-graph? db)
-      (let [e1 (d/entity db :logseq.task/recur-frequency)
-            e2 (d/entity db :logseq.task/recur-unit)]
-        (outliner-property/set-block-property! conn (:db/id e1) :logseq.property/default-value 1)
-        (outliner-property/set-block-property! conn (:db/id e2) :logseq.property/default-unit :logseq.task/recur-unit.day)
-        nil))))
-
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -545,8 +535,7 @@
    [50 {:classes [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard]}]
    [51 {:fix replace-block-type-with-tags}]
    [52 {:properties [:logseq.task/scheduled :logseq.task/recur-frequency :logseq.task/recur-unit]
-        :fix add-scheduled-to-task}]
-   [53 {:fix add-repeat-default-values}]])
+        :fix add-scheduled-to-task}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
