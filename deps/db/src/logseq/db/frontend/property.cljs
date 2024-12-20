@@ -422,21 +422,6 @@
                                 {:type :map
                                  :hide? false ; TODO: show for debug now, hide it later
                                  :public? false}}
-   :logseq.user/name {:title "User Name"
-                      :schema
-                      {:type :string
-                       :hide? false
-                       :public? true}}
-   :logseq.user/email {:title "User Email"
-                       :schema
-                       {:type :string
-                        :hide? false
-                        :public? true}}
-   :logseq.user/avatar {:title "User Avatar"
-                        :schema
-                        {:type :string
-                         :hide? false
-                         :public? true}}
    :logseq.property.user/name {:title "User Name"
                                :schema
                                {:type :string
@@ -499,7 +484,7 @@
     ;; attribute ns is for db attributes that don't start with :block
     "logseq.property.attribute"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
-    "logseq.user"})
+    "logseq.property.user"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
