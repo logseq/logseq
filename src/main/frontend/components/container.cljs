@@ -210,11 +210,13 @@
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-navigations
   [{:keys [default-home route-match route-name srs-open? db-based? enable-whiteboards?]}]
-  (let [navs (cond->> [:whiteboards :flashcards :graph-view :all-pages]
+  (let [navs (cond-> [:flashcards :graph-view :all-pages]
                db-based?
-               (into [:tag/tasks :tag/assets]))
+               (concat [:tag/tasks :tag/assets])
+               (not db-based?)
+               (#(concat [:whiteboards] %)) )
         [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
-                                                            [:whiteboards :flashcards :graph-view :all-pages :tag/tasks]))]
+                                                            [:whiteboards :flashcards :graph-view :all-pages]))]
 
     (rum/use-effect!
      (fn []
@@ -233,8 +235,8 @@
                                                                   :checked-navs checked-navs
                                                                   :set-checked-navs! set-checked-navs!})
                                                                {:as-dropdown? false})))}
-      :more [:a.as-edit {:class "!opacity-60 hover:!opacity-80 relative -top-0.5 right-0"}
-             (shui/tabler-icon "filter-edit" {:size 15})]}
+      :more [:a.as-edit {:class "!opacity-60 hover:!opacity-80 relative -top-0.5 -right-0.5"}
+             (shui/tabler-icon "filter-edit" {:size 14})]}
      [:div.sidebar-navigations.flex.flex-col.mt-1
        ;; required custom home page
       (let [page (:page default-home)]
@@ -265,7 +267,7 @@
         (cond
           (= nav :whiteboards)
           (when enable-whiteboards?
-            (when (or config/dev? (not db-based?))
+            (when (not db-based?)
               (sidebar-item
                {:class "whiteboard"
                 :title (t :right-side-bar/whiteboards)
