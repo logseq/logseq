@@ -10,16 +10,12 @@
       @apply relative;
 
       &.on {
+        @apply after:content-['*'];
+
         &:after {
-          content: " ";
-          position: absolute;
-          bottom: 10px;
-          right: 8px;
-          width: 7px;
-          height: 7px;
+          @apply absolute bottom-2.5 right-1 w-[7px] h-[7px] rounded-full opacity-100 text-transparent;
+
           background-color: var(--ls-color-file-sync-pending);
-          border-radius: 100%;
-          opacity: 1;
         }
 
         &.syncing {
