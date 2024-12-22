@@ -257,7 +257,7 @@
             (reset! *show-new-property-config? false)))))))
 
 (rum/defc property-key-title
-  [block property class-schema?]
+  [block property class-schema? property-position]
   (let [block-container (state/get-component :block/container)]
     (shui/trigger-as
      :a
@@ -284,10 +284,12 @@
                                                              (.focus input)))}
                                        :align "start"
                                        :as-dropdown? true})))}
-     (block-container {:property? true} property))))
+     (if (= :block-below property-position)
+       (:block/title property)
+       (block-container {:property? true} property)))))
 
 (rum/defc property-key-cp < rum/static
-  [block property {:keys [other-position? class-schema?]}]
+  [block property {:keys [other-position? class-schema? property-position]}]
   (let [icon (:logseq.property/icon property)]
     [:div.property-key-inner.jtrigger-view
      ;; icon picker
@@ -323,7 +325,7 @@
        [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
         (:block/title property)]
-       (property-key-title block property class-schema?))]))
+       (property-key-title block property class-schema? property-position))]))
 
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)
