@@ -353,7 +353,7 @@
       :queryable? true})
    :logseq.task/recur-unit
    {:title "Recur unit"
-    :schema {:type :number
+    :schema {:type :default
              :public? false}
     :closed-values (mapv (fn [[db-ident value]]
                            {:db-ident db-ident
