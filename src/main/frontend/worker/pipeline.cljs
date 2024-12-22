@@ -12,7 +12,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [frontend.worker.commands :as commands]))
 
 (defn- refs-need-recalculated?
   [tx-meta]
@@ -142,21 +143,24 @@ default = false")
                        (rebuild-block-refs repo tx-report* blocks'))
           refs-tx-report (when (seq block-refs)
                            (ldb/transact! conn block-refs {:pipeline-replace? true}))
+          commands-tx (commands/run-commands tx-report)
           replace-tx (concat
-                          ;; block path refs
+                      ;; block path refs
                       (when (seq blocks')
                         (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))
                               blocks' (keep (fn [b] (d/entity db-after (:db/id b))) blocks')]
                           (compute-block-path-refs-tx tx-report* blocks')))
 
-                          ;; update block/tx-id
+                       ;; update block/tx-id
                       (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
                                                    (concat pages blocks))
                             tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
                         (keep (fn [b]
                                 (when-let [db-id (:db/id b)]
                                   {:db/id db-id
-                                   :block/tx-id tx-id})) updated-blocks)))
+                                   :block/tx-id tx-id})) updated-blocks))
+
+                      commands-tx)
           tx-report' (if (seq replace-tx)
                        (ldb/transact! conn replace-tx {:pipeline-replace? true})
                        (do
