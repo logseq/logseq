@@ -410,7 +410,7 @@
 
              :else
              (when (and property (not class-schema?))
-               (pv/property-value block property (get block (:db/ident property)) (assoc opts :editing? true)))))]]
+               (pv/property-value block property (assoc opts :editing? true)))))]]
 
        (let [on-chosen (property-input-on-chosen block *property *property-key *show-new-property-config? opts)
              input-opts {:on-key-down
@@ -504,8 +504,8 @@
               (cond-> {}
                 class-properties? (assoc :class :opacity-90))
               (if (:class-schema? opts)
-                (pv/property-value property (db/entity :logseq.property/description) property-desc opts)
-                (pv/property-value block property v opts))]]])]))))
+                (pv/property-value property (db/entity :logseq.property/description) opts)
+                (pv/property-value block property opts))]]])]))))
 
 (rum/defcs ordered-properties < rum/reactive
   {:init (fn [state]
