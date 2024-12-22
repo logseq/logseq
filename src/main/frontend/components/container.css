@@ -119,7 +119,7 @@
     @apply flex items-center pl-1.5 pr-0.5 h-8 select-none;
 
     .ui__icon {
-      @apply relative flex justify-center w-[20px] text-base mr-2 opacity-80;
+      @apply relative flex justify-center w-[16px] text-base mr-2;
     }
 
     .graph-icon {

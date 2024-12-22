@@ -6,22 +6,8 @@
 
 .cp__file-sync, .cp__rtc-sync {
   &-indicator {
-    a.cloud {
-      position: relative;
-      opacity: 1 !important;
-      cursor: pointer;
-
-      &:active {
-        opacity: .5 !important;
-      }
-
-      .ti {
-        opacity: .5;
-      }
-
-      &:hover .ti {
-        opacity: .9;
-      }
+    .ui__button.cloud {
+      @apply relative;
 
       &.on {
         &:after {
