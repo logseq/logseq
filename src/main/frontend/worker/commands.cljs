@@ -4,7 +4,10 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.outliner.pipeline :as outliner-property]
+            [frontend.worker.handler.page.db-based.page :as worker-db-page]
+            [logseq.common.util.date-time :as date-time-util]))
 
 ;; TODO: allow users to add command or configure it through #Command (which parent should be #Code)
 (def *commands
@@ -32,12 +35,12 @@
                              :else
                              (= (get entity property) value)))]
       (if datoms
-        (some (fn [d] (value-matches? (:v d))) datoms)
+        (some (fn [d] (and (value-matches? (:v d)) (:added d))) datoms)
         (value-matches? value)))))
 
 (defmulti handle-command (fn [action-id & _others] action-id))
 
-(defmethod handle-command :reschedule [_ entity property]
+(defmethod handle-command :reschedule [_ db entity property]
   (let [frequency (db-property/property-value-content  (:logseq.task/recur-frequency entity))
         unit (:logseq.task/recur-unit entity)]
     (when (and frequency unit)
@@ -48,17 +51,25 @@
                        :logseq.task/recur-unit.week t/weeks
                        :logseq.task/recur-unit.month t/months
                        :logseq.task/recur-unit.year t/years)
-            next-time (tc/to-long (t/plus (t/now) (interval frequency)))]
-        [[:db/add (:db/id entity) property next-time]]))))
+            next-time (t/plus (t/now) (interval frequency))
+            next-time-long (tc/to-long next-time)
+            journal-day (outliner-property/get-journal-day-from-long db next-time-long)
+            create-journal-page (when-not journal-day
+                                  (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
+                                        title (date-time-util/format next-time formatter)]
+                                    (worker-db-page/create db title {:create-first-block? false})))]
+        (concat
+         [[:db/add (:db/id entity) property next-time-long]]
+         (:tx-data create-journal-page))))))
 
-(defmethod handle-command :set-property [_ entity property value]
+(defmethod handle-command :set-property [_ _db entity property value]
   [[:db/add (:db/id entity) property value]])
 
 (defn execute-command
   "Build tx-data"
-  [entity [_command {:keys [actions]}]]
+  [db entity [_command {:keys [actions]}]]
   (mapcat (fn [action]
-            (apply handle-command (first action) entity (rest action))) actions))
+            (apply handle-command (first action) db entity (rest action))) actions))
 
 (defn run-commands
   [{:keys [tx-data db-after]}]
@@ -70,6 +81,6 @@
                                             (every? #(sastify-condition? db entity % datoms) tx-conditions))) @*commands)]
                 (mapcat
                  (fn [command]
-                   (execute-command entity command))
+                   (execute-command db entity command))
                  commands)))
             (group-by :e tx-data))))

@@ -360,9 +360,8 @@
       (get-statuses)
       [["Deadline" [[:editor/clear-current-slash]
                     [:editor/set-deadline]] "" :icon/calendar-stats]
-       (when-not db?
-         ["Scheduled" [[:editor/clear-current-slash]
-                       [:editor/set-scheduled]] "" :icon/calendar-month])]
+       ["Scheduled" [[:editor/clear-current-slash]
+                     [:editor/set-scheduled]] "" :icon/calendar-month]]
 
       ;; priority
       (get-priorities)
