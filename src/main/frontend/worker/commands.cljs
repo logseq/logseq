@@ -26,7 +26,7 @@
                            (cond
                              (qualified-keyword? value)
                              (= (:db/ident (get entity property)) value)
-                           ;; ref type
+                             ;; ref type
                              (and (int? value) (contains? db-property-type/all-ref-property-types (:type (:block/schema property-entity))))
                              (= (:db/id (get entity property)) value)
                              :else

@@ -41,7 +41,10 @@
           (let [explainer (get-schema-explainer (:closed-schema? validate-options))]
             (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
             (doseq [m invalid-ent-maps]
-              (prn {:entity-map m
+              (prn {:entity-map (update m :block/properties (fn [properties]
+                                                              (map (fn [[p v]]
+                                                                     [(:db/ident p) v])
+                                                                   properties)))
                     :errors (me/humanize (explainer [m]))}))
             false)
           true)))))
