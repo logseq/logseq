@@ -223,9 +223,7 @@
      [:div.mb-4
       [:div.flex.flex-row.items-center.gap-1
        [:div.w-4
-        (property-value block (db/entity :logseq.task/repeated?)
-                        (:logseq.task/repeated? block)
-                        opts)]
+        (property-value block (db/entity :logseq.task/repeated?) opts)]
        [:div "Set as repeated task"]]]
      [:div.flex.flex-row.gap-2
       [:div.flex.text-muted-foreground.mr-4
@@ -233,15 +231,11 @@
 
     ;; recur frequency
       [:div.w-6
-       (property-value block (db/entity :logseq.task/recur-frequency)
-                       (:logseq.task/recur-frequency block)
-                       opts)]
+       (property-value block (db/entity :logseq.task/recur-frequency) opts)]
 
     ;; recur unit
       [:div.w-20
-       (property-value block (db/entity :logseq.task/recur-unit)
-                       (:logseq.task/recur-unit block)
-                       opts)]]
+       (property-value block (db/entity :logseq.task/recur-unit) opts)]]
      [:div.flex.flex-col.gap-2
       [:div.text-muted-foreground
        "When"]
@@ -387,9 +381,11 @@
            [:div.flex.flex-row.gap-1.items-center
             (when-let [page-cp (state/get-component :block/page-cp)]
               (let [page-title (date/journal-name (date/js-date->goog-date date))]
-                (page-cp {:disable-preview? true
-                          :show-non-exists-page? true}
-                         {:block/name page-title})))
+                (rum/with-key
+                  (page-cp {:disable-preview? true
+                            :show-non-exists-page? true}
+                           {:block/name page-title})
+                  page-title)))
             [:span.opacity-50
              (str (util/zero-pad (.getHours date))
                   ":"
@@ -410,9 +406,16 @@
                          :datetime? datetime?
                          :multiple-values? multiple-values?
                          :on-change (fn [value]
-                                      (property-handler/set-block-property! repo (:block/uuid block)
-                                                                            (:db/ident property)
-                                                                            (if (map? value) (:db/id value) value)))
+                                      (let [journal (date/journal-name (date/js-date->goog-date (js/Date. value)))]
+                                        (p/do!
+                                         (when-not (db/get-page journal)
+                                           (page-handler/<create! journal
+                                                                  {:redirect? false
+                                                                   :create-first-block? false
+                                                                   :tags #{:logseq.class/Journal}}))
+                                         (property-handler/set-block-property! repo (:block/uuid block)
+                                                                               (:db/ident property)
+                                                                               (if (map? value) (:db/id value) value)))))
                          :del-btn? (some? value)
                          :on-delete (fn []
                                       (property-handler/set-block-property! repo (:block/uuid block)
@@ -995,11 +998,10 @@
        :else
        (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
 
-(rum/defcs property-scalar-value < rum/reactive db-mixins/query rum/static
+(rum/defcs property-scalar-value < rum/static rum/reactive
   [state block property value* {:keys [container-id editing? on-chosen]
                                 :as opts}]
   (let [property (model/sub-block (:db/id property))
-        block (db/sub-block (:db/id block))
         schema (:block/schema property)
         type (get schema :type :default)
         editing? (or editing?
@@ -1102,12 +1104,13 @@
                    (when (some? value) #{value}))]
     (multiple-values-inner block property value' opts schema)))
 
-(rum/defcs property-value < rum/reactive
-  [state block property v {:keys [show-tooltip?]
-                           :as opts}]
+(rum/defcs property-value < rum/reactive db-mixins/query
+  [state block property {:keys [show-tooltip?]
+                         :as opts}]
   (ui/catch-error
    (ui/block-error "Something wrong" {})
-   (let [block-cp (state/get-component :block/blocks-container)
+   (let [block (db/sub-block (:db/id block))
+         block-cp (state/get-component :block/blocks-container)
          properties-cp (state/get-component :block/properties-cp)
          opts (merge opts
                      {:page-cp (state/get-component :block/page-cp)
@@ -1120,6 +1123,7 @@
          schema (:block/schema property)
          type (some-> schema (get :type :default))
          multiple-values? (db-property/many? property)
+         v (get block (:db/ident property))
          v (cond
              (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
              v
