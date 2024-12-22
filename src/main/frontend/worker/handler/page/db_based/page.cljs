@@ -158,8 +158,9 @@
        [page])
      (remove nil?))))
 
-(defn create!
-  [conn title*
+(defn create
+  "Pure function without side effects"
+  [db title*
    {:keys [create-first-block? properties uuid persist-op? whiteboard? class? today-journal? split-namespace? skip-existing-page-check?]
     :or   {create-first-block?      true
            properties               nil
@@ -167,8 +168,7 @@
            persist-op?              true
            skip-existing-page-check? false}
     :as options}]
-  (let [db @conn
-        date-formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
+  (let [date-formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
         title (sanitize-title title*)
         types (cond class?
                     #{:logseq.class/Tag}
@@ -187,9 +187,10 @@
                    (or (ldb/property? existing-page) (ldb/internal-page? existing-page)))
           ;; Convert existing user property or page to class
           (let [tx-data (db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :db/ident :block/created-at]))]
-            (ldb/transact! conn tx-data tx-meta))))
+            {:tx-meta tx-meta
+             :tx-data tx-data})))
       (let [format    :markdown
-            page      (-> (gp-block/page-name->map title @conn true date-formatter
+            page      (-> (gp-block/page-name->map title db true date-formatter
                                                    {:class? class?
                                                     :page-uuid (when (uuid? uuid) uuid)
                                                     :skip-existing-page-check? (if (some? skip-existing-page-check?)
@@ -211,9 +212,9 @@
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
 
           (let [page-uuid (:block/uuid page)
-                page-txs  (build-page-tx conn properties page (select-keys options [:whiteboard? :class? :tags]))
+                page-txs  (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags]))
                 first-block-tx (when (and
-                                      (nil? (d/entity @conn [:block/uuid page-uuid]))
+                                      (nil? (d/entity db [:block/uuid page-uuid]))
                                       create-first-block?
                                       (not (or whiteboard? class?))
                                       page-txs)
@@ -222,11 +223,20 @@
                           ;; transact doesn't support entities
                           (remove de/entity? parents)
                           page-txs
-                          first-block-tx)]
-            (when (seq txs)
-              (ldb/transact! conn txs (cond-> {:persist-op? persist-op?
-                                               :outliner-op :create-page}
-                                        today-journal?
-                                        (assoc :create-today-journal? true
-                                               :today-journal-name title))))
-            [title page-uuid]))))))
+                          first-block-tx)
+                tx-meta (cond-> {:persist-op? persist-op?
+                                 :outliner-op :create-page}
+                          today-journal?
+                          (assoc :create-today-journal? true
+                                 :today-journal-name title))]
+            {:tx-meta tx-meta
+             :tx-data txs
+             :title title
+             :page-uuid page-uuid}))))))
+
+(defn create!
+  [conn title opts]
+  (let [{:keys [tx-meta tx-data title page-uuid]} (create @conn title opts)]
+    (when (seq tx-data)
+      (d/transact! conn tx-data tx-meta)
+      [title page-uuid])))

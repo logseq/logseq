@@ -144,7 +144,7 @@
                   (when-let [e (d/entity db [:block/uuid id])]
                     (:db/id e))))))))
 
-(defn- get-journal-day-from-long
+(defn get-journal-day-from-long
   [db v]
   (when-let [date (tc/to-local-date v)]
     (let [day (js/parseInt

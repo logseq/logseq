@@ -120,8 +120,11 @@ default = false")
 (defn- invoke-hooks-default [repo conn {:keys [tx-meta] :as tx-report} context]
   (try
     (let [display-blocks-tx-data (add-missing-properties-to-typed-display-blocks (:db-after tx-report) (:tx-data tx-report))
-          tx-report* (if (seq display-blocks-tx-data)
-                       (let [result (ldb/transact! conn display-blocks-tx-data {:pipeline-replace? true})]
+          commands-tx (commands/run-commands tx-report)
+          ;; :block/refs relies on those changes
+          tx-before-refs (concat display-blocks-tx-data commands-tx)
+          tx-report* (if (seq tx-before-refs)
+                       (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true})]
                          (assoc tx-report
                                 :tx-data (concat (:tx-data tx-report) (:tx-data result))
                                 :db-after (:db-after result)))
@@ -143,7 +146,6 @@ default = false")
                        (rebuild-block-refs repo tx-report* blocks'))
           refs-tx-report (when (seq block-refs)
                            (ldb/transact! conn block-refs {:pipeline-replace? true}))
-          commands-tx (commands/run-commands tx-report)
           replace-tx (concat
                       ;; block path refs
                       (when (seq blocks')
@@ -158,9 +160,7 @@ default = false")
                         (keep (fn [b]
                                 (when-let [db-id (:db/id b)]
                                   {:db/id db-id
-                                   :block/tx-id tx-id})) updated-blocks))
-
-                      commands-tx)
+                                   :block/tx-id tx-id})) updated-blocks)))
           tx-report' (if (seq replace-tx)
                        (ldb/transact! conn replace-tx {:pipeline-replace? true})
                        (do
