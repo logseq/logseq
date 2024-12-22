@@ -555,6 +555,10 @@ a.fade-link:hover {
   height: 20px;
 }
 
+#head div[data-tooltipped] {
+  display: flex !important;
+}
+
 .svg-small svg {
   transform: scale(0.6);
   display: inline;

@@ -48,18 +48,20 @@
             :block/title new-title
             :block/name (common-util/page-name-sanity-lc new-title)})))
 
-(defn- get-page-uuid [page-names-to-uuids page-name]
+(defn- get-page-uuid [page-names-to-uuids page-name ex-data']
   (or (get @page-names-to-uuids (if (string/includes? (str page-name) "#")
                                   (string/lower-case (gp-block/sanitize-hashtag-name page-name))
                                   page-name))
       (throw (ex-info (str "No uuid found for page name " (pr-str page-name))
-                      {:page-name page-name}))))
+                      (merge ex-data' {:page-name page-name})))))
 
 (defn- replace-namespace-with-parent [block page-names-to-uuids]
   (if (:block/namespace block)
     (-> (dissoc block :block/namespace)
         (assoc :logseq.property/parent
-               {:block/uuid (get-page-uuid page-names-to-uuids (get-in block [:block/namespace :block/name]))}))
+               {:block/uuid (get-page-uuid page-names-to-uuids
+                                           (get-in block [:block/namespace :block/name])
+                                           {:block block :block/namespace (:block/namespace block)})}))
     block))
 
 (defn- build-class-ident-name
@@ -197,7 +199,7 @@
                                       (convert-tag? (:block/name %) user-options)
                                       ;; Ignore new class tags from extract e.g. :logseq.class/Journal
                                       (logseq-class-ident? %)))
-                         (map #(vector :block/uuid (get-page-uuid (:page-names-to-uuids per-file-state) (:block/name %))))
+                         (map #(vector :block/uuid (get-page-uuid (:page-names-to-uuids per-file-state) (:block/name %) {:block %})))
                          set)
           page-classes (into #{:logseq.class/Page} db-class/page-children-classes)]
       (cond-> block
@@ -214,7 +216,7 @@
     block))
 
 (defn- add-uuid-to-page-map [m page-names-to-uuids]
-  (assoc m :block/uuid (get-page-uuid page-names-to-uuids (:block/name m))))
+  (assoc m :block/uuid (get-page-uuid page-names-to-uuids (:block/name m) {:block m})))
 
 (defn- content-without-tags-ignore-case
   "Ignore case because tags in content can have any case and still have a valid ref"
@@ -300,12 +302,12 @@
 (defn- update-block-deadline
   ":block/title doesn't contain DEADLINE.* text so unable to detect timestamp
   or repeater usage and notify user that they aren't supported"
-  [block db {:keys [user-config]}]
+  [block page-names-to-uuids {:keys [user-config]}]
   (if-let [date-int (or (:block/deadline block) (:block/scheduled block))]
-    (let [existing-journal-page (ffirst (d/q '[:find (pull ?b [:block/uuid])
-                                               :in $ ?journal-day
-                                               :where [?b :block/journal-day ?journal-day]]
-                                             db date-int))
+    (let [existing-journal-page (some->> (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config))
+                                         common-util/page-name-sanity-lc
+                                         (get @page-names-to-uuids)
+                                         (hash-map :block/uuid))
           deadline-page (->
                          (or existing-journal-page
                             ;; FIXME: Register new pages so that two different refs to same new page
@@ -519,7 +521,7 @@
   [page-names-to-uuids property-values]
   (set (map #(vector :block/uuid
                      ;; assume for now a ref's :block/name can always be translated by lc helper
-                     (get-page-uuid page-names-to-uuids (common-util/page-name-sanity-lc %)))
+                     (get-page-uuid page-names-to-uuids (common-util/page-name-sanity-lc %) {:original-name %}))
             property-values)))
 
 (defn- handle-changed-property
@@ -619,7 +621,9 @@
       (swap! (:block-properties-text-values import-state)
              assoc
              ;; For pages, valid uuid is in page-names-to-uuids, not in block
-             (if (:block/name block) (get-page-uuid page-names-to-uuids ((some-fn ::original-name :block/name) block)) (:block/uuid block))
+             (if (:block/name block)
+               (get-page-uuid page-names-to-uuids ((some-fn ::original-name :block/name) block) {:block block})
+               (:block/uuid block))
              properties-text-values))
     ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
     (if (contains? props :template)
@@ -843,7 +847,7 @@
   [{:block/keys [parent] :as block} pre-blocks page-names-to-uuids]
   (cond-> block
     (and (vector? parent) (contains? pre-blocks (second parent)))
-    (assoc :block/parent [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)))])))
+    (assoc :block/parent [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)) {:block block :block/page (:block/page block)})])))
 
 (defn- fix-block-name-lookup-ref
   "Some graph-parser attributes return :block/name as a lookup ref. This fixes
@@ -851,9 +855,9 @@
   [block page-names-to-uuids]
   (cond-> block
     (= :block/name (first (:block/page block)))
-    (assoc :block/page [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)))])
+    (assoc :block/page [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)) {:block block :block/page (:block/page block)})])
     (:block/name (:block/parent block))
-    (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)))})))
+    (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)) {:block block :block/parent (:block/parent block)})})))
 
 (defn- build-block-tx
   [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
@@ -861,7 +865,7 @@
   (let [;; needs to come before update-block-refs to detect new property schemas
         {:keys [block properties-tx]}
         (handle-block-properties block* db page-names-to-uuids (:block/refs block*) options)
-        {block-after-built-in-props :block deadline-properties-tx :properties-tx} (update-block-deadline block db options)
+        {block-after-built-in-props :block deadline-properties-tx :properties-tx} (update-block-deadline block page-names-to-uuids options)
         ;; :block/page should be [:block/page NAME]
         journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
         prepared-block (cond-> block-after-built-in-props
@@ -886,7 +890,7 @@
 (defn- update-page-alias
   [m page-names-to-uuids]
   (update m :block/alias (fn [aliases]
-                           (map #(vector :block/uuid (get-page-uuid page-names-to-uuids (:block/name %)))
+                           (map #(vector :block/uuid (get-page-uuid page-names-to-uuids (:block/name %) {:block %}))
                                 aliases))))
 
 (defn- build-new-page-or-class
@@ -1154,7 +1158,7 @@
              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
         ;; Could do this only for existing pages but the added complexity isn't worth reducing the tx noise
         retract-page-tag-from-properties-tx (map #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)
-                                                  (concat property-pages-tx converted-property-pages-tx))
+                                                 (concat property-pages-tx converted-property-pages-tx))
         ;; Save properties on new property pages separately as they can contain new properties and thus need to be
         ;; transacted separately the property pages
         property-page-properties-tx (keep (fn [b]
@@ -1275,7 +1279,7 @@
            pages-tx')
      :retract-page-tag-from-classes-tx
      (mapv #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)
-                                              classes-tx)}))
+           classes-tx)}))
 
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:

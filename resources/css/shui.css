@@ -205,7 +205,8 @@ html[data-theme=dark] {
     }
 
     .cp__header {
-      > .r > div:not(.ui__dropdown-trigger) a.button, button.button {
+      > .r > div:not(.ui__dropdown-trigger) a.button, button.button,
+      .ui__button.as-ghost {
         @apply opacity-60 hover:opacity-90;
       }
     }

@@ -99,6 +99,12 @@
             [:db/add "e" :local-tx t])]
       (d/transact! conn [tx-data]))))
 
+(defn remove-local-tx
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (when-let [datom (first (d/datoms @conn :avet :local-tx))]
+      (d/transact! conn [[:db/retract (:e datom) :local-tx]]))))
+
 (defn get-local-tx
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
@@ -297,6 +303,20 @@
                                       :remove-asset op}]
                               update-asset-op (conj [:db.fn/retractAttribute e :update-asset]))))))]
             (d/transact! conn tx-data)))))))
+
+(defn add-all-exists-asset-as-ops
+  [repo]
+  (let [conn (worker-state/get-datascript-conn repo)
+        _ (assert (some? conn))
+        asset-block-uuids (d/q '[:find [?block-uuid ...]
+                                 :where
+                                 [?b :block/uuid ?block-uuid]
+                                 [?b :logseq.property.asset/type]]
+                               @conn)
+        ops (map
+             (fn [block-uuid] [:update-asset 1 {:block-uuid block-uuid}])
+             asset-block-uuids)]
+    (add-asset-ops repo ops)))
 
 (defn- get-all-asset-ops*
   [db]

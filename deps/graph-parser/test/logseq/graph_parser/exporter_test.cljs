@@ -154,12 +154,12 @@
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
     (is (= []
-             (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
-                         :where [?b :block/tags :logseq.class/Tag]]
-                       @conn)
-                  (map first)
-                  (remove #(= [{:db/ident :logseq.class/Tag}] (:block/tags %)))))
-          "All classes only have :logseq.class/Tag as their tag (and don't have Page)")))
+           (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
+                       :where [?b :block/tags :logseq.class/Tag]]
+                     @conn)
+                (map first)
+                (remove #(= [{:db/ident :logseq.class/Tag}] (:block/tags %)))))
+        "All classes only have :logseq.class/Tag as their tag (and don't have Page)")))
 
 (deftest-async export-basic-graph-with-convert-all-tags
   ;; This graph will contain basic examples of different features to import
@@ -300,6 +300,12 @@
       (is (= {:logseq.task/deadline "Nov 25th, 2022"}
              (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled")))
           "scheduled block converted to correct deadline")
+
+      (is (= 1 (count (d/q '[:find [(pull ?b [*]) ...]
+                             :in $ ?content
+                             :where [?b :block/title ?content]]
+                           @conn "Apr 1st, 2024")))
+          "Only one journal page exists when deadline is on same day as journal")
 
       (is (= {:logseq.task/priority "High"}
              (readable-properties @conn (db-test/find-block-by-content @conn "high priority")))

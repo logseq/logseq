@@ -778,7 +778,7 @@
   (rtc-get-users-info
    [this token graph-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--get-user-info token graph-uuid))))
+     (js/Promise. (rtc-core/new-task--get-users-info token graph-uuid))))
 
   (rtc-get-block-content-versions
    [this token graph-uuid block-uuid]
