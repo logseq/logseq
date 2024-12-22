@@ -16,8 +16,7 @@
             [logseq.common.uuid :as common-uuid]
             [clojure.string :as string]
             [logseq.db.frontend.content :as db-content]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.outliner.property :as outliner-property]))
+            [logseq.common.util.page-ref :as page-ref]))
 
 ;; TODO: fixes/rollback
 ;; Frontend migrations
