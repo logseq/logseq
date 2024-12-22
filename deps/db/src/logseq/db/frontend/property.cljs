@@ -371,7 +371,8 @@
    :logseq.task/repeated?
    {:title "Repeated task?"
     :schema {:type :checkbox
-             :hide? true}}
+             :hide? true}
+    :queryable? true}
 
 ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 
@@ -408,6 +409,7 @@
           [[:logseq.property.view/type.table "Table View"]
            [:logseq.property.view/type.list "List View"]
            [:logseq.property.view/type.gallery "Gallery View"]])
+    :properties {:logseq.property/default-value :logseq.property.view/type.table}
     :queryable? true}
 
    :logseq.property.table/sorting {:title "View sorting"
