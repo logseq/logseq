@@ -331,42 +331,58 @@
      (when datetime?
        (repeat-setting block property value))]))
 
-(rum/defc datetime-value
-  [value]
-  (when-let [date (js/Date. value)]
-    (let [date' (date/js-date->goog-date date)
-          overdue? (t/after? (t/now) date')]
-      [:div.flex.flex-row.gap-1.items-center
+(rum/defc overdue
+  [date content]
+  (let [[current-time set-current-time!] (rum/use-state (t/now))]
+    (rum/use-effect!
+     (fn []
+       (let [timer (js/setInterval (fn [] (set-current-time! (t/now))) (* 1000 60 3))]
+         #(js/clearInterval timer)))
+     [])
+    (let [overdue? (when date (t/after? current-time date))]
+      [:div
        (cond-> {} overdue? (assoc :class "warning"
                                   :title "Overdue"))
-       (when-let [page-cp (state/get-component :block/page-cp)]
-         (let [page-title (date/journal-name date')
-               today (t/today)
-               label (cond
-                       (and (or (t/after? date' today)
-                                (t/equal? date' today))
-                            (t/before? date' (t/plus today (t/days 1))))
-                       "Today"
-                       (and (or (t/equal? date' (t/plus today (t/days 1)))
-                                (t/after? date' (t/plus today (t/days 1))))
-                            (t/before? date' (t/plus today (t/days 2))))
-                       "Tomorrow"
-                       (and (or (t/equal? date' (t/minus today (t/days 1)))
-                                (t/after? date' (t/minus today (t/days 1))))
-                            (t/before? date' today))
-                       "Yesterday"
-                       :else
-                       nil)]
-           (rum/with-key
-             (page-cp {:disable-preview? true
-                       :show-non-exists-page? true
-                       :label label}
-                      {:block/name page-title})
-             page-title)))
-       [:span
-        (str (util/zero-pad (.getHours date))
-             ":"
-             (util/zero-pad (.getMinutes date)))]])))
+       content])))
+
+(defn- human-date-label
+  [date]
+  (let [today (t/today)]
+    (cond
+      (and (or (t/after? date today)
+               (t/equal? date today))
+           (t/before? date (t/plus today (t/days 1))))
+      "Today"
+      (and (or (t/equal? date (t/plus today (t/days 1)))
+               (t/after? date (t/plus today (t/days 1))))
+           (t/before? date (t/plus today (t/days 2))))
+      "Tomorrow"
+      (and (or (t/equal? date (t/minus today (t/days 1)))
+               (t/after? date (t/minus today (t/days 1))))
+           (t/before? date today))
+      "Yesterday"
+      :else
+      nil)))
+
+(rum/defc datetime-value
+  [value]
+  (when-let [date (tc/from-long value)]
+    (overdue
+     date
+     [:div.flex.flex-row.gap-1.items-center
+      (when-let [page-cp (state/get-component :block/page-cp)]
+        (let [page-title (date/journal-name date)]
+          (rum/with-key
+            (page-cp {:disable-preview? true
+                      :show-non-exists-page? true
+                      :label (human-date-label date)}
+                     {:block/name page-title})
+            page-title)))
+      (let [date (js/Date. value)]
+        [:span
+         (str (util/zero-pad (.getHours date))
+              ":"
+              (util/zero-pad (.getMinutes date)))])])))
 
 (rum/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
@@ -409,11 +425,18 @@
         :on-click open-popup!}
        (cond
          (map? value)
-         (when-let [page-cp (state/get-component :block/page-cp)]
-           (rum/with-key
-             (page-cp {:disable-preview? true
-                       :meta-click? other-position?} value)
-             (:db/id value)))
+         (let [date (tc/to-date-time (date/journal-title->long (:block/title value)))
+               compare-value (some-> date
+                                     (t/plus (t/days 1))
+                                     (t/minus (t/seconds 1)))]
+           (overdue
+            compare-value
+            (when-let [page-cp (state/get-component :block/page-cp)]
+              (rum/with-key
+                (page-cp {:disable-preview? true
+                          :meta-click? other-position?
+                          :label (human-date-label date)} value)
+                (:db/id value)))))
 
          (number? value)
          (datetime-value value)
@@ -433,7 +456,8 @@
                          :datetime? datetime?
                          :multiple-values? multiple-values?
                          :on-change (fn [value]
-                                      (let [journal (date/journal-name (date/js-date->goog-date (js/Date. value)))]
+                                      (let [journal (when (number? value)
+                                                      (date/journal-name (date/js-date->goog-date (js/Date. value))))]
                                         (p/do!
                                          (when-not (db/get-page journal)
                                            (page-handler/<create! journal
