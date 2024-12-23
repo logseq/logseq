@@ -290,6 +290,12 @@
     :schema {:type :checkbox
              :hide? true}
     :queryable? false}
+   :logseq.property/checkbox-display-properties
+   {:title "Properties displayed as checkbox"
+    :schema {:type :property
+             :cardinality :many
+             :hide? true}
+    :queryable? false}
    ;; Task props
    :logseq.task/priority
    {:title "Priority"

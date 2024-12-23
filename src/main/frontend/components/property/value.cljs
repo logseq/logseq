@@ -35,7 +35,8 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [logseq.outliner.property :as outliner-property]))
 
 (rum/defc property-empty-btn-value
   [property & opts]
@@ -1040,10 +1041,28 @@
       (icon-row block editing?)
       (if (and select-type?'
                (not (and (not closed-values?) (= type :date))))
-        (single-value-select block property value
-                             (fn [] (select-item property type value opts))
-                             select-opts
-                             (assoc opts :editing? editing?))
+        (let [classes (outliner-property/get-block-classes (db/get-db) (:db/id block))
+              display-as-checkbox? (and (some
+                                         (fn [block]
+                                           (-> (set (map :db/id (:logseq.property/checkbox-display-properties block)))
+                                               (contains? (:db/id property))))
+                                         (conj classes block))
+                                        (seq (:property/closed-values property))
+                                        (boolean? (:logseq.property/choice-checkbox-state value*)))]
+          (if display-as-checkbox?
+            (let [checked? (:logseq.property/choice-checkbox-state value*)]
+              (shui/checkbox {:checked checked?
+                              :class "mt-1"
+                              :on-checked-change (fn [value]
+                                                   (let [choices (:property/closed-values property)
+                                                         choice (some (fn [choice] (when (= value (:logseq.property/choice-checkbox-state choice))
+                                                                                     choice)) choices)]
+                                                     (when choice
+                                                       (db-property-handler/set-block-property! (:db/id block) (:db/ident property) (:db/id choice)))))}))
+            (single-value-select block property value
+                                 (fn [] (select-item property type value opts))
+                                 select-opts
+                                 (assoc opts :editing? editing?))))
         (case type
           (:date :datetime)
           (property-value-date-picker block property value (merge opts {:editing? editing?}))

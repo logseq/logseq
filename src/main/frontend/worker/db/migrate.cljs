@@ -536,7 +536,7 @@
    [52 {:fix replace-block-type-with-tags}]
    [53 {:properties [:logseq.task/scheduled :logseq.task/recur-frequency :logseq.task/recur-unit :logseq.task/repeated?]
         :fix add-scheduled-to-task}]
-   [54 {:properties [:logseq.property/choice-checkbox-state]}]])
+   [54 {:properties [:logseq.property/choice-checkbox-state :logseq.property/checkbox-display-properties]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
