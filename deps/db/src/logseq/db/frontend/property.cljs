@@ -285,6 +285,11 @@
    ;;                               {:type :raw-number
    ;;                                :public? false}}
 
+   :logseq.property/choice-checkbox-state
+   {:title "Choice checkbox state"
+    :schema {:type :checkbox
+             :hide? true}
+    :queryable? false}
    ;; Task props
    :logseq.task/priority
    {:title "Priority"
@@ -310,16 +315,18 @@
      :public? true
      :position :block-left}
     :closed-values
-    (mapv (fn [[db-ident value icon]]
+    (mapv (fn [[db-ident value icon checkbox-state]]
             {:db-ident db-ident
              :value value
              :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)
-             :icon {:type :tabler-icon :id icon}})
+             :icon {:type :tabler-icon :id icon}
+             :properties (when (some? checkbox-state)
+                           {:logseq.property/choice-checkbox-state checkbox-state})})
           [[:logseq.task/status.backlog "Backlog" "Backlog"]
-           [:logseq.task/status.todo "Todo" "Todo"]
+           [:logseq.task/status.todo "Todo" "Todo" false]
            [:logseq.task/status.doing "Doing" "InProgress50"]
            [:logseq.task/status.in-review "In Review" "InReview"]
-           [:logseq.task/status.done "Done" "Done"]
+           [:logseq.task/status.done "Done" "Done" true]
            [:logseq.task/status.canceled "Canceled" "Cancelled"]])
     :properties {:logseq.property/hide-empty-value true
                  :logseq.property/default-value :logseq.task/status.todo}

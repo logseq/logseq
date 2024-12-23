@@ -17,7 +17,7 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]))
 
-(defn- build-page-tx [conn properties page {:keys [whiteboard? class? tags]}]
+(defn- build-page-tx [db properties page {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)
     (let [type-tag (cond class? :logseq.class/Tag
                          whiteboard? :logseq.class/Whiteboard
@@ -27,7 +27,7 @@
                         (fnil into [])
                         (mapv (fn [tag]
                                 (let [v (if (uuid? tag)
-                                          (d/entity @conn [:block/uuid tag])
+                                          (d/entity db [:block/uuid tag])
                                           tag)]
                                   (cond
                                     (de/entity? v)
@@ -48,7 +48,7 @@
                         (when (db-property-util/built-in-has-ref-value? k)
                           [k v])))
                 (into {})))]
-      (cond-> [(if class? (db-class/build-new-class @conn page') page')]
+      (cond-> [(if class? (db-class/build-new-class db page') page')]
         (seq property-vals-tx-m)
         (into (vals property-vals-tx-m))
         true

@@ -355,6 +355,7 @@
                             :class "mr-1 opacity-50 hover:opacity-100"
                             :checked default-value?})
             "Set as default choice")))
+
        (shui/dropdown-menu-item
         {:key "delete"
          :class "del"
@@ -391,16 +392,19 @@
   (let [values (:property/closed-values property)
         choices (doall
                  (keep (fn [value]
-                         (when-let [block (db/sub-block (:db/id value))]
-                           (let [id (:block/uuid block)]
-                             {:id (str id)
-                              :value id
-                              :content (choice-item-content property block)})))
-                       values))]
+                         (db/sub-block (:db/id value)))
+                       values))
+        choice-items (map
+                      (fn [block]
+                        (let [id (:block/uuid block)]
+                          {:id (str id)
+                           :value id
+                           :content (choice-item-content property block)}))
+                      choices)]
     [:div.ls-property-dropdown-editor.ls-property-choices-sub-pane
      (when (seq choices)
        [:ul.choices-list
-        (dnd/items choices
+        (dnd/items choice-items
                    {:sort-by-inner-element? false
                     :on-drag-end (fn [_ {:keys [active-id over-id direction]}]
                                    (let [move-down? (= direction :down)
@@ -451,6 +455,39 @@
                                                   (choice-base-edit-form property {:create? true}))))
                                             {:id :ls-base-edit-form
                                              :align "start"})))}}))]))
+
+(rum/defc checkbox-state-mapping
+  [choices]
+  (let [select-cp (fn [opts]
+                    (shui/select
+                     opts
+                     (shui/select-trigger
+                      (shui/select-value {:placeholder "Select a choice"}))
+                     (shui/select-content
+                      (map (fn [choice]
+                             (shui/select-item {:value (:db/id choice)} (:block/title choice))) choices))))
+        checked-choice (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) choices)
+        unchecked-choice (some (fn [choice] (when (false? (:logseq.property/choice-checkbox-state choice)) choice)) choices)]
+    [:div.flex.flex-col.gap-4.text-sm.p-2
+     [:div.text-muted-foreground "Checkbox state mapping"]
+     [:div.flex.flex-col.gap-2
+      [:div "Map unchecked to"]
+      (select-cp
+       (cond->
+        {:on-value-change
+         (fn [value]
+           (db-property-handler/set-block-property! value :logseq.property/choice-checkbox-state false))}
+         unchecked-choice
+         (assoc :default-value (:db/id unchecked-choice))))
+
+      [:div.mt-2 "Map checked to"]
+      (select-cp
+       (cond->
+        {:on-value-change
+         (fn [value]
+           (db-property-handler/set-block-property! value :logseq.property/choice-checkbox-state true))}
+         checked-choice
+         (assoc :default-value (:db/id checked-choice))))]]))
 
 (def position-labels
   {:properties {:icon :layout-distribute-horizontal :title "Block properties"}
@@ -596,6 +633,15 @@
          (dropdown-editor-menuitem {:icon :list :title "Available choices"
                                     :desc (when (seq values) (str (count values) " choices"))
                                     :submenu-content (fn [] (choices-sub-pane property {:disabled? config/publishing?}))})))
+
+     (when enable-closed-values?
+       (let [values (:property/closed-values property)]
+         (when (>= (count values) 2)
+           (when-not owner-block
+             (dropdown-editor-menuitem {:icon :list :title "Display as checkbox"
+                                        :desc "Configure"
+                                        :submenu-content (fn []
+                                                           (checkbox-state-mapping values))})))))
 
      (when (and (contains? db-property-type/cardinality-property-types property-type) (not disabled?))
        (let [many? (db-property/many? property)]
