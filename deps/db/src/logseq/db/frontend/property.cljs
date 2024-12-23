@@ -390,6 +390,10 @@
    {:title "Reschedule property"
     :schema {:type :property
              :hide? true}}
+   :logseq.task/recur-status-property
+   {:title "Recur status property"
+    :schema {:type :property
+             :hide? true}}
 
 ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 
