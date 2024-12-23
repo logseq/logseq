@@ -386,6 +386,10 @@
     :schema {:type :checkbox
              :hide? true}
     :queryable? true}
+   :logseq.task/reschedule-property
+   {:title "Reschedule property"
+    :schema {:type :property
+             :hide? true}}
 
 ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 

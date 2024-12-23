@@ -534,7 +534,7 @@
    [50 {:properties [:logseq.user/name :logseq.user/email :logseq.user/avatar]}]
    [51 {:classes [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard]}]
    [52 {:fix replace-block-type-with-tags}]
-   [53 {:properties [:logseq.task/scheduled :logseq.task/recur-frequency :logseq.task/recur-unit :logseq.task/repeated?]
+   [53 {:properties [:logseq.task/scheduled :logseq.task/recur-frequency :logseq.task/recur-unit :logseq.task/repeated? :logseq.task/reschedule-property]
         :fix add-scheduled-to-task}]
    [54 {:properties [:logseq.property/choice-checkbox-state :logseq.property/checkbox-display-properties]}]])
 
