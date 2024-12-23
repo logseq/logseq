@@ -535,7 +535,8 @@
    [51 {:classes [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard]}]
    [52 {:fix replace-block-type-with-tags}]
    [53 {:properties [:logseq.task/scheduled :logseq.task/recur-frequency :logseq.task/recur-unit :logseq.task/repeated?]
-        :fix add-scheduled-to-task}]])
+        :fix add-scheduled-to-task}]
+   [54 {:properties [:logseq.property/choice-checkbox-state]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

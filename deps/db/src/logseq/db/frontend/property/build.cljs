@@ -37,7 +37,7 @@
 
 (defn closed-values->blocks
   [property]
-  (map (fn [{uuid' :uuid :keys [db-ident value icon schema]}]
+  (map (fn [{uuid' :uuid :keys [db-ident value icon schema properties]}]
          (cond->
           (build-closed-value-block
            uuid'
@@ -45,6 +45,8 @@
            value
            property
            {:db-ident db-ident :icon icon})
+           (seq properties)
+           (merge properties)
            true
            (assoc :block/order (db-order/gen-key))))
        (:closed-values property)))
