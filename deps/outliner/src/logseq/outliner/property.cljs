@@ -420,6 +420,17 @@
          (common-util/distinct-by :db/id)
          (ldb/sort-by-order))))
 
+(defn ^:api get-block-classes
+  [db eid]
+  (let [block (d/entity db eid)
+        classes (->> (:block/tags block)
+                     (sort-by :block/name)
+                     (filter ldb/class?))
+        class-parents (get-classes-parents classes)]
+    (->> (concat classes class-parents)
+         (filter (fn [class]
+                   (seq (:logseq.property.class/properties class)))))))
+
 (defn ^:api get-block-classes-properties
   [db eid]
   (let [block (d/entity db eid)

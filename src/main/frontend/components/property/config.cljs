@@ -637,11 +637,26 @@
      (when enable-closed-values?
        (let [values (:property/closed-values property)]
          (when (>= (count values) 2)
-           (when-not owner-block
-             (dropdown-editor-menuitem {:icon :list :title "Display as checkbox"
-                                        :desc "Configure"
-                                        :submenu-content (fn []
-                                                           (checkbox-state-mapping values))})))))
+           (if owner-block
+             (let [checked? (contains?
+                             (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
+                             (:db/id property))]
+               (dropdown-editor-menuitem
+                {:icon :checkbox :title "Display as checkbox"
+                 :desc (shui/switch
+                        {:id "display as checkbox" :size "sm"
+                         :checked checked?
+                         :on-click util/stop-propagation
+                         :on-checked-change
+                         (fn [value]
+                           (if value
+                             (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
+                             (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))})}))
+             (dropdown-editor-menuitem
+              {:icon :settings :title "Display as checkbox"
+               :desc "Configure"
+               :submenu-content (fn []
+                                  (checkbox-state-mapping values))})))))
 
      (when (and (contains? db-property-type/cardinality-property-types property-type) (not disabled?))
        (let [many? (db-property/many? property)]
@@ -735,6 +750,7 @@
              (assoc state ::values *values)))}
   [state property* owner-block opts]
   (let [property (db/sub-block (:db/id property*))
+        owner-block (when (:db/id owner-block) (db/sub-block (:db/id owner-block)))
         values (rum/react (::values state))]
     (when-not (= :loading values)
       (dropdown-editor-impl property owner-block values opts))))
