@@ -334,36 +334,39 @@
 (rum/defc datetime-value
   [value]
   (when-let [date (js/Date. value)]
-    [:div.flex.flex-row.gap-1.items-center
-     (when-let [page-cp (state/get-component :block/page-cp)]
-       (let [date' (date/js-date->goog-date date)
-             page-title (date/journal-name date')
-             today (t/today)
-             label (cond
-                     (and (or (t/after? date' today)
-                              (t/equal? date' today))
-                          (t/before? date' (t/plus today (t/days 1))))
-                     "Today"
-                     (and (or (t/equal? date' (t/plus today (t/days 1)))
-                              (t/after? date' (t/plus today (t/days 1))))
-                          (t/before? date' (t/plus today (t/days 2))))
-                     "Tomorrow"
-                     (and (or (t/equal? date' (t/minus today (t/days 1)))
-                              (t/after? date' (t/minus today (t/days 1))))
-                          (t/before? date' today))
-                     "Yesterday"
-                     :else
-                     nil)]
-         (rum/with-key
-           (page-cp {:disable-preview? true
-                     :show-non-exists-page? true
-                     :label label}
-                    {:block/name page-title})
-           page-title)))
-     [:span
-      (str (util/zero-pad (.getHours date))
-           ":"
-           (util/zero-pad (.getMinutes date)))]]))
+    (let [date' (date/js-date->goog-date date)
+          overdue? (t/after? (t/now) date')]
+      [:div.flex.flex-row.gap-1.items-center
+       (cond-> {} overdue? (assoc :class "warning"
+                                  :title "Overdue"))
+       (when-let [page-cp (state/get-component :block/page-cp)]
+         (let [page-title (date/journal-name date')
+               today (t/today)
+               label (cond
+                       (and (or (t/after? date' today)
+                                (t/equal? date' today))
+                            (t/before? date' (t/plus today (t/days 1))))
+                       "Today"
+                       (and (or (t/equal? date' (t/plus today (t/days 1)))
+                                (t/after? date' (t/plus today (t/days 1))))
+                            (t/before? date' (t/plus today (t/days 2))))
+                       "Tomorrow"
+                       (and (or (t/equal? date' (t/minus today (t/days 1)))
+                                (t/after? date' (t/minus today (t/days 1))))
+                            (t/before? date' today))
+                       "Yesterday"
+                       :else
+                       nil)]
+           (rum/with-key
+             (page-cp {:disable-preview? true
+                       :show-non-exists-page? true
+                       :label label}
+                      {:block/name page-title})
+             page-title)))
+       [:span
+        (str (util/zero-pad (.getHours date))
+             ":"
+             (util/zero-pad (.getMinutes date)))]])))
 
 (rum/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
