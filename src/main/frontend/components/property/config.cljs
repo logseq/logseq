@@ -315,24 +315,7 @@
                         (select-keys icon [:id :type :color])))
         icon (:logseq.property/icon block)
         value (db-property/closed-value-content block)]
-
     [:li
-     (let [property-type (get-in property [:block/schema :type])
-           property (db/sub-block (:db/id property))
-           default-type? (contains? #{:default :number} property-type)
-           default-value (when default-type? (:logseq.property/default-value property))
-           default-value? (= (:db/id default-value) (:db/id block))]
-       (when default-type?
-         (shui/checkbox {:size :sm
-                         :title "Set as default choice"
-                         :class "opacity-50 hover:opacity-100"
-                         :checked default-value?
-                         :on-checked-change (fn []
-                                              (let [property-ident :logseq.property/default-value]
-                                                (if default-value?
-                                                  (db-property-handler/remove-block-property! (:db/ident property) property-ident)
-                                                  (db-property-handler/set-block-property! (:db/ident property) property-ident (:db/id block)))))})))
-
      (shui/button {:size :sm :variant :ghost :title "Drag && Drop to reorder"}
                   (shui/tabler-icon "grip-vertical" {:size 14}))
      (icon-component/icon-picker icon {:on-chosen (fn [_e icon] (update-icon! icon))
@@ -346,12 +329,38 @@
                                              {:id :ls-base-edit-form
                                               :align "start"}))}
       value]
-
-     (shui/button
-      {:size :sm :variant :ghost :class "del"
-       :title "Delete this choice"
-       :on-click delete-choice!}
-      (shui/tabler-icon "x" {:size 16}))]))
+     (shui/dropdown-menu
+      (shui/dropdown-menu-trigger
+       {:as-child true}
+       (shui/button
+        {:size :sm :variant :ghost
+         :title "More settings"}
+        (shui/tabler-icon "dots" {:size 16})))
+      (shui/dropdown-menu-content
+       ;; default choice
+       (let [property-type (get-in property [:block/schema :type])
+             property (db/sub-block (:db/id property))
+             default-type? (contains? #{:default :number} property-type)
+             default-value (when default-type? (:logseq.property/default-value property))
+             default-value? (= (:db/id default-value) (:db/id block))]
+         (when default-type?
+           (shui/dropdown-menu-item
+            {:key "default value"
+             :on-click #(let [value (if default-value? nil (:db/id block))]
+                          (db-property-handler/set-block-property! (:db/ident property) :logseq.property/default-value
+                                                                   value))}
+            (shui/checkbox {:id "default value"
+                            :size :sm
+                            :title "Set as default choice"
+                            :class "mr-1 opacity-50 hover:opacity-100"
+                            :checked default-value?})
+            "Set as default choice")))
+       (shui/dropdown-menu-item
+        {:key "delete"
+         :class "del"
+         :on-click delete-choice!}
+        (ui/icon "x" {:class "scale-90 pr-1 opacity-80"})
+        "Delete")))]))
 
 (rum/defc add-existing-values
   [property values {:keys [toggle-fn]}]
