@@ -16,41 +16,80 @@
      {:title "Repeated task"
       :entity-conditions [{:property :logseq.task/repeated?
                            :value true}]
-      :tx-conditions [{:property :logseq.task/status
-                       :value :logseq.task/status.done}]
+      :tx-conditions [{:property :status
+                       :value :done}]
       :actions [[:reschedule]
-                [:set-property :logseq.task/status :logseq.task/status.todo]]}]]))
+                [:set-property :status :todo]]}]]))
+
+(defn- get-property
+  [entity property]
+  (if (= property :status)
+    (or
+     (:db/ident (:logseq.task/recur-status-property entity))
+     :logseq.task/status)
+    property))
+
+(defn- get-value
+  [entity property value]
+  (cond
+    (and (= property :status) (= value :done))
+    (or
+     (let [p (:logseq.task/recur-status-property entity)
+           choices (:property/closed-values p)
+           checkbox? (= :checkbox (get-in p [:block/schema :type]))]
+       (if checkbox?
+         true
+         (some (fn [choice]
+                 (when (:logseq.property/choice-checkbox-state choice)
+                   (:db/id choice))) choices)))
+     :logseq.task/status.done)
+    (and (= property :status) (= value :todo))
+    (or
+     (let [p (:logseq.task/recur-status-property entity)
+           choices (:property/closed-values p)
+           checkbox? (= :checkbox (get-in p [:block/schema :type]))]
+       (if checkbox?
+         false
+         (some (fn [choice]
+                 (when (false? (:logseq.property/choice-checkbox-state choice))
+                   (:db/id choice))) choices)))
+     :logseq.task/status.todo)
+    :else
+    value))
 
 (defn sastify-condition?
   "Whether entity or updated datoms satisfy the `condition`"
   [db entity {:keys [property value]} datoms]
-  (when-let [property-entity (d/entity db property)]
-    (let [value-matches? (fn [datom-value]
-                           (let [ref? (contains? db-property-type/all-ref-property-types (:type (:block/schema property-entity)))
-                                 db-value (cond
-                                            ;; entity-conditions
-                                            (nil? datom-value)
-                                            (get entity property)
-                                            ;; tx-conditions
-                                            ref?
-                                            (d/entity db datom-value)
-                                            :else
-                                            datom-value)]
-                             (cond
-                               (qualified-keyword? value)
-                               (and (map? db-value) (= value (:db/ident db-value)))
+  (let [property' (get-property entity property)
+        value (get-value entity property value)]
+    (when-let [property-entity (d/entity db property')]
+      (let [value-matches? (fn [datom-value]
+                             (let [ref? (contains? db-property-type/all-ref-property-types (:type (:block/schema property-entity)))
+                                   db-value (cond
+                                              ;; entity-conditions
+                                              (nil? datom-value)
+                                              (get entity property')
+                                              ;; tx-conditions
+                                              ref?
+                                              (d/entity db datom-value)
+                                              :else
+                                              datom-value)]
+                               (cond
+                                 (qualified-keyword? value)
+                                 (and (map? db-value) (= value (:db/ident db-value)))
 
-                               ref?
-                               (or
-                                (and (uuid? value) (= (:block/uuid db-value) value))
-                                (= value (db-property/property-value-content db-value)))
+                                 ref?
+                                 (or
+                                  (and (uuid? value) (= (:block/uuid db-value) value))
+                                  (= value (db-property/property-value-content db-value))
+                                  (= value (:db/id db-value)))
 
-                               :else
-                               (= db-value value))))]
-      (if (seq datoms)
-        (some (fn [d] (and (value-matches? (:v d)) (:added d)))
-              (filter (fn [d] (= property (:a d))) datoms))
-        (value-matches? nil)))))
+                                 :else
+                                 (= db-value value))))]
+        (if (seq datoms)
+          (some (fn [d] (and (value-matches? (:v d)) (:added d)))
+                (filter (fn [d] (= property' (:a d))) datoms))
+          (value-matches? nil))))))
 
 (defmulti handle-command (fn [action-id & _others] action-id))
 
@@ -79,7 +118,9 @@
          (:tx-data create-journal-page))))))
 
 (defmethod handle-command :set-property [_ _db entity property value]
-  [[:db/add (:db/id entity) property value]])
+  (let [property' (get-property entity property)
+        value' (get-value entity property value)]
+    [[:db/add (:db/id entity) property' value']]))
 
 (defn execute-command
   "Build tx-data"

@@ -448,6 +448,16 @@
      :all-classes all-classes           ; block own classes + parent classes
      :classes-properties all-properties}))
 
+(defn ^:api get-block-full-properties
+  "Get block's full properties including its own and classes' properties"
+  [db eid]
+  (let [block (d/entity db eid)]
+    (->>
+     (concat
+      (map (fn [ident] (d/entity db ident)) (keys (:block/properties block)))
+      (:classes-properties (get-block-classes-properties db eid)))
+     (common-util/distinct-by :db/id))))
+
 (defn- property-with-position?
   [db property-id block position]
   (let [property (d/entity db property-id)

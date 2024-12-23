@@ -228,43 +228,48 @@
         (property-value block (db/entity :logseq.task/repeated?)
                         (assoc opts
                                :on-checked-change (fn [value]
-                                                    (db-property-handler/set-block-property! (:db/id block)
-                                                                                             :logseq.task/reschedule-property
-                                                                                             (if value (:db/id property) nil)))))]
+                                                    (if value
+                                                      (db-property-handler/set-block-property! (:db/id block)
+                                                                                               :logseq.task/reschedule-property
+                                                                                               (:db/id property))
+                                                      (db-property-handler/remove-block-property! (:db/id block)
+                                                                                                  :logseq.task/reschedule-property)))))]
        [:div "Set as repeated task"]]]
      [:div.flex.flex-row.gap-2
       [:div.flex.text-muted-foreground.mr-4
        "Every"]
 
-    ;; recur frequency
+      ;; recur frequency
       [:div.w-6
        (property-value block (db/entity :logseq.task/recur-frequency) opts)]
 
-    ;; recur unit
+      ;; recur unit
       [:div.w-20
        (property-value block (db/entity :logseq.task/recur-unit) opts)]]
-     [:div.flex.flex-col.gap-2
-      [:div.text-muted-foreground
-       "When"]
-      [:div.flex.flex-col.gap-1
-       [:div.flex.flex-row.gap-2
-     ;; property select
-        "Status"
-
-        [:div.text-muted-foreground
-         "is"]
-
-     ;; value select
-        "Done"]
-
+     (let [properties (->>
+                       (outliner-property/get-block-full-properties (db/get-db) (:db/id block))
+                       (filter (fn [property]
+                                 (and (not (ldb/built-in? property))
+                                      (>= (count (:property/closed-values property)) 2))))
+                       (concat [(db/entity :logseq.task/status)])
+                       (util/distinct-by :db/id))
+           property-id (:db/id (:logseq.task/recur-status-property block))]
        [:div.flex.flex-col.gap-2
-        [:div.flex.flex-row.gap-2
-     ;; property select
-         [:div.text-muted-foreground
-          "Update it to"]
-
-     ;; value select
-         "Todo"]]]]]))
+        [:div.text-muted-foreground
+         "Reschedule on:"]
+        (shui/select
+         (cond->
+          {:on-value-change (fn [v]
+                              (db-property-handler/set-block-property! (:db/id block)
+                                                                       :logseq.task/recur-status-property
+                                                                       v))}
+           property-id
+           (assoc :default-value property-id))
+         (shui/select-trigger
+          (shui/select-value {:placeholder "Select a property"}))
+         (shui/select-content
+          (map (fn [choice]
+                 (shui/select-item {:value (:db/id choice)} (:block/title choice))) properties)))])]))
 
 (rum/defcs calendar-inner < rum/reactive db-mixins/query
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
