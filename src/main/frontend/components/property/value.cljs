@@ -218,14 +218,19 @@
 
 (declare property-value)
 (rum/defc repeat-setting < rum/reactive db-mixins/query
-  [block property value]
+  [block property]
   (let [opts {:exit-edit? false}
         block (db/sub-block (:db/id block))]
     [:div.p-4.flex.flex-col.gap-4.w-64
      [:div.mb-4
       [:div.flex.flex-row.items-center.gap-1
        [:div.w-4
-        (property-value block (db/entity :logseq.task/repeated?) opts)]
+        (property-value block (db/entity :logseq.task/repeated?)
+                        (assoc opts
+                               :on-checked-change (fn [value]
+                                                    (db-property-handler/set-block-property! (:db/id block)
+                                                                                             :logseq.task/reschedule-property
+                                                                                             (if value (:db/id property) nil)))))]
        [:div "Set as repeated task"]]]
      [:div.flex.flex-row.gap-2
       [:div.flex.text-muted-foreground.mr-4
@@ -329,7 +334,7 @@
      (when datetime?
        (shui/separator {:orientation "vertical"}))
      (when datetime?
-       (repeat-setting block property value))]))
+       (repeat-setting block property))]))
 
 (rum/defc overdue
   [date content]
@@ -341,7 +346,7 @@
      [])
     (let [overdue? (when date (t/after? current-time date))]
       [:div
-       (cond-> {} overdue? (assoc :class "warning"
+       (cond-> {} overdue? (assoc :class "overdue"
                                   :title "Overdue"))
        content])))
 
@@ -1095,7 +1100,11 @@
           (property-value-date-picker block property value (merge opts {:editing? editing?}))
 
           :checkbox
-          (let [add-property! (fn [] (<add-property! block (:db/ident property) (boolean (not value)) opts))]
+          (let [add-property! (fn []
+                                (let [value' (boolean (not value))]
+                                  (<add-property! block (:db/ident property) value' opts)
+                                  (when-let [on-checked-change (:on-checked-change opts)]
+                                    (on-checked-change value'))))]
             [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
              (shui/checkbox {:class "jtrigger flex flex-row items-center"
                              :disabled config/publishing?
