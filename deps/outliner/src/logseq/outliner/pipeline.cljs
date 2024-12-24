@@ -146,7 +146,7 @@
 
 (defn get-journal-day-from-long
   [db v]
-  (when-let [date (tc/to-local-date v)]
+  (when-let [date (tc/from-long v)]
     (let [day (js/parseInt
                (str (t/year date)
                     (t/month date)
