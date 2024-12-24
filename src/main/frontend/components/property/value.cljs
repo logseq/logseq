@@ -386,7 +386,7 @@
             (page-cp {:disable-preview? true
                       :show-non-exists-page? true
                       :label (human-date-label date)}
-                     {:block/name page-title})
+                     (db/get-page page-title))
             page-title)))
       (let [date (js/Date. value)]
         [:span
