@@ -110,18 +110,22 @@ returns map of plugins to install and uninstall"
 (defn setup-install-listener!
   "Sets up a listener for the lsp-installed event to update plugins.edn"
   []
-  (let [listener (fn listener [_ e]
+  (let [channel (name :lsp-updates)
+        listener (fn listener [_ e]
                    (when-let [{:keys [status payload only-check]} (bean/->clj e)]
                      (when (and (= status "completed") (not only-check))
                        (let [{:keys [theme effect]} payload]
                          (add-or-update-plugin
-                          (assoc payload
-                                 :version (:installed-version payload)
-                                 :effect (boolean effect)
-                                 ;; Manual installation doesn't have theme field but
-                                 ;; plugin.edn requires this field
-                                 :theme (boolean theme)))))))]
-    (js/window.apis.addListener (name :lsp-updates) listener)))
+                           (assoc payload
+                             :version (:installed-version payload)
+                             :effect (boolean effect)
+                             ;; Manual installation doesn't have theme field but
+                             ;; plugin.edn requires this field
+                             :theme (boolean theme)))))))]
+    (js/window.apis.addListener channel listener)
+    ;;teardown
+    (fn []
+      (js/window.apis.removeListener channel listener))))
 
 (defn start
   "This component has just one responsibility on start, to create a plugins.edn

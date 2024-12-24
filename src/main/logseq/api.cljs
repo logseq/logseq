@@ -354,13 +354,18 @@
 
 (def ^:export load_user_preferences
   (fn []
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            path (util/node-path.join path "preferences.json")
-            _    (fs/create-if-not-exists repo nil path)
-            json (fs/read-file nil path)
-            json (if (string/blank? json) "{}" json)]
-      (js/JSON.parse json))))
+    (if (util/electron?)
+      (p/let [repo ""
+              path (plugin-handler/get-ls-dotdir-root)
+              path (util/node-path.join path "preferences.json")
+              _ (fs/create-if-not-exists repo nil path)
+              json (fs/read-file nil path)
+              json (if (string/blank? json) "{}" json)]
+        (js/JSON.parse json))
+      ;; TODO: for web
+      (do
+        (js/console.warn "==> plugin:" "load user preferences for Web!")
+        #js {}))))
 
 (def ^:export save_user_preferences
   (fn [^js data]

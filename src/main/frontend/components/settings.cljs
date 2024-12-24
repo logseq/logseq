@@ -640,10 +640,12 @@
                      (storage/set ::storage-spec/lsp-core-enabled v))]
     [:div.flex.items-center.gap-2
      (ui/toggle on? on-toggle true)
-     (when (not= (boolean value) on?)
-       (ui/button (t :plugin/restart)
-                  :on-click #(js/logseq.api.relaunch)
-                  :small? true :intent "logseq"))]))
+
+     (when (util/electron?)
+       (when (not= (boolean value) on?)
+         (ui/button (t :plugin/restart)
+           :on-click #(js/logseq.api.relaunch)
+           :small? true :intent "logseq")))]))
 
 (rum/defc http-server-enabled-switcher
   [t]
@@ -1112,7 +1114,7 @@
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
      (when-not db-based? (whiteboards-switcher-row enable-whiteboards?))
-     (when (and (util/electron?) config/feature-plugin-system-on?)
+     (when (and web-platform? config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
      (when (util/electron?)
        (http-server-switcher-row))

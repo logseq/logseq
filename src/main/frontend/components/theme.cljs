@@ -85,11 +85,10 @@
 
     (rum/use-effect!
      #(when config/lsp-enabled?
-        (plugin-handler/setup-install-listener!)
-        (plugin-config-handler/setup-install-listener!)
         (plugin-handler/load-plugin-preferences)
-        (fn []
-          (js/window.apis.removeAllListeners (name :lsp-updates))))
+        (comp
+          (plugin-handler/setup-install-listener!)
+          (plugin-config-handler/setup-install-listener!)))
      [])
 
     (rum/use-effect!

@@ -37,7 +37,7 @@
 (defn invoke-exported-api
   [type & args]
   (try
-    (apply js-invoke (aget js/window.logseq "api") type args)
+    (apply js-invoke (aget js/window.logseq "api") (name type) args)
     (catch :default e (js/console.error e))))
 
 (defn markdown-to-html
@@ -54,9 +54,16 @@
 (defonce stats-url (str central-endpoint "stats.json"))
 (declare select-a-plugin-theme)
 
+(defn setup-global-apis-for-web!
+  []
+  (when (and util/web-platform?
+          (nil? js/window.apis))
+    (let [^js e (js/window.EventEmitter3.)]
+      (set! (. js/window -apis) e))))
+
 (defn load-plugin-preferences
   []
-  (-> (invoke-exported-api "load_user_preferences")
+  (-> (invoke-exported-api :load_user_preferences)
     (p/then #(bean/->clj %))
     (p/then #(state/set-state! :plugin/preferences %))
     (p/catch
@@ -249,8 +256,10 @@
                    ;; reset
                    (js/setTimeout #(state/set-state! :plugin/installing nil) 512)
                    true)]
-
-    (js/window.apis.addListener channel listener)))
+    (js/window.apis.addListener channel listener)
+    ;; teardown
+    (fn []
+      (js/window.apis.removeListener channel listener))))
 
 (defn- normalize-plugin-metadata
   [metadata]
@@ -853,7 +862,9 @@
   [callback]
   (if (not config/lsp-enabled?)
     (callback)
-    (init-plugins! callback)))
+    (do
+      (setup-global-apis-for-web!)
+      (init-plugins! callback))))
 
 (comment
   {:pending (count (:plugin/updates-pending @state/state))
