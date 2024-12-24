@@ -76,7 +76,7 @@
 
     > .thumb {
       @apply w-6 h-6 overflow-hidden flex flex-shrink-0 items-center
-      justify-center rounded opacity-80 dark:opacity-50;
+      -ml-0.5 justify-center rounded opacity-80 dark:opacity-50;
 
       > .ui__icon {
         @apply mr-0;
