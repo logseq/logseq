@@ -501,7 +501,7 @@
      [:div.flex.items-center.l
       (category-tabs t total-nums category #(reset! *category %))
 
-      (when (and develop-mode? (not market?))
+      (when (and develop-mode? (util/electron?) (not market?))
         [:div
          (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
                     :arrow true}
@@ -891,8 +891,11 @@
                                true nil (get coming-updates pid)))
            (:id item)))]
 
-      (when (seq sorted-plugins)
-        (lazy-items-loader load-more-pages!))]]))
+      (if (seq sorted-plugins)
+        (lazy-items-loader load-more-pages!)
+        [:div.flex.items-center.justify-center.py-16.flex-col.gap-2.opacity-30
+         (shui/tabler-icon "list-search" {:size 40})
+         [:span.text-sm "Nothing Founded."]])]]))
 
 (rum/defcs waiting-coming-updates
   < rum/reactive

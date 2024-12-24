@@ -13,6 +13,7 @@
             [frontend.state :as state]
             [medley.core :as medley]
             [frontend.fs :as fs]
+            [frontend.idb :as idb]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -590,38 +591,47 @@
 
 (defn get-ls-dotdir-root
   []
-  (ipc/ipc "getLogseqDotDirRoot"))
+  (if (util/electron?)
+    (ipc/ipc "getLogseqDotDirRoot")
+    "LSPUserDotRoot/"))
 
 (defn make-fn-to-load-dotdir-json
-  [dirname default]
+  [dirname ^js default]
   (fn [key]
     (when-let [key (and key (name key))]
-      (p/let [repo ""
-              path (get-ls-dotdir-root)
-              exist? (fs/file-exists? path dirname)
-              _ (when-not exist? (fs/mkdir! (util/node-path.join path dirname)))
-              path (util/node-path.join path dirname (str key ".json"))
-              _ (fs/create-if-not-exists repo nil path (or default "{}"))
-              json (fs/read-file nil path)]
-        [path (js/JSON.parse json)]))))
+      (let [repo ""
+            path (get-ls-dotdir-root)
+            path (util/node-path.join path dirname (str key ".json"))]
+        (if (util/electron?)
+          (p/let [exist? (fs/file-exists? path dirname)
+                  _ (when-not exist? (fs/mkdir! (util/node-path.join path dirname)))
+                  _ (fs/create-if-not-exists repo nil path (js/JSON.stringify default))
+                  json (fs/read-file nil path)]
+            [path (js/JSON.parse json)])
+          (p/let [data (idb/get-item path)]
+            [path (or data default)]))))))
 
 (defn make-fn-to-save-dotdir-json
   [dirname]
-  (fn [key content]
+  (fn [key ^js data]
     (when-let [key (and key (name key))]
-      (p/let [repo ""
-              path (get-ls-dotdir-root)
-              path (util/node-path.join path dirname (str key ".json"))]
-        (fs/write-file! repo nil path content {:skip-compare? true})))))
+      (let [repo ""
+            path (get-ls-dotdir-root)
+            path (util/node-path.join path dirname (str key ".json"))]
+        (if (util/electron?)
+          (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true})
+          (idb/set-item! path data))))))
 
 (defn make-fn-to-unlink-dotdir-json
   [dirname]
   (fn [key]
     (when-let [key (and key (name key))]
-      (p/let [repo ""
-              path (get-ls-dotdir-root)
-              path (util/node-path.join path dirname (str key ".json"))]
-        (fs/unlink! repo path nil)))))
+      (let [repo ""
+            path (get-ls-dotdir-root)
+            path (util/node-path.join path dirname (str key ".json"))]
+        (if (util/electron?)
+          (fs/unlink! repo path nil)
+          (idb/remove-item! path))))))
 
 (defn show-themes-modal!
   ([] (show-themes-modal! false))
