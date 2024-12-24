@@ -417,7 +417,6 @@
                 :block/title title'})))))
      datoms)))
 
-<<<<<<< HEAD
 (defn- replace-block-type-with-tags
   [conn _search-db]
   (let [db @conn
@@ -445,7 +444,7 @@
      [[:db/add (:db/id journal-entity) :block/tags :logseq.class/Page]]
      tx-data
      [[:db/retractEntity (:db/id block-type-entity)]])))
-=======
+
 (defn- deprecate-logseq-user-ns
   [conn _search-db]
   (let [db @conn]
@@ -464,7 +463,6 @@
                           [:db/retract e :logseq.user/email]
                           [:db/retract e :logseq.user/avatar]])
                  db-ids))))))
->>>>>>> feat/db
 
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
