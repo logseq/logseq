@@ -19,6 +19,7 @@
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.db :as db]
+            [frontend.idb :as idb]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-custom :as query-custom]
@@ -354,35 +355,35 @@
 
 (def ^:export load_user_preferences
   (fn []
-    (if (util/electron?)
-      (p/let [repo ""
-              path (plugin-handler/get-ls-dotdir-root)
-              path (util/node-path.join path "preferences.json")
-              _ (fs/create-if-not-exists repo nil path)
-              json (fs/read-file nil path)
-              json (if (string/blank? json) "{}" json)]
-        (js/JSON.parse json))
-      ;; TODO: for web
-      (do
-        (js/console.warn "==> plugin:" "load user preferences for Web!")
-        #js {}))))
+    (let [repo ""
+          path (plugin-handler/get-ls-dotdir-root)
+          path (util/node-path.join path "preferences.json")]
+      (if (util/electron?)
+        (p/let [_ (fs/create-if-not-exists repo nil path)
+                json (fs/read-file nil path)
+                json (if (string/blank? json) "{}" json)]
+          (js/JSON.parse json))
+        (p/let [json (idb/get-item path)]
+          (or json #js {}))))))
 
 (def ^:export save_user_preferences
   (fn [^js data]
     (when data
-      (p/let [repo ""
-              path (plugin-handler/get-ls-dotdir-root)
-              path (util/node-path.join path "preferences.json")]
-        (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
+      (let [repo ""
+            path (plugin-handler/get-ls-dotdir-root)
+            path (util/node-path.join path "preferences.json")]
+        (if (util/electron?)
+          (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true})
+          (idb/set-item! path data))))))
 
 (def ^:export load_plugin_user_settings
   ;; results [path data]
-  (plugin-handler/make-fn-to-load-dotdir-json "settings" "{}"))
+  (plugin-handler/make-fn-to-load-dotdir-json "settings" #js {}))
 
 (def ^:export save_plugin_user_settings
   (fn [key ^js data]
     ((plugin-handler/make-fn-to-save-dotdir-json "settings")
-     key (js/JSON.stringify data nil 2))))
+     key data)))
 
 (def ^:export unlink_plugin_user_settings
   (plugin-handler/make-fn-to-unlink-dotdir-json "settings"))
