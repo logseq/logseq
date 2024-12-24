@@ -146,7 +146,8 @@
    (do
      (def nfs? (and (not (electron?))
                     (not (mobile-util/native-platform?))))
-     (def web-platform? nfs?)))
+     (def web-platform? nfs?)
+     (def plugin-platform? (or web-platform? (electron?)))))
 
 #?(:cljs
    (defn file-protocol?
