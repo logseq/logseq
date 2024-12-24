@@ -36,8 +36,8 @@
              [(dissoc property :logseq.property/default-value)]
              others
              (when-let [default-value (:logseq.property/default-value property)]
-               (when-let [uuid (:block/uuid property)]
-                 [{:block/uuid uuid
+               (when-let [id (:block/uuid property)]
+                 [{:block/uuid id
                    :logseq.property/default-value default-value}])))
             (remove nil?))))
    (dissoc built-in-properties :logseq.property/built-in?)))

@@ -256,7 +256,7 @@
            property-id (:db/id (:logseq.task/recur-status-property block))]
        [:div.flex.flex-col.gap-2
         [:div.text-muted-foreground
-         "Reschedule on:"]
+         "Scheduled on:"]
         (shui/select
          (cond->
           {:on-value-change (fn [v]
@@ -349,7 +349,7 @@
        (let [timer (js/setInterval (fn [] (set-current-time! (t/now))) (* 1000 60 3))]
          #(js/clearInterval timer)))
      [])
-    (let [overdue? (when date (t/after? current-time date))]
+    (let [overdue? (when date (t/after? current-time (t/plus date (t/seconds 59))))]
       [:div
        (cond-> {} overdue? (assoc :class "overdue"
                                   :title "Overdue"))
