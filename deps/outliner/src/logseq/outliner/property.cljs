@@ -38,7 +38,7 @@
            multiple-values-empty? (and (sequential? old-value)
                                        (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
            block' (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
-                        property-id value)
+                         property-id value)
            block-tx-data (cond-> block'
                            (and status? (not (ldb/class-instance? (d/entity @conn :logseq.class/Task) block)))
                            (assoc :block/tags :logseq.class/Task))]
@@ -160,6 +160,8 @@
             db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
+        (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
+        (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
         (ldb/transact! conn
                        [(sqlite-util/build-new-property db-ident' schema {:title k-name})]
                        {:outliner-op :new-property})
@@ -281,10 +283,16 @@
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (d/entity @conn block-eid)
         db-attribute? (some? (db-schema/schema-for-db-based-graph property-id))]
-    (if db-attribute?
+    (when (= property-id :block/tags)
+      (outliner-validate/validate-tags-property @conn [block-eid] v))
+    (when (= property-id :logseq.property/parent)
+      (outliner-validate/validate-parent-property v [block]))
+    (cond
+      db-attribute?
       (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
         (ldb/transact! conn [{:db/id (:db/id block) property-id v}]
                        {:outliner-op :save-block}))
+      :else
       (let [property (d/entity @conn property-id)
             _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
             property-type (get-in property [:block/schema :type] :default)
@@ -302,6 +310,8 @@
   (assert property-id "property-id is nil")
   (throw-error-if-read-only-property property-id)
   (let [block-eids (map ->eid block-ids)
+        _ (when (= property-id :block/tags)
+            (outliner-validate/validate-tags-property @conn block-eids v))
         property (d/entity @conn property-id)
         _ (when (= (:db/ident property) :logseq.property/parent)
             (outliner-validate/validate-parent-property
@@ -553,7 +563,6 @@
           (when (seq values)
             (let [value-property-tx (map (fn [id]
                                            {:db/id id
-                                            :block/type "closed value"
                                             :block/closed-value-property (:db/id property)})
                                          (map :db/id values))
                   property-tx (outliner-core/block-with-updated-at {:db/id (:db/id property)})]

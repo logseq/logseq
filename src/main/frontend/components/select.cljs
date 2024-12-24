@@ -29,7 +29,8 @@
               (when multiple-choices?
                 (ui/checkbox {:checked (boolean (selected-choices (:value result)))
                               :on-click (fn [e]
-                                          (.preventDefault e))}))
+                                          (.preventDefault e))
+                              :disabled (:disabled? result)}))
               value]
              (when (and (map? result) (:id result))
                [:div.tip.flex
@@ -67,7 +68,7 @@
    :will-unmount (fn [state]
                    (shui/dialog-close! :ls-select-modal)
                    state)}
-  [state {:keys [items limit on-chosen empty-placeholder
+  [state {:keys [items limit on-chosen empty-placeholder grouped?
                  prompt-key input-default-placeholder close-modal?
                  extract-fn extract-chosen-fn host-opts on-input input-opts
                  item-cp transform-fn tap-*input-val
@@ -138,7 +139,8 @@
                            [:div.item-results-wrap
                             (ui/auto-complete
                              search-result
-                             {:item-render       (or item-cp (fn [result chosen?]
+                             {:grouped? grouped?
+                              :item-render       (or item-cp (fn [result chosen?]
                                                                (render-item result chosen? multiple-choices? *selected-choices)))
                               :class             "cp__select-results"
                               :on-chosen         (fn [raw-chosen e]

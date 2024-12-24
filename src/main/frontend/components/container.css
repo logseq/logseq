@@ -446,7 +446,7 @@
   flex: 1;
 
   .page {
-    @apply px-6;
+    @apply px-4;
   }
 }
 

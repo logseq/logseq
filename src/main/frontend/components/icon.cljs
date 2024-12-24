@@ -61,7 +61,9 @@
 (defn get-node-icon-cp
   [node-entity opts]
   (let [opts' (merge {:size 14} opts)
-        node-icon (get-node-icon node-entity)]
+        node-icon (if (:own-icon? opts)
+                    (get node-entity (pu/get-pid :logseq.property/icon))
+                    (get-node-icon node-entity))]
     (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "page"} node-icon) (:not-text-or-page? opts)))
       [:div.icon-cp-container.flex.items-center
        (merge {:style {:color (or (:color node-icon) "inherit")}}

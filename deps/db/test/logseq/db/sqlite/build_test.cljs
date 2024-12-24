@@ -12,14 +12,14 @@
            [{:page {:block/title "page1"}
              :blocks [{:block/title "Jrue Holiday" :build/tags [:Person]}]}
             {:page {:block/title "Jayson Tatum" :build/tags [:Person]}}])]
-    (is (= {:block/tags [{:block/title "Person", :block/type "class"}]}
-           (first (d/q '[:find [(pull ?b [{:block/tags [:block/title :block/type]}]) ...]
+    (is (= {:block/tags [{:block/title "Person"}]}
+           (first (d/q '[:find [(pull ?b [{:block/tags [:block/title]}]) ...]
                          :where [?b :block/title "Jrue Holiday"]]
                        @conn)))
         "Person class is created and correctly associated to a block")
 
-    (is (= {:block/tags [{:block/title "Person", :block/type "class"}]}
-           (first (d/q '[:find [(pull ?b [{:block/tags [:block/title :block/type]}]) ...]
+    (is (= {:block/tags [{:block/title "Page"} {:block/title "Person"}]}
+           (first (d/q '[:find [(pull ?b [{:block/tags [:block/title]}]) ...]
                          :where [?b :block/title "Jayson Tatum"]]
                        @conn)))
         "Person class is created and correctly associated to a page")))

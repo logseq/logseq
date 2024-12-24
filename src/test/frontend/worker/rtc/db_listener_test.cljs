@@ -9,15 +9,13 @@
             [frontend.worker.rtc.db-listener :as subject]
             [frontend.worker.rtc.fixture :as r.fixture]
             [frontend.worker.state :as worker-state]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.outliner.batch-tx :as batch-tx]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.outliner.core :as outliner-core]
+            [logseq.db.test.helper :as db-test]))
 
 (t/use-fixtures :each
   test-helper/db-based-start-and-destroy-db-map-fixture
   r.fixture/listen-test-db-to-gen-rtc-ops-fixture)
-
-(def empty-db (d/empty-db db-schema/schema-for-db-based-graph))
 
 (defn- tx-data=>e->a->add?->v->t
   [tx-data]
@@ -27,11 +25,11 @@
 
 (deftest entity-datoms=>ops-test
   (testing "remove whiteboard page-block"
-    (let [conn (d/conn-from-db empty-db)
+    (let [conn (db-test/create-conn)
           block-uuid (random-uuid)
           _create-whiteboard-page-block
           (d/transact! conn [{:block/uuid block-uuid
-                              :block/type "whiteboard"
+                              :block/tags :logseq.class/Whiteboard
                               :block/name "block-name"
                               :block/title "BLOCK-NAME"}])
           remove-whiteboard-page-block
@@ -44,20 +42,20 @@
              (map (fn [[op-type _t op-value]] [op-type op-value]) r)))))
 
   (testing "update-schema op"
-    (let [conn (d/conn-from-db empty-db)
-          tx-data [[:db/add 69 :db/index true]
-                   [:db/add 69 :block/uuid #uuid "66558abf-6512-469d-9e83-8f1ba0be9305"]
-                   [:db/add 69 :db/valueType :db.type/ref]
-                   [:db/add 69 :block/updated-at 1716882111476]
-                   [:db/add 69 :block/created-at 1716882111476]
-                   [:db/add 69 :block/schema {:type :number}]
-                   [:db/add 69 :block/format :markdown]
-                   [:db/add 69 :db/cardinality :db.cardinality/one]
-                   [:db/add 69 :db/ident :user.property/qqq]
-                   [:db/add 69 :block/type "property"]
-                   [:db/add 69 :block/order "b0T"]
-                   [:db/add 69 :block/name "qqq"]
-                   [:db/add 69 :block/title "qqq"]]
+    (let [conn (db-test/create-conn)
+          tx-data [[:db/add 1000000 :db/index true]
+                   [:db/add 1000000 :block/uuid #uuid "66558abf-6512-469d-9e83-8f1ba0be9305"]
+                   [:db/add 1000000 :db/valueType :db.type/ref]
+                   [:db/add 1000000 :block/updated-at 1716882111476]
+                   [:db/add 1000000 :block/created-at 1716882111476]
+                   [:db/add 1000000 :block/schema {:type :number}]
+                   [:db/add 1000000 :block/format :markdown]
+                   [:db/add 1000000 :db/cardinality :db.cardinality/one]
+                   [:db/add 1000000 :db/ident :user.property/qqq]
+                   [:db/add 1000000 :block/tags :logseq.class/Property]
+                   [:db/add 1000000 :block/order "b0T"]
+                   [:db/add 1000000 :block/name "qqq"]
+                   [:db/add 1000000 :block/title "qqq"]]
           {:keys [db-before db-after tx-data]} (d/transact! conn tx-data)
           ops (#'subject/entity-datoms=>ops db-before db-after
                                             (tx-data=>e->a->add?->v->t tx-data)
@@ -72,10 +70,11 @@
                        [:block/updated-at "[\"~#'\",1716882111476]"]
                        [:block/created-at "[\"~#'\",1716882111476]"]
                        [:block/schema "[\"^ \",\"~:type\",\"~:number\"]"]
+                       [:block/tags #uuid "00000002-1038-7670-4800-000000000000"]
                        [:block/title "[\"~#'\",\"qqq\"]"]
                        [:db/cardinality "[\"~#'\",\"~:db.cardinality/one\"]"]
                        ;; [:db/ident "[\"~#'\",\"~:user.property/qqq\"]"]
-                       [:block/type "[\"~#'\",\"property\"]"]]}]]
+                       ]}]]
            (map (fn [[op-type _t op-value]]
                   [op-type (cond-> op-value
                              (:av-coll op-value)
@@ -83,16 +82,16 @@
                 ops)))))
 
   (testing "create user-class"
-    (let [conn (d/conn-from-db empty-db)
-          tx-data [[:db/add 62 :block/uuid #uuid "66856a29-6eb3-4122-af97-8580a853c6a6" 536870954]
-                   [:db/add 62 :block/updated-at 1720019497643 536870954]
-                   [:db/add 62 :logseq.property/parent 4 536870954]
-                   [:db/add 62 :block/created-at 1720019497643 536870954]
-                   [:db/add 62 :block/format :markdown 536870954]
-                   [:db/add 62 :db/ident :user.class/zzz 536870954]
-                   [:db/add 62 :block/type "class" 536870954]
-                   [:db/add 62 :block/name "zzz" 536870954]
-                   [:db/add 62 :block/title "zzz" 536870954]]
+    (let [conn (db-test/create-conn)
+          tx-data [[:db/add 1000000 :block/uuid #uuid "66856a29-6eb3-4122-af97-8580a853c6a6" 536870954]
+                   [:db/add 1000000 :block/updated-at 1720019497643 536870954]
+                   [:db/add 1000000 :logseq.property/parent :logseq.class/Root 536870954]
+                   [:db/add 1000000 :block/created-at 1720019497643 536870954]
+                   [:db/add 1000000 :block/format :markdown 536870954]
+                   [:db/add 1000000 :db/ident :user.class/zzz 536870954]
+                   [:db/add 1000000 :block/tags :logseq.class/Tag 536870954]
+                   [:db/add 1000000 :block/name "zzz" 536870954]
+                   [:db/add 1000000 :block/title "zzz" 536870954]]
           {:keys [db-before db-after tx-data]} (d/transact! conn tx-data)
           ops (#'subject/entity-datoms=>ops db-before db-after
                                             (tx-data=>e->a->add?->v->t tx-data)
@@ -103,9 +102,9 @@
                       :av-coll
                       [[:block/updated-at "[\"~#'\",1720019497643]"]
                        [:block/created-at "[\"~#'\",1720019497643]"]
+                       [:block/tags #uuid "00000002-5389-0208-3000-000000000000"]
                        [:block/title "[\"~#'\",\"zzz\"]"]
-                       [:block/type "[\"~#'\",\"class\"]"]
-                       [:logseq.property/parent "[\"~#'\",4]"]
+                       [:logseq.property/parent #uuid "00000002-2737-8382-7000-000000000000"]
                        ;;1. shouldn't have :db/ident, :db/ident is special, will be handled later
                        ]}]]
            (map (fn [[op-type _t op-value]]
