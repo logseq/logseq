@@ -278,14 +278,6 @@ li p:last-child,
   @apply border-r;
 }
 
-i.ti {
-  /*
-  compensates the wrong top spacing in the iconfont.
-  See https://github.com/tabler/tabler-icons/issues/118/
-  */
-  transform: translateY(-1px);
-}
-
 .dnd-separator {
   border-bottom: 3px solid #ccc;
 }

@@ -417,6 +417,7 @@
                 :block/title title'})))))
      datoms)))
 
+<<<<<<< HEAD
 (defn- replace-block-type-with-tags
   [conn _search-db]
   (let [db @conn
@@ -444,6 +445,26 @@
      [[:db/add (:db/id journal-entity) :block/tags :logseq.class/Page]]
      tx-data
      [[:db/retractEntity (:db/id block-type-entity)]])))
+=======
+(defn- deprecate-logseq-user-ns
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [db-ids (d/q '[:find [?b ...]
+                          :where
+                          (or [?b :logseq.user/name]
+                              [?b :logseq.user/email]
+                              [?b :logseq.user/avatar])]
+                        db)]
+        (into
+         [[:db/retractEntity :logseq.user/name]
+          [:db/retractEntity :logseq.user/email]
+          [:db/retractEntity :logseq.user/avatar]]
+         (mapcat (fn [e] [[:db/retract e :logseq.user/name]
+                          [:db/retract e :logseq.user/email]
+                          [:db/retract e :logseq.user/avatar]])
+                 db-ids))))))
+>>>>>>> feat/db
 
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
@@ -523,7 +544,8 @@
    [47 {:fix replace-hidden-type-with-schema}]
    [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]
    [49 {:fix replace-special-id-ref-with-id-ref}]
-   [50 {:properties [:logseq.user/name :logseq.user/email :logseq.user/avatar]}]
+   [50 {:properties [:logseq.property.user/name :logseq.property.user/email :logseq.property.user/avatar]
+        :fix deprecate-logseq-user-ns}]
    [51 {:classes [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Whiteboard]}]
    [52 {:fix replace-block-type-with-tags}]])
 
