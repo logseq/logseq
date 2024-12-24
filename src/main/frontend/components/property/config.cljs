@@ -637,24 +637,21 @@
      (when enable-closed-values?
        (let [values (:property/closed-values property)]
          (when (>= (count values) 2)
-           (if owner-block
-             (let [checked? (contains?
-                             (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
-                             (:db/id property))]
-               (dropdown-editor-menuitem
-                {:icon :checkbox :title "Display as checkbox"
-                 :desc (shui/switch
-                        {:id "display as checkbox" :size "sm"
+           (let [checked? (contains?
+                           (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
+                           (:db/id property))]
+             (dropdown-editor-menuitem
+              {:icon :checkbox :title "Show as checkbox"
+               :desc (when owner-block
+                       (shui/switch
+                        {:id "show as checkbox" :size "sm"
                          :checked checked?
                          :on-click util/stop-propagation
                          :on-checked-change
                          (fn [value]
                            (if value
                              (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
-                             (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))})}))
-             (dropdown-editor-menuitem
-              {:icon :settings :title "Display as checkbox"
-               :desc "Configure"
+                             (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))
                :submenu-content (fn []
                                   (checkbox-state-mapping values))})))))
 
