@@ -425,7 +425,6 @@
                           (<create! title {:redirect? false
                                            :split-namespace? false
                                            :create-first-block? (not template)
-                                           :journal? true
                                            :today-journal? true})
                           (state/pub-event! [:journal/insert-template today-page])
                           (ui-handler/re-render-root!)

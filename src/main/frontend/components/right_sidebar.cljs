@@ -97,8 +97,8 @@
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])
           page (db/entity repo lookup)]
       (if (ldb/page? page)
-        [[:.flex.items-center.page-title
-          (icon/get-node-icon-cp page {:class "text-md mr-2"})
+        [[:.flex.items-center.page-title.gap-1
+          (icon/get-node-icon-cp page {:class "text-md"})
           [:span.overflow-hidden.text-ellipsis (:block/title page)]]
          (page-cp repo (str (:block/uuid page)))]
         (block-with-breadcrumb repo page idx [repo db-id block-type] false)))

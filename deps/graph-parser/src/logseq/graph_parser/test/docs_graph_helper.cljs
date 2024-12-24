@@ -23,7 +23,6 @@
     (sh ["git" "clone" "--depth" "1" "-b" branch "-c" "advice.detachedHead=false"
          "https://github.com/logseq/docs" dir] {})))
 
-
 ;; Fns for common test assertions
 ;; ==============================
 (defn get-top-block-properties
@@ -62,7 +61,7 @@
 (defn- get-journal-page-count [db]
   (->> (d/q '[:find (count ?b)
               :where
-              [?b :block/type "journal"]
+              [?b :block/journal-day]
               [?b :block/name]
               [?b :block/file]]
             db)

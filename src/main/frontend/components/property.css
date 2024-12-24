@@ -29,9 +29,7 @@
   margin-left: 0;
 }
 
-.ls-block .property-pair,
-.property-block .property-value,
-.block-property-value {
+.ls-block .property-pair, .ls-sidebar-page-properties .property-pair, .property-block .property-value, .block-property-value {
   margin-left: 7px;
 }
 

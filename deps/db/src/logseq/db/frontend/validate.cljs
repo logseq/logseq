@@ -19,32 +19,11 @@
   [closed-schema?]
   (if closed-schema? closed-db-schema-explainer db-schema-explainer))
 
-(defn validate-ents-before-after!
-  [changed-ids db-before db-after tx-data tx-meta]
-  (let [id->ent-before (into {}
-                             (keep (fn [id] (when-let [ent (d/entity db-before id)] [id ent])))
-                             changed-ids)
-        id->ent-after (keep (fn [id] (when-let [ent (d/entity db-after id)] [id ent])) changed-ids)
-        ent-before+ent-after-coll
-        (reduce
-         (fn [acc [id ent-after]]
-           (if-let [ent-before (id->ent-before id)]
-             (conj acc [ent-before ent-after])
-             acc))
-         [] id->ent-after)]
-    (doseq [[ent-before ent-after] ent-before+ent-after-coll]
-      (let [[type-before type-after] [(:block/type ent-before) (:block/type ent-after)]]
-        (when (and (some? type-before)
-                   (nil? type-after))
-          (js/console.error "Illegal :block/type change, entity id:" (:db/id ent-after))
-          (prn :ent-before ent-before :ent-after ent-after :tx-data tx-data :tx-meta tx-meta))))))
-
 (defn validate-tx-report!
   "Validates the datascript tx-report for entities that have changed. Returns
   boolean indicating if db is valid"
-  [{:keys [db-before db-after tx-data tx-meta]} validate-options]
+  [{:keys [db-after tx-data tx-meta]} validate-options]
   (let [changed-ids (->> tx-data (keep :e) distinct)
-        _ (validate-ents-before-after! changed-ids db-before db-after tx-data tx-meta)
         tx-datoms (mapcat #(d/datoms db-after :eavt %) changed-ids)
         ent-maps* (map (fn [[db-id m]]
                          ;; Add :db/id for debugging
@@ -62,13 +41,8 @@
           (let [explainer (get-schema-explainer (:closed-schema? validate-options))]
             (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
             (doseq [m invalid-ent-maps]
-
               (prn {:entity-map m
-                    :errors (me/humanize (explainer [m]))})
-          ;; FIXME: pprint fails sometime
-          ;; (pprint/pprint {;; :entity-map (map #(into {} %) m)
-          ;;                 :errors (me/humanize (m/explain db-schema [m]))})
-              )
+                    :errors (me/humanize (explainer [m]))}))
             false)
           true)))))
 
@@ -88,7 +62,7 @@
                            (:block/page ent)
                            (update :block/page
                                    (fn [id] (select-keys (d/entity db id)
-                                                         [:block/name :block/type :db/id :block/created-at])))))
+                                                         [:block/name :block/tags :db/id :block/created-at])))))
                :errors errors'
                ;; Group by type to reduce verbosity
                ;; TODO: Move/remove this to another fn if unused

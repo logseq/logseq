@@ -4,7 +4,6 @@
             [electron.ipc :as ipc]
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
-            [frontend.components.title :as title]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -18,6 +17,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.block :as block-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -235,7 +235,7 @@
                "whiteboard"
                :else
                "page")
-        title (title/block-unique-title page)
+        title (block-handler/block-unique-title page)
         title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
     (hash-map :icon icon
               :icon-theme :gray
@@ -245,7 +245,7 @@
 (defn- block-item
   [repo block current-page !input]
   (let [id (:block/uuid block)
-        text (title/block-unique-title block)
+        text (block-handler/block-unique-title block)
         icon "letter-n"]
     {:icon icon
      :icon-theme :gray

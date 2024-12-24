@@ -330,3 +330,7 @@ input[type='range'] {
     @apply opacity-60 cursor-pointer select-none active:opacity-50;
   }
 }
+
+.ls-foldable-title-control {
+  margin-left: -27px;
+}

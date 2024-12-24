@@ -307,8 +307,8 @@
         db-based? (config/db-based-graph? current-repo)
         repos (sort-repos-with-metadata-local repos)
         repos (distinct
-                (if (and (or (seq remotes) (seq rtc-graphs)) login?)
-                  (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))
+               (if (and (or (seq remotes) (seq rtc-graphs)) login?)
+                 (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))
         items-fn #(repos-dropdown-links repos current-repo downloading-graph-id opts)
         header-fn #(when (> (count repos) 1)                ; show switch to if there are multiple repos
                      [:div.font-medium.text-sm.opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
@@ -318,14 +318,14 @@
                         (if remotes-loading?
                           (ui/loading "")
                           (shui/button
-                            {:variant :ghost
-                             :size :sm
-                             :title "Refresh remote graphs"
-                             :class "!h-6 !px-1 relative right-[-4px]"
-                             :on-click (fn []
-                                         (file-sync/load-session-graphs)
-                                         (rtc-handler/<get-remote-graphs))}
-                            (ui/icon "refresh" {:size 15}))))])
+                           {:variant :ghost
+                            :size :sm
+                            :title "Refresh remote graphs"
+                            :class "!h-6 !px-1 relative right-[-4px]"
+                            :on-click (fn []
+                                        (file-sync/load-session-graphs)
+                                        (rtc-handler/<get-remote-graphs))}
+                           (ui/icon "refresh" {:size 15}))))])
         _remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
         _repo-name (when current-repo (db/get-repo-name current-repo))]
 
@@ -339,23 +339,23 @@
           (if hr
             (shui/dropdown-menu-separator)
             (shui/dropdown-menu-item
-              (assoc options
-                :title hover-detail
-                :on-click (fn [^js e]
-                            (when on-click'
-                              (when-not (false? (on-click' e))
-                                (shui/popup-hide! contentid)))))
-              (or item
-                (if href'
-                  [:a.flex.items-center.w-full
-                   {:href href' :on-click #(shui/popup-hide! contentid)
-                    :style {:color "inherit"}} title]
-                  [:span.flex.items-center.gap-1.w-full
-                   icon [:div title]]))))))]
+             (assoc options
+                    :title hover-detail
+                    :on-click (fn [^js e]
+                                (when on-click'
+                                  (when-not (false? (on-click' e))
+                                    (shui/popup-hide! contentid)))))
+             (or item
+                 (if href'
+                   [:a.flex.items-center.w-full
+                    {:href href' :on-click #(shui/popup-hide! contentid)
+                     :style {:color "inherit"}} title]
+                   [:span.flex.items-center.gap-1.w-full
+                    icon [:div title]]))))))]
      (repos-footer multiple-windows? db-based?)]))
 
 (rum/defcs repos-dropdown < rum/reactive
-                            (rum/local false ::electron-multiple-windows?)
+  (rum/local false ::electron-multiple-windows?)
   [state & {:as opts}]
   (let [current-repo (state/sub :git/current-repo)
         login? (boolean (state/sub :auth/id-token))]
@@ -365,38 +365,38 @@
           db-based? (config/db-based-graph? current-repo)
           repos (sort-repos-with-metadata-local repos)
           repos (distinct
-                  (if (and (or (seq remotes) (seq rtc-graphs)) login?)
-                    (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))]
+                 (if (and (or (seq remotes) (seq rtc-graphs)) login?)
+                   (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))]
       (let [remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
             repo-name (when current-repo (db/get-repo-name current-repo))
             short-repo-name (if current-repo
                               (db/get-short-repo-name repo-name)
                               "Select a Graph")]
         (shui/trigger-as :a
-          {:tab-index 0
-           :class "item cp__repos-select-trigger"
-           :on-pointer-down
-           (fn [^js e]
-             (check-multiple-windows? state)
-             (some-> (.-target e)
-               (.closest "a.item")
-               (shui/popup-show!
-                 (fn [{:keys [id]}] (repos-dropdown-content (assoc opts :contentid id)))
-                 {:as-dropdown? true
-                  :auto-focus? false
-                  :align "start"
-                  :content-props {:class "repos-list"
-                                  :data-mode (when db-based? "db")}})))
-           :title repo-name}      ;; show full path on hover
-          [:div.flex.relative.graph-icon.rounded
-           (shui/tabler-icon "database" {:size 15})]
+                         {:tab-index 0
+                          :class "item cp__repos-select-trigger"
+                          :on-pointer-down
+                          (fn [^js e]
+                            (check-multiple-windows? state)
+                            (some-> (.-target e)
+                                    (.closest "a.item")
+                                    (shui/popup-show!
+                                     (fn [{:keys [id]}] (repos-dropdown-content (assoc opts :contentid id)))
+                                     {:as-dropdown? true
+                                      :auto-focus? false
+                                      :align "start"
+                                      :content-props {:class "repos-list"
+                                                      :data-mode (when db-based? "db")}})))
+                          :title repo-name}      ;; show full path on hover
+                         [:div.flex.relative.graph-icon.rounded
+                          (shui/tabler-icon "database" {:size 15})]
 
-          [:div.repo-switch.pr-2.whitespace-nowrap
-           [:span.repo-name.font-medium
-            [:span.repo-text.overflow-hidden.text-ellipsis
-             (if (config/demo-graph? short-repo-name) "Demo" short-repo-name)]
-            (when remote? [:span.pl-1 (ui/icon "cloud")])]
-           [:span.dropdown-caret]])))))
+                         [:div.repo-switch.pr-2.whitespace-nowrap
+                          [:span.repo-name.font-medium
+                           [:span.repo-text.overflow-hidden.text-ellipsis
+                            (if (config/demo-graph? short-repo-name) "Demo" short-repo-name)]
+                           (when remote? [:span.pl-1 (ui/icon "cloud")])]
+                          [:span.dropdown-caret]])))))
 
 (rum/defcs graphs-selector < rum/reactive
   [_state]
@@ -413,10 +413,10 @@
      [:a.item.flex.items-center.gap-1.select-none
       {:on-click (fn [^js e]
                    (shui/popup-show! (.closest (.-target e) "a")
-                     (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
-                     {:as-dropdown? true
-                      :content-props {:class "repos-list"}
-                      :align :start}))}
+                                     (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
+                                     {:as-dropdown? true
+                                      :content-props {:class "repos-list"}
+                                      :align :start}))}
       [:span.thumb (shui/tabler-icon (if remote? "cloud" (if db-based? "database" "folder")) {:size 16})]
       [:strong short-repo-name]
       (shui/tabler-icon "selector" {:size 18})]]))

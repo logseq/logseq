@@ -4,8 +4,10 @@
             [frontend.db :as db]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
-            [logseq.outliner.property :as outliner-property]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db :as ldb]
+            [logseq.db.test.helper :as db-test]
+            [frontend.db.conn :as conn]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -27,7 +29,9 @@
         _ (test-helper/create-page! "class2" opts)]
     (is (= (set
             (concat
-             (map :title (vals db-class/built-in-classes))
+             (map :title (vals (remove (fn [[ident _]]
+                                         (contains? ldb/private-tags ident))
+                                       db-class/built-in-classes)))
              ["class1" "class2"]))
            (set (map :block/title (model/get-all-classes repo)))))))
 
@@ -51,19 +55,16 @@
               (:db/id (db/entity [:block/uuid sbid]))])))))
 
 (deftest get-classes-with-property-test
-  (let [opts {:redirect? false :create-first-block? false :class? true}
-        _ (test-helper/create-page! "class1" opts)
-        _ (test-helper/create-page! "class2" opts)
-        class1 (db/get-case-page "class1")
-        class2 (db/get-case-page "class2")
-        conn (db/get-db false)]
-    (outliner-property/upsert-property! conn :user.property/property-1 {:type :node} {})
-    (outliner-property/class-add-property! conn (:db/id class1) :user.property/property-1)
-    (outliner-property/class-add-property! conn (:db/id class2) :user.property/property-1)
-    (let [property (db/entity :user.property/property-1)
-          classes (model/get-classes-with-property (:db/ident property))]
-      (is (= (set (map :db/id classes))
-             #{(:db/id class1) (:db/id class2)})))))
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:prop1 {:block/schema {:type :default}}}
+               :classes
+               {:Class1 {:build/schema-properties [:prop1]}
+                :Class2 {:build/schema-properties [:prop1]}}})
+        property (d/entity @conn :user.property/prop1)
+        classes (with-redefs [conn/get-db (constantly @conn)]
+                  (model/get-classes-with-property (:db/ident property)))]
+    (is (= ["Class1" "Class2"]
+           (map :block/title classes)))))
 
 (deftest hidden-page-test
   (let [opts {:redirect? false :create-first-block? false}

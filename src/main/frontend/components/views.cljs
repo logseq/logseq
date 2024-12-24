@@ -80,11 +80,11 @@
      {:variant "text"
       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
       :on-click #(column-toggle-sorting! column)}
-      (let [title (str (:name column))]
-        [:span {:title title
-                :class "max-w-full overflow-hidden text-ellipsis"}
-         title])
-      (case asc?
+     (let [title (str (:name column))]
+       [:span {:title title
+               :class "max-w-full overflow-hidden text-ellipsis"}
+        title])
+     (case asc?
        true
        (ui/icon "arrow-up")
        false
@@ -529,7 +529,6 @@
 (defn- get-property-values
   [rows property]
   (let [property-ident (:db/ident property)
-        block-type? (= property-ident :block/type)
         values (->> (mapcat (fn [e] (let [e' (db/entity (:db/id e))
                                           v (get e' property-ident)]
                                       (if (set? v) v #{v}))) rows)
@@ -537,9 +536,8 @@
                     (distinct))]
     (->>
      (map (fn [e]
-            (let [label (get-property-value-content e)
-                  label' (if (and block-type? (= label "class")) "tag" label)]
-              {:label (str label') :value e}))
+            (let [label (get-property-value-content e)]
+              {:label (str label) :value e}))
           values)
      (sort-by :label))))
 
@@ -607,7 +605,7 @@
                                  (do
                                    (shui/popup-hide!)
                                    (let [property internal-property
-                                         new-filter [(:db/ident property) (if (= (:db/ident property) :block/type) :is :text-contains)]
+                                         new-filter [(:db/ident property) :text-contains]
                                          filters' (if (seq filters)
                                                     (conj filters new-filter)
                                                     [new-filter])]
@@ -685,15 +683,14 @@
     [:before :after]
     (concat
      [:is :is-not]
-     (when-not (= :block/type (:db/ident property))
-       (case (get-in property [:block/schema :type])
-         (:default :url :node)
-         [:text-contains :text-not-contains]
-         (:date)
-         [:date-before :date-after]
-         :number
-         [:number-gt :number-lt :number-gte :number-lte :between]
-         nil)))))
+     (case (get-in property [:block/schema :type])
+       (:default :url :node)
+       [:text-contains :text-not-contains]
+       (:date)
+       [:date-before :date-after]
+       :number
+       [:number-gt :number-lt :number-gte :number-lte :between]
+       nil))))
 
 (defn- get-filter-with-changed-operator
   [_property operator value]
@@ -821,16 +818,11 @@
        {:class "!px-2 rounded-none border-r"
         :variant "ghost"
         :size :sm}
-       (let [block-type? (= (:db/ident property) :block/type)
-             value (cond
+       (let [value (cond
                      (uuid? value)
                      (db/entity [:block/uuid value])
                      (and (coll? value) (every? uuid? value))
                      (set (map #(db/entity [:block/uuid %]) value))
-                     (and block-type? (coll? value))
-                     (map (fn [v] (if (= v "class") "tag" v)) value)
-                     (and block-type? (= value "class"))
-                     "tag"
                      :else
                      value)]
          [:div.flex.flex-row.items-center.gap-1.text-xs
@@ -1012,15 +1004,15 @@
 (rum/defc new-record-button < rum/static
   [table view-entity]
   (let [asset? (and (:logseq.property/built-in? view-entity)
-                 (= (:block/name view-entity) "asset"))]
+                    (= (:block/name view-entity) "asset"))]
     (ui/tooltip
-      (shui/button
-        {:variant "ghost"
-         :class "!px-1 text-muted-foreground"
-         :size :sm
-         :on-click (get-in table [:data-fns :add-new-object!])}
-        (ui/icon (if asset? "upload" "plus")))
-      [:div "New record"])))
+     (shui/button
+      {:variant "ghost"
+       :class "!px-1 text-muted-foreground"
+       :size :sm
+       :on-click (get-in table [:data-fns :add-new-object!])}
+      (ui/icon (if asset? "upload" "plus")))
+     [:div "New record"])))
 
 (rum/defc add-new-row < rum/static
   [table]
@@ -1084,8 +1076,8 @@
         *rows-wrap (rum/use-ref nil)]
 
     (rum/use-effect!
-      (fn [] (set-ready? true))
-      [])
+     (fn [] (set-ready? true))
+     [])
 
     (shui/table
      (let [columns' (:columns table)
@@ -1097,17 +1089,17 @@
            (table-header table columns' option selected-rows)
 
            (ui/virtualized-list
-             {:ref #(reset! *scroller-ref %)
-              :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
-                                      (gdom/getElement "main-content-container"))
-              :increase-viewport-by {:top 300 :bottom 300}
-              :compute-item-key (fn [idx]
-                                  (let [block (nth rows idx)]
-                                    (str "table-row-" (:db/id block))))
-              :total-count (count rows)
-              :item-content (fn [idx]
-                              (let [row (nth rows idx)]
-                                (table-row table row columns' {} option)))})
+            {:ref #(reset! *scroller-ref %)
+             :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
+                                       (gdom/getElement "main-content-container"))
+             :increase-viewport-by {:top 300 :bottom 300}
+             :compute-item-key (fn [idx]
+                                 (let [block (nth rows idx)]
+                                   (str "table-row-" (:db/id block))))
+             :total-count (count rows)
+             :item-content (fn [idx]
+                             (let [row (nth rows idx)]
+                               (table-row table row columns' {} option)))})
 
            (when add-new-object!
              (shui/table-footer (add-new-row table)))])]))))
@@ -1245,39 +1237,42 @@
 
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
-     [:div.flex.flex-wrap.items-center.justify-between.gap-1
-      (when-not render-empty-title?
-        [:div.flex.flex-row.items-center.gap-2
-         (or
-          views-title
-          [:div.font-medium.opacity-50.text-sm
-           (t (or title-key :views.table/default-title)
-              (count (:rows table)))])])
-      [:div.view-actions.flex.items-center.gap-1
+     (ui/foldable
+      [:div.flex.flex-1.flex-wrap.items-center.justify-between.gap-1
+       (when-not render-empty-title?
+         [:div.flex.flex-row.items-center.gap-2
+          (or
+           views-title
+           [:div.font-medium.opacity-50.text-sm
+            (t (or title-key :views.table/default-title)
+               (count (:rows table)))])])
+       [:div.view-actions.flex.items-center.gap-1
 
-       (filter-properties columns table)
+        (filter-properties columns table)
 
-       (search input {:on-change set-input!
-                      :set-input! set-input!})
+        (search input {:on-change set-input!
+                       :set-input! set-input!})
 
-       [:div.text-muted-foreground.text-sm
-        (pv/property-value view-entity (db/entity :logseq.property.view/type)
-                           (db/entity display-type) {})]
+        [:div.text-muted-foreground.text-sm
+         (pv/property-value view-entity (db/entity :logseq.property.view/type)
+                            (db/entity display-type) {})]
 
-       (more-actions columns table)
+        (more-actions columns table)
 
-       (when add-new-object! (new-record-button table view-entity))]]
+        (when add-new-object! (new-record-button table view-entity))]]
+      (fn []
+        [:div.ls-view-body.flex.flex-col.gap-2.grid
+         (filters-row table)
 
-     (filters-row table)
+         (case display-type
+           :logseq.property.view/type.list
+           (list-view (:config option) view-entity (:rows table))
 
-     (case display-type
-       :logseq.property.view/type.list
-       (list-view (:config option) view-entity (:rows table))
+           :logseq.property.view/type.gallery
+           (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
 
-       :logseq.property.view/type.gallery
-       (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
-
-       (table-view table option row-selection add-new-object! *scroller-ref))]))
+           (table-view table option row-selection add-new-object! *scroller-ref))])
+      {:title-trigger? false})]))
 
 (rum/defcs view
   "Provides a view for data like query results and tagged objects, multiple

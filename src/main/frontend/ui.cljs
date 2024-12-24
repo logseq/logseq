@@ -511,42 +511,53 @@
            empty-placeholder
            item-render
            class
-           header]}]
+           header
+           grouped?]}]
   (let [*current-idx (get state ::current-idx)
-        *groups (atom #{})]
+        *groups (atom #{})
+        render-f (fn [matched]
+                   (for [[idx item] (medley/indexed matched)]
+                     (let [react-key (str idx)
+                           item-cp
+                           [:div.menu-link-wrap
+                            {:key react-key
+                   ;; mouse-move event to indicate that cursor moved by user
+                             :on-mouse-move  #(reset! *current-idx idx)}
+                            (let [chosen? (= @*current-idx idx)]
+                              (menu-link
+                               {:id (str "ac-" react-key)
+                                :tab-index "0"
+                                :class (when chosen? "chosen")
+                       ;; TODO: should have more tests on touch devices
+                       ;:on-pointer-down #(util/stop %)
+                                :on-click (fn [e]
+                                            (util/stop e)
+                                            (when-not (:disabled? item)
+                                              (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                                (on-shift-chosen item)
+                                                (on-chosen item e))))}
+                               (if item-render (item-render item chosen?) item)))]]
+
+                       (let [group-name (and (fn? get-group-name) (get-group-name item))]
+                         (if (and group-name (not (contains? @*groups group-name)))
+                           (do
+                             (swap! *groups conj group-name)
+                             [:div
+                              [:div.ui__ac-group-name group-name]
+                              item-cp])
+                           item-cp)))))]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
         (when header header)
-        (for [[idx item] (medley/indexed matched)]
-          (let [react-key (str idx)
-                item-cp
-                [:div.menu-link-wrap
-                 {:key react-key
-                   ;; mouse-move event to indicate that cursor moved by user
-                  :on-mouse-move  #(reset! *current-idx idx)}
-                 (let [chosen? (= @*current-idx idx)]
-                   (menu-link
-                    {:id (str "ac-" react-key)
-                     :tab-index "0"
-                     :class (when chosen? "chosen")
-                       ;; TODO: should have more tests on touch devices
-                       ;:on-pointer-down #(util/stop %)
-                     :on-click (fn [e]
-                                 (util/stop e)
-                                 (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                   (on-shift-chosen item)
-                                   (on-chosen item e)))}
-                    (if item-render (item-render item chosen?) item)))]]
-
-            (let [group-name (and (fn? get-group-name) (get-group-name item))]
-              (if (and group-name (not (contains? @*groups group-name)))
-                (do
-                  (swap! *groups conj group-name)
-                  [:div
-                   [:div.ui__ac-group-name group-name]
-                   item-cp])
-                item-cp))))]
+        (if grouped?
+          (for [[group matched] (group-by :group matched)]
+            (if group
+              [:div
+               [:div.ui__ac-group-name group]
+               (render-f matched)]
+              (render-f matched)))
+          (render-f matched))]
        (when empty-placeholder
          empty-placeholder))]))
 
@@ -593,28 +604,27 @@
   (rum/local false ::control?)
   [state {:keys [on-pointer-down header title-trigger? collapsed?]}]
   (let [control? (get state ::control?)]
-    [:div.content
+    [:div.ls-foldable-title.content
      [:div.flex-1.flex-row.foldable-title (cond->
                                            {:on-mouse-over #(reset! control? true)
                                             :on-mouse-out  #(reset! control? false)}
                                             title-trigger?
                                             (assoc :on-pointer-down on-pointer-down
                                                    :class "cursor"))
-      [:div.flex.flex-row.items-center.ls-foldable-header
+      [:div.flex.flex-row.items-center.ls-foldable-header.gap-1
        {:on-click (fn [^js e]
                     (let [^js target (.-target e)]
                       (when (some-> target (.closest ".as-toggle"))
                         (reset! collapsed? (not @collapsed?)))))}
        (when-not (mobile-util/native-platform?)
-         [:a.block-control.opacity-50.hover:opacity-100.mr-2
-          (cond->
-           {:style    {:width       14
-                       :height      16
-                       :margin-left -30}}
-            (not title-trigger?)
-            (assoc :on-pointer-down on-pointer-down))
-          [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
-           (rotating-arrow @collapsed?)]])
+         (let [style {:width 14 :height 16}]
+           [:a.ls-foldable-title-control.block-control.opacity-50.hover:opacity-100
+            (cond->
+             {:style style}
+              (not title-trigger?)
+              (assoc :on-pointer-down on-pointer-down))
+            [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
+             (rotating-arrow @collapsed?)]]))
        (if (fn? header)
          (header @collapsed?)
          header)]]]))

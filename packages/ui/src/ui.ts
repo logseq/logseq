@@ -91,6 +91,7 @@ import { Toggle } from '@/components/ui/toggle'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import * as uniqolor from 'uniqolor'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 declare global {
   var LSUI: any
@@ -185,6 +186,7 @@ const shadui = {
   TooltipContent, TooltipProvider, TooltipPortal,
   Toggle, ToggleGroup, ToggleGroupItem,
   Avatar, AvatarImage, AvatarFallback,
+  Tabs, TabsContent, TabsList, TabsTrigger
 }
 
 function setupGlobals() {
