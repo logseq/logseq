@@ -106,6 +106,7 @@
                               "/page-name-sanity-lc"]))
         ;; For now use the whole code line. If this is too brittle can make this smaller
         allowed-exceptions #{"{:block/name page-title})))"
+                             "{:block/name page-title})"
                              "(when-not (db/get-page journal)"
                              "(let [value (if datetime? (tc/to-long d) (db/get-page journal))]"}
         res (apply shell {:out :string :continue true}
