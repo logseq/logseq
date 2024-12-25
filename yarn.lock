@@ -15,6 +15,16 @@
     "@jridgewell/gen-mapping" "^0.3.0"
     "@jridgewell/trace-mapping" "^0.3.9"
 
+"@aparajita/capacitor-dark-mode@^4.0.1":
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/@aparajita/capacitor-dark-mode/-/capacitor-dark-mode-4.0.1.tgz#b4350ec280ba1c61eb3220b7147c88eb1f1325a2"
+  integrity sha512-6FLL3tVHjejGlSvBOZGL5Igh9X3rQTU/goRXAEPG8Rxs6BSy4bmKq9yiRn3YKAKUVRh1H4TYqTOK66WdvbNZvg==
+  dependencies:
+    "@capacitor/android" "^5.5.0"
+    "@capacitor/core" "^5.5.0"
+    "@capacitor/ios" "^5.5.0"
+    "@capacitor/status-bar" "^5.0.6"
+
 "@axe-core/playwright@=4.4.4":
   version "4.4.4"
   resolved "https://registry.yarnpkg.com/@axe-core/playwright/-/playwright-4.4.4.tgz#3786c5f6bba38d1991b608584b00ae2744544573"
@@ -250,6 +260,11 @@
   resolved "https://registry.yarnpkg.com/@capacitor/android/-/android-5.4.1.tgz#5b0445202ca5e48fcb79d0c88e4403acc32504bc"
   integrity sha512-25k/GyIly/8xKQo0EO6eIvJStpVWsBPyYh9Eiv+Or9DCz9iuVlGZY3vui+zjFhfHQ5f9Uwywa8B+thOGWU8f6g==
 
+"@capacitor/android@^5.5.0":
+  version "5.7.8"
+  resolved "https://registry.yarnpkg.com/@capacitor/android/-/android-5.7.8.tgz#9c18fec3ea6ebba5b34fa48cc7a01dc6aa46e312"
+  integrity sha512-ooWclwcuW0dy3YfqgoozkHkjatX8H2fb2/RwRsJa3cew1P1lUXIXri3Dquuy4LdqFAJA7UHcJ19Bl/6UKdsZYA==
+
 "@capacitor/app@^5.0.0":
   version "5.0.6"
   resolved "https://registry.yarnpkg.com/@capacitor/app/-/app-5.0.6.tgz#2ee02551115fd2e92dc7e81bc30a6c6fa78efa66"
@@ -295,6 +310,13 @@
   dependencies:
     tslib "^2.1.0"
 
+"@capacitor/core@^5.5.0":
+  version "5.7.8"
+  resolved "https://registry.yarnpkg.com/@capacitor/core/-/core-5.7.8.tgz#584d5ac2754501ef1443ab4bf182d8f5be16f65e"
+  integrity sha512-rrZcm/2vJM0WdWRQup1TUidbjQV9PfIadSkV4rAGLD7R6PuzZSMPGT0gmoZzCRlXkqrazrWWDkurei3ozU02FA==
+  dependencies:
+    tslib "^2.1.0"
+
 "@capacitor/filesystem@^5.0.0":
   version "5.1.4"
   resolved "https://registry.yarnpkg.com/@capacitor/filesystem/-/filesystem-5.1.4.tgz#6e3278f4c47c72416d586367889736b576113ef5"
@@ -309,6 +331,11 @@
   version "5.4.1"
   resolved "https://registry.yarnpkg.com/@capacitor/ios/-/ios-5.4.1.tgz#79c1620ac7b57dc1ea85653ad1e5a32e8ec7dbea"
   integrity sha512-s5djQEX1HFM6u4gQlWz7DUWG7ma0d3AwwnjbSbCh25aYEt40Dbei0TjzlKrfU6b3nUbyVVAZJBJgMuk7Bq59qA==
+
+"@capacitor/ios@^5.5.0":
+  version "5.7.8"
+  resolved "https://registry.yarnpkg.com/@capacitor/ios/-/ios-5.7.8.tgz#cbed9afa58bc49e8edcf4dfbef130903ad686e39"
+  integrity sha512-XhGrziBnlRmCJ97LdPXOJquHPpYTwSJZIxYSXuPl7SDDuAEve8vs2wY76gLdaaFH2Z6ctdugUX+jR6VNu+ds+w==
 
 "@capacitor/keyboard@^5.0.0":
   version "5.0.6"
@@ -329,6 +356,11 @@
   version "5.0.6"
   resolved "https://registry.yarnpkg.com/@capacitor/status-bar/-/status-bar-5.0.6.tgz#281568a7f7aeacf80777702cb9947c29dc32685c"
   integrity sha512-7od8CxsBnot1XMK3IeOkproFL4hgoKoWAc3pwUvmDOkQsXoxwQm4SR9mLwQavv1XfxtHbFV9Ukd7FwMxOPSViw==
+
+"@capacitor/status-bar@^5.0.6":
+  version "5.0.8"
+  resolved "https://registry.yarnpkg.com/@capacitor/status-bar/-/status-bar-5.0.8.tgz#f00e21a99f79b06c36d61ad35ba78675fdefda54"
+  integrity sha512-ES/4ik3/6SV6RVXVVoMm5i7zanwZ+CBtNX6glhBHDHS0nR2m3Dmdxuk/BaFEZWT5bDn4xzg0LlnMsS8mlbUf+A==
 
 "@capawesome/capacitor-background-task@^5.0.0":
   version "5.0.0"
