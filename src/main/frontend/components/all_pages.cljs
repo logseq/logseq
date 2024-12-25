@@ -54,7 +54,8 @@
         [data set-data!] (rum/use-state nil)
         [loading? set-loading!] (rum/use-state true)
         columns' (views/build-columns {} (columns)
-                                      {:with-object-name? false})
+                                      {:with-object-name? false
+                                       :with-id? false})
         view-entity (first (ldb/get-all-pages-views db))]
     (rum/use-effect!
      (fn []
