@@ -693,8 +693,9 @@
      (fn [state error _info]
        (log/error :exception error)
        (notification/show!
-        (str "Error caught by UI!\n " error)
-        :error)
+        [:div.flex.flex-col.gap-2
+         [:div (str "Error caught by UI!\n " error)]
+         (str (.-stack error))] `:error)
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]
   (if (some? error)

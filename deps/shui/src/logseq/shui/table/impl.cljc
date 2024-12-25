@@ -8,13 +8,12 @@
 
 (defn column-visible?
   [column visible-columns]
-  (not (false? (get visible-columns (column-id column)))))
+  (let [value (get visible-columns (column-id column))]
+    (not (false? value))))
 
 (defn visible-columns
   [columns visible-columns']
-  (if (seq visible-columns')
-    (filter #(column-visible? % visible-columns') columns)
-    columns))
+  (filter #(column-visible? % visible-columns') columns))
 
 (defn sort-rows
   "Support multiple sorts"
