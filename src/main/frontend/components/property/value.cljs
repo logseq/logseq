@@ -253,7 +253,8 @@
                                       (>= (count (:property/closed-values property)) 2))))
                        (concat [(db/entity :logseq.task/status)])
                        (util/distinct-by :db/id))
-           property-id (:db/id (:logseq.task/recur-status-property block))]
+           property-id (or (:db/id (:logseq.task/recur-status-property block))
+                           (:db/id (db/entity :logseq.task/status)))]
        [:div.flex.flex-col.gap-2
         [:div.text-muted-foreground
          "Scheduled on:"]
