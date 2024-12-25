@@ -57,8 +57,9 @@
   ([repo-or-conn tx-data]
    (transact! repo-or-conn tx-data nil))
   ([repo-or-conn tx-data tx-meta]
-   (when (and (exists? js/goog)
-              (aget js/goog "DEBUG"))
+   (when (or goog.DEBUG
+             ;; test
+             (exists? js/process))
      (assert-no-entities tx-data))
    (let [tx-data (map (fn [m]
                         (if (map? m)
