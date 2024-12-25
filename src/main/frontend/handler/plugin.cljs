@@ -220,9 +220,12 @@
                                ;; register plugin
                                (-> (js/LSPluginCore.register (bean/->js {:key id :url dst :webPkg web-pkg}))
                                  (p/then (fn []
-                                           (when theme (js/setTimeout #(select-a-plugin-theme id) 300))
-                                           (notification/show!
-                                             (t :plugin/installed-plugin name) :success)))
+                                           (when-let [^js pl (get-plugin-inst id)]
+                                             (when theme (js/setTimeout #(select-a-plugin-theme id) 300))
+                                             (when (.-isWebPlugin pl)
+                                               (invoke-exported-api :save_installed_web_plugin (.toJSON pl false)))
+                                             (notification/show!
+                                               (t :plugin/installed-plugin name) :success))))
                                  (p/catch (fn [^js e]
                                             (notification/show!
                                               (str "Install failed: " name "\n" (.-message e))
@@ -658,12 +661,17 @@
 
 (defn- get-user-default-plugins
   []
-  (p/catch
-   (p/let [files ^js (ipc/ipc "getUserDefaultPlugins")
-           files (js->clj files)]
-     (map #(hash-map :url %) files))
-   (fn [e]
-     (js/console.error e))))
+  (-> (if (util/electron?)
+        (ipc/ipc "getUserDefaultPlugins")
+        (invoke-exported-api :load_installed_web_plugins))
+      (p/then #(bean/->clj %))
+      (p/then (fn [plugins]
+                (if (util/electron?)
+                  (map #(hash-map :url %) plugins)
+                  (some->> (vals plugins)
+                           (filter #(:url %))))))
+      (p/catch (fn [e]
+                 (js/console.error "[get-user-default-plugins:error]" e)))))
 
 (defn set-auto-checking!
   [v]
@@ -787,14 +795,14 @@
 
               _ (doto js/LSPluginCore
                   (.on "registered"
-                    (fn [^js pl]
-                      (register-plugin
-                        (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
+                       (fn [^js pl]
+                         (register-plugin
+                           (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
 
                   (.on "reloaded"
-                    (fn [^js pl]
-                      (register-plugin
-                        (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
+                       (fn [^js pl]
+                         (register-plugin
+                           (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
 
                   (.on "unregistered" (fn [pid]
                                         (let [pid (keyword pid)]
@@ -820,7 +828,7 @@
 
                   (.on "themes-changed" (fn [^js themes]
                                           (swap! state/state assoc :plugin/installed-themes
-                                            (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
+                                                 (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
 
                   (.on "theme-selected" (fn [^js theme]
                                           (let [theme (bean/->clj theme)
@@ -837,31 +845,31 @@
                                                     custom-theme (dissoc themes :mode)
                                                     mode (:mode themes)]
                                                 (state/set-custom-theme! {:light (if (nil? (:light custom-theme)) {:mode "light"} (:light custom-theme))
-                                                                          :dark (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
+                                                                          :dark  (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
                                                 (state/set-theme-mode! mode))))
 
                   (.on "settings-changed" (fn [id ^js settings]
                                             (let [id (keyword id)]
                                               (when (and settings
-                                                      (contains? (:plugin/installed-plugins @state/state) id))
+                                                         (contains? (:plugin/installed-plugins @state/state) id))
                                                 (update-plugin-settings-state id (bean/->clj settings))))))
 
                   (.on "ready" (fn [^js perf-table]
                                  (when-let [plugins (and perf-table (.entries perf-table))]
                                    (->> plugins
-                                     (keep
-                                       (fn [[_k ^js v]]
-                                         (when-let [end (and (some-> v (.-o) (.-disabled) (not))
-                                                          (.-e v))]
-                                           (when (and (number? end)
-                                                   ;; valid end time
-                                                   (> end 0)
-                                                   ;; greater than 6s
-                                                   (> (- end (.-s v)) 6000))
-                                             v))))
-                                     ((fn [perfs]
-                                        (doseq [perf perfs]
-                                          (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)])))))))))
+                                        (keep
+                                          (fn [[_k ^js v]]
+                                            (when-let [end (and (some-> v (.-o) (.-disabled) (not))
+                                                                (.-e v))]
+                                              (when (and (number? end)
+                                                         ;; valid end time
+                                                         (> end 0)
+                                                         ;; greater than 6s
+                                                         (> (- end (.-s v)) 6000))
+                                                v))))
+                                        ((fn [perfs]
+                                           (doseq [perf perfs]
+                                             (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)])))))))))
 
               default-plugins (get-user-default-plugins)
 
@@ -883,6 +891,7 @@
   (if (not config/lsp-enabled?)
     (callback)
     (do
+      (idb/start)
       (setup-global-apis-for-web!)
       (init-plugins! callback))))
 

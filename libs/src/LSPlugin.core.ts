@@ -593,7 +593,8 @@ class PluginLocal extends EventEmitter<
     if (this.isInstalledInDotRoot) {
       this._id = path.basename(localRoot)
     } else {
-      if (logseq.id) {
+      // development mode
+      if (!this.isWebPlugin && logseq.id) {
         this._id = logseq.id
       } else {
         logseq.id = this.id
@@ -985,7 +986,7 @@ class PluginLocal extends EventEmitter<
   }
 
   get isWebPlugin() {
-    return !!this.options.webPkg
+    return this._ctx.isWebPlatform || !!this.options.webPkg
   }
 
   get layoutCore(): any {
@@ -1092,14 +1093,19 @@ class PluginLocal extends EventEmitter<
     this._sdk = value
   }
 
-  toJSON() {
+  toJSON(settings = true) {
     const json = { ...this.options } as any
     json.id = this.id
     json.err = this.loadErr
     json.usf = this.dotSettingsFile
     json.iir = this.isInstalledInDotRoot
     json.lsr = this._resolveResourceFullUrl('/')
-    json.settings = json.settings?.toJSON()
+
+    if (settings) {
+      json.settings = json.settings?.toJSON()
+    } else {
+      delete json.settings
+    }
 
     return json
   }
@@ -1336,7 +1342,7 @@ class LSPluginCore
         this.emit('registered', pluginLocal)
 
         // external plugins
-        if (!pluginLocal.isInstalledInDotRoot) {
+        if (!pluginLocal.isWebPlugin && !pluginLocal.isInstalledInDotRoot) {
           externals.add(url)
         }
       }

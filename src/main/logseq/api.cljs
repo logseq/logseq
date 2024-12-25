@@ -218,7 +218,6 @@
 (def ^:export save_plugin_config
   (fn [path ^js data]
     (let [repo ""
-
           path (util/node-path.join path "package.json")]
       (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
 
@@ -387,6 +386,20 @@
   (fn [key ^js data]
     ((plugin-handler/make-fn-to-save-dotdir-json "settings")
      key data)))
+
+(defn ^:export load_installed_web_plugins
+ []
+ (let [getter (plugin-handler/make-fn-to-load-dotdir-json "installed-plugins-for-web" #js {})]
+        (some-> (getter :all) (p/then second))))
+
+(defn ^:export save_installed_web_plugin
+ [^js plugin]
+ (when-let [id (some-> plugin (.-key))]
+  (let [setter (plugin-handler/make-fn-to-save-dotdir-json "installed-plugins-for-web")
+        plugin (js/JSON.parse (js/JSON.stringify plugin))]
+   (p/let [^js plugins (or (load_installed_web_plugins) #js {})]
+          (gobj/set plugins id plugin)
+          (setter :all plugins)))))
 
 (def ^:export unlink_plugin_user_settings
   (plugin-handler/make-fn-to-unlink-dotdir-json "settings"))
