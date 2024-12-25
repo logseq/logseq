@@ -38,7 +38,3 @@ html[data-theme=light] {
     @apply opacity-100;
   }
 }
-
-.sidebar-panel-content {
-  @apply pt-3;
-}

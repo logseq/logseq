@@ -6,8 +6,7 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.outliner.tree :as otree]
             [cljs-bean.core :as bean]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [clojure.string :as string]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- safe-keywordize
   [block]
@@ -64,23 +63,17 @@
                          (:keys result)))))
            (group-by first)
            (mapcat (fn [[_id col]]
-                     (let [type (some (fn [[_e a v _t]]
-                                        (when (= a :block/type)
-                                          v)) col)
-                           ident (some (fn [[_e a v _t]]
+                     (let [ident (some (fn [[_e a v _t]]
                                          (when (= a :db/ident)
-                                           v)) col)]
+                                           v)) col)
+                           journal (some (fn [[_e a v _t]]
+                                           (when (= a :block/journal-day)
+                                             v)) col)]
                        (map
                         (fn [[e a v t]]
                           (cond
                             (and (contains? #{:block/title :block/name} a)
-                                 (or
-                                  ;; normal page or block
-                                  (not (contains? #{"class" "property" "journal" "closed value"} type))
-                                  ;; class/property created by user
-                                  (and ident
-                                       (contains? #{"class" "property"} type)
-                                       (not (string/starts-with? (namespace ident) "logseq")))))
+                                 (not (or ident journal)))
                             [e a (str "debug " e) t]
 
                             (= a :block/uuid)

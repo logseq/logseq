@@ -15,7 +15,6 @@
             [frontend.components.block :as block]
             [dommy.core :as d]
             [frontend.components.content :as cp-content]
-            [frontend.components.title :as title]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t tt]]
             [frontend.db :as db]
@@ -32,6 +31,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.recent :as recent-handler]
+            [frontend.handler.block :as block-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -139,7 +139,7 @@
                                                              :class "w-60"}})
                           (util/stop e))}
        (ldb/object? page)
-       (assoc :title (title/block-unique-title page)))
+       (assoc :title (block-handler/block-unique-title page)))
      [:span.page-icon icon]
      [:span.page-title {:class (when untitled? "opacity-50")
                         :style {:display "ruby"}}
@@ -214,7 +214,7 @@
                db-based?
                (concat [:tag/tasks :tag/assets])
                (not db-based?)
-               (#(cons :whiteboards %)) )
+               (#(cons :whiteboards %)))
         [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:whiteboards :flashcards :graph-view :all-pages]))]
 
@@ -362,7 +362,7 @@
       (for [page pages]
         [:li.recent-item.select-none.font-medium
          {:key (str "recent-" (:db/id page))
-          :title (title/block-unique-title page)
+          :title (block-handler/block-unique-title page)
           :draggable true
           :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
           :data-ref name}

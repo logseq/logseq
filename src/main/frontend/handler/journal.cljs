@@ -15,7 +15,7 @@
   (when (and page (state/enable-journals? (state/get-current-repo)))
     (p/do!
      (db-async/<get-block (state/get-current-repo) page :children? false)
-     (if (db-model/page-exists? page "journal")
+     (if (db-model/page-exists? page #{:logseq.class/Journal})
        (route-handler/redirect! {:to          :page
                                  :path-params {:name page}})
        (page-handler/<create! page)))))

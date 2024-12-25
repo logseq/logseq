@@ -154,53 +154,45 @@
 
     (if loading?
       (ui/skeleton)
-      [:div.flex.flex-col.gap-2.mt-2
-
-       (ui/foldable
-        [:div.font-medium.opacity-60.as-toggle
-         "Tagged Nodes"]
-         (fn []
-           [:div.mt-2
-            (views/view view-entity {:config config
-                                     :data data
-                                     :set-data! set-data!
-                                     :views-title (class-views class views view-entity {:set-view-entity! set-view-entity!
-                                                                                        :set-views! set-views!})
-                                     :columns columns
-                                     :add-new-object! (if (= :logseq.class/Asset (:db/ident class))
-                                                        (fn [_e]
-                                                          (shui/dialog-open!
-                                                            (fn []
-                                                              [:div.flex.flex-col.gap-2
-                                                               [:div.font-medium "Add assets"]
-                                                               (filepicker/picker
-                                                                 {:on-change (fn [_e files]
-                                                                               (p/do!
-                                                                                 (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)
-                                                                                 (set-data! (get-class-objects class))
-                                                                                 (shui/dialog-close!)))})])))
-                                                        #(add-new-class-object! class set-data!))
-                                     :show-add-property? true
-                                     :add-property! (fn []
-                                                      (state/pub-event! [:editor/new-property {:block class
-                                                                                               :class-schema? true}]))
-                                     :on-delete-rows (fn [table selected-rows]
-                                                       (let [pages (filter ldb/page? selected-rows)
-                                                             blocks (remove ldb/page? selected-rows)]
-                                                         (p/do!
-                                                           (ui-outliner-tx/transact!
-                                                             {:outliner-op :delete-blocks}
-                                                             (when (seq blocks)
-                                                               (outliner-op/delete-blocks! blocks nil))
-                                                             (let [page-ids (map :db/id pages)
-                                                                   tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id class)]) page-ids)]
-                                                               (when (seq tx-data)
-                                                                 (outliner-op/transact! tx-data {:outliner-op :save-block}))))
-                                                           (set-data! (get-class-objects class))
-                                                           (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                                             (f {})))))})])
-         {:disable-on-pointer-down? true
-         :default-collapsed? (:sidebar? config)})])))
+      (views/view view-entity
+                  {:config config
+                   :data data
+                   :set-data! set-data!
+                   :views-title (class-views class views view-entity {:set-view-entity! set-view-entity!
+                                                                      :set-views! set-views!})
+                   :columns columns
+                   :add-new-object! (if (= :logseq.class/Asset (:db/ident class))
+                                      (fn [_e]
+                                        (shui/dialog-open!
+                                         (fn []
+                                           [:div.flex.flex-col.gap-2
+                                            [:div.font-medium "Add assets"]
+                                            (filepicker/picker
+                                             {:on-change (fn [_e files]
+                                                           (p/do!
+                                                            (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)
+                                                            (set-data! (get-class-objects class))
+                                                            (shui/dialog-close!)))})])))
+                                      #(add-new-class-object! class set-data!))
+                   :show-add-property? true
+                   :add-property! (fn []
+                                    (state/pub-event! [:editor/new-property {:block class
+                                                                             :class-schema? true}]))
+                   :on-delete-rows (fn [table selected-rows]
+                                     (let [pages (filter ldb/page? selected-rows)
+                                           blocks (remove ldb/page? selected-rows)]
+                                       (p/do!
+                                        (ui-outliner-tx/transact!
+                                         {:outliner-op :delete-blocks}
+                                         (when (seq blocks)
+                                           (outliner-op/delete-blocks! blocks nil))
+                                         (let [page-ids (map :db/id pages)
+                                               tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id class)]) page-ids)]
+                                           (when (seq tx-data)
+                                             (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+                                        (set-data! (get-class-objects class))
+                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                          (f {})))))}))))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class {:keys [current-page? sidebar?]}]
@@ -251,35 +243,32 @@
      [])
 
     (when (false? loading?)
-      (ui/foldable
-       [:div.font-medium.opacity-50 "Nodes with Property"]
-       [:div.mt-2
-        (views/view view-entity {:config config
-                                 :data data
-                                 :set-data! set-data!
-                                 :title-key :views.table/property-nodes
-                                 :columns columns
-                                 :add-new-object! #(add-new-property-object! property set-data!)
+      (views/view view-entity
+                  {:config config
+                   :data data
+                   :set-data! set-data!
+                   :title-key :views.table/property-nodes
+                   :columns columns
+                   :add-new-object! #(add-new-property-object! property set-data!)
                                ;; TODO: Add support for adding column
-                                 :show-add-property? false
-                                 :on-delete-rows (when-not (contains? #{:logseq.property/built-in? :logseq.property/parent}
-                                                                      (:db/ident property))
-                                                   (fn [table selected-rows]
-                                                     (let [pages (filter ldb/page? selected-rows)
-                                                           blocks (remove ldb/page? selected-rows)]
-                                                       (p/do!
-                                                        (ui-outliner-tx/transact!
-                                                         {:outliner-op :delete-blocks}
-                                                         (when (seq blocks)
-                                                           (outliner-op/delete-blocks! blocks nil))
-                                                         (let [page-ids (map :db/id pages)
-                                                               tx-data (map (fn [pid] [:db/retract pid (:db/ident property)]) page-ids)]
-                                                           (when (seq tx-data)
-                                                             (outliner-op/transact! tx-data {:outliner-op :save-block}))))
-                                                        (set-data! (get-property-related-objects (state/get-current-repo) property))
-                                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                                          (f {}))))))})]
-       {:disable-on-pointer-down? true}))))
+                   :show-add-property? false
+                   :on-delete-rows (when-not (contains? #{:logseq.property/built-in? :logseq.property/parent}
+                                                        (:db/ident property))
+                                     (fn [table selected-rows]
+                                       (let [pages (filter ldb/page? selected-rows)
+                                             blocks (remove ldb/page? selected-rows)]
+                                         (p/do!
+                                          (ui-outliner-tx/transact!
+                                           {:outliner-op :delete-blocks}
+                                           (when (seq blocks)
+                                             (outliner-op/delete-blocks! blocks nil))
+                                           (let [page-ids (map :db/id pages)
+                                                 tx-data (map (fn [pid] [:db/retract pid (:db/ident property)]) page-ids)]
+                                             (when (seq tx-data)
+                                               (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+                                          (set-data! (get-property-related-objects (state/get-current-repo) property))
+                                          (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                            (f {}))))))}))))
 
 ;; Show all nodes containing the given property
 (rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
