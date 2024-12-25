@@ -893,7 +893,7 @@
 
       (if (seq sorted-plugins)
         (lazy-items-loader load-more-pages!)
-        [:div.flex.items-center.justify-center.py-16.flex-col.gap-2.opacity-30
+        [:div.flex.items-center.justify-center.py-28.flex-col.gap-2.opacity-30
          (shui/tabler-icon "list-search" {:size 40})
          [:span.text-sm "Nothing Founded."]])]]))
 
@@ -1249,22 +1249,31 @@
      [market?])
 
     [:div.cp__plugins-page
-     {:ref       *el-ref
+     {:ref *el-ref
+      :class (when-not (util/electron?) "web-platform")
       :tab-index "-1"}
-     [:h1 (t :plugins)]
-     (security-warning)
 
-     [:hr.my-4]
+     [:h1 (t :plugins)]
+
+     (when (util/electron?)
+       [:<>
+        (security-warning)
+        [:hr.my-4]])
 
      [:div.tabs.flex.items-center.justify-center
       [:div.tabs-inner.flex.items-center
-       (ui/button [:span.it (t :plugin/installed)]
-                  :on-click #(set-active! :installed)
-                  :intent (if-not market? "" "link"))
+       (shui/button {:on-click #(set-active! :installed)
+                     :class (when (not market?) "active")
+                     :size :sm
+                     :variant :text}
+         (t :plugin/installed))
 
-       (ui/button [:span.mk (svg/apps 16) (t :plugin/marketplace)]
-                  :on-click #(set-active! :marketplace)
-                  :intent (if market? "" "link"))]]
+       (shui/button {:on-click #(set-active! :marketplace)
+                     :class (when market? "active")
+                     :size :sm
+                     :variant :text}
+         (shui/tabler-icon "apps")
+         (t :plugin/marketplace))]]
 
      [:div.panels
       (if market?

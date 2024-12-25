@@ -589,11 +589,16 @@
   (when-let [type (and block (str "slot:" (:block/uuid block)))]
     (hook-plugin-editor type (merge payload block) nil)))
 
-(defn get-ls-dotdir-root
+(defonce *ls-dotdir-root (atom nil))
+(defn get-ls-dotdir-root [] @*ls-dotdir-root)
+
+(defn init-ls-dotdir-root
   []
-  (if (util/electron?)
-    (ipc/ipc "getLogseqDotDirRoot")
-    "LSPUserDotRoot/"))
+  (-> (if (util/electron?)
+        (ipc/ipc "getLogseqDotDirRoot")
+        "LSPUserDotRoot/")
+    (p/then #(do (reset! *ls-dotdir-root %) %))))
+
 
 (defn make-fn-to-load-dotdir-json
   [dirname ^js default]
@@ -763,7 +768,7 @@
 
   (state/set-state! :plugin/indicator-text "LOADING")
 
-  (-> (p/let [root (get-ls-dotdir-root)
+  (-> (p/let [root (init-ls-dotdir-root)
               _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
 
               clear-commands! (fn [pid]
