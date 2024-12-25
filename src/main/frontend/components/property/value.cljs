@@ -245,7 +245,7 @@
 
       ;; recur unit
       [:div.w-20
-       (property-value block (db/entity :logseq.task/recur-unit) opts)]]
+       (property-value block (db/entity :logseq.task/recur-unit) (assoc opts :property property))]]
      (let [properties (->>
                        (outliner-property/get-block-full-properties (db/get-db) (:db/id block))
                        (filter (fn [property]
@@ -337,10 +337,8 @@
          :on-day-click select-handler!}
          initial-month
          (assoc :default-month initial-month)))]
-     (when datetime?
-       (shui/separator {:orientation "vertical"}))
-     (when datetime?
-       (repeat-setting block property))]))
+     (shui/separator {:orientation "vertical"})
+     (repeat-setting block property)]))
 
 (rum/defc overdue
   [date content]
@@ -389,11 +387,13 @@
                       :label (human-date-label date)}
                      {:block/name page-title})
             page-title)))
-      (let [date (js/Date. value)]
+      (let [date (js/Date. value)
+            hours (.getHours date)
+            minutes (.getMinutes date)]
         [:span
-         (str (util/zero-pad (.getHours date))
+         (str (util/zero-pad hours)
               ":"
-              (util/zero-pad (.getMinutes date)))])])))
+              (util/zero-pad minutes))])])))
 
 (rum/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
@@ -780,7 +780,7 @@
                     ::refresh-result-f refresh-result-f)))}
   [state block property
    {:keys [multiple-choices? dropdown? content-props] :as select-opts}
-   {:keys [*show-new-property-config? exit-edit?]}]
+   {:keys [*show-new-property-config? exit-edit?] :as opts}]
   (let [*values (::values state)
         refresh-result-f (::refresh-result-f state)
         values (rum/react *values)
@@ -791,16 +791,23 @@
             closed-values? (seq (:property/closed-values property))
             ref-type? (db-property-type/all-ref-property-types type)
             items (if closed-values?
-                    (keep (fn [block]
-                            (let [icon (pu/get-block-property-value block :logseq.property/icon)
-                                  value (db-property/closed-value-content block)]
-                              {:label (if icon
-                                        [:div.flex.flex-row.gap-1.items-center
-                                         (icon-component/icon icon {:color? true})
-                                         value]
-                                        value)
-                               :value (:db/id block)
-                               :label-value value})) (:property/closed-values property))
+                    (let [date? (and
+                                 (= (:db/ident property) :logseq.task/recur-unit)
+                                 (= :date (get-in (:property opts) [:block/schema :type])))
+                          values (cond->> (:property/closed-values property)
+                                   date?
+                                   (remove (fn [b] (contains? #{:logseq.task/recur-unit.minute :logseq.task/recur-unit.hour} (:db/ident b)))))]
+                      (keep (fn [block]
+                              (let [icon (pu/get-block-property-value block :logseq.property/icon)
+                                    value (db-property/closed-value-content block)]
+                                {:label (if icon
+                                          [:div.flex.flex-row.gap-1.items-center
+                                           (icon-component/icon icon {:color? true})
+                                           value]
+                                          value)
+                                 :value (:db/id block)
+                                 :label-value value}))
+                            values))
                     (->> values
                          (mapcat (fn [value]
                                    (if (coll? value)
