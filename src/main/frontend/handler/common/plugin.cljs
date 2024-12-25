@@ -41,12 +41,13 @@
   (js/console.log "debug:install-or-update" mft)
   (-> (fetch-web-plugin-entry-info repo version)
     (p/then (fn [{:keys [_version] :as web-pkg}]
+             (let [web-pkg (merge web-pkg (dissoc mft :stat))]
               (emit-lsp-updates!
-                {:status :completed
-                 :only-check only-check
-                 :payload (if only-check
-                            (assoc mft :latest-version version :latest-notes "TODO: update notes")
-                            (assoc mft :dst repo :installed-version version :web-pkg (merge web-pkg mft)))})))
+               {:status     :completed
+                :only-check only-check
+                :payload    (if only-check
+                             (assoc mft :latest-version version :latest-notes "TODO: update notes")
+                             (assoc mft :dst repo :installed-version version :web-pkg web-pkg))}))))
     (p/catch (fn [^js e]
                (emit-lsp-updates!
                  {:status :error
