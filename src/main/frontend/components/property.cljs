@@ -2,7 +2,6 @@
   "Block properties management."
   (:require [clojure.set :as set]
             [clojure.string :as string]
-            [dommy.core :as d]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.components.property.config :as property-config]
