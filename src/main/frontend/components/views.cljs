@@ -1278,18 +1278,17 @@
         (more-actions columns table)
 
         (when add-new-object! (new-record-button table view-entity))]]
-      (fn []
-        [:div.ls-view-body.flex.flex-col.gap-2.grid
-         (filters-row table)
+      [:div.ls-view-body.flex.flex-col.gap-2.grid
+       (filters-row table)
 
-         (case display-type
-           :logseq.property.view/type.list
-           (list-view (:config option) view-entity (:rows table))
+       (case display-type
+         :logseq.property.view/type.list
+         (list-view (:config option) view-entity (:rows table))
 
-           :logseq.property.view/type.gallery
-           (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
+         :logseq.property.view/type.gallery
+         (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
 
-           (table-view table option row-selection add-new-object! *scroller-ref))])
+         (table-view table option row-selection add-new-object! *scroller-ref))]
       {:title-trigger? false})]))
 
 (rum/defcs view
