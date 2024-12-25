@@ -197,62 +197,67 @@
 (defn setup-install-listener!
   []
   (let [channel (name :lsp-updates)
-        listener (fn [_ ^js e]
-                   (when-let [{:keys [status payload only-check]} (bean/->clj e)]
-                     (case (keyword status)
+        listener (fn [_ctx ^js _e]
+                   (let [e (or _e _ctx)]
+                     (when-let [{:keys [status payload only-check]} (bean/->clj e)]
+                       (case (keyword status)
 
-                       :completed
-                       (let [{:keys [id dst name title theme]} payload
-                             name (or title name "Untitled")]
-                         (if only-check
-                           (state/consume-updates-from-coming-plugin! payload false)
-                           (if (plugin-common-handler/installed? id)
-                             (when-let [^js pl (get-plugin-inst id)] ;; update
-                               (p/then
-                                 (.reload pl)
-                                 #(do
-                                    ;;(if theme (select-a-plugin-theme id))
-                                    (notification/show!
-                                      (t :plugin/update-plugin name (.-version (.-options pl))) :success)
-                                    (state/consume-updates-from-coming-plugin! payload true))))
+                         :completed
+                         (let [{:keys [id dst name title theme]} payload
+                               name (or title name "Untitled")]
+                           (if only-check
+                             (state/consume-updates-from-coming-plugin! payload false)
+                             (if (plugin-common-handler/installed? id)
+                               ;; update plugin
+                               (when-let [^js pl (get-plugin-inst id)]
+                                 (p/then
+                                   (.reload pl)
+                                   #(do
+                                      ;;(if theme (select-a-plugin-theme id))
+                                      (notification/show!
+                                        (t :plugin/update-plugin name (.-version (.-options pl))) :success)
+                                      (state/consume-updates-from-coming-plugin! payload true))))
+                               ;; register plugin
+                               (-> (js/LSPluginCore.register (bean/->js {:key id :url dst}))
+                                 (p/then (fn []
+                                           (when theme (js/setTimeout #(select-a-plugin-theme id) 300))
+                                           (notification/show!
+                                             (t :plugin/installed-plugin name) :success)))
+                                 (p/catch (fn [^js e]
+                                            (notification/show!
+                                              (str "Install failed: " name "\n" (.-message e))
+                                              :error)))))))
 
-                             (do                            ;; register new
-                               (p/then
-                                 (js/LSPluginCore.register (bean/->js {:key id :url dst}))
-                                 (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
+                         :error
+                         (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))
+                               fake-error? (contains? #{:no-new-version} error-code)
+                               [msg type] (case error-code
+
+                                            :no-new-version
+                                            [(t :plugin/up-to-date ":)") :success]
+
+                                            [error-code :error])
+                               pending? (seq (:plugin/updates-pending @state/state))]
+
+                           (if (and only-check pending?)
+                             (state/consume-updates-from-coming-plugin! payload false)
+
+                             (do
+                               ;; consume failed download updates
+                               (when (and (not only-check) (not pending?))
+                                 (state/consume-updates-from-coming-plugin! payload true))
+
+                               ;; notify human tips
                                (notification/show!
-                                 (t :plugin/installed-plugin name) :success)))))
+                                 (str
+                                   (if (= :error type) "[Error]" "")
+                                   (str "<" (:id payload) "> ")
+                                   msg) type)))
 
-                       :error
-                       (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))
-                             fake-error? (contains? #{:no-new-version} error-code)
-                             [msg type] (case error-code
+                           (when-not fake-error?
+                             (js/console.error "Update Error:" (:error-code payload))))
 
-                                          :no-new-version
-                                          [(t :plugin/up-to-date ":)") :success]
-
-                                          [error-code :error])
-                             pending? (seq (:plugin/updates-pending @state/state))]
-
-                         (if (and only-check pending?)
-                           (state/consume-updates-from-coming-plugin! payload false)
-
-                           (do
-                             ;; consume failed download updates
-                             (when (and (not only-check) (not pending?))
-                               (state/consume-updates-from-coming-plugin! payload true))
-
-                             ;; notify human tips
-                             (notification/show!
-                               (str
-                                 (if (= :error type) "[Error]" "")
-                                 (str "<" (:id payload) "> ")
-                                 msg) type)))
-
-                         (when-not fake-error?
-                           (js/console.error "Update Error:" (:error-code payload))))
-
-                       :default))
+                         :default)))
 
                    ;; reset
                    (js/setTimeout #(state/set-state! :plugin/installing nil) 512)

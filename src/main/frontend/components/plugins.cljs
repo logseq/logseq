@@ -231,7 +231,7 @@
     [:a.btn
      {:class    (util/classnames [{:disabled   (or installed? installing-or-updating?)
                                    :installing installing-or-updating?}])
-      :on-click #(plugin-common-handler/install-marketplace-plugin item)}
+      :on-click #(plugin-common-handler/install-marketplace-plugin! item)}
      (if installed?
        (t :plugin/installed)
        (if installing-or-updating?

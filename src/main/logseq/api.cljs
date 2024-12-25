@@ -1026,7 +1026,7 @@
     (when-let [{:keys [repo id] :as mft} (bean/->clj manifest)]
       (if-not (and repo id)
         (throw (js/Error. "[required] :repo :id"))
-        (plugin-common-handler/install-marketplace-plugin mft)))))
+        (plugin-common-handler/install-marketplace-plugin! mft)))))
 
 ;; db
 (defn ^:export q
