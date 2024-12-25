@@ -11,6 +11,7 @@ when a plugin is installed, updated or removed"
             [frontend.state :as state]
             [frontend.handler.notification :as notification]
             [frontend.handler.common.plugin :as plugin-common-handler]
+            [frontend.util :as util]
             [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.pprint :as pprint]
@@ -103,7 +104,7 @@ returns map of plugins to install and uninstall"
     (plugin-common-handler/unregister-plugin (name (:id plugin))))
   (log/info :install-plugins (:install plugins))
   (doseq [plugin (:install plugins)]
-    (plugin-common-handler/install-marketplace-plugin
+    (plugin-common-handler/install-marketplace-plugin!
      ;; Add :name so that install notifications are readable
      (assoc plugin :name (name (:id plugin))))))
 
@@ -122,10 +123,12 @@ returns map of plugins to install and uninstall"
                              ;; Manual installation doesn't have theme field but
                              ;; plugin.edn requires this field
                              :theme (boolean theme)))))))]
-    (js/window.apis.addListener channel listener)
+    (when (util/electron?)
+      (js/window.apis.addListener channel listener))
     ;;teardown
     (fn []
-      (js/window.apis.removeListener channel listener))))
+      (when (util/electron?)
+        (js/window.apis.removeListener channel listener)))))
 
 (defn start
   "This component has just one responsibility on start, to create a plugins.edn
