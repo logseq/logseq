@@ -146,7 +146,7 @@
 
 (defn ^:api get-journal-day-from-long
   [db v]
-  (when-let [date (goog.date.DateTime. (tc/from-long v))]
+  (when-let [date (t/to-default-time-zone (tc/from-long v))]
     (let [day (js/parseInt
                (str (t/year date)
                     (t/month date)

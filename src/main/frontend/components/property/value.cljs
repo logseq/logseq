@@ -380,7 +380,7 @@
   (when-let [date (tc/from-long value)]
     (overdue
      date
-     [:div.flex.flex-row.gap-1.items-center
+     [:div.ls-datetime.flex.flex-row.gap-1.items-center
       (when-let [page-cp (state/get-component :block/page-cp)]
         (let [page-title (date/journal-name date)]
           (rum/with-key
