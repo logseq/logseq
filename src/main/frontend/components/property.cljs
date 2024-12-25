@@ -700,10 +700,6 @@
            (let [properties (->> (:logseq.property.class/properties block)
                                  (map (fn [e] [(:db/ident e)])))
                  opts' (assoc opts :class-schema? true)]
-             [:<>
-              [:div.mt-2
-               [:div.text-sm.text-muted-foreground.mb-2 {:style {:margin-left 10}}
-                "Tagged node properties:"]
-               [:div
-                (properties-section block properties opts')
-                (rum/with-key (new-property block opts') (str id "-class-add-property"))]]]))]))))
+             [:div
+              (properties-section block properties opts')
+              (rum/with-key (new-property block opts') (str id "-class-add-property"))]))]))))
