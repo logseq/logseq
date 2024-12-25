@@ -96,6 +96,7 @@
 (defmethod handle-command :reschedule [_ db entity]
   (let [property-ident (or (:db/ident (:logseq.task/reschedule-property entity))
                            :logseq.task/scheduled)
+        property (when property-ident (d/entity db property-ident))
         frequency (db-property/property-value-content (:logseq.task/recur-frequency entity))
         unit (:logseq.task/recur-unit entity)]
     (when (and frequency unit)
@@ -111,11 +112,16 @@
             journal-day (outliner-pipeline/get-journal-day-from-long db next-time-long)
             create-journal-page (when-not journal-day
                                   (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
-                                        title (date-time-util/format next-time formatter)]
-                                    (worker-db-page/create db title {:create-first-block? false})))]
+                                        title (date-time-util/format (t/to-default-time-zone next-time) formatter)]
+                                    (worker-db-page/create db title {:create-first-block? false})))
+            value (if (= :datetime (get-in property [:block/schema :type]))
+                    next-time-long
+                    (or journal-day
+                        [:block/uuid (:page-uuid create-journal-page)]))]
         (concat
-         [[:db/add (:db/id entity) property-ident next-time-long]]
-         (:tx-data create-journal-page))))))
+         (:tx-data create-journal-page)
+         (when value
+           [[:db/add (:db/id entity) property-ident value]]))))))
 
 (defmethod handle-command :set-property [_ _db entity property value]
   (let [property' (get-property entity property)
