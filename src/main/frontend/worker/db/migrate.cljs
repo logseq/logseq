@@ -443,7 +443,8 @@
      ;; set journal's tag to `#Page`
      [[:db/add (:db/id journal-entity) :block/tags :logseq.class/Page]]
      tx-data
-     [[:db/retractEntity (:db/id block-type-entity)]])))
+     (when block-type-entity
+       [[:db/retractEntity (:db/id block-type-entity)]]))))
 
 (defn- deprecate-logseq-user-ns
   [conn _search-db]
