@@ -206,7 +206,10 @@
 
 (def ^:export load_plugin_config
   (fn [path]
-    (fs/read-file nil (util/node-path.join path "package.json"))))
+    (if (util/electron?)
+      (fs/read-file nil (util/node-path.join path "package.json"))
+      (do (js/console.log "==>>> TODO: load plugin package.json from local???")
+        ""))))
 
 (def ^:export load_plugin_readme
   (fn [path]

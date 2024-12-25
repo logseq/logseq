@@ -203,7 +203,7 @@
                        (case (keyword status)
 
                          :completed
-                         (let [{:keys [id dst name title theme]} payload
+                         (let [{:keys [id dst name title theme web-pkg]} payload
                                name (or title name "Untitled")]
                            (if only-check
                              (state/consume-updates-from-coming-plugin! payload false)
@@ -218,7 +218,7 @@
                                         (t :plugin/update-plugin name (.-version (.-options pl))) :success)
                                       (state/consume-updates-from-coming-plugin! payload true))))
                                ;; register plugin
-                               (-> (js/LSPluginCore.register (bean/->js {:key id :url dst}))
+                               (-> (js/LSPluginCore.register (bean/->js {:key id :url dst :webPkg web-pkg}))
                                  (p/then (fn []
                                            (when theme (js/setTimeout #(select-a-plugin-theme id) 300))
                                            (notification/show!
