@@ -949,7 +949,7 @@ html.is-mac {
 
 .positioned-properties.block-right {
   button {
-    @apply whitespace-nowrap mr-0.5;
+    @apply whitespace-nowrap;
   }
 
   .block-title-wrap {
@@ -970,14 +970,18 @@ html.is-mac {
 }
 
 .block-tag {
-  @apply pr-1 flex flex-row items-center gap-1;
+  @apply flex flex-row items-center;
 }
 
 .block-tag a.tag {
   @apply flex text-sm font-normal items-center opacity-70;
 }
 
-.block-tag a.tag:hover {
+.block-tag a.hash-symbol {
+    @apply text-sm text-sm font-normal opacity-70;
+}
+
+.block-tag a.tag:hover, .block-tag a.hash-symbol:hover {
   @apply opacity-100;
 }
 
@@ -1013,7 +1017,7 @@ html.is-mac {
 }
 
 .ls-page-title .block-tags {
-  @apply relative -right-1 min-h-full;
+  @apply relative min-h-full;
 }
 
 .ls-code-editor-wrap {

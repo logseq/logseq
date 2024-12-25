@@ -138,7 +138,7 @@
   [db val]
   (when-let [ent (d/entity db val)]
     (and (some? (:block/title ent))
-         (= (:block/type ent) "journal"))))
+         (entity-util/journal? ent))))
 
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"
@@ -167,10 +167,18 @@
 
    :string   string?
    :raw-number number?
-   :entity   entity?
-   :class    class-entity?
-   :property property-entity?
-   :page     page-entity?
+   :entity   [:fn
+              {:error/message "should be an Entity"}
+              entity?]
+   :class    [:fn
+              {:error/message "should be a Class"}
+              class-entity?]
+   :property [:fn
+              {:error/message "should be a Property"}
+              property-entity?]
+   :page     [:fn
+              {:error/message "should be a Page"}
+              page-entity?]
    :keyword  keyword?
    :map      map?
    ;; coll elements are ordered as it's saved as a vec

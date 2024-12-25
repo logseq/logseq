@@ -693,7 +693,7 @@
      [:div.cp__file-sync-page-histories-right
       [:h1.title.text-xl
        "Current version"]
-      (page/page-blocks-cp (state/get-current-repo) page-entity nil)]
+      (page/page-blocks-cp page-entity nil)]
 
      ;; ready loading
      [:div.flex.items-center.h-full.justify-center.w-full.absolute.ready-loading

@@ -383,10 +383,10 @@ independent of format as format specific heading characters are stripped"
 
 (defn page-exists?
   "Whether a page exists."
-  [page-name type]
+  [page-name tags]
   (let [repo (state/get-current-repo)]
     (when-let [db (conn/get-db repo)]
-      (ldb/page-exists? db page-name type))))
+      (ldb/page-exists? db page-name tags))))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?
@@ -531,14 +531,23 @@ independent of format as format specific heading characters are stripped"
 (defn get-journals-length
   []
   (let [today (date-time-util/date->int (js/Date.))]
-    (d/q '[:find (count ?page) .
-           :in $ ?today
-           :where
-           [?page :block/type "journal"]
-           [?page :block/journal-day ?journal-day]
-           [(<= ?journal-day ?today)]]
-         (conn/get-db (state/get-current-repo))
-         today)))
+    (if (config/db-based-graph?)
+      (d/q '[:find (count ?page) .
+             :in $ ?today
+             :where
+             [?page :block/tags :logseq.class/Journal]
+             [?page :block/journal-day ?journal-day]
+             [(<= ?journal-day ?today)]]
+           (conn/get-db (state/get-current-repo))
+           today)
+      (d/q '[:find (count ?page) .
+             :in $ ?today
+             :where
+             [?page :block/type "journal"]
+             [?page :block/journal-day ?journal-day]
+             [(<= ?journal-day ?today)]]
+           (conn/get-db (state/get-current-repo))
+           today))))
 
 (defn get-latest-journals
   ([n]
@@ -749,17 +758,29 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-all-whiteboards
   [repo]
-  (d/q
-   '[:find [(pull ?page [:db/id
-                         :block/uuid
-                         :block/name
-                         :block/title
-                         :block/created-at
-                         :block/updated-at]) ...]
-     :where
-     [?page :block/name]
-     [?page :block/type "whiteboard"]]
-   (conn/get-db repo)))
+  (if (config/db-based-graph?)
+    (d/q
+     '[:find [(pull ?page [:db/id
+                           :block/uuid
+                           :block/name
+                           :block/title
+                           :block/created-at
+                           :block/updated-at]) ...]
+       :where
+       [?page :block/name]
+       [?page :block/tags :logseq.class/Whiteboard]]
+     (conn/get-db repo))
+    (d/q
+     '[:find [(pull ?page [:db/id
+                           :block/uuid
+                           :block/name
+                           :block/title
+                           :block/created-at
+                           :block/updated-at]) ...]
+       :where
+       [?page :block/name]
+       [?page :block/type "whiteboard"]]
+     (conn/get-db repo))))
 
 (defn get-whiteboard-id-nonces
   [repo page-id]
@@ -777,15 +798,26 @@ independent of format as format specific heading characters are stripped"
                     :nonce (:nonce shape)}))))))
 
 (defn get-all-classes
-  [repo & {:keys [except-root-class?]
-           :or {except-root-class? false}}]
+  [repo & {:keys [except-root-class? except-private-tags?]
+           :or {except-root-class? false
+                except-private-tags? true}}]
   (let [db (conn/get-db repo)
-        classes (->> (d/datoms db :avet :block/type "class")
+        classes (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
                      (map (fn [d]
-                            (db-utils/entity db (:e d)))))]
+                            (db-utils/entity db (:e d))))
+                     (remove (fn [d]
+                               (and except-private-tags?
+                                    (contains? ldb/private-tags (:db/ident d))))))]
     (if except-root-class?
       (keep (fn [e] (when-not (= :logseq.class/Root (:db/ident e)) e)) classes)
       classes)))
+
+(defn get-all-readable-classes
+  "Gets all classes that are used in a read only context e.g. querying or used
+  for property value selection. This should _not_ be used in a write context e.g.
+  adding a tag to a node or creating a new node with a tag"
+  [repo opts]
+  (get-all-classes repo (merge opts {:except-private-tags? false})))
 
 (defn get-structured-children
   [repo eid]
@@ -802,13 +834,15 @@ independent of format as format specific heading characters are stripped"
 (defn get-class-objects
   [repo class-id]
   (when-let [class (db-utils/entity repo class-id)]
-    (if (first (:logseq.property/_parent class))        ; has children classes
-      (let [all-classes (conj (->> (get-structured-children repo class-id)
-                                   (map #(db-utils/entity repo %)))
-                              class)]
-        (->> (mapcat :block/_tags all-classes)
-             distinct))
-      (:block/_tags class))))
+    (->>
+     (if (first (:logseq.property/_parent class))        ; has children classes
+       (let [all-classes (conj (->> (get-structured-children repo class-id)
+                                    (map #(db-utils/entity repo %)))
+                               class)]
+         (->> (mapcat :block/_tags all-classes)
+              distinct))
+       (:block/_tags class))
+     (remove ldb/hidden?))))
 
 (defn sub-class-objects
   [repo class-id]
@@ -829,7 +863,8 @@ independent of format as format specific heading characters are stripped"
               (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
                                    {:deps rules/rules-dependencies})
               (:db/ident property))
-         (map #(db-utils/entity repo %)))))
+         (map #(db-utils/entity repo %))
+         (remove ldb/hidden?))))
 
 (defn get-all-namespace-relation
   [repo]
@@ -849,18 +884,30 @@ independent of format as format specific heading characters are stripped"
 (defn get-pages-relation
   [repo with-journal?]
   (when-let [db (conn/get-db repo)]
-    (let [q (if with-journal?
-              '[:find ?p ?ref-page
-                :where
-                [?block :block/page ?p]
-                [?block :block/refs ?ref-page]]
-              '[:find ?p ?ref-page
-                :where
-                [?block :block/page ?p]
-                [(get-else $ ?p :block/type "N/A") ?type]
-                [(not= ?type "journal")]
-                [?block :block/refs ?ref-page]])]
-      (d/q q db))))
+    (if (config/db-based-graph?)
+      (let [q (if with-journal?
+                '[:find ?p ?ref-page
+                  :where
+                  [?block :block/page ?p]
+                  [?block :block/refs ?ref-page]]
+                '[:find ?p ?ref-page
+                  :where
+                  [?block :block/page ?p]
+                  [?p :block/tags]
+                  (not [?p :block/tags :logseq.class/Journal])
+                  [?block :block/refs ?ref-page]])]
+        (d/q q db))
+      (let [q (if with-journal?
+                '[:find ?p ?ref-page
+                  :where
+                  [?block :block/page ?p]
+                  [?block :block/refs ?ref-page]]
+                '[:find ?p ?ref-page
+                  :where
+                  [?block :block/page ?p]
+                  (not [?p :block/type "journal"])
+                  [?block :block/refs ?ref-page]])]
+        (d/q q db)))))
 
 (defn get-namespace-pages
   "Accepts both sanitized and unsanitized namespaces"

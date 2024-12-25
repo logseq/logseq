@@ -31,10 +31,10 @@
 (defn tt
   [& keys]
   (some->
-    (medley/find-first
-      #(not (string/starts-with? (t %) "{Missing key"))
-      keys)
-    t))
+   (medley/find-first
+    #(not (string/starts-with? (t %) "{Missing key"))
+    keys)
+   t))
 
 (defn- fetch-local-language []
   (.. js/window -navigator -language))

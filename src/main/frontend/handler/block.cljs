@@ -22,7 +22,8 @@
    [frontend.handler.property.util :as pu]
    [dommy.core :as dom]
    [goog.object :as gobj]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [datascript.impl.entity :as de]))
 
 ;;  Fns
 
@@ -187,6 +188,32 @@
     content
     (-> (property-util/remove-built-in-properties format content)
         (drawer/remove-logbook))))
+
+(defn block-unique-title
+  "Multiple pages/objects may have the same `:block/title`.
+   Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
+  [block]
+  (let [block-e (cond
+                  (de/entity? block)
+                  block
+                  (uuid? (:block/uuid block))
+                  (db/entity [:block/uuid (:block/uuid block)])
+                  :else
+                  block)
+        tags (remove (fn [t]
+                       (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
+                           (ldb/private-tags (:db/ident t))))
+                     (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))]
+    (if (seq tags)
+      (str (:block/title block)
+           " "
+           (string/join
+            ", "
+            (keep (fn [tag]
+                    (when-let [title (:block/title tag)]
+                      (str "#" title)))
+                  tags)))
+      (:block/title block))))
 
 (defn edit-block!
   [block pos & {:keys [_container-id custom-content tail-len save-code-editor?]

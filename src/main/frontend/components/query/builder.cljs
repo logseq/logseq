@@ -227,7 +227,7 @@
         db-based? (config/db-based-graph? repo)]
     (rum/use-effect!
      (fn []
-       (let [result (db-model/get-all-classes repo {:except-root-class? true})]
+       (let [result (db-model/get-all-readable-classes repo {:except-root-class? true})]
          (set-values! result)))
      [])
     (let [items (->> values
