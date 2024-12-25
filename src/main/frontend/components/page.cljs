@@ -446,7 +446,7 @@
       :on-click (fn [e]
                   (state/pub-event! [:editor/new-property {:block page
                                                            :target (.-target e)}]))}
-     "Set node property")]])
+     "Set page property")]])
 
 (rum/defc db-page-title
   [page whiteboard-page? sidebar? container-id]
