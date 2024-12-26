@@ -374,26 +374,27 @@
       nil)))
 
 (rum/defc datetime-value
-  [value]
+  [value property-id repeated-task?]
   (when-let [date (tc/from-long value)]
-    (overdue
-     date
-     [:div.ls-datetime.flex.flex-row.gap-1.items-center
-      (when-let [page-cp (state/get-component :block/page-cp)]
-        (let [page-title (date/journal-name date)]
-          (rum/with-key
-            (page-cp {:disable-preview? true
-                      :show-non-exists-page? true
-                      :label (human-date-label date)}
-                     {:block/name page-title})
-            page-title)))
-      (let [date (js/Date. value)
-            hours (.getHours date)
-            minutes (.getMinutes date)]
-        [:span
-         (str (util/zero-pad hours)
-              ":"
-              (util/zero-pad minutes))])])))
+    (let [content [:div.ls-datetime.flex.flex-row.gap-1.items-center
+                   (when-let [page-cp (state/get-component :block/page-cp)]
+                     (let [page-title (date/journal-name date)]
+                       (rum/with-key
+                         (page-cp {:disable-preview? true
+                                   :show-non-exists-page? true
+                                   :label (human-date-label date)}
+                                  {:block/name page-title})
+                         page-title)))
+                   (let [date (js/Date. value)
+                         hours (.getHours date)
+                         minutes (.getMinutes date)]
+                     [:span
+                      (str (util/zero-pad hours)
+                           ":"
+                           (util/zero-pad minutes))])]]
+      (if (or repeated-task? (contains? #{:logseq.task/deadline :logseq.task/scheduled} property-id))
+        (overdue date content)
+        content))))
 
 (rum/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
@@ -411,7 +412,8 @@
                         (util/stop e)
                         (when-not config/publishing?
                           (shui/popup-show! (.-target e) content-fn
-                                            {:align "start" :auto-focus? true}))))]
+                                            {:align "start" :auto-focus? true}))))
+        repeated-task? (:logseq.task/repeated? block)]
     (rum/use-effect!
      (fn []
        (when editing?
@@ -435,25 +437,26 @@
         :ref *trigger-ref
         :on-click open-popup!}
        [:div.flex.flex-row.gap-1.items-center
-        (when (:logseq.task/repeated? block)
+        (when repeated-task?
           (ui/icon "repeat" {:size 14 :class "opacity-40"}))
         (cond
           (map? value)
           (let [date (tc/to-date-time (date/journal-title->long (:block/title value)))
                 compare-value (some-> date
                                       (t/plus (t/days 1))
-                                      (t/minus (t/seconds 1)))]
-            (overdue
-             compare-value
-             (when-let [page-cp (state/get-component :block/page-cp)]
-               (rum/with-key
-                 (page-cp {:disable-preview? true
-                           :meta-click? other-position?
-                           :label (human-date-label date)} value)
-                 (:db/id value)))))
+                                      (t/minus (t/seconds 1)))
+                content (when-let [page-cp (state/get-component :block/page-cp)]
+                          (rum/with-key
+                            (page-cp {:disable-preview? true
+                                      :meta-click? other-position?
+                                      :label (human-date-label date)} value)
+                            (:db/id value)))]
+            (if (or repeated-task? (contains? #{:logseq.task/deadline :logseq.task/scheduled} (:db/id property)))
+              (overdue compare-value content)
+              content))
 
           (number? value)
-          (datetime-value value)
+          (datetime-value value (:db/ident property) repeated-task?)
 
           :else
           (property-empty-btn-value nil))]))))
