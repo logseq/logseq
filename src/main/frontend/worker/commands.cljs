@@ -93,31 +93,61 @@
 
 (defmulti handle-command (fn [action-id & _others] action-id))
 
+(defn- repeat-until-future-timestamp
+  [datetime delta keep-week?]
+  (let [now (t/now)]
+    (if (t/after? datetime now)
+      datetime
+      (let [datetime (t/plus datetime delta)
+            result (loop [result datetime]
+                     (if (t/after? result now)
+                       result
+                       (recur (t/plus result delta))))
+            w1 (t/day-of-week datetime)
+            w2 (t/day-of-week result)]
+        (if (and keep-week? (not= w1 w2))
+      ;; next week
+          (if (> w2 w1)
+            (t/plus result (t/days (- 7 (- w2 w1))))
+            (t/plus result (t/days (- w1 w2))))
+          result)))))
+
+(defn- get-next-time
+  [current-value unit frequency]
+  (let [current-date-time (tc/to-date-time current-value)
+        default-timezone-time (t/to-default-time-zone current-date-time)
+        interval (case (:db/ident unit)
+                   :logseq.task/recur-unit.minute t/minutes
+                   :logseq.task/recur-unit.hour t/hours
+                   :logseq.task/recur-unit.day t/days
+                   :logseq.task/recur-unit.week t/weeks
+                   :logseq.task/recur-unit.month t/months
+                   :logseq.task/recur-unit.year t/years)
+        delta (interval frequency)
+        next-time (case (:db/ident unit)
+                    :logseq.task/recur-unit.year
+                    (repeat-until-future-timestamp default-timezone-time delta false)
+                    :logseq.task/recur-unit.month
+                    (repeat-until-future-timestamp default-timezone-time delta false)
+                    :logseq.task/recur-unit.week
+                    (repeat-until-future-timestamp default-timezone-time delta true)
+                    (t/plus (t/now) delta))]
+    (tc/to-long next-time)))
+
 (defmethod handle-command :reschedule [_ db entity]
   (let [property-ident (or (:db/ident (:logseq.task/scheduled-on-property entity))
                            :logseq.task/scheduled)
-        property (when property-ident (d/entity db property-ident))
         frequency (db-property/property-value-content (:logseq.task/recur-frequency entity))
-        unit (:logseq.task/recur-unit entity)]
+        unit (:logseq.task/recur-unit entity)
+        current-value (get entity property-ident)]
     (when (and frequency unit)
-      (let [interval (case (:db/ident unit)
-                       :logseq.task/recur-unit.minute t/minutes
-                       :logseq.task/recur-unit.hour t/hours
-                       :logseq.task/recur-unit.day t/days
-                       :logseq.task/recur-unit.week t/weeks
-                       :logseq.task/recur-unit.month t/months
-                       :logseq.task/recur-unit.year t/years)
-            next-time (t/plus (t/now) (interval frequency))
-            next-time-long (tc/to-long next-time)
+      (let [next-time-long (get-next-time current-value unit frequency)
             journal-day (outliner-pipeline/get-journal-day-from-long db next-time-long)
             create-journal-page (when-not journal-day
                                   (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
-                                        title (date-time-util/format (t/to-default-time-zone next-time) formatter)]
+                                        title (date-time-util/format (t/to-default-time-zone (tc/to-date-time next-time-long)) formatter)]
                                     (worker-db-page/create db title {:create-first-block? false})))
-            value (if (= :datetime (get-in property [:block/schema :type]))
-                    next-time-long
-                    (or journal-day
-                        [:block/uuid (:page-uuid create-journal-page)]))]
+            value next-time-long]
         (concat
          (:tx-data create-journal-page)
          (when value
