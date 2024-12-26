@@ -830,8 +830,9 @@
                                           (swap! state/state assoc :plugin/installed-themes
                                                  (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
 
-                  (.on "theme-selected" (fn [^js theme]
+                  (.on "theme-selected" (fn [^js theme ^js opts]
                                           (let [theme (bean/->clj theme)
+                                                _opts (bean/->clj opts)
                                                 url (:url theme)
                                                 mode (:mode theme)]
                                             (when mode
