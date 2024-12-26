@@ -9,7 +9,8 @@
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.outliner.datascript-report :as ds-report]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [cljs-time.format :as tf]))
 
 (defn filter-deleted-blocks
   [datoms]
@@ -147,10 +148,7 @@
 (defn ^:api get-journal-day-from-long
   [db v]
   (when-let [date (t/to-default-time-zone (tc/from-long v))]
-    (let [day (js/parseInt
-               (str (t/year date)
-                    (t/month date)
-                    (t/day date)))]
+    (let [day (js/parseInt (tf/unparse (tf/formatter "yyyyMMdd") date))]
       (:e (first (d/datoms db :avet :block/journal-day day))))))
 
 (defn db-rebuild-block-refs
