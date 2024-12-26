@@ -78,6 +78,7 @@
   "TODO: split this mix schema to multiple ones"
   [:map
    [:req-id :string]
+   [:profile {:optional true} :map]
    [:t {:optional true} :int]
    [:t-before {:optional true} :int]
    [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
@@ -172,7 +173,9 @@
        (fn [api-schema]
          (let [[api-name [type']] api-schema]
            (if (= :map type')
-             [api-name (vec (concat (second api-schema) [[:req-id :string] [:action :string]]))]
+             [api-name (vec (concat (second api-schema) [[:req-id :string]
+                                                         [:action :string]
+                                                         [:profile {:optional true} :boolean]]))]
              api-schema)))
        api-schema-seq)))))
 
@@ -190,12 +193,14 @@
         [:map
          [:req-id :string]
          [:action :string]
+         [:profile {:optional true} :boolean]
          [:graph-uuid :string]
          [:ops [:sequential to-ws-op-schema]]
          [:t-before :int]]
         [:map
          [:req-id :string]
          [:action :string]
+         [:profile {:optional true} :boolean]
          [:s3-key :string]]]]
       ["presign-put-temp-s3-obj"
        [:map]]
