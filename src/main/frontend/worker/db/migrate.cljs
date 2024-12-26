@@ -577,7 +577,7 @@
                      :logseq.task/scheduled-on-property :logseq.task/recur-status-property]
         :fix add-scheduled-to-task}]
    [54 {:properties [:logseq.property/choice-checkbox-state :logseq.property/checkbox-display-properties]}]
-   [1735220598426 {:fix update-deadline-to-datetime}]])
+   [55 {:fix update-deadline-to-datetime}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
