@@ -2,7 +2,8 @@
   "cljs-time util fns for deps"
   (:require [cljs-time.format :as tf]
             [clojure.string :as string]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [cljs-time.core :as t]))
 
 ;; (tf/parse (tf/formatter "dd.MM.yyyy") "2021Q4") => 20040120T000000
 (defn safe-journal-title-formatters
@@ -38,10 +39,18 @@
   (when date-formatter
     (tf/unparse (tf/formatter date-formatter) date)))
 
+(defn int->local-date
+  [day]
+  (let [s (str day)
+        year (js/parseInt (subs s 0 4))
+        month (js/parseInt (subs s 4 6))
+        day (js/parseInt (subs s 6))]
+    (t/local-date year month day)))
+
 (defn int->journal-title
   [day date-formatter]
   (when day
-    (format (tf/parse (tf/formatter "yyyyMMdd") (str day)) date-formatter)))
+    (format (int->local-date day) date-formatter)))
 
 (defn- get-weekday
   [date]

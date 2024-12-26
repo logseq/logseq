@@ -205,8 +205,6 @@
                                                         (into {})))
                        get-value-for-sort (fn [row]
                                             (cond
-                                              (= (:db/ident property) :logseq.task/deadline)
-                                              (:block/journal-day (get row :logseq.task/deadline))
                                               closed-values
                                               (closed-value->sort-number (:db/id (get row (:db/ident property))))
                                               :else
