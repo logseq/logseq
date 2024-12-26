@@ -387,7 +387,7 @@
   (when-let [date (tc/from-long value)]
     (let [content [:div.ls-datetime.flex.flex-row.gap-1.items-center
                    (when-let [page-cp (state/get-component :block/page-cp)]
-                     (let [page-title (date/journal-name date)]
+                     (let [page-title (date/journal-name (date/js-date->goog-date (js/Date. value)))]
                        (rum/with-key
                          (page-cp {:disable-preview? true
                                    :show-non-exists-page? true
