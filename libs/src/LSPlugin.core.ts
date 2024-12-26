@@ -1101,10 +1101,10 @@ class PluginLocal extends EventEmitter<
     json.iir = this.isInstalledInDotRoot
     json.lsr = this._resolveResourceFullUrl('/')
 
-    if (settings) {
-      json.settings = json.settings?.toJSON()
-    } else {
+    if (settings === false) {
       delete json.settings
+    } else {
+      json.settings = json.settings?.toJSON()
     }
 
     return json
@@ -1205,10 +1205,10 @@ class LSPluginCore
 
     // If there is currently a theme that has been set
     if (currentTheme) {
-      await this.selectTheme(currentTheme, { effect: false })
+      await this.selectTheme(currentTheme, { effect: false, emit: false })
     } else if (legacyTheme) {
       // Otherwise compatible with older versions
-      await this.selectTheme(legacyTheme, { effect: false })
+      await this.selectTheme(legacyTheme, { effect: false, emit: false })
     }
   }
 
@@ -1571,10 +1571,7 @@ class LSPluginCore
     } = {}
   ) {
     const { effect, emit } = Object.assign(
-      {},
-      { effect: true, emit: true },
-      options
-    )
+      { effect: true, emit: true }, options)
 
     // Clear current theme before injecting.
     if (this._currentTheme) {
@@ -1609,7 +1606,7 @@ class LSPluginCore
     }
 
     if (emit) {
-      this.emit('theme-selected', theme)
+      this.emit('theme-selected', theme, options)
     }
   }
 

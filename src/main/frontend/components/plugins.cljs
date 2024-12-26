@@ -302,69 +302,70 @@
     url item (if repo remote-readme-display local-markdown-display)))
 
 (rum/defc plugin-item-card < rum/static
-  [t {:keys [id name title version url description author icon iir repo sponsors] :as item}
-   disabled? market? *search-key has-other-pending?
-   installing-or-updating? installed? stat coming-update]
+ [t {:keys [id name title version url description author icon iir repo sponsors webPkg] :as item}
+  disabled? market? *search-key has-other-pending?
+  installing-or-updating? installed? stat coming-update]
 
-  (let [name        (or title name "Untitled")
-        unpacked?   (not iir)
-        new-version (state/coming-update-new-version? coming-update)]
-    [:div.cp__plugins-item-card
-     {:key   (str "lsp-card-" id)
-      :class (util/classnames
-              [{:market          market?
-                :installed       installed?
-                :updating        installing-or-updating?
-                :has-new-version new-version}])}
+ (let [name (or title name "Untitled")
+       web? (not (nil? webPkg))
+       unpacked? (and (not web?) (not iir))
+       new-version (state/coming-update-new-version? coming-update)]
+  [:div.cp__plugins-item-card
+   {:key   (str "lsp-card-" id)
+    :class (util/classnames
+            [{:market          market?
+              :installed       installed?
+              :updating        installing-or-updating?
+              :has-new-version new-version}])}
 
-     [:div.l.link-block.cursor-pointer
+   [:div.l.link-block.cursor-pointer
+    {:on-click (get-open-plugin-readme-handler url item repo)}
+    (if (and icon (not (string/blank? icon)))
+     [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
+     svg/folder)
+
+    (when (and (not market?) unpacked?)
+     [:span.flex.justify-center.text-xs.text-error.pt-2 (t :plugin/unpacked)])]
+
+   [:div.r
+    [:h3.head.text-xl.font-bold.pt-1.5
+
+     [:span.l.link-block.cursor-pointer
       {:on-click (get-open-plugin-readme-handler url item repo)}
-      (if (and icon (not (string/blank? icon)))
-        [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
-        svg/folder)
+      name]
+     (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
 
-      (when (and (not market?) unpacked?)
-        [:span.flex.justify-center.text-xs.text-error.pt-2 (t :plugin/unpacked)])]
+    [:div.desc.text-xs.opacity-70
+     [:p description]
+     ;;[:small (js/JSON.stringify (bean/->js settings))]
+     ]
 
-     [:div.r
-      [:h3.head.text-xl.font-bold.pt-1.5
+    ;; Author & Identity
+    [:div.flag
+     [:p.text-xs.pr-2.flex.justify-between
+      [:small {:on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
+                           (reset! *search-key (str "@" author))
+                           (.select el))} author]
+      [:small {:on-click #(do
+                           (notification/show! "Copied!" :success)
+                           (util/copy-to-clipboard! id))}
+       (str "ID: " id)]]]
 
-       [:span.l.link-block.cursor-pointer
-        {:on-click (get-open-plugin-readme-handler url item repo)}
-        name]
-       (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
+    ;; Github repo
+    [:div.flag.is-top.opacity-50
+     (when repo
+      [:a.flex {:target "_blank"
+                :href   (plugin-handler/gh-repo-url repo)}
+       (svg/github {:width 16 :height 16})])]
 
-      [:div.desc.text-xs.opacity-70
-       [:p description]
-       ;;[:small (js/JSON.stringify (bean/->js settings))]
-       ]
+    (if market?
+     ;; market ctls
+     (card-ctls-of-market item stat installed? installing-or-updating?)
 
-      ;; Author & Identity
-      [:div.flag
-       [:p.text-xs.pr-2.flex.justify-between
-        [:small {:on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
-                              (reset! *search-key (str "@" author))
-                              (.select el))} author]
-        [:small {:on-click #(do
-                              (notification/show! "Copied!" :success)
-                              (util/copy-to-clipboard! id))}
-         (str "ID: " id)]]]
-
-      ;; Github repo
-      [:div.flag.is-top.opacity-50
-       (when repo
-         [:a.flex {:target "_blank"
-                   :href   (plugin-handler/gh-repo-url repo)}
-          (svg/github {:width 16 :height 16})])]
-
-      (if market?
-        ;; market ctls
-        (card-ctls-of-market item stat installed? installing-or-updating?)
-
-        ;; installed ctls
-        (card-ctls-of-installed
-         id name url sponsors unpacked? disabled?
-         installing-or-updating? has-other-pending? new-version item))]]))
+     ;; installed ctls
+     (card-ctls-of-installed
+      id name url sponsors unpacked? disabled?
+      installing-or-updating? has-other-pending? new-version item))]]))
 
 (rum/defc panel-tab-search < rum/static
   [search-key *search-key *search-ref]
