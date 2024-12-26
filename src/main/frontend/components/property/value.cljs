@@ -434,26 +434,29 @@
         :class "jtrigger min-h-[24px]"                     ; FIXME: min-h-6 not works
         :ref *trigger-ref
         :on-click open-popup!}
-       (cond
-         (map? value)
-         (let [date (tc/to-date-time (date/journal-title->long (:block/title value)))
-               compare-value (some-> date
-                                     (t/plus (t/days 1))
-                                     (t/minus (t/seconds 1)))]
-           (overdue
-            compare-value
-            (when-let [page-cp (state/get-component :block/page-cp)]
-              (rum/with-key
-                (page-cp {:disable-preview? true
-                          :meta-click? other-position?
-                          :label (human-date-label date)} value)
-                (:db/id value)))))
+       [:div.flex.flex-row.gap-1.items-center
+        (when (:logseq.task/repeated? block)
+          (ui/icon "repeat" {:size 14 :class "opacity-40"}))
+        (cond
+          (map? value)
+          (let [date (tc/to-date-time (date/journal-title->long (:block/title value)))
+                compare-value (some-> date
+                                      (t/plus (t/days 1))
+                                      (t/minus (t/seconds 1)))]
+            (overdue
+             compare-value
+             (when-let [page-cp (state/get-component :block/page-cp)]
+               (rum/with-key
+                 (page-cp {:disable-preview? true
+                           :meta-click? other-position?
+                           :label (human-date-label date)} value)
+                 (:db/id value)))))
 
-         (number? value)
-         (datetime-value value)
+          (number? value)
+          (datetime-value value)
 
-         :else
-         (property-empty-btn-value nil))))))
+          :else
+          (property-empty-btn-value nil))]))))
 
 (rum/defc property-value-date-picker
   [block property value opts]
