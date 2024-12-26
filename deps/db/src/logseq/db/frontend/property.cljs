@@ -386,8 +386,8 @@
     :schema {:type :checkbox
              :hide? true}
     :queryable? true}
-   :logseq.task/reschedule-property
-   {:title "Reschedule property"
+   :logseq.task/scheduled-on-property
+   {:title "Scheduled on property"
     :schema {:type :property
              :hide? true}}
    :logseq.task/recur-status-property

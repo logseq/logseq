@@ -94,7 +94,7 @@
 (defmulti handle-command (fn [action-id & _others] action-id))
 
 (defmethod handle-command :reschedule [_ db entity]
-  (let [property-ident (or (:db/ident (:logseq.task/reschedule-property entity))
+  (let [property-ident (or (:db/ident (:logseq.task/scheduled-on-property entity))
                            :logseq.task/scheduled)
         property (when property-ident (d/entity db property-ident))
         frequency (db-property/property-value-content (:logseq.task/recur-frequency entity))
