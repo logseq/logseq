@@ -339,7 +339,7 @@
     :queryable? true}
    :logseq.task/deadline
    {:title "Deadline"
-    :schema {:type :date
+    :schema {:type :datetime
              :public? true
              :position :block-below}
     :properties {:logseq.property/hide-empty-value true}
