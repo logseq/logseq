@@ -182,6 +182,9 @@
                                      (let [pages (filter ldb/page? selected-rows)
                                            blocks (remove ldb/page? selected-rows)]
                                        (p/do!
+                                        (set-data! (get-class-objects class))
+                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                          (f {}))
                                         (ui-outliner-tx/transact!
                                          {:outliner-op :delete-blocks}
                                          (when (seq blocks)
@@ -189,10 +192,7 @@
                                          (let [page-ids (map :db/id pages)
                                                tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id class)]) page-ids)]
                                            (when (seq tx-data)
-                                             (outliner-op/transact! tx-data {:outliner-op :save-block}))))
-                                        (set-data! (get-class-objects class))
-                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                          (f {})))))}))))
+                                             (outliner-op/transact! tx-data {:outliner-op :save-block})))))))}))))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class {:keys [current-page? sidebar?]}]
@@ -258,6 +258,9 @@
                                        (let [pages (filter ldb/page? selected-rows)
                                              blocks (remove ldb/page? selected-rows)]
                                          (p/do!
+                                          (set-data! (get-property-related-objects (state/get-current-repo) property))
+                                          (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                            (f {}))
                                           (ui-outliner-tx/transact!
                                            {:outliner-op :delete-blocks}
                                            (when (seq blocks)
@@ -265,10 +268,7 @@
                                            (let [page-ids (map :db/id pages)
                                                  tx-data (map (fn [pid] [:db/retract pid (:db/ident property)]) page-ids)]
                                              (when (seq tx-data)
-                                               (outliner-op/transact! tx-data {:outliner-op :save-block}))))
-                                          (set-data! (get-property-related-objects (state/get-current-repo) property))
-                                          (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                            (f {}))))))}))))
+                                               (outliner-op/transact! tx-data {:outliner-op :save-block}))))))))}))))
 
 ;; Show all nodes containing the given property
 (rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
