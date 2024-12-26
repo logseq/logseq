@@ -230,10 +230,10 @@
                                :on-checked-change (fn [value]
                                                     (if value
                                                       (db-property-handler/set-block-property! (:db/id block)
-                                                                                               :logseq.task/reschedule-property
+                                                                                               :logseq.task/scheduled-on-property
                                                                                                (:db/id property))
                                                       (db-property-handler/remove-block-property! (:db/id block)
-                                                                                                  :logseq.task/reschedule-property)))))]
+                                                                                                  :logseq.task/scheduled-on-property)))))]
        [:div "Set as repeated task"]]]
      [:div.flex.flex-row.gap-2
       [:div.flex.text-muted-foreground.mr-4
