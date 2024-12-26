@@ -1,6 +1,6 @@
 (ns frontend.modules.outliner.ui
   #?(:cljs (:require-macros [frontend.modules.outliner.ui]))
-  #?(:cljs (:require [frontend.state :as state]
+  #?(:cljs (:require [frontend.state]
                      [frontend.db.transact]
                      [frontend.db.conn]
                      [logseq.outliner.op]
@@ -11,32 +11,32 @@
   [opts & body]
   `(let [test?# frontend.util/node-test?]
      (let [ops# frontend.modules.outliner.op/*outliner-ops*
-           editor-info# (state/get-editor-info)]
+           editor-info# (frontend.state/get-editor-info)]
        (if ops#
          (do ~@body)                    ; nested transact!
          (binding [frontend.modules.outliner.op/*outliner-ops* (transient [])]
            ~@body
            (let [r# (persistent! frontend.modules.outliner.op/*outliner-ops*)
-                 worker# @state/*db-worker]
+                 worker# @frontend.state/*db-worker]
             ;;  (js/console.groupCollapsed "ui/transact!")
             ;;  (prn :ops r#)
             ;;  (js/console.trace)
             ;;  (js/console.groupEnd)
              (if test?#
                (when (seq r#)
-                 (logseq.outliner.op/apply-ops! (state/get-current-repo)
+                 (logseq.outliner.op/apply-ops! (frontend.state/get-current-repo)
                                                 (frontend.db.conn/get-db false)
                                                 r#
-                                                (state/get-date-formatter)
+                                                (frontend.state/get-date-formatter)
                                                 ~opts))
                (when (and worker# (seq r#))
-                 (let [request-id# (state/get-worker-next-request-id)
-                       request# #(.apply-outliner-ops ^Object worker# (state/get-current-repo)
+                 (let [request-id# (frontend.state/get-worker-next-request-id)
+                       request# #(.apply-outliner-ops ^Object worker# (frontend.state/get-current-repo)
                                                       (logseq.db/write-transit-str r#)
                                                       (logseq.db/write-transit-str
                                                        (assoc ~opts
                                                               :request-id request-id#
                                                               :editor-info editor-info#)))
-                       response# (state/add-worker-request! request-id# request#)]
+                       response# (frontend.state/add-worker-request! request-id# request#)]
 
                    response#)))))))))

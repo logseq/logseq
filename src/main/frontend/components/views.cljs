@@ -53,6 +53,12 @@
        :class (str "flex transition-opacity "
                    (if (or show? selected-all? selected-some?) "opacity-100" "opacity-0"))})]))
 
+(rum/defc header-index < rum/static
+  []
+  [:label.h-8.w-6.flex.items-center.justify-center
+   {:html-for "header-index"}
+   "ID"])
+
 (rum/defc row-checkbox < rum/static
   [{:keys [row-selected? row-toggle-selected!]} row _column]
   (let [id (str (:id row) "-" "checkbox")
@@ -138,8 +144,9 @@
        (container config row')])))
 
 (defn build-columns
-  [config properties & {:keys [with-object-name? add-tags-column?]
+  [config properties & {:keys [with-object-name? with-id? add-tags-column?]
                         :or {with-object-name? true
+                             with-id? true
                              add-tags-column? true}}]
   (let [;; FIXME: Shouldn't file graphs have :block/tags?
         add-tags-column?' (and (config/db-based-graph? (state/get-current-repo)) add-tags-column?)
@@ -156,6 +163,14 @@
                     (row-checkbox table row column))
             :column-list? false
             :resizable? false}
+           (when with-id?
+             {:id :id
+              :name "ID"
+              :header (fn [_table _column] (header-index))
+              :cell (fn [table row _column]
+                      (let [rows (map :id (:rows table))]
+                        (inc (.indexOf rows (:id row)))))
+              :resizable? false})
            (when with-object-name?
              {:id :block/title
               :name "Name"
@@ -270,6 +285,9 @@
   (let [id (:id column)
         size (get sized-columns id)]
     (cond
+      (= id :id)
+      48
+
       (number? size)
       size
 
@@ -1260,18 +1278,17 @@
         (more-actions columns table)
 
         (when add-new-object! (new-record-button table view-entity))]]
-      (fn []
-        [:div.ls-view-body.flex.flex-col.gap-2.grid
-         (filters-row table)
+      [:div.ls-view-body.flex.flex-col.gap-2.grid
+       (filters-row table)
 
-         (case display-type
-           :logseq.property.view/type.list
-           (list-view (:config option) view-entity (:rows table))
+       (case display-type
+         :logseq.property.view/type.list
+         (list-view (:config option) view-entity (:rows table))
 
-           :logseq.property.view/type.gallery
-           (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
+         :logseq.property.view/type.gallery
+         (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
 
-           (table-view table option row-selection add-new-object! *scroller-ref))])
+         (table-view table option row-selection add-new-object! *scroller-ref))]
       {:title-trigger? false})]))
 
 (rum/defcs view

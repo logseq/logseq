@@ -435,9 +435,7 @@
       [:div.flex.flex-row.items-center.shrink-0
        (ui/icon "plus" {:size 16})
        [:div.ml-1
-        (if (:class-schema? opts)
-          "Add tag property"
-          "Add property")]]]]))
+        "Add property"]]]]))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
@@ -586,7 +584,7 @@
    :will-remount (fn [state]
                    (let [block (db/entity (:db/id (::block state)))]
                      (assoc state ::classes (async-load-classes! block))))}
-  [state _target-block {:keys [class-schema? sidebar-properties?] :as opts}]
+  [state _target-block {:keys [sidebar-properties?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
@@ -598,15 +596,7 @@
             (db/sub-block (:db/id class)))
         class? (ldb/class? block)
         block-properties (:block/properties block)
-        properties (cond
-                     class-schema?
-                     (->> (db-property/get-class-ordered-properties block)
-                          (map :db/ident)
-                          distinct
-                          (map #(vector % %)))
-
-                     :else
-                     block-properties)
+        properties block-properties
         remove-built-in-or-other-position-properties
         (fn [properties]
           (remove (fn [property]
@@ -685,37 +675,34 @@
                                        [[:logseq.property.class/properties nil]]))
                              remove-built-in-or-other-position-properties)]
     (cond
-      (and (empty? full-properties) (not (:class-schema? opts)))
+      (empty? full-properties)
       (when sidebar-properties?
         (rum/with-key (new-property block opts) (str id "-add-property")))
 
       :else
       (let [remove-properties #{:logseq.property/icon :logseq.property/query}
             properties' (remove (fn [[k _v]] (contains? remove-properties k)) full-properties)
-            properties'' (cond->> properties'
-                           (not class-schema?)
-                           (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
+            properties'' (->> properties'
+                              (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
             page? (ldb/page? block)]
         [:div.ls-properties-area
          {:id id
-          :class (util/classnames [{:class-properties class-schema?
-                                    :ls-page-properties (and page? (not class-schema?))}])
-          :tab-index 0
-          :on-key-up #(when-let [block (and (= "Escape" (.-key %))
-                                            (.closest (.-target %) "[blockid]"))]
-                        (let [target (.-target %)]
-                          (when-not (d/has-class? target "ls-popup-closed")
-                            (state/set-selection-blocks! [block])
-                            (some-> js/document.activeElement (.blur)))
-                          (d/remove-class! target "ls-popup-closed")))}
-         (properties-section block (if class-schema? properties properties'') opts)
+          :class (util/classnames [{:ls-page-properties page?}])
+          :tab-index 0}
+         [:<>
+          (properties-section block properties'' opts)
 
-         (when page?
-           (rum/with-key (new-property block opts) (str id "-add-property")))
+          (when (and page? (not class?))
+            (rum/with-key (new-property block opts) (str id "-add-property")))]
 
-         (when page?
-           (let [properties'' (filter (fn [[k _v]] (= k :logseq.property.class/properties)) properties')]
-             (when (seq properties'')
-               [:<>
-                (when-not class-schema? [:hr.my-4])
-                (properties-section block (if class-schema? properties properties'') opts)])))]))))
+         (when class?
+           (let [properties (->> (:logseq.property.class/properties block)
+                                 (map (fn [e] [(:db/ident e)])))
+                 opts' (assoc opts :class-schema? true)]
+             [:<>
+              [:div.mt-2
+               [:div.text-sm.text-muted-foreground.mb-2 {:style {:margin-left 10}}
+                "Tagged node properties:"]
+               [:div
+                (properties-section block properties opts')
+                (rum/with-key (new-property block opts') (str id "-class-add-property"))]]]))]))))
