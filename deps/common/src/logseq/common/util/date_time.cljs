@@ -43,14 +43,14 @@
   [day]
   (let [s (str day)
         year (js/parseInt (subs s 0 4))
-        month (js/parseInt (subs s 4 6))
+        month (dec (js/parseInt (subs s 4 6)))
         day (js/parseInt (subs s 6))]
-    (t/local-date year month day)))
+    (js/Date. year month day)))
 
 (defn int->journal-title
   [day date-formatter]
   (when day
-    (format (int->local-date day) date-formatter)))
+    (format (tf/parse (tf/formatter "yyyyMMdd") (str day)) date-formatter)))
 
 (defn- get-weekday
   [date]
