@@ -253,11 +253,15 @@
                                       (>= (count (:property/closed-values property)) 2))))
                        (concat [(db/entity :logseq.task/status)])
                        (util/distinct-by :db/id))
-           property-id (or (:db/id (:logseq.task/recur-status-property block))
-                           (:db/id (db/entity :logseq.task/status)))]
+           status-property (or (:logseq.task/recur-status-property block)
+                               (db/entity :logseq.task/status))
+           property-id (:db/id status-property)
+           done-choice (or
+                        (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) (:property/closed-values status-property))
+                        (db/entity :logseq.task/status.done))]
        [:div.flex.flex-col.gap-2
         [:div.text-muted-foreground
-         "Scheduled on:"]
+         "Reschedule when"]
         (shui/select
          (cond->
           {:on-value-change (fn [v]
@@ -270,7 +274,12 @@
           (shui/select-value {:placeholder "Select a property"}))
          (shui/select-content
           (map (fn [choice]
-                 (shui/select-item {:value (:db/id choice)} (:block/title choice))) properties)))])]))
+                 (shui/select-item {:value (:db/id choice)} (:block/title choice))) properties)))
+        [:div.flex.flex-row.gap-1
+         [:div.text-muted-foreground
+          "is:"]
+         (when done-choice
+           (db-property/property-value-content done-choice))]])]))
 
 (rum/defcs calendar-inner < rum/reactive db-mixins/query
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
