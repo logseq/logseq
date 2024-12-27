@@ -59,19 +59,19 @@
       (js/setTimeout #(sync/<sync-start) 1000))))
 
 (comment
+  (def d-entity-count (volatile! 0))
+  (def ident->count (volatile! {}))
+  (def time-sum (volatile! 0))
   (defn- setup-entity-profile!
     []
-    (let [origin-d-entity d/entity
-          d-entity-count (volatile! 0)
-          ident->count (volatile! {})]
+    (let [origin-d-entity d/entity]
       (set! d/entity (fn [& args]
-                       (let [r (apply origin-d-entity args)
+                       (let [{r :result time :time} (util/with-time (apply origin-d-entity args))
                              k (last args)]
-                         (when (= :logseq.class/Query k)
-                           (js/console.trace))
                          (vswap! d-entity-count inc)
                          (vswap! ident->count update k inc)
-                         (prn @d-entity-count (:db/id r) k (get @ident->count k))
+                         (vswap! time-sum #(+ time %))
+                         (println @d-entity-count (:db/id r) k (get @ident->count k) @time-sum "ms")
                          r))))))
 
 (defn ^:export init []
