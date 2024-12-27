@@ -7,15 +7,16 @@
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.text :as text]
-            [logseq.outliner.validate :as outliner-validate]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]))
+            [logseq.outliner.validate :as outliner-validate]))
 
 (defn- build-page-tx [conn properties page {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)
@@ -168,7 +169,7 @@
            skip-existing-page-check? false}
     :as options}]
   (let [db @conn
-        date-formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
+        date-formatter (:logseq.property.journal/title-format (entity-plus/entity-memoized db :logseq.class/Journal))
         title (sanitize-title title*)
         types (cond class?
                     #{:logseq.class/Tag}

@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
+            [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.config :as config]
@@ -54,18 +55,18 @@
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
             [logseq.outliner.core :as outliner-core]
-            [promesa.core :as p]
-            [rum.core :as rum]
             [logseq.outliner.property :as outliner-property]
-            [datascript.core :as d]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -3457,15 +3458,16 @@
 (defn- db-collapsable?
   [block]
   (let [class-properties (:classes-properties (outliner-property/get-block-classes-properties (db/get-db) (:db/id block)))
-        properties (->> (map :a (d/datoms (db/get-db) :eavt (:db/id block)))
-                        (map db/entity)
+        db (db/get-db)
+        properties (->> (map :a (d/datoms db :eavt (:db/id block)))
+                        (map (partial entity-plus/entity-memoized db))
                         (concat class-properties)
                         (remove (fn [e] (db-property/db-attribute-properties (:db/ident e))))
                         (remove outliner-property/property-with-other-position?)
                         (remove (fn [e] (:hide? (:block/schema e))))
                         (remove nil?))]
     (or (seq properties)
-        (ldb/class-instance? (db/entity :logseq.class/Query) block))))
+        (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block))))
 
 (defn collapsable?
   ([block-id]
