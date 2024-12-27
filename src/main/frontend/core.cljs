@@ -2,6 +2,7 @@
   "Entry ns for the mobile, browser and electron frontend apps"
   {:dev/always true}
   (:require [frontend.common-keywords]
+            [frontend.common.schema-register :as sr]
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.fs.sync :as sync]
@@ -11,7 +12,6 @@
             [frontend.log]
             [frontend.page :as page]
             [frontend.routes :as routes]
-            [frontend.common.schema-register :as sr]
             [frontend.spec]
             [logseq.api]
             [malli.dev.cljs :as md]
@@ -58,11 +58,28 @@
     (when config/dev?
       (js/setTimeout #(sync/<sync-start) 1000))))
 
+(comment
+  (defn- setup-entity-profile!
+    []
+    (let [origin-d-entity d/entity
+          d-entity-count (volatile! 0)
+          ident->count (volatile! {})]
+      (set! d/entity (fn [& args]
+                       (let [r (apply origin-d-entity args)
+                             k (last args)]
+                         (when (= :logseq.class/Query k)
+                           (js/console.trace))
+                         (vswap! d-entity-count inc)
+                         (vswap! ident->count update k inc)
+                         (prn @d-entity-count (:db/id r) k (get @ident->count k))
+                         r))))))
+
 (defn ^:export init []
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
 
+  ;; (setup-entity-profile!)
   (plugin-handler/setup!
    #(handler/start! start)))
 

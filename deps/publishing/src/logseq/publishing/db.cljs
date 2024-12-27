@@ -1,17 +1,17 @@
 (ns logseq.publishing.db
   "Provides db fns and associated util fns for publishing"
-  (:require [datascript.core :as d]
-            [logseq.db.frontend.rules :as rules]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]))
+            [datascript.core :as d]
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.rules :as rules]))
 
 (defn ^:api get-area-block-asset-url
   "Returns asset url for an area block used by pdf assets. This lives in this ns
   because it is used by this dep and needs to be independent from the frontend app"
   [db block page]
-  (let [db-based? (entity-util/db-based-graph? db)]
+  (let [db-based? (entity-plus/db-based-graph? db)]
     (when-some [uuid' (:block/uuid block)]
       (if db-based?
         (when-let [image (:logseq.property.pdf/hl-image block)]
@@ -105,7 +105,7 @@
 
 (defn- hl-type-area-fn
   [db]
-  (if (entity-util/db-based-graph? db)
+  (if (entity-plus/db-based-graph? db)
     (fn [datom]
       (and (= :logseq.property.pdf/hl-type (:a datom))
            (= (keyword (:v datom)) :area)))

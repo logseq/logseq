@@ -439,7 +439,7 @@
 
 (defn- property-with-position?
   [db property-id block position]
-  (let [property (d/entity db property-id)
+  (let [property (entity-plus/entity-memoized db property-id)
         schema (:block/schema property)]
     (and
      (= (:position schema) position)

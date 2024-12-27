@@ -1,15 +1,8 @@
 (ns logseq.db.frontend.entity-util
   "Lower level entity util fns used across db namespaces"
-  (:require [datascript.core :as d]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.impl.entity :as de])
   (:refer-clojure :exclude [object?]))
-
-(defn db-based-graph?
-  "Whether the current graph is db-only"
-  [db]
-  (when db
-    (= "db" (:kv/value (d/entity db :logseq.kv/db-type)))))
 
 (defn- has-tag?
   [entity tag-ident]
