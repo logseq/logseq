@@ -249,7 +249,8 @@
      [:strong (ui/icon "settings")]
      [:ul.menu-list
       [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t :plugin/open-settings)]
-      [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
+      (when (util/electron?)
+        [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)])
       [:li {:on-click #(plugin-handler/open-report-modal! id name)} (t :plugin/report-security)]
       [:li {:on-click
             #(-> (shui/dialog-confirm!

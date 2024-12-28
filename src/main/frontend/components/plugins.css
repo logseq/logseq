@@ -457,25 +457,29 @@
 
   &-settings {
     &-inner {
-      position: relative;
-      padding: 10px 0 20px;
+      @apply relative pt-2.5 pb-5 px-0;
 
       > .edit-file {
-        position: absolute;
-        top: 12px;
-        right: 8px;
+        @apply absolute top-3 right-2;
+      }
+
+      &[data-mode=code] {
+        @apply pt-2;
+
+        > .edit-file {
+          @apply -top-3.5;
+        }
       }
 
       .heading-item {
-        margin: 12px 12px 6px;
-        border-bottom: 1px solid var(--ls-border-color, #738694);
+        @apply pt-3 px-3 pb-1.5 border-b;
 
         h2 {
-          font-weight: bold;
+          @apply font-bold;
         }
 
         small:empty {
-          display: none;
+          @apply hidden;
         }
       }
 
