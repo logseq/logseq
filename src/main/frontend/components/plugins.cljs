@@ -255,18 +255,20 @@
             #(-> (shui/dialog-confirm!
                   [:b (t :plugin/delete-alert name)])
                  (p/then (fn []
-                           (plugin-common-handler/unregister-plugin id)
-                           (plugin-config-handler/remove-plugin id))))}
+                          (plugin-common-handler/unregister-plugin id)
+
+                          (when (util/electron?)
+                           (plugin-config-handler/remove-plugin id)))))}
        (t :plugin/uninstall)]]]
 
     (when (seq sponsors)
-      [:div.de.sponsors
-       [:strong (ui/icon "coffee")]
-       [:ul.menu-list
-        (for [link sponsors]
-          [:li {:key link}
-           [:a {:href link :target "_blank"}
-            [:span.flex.items-center link (ui/icon "external-link")]]])]])]
+     [:div.de.sponsors
+      [:strong (ui/icon "coffee")]
+      [:ul.menu-list
+       (for [link sponsors]
+        [:li {:key link}
+         [:a {:href link :target "_blank"}
+          [:span.flex.items-center link (ui/icon "external-link")]]])]])]
 
    [:div.r.flex.items-center
     (when (and unpacked? (not disabled?))

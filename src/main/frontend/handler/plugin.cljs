@@ -62,6 +62,11 @@
     (let [^js e (js/window.EventEmitter3.)]
       (set! (. js/window -apis) e))))
 
+(defn unlink-plugin-for-web!
+  [key]
+  (invoke-exported-api :unlink_installed_web_plugin key)
+  (invoke-exported-api :unlink_plugin_user_settings key))
+
 (defn load-plugin-preferences
   []
   (-> (invoke-exported-api :load_user_preferences)
@@ -817,7 +822,9 @@
 
                   (.on "unlink-plugin" (fn [pid]
                                          (let [pid (keyword pid)]
-                                           (ipc/ipc "uninstallMarketPlugin" (name pid)))))
+                                           (if (util/electron?)
+                                             (ipc/ipc :uninstallMarketPlugin (name pid))
+                                             (unlink-plugin-for-web! pid)))))
 
                   (.on "beforereload" (fn [^js pl]
                                         (let [pid (.-id pl)]

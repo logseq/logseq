@@ -393,13 +393,21 @@
         (some-> (getter :all) (p/then second))))
 
 (defn ^:export save_installed_web_plugin
- [^js plugin]
- (when-let [id (some-> plugin (.-key))]
-  (let [setter (plugin-handler/make-fn-to-save-dotdir-json "installed-plugins-for-web")
-        plugin (js/JSON.parse (js/JSON.stringify plugin))]
-   (p/let [^js plugins (or (load_installed_web_plugins) #js {})]
-          (gobj/set plugins id plugin)
-          (setter :all plugins)))))
+ ([^js plugin] (save_installed_web_plugin plugin false))
+ ([^js plugin remove?]
+  (when-let [id (some-> plugin (.-key) (name))]
+   (let [setter (plugin-handler/make-fn-to-save-dotdir-json "installed-plugins-for-web")
+         plugin (js/JSON.parse (js/JSON.stringify plugin))]
+    (p/let [^js plugins (or (load_installed_web_plugins) #js {})]
+           (if (true? remove?)
+            (when (aget plugins id)
+             (js-delete plugins id))
+            (gobj/set plugins id plugin))
+           (setter :all plugins))))))
+
+(defn ^:export unlink_installed_web_plugin
+ [key]
+ (save_installed_web_plugin #js {:key key} true))
 
 (def ^:export unlink_plugin_user_settings
   (plugin-handler/make-fn-to-unlink-dotdir-json "settings"))

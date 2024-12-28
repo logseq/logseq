@@ -927,7 +927,7 @@ class PluginLocal extends EventEmitter<
     if (unregister) {
       await this.unload()
 
-      if (this.isInstalledInDotRoot) {
+      if (this.isWebPlugin || this.isInstalledInDotRoot) {
         this._ctx.emit('unlink-plugin', this.id)
       }
 
@@ -1393,7 +1393,7 @@ class LSPluginCore
     for (const identity of plugins) {
       const p = this.ensurePlugin(identity)
 
-      if (!p.isInstalledInDotRoot) {
+      if (!p.isWebPlugin && !p.isInstalledInDotRoot) {
         unregisteredExternals.push(p.options.url)
       }
 
