@@ -591,6 +591,9 @@
                        (pdf-utils/hls-file? page-name)
                        (pdf-utils/fix-local-asset-pagename page-name)
 
+                       (or (:page-reference? config) (:tag? config))
+                       page-name-in-block
+
                        (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
                        page-name-in-block ;; page-name-in-block might be overridden (legacy))
 
@@ -772,7 +775,8 @@
        (let [s (string/trim s)]
          (page-cp (assoc config
                          :label (mldoc/plain->text label)
-                         :contents-page? contents-page?)
+                         :contents-page? contents-page?
+                         :page-reference? true)
                   {:block/name s}))
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
