@@ -98,11 +98,13 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
       return
     }
 
-    this.emit('change', Object.assign({}, this._settings), o)
+    this.emit('change', { ...this._settings }, o)
   }
 
   set settings(value: Record<string, any>) {
-    this._settings = value
+    const o = deepMerge({}, this._settings)
+    this._settings = value || {}
+    this.emit('change', { ...this._settings }, o)
   }
 
   get settings(): Record<string, any> {
