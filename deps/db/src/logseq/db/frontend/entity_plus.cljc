@@ -47,11 +47,11 @@
   (vreset! *seen-immutable-entities {}))
 
 (def ^:private *reset-cache-background-task-running?
-  ;; missionary is not compatible with nbb, so enitity-memoized is disabled in nbb
+  ;; missionary is not compatible with nbb, so entity-memoized is disabled in nbb
   (delay
     #?(:org.babashka/nbb false
-       :cljs ((resolve 'frontend.common.missionary/background-task-running?)
-              :logseq.db.frontend.entity-plus/reset-immutable-entities-cache!))))
+       :cljs (when-let [f (resolve 'frontend.common.missionary/background-task-running?)]
+               (f :logseq.db.frontend.entity-plus/reset-immutable-entities-cache!)))))
 
 (defn entity-memoized
   [db eid]
