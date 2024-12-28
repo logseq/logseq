@@ -1,9 +1,9 @@
 (ns frontend.worker.rtc.client-op
   "Store client-ops in a persisted datascript"
   (:require [datascript.core :as d]
-            [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.state :as worker-state]
+            [frontend.common.missionary :as c.m]
             [logseq.db.sqlite.util :as sqlite-util]
             [malli.core :as ma]
             [malli.transform :as mt]

@@ -85,6 +85,6 @@ frontend.worker.rtc.hash/hash-blocks
 ;; Repl fn
 frontend.rum/use-atom-in
 ;; missionary utils
-frontend.common.missionary-util/<!
-;; Not sure why carve said it's unused...
-frontend.flows/current-repo-flow
+frontend.common.missionary/<!
+;; only used in deps/common
+frontend.common.missionary/background-task-running?

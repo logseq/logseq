@@ -2,7 +2,6 @@
   "Main(use missionary) ns for rtc related fns"
   (:require [clojure.data :as data]
             [datascript.core :as d]
-            [frontend.common.missionary-util :as c.m]
             [frontend.worker.device :as worker-device]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client :as r.client]
@@ -17,6 +16,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.config :as common-config]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [malli.core :as ma]
             [missionary.core :as m])

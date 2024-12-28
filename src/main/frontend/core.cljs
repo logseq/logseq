@@ -1,7 +1,8 @@
 (ns frontend.core
   "Entry ns for the mobile, browser and electron frontend apps"
   {:dev/always true}
-  (:require [frontend.common-keywords]
+  (:require [frontend.background-tasks]
+            [frontend.common-keywords]
             [frontend.common.schema-register :as sr]
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]

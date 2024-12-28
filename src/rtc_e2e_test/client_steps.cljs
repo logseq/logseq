@@ -2,10 +2,10 @@
   (:require [cljs.test :as t :refer [is]]
             [const]
             [datascript.core :as d]
-            [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc-core]
             [helper]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [missionary.core :as m]))
 
