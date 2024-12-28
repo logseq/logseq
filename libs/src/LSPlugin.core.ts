@@ -864,6 +864,8 @@ class PluginLocal extends EventEmitter<
         return
       }
 
+      this._ctx.emit('beforeload', this)
+
       await this._tryToNormalizeEntry()
 
       this._caller = new LSPluginCaller(this)
@@ -884,6 +886,8 @@ class PluginLocal extends EventEmitter<
       })
 
       this._dispose(cleanInjectedScripts.bind(this))
+
+      this._ctx.emit('loadeded', this)
     } catch (e) {
       this.logger.error('load', e, true)
 
@@ -1129,6 +1133,8 @@ class LSPluginCore
     | 'reset-custom-theme'
     | 'settings-changed'
     | 'unlink-plugin'
+    | 'beforeload'
+    | 'loadeded'
     | 'beforereload'
     | 'reloaded'
   >
