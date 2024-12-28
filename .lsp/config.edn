@@ -1,4 +1,13 @@
 {:source-aliases #{:cljs}
  :source-paths-ignore-regex ["src/resources" "target.*"]
  :paths-ignore-regex ["src/resources"]
- :clean {:ns-inner-blocks-indentation :same-line}}
+ :clean {:ns-inner-blocks-indentation :same-line}
+ :additional-snippets [{:name "profile"
+                        :detail "Insert profile-fn"
+                        :snippet
+                        "
+(comment
+(require '[logseq.common.profile :as c.p])
+(do (vreset! c.p/*key->call-count {})
+    (vreset! c.p/*key->time-sum {}))
+(c.p/profile-fn! $1) )"}]}
