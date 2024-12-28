@@ -591,10 +591,9 @@
                        (pdf-utils/hls-file? page-name)
                        (pdf-utils/fix-local-asset-pagename page-name)
 
-                       (or (:page-reference? config) (:tag? config))
-                       page-name-in-block
-
-                       (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
+                       (or (:page-reference? config)
+                           (:tag? config)
+                           (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block))
                        page-name-in-block ;; page-name-in-block might be overridden (legacy))
 
                        original-name
