@@ -1,7 +1,6 @@
 (ns frontend.db.rtc.debug-ui
   "Debug UI for rtc module"
   (:require [fipp.edn :as fipp]
-            [frontend.common.missionary-util :as c.m]
             [frontend.db :as db]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.user :as user]
@@ -9,6 +8,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
