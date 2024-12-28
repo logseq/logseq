@@ -16,7 +16,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.config :as common-config]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [malli.core :as ma]
             [missionary.core :as m])

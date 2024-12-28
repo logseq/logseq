@@ -8,7 +8,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]

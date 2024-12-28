@@ -28,7 +28,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :refer [version]]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [logseq.shui.util :as shui-util]

@@ -1,4 +1,4 @@
-(ns logseq.common.missionary
+(ns frontend.common.missionary
   "Macros for missionary"
   (:require [missionary.core :as m]))
 

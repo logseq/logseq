@@ -23,7 +23,7 @@
 
 (use-fixtures :each start-and-destroy-db)
 
-(deftest ^:xxx get-all-classes-test
+(deftest get-all-classes-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (test-helper/create-page! "class1" opts)
         _ (test-helper/create-page! "class2" opts)]

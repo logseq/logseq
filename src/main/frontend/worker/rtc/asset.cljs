@@ -11,7 +11,7 @@
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [logseq.common.path :as path]
             [logseq.db :as ldb]
             [malli.core :as ma]

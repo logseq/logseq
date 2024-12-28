@@ -7,7 +7,7 @@
             [frontend.worker.rtc.db-listener]
             [frontend.worker.state :as worker-state]
             [helper]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [missionary.core :as m]))
 
 (def install-some-consts
