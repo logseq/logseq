@@ -1,15 +1,16 @@
 (ns logseq.db.sqlite.common-db
   "Common sqlite db fns for browser and node"
-  (:require [datascript.core :as d]
-            ["path" :as node-path]
-            [clojure.string :as string]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util :as common-util]
-            [logseq.common.config :as common-config]
-            [logseq.db.frontend.entity-util :as entity-util]
+  (:require ["path" :as node-path]
             [clojure.set :as set]
-            [logseq.db.frontend.order :as db-order]))
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- get-pages-by-name
   [db page-name]
@@ -81,7 +82,7 @@
 
 (defn- property-with-values
   [db block]
-  (when (entity-util/db-based-graph? db)
+  (when (entity-plus/db-based-graph? db)
     (let [block (d/entity db (:db/id block))]
       (->> (:block/properties block)
            vals
@@ -242,7 +243,7 @@
   "Returns current database schema and initial data.
    NOTE: This fn is called by DB and file graphs"
   [db]
-  (let [db-graph? (entity-util/db-based-graph? db)
+  (let [db-graph? (entity-plus/db-based-graph? db)
         _ (when db-graph?
             (reset! db-order/*max-key (db-order/get-max-order db)))
         schema (:schema db)

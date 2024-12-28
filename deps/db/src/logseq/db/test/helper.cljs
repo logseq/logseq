@@ -1,9 +1,10 @@
 (ns ^:node-only logseq.db.test.helper
   "Main ns for providing test fns for DB graphs"
   (:require [datascript.core :as d]
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (defn find-block-by-content
   "Find first block by exact block string or by fuzzier regex"
@@ -43,6 +44,7 @@
   []
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
         _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))]
+    (entity-plus/reset-immutable-entities-cache!)
     conn))
 
 (defn create-conn-with-blocks

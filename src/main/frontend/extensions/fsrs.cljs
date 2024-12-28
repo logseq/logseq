@@ -18,6 +18,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [open-spaced-repetition.cljc-fsrs.core :as fsrs.core]
@@ -247,7 +248,7 @@
         all-cards (concat
                    [{:db/id :global
                      :block/title "All cards"}]
-                   (db-model/get-class-objects repo (:db/id (db/entity :logseq.class/Cards))))
+                   (db-model/get-class-objects repo (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards))))
         *block-ids (::block-ids state)
         block-ids (rum/react *block-ids)
         loading? (rum/react (::loading? state))
