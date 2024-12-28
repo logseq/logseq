@@ -2,7 +2,7 @@
   "Fns to generate rtc related logs"
   (:require [frontend.common.schema-register :as sr]
             [frontend.worker.util :as worker-util]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [malli.core :as ma]
             [missionary.core :as m]))
 

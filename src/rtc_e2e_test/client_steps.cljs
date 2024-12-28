@@ -5,7 +5,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc-core]
             [helper]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [missionary.core :as m]))
 

@@ -1,6 +1,6 @@
-(ns logseq.common.missionary
+(ns frontend.common.missionary
   "Utils based on missionary. Used by frontend and worker namespaces"
-  (:require-macros [logseq.common.missionary])
+  (:require-macros [frontend.common.missionary])
   (:require [cljs.core.async.impl.channels]
             [clojure.core.async :as a]
             [missionary.core :as m]

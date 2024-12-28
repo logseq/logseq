@@ -7,7 +7,7 @@
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.state :as worker-state]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.batch-tx :as batch-tx]

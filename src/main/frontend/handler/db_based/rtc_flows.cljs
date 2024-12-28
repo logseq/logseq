@@ -1,7 +1,7 @@
 (ns frontend.handler.db-based.rtc-flows
   "Flows related to RTC"
   (:require [frontend.state :as state]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [logseq.common.util :as common-util]
             [missionary.core :as m]))
 

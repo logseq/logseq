@@ -9,7 +9,7 @@
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
             [goog.crypt.base64 :as base64]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [missionary.core :as m]
             [promesa.core :as p]))

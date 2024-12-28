@@ -1,7 +1,7 @@
 (ns frontend.background-tasks
   "Some background tasks"
   (:require [frontend.flows :as flows]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [missionary.core :as m]))
 

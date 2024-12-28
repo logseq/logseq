@@ -10,7 +10,6 @@
             [datascript.core :as d]
             [datascript.impl.entity :as entity :refer [Entity]]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.missionary :as c.m]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]))
 
@@ -48,7 +47,11 @@
   (vreset! *seen-immutable-entities {}))
 
 (def ^:private *reset-cache-background-task-running?
-  (delay (c.m/background-task-running? :logseq.db.frontend.entity-plus/reset-immutable-entities-cache!)))
+  ;; missionary is not compatible with nbb, so enitity-memoized is disabled in nbb
+  (delay
+    #?(:org.babashka/nbb false
+       :cljs ((resolve 'frontend.common.missionary/background-task-running?)
+              :logseq.db.frontend.entity-plus/reset-immutable-entities-cache!))))
 
 (defn entity-memoized
   [db eid]

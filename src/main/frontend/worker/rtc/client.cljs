@@ -10,7 +10,7 @@
             [frontend.worker.rtc.skeleton :as r.skeleton]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [missionary.core :as m]))
 
 (defn- register-graph-updates

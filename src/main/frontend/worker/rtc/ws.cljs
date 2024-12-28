@@ -5,7 +5,7 @@
   (:require [cljs-http-missionary.client :as http]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [missionary.core :as m]))
 
 (defn- get-state

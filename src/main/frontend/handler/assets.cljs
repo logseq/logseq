@@ -8,7 +8,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
-            [logseq.common.missionary :as c.m]
+            [frontend.common.missionary :as c.m]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [medley.core :as medley]
