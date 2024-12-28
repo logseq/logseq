@@ -2,7 +2,6 @@
   "Fns about push local updates"
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
@@ -11,6 +10,7 @@
             [frontend.worker.rtc.skeleton :as r.skeleton]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util]
+            [frontend.common.missionary :as c.m]
             [missionary.core :as m]))
 
 (defn- register-graph-updates

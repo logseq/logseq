@@ -9,12 +9,9 @@
             [cljs.core]
             [datascript.core :as d]
             [datascript.impl.entity :as entity :refer [Entity]]
-            [frontend.common.missionary-util :as c.m]
-            [frontend.flows :as flows]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
-            [missionary.core :as m]))
+            [logseq.db.frontend.property :as db-property]))
 
 (def immutable-db-idents
   "These db-ident entities are immutable,
@@ -49,18 +46,17 @@
   []
   (vreset! *seen-immutable-entities {}))
 
-(c.m/run-background-task
- ::reset-immutable-entities-cache!
- (m/reduce
-  (fn [_ repo]
-    (when (some? repo)
-      (prn :reset-immutable-entities-cache!)
-      (reset-immutable-entities-cache!)))
-  flows/current-repo-flow))
+(def ^:private *reset-cache-background-task-running?
+  ;; missionary is not compatible with nbb, so entity-memoized is disabled in nbb
+  (delay
+    #?(:org.babashka/nbb false
+       :cljs (when-let [f (resolve 'frontend.common.missionary/background-task-running?)]
+               (f :logseq.db.frontend.entity-plus/reset-immutable-entities-cache!)))))
 
 (defn entity-memoized
   [db eid]
-  (if (and (qualified-keyword? eid)
+  (if (and @*reset-cache-background-task-running?
+           (qualified-keyword? eid)
            (contains? immutable-db-idents eid))
     (if-let [e (find @*seen-immutable-entities eid)]
       (val e)

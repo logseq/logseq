@@ -1,7 +1,9 @@
 {:paths ["src" "resources"]
  :deps {com.andrewmcveigh/cljs-time           {:git/url "https://github.com/logseq/cljs-time" ;; fork
                                                :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
-        missionary/missionary                 {:mvn/version "b.39"}}
+        missionary/missionary                 {:mvn/version "b.39"}
+        org.clojure/core.async                {:mvn/version "1.6.673"}
+        funcool/promesa                       {:mvn/version "11.0.678"}}
  :aliases
  {:test {:extra-paths ["test"]
          :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.0"}

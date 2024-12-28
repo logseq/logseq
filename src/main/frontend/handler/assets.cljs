@@ -1,7 +1,6 @@
 (ns ^:no-doc frontend.handler.assets
   (:require [cljs-http-missionary.client :as http]
             [clojure.string :as string]
-            [frontend.common.missionary-util :as c.m]
             [frontend.config :as config]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
@@ -9,6 +8,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
+            [frontend.common.missionary :as c.m]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [medley.core :as medley]
