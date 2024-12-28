@@ -755,6 +755,10 @@
    [this]
    (rtc-core/rtc-toggle-auto-push))
 
+  (rtc-toggle-remote-profile
+   [this]
+   (rtc-core/rtc-toggle-remote-profile))
+
   (rtc-grant-graph-access
    [this token graph-uuid target-user-uuids-str target-user-emails-str]
    (let [target-user-uuids (ldb/read-transit-str target-user-uuids-str)

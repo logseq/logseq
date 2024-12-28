@@ -11,6 +11,7 @@
             [electron.ipc :as ipc]
             [frontend.db.conn-state :as db-conn-state]
             [frontend.db.transact :as db-transact]
+            [frontend.flows :as flows]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as r]
             [frontend.spec.storage :as storage-spec]
@@ -21,6 +22,7 @@
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
@@ -599,7 +601,7 @@ should be done through this fn in order to get global config and config defaults
   (let [repo (get-current-repo)]
     (if (sqlite-util/db-based-graph? repo)
       (when-let [conn (db-conn-state/get-conn repo)]
-        (get (d/entity @conn :logseq.class/Journal)
+        (get (entity-plus/entity-memoized @conn :logseq.class/Journal)
              :logseq.property.journal/title-format
              "MMM do, yyyy"))
       (common-config/get-date-formatter (get-config)))))
@@ -978,6 +980,7 @@ Similar to re-frame subscriptions"
 (defn set-current-repo!
   [repo]
   (swap! state assoc :git/current-repo repo)
+  (reset! flows/*current-repo repo)
   (if repo
     (storage/set :git/current-repo repo)
     (storage/remove :git/current-repo))
