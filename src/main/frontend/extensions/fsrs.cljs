@@ -1,7 +1,6 @@
 (ns frontend.extensions.fsrs
   "Flashcards functions based on FSRS, only works in db-based graphs"
   (:require [clojure.string :as string]
-            [frontend.common.missionary-util :as c.m]
             [frontend.components.block :as component-block]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -17,6 +16,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.shui.ui :as shui]

@@ -86,5 +86,3 @@ frontend.worker.rtc.hash/hash-blocks
 frontend.rum/use-atom-in
 ;; missionary utils
 frontend.common.missionary-util/<!
-;; Not sure why carve said it's unused...
-frontend.flows/current-repo-flow
