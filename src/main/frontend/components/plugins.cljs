@@ -603,16 +603,18 @@
                             [{:title [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
                               :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}])
 
-                          [{:title [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings-page/network-proxy)]
-                            :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
+                          (when (util/electron?)
+                           [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings-page/network-proxy)]
+                             :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}
 
-                          [{:title [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
-                            :options {:on-click plugin-config-handler/open-replace-plugins-modal}}]
+                            {:title   [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
+                             :options {:on-click plugin-config-handler/open-replace-plugins-modal}}])
 
                           [{:hr true}]
 
-                          (when (state/developer-mode?)
-                            [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
+                          (when (and (state/developer-mode?)
+                                     (util/electron?))
+                           [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
                               :options {:on-click
                                         #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                            (js/apis.openPath (str root "/preferences.json")))}}
