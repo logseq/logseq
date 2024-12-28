@@ -1,6 +1,7 @@
 (ns logseq.db.frontend.entity-util
   "Lower level entity util fns used across db namespaces"
   (:require [clojure.string :as string]
+            [datascript.db]
             [datascript.impl.entity :as de])
   (:refer-clojure :exclude [object?]))
 
