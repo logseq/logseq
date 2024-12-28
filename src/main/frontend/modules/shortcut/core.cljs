@@ -279,15 +279,15 @@
         global? true]
     (letfn [(into-shortcuts [shortcuts]
               (cond-> shortcuts
-                      (nil? binding)
-                      (dissoc id)
+                (nil? binding)
+                (dissoc id)
 
-                      (and global?
-                           (or (string? binding)
-                               (vector? binding)
-                               (boolean? binding)))
-                      (assoc id binding)))]
+                (and global?
+                  (or (string? binding)
+                    (vector? binding)
+                    (boolean? binding)))
+                (assoc id binding)))]
       ;; TODO: exclude current graph config shortcuts
-      (when (nil? binding)
-        (config-handler/set-config! :shortcuts (into-shortcuts graph-shortcuts)))
-      (global-config-handler/set-global-config-kv! :shortcuts (into-shortcuts global-shortcuts)))))
+      (config-handler/set-config! :shortcuts (into-shortcuts graph-shortcuts))
+      (when (util/electron?)
+        (global-config-handler/set-global-config-kv! :shortcuts (into-shortcuts global-shortcuts))))))
