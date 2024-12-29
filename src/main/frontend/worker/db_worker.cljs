@@ -37,7 +37,8 @@
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]))
+            [shadow.cljs.modern :refer [defclass]]
+            [datascript.impl.entity :as de]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -108,7 +109,7 @@
 
 (defn- rebuild-db-from-datoms!
   "Persistent-sorted-set has been broken, used addresses can't be found"
-  [datascript-conn sqlite-db]
+  [datascript-conn sqlite-db import-type]
   (let [datoms (get-all-datoms-from-sqlite-db sqlite-db)
         db (d/init-db [] db-schema/schema-for-db-based-graph
                       {:storage (storage/storage @datascript-conn)})
@@ -117,10 +118,12 @@
                              [:db/add (:e d) (:a d) (:v d) (:t d)]) datoms))]
     (prn :debug :rebuild-db-from-datoms :datoms-count (count datoms))
     ;; export db first
-    (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
-    (worker-util/post-message :export-current-db [])
+    (when-not import-type
+      (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
+      (worker-util/post-message :export-current-db []))
     (.exec sqlite-db #js {:sql "delete from kvs"})
-    (d/reset-conn! datascript-conn db)))
+    (d/reset-conn! datascript-conn db)
+    (db-migrate/fix-db! datascript-conn)))
 
 (comment
   (defn- gc-kvs-table!
@@ -327,7 +330,7 @@
           (db-migrate/migrate conn search-db)
           (catch :default _e
             (when db-based?
-              (rebuild-db-from-datoms! conn db))))
+              (rebuild-db-from-datoms! conn db import-type))))
 
         (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 
