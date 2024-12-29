@@ -843,7 +843,7 @@
                                           (let [theme (bean/->clj theme)
                                                 _opts (bean/->clj opts)
                                                 url (:url theme)
-                                                mode (:mode theme)]
+                                                mode (or (:mode theme) (state/sub :ui/theme))]
                                             (when mode
                                               (state/set-custom-theme! mode theme)
                                               (state/set-theme-mode! mode))
