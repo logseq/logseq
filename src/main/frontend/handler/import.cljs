@@ -233,7 +233,7 @@
      (p/do!
       (persist-db/<import-db graph buffer)
       (state/add-repo! {:url graph})
-      (repo-handler/restore-and-setup-repo! graph)
+      (repo-handler/restore-and-setup-repo! graph {:import-type "sqlite"})
       (state/set-current-repo! graph)
       (persist-db/<export-db graph {})
       (db/transact! graph (sqlite-util/import-tx :sqlite-db))
