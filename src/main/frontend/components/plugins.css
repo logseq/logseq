@@ -467,7 +467,7 @@
         @apply pt-2;
 
         > .edit-file {
-          @apply -top-3.5;
+          @apply -top-4;
         }
       }
 
