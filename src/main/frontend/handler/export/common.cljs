@@ -191,8 +191,7 @@
 (defn <get-debug-datoms
   [repo]
   (when-let [^object worker @db-browser/*worker]
-    (p/let [result (.get-debug-datoms worker repo)]
-      (ldb/read-transit-str result))))
+    (.get-debug-datoms worker repo)))
 
 (defn <get-all-page->content
   [repo]
