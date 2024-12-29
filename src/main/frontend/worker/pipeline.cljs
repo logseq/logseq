@@ -120,7 +120,8 @@ default = false")
 (defn- invoke-hooks-default [repo conn {:keys [tx-meta] :as tx-report} context]
   (try
     (let [display-blocks-tx-data (add-missing-properties-to-typed-display-blocks (:db-after tx-report) (:tx-data tx-report))
-          commands-tx (commands/run-commands tx-report)
+          commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta))
+                        (commands/run-commands tx-report))
           ;; :block/refs relies on those changes
           tx-before-refs (concat display-blocks-tx-data commands-tx)
           tx-report* (if (seq tx-before-refs)
