@@ -1,6 +1,7 @@
 (ns frontend.components.property.value
-  (:require [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
             [dommy.core :as d]
@@ -32,11 +33,10 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.outliner.property :as outliner-property]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [clojure.set :as set]
-            [logseq.outliner.property :as outliner-property]))
+            [rum.core :as rum]))
 
 (rum/defc property-empty-btn-value
   [property & opts]
@@ -419,6 +419,7 @@
         open-popup! (fn [e]
                       (when-not (or (util/meta-key? e) (util/shift-key? e))
                         (util/stop e)
+                        (editor-handler/save-current-block!)
                         (when-not config/publishing?
                           (shui/popup-show! (.-target e) content-fn
                                             {:align "start" :auto-focus? true}))))
@@ -492,7 +493,9 @@
                                                                    :tags #{:logseq.class/Journal}}))
                                          (property-handler/set-block-property! repo (:block/uuid block)
                                                                                (:db/ident property)
-                                                                               (if (map? value) (:db/id value) value)))))
+                                                                               (if datetime?
+                                                                                 value
+                                                                                 (:db/id value))))))
                          :del-btn? (some? value)
                          :on-delete (fn []
                                       (property-handler/set-block-property! repo (:block/uuid block)
