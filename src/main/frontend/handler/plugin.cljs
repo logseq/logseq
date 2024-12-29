@@ -99,7 +99,9 @@
       (fn [resolve reject]
         (let [on-ok (fn [res]
                       (if-let [res (and res (bean/->clj res))]
-                        (let [pkgs (:packages res)]
+                        (let [pkgs (:packages res)
+                              pkgs (if (util/electron?) pkgs
+                                     (some->> pkgs (filterv #(not (true? (:effect %))))))]
                           (state/set-state! :plugin/marketplace-pkgs pkgs)
                           (resolve pkgs))
                         (reject nil)))]
