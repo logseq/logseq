@@ -2,7 +2,6 @@
   "Fns about push local updates"
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
@@ -11,6 +10,7 @@
             [frontend.worker.rtc.skeleton :as r.skeleton]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util]
+            [frontend.common.missionary :as c.m]
             [missionary.core :as m]))
 
 (defn- register-graph-updates
@@ -326,7 +326,7 @@
 
 (defn new-task--push-local-ops
   "Return a task: push local updates"
-  [repo conn graph-uuid date-formatter get-ws-create-task add-log-fn]
+  [repo conn graph-uuid date-formatter get-ws-create-task *remote-profile? add-log-fn]
   (m/sp
     (let [block-ops-map-coll (client-op/get&remove-all-block-ops repo)]
       (when-let [block-uuid->remote-ops (not-empty (gen-block-uuid->remote-ops @conn block-ops-map-coll))]
@@ -336,8 +336,9 @@
           (let [local-tx (client-op/get-local-tx repo)
                 r (try
                     (m/? (ws-util/send&recv get-ws-create-task
-                                            {:action "apply-ops" :graph-uuid graph-uuid
-                                             :ops ops-for-remote :t-before (or local-tx 1)}))
+                                            (cond-> {:action "apply-ops" :graph-uuid graph-uuid
+                                                     :ops ops-for-remote :t-before (or local-tx 1)}
+                                              (true? @*remote-profile?) (assoc :profile true))))
                     (catch :default e
                       (rollback repo block-ops-map-coll)
                       (throw e)))]

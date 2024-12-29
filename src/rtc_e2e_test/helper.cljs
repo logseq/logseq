@@ -1,13 +1,13 @@
 (ns helper
   (:require [cljs.test :as t :refer [is]]
-            [datascript.transit :as dt]
             [const]
             [datascript.core :as d]
-            [frontend.common.missionary-util :as c.m]
+            [datascript.transit :as dt]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.state :as worker-state]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.batch-tx :as batch-tx]
@@ -91,11 +91,11 @@
   #_:clj-kondo/ignore
   (me/find
    client-op
-    [?op-type _ {:block-uuid ?block-uuid :av-coll [[!a !v _ !add] ...]}]
-    [?op-type ?block-uuid (map vector !a !v !add)]
+   [?op-type _ {:block-uuid ?block-uuid :av-coll [[!a !v _ !add] ...]}]
+   [?op-type ?block-uuid (map vector !a !v !add)]
 
-    [?op-type _ {:block-uuid ?block-uuid}]
-    [?op-type ?block-uuid]))
+   [?op-type _ {:block-uuid ?block-uuid}]
+   [?op-type ?block-uuid]))
 
 (defn new-task--wait-all-client-ops-sent
   [& {:keys [timeout] :or {timeout 10000}}]

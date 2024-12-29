@@ -19,8 +19,8 @@
             [frontend.components.property.value :as pv]
             [frontend.components.query :as query]
             [frontend.components.query.builder :as query-builder-component]
-            [frontend.components.svg :as svg]
             [frontend.components.select :as select]
+            [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -78,6 +78,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
@@ -2285,7 +2286,9 @@
          ;; highlight ref block (area)
          (when area? [(hl-ref)])
 
-         (when (and (seq block-ast-title) (ldb/class-instance? (db/entity :logseq.class/Cards) block))
+         (when (and (seq block-ast-title) (ldb/class-instance?
+                                           (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)
+                                           block))
            [(ui/tooltip
              (shui/button
               {:variant :ghost
@@ -2302,7 +2305,8 @@
   (let [collapsed? (:collapsed? config)
         block' (db/entity (:db/id block))
         node-display-type (:logseq.property.node/display-type block')
-        query? (ldb/class-instance? (db/entity :logseq.class/Query) block')
+        db (db/get-db)
+        query? (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block')
         query (:logseq.property/query block')
         advanced-query? (and query? (= :code node-display-type))]
     (cond
@@ -3277,7 +3281,8 @@
 (rum/defc query-property-cp < rum/reactive db-mixins/query
   [block config collapsed?]
   (let [block (db/entity (:db/id block))
-        query? (ldb/class-instance? (db/entity :logseq.class/Query) block)]
+        db (db/get-db)
+        query? (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block)]
     (when (and query? (not collapsed?))
       (let [query-id (:db/id (:logseq.property/query block))
             query (some-> query-id db/sub-block)
@@ -3496,7 +3501,7 @@
         (db-properties-cp config block {:in-block-container? true})])
 
      (when (and db-based? (not collapsed?) (not (or table? property?))
-                (ldb/class-instance? (db/entity :logseq.class/Query) block))
+                (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block))
        (let [query-block (:logseq.property/query (db/entity (:db/id block)))
              query-block (if query-block (db/sub-block (:db/id query-block)) query-block)
              query (:block/title query-block)
@@ -3505,7 +3510,9 @@
          [:div {:style {:padding-left 42}}
           (query/custom-query (wrap-query-components (assoc config
                                                             :dsl-query? (not advanced-query?)
-                                                            :cards? (ldb/class-instance? (db/entity :logseq.class/Cards) block)))
+                                                            :cards? (ldb/class-instance? (entity-plus/entity-memoized
+                                                                                          (db/get-db)
+                                                                                          :logseq.class/Cards) block)))
                               (if advanced-query? result {:builder nil
                                                           :query (query-builder-component/sanitize-q query)}))]))
 

@@ -5,23 +5,76 @@
   ;; Disable clj linters since we don't support clj
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})
-  (:require [cljs.core]
-            #?(:org.babashka/nbb [datascript.db])
+  (:require #?(:org.babashka/nbb [datascript.db])
+            [cljs.core]
+            [datascript.core :as d]
             [datascript.impl.entity :as entity :refer [Entity]]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.common.util.date-time :as date-time-util]
-            [datascript.core :as d]))
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.property :as db-property]))
 
-(def db-based-graph? entity-util/db-based-graph?)
+(def immutable-db-idents
+  "These db-ident entities are immutable,
+  it means `(db/entity :block/title)` always return same result"
+  #{:block/created-at :block/updated-at
+    :block/uuid :block/title :block/tags :block/name :block/format
+    :block/schema :block/path-refs :block/refs :block/tx-id :block/type
+    :block/page :block/parent :block/order :block/journal-day :block/closed-value-property
+    :block/link :block/marker :block/warning :block/collapsed? :block/deadline :block/scheduled :block/level
+    :block/pre-block? :block/heading-level
 
-(def lookup-entity @#'entity/lookup-entity)
+    :block/_refs :logseq.property/_query
+
+    :block.temp/search? :block.temp/ast-title :block.temp/ast-body
+    :block.temp/fully-loaded? :block.temp/top? :block.temp/bottom?
+
+    :db/cardinality :db/ident :db/index :db/valueType
+
+    :logseq.kv/db-type
+
+    :logseq.property.node/display-type :logseq.property/icon
+    :logseq.property.asset/type :logseq.property.asset/checksum
+    :logseq.property/created-from-property
+
+    :logseq.class/Query :logseq.class/Journal :logseq.class/Cards :logseq.class/Task})
+
+(def ^:private lookup-entity @#'entity/lookup-entity)
+
+(def ^:private *seen-immutable-entities (volatile! {}))
+
+(defn reset-immutable-entities-cache!
+  []
+  (vreset! *seen-immutable-entities {}))
+
+(def ^:private *reset-cache-background-task-running?
+  ;; missionary is not compatible with nbb, so entity-memoized is disabled in nbb
+  (delay
+    #?(:org.babashka/nbb false
+       :cljs (when-let [f (resolve 'frontend.common.missionary/background-task-running?)]
+               (f :logseq.db.frontend.entity-plus/reset-immutable-entities-cache!)))))
+
+(defn entity-memoized
+  [db eid]
+  (if (and @*reset-cache-background-task-running?
+           (qualified-keyword? eid)
+           (contains? immutable-db-idents eid))
+    (if-let [e (find @*seen-immutable-entities eid)]
+      (val e)
+      (let [r (d/entity db eid)]
+        (when r (vswap! *seen-immutable-entities assoc eid r))
+        r))
+    (d/entity db eid)))
+
+(defn db-based-graph?
+  "Whether the current graph is db-only"
+  [db]
+  (when db
+    (= "db" (:kv/value (entity-memoized db :logseq.kv/db-type)))))
 
 (defn- get-journal-title
   [db e]
   (date-time-util/int->journal-title (:block/journal-day e)
-                                     (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))))
+                                     (:logseq.property.journal/title-format (entity-memoized db :logseq.class/Journal))))
 
 (defn- get-block-title
   [^Entity e k default-value]
@@ -36,7 +89,7 @@
          (let [result (lookup-entity e k default-value)
                refs (:block/refs e)
                result' (if (and (string? result) refs)
-                         (db-content/id-ref->title-ref result refs search?)
+                         ((resolve 'logseq.db.frontend.content/id-ref->title-ref) result refs search?)
                          result)]
            (or result' default-value)))))))
 
@@ -51,7 +104,7 @@
        result
        ;; property default value
        (when (qualified-keyword? k)
-         (when-let [property (d/entity db k)]
+         (when-let [property (entity-memoized db k)]
            (let [schema (lookup-entity property :block/schema nil)]
              (if (= :checkbox (:type schema))
                (lookup-entity property :logseq.property/scalar-default-value nil)
@@ -107,7 +160,9 @@
   [^js this]
   (let [v @(.-cache this)
         v' (if (:block/title v)
-             (assoc v :block/title (db-content/id-ref->title-ref (:block/title v) (:block/refs this) (:block.temp/search? this)))
+             (assoc v :block/title
+                    ((resolve 'logseq.db.frontend.content/id-ref->title-ref)
+                     (:block/title v) (:block/refs this) (:block.temp/search? this)))
              v)]
     (concat (seq v')
             (seq (.-kv this)))))

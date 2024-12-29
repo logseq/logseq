@@ -69,7 +69,7 @@
                           :error))))
 
 (defn- lsq-import-handler
-  [e & {:keys [sqlite? graph-name]}]
+  [e & {:keys [sqlite? debug-transit? graph-name]}]
   (let [file      (first (array-seq (.-files (.-target e))))
         file-name (some-> (gobj/get file "name")
                           (string/lower-case))
@@ -97,6 +97,31 @@
                                        (prn :debug :aborted)
                                        (js/console.error e)))
             (.readAsArrayBuffer reader file))))
+
+      debug-transit?
+      (let [graph-name (string/trim graph-name)]
+        (cond
+          (string/blank? graph-name)
+          (notification/show! "Empty graph name." :error)
+
+          (repo-handler/graph-already-exists? graph-name)
+          (notification/show! "Please specify another name as another graph with this name already exists!" :error)
+
+          :else
+          (do
+            (state/set-state! :graph/importing :logseq)
+            (let [reader (js/FileReader.)
+                  import-f import-handler/import-from-debug-transit!]
+              (set! (.-onload reader)
+                    (fn [e]
+                      (let [text (.. e -target -result)]
+                        (import-f
+                         graph-name
+                         text
+                         #(do
+                            (state/set-state! :graph/importing nil)
+                            (finished-cb))))))
+              (.readAsText reader file)))))
 
       (or edn? json?)
       (do
@@ -142,11 +167,11 @@
 (rum/defcs set-graph-name-dialog
   < rum/reactive
   (rum/local "" ::input)
-  [state sqlite-input-e opts]
+  [state input-e opts]
   (let [*input (::input state)
         on-submit #(if (repo/invalid-graph-name? @*input)
                      (repo/invalid-graph-name-warning)
-                     (lsq-import-handler sqlite-input-e (assoc opts :graph-name @*input)))]
+                     (lsq-import-handler input-e (assoc opts :graph-name @*input)))]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -184,74 +209,74 @@
                             ;; (js/console.log "[form] submit: " e (js->clj e))
                             (on-submit-fn (js->clj e :keywordize-keys true))
                             (shui/dialog-close!)))
-        [convert-all-tags-input set-convert-all-tags-input!] (rum/use-state true)]
+         [convert-all-tags-input set-convert-all-tags-input!] (rum/use-state true)]
 
      (shui/form-provider form-ctx
-       [:form
-        {:on-submit on-submit-valid}
+                         [:form
+                          {:on-submit on-submit-valid}
 
-        (shui/form-field {:name "graph-name"}
-                         (fn [field error]
-                           (shui/form-item
-                            (shui/form-label "New graph name")
-                            (shui/form-control
-                             (shui/input (merge {:placeholder "Graph name"} field)))
-                            (when error
-                              (shui/form-description
-                               [:b.text-red-800 (:message error)])))))
+                          (shui/form-field {:name "graph-name"}
+                                           (fn [field error]
+                                             (shui/form-item
+                                              (shui/form-label "New graph name")
+                                              (shui/form-control
+                                               (shui/input (merge {:placeholder "Graph name"} field)))
+                                              (when error
+                                                (shui/form-description
+                                                 [:b.text-red-800 (:message error)])))))
 
-        (shui/form-field {:name "convert-all-tags?"}
-                         (fn [field]
-                           (shui/form-item
-                            {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
-                            (shui/form-label "Import all tags")
-                            (shui/form-control
-                             (shui/checkbox {:checked (:value field)
-                                             :on-checked-change (fn [e]
-                                                                  ((:onChange field) e)
-                                                                  (set-convert-all-tags-input! (not convert-all-tags-input)))})))))
+                          (shui/form-field {:name "convert-all-tags?"}
+                                           (fn [field]
+                                             (shui/form-item
+                                              {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
+                                              (shui/form-label "Import all tags")
+                                              (shui/form-control
+                                               (shui/checkbox {:checked (:value field)
+                                                               :on-checked-change (fn [e]
+                                                                                    ((:onChange field) e)
+                                                                                    (set-convert-all-tags-input! (not convert-all-tags-input)))})))))
 
-        (shui/form-field {:name "tag-classes"}
-                         (fn [field _error]
-                           (shui/form-item
-                            {:class "pt-3"}
-                            (shui/form-label "Import specific tags")
-                            (shui/form-control
-                             (shui/input (merge field
-                                                {:placeholder "tag 1, tag 2" :disabled convert-all-tags-input})))
-                            (shui/form-description "Tags are case insensitive"))))
+                          (shui/form-field {:name "tag-classes"}
+                                           (fn [field _error]
+                                             (shui/form-item
+                                              {:class "pt-3"}
+                                              (shui/form-label "Import specific tags")
+                                              (shui/form-control
+                                               (shui/input (merge field
+                                                                  {:placeholder "tag 1, tag 2" :disabled convert-all-tags-input})))
+                                              (shui/form-description "Tags are case insensitive"))))
 
-        (shui/form-field {:name "remove-inline-tags?"}
-                         (fn [field]
-                           (shui/form-item
-                            {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
-                            (shui/form-label "Remove inline tags")
-                            (shui/form-description "Default behavior for DB graphs")
-                            (shui/form-control
-                             (shui/checkbox {:checked (:value field)
-                                             :on-checked-change (:onChange field)})))))
+                          (shui/form-field {:name "remove-inline-tags?"}
+                                           (fn [field]
+                                             (shui/form-item
+                                              {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
+                                              (shui/form-label "Remove inline tags")
+                                              (shui/form-description "Default behavior for DB graphs")
+                                              (shui/form-control
+                                               (shui/checkbox {:checked (:value field)
+                                                               :on-checked-change (:onChange field)})))))
 
-        (shui/form-field {:name "property-classes"}
-                         (fn [field _error]
-                           (shui/form-item
-                            {:class "pt-3"}
-                            (shui/form-label "Import additional tags from property values")
-                            (shui/form-control
-                             (shui/input (merge {:placeholder "e.g. type"} field)))
-                            (shui/form-description
-                             "Properties are case insensitive and separated by commas"))))
+                          (shui/form-field {:name "property-classes"}
+                                           (fn [field _error]
+                                             (shui/form-item
+                                              {:class "pt-3"}
+                                              (shui/form-label "Import additional tags from property values")
+                                              (shui/form-control
+                                               (shui/input (merge {:placeholder "e.g. type"} field)))
+                                              (shui/form-description
+                                               "Properties are case insensitive and separated by commas"))))
 
-        (shui/form-field {:name "property-parent-classes"}
-                         (fn [field _error]
-                           (shui/form-item
-                            {:class "pt-3"}
-                            (shui/form-label "Import tag parents from property values")
-                            (shui/form-control
-                             (shui/input (merge {:placeholder "e.g. parent"} field)))
-                            (shui/form-description
-                             "Properties are case insensitive and separated by commas"))))
+                          (shui/form-field {:name "property-parent-classes"}
+                                           (fn [field _error]
+                                             (shui/form-item
+                                              {:class "pt-3"}
+                                              (shui/form-label "Import tag parents from property values")
+                                              (shui/form-control
+                                               (shui/input (merge {:placeholder "e.g. parent"} field)))
+                                              (shui/form-description
+                                               "Properties are case insensitive and separated by commas"))))
 
-        (shui/button {:type "submit" :class "right-0 mt-3"} "Submit")]))])
+                          (shui/button {:type "submit" :class "right-0 mt-3"} "Submit")]))])
 
 (defn- counts-from-entities
   [entities]
@@ -416,14 +441,14 @@
 (rum/defc import-indicator
   [importing?]
   (rum/use-effect!
-    (fn []
-      (when (and importing? (not (shui-dialog/get-modal :import-indicator)))
-        (shui/dialog-open! indicator-progress
-          {:id :import-indicator
-           :content-props
-           {:onPointerDownOutside #(.preventDefault %)
-            :onOpenAutoFocus #(.preventDefault %)}})))
-    [importing?])
+   (fn []
+     (when (and importing? (not (shui-dialog/get-modal :import-indicator)))
+       (shui/dialog-open! indicator-progress
+                          {:id :import-indicator
+                           :content-props
+                           {:onPointerDownOutside #(.preventDefault %)
+                            :onOpenAutoFocus #(.preventDefault %)}})))
+   [importing?])
   [:<>])
 
 (rum/defc importer < rum/reactive
@@ -467,6 +492,21 @@
                :on-change (debounce (fn [e]
                                       (import-file-to-db-handler e {}))
                                     1000)}]])
+
+          (when (or (util/electron?) util/web-platform?)
+            [:label.action-input.flex.items-center.mx-2.my-2
+             [:span.as-flex-center [:i (svg/logo 28)]]
+             [:span.flex.flex-col
+              [[:strong "Debug Transit"]
+               [:small "Import debug transit file into a new DB graph"]]]
+             ;; Test form style changes
+             #_[:a.button {:on-click #(import-file-to-db-handler nil {:import-graph-fn js/alert})} "Open"]
+             [:input.absolute.hidden
+              {:id "import-debug-transit"
+               :type "file"
+               :on-change (fn [e]
+                            (shui/dialog-open!
+                             #(set-graph-name-dialog e {:debug-transit? true})))}]])
 
           (when (and (util/electron?) support-file-based?)
             [:label.action-input.flex.items-center.mx-2.my-2

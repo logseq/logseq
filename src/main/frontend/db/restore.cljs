@@ -10,10 +10,10 @@
 
 (defn restore-graph!
   "Restore db from SQLite"
-  [repo]
+  [repo & {:as opts}]
   (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
-          data (persist-db/<fetch-init-data repo)
+          data (persist-db/<fetch-init-data repo opts)
           _ (assert (some? data) "No data found when reloading db")
           {:keys [schema initial-data]} (dt/read-transit-str data)
           conn (try

@@ -1,7 +1,6 @@
 (ns frontend.extensions.fsrs
   "Flashcards functions based on FSRS, only works in db-based graphs"
   (:require [clojure.string :as string]
-            [frontend.common.missionary-util :as c.m]
             [frontend.components.block :as component-block]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -17,7 +16,9 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [open-spaced-repetition.cljc-fsrs.core :as fsrs.core]
@@ -247,7 +248,7 @@
         all-cards (concat
                    [{:db/id :global
                      :block/title "All cards"}]
-                   (db-model/get-class-objects repo (:db/id (db/entity :logseq.class/Cards))))
+                   (db-model/get-class-objects repo (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards))))
         *block-ids (::block-ids state)
         block-ids (rum/react *block-ids)
         loading? (rum/react (::loading? state))
@@ -294,15 +295,15 @@
 (def ^:private new-task--update-due-cards-count
   "Return a task that update `:srs/cards-due-count` periodically."
   (m/sp
-   (let [repo (state/get-current-repo)]
-     (if (config/db-based-graph? repo)
-       (m/?
-        (m/reduce
-         (fn [_ _]
-           (p/let [due-cards (<get-due-card-block-ids repo nil)]
-             (state/set-state! :srs/cards-due-count (count due-cards))))
-         (c.m/clock (* 3600 1000))))
-       (srs/update-cards-due-count!)))))
+    (let [repo (state/get-current-repo)]
+      (if (config/db-based-graph? repo)
+        (m/?
+         (m/reduce
+          (fn [_ _]
+            (p/let [due-cards (<get-due-card-block-ids repo nil)]
+              (state/set-state! :srs/cards-due-count (count due-cards))))
+          (c.m/clock (* 3600 1000))))
+        (srs/update-cards-due-count!)))))
 
 (defn update-due-cards-count
   []

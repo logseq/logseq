@@ -27,7 +27,8 @@
             [frontend.persist-db :as persist-db]
             [promesa.core :as p]
             [frontend.db.async :as db-async]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db :as ldb]))
 
 (defn index-files!
   "Create file structure, then parse into DB (client only)"
@@ -233,7 +234,7 @@
      (p/do!
       (persist-db/<import-db graph buffer)
       (state/add-repo! {:url graph})
-      (repo-handler/restore-and-setup-repo! graph)
+      (repo-handler/restore-and-setup-repo! graph {:import-type "sqlite"})
       (state/set-current-repo! graph)
       (persist-db/<export-db graph {})
       (db/transact! graph (sqlite-util/import-tx :sqlite-db))
@@ -291,3 +292,15 @@
     (async/go
       (async/<! (import-from-tree! clj-data tree-vec-translate-json))
       (finished-ok-handler nil)))) ;; it was designed to accept a list of imported page names but now deprecated
+
+(defn import-from-debug-transit!
+  [bare-graph-name raw finished-ok-handler]
+  (let [graph (str config/db-version-prefix bare-graph-name)
+        datoms (ldb/read-transit-str raw)]
+    (p/do!
+     (persist-db/<new graph {:import-type "debug-transit"
+                             :datoms datoms})
+     (state/add-repo! {:url graph})
+     (repo-handler/restore-and-setup-repo! graph {:import-type "debug-transit"})
+     (state/set-current-repo! graph)
+     (finished-ok-handler nil))))

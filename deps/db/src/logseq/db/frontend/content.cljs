@@ -4,7 +4,8 @@
             [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.entity-plus :as entity-plus]))
 
 ;; [[uuid]]
 (def id-ref-pattern
@@ -121,7 +122,7 @@
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"
   [db item eid]
-  (if (entity-util/db-based-graph? db)
+  (if (entity-plus/db-based-graph? db)
     (if-let [content (:block/title item)]
       (let [refs (:block/refs (d/entity db eid))]
         (assoc item :block/title (id-ref->title-ref content refs false)))

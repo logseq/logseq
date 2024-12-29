@@ -1,16 +1,16 @@
 (ns frontend.components.rtc.indicator
   "RTC state indicator"
   (:require [cljs-time.core :as t]
-            [frontend.common.missionary-util :as c.m]
+            [clojure.pprint :as pprint]
+            [frontend.db :as db]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.common.missionary :as c.m]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
-            [rum.core :as rum]
-            [clojure.pprint :as pprint]
-            [frontend.db :as db]))
+            [rum.core :as rum]))
 
 (comment
   (def rtc-state-schema
