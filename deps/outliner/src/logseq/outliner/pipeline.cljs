@@ -188,7 +188,8 @@
                                                  (keep #(get-journal-day-from-long db %) v)
 
                                                  datetime?
-                                                 [(get-journal-day-from-long db v)]
+                                                 (when-let [journal-day (get-journal-day-from-long db v)]
+                                                   [journal-day])
 
                                                  :else
                                                  nil))))))

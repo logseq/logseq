@@ -2,7 +2,6 @@
   "Main datascript schemas for the Logseq app"
   (:require [clojure.set :as set]))
 
-;; Use `frontend.util/time-ms` to avoid conflicts between different branches
 (def version 55)
 
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".

@@ -205,7 +205,7 @@
               (let [datoms (d/datoms db :eavt (:e d))]
                 (mapcat
                  (fn [d]
-                   (if (= (:a d) :logseq.property/default-value)
+                   (if (keyword-identical? (:a d) :logseq.property/default-value)
                      (concat
                       (d/datoms db :eavt (:v d))
                       datoms)
