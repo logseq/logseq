@@ -98,10 +98,10 @@
 
     (testing "built-in tag can't have parent changed"
       (is (thrown-with-msg?
-            js/Error
-            #"Can't change.*built-in"
-            (outliner-validate/validate-parent-property (entity-plus/entity-memoized @conn :logseq.class/Task)
-                                                        [(entity-plus/entity-memoized @conn :logseq.class/Cards)]))))))
+           js/Error
+           #"Can't change.*built-in"
+           (outliner-validate/validate-parent-property (entity-plus/entity-memoized @conn :logseq.class/Task)
+                                                       [(entity-plus/entity-memoized @conn :logseq.class/Cards)]))))))
 
 (deftest validate-tags-property
   (let [conn (db-test/create-conn-with-blocks

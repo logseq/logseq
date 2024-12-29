@@ -29,9 +29,9 @@
   (when-not (util/sm-breakpoint?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
       (shui/button-ghost-icon :layout-sidebar-right
-        {:title (t :right-side-bar/toggle-right-sidebar)
-         :class "toggle-right-sidebar"
-         :on-click ui-handler/toggle-right-sidebar!}))))
+                              {:title (t :right-side-bar/toggle-right-sidebar)
+                               :class "toggle-right-sidebar"
+                               :on-click ui-handler/toggle-right-sidebar!}))))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]

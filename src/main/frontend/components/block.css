@@ -961,6 +961,10 @@ html.is-mac {
   .block-content.inline {
     @apply flex;
   }
+
+  .property-k {
+    color: var(--ls-primary-text-color);
+  }
 }
 
 .block-tags {

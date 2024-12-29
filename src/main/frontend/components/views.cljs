@@ -205,8 +205,6 @@
                                                         (into {})))
                        get-value-for-sort (fn [row]
                                             (cond
-                                              (= (:db/ident property) :logseq.task/deadline)
-                                              (:block/journal-day (get row :logseq.task/deadline))
                                               closed-values
                                               (closed-value->sort-number (:db/id (get row (:db/ident property))))
                                               :else
@@ -221,7 +219,7 @@
                     :cell (or (:cell property)
                               (when (de/entity? property)
                                 (fn [_table row _column]
-                                  (pv/property-value row property (get row (:db/ident property)) {}))))
+                                  (pv/property-value row property {}))))
                     :get-value get-value
                     :get-value-for-sort get-value-for-sort
                     :type (:type property)}))))
@@ -1272,8 +1270,7 @@
                        :set-input! set-input!})
 
         [:div.text-muted-foreground.text-sm
-         (pv/property-value view-entity (db/entity :logseq.property.view/type)
-                            (db/entity display-type) {})]
+         (pv/property-value view-entity (db/entity :logseq.property.view/type) {})]
 
         (more-actions columns table)
 

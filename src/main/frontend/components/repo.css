@@ -89,7 +89,7 @@
     }
 
     > .ui__icon {
-      @apply absolute -right-1 top-2 opacity-60;
+      @apply absolute -right-1 top-2 opacity-40;
     }
   }
 

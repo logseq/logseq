@@ -29,6 +29,7 @@
 (def slider-track (util/lsui-wrap "SliderTrack"))
 (def slider-range (util/lsui-wrap "SliderRange"))
 (def slider-thumb (util/lsui-wrap "SliderThumb"))
+(def separator (util/lsui-wrap "Separator"))
 (def badge (util/lsui-wrap "Badge"))
 (def skeleton (util/lsui-wrap "Skeleton"))
 (def calendar (util/lsui-wrap "Calendar"))

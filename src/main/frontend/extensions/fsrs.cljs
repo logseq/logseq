@@ -295,15 +295,15 @@
 (def ^:private new-task--update-due-cards-count
   "Return a task that update `:srs/cards-due-count` periodically."
   (m/sp
-   (let [repo (state/get-current-repo)]
-     (if (config/db-based-graph? repo)
-       (m/?
-        (m/reduce
-         (fn [_ _]
-           (p/let [due-cards (<get-due-card-block-ids repo nil)]
-             (state/set-state! :srs/cards-due-count (count due-cards))))
-         (c.m/clock (* 3600 1000))))
-       (srs/update-cards-due-count!)))))
+    (let [repo (state/get-current-repo)]
+      (if (config/db-based-graph? repo)
+        (m/?
+         (m/reduce
+          (fn [_ _]
+            (p/let [due-cards (<get-due-card-block-ids repo nil)]
+              (state/set-state! :srs/cards-due-count (count due-cards))))
+          (c.m/clock (* 3600 1000))))
+        (srs/update-cards-due-count!)))))
 
 (defn update-due-cards-count
   []

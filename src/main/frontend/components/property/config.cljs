@@ -315,24 +315,7 @@
                         (select-keys icon [:id :type :color])))
         icon (:logseq.property/icon block)
         value (db-property/closed-value-content block)]
-
     [:li
-     (let [property-type (get-in property [:block/schema :type])
-           property (db/sub-block (:db/id property))
-           default-type? (contains? #{:default :number} property-type)
-           default-value (when default-type? (:logseq.property/default-value property))
-           default-value? (= (:db/id default-value) (:db/id block))]
-       (when default-type?
-         (shui/checkbox {:size :sm
-                         :title "Set as default choice"
-                         :class "opacity-50 hover:opacity-100"
-                         :checked default-value?
-                         :on-checked-change (fn []
-                                              (let [property-ident :logseq.property/default-value]
-                                                (if default-value?
-                                                  (db-property-handler/remove-block-property! (:db/ident property) property-ident)
-                                                  (db-property-handler/set-block-property! (:db/ident property) property-ident (:db/id block)))))})))
-
      (shui/button {:size :sm :variant :ghost :title "Drag && Drop to reorder"}
                   (shui/tabler-icon "grip-vertical" {:size 14}))
      (icon-component/icon-picker icon {:on-chosen (fn [_e icon] (update-icon! icon))
@@ -346,12 +329,39 @@
                                              {:id :ls-base-edit-form
                                               :align "start"}))}
       value]
+     (shui/dropdown-menu
+      (shui/dropdown-menu-trigger
+       {:as-child true}
+       (shui/button
+        {:size :sm :variant :ghost
+         :title "More settings"}
+        (shui/tabler-icon "dots" {:size 16})))
+      (shui/dropdown-menu-content
+       ;; default choice
+       (let [property-type (get-in property [:block/schema :type])
+             property (db/sub-block (:db/id property))
+             default-type? (contains? #{:default :number} property-type)
+             default-value (when default-type? (:logseq.property/default-value property))
+             default-value? (= (:db/id default-value) (:db/id block))]
+         (when default-type?
+           (shui/dropdown-menu-item
+            {:key "default value"
+             :on-click #(let [value (if default-value? nil (:db/id block))]
+                          (db-property-handler/set-block-property! (:db/ident property) :logseq.property/default-value
+                                                                   value))}
+            (shui/checkbox {:id "default value"
+                            :size :sm
+                            :title "Set as default choice"
+                            :class "mr-1 opacity-50 hover:opacity-100"
+                            :checked default-value?})
+            "Set as default choice")))
 
-     (shui/button
-      {:size :sm :variant :ghost :class "del"
-       :title "Delete this choice"
-       :on-click delete-choice!}
-      (shui/tabler-icon "x" {:size 16}))]))
+       (shui/dropdown-menu-item
+        {:key "delete"
+         :class "del"
+         :on-click delete-choice!}
+        (ui/icon "x" {:class "scale-90 pr-1 opacity-80"})
+        "Delete")))]))
 
 (rum/defc add-existing-values
   [property values {:keys [toggle-fn]}]
@@ -382,16 +392,19 @@
   (let [values (:property/closed-values property)
         choices (doall
                  (keep (fn [value]
-                         (when-let [block (db/sub-block (:db/id value))]
-                           (let [id (:block/uuid block)]
-                             {:id (str id)
-                              :value id
-                              :content (choice-item-content property block)})))
-                       values))]
+                         (db/sub-block (:db/id value)))
+                       values))
+        choice-items (map
+                      (fn [block]
+                        (let [id (:block/uuid block)]
+                          {:id (str id)
+                           :value id
+                           :content (choice-item-content property block)}))
+                      choices)]
     [:div.ls-property-dropdown-editor.ls-property-choices-sub-pane
      (when (seq choices)
        [:ul.choices-list
-        (dnd/items choices
+        (dnd/items choice-items
                    {:sort-by-inner-element? false
                     :on-drag-end (fn [_ {:keys [active-id over-id direction]}]
                                    (let [move-down? (= direction :down)
@@ -442,6 +455,39 @@
                                                   (choice-base-edit-form property {:create? true}))))
                                             {:id :ls-base-edit-form
                                              :align "start"})))}}))]))
+
+(rum/defc checkbox-state-mapping
+  [choices]
+  (let [select-cp (fn [opts]
+                    (shui/select
+                     opts
+                     (shui/select-trigger
+                      (shui/select-value {:placeholder "Select a choice"}))
+                     (shui/select-content
+                      (map (fn [choice]
+                             (shui/select-item {:value (:db/id choice)} (:block/title choice))) choices))))
+        checked-choice (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) choices)
+        unchecked-choice (some (fn [choice] (when (false? (:logseq.property/choice-checkbox-state choice)) choice)) choices)]
+    [:div.flex.flex-col.gap-4.text-sm.p-2
+     [:div.text-muted-foreground "Checkbox state mapping"]
+     [:div.flex.flex-col.gap-2
+      [:div "Map unchecked to"]
+      (select-cp
+       (cond->
+        {:on-value-change
+         (fn [value]
+           (db-property-handler/set-block-property! value :logseq.property/choice-checkbox-state false))}
+         unchecked-choice
+         (assoc :default-value (:db/id unchecked-choice))))
+
+      [:div.mt-2 "Map checked to"]
+      (select-cp
+       (cond->
+        {:on-value-change
+         (fn [value]
+           (db-property-handler/set-block-property! value :logseq.property/choice-checkbox-state true))}
+         checked-choice
+         (assoc :default-value (:db/id checked-choice))))]]))
 
 (def position-labels
   {:properties {:icon :layout-distribute-horizontal :title "Block properties"}
@@ -588,6 +634,27 @@
                                     :desc (when (seq values) (str (count values) " choices"))
                                     :submenu-content (fn [] (choices-sub-pane property {:disabled? config/publishing?}))})))
 
+     (when enable-closed-values?
+       (let [values (:property/closed-values property)]
+         (when (>= (count values) 2)
+           (let [checked? (contains?
+                           (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
+                           (:db/id property))]
+             (dropdown-editor-menuitem
+              {:icon :checkbox :title "Show as checkbox"
+               :desc (when owner-block
+                       (shui/switch
+                        {:id "show as checkbox" :size "sm"
+                         :checked checked?
+                         :on-click util/stop-propagation
+                         :on-checked-change
+                         (fn [value]
+                           (if value
+                             (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
+                             (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))
+               :submenu-content (fn []
+                                  (checkbox-state-mapping values))})))))
+
      (when (and (contains? db-property-type/cardinality-property-types property-type) (not disabled?))
        (let [many? (db-property/many? property)]
          (dropdown-editor-menuitem {:icon :checks :title "Multiple values"
@@ -680,6 +747,7 @@
              (assoc state ::values *values)))}
   [state property* owner-block opts]
   (let [property (db/sub-block (:db/id property*))
+        owner-block (when (:db/id owner-block) (db/sub-block (:db/id owner-block)))
         values (rum/react (::values state))]
     (when-not (= :loading values)
       (dropdown-editor-impl property owner-block values opts))))

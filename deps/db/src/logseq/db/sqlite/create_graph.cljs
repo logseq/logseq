@@ -21,18 +21,25 @@
   (mapcat
    (fn [[db-ident {:keys [schema title closed-values properties] :as m}]]
      (let [prop-name (or title (name (:name m)))
-           blocks (if closed-values
-                    (db-property-build/build-closed-values
-                     db-ident
-                     prop-name
-                     {:db/ident db-ident :block/schema schema :closed-values closed-values}
-                     {:properties properties})
-                    [(sqlite-util/build-new-property
-                      db-ident
-                      schema
-                      {:title prop-name
-                       :properties properties})])]
-       blocks))
+           [property & others] (if closed-values
+                                 (db-property-build/build-closed-values
+                                  db-ident
+                                  prop-name
+                                  {:db/ident db-ident :block/schema schema :closed-values closed-values}
+                                  {:properties properties})
+                                 [(sqlite-util/build-new-property
+                                   db-ident
+                                   schema
+                                   {:title prop-name
+                                    :properties properties})])]
+       (->> (concat
+             [(dissoc property :logseq.property/default-value)]
+             others
+             (when-let [default-value (:logseq.property/default-value property)]
+               (when-let [id (:block/uuid property)]
+                 [{:block/uuid id
+                   :logseq.property/default-value default-value}])))
+            (remove nil?))))
    (dissoc built-in-properties :logseq.property/built-in?)))
 
 (defn- build-initial-properties

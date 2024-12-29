@@ -389,7 +389,7 @@ div[data-radix-popper-content-wrapper] {
   }
 
   .del-date-btn {
-    @apply absolute right-[13px] top-[21px] px-1 opacity-70 hover:opacity-100
+    @apply absolute right-[4px] top-[17px] px-1 opacity-70 hover:opacity-100
     active:opacity-80 hover:text-red-rx-09 rounded-md !h-6 !w-6;
   }
 

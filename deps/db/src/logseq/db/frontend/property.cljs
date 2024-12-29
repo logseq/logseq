@@ -5,7 +5,32 @@
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.db-ident :as db-ident]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.common.util :as common-util]))
+
+(defn build-property-value-block
+  "Builds a property value entity given a block map/entity, a property entity or
+  ident and its property value"
+  [block property value]
+  (let [block-id (or (:db/id block) (:db/ident block))]
+    (-> (merge
+         {:block/uuid (d/squuid)
+          :block/format :markdown
+          :block/page (if (:block/page block)
+                        (:db/id (:block/page block))
+                        ;; page block
+                        block-id)
+          :block/parent block-id
+          :logseq.property/created-from-property (if (= (:db/ident property) :logseq.property/default-value)
+                                                   block-id
+                                                   (or (:db/id property) {:db/ident (:db/ident property)}))
+          :block/order (db-order/gen-key)}
+         (if (db-property-type/property-value-content? (get-in block [:block/schema :type]) property)
+           {:property.value/content value}
+           {:block/title value}))
+        common-util/block-with-timestamps)))
 
 ;; Main property vars
 ;; ==================
@@ -260,6 +285,17 @@
    ;;                               {:type :raw-number
    ;;                                :public? false}}
 
+   :logseq.property/choice-checkbox-state
+   {:title "Choice checkbox state"
+    :schema {:type :checkbox
+             :hide? true}
+    :queryable? false}
+   :logseq.property/checkbox-display-properties
+   {:title "Properties displayed as checkbox"
+    :schema {:type :property
+             :cardinality :many
+             :hide? true}
+    :queryable? false}
    ;; Task props
    :logseq.task/priority
    {:title "Priority"
@@ -285,28 +321,81 @@
      :public? true
      :position :block-left}
     :closed-values
-    (mapv (fn [[db-ident value icon]]
+    (mapv (fn [[db-ident value icon checkbox-state]]
             {:db-ident db-ident
              :value value
              :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)
-             :icon {:type :tabler-icon :id icon}})
+             :icon {:type :tabler-icon :id icon}
+             :properties (when (some? checkbox-state)
+                           {:logseq.property/choice-checkbox-state checkbox-state})})
           [[:logseq.task/status.backlog "Backlog" "Backlog"]
-           [:logseq.task/status.todo "Todo" "Todo"]
+           [:logseq.task/status.todo "Todo" "Todo" false]
            [:logseq.task/status.doing "Doing" "InProgress50"]
            [:logseq.task/status.in-review "In Review" "InReview"]
-           [:logseq.task/status.done "Done" "Done"]
+           [:logseq.task/status.done "Done" "Done" true]
            [:logseq.task/status.canceled "Canceled" "Cancelled"]])
-    :properties {:logseq.property/hide-empty-value true}
+    :properties {:logseq.property/hide-empty-value true
+                 :logseq.property/default-value :logseq.task/status.todo}
     :queryable? true}
    :logseq.task/deadline
    {:title "Deadline"
-    :schema {:type :date
+    :schema {:type :datetime
              :public? true
              :position :block-below}
     :properties {:logseq.property/hide-empty-value true}
     :queryable? true}
+   :logseq.task/scheduled
+   {:title "Scheduled"
+    :schema {:type :datetime
+             :public? true
+             :position :block-below}
+    :properties {:logseq.property/hide-empty-value true}
+    :queryable? true}
+   :logseq.task/recur-frequency
+   (let [schema {:type :number
+                 :public? false}]
+     {:title "Recur frequency"
+      :schema schema
+      :properties (let [block {:db/ident :logseq.task/recur-frequency
+                               :block/schema schema}
+                        property {:db/ident :logseq.property/default-value
+                                  :block/schema {:type :entity}}
+                        default-value (assoc (build-property-value-block block property 1) :db/id -1)]
+                    {:logseq.property/hide-empty-value true
+                     :logseq.property/default-value default-value})
+      :queryable? true})
+   :logseq.task/recur-unit
+   {:title "Recur unit"
+    :schema {:type :default
+             :public? false}
+    :closed-values (mapv (fn [[db-ident value]]
+                           {:db-ident db-ident
+                            :value value
+                            :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
+                         [[:logseq.task/recur-unit.minute "Minute"]
+                          [:logseq.task/recur-unit.hour "Hour"]
+                          [:logseq.task/recur-unit.day "Day"]
+                          [:logseq.task/recur-unit.week "Week"]
+                          [:logseq.task/recur-unit.month "Month"]
+                          [:logseq.task/recur-unit.year "Year"]])
+    :properties {:logseq.property/hide-empty-value true
+                 :logseq.property/default-value :logseq.task/recur-unit.day}
+    :queryable? true}
+   :logseq.task/repeated?
+   {:title "Repeated task?"
+    :schema {:type :checkbox
+             :hide? true}
+    :queryable? true}
+   :logseq.task/scheduled-on-property
+   {:title "Scheduled on property"
+    :schema {:type :property
+             :hide? true}}
+   :logseq.task/recur-status-property
+   {:title "Recur status property"
+    :schema {:type :property
+             :hide? true}}
 
-   ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
+;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 
    :logseq.property/icon {:title "Icon"
                           :schema {:type :map}}
@@ -341,6 +430,7 @@
           [[:logseq.property.view/type.table "Table View"]
            [:logseq.property.view/type.list "List View"]
            [:logseq.property.view/type.gallery "Gallery View"]])
+    :properties {:logseq.property/default-value :logseq.property.view/type.table}
     :queryable? true}
 
    :logseq.property.table/sorting {:title "View sorting"

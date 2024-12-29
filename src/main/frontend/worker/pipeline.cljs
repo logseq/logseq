@@ -12,7 +12,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [frontend.worker.commands :as commands]))
 
 (defn- refs-need-recalculated?
   [tx-meta]
@@ -119,8 +120,12 @@ default = false")
 (defn- invoke-hooks-default [repo conn {:keys [tx-meta] :as tx-report} context]
   (try
     (let [display-blocks-tx-data (add-missing-properties-to-typed-display-blocks (:db-after tx-report) (:tx-data tx-report))
-          tx-report* (if (seq display-blocks-tx-data)
-                       (let [result (ldb/transact! conn display-blocks-tx-data {:pipeline-replace? true})]
+          commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
+                        (commands/run-commands tx-report))
+          ;; :block/refs relies on those changes
+          tx-before-refs (concat display-blocks-tx-data commands-tx)
+          tx-report* (if (seq tx-before-refs)
+                       (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true})]
                          (assoc tx-report
                                 :tx-data (concat (:tx-data tx-report) (:tx-data result))
                                 :db-after (:db-after result)))
@@ -143,13 +148,13 @@ default = false")
           refs-tx-report (when (seq block-refs)
                            (ldb/transact! conn block-refs {:pipeline-replace? true}))
           replace-tx (concat
-                          ;; block path refs
+                      ;; block path refs
                       (when (seq blocks')
                         (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))
                               blocks' (keep (fn [b] (d/entity db-after (:db/id b))) blocks')]
                           (compute-block-path-refs-tx tx-report* blocks')))
 
-                          ;; update block/tx-id
+                       ;; update block/tx-id
                       (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
                                                    (concat pages blocks))
                             tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
