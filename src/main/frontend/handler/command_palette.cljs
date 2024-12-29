@@ -11,14 +11,14 @@
 (s/def :command/id keyword?)
 (s/def :command/desc string?)
 (s/def :command/action fn?)
-(s/def :command/shortcut string?)
+(s/def :command/shortcut (s/or :nil nil? :keybinding string?))
 (s/def :command/tag vector?)
 
 (s/def :command/command
   (s/keys :req-un [:command/id :command/action]
           ;; :command/desc is optional for internal commands since view
           ;; checks translation ns first
-          :opt-un [:command/desc :command/shortcut :command/tag]))
+          :opt-un [:command/desc :command/shortcut :command/tag :command/handler-id]))
 
 (defn global-shortcut-commands []
   (->> [:shortcut.handler/editor-global
