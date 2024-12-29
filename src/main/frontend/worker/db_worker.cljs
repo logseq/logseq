@@ -37,7 +37,8 @@
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]))
+            [shadow.cljs.modern :refer [defclass]]
+            [clojure.set]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -139,13 +140,34 @@
                              [addr (bean/->clj (js/JSON.parse addresses))])))
           used-addresses (set (concat (mapcat second result)
                                       [0 1 (:eavt schema) (:avet schema) (:aevt schema)]))
-          unused-addresses (set/difference (set (map first result)) used-addresses)]
+          unused-addresses (clojure.set/difference (set (map first result)) used-addresses)]
       (when unused-addresses
         (prn :debug :db-gc :unused-addresses unused-addresses)
         (.transaction db (fn [tx]
                            (doseq [addr unused-addresses]
                              (.exec tx #js {:sql "Delete from kvs where addr = ?"
                                             :bind #js [addr]}))))))))
+
+(defn- find-missing-addresses
+  [^Object db]
+  (let [schema (some->> (.exec db #js {:sql "select content from kvs where addr = 0"
+                                       :rowMode "array"})
+                        bean/->clj
+                        ffirst
+                        sqlite-util/transit-read)
+        result (->> (.exec db #js {:sql "select addr, addresses from kvs"
+                                   :rowMode "array"})
+                    bean/->clj
+                    (map (fn [[addr addresses]]
+                           [addr (bean/->clj (js/JSON.parse addresses))])))
+        used-addresses (set (concat (mapcat second result)
+                                    [0 1 (:eavt schema) (:avet schema) (:aevt schema)]))
+        missing-addresses (clojure.set/difference used-addresses (set (map first result)))]
+    (when (seq missing-addresses)
+      (worker-util/post-message :capture-error
+                                {:error "db-missing-addresses"
+                                 :payload {:missing-addresses missing-addresses}})
+      (prn :error :missing-addresses missing-addresses))))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
@@ -331,7 +353,9 @@
               (ldb/transact! conn (sqlite-create-graph/build-initial-views)))
             (catch :default _e)))
 
+        (find-missing-addresses db)
         ;; (gc-kvs-table! db)
+
         (try
           (db-migrate/migrate conn search-db)
           (catch :default _e

@@ -42,6 +42,9 @@
 (defmethod handle :export-current-db [_]
   (state/pub-event! [:db/export-sqlite]))
 
+(defmethod handle :capture-error [_ _worker data]
+  (state/pub-event! [:capture-error data]))
+
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))
 

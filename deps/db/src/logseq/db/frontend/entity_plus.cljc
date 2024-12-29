@@ -7,36 +7,42 @@
                                         :unresolved-symbol {:level :off}}}})
   (:require #?(:org.babashka/nbb [datascript.db])
             [cljs.core]
+            [clojure.data :as data]
             [datascript.core :as d]
             [datascript.impl.entity :as entity :refer [Entity]]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]))
 
-(def immutable-db-idents
+(def nil-db-ident-entities
+  "No such entities with these :db/ident, but `(d/entity <db> <ident>)` has been called somewhere."
+  #{:block/tx-id :block/warning :block/pre-block? :block/uuid :block/scheduled
+    :block/deadline :block/journal-day :block/format :block/level :block/heading-level
+    :block/type :block/name :block/marker :block/_refs
+
+    :block.temp/ast-title :block.temp/top? :block.temp/bottom? :block.temp/search?
+    :block.temp/fully-loaded? :block.temp/ast-body
+
+    :db/valueType :db/cardinality :db/ident :db/index
+
+    :logseq.property/_query})
+
+(def immutable-db-ident-entities
   "These db-ident entities are immutable,
   it means `(db/entity :block/title)` always return same result"
-  #{:block/created-at :block/updated-at
-    :block/uuid :block/title :block/tags :block/name :block/format
-    :block/schema :block/path-refs :block/refs :block/tx-id :block/type
-    :block/page :block/parent :block/order :block/journal-day :block/closed-value-property
-    :block/link :block/marker :block/warning :block/collapsed? :block/deadline :block/scheduled :block/level
-    :block/pre-block? :block/heading-level
+  #{:block/link :block/updated-at :block/refs :block/closed-value-property
+    :block/created-at :block/collapsed? :block/schema :block/tags :block/title
+    :block/path-refs :block/parent :block/order :block/page
 
-    :block/_refs :logseq.property/_query
-
-    :block.temp/search? :block.temp/ast-title :block.temp/ast-body
-    :block.temp/fully-loaded? :block.temp/top? :block.temp/bottom?
-
-    :db/cardinality :db/ident :db/index :db/valueType
-
-    :logseq.kv/db-type
-
-    :logseq.property.node/display-type :logseq.property/icon
-    :logseq.property.asset/type :logseq.property.asset/checksum
     :logseq.property/created-from-property
+    :logseq.property/icon
+    :logseq.property.asset/type
+    :logseq.property.asset/checksum
+    :logseq.property.node/display-type
 
-    :logseq.class/Query :logseq.class/Journal :logseq.class/Cards :logseq.class/Task})
+    :logseq.kv/db-type})
+
+(assert (empty? (last (data/diff immutable-db-ident-entities nil-db-ident-entities))))
 
 (def ^:private lookup-entity @#'entity/lookup-entity)
 
@@ -55,14 +61,15 @@
 
 (defn entity-memoized
   [db eid]
-  (if (and @*reset-cache-background-task-running?
-           (qualified-keyword? eid)
-           (contains? immutable-db-idents eid))
-    (if-let [e (find @*seen-immutable-entities eid)]
-      (val e)
-      (let [r (d/entity db eid)]
-        (when r (vswap! *seen-immutable-entities assoc eid r))
-        r))
+  (if (qualified-keyword? eid)
+    (when-not (contains? nil-db-ident-entities eid) ;fast return nil
+      (if (and @*reset-cache-background-task-running?
+               (contains? immutable-db-ident-entities eid)) ;return cache entity if possible which isn't nil
+        (or (get @*seen-immutable-entities eid)
+            (let [r (d/entity db eid)]
+              (when r (vswap! *seen-immutable-entities assoc eid r))
+              r))
+        (d/entity db eid)))
     (d/entity db eid)))
 
 (defn db-based-graph?
