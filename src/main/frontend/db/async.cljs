@@ -245,12 +245,12 @@
                         :where
                         (or [?block :logseq.task/scheduled ?n]
                             [?block :logseq.task/deadline ?n])
+                        [(>= ?n ?start-time)]
+                        [(<= ?n ?end-time)]
                         [?block :logseq.task/status ?status]
                         [?status :db/ident ?status-ident]
                         [(not= ?status-ident :logseq.task/status.done)]
-                        [(not= ?status-ident :logseq.task/status.canceled)]
-                        [(>= ?n ?start-time)]
-                        [(<= ?n ?end-time)]]
+                        [(not= ?status-ident :logseq.task/status.canceled)]]
                       start-time
                       future-time
                       '[*])

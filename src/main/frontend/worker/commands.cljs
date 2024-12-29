@@ -57,7 +57,7 @@
     :else
     value))
 
-(defn sastify-condition?
+(defn satisfy-condition?
   "Whether entity or updated datoms satisfy the `condition`"
   [db entity {:keys [property value]} datoms]
   (let [property' (get-property entity property)
@@ -94,19 +94,19 @@
 (defmulti handle-command (fn [action-id & _others] action-id))
 
 (defn- repeat-until-future-timestamp
-  [datetime delta keep-week?]
+  [datetime recur-unit frequency period-f keep-week?]
   (let [now (t/now)]
     (if (t/after? datetime now)
       datetime
-      (let [datetime (t/plus datetime delta)
-            result (loop [result datetime]
-                     (if (t/after? result now)
-                       result
-                       (recur (t/plus result delta))))
+      (let [v (period-f (t/interval datetime now))
+            delta (->> (Math/ceil (/ (if (zero? v) 1 v) frequency))
+                       (* frequency)
+                       recur-unit)
+            result (t/plus datetime delta)
             w1 (t/day-of-week datetime)
             w2 (t/day-of-week result)]
         (if (and keep-week? (not= w1 w2))
-      ;; next week
+          ;; next week
           (if (> w2 w1)
             (t/plus result (t/days (- 7 (- w2 w1))))
             (t/plus result (t/days (- w1 w2))))
@@ -116,23 +116,25 @@
   [current-value unit frequency]
   (let [current-date-time (tc/to-date-time current-value)
         default-timezone-time (t/to-default-time-zone current-date-time)
-        interval (case (:db/ident unit)
-                   :logseq.task/recur-unit.minute t/minutes
-                   :logseq.task/recur-unit.hour t/hours
-                   :logseq.task/recur-unit.day t/days
-                   :logseq.task/recur-unit.week t/weeks
-                   :logseq.task/recur-unit.month t/months
-                   :logseq.task/recur-unit.year t/years)
-        delta (interval frequency)
-        next-time (case (:db/ident unit)
-                    :logseq.task/recur-unit.year
-                    (repeat-until-future-timestamp default-timezone-time delta false)
-                    :logseq.task/recur-unit.month
-                    (repeat-until-future-timestamp default-timezone-time delta false)
-                    :logseq.task/recur-unit.week
-                    (repeat-until-future-timestamp default-timezone-time delta true)
-                    (t/plus (t/now) delta))]
-    (tc/to-long next-time)))
+        [recur-unit period-f] (case (:db/ident unit)
+                                :logseq.task/recur-unit.minute [t/minutes t/in-minutes]
+                                :logseq.task/recur-unit.hour [t/hours t/in-hours]
+                                :logseq.task/recur-unit.day [t/days t/in-days]
+                                :logseq.task/recur-unit.week [t/weeks t/in-weeks]
+                                :logseq.task/recur-unit.month [t/months t/in-months]
+                                :logseq.task/recur-unit.year [t/years t/in-years]
+                                nil)]
+    (when recur-unit
+      (let [delta (recur-unit frequency)
+            next-time (case (:db/ident unit)
+                        :logseq.task/recur-unit.year
+                        (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f false)
+                        :logseq.task/recur-unit.month
+                        (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f false)
+                        :logseq.task/recur-unit.week
+                        (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f true)
+                        (t/plus (t/now) delta))]
+        (tc/to-long next-time)))))
 
 (defmethod handle-command :reschedule [_ db entity]
   (let [property-ident (or (:db/ident (:logseq.task/scheduled-on-property entity))
@@ -141,17 +143,17 @@
         unit (:logseq.task/recur-unit entity)
         current-value (get entity property-ident)]
     (when (and frequency unit)
-      (let [next-time-long (get-next-time current-value unit frequency)
-            journal-day (outliner-pipeline/get-journal-day-from-long db next-time-long)
-            create-journal-page (when-not journal-day
-                                  (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
-                                        title (date-time-util/format (t/to-default-time-zone (tc/to-date-time next-time-long)) formatter)]
-                                    (worker-db-page/create db title {:create-first-block? false})))
-            value next-time-long]
-        (concat
-         (:tx-data create-journal-page)
-         (when value
-           [[:db/add (:db/id entity) property-ident value]]))))))
+      (when-let [next-time-long (get-next-time current-value unit frequency)]
+        (let [journal-day (outliner-pipeline/get-journal-day-from-long db next-time-long)
+              create-journal-page (when-not journal-day
+                                    (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
+                                          title (date-time-util/format (t/to-default-time-zone (tc/to-date-time next-time-long)) formatter)]
+                                      (worker-db-page/create db title {:create-first-block? false})))
+              value next-time-long]
+          (concat
+           (:tx-data create-journal-page)
+           (when value
+             [[:db/add (:db/id entity) property-ident value]])))))))
 
 (defmethod handle-command :set-property [_ _db entity property value]
   (let [property' (get-property entity property)
@@ -170,8 +172,8 @@
     (mapcat (fn [[e datoms]]
               (let [entity (d/entity db e)
                     commands (filter (fn [[_command {:keys [entity-conditions tx-conditions]}]]
-                                       (and (every? #(sastify-condition? db entity % nil) entity-conditions)
-                                            (every? #(sastify-condition? db entity % datoms) tx-conditions))) @*commands)]
+                                       (and (every? #(satisfy-condition? db entity % nil) entity-conditions)
+                                            (every? #(satisfy-condition? db entity % datoms) tx-conditions))) @*commands)]
                 (mapcat
                  (fn [command]
                    (execute-command db entity command))
