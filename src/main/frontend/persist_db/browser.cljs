@@ -190,13 +190,13 @@
     (when-let [^js sqlite @*worker]
       (.releaseAccessHandles sqlite repo)))
 
-  (<fetch-initial-data [_this repo _opts]
+  (<fetch-initial-data [_this repo opts]
     (when-let [^js sqlite @*worker]
       (-> (p/let [db-exists? (.dbExists sqlite repo)
                   disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                   _ (when disk-db-data
                       (.importDb sqlite repo disk-db-data))
-                  _ (.createOrOpenDB sqlite repo (ldb/write-transit-str {}))]
+                  _ (.createOrOpenDB sqlite repo (ldb/write-transit-str opts))]
             (.getInitialData sqlite repo))
           (p/catch sqlite-error-handler))))
 

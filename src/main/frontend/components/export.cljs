@@ -94,9 +94,9 @@
             (t :export-zip)]])
         (when db-based?
           [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-debug-json! current-repo)}
-            "Export debug JSON"]
-           [:p.text-sm.opacity-70 "Any sensitive data will be removed in the exported json file, you can send it to us for debugging."]])
+           [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
+            "Export debug transit file"]
+           [:p.text-sm.opacity-70 "Any sensitive data will be removed in the exported transit file, you can send it to us for debugging."]])
 
         (when (util/electron?)
           [:div

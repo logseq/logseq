@@ -37,7 +37,8 @@
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]))
+            [shadow.cljs.modern :refer [defclass]]
+            [clojure.set]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -108,7 +109,7 @@
 
 (defn- rebuild-db-from-datoms!
   "Persistent-sorted-set has been broken, used addresses can't be found"
-  [datascript-conn sqlite-db]
+  [datascript-conn sqlite-db import-type]
   (let [datoms (get-all-datoms-from-sqlite-db sqlite-db)
         db (d/init-db [] db-schema/schema-for-db-based-graph
                       {:storage (storage/storage @datascript-conn)})
@@ -117,10 +118,12 @@
                              [:db/add (:e d) (:a d) (:v d) (:t d)]) datoms))]
     (prn :debug :rebuild-db-from-datoms :datoms-count (count datoms))
     ;; export db first
-    (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
-    (worker-util/post-message :export-current-db [])
+    (when-not import-type
+      (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
+      (worker-util/post-message :export-current-db []))
     (.exec sqlite-db #js {:sql "delete from kvs"})
-    (d/reset-conn! datascript-conn db)))
+    (d/reset-conn! datascript-conn db)
+    (db-migrate/fix-db! datascript-conn)))
 
 (comment
   (defn- gc-kvs-table!
@@ -137,13 +140,34 @@
                              [addr (bean/->clj (js/JSON.parse addresses))])))
           used-addresses (set (concat (mapcat second result)
                                       [0 1 (:eavt schema) (:avet schema) (:aevt schema)]))
-          unused-addresses (set/difference (set (map first result)) used-addresses)]
+          unused-addresses (clojure.set/difference (set (map first result)) used-addresses)]
       (when unused-addresses
         (prn :debug :db-gc :unused-addresses unused-addresses)
         (.transaction db (fn [tx]
                            (doseq [addr unused-addresses]
                              (.exec tx #js {:sql "Delete from kvs where addr = ?"
                                             :bind #js [addr]}))))))))
+
+(defn- find-missing-addresses
+  [^Object db]
+  (let [schema (some->> (.exec db #js {:sql "select content from kvs where addr = 0"
+                                       :rowMode "array"})
+                        bean/->clj
+                        ffirst
+                        sqlite-util/transit-read)
+        result (->> (.exec db #js {:sql "select addr, addresses from kvs"
+                                   :rowMode "array"})
+                    bean/->clj
+                    (map (fn [[addr addresses]]
+                           [addr (bean/->clj (js/JSON.parse addresses))])))
+        used-addresses (set (concat (mapcat second result)
+                                    [0 1 (:eavt schema) (:avet schema) (:aevt schema)]))
+        missing-addresses (clojure.set/difference used-addresses (set (map first result)))]
+    (when (seq missing-addresses)
+      (worker-util/post-message :capture-error
+                                {:error "db-missing-addresses"
+                                 :payload {:missing-addresses missing-addresses}})
+      (prn :error :missing-addresses missing-addresses))))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
@@ -287,7 +311,7 @@
   (.exec db "PRAGMA journal_mode=WAL"))
 
 (defn- create-or-open-db!
-  [repo {:keys [config import-type]}]
+  [repo {:keys [config import-type datoms]}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage repo {})
@@ -305,12 +329,19 @@
       (search/create-tables-and-triggers! search-db)
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)
-            client-ops-conn (when-not @*publishing? (sqlite-common-db/get-storage-conn client-ops-storage client-op/schema-in-db))
-            initial-data-exists? (and (d/entity @conn :logseq.class/Root)
-                                      (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type))))]
+            _ (when datoms
+                (let [data (map (fn [datom]
+                                  [:db/add (:e datom) (:a datom) (:v datom)]) datoms)]
+                  (d/transact! conn data {:initial-db? true})))
+            client-ops-conn (when-not @*publishing? (sqlite-common-db/get-storage-conn
+                                                     client-ops-storage
+                                                     client-op/schema-in-db))
+            initial-data-exists? (when (nil? datoms)
+                                   (and (d/entity @conn :logseq.class/Root)
+                                        (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type)))))]
         (swap! *datascript-conns assoc repo conn)
         (swap! *client-ops-conns assoc repo client-ops-conn)
-        (when (and db-based? (not initial-data-exists?))
+        (when (and db-based? (not initial-data-exists?) (not datoms))
           (let [config (or config "")
                 initial-data (sqlite-create-graph/build-db-initial-data config
                                                                         (when import-type {:import-type import-type}))]
@@ -322,12 +353,14 @@
               (ldb/transact! conn (sqlite-create-graph/build-initial-views)))
             (catch :default _e)))
 
+        (find-missing-addresses db)
         ;; (gc-kvs-table! db)
+
         (try
           (db-migrate/migrate conn search-db)
           (catch :default _e
             (when db-based?
-              (rebuild-db-from-datoms! conn db))))
+              (rebuild-db-from-datoms! conn db import-type))))
 
         (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 
@@ -729,7 +762,8 @@
   (get-debug-datoms
    [this repo]
    (when-let [db (worker-state/get-sqlite-conn repo)]
-     (ldb/write-transit-str (worker-export/get-debug-datoms db))))
+     (let [conn (worker-state/get-datascript-conn repo)]
+       (ldb/write-transit-str (worker-export/get-debug-datoms conn db)))))
 
   (get-all-pages
    [this repo]
