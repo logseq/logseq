@@ -37,8 +37,7 @@
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]
-            [datascript.impl.entity :as de]))
+            [shadow.cljs.modern :refer [defclass]]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -290,7 +289,7 @@
   (.exec db "PRAGMA journal_mode=WAL"))
 
 (defn- create-or-open-db!
-  [repo {:keys [config import-type]}]
+  [repo {:keys [config import-type datoms]}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage repo {})
@@ -308,12 +307,19 @@
       (search/create-tables-and-triggers! search-db)
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)
-            client-ops-conn (when-not @*publishing? (sqlite-common-db/get-storage-conn client-ops-storage client-op/schema-in-db))
-            initial-data-exists? (and (d/entity @conn :logseq.class/Root)
-                                      (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type))))]
+            _ (when datoms
+                (let [data (map (fn [datom]
+                                  [:db/add (:e datom) (:a datom) (:v datom)]) datoms)]
+                  (d/transact! conn data {:initial-db? true})))
+            client-ops-conn (when-not @*publishing? (sqlite-common-db/get-storage-conn
+                                                     client-ops-storage
+                                                     client-op/schema-in-db))
+            initial-data-exists? (when (nil? datoms)
+                                   (and (d/entity @conn :logseq.class/Root)
+                                        (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type)))))]
         (swap! *datascript-conns assoc repo conn)
         (swap! *client-ops-conns assoc repo client-ops-conn)
-        (when (and db-based? (not initial-data-exists?))
+        (when (and db-based? (not initial-data-exists?) (not datoms))
           (let [config (or config "")
                 initial-data (sqlite-create-graph/build-db-initial-data config
                                                                         (when import-type {:import-type import-type}))]
@@ -732,7 +738,8 @@
   (get-debug-datoms
    [this repo]
    (when-let [db (worker-state/get-sqlite-conn repo)]
-     (ldb/write-transit-str (worker-export/get-debug-datoms db))))
+     (let [conn (worker-state/get-datascript-conn repo)]
+       (ldb/write-transit-str (worker-export/get-debug-datoms conn db)))))
 
   (get-all-pages
    [this repo]
