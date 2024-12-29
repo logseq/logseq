@@ -397,7 +397,7 @@
                    (let [date (js/Date. value)
                          hours (.getHours date)
                          minutes (.getMinutes date)]
-                     [:span
+                     [:span.select-none
                       (str (util/zero-pad hours)
                            ":"
                            (util/zero-pad minutes))])]]
