@@ -1102,9 +1102,9 @@
                            :content-props {:class "toolbar-plugins-manager-content"}}))}
 
      (shui/button-ghost-icon :puzzle
-       {:class "flex relative toolbar-plugins-manager-trigger"}
-       (when badge-updates?
-         (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}})))]))
+                             {:class "flex relative toolbar-plugins-manager-trigger"}
+                             (when badge-updates?
+                               (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}})))]))
 
 (rum/defc header-ui-items-list-wrap
   [children]

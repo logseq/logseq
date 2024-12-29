@@ -14,6 +14,7 @@
             [frontend.db.react :as react]
             [frontend.date :as date]
             [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
             [cljs-time.format :as tf]
             [logseq.db :as ldb]
             [frontend.util :as util]
@@ -229,26 +230,29 @@
     (let [future-days (state/get-scheduled-future-days)
           date-format (tf/formatter "yyyyMMdd")
           current-day (tf/parse date-format (str date))
-          future-day (some->> (t/plus current-day (t/days future-days))
+          future-date (t/plus current-day (t/days future-days))
+          future-day (some->> future-date
                               (tf/unparse date-format)
-                              (parse-long))]
+                              (parse-long))
+          start-time (date/journal-day->ts date)
+          future-time (tc/to-long future-date)]
       (when-let [repo (and future-day (state/get-current-repo))]
         (p/let [result
                 (if (config/db-based-graph? repo)
                   (<q repo {}
                       '[:find [(pull ?block ?block-attrs) ...]
-                        :in $ ?day ?future ?block-attrs
+                        :in $ ?start-time ?end-time ?block-attrs
                         :where
-                        [?block :logseq.task/deadline ?deadline]
-                        [?deadline :block/journal-day ?d]
+                        (or [?block :logseq.task/scheduled ?n]
+                            [?block :logseq.task/deadline ?n])
+                        [(>= ?n ?start-time)]
+                        [(<= ?n ?end-time)]
                         [?block :logseq.task/status ?status]
                         [?status :db/ident ?status-ident]
                         [(not= ?status-ident :logseq.task/status.done)]
-                        [(not= ?status-ident :logseq.task/status.canceled)]
-                        [(<= ?d ?future)]
-                        [(>= ?d ?day)]]
-                      date
-                      future-day
+                        [(not= ?status-ident :logseq.task/status.canceled)]]
+                      start-time
+                      future-time
                       '[*])
                   (<q repo {}
                       '[:find [(pull ?block ?block-attrs) ...]

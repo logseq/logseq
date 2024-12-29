@@ -256,7 +256,7 @@
             (reset! *show-new-property-config? false)))))))
 
 (rum/defc property-key-title
-  [block property class-schema?]
+  [block property class-schema? property-position]
   (let [block-container (state/get-component :block/container)]
     (shui/trigger-as
      :a
@@ -283,10 +283,12 @@
                                                              (.focus input)))}
                                        :align "start"
                                        :as-dropdown? true})))}
-     (block-container {:property? true} property))))
+     (if (= :block-below property-position)
+       (:block/title property)
+       (block-container {:property? true} property)))))
 
 (rum/defc property-key-cp < rum/static
-  [block property {:keys [other-position? class-schema?]}]
+  [block property {:keys [other-position? class-schema? property-position]}]
   (let [icon (:logseq.property/icon property)]
     [:div.property-key-inner.jtrigger-view
      ;; icon picker
@@ -322,7 +324,7 @@
        [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
         (:block/title property)]
-       (property-key-title block property class-schema?))]))
+       (property-key-title block property class-schema? property-position))]))
 
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)
@@ -409,7 +411,7 @@
 
              :else
              (when (and property (not class-schema?))
-               (pv/property-value block property (get block (:db/ident property)) (assoc opts :editing? true)))))]]
+               (pv/property-value block property (assoc opts :editing? true)))))]]
 
        (let [on-chosen (property-input-on-chosen block *property *property-key *show-new-property-config? opts)
              input-opts {:on-key-down
@@ -501,8 +503,8 @@
               (cond-> {}
                 class-properties? (assoc :class :opacity-90))
               (if (:class-schema? opts)
-                (pv/property-value property (db/entity :logseq.property/description) property-desc opts)
-                (pv/property-value block property v opts))]]])]))))
+                (pv/property-value property (db/entity :logseq.property/description) opts)
+                (pv/property-value block property opts))]]])]))))
 
 (rum/defcs ordered-properties < rum/reactive
   {:init (fn [state]
@@ -698,10 +700,6 @@
            (let [properties (->> (:logseq.property.class/properties block)
                                  (map (fn [e] [(:db/ident e)])))
                  opts' (assoc opts :class-schema? true)]
-             [:<>
-              [:div.mt-2
-               [:div.text-sm.text-muted-foreground.mb-2 {:style {:margin-left 10}}
-                "Tagged node properties:"]
-               [:div
-                (properties-section block properties opts')
-                (rum/with-key (new-property block opts') (str id "-class-add-property"))]]]))]))))
+             [:div
+              (properties-section block properties opts')
+              (rum/with-key (new-property block opts') (str id "-class-add-property"))]))]))))

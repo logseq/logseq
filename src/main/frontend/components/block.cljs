@@ -2703,18 +2703,17 @@
         :block-below
         [:div.positioned-properties.block-below.flex.flex-row.gap-2.item-center.flex-wrap.text-sm.overflow-x-hidden
          (for [pid properties]
-           (let [property (db/entity pid)
-                 v (get block pid)]
-             [:div.flex.flex-row.items-center.opacity-50.hover:opacity-100.transition-opacity.duration-300.ease-in.gap-1
+           (let [property (db/entity pid)]
+             [:div.flex.flex-row.items-center.gap-1
               [:div.flex.flex-row.items-center
                (property-component/property-key-cp block property opts)
                [:div.select-none ":"]]
-              (pv/property-value block property v opts)]))]
+              (pv/property-value block property opts)]))]
         [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6
          {:class (name position)}
          (for [pid properties]
            (when-let [property (db/entity pid)]
-             (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
+             (pv/property-value block property (assoc opts :show-tooltip? true))))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]

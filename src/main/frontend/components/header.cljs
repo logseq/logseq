@@ -40,11 +40,11 @@
   < {:key-fn #(identity "home-button")}
   []
   (shui/button-ghost-icon :home
-    {:title (t :home)
-     :on-click #(do
-                  (when (mobile-util/native-iphone?)
-                    (state/set-left-sidebar-open! false))
-                  (route-handler/redirect-to-home!))}))
+                          {:title (t :home)
+                           :on-click #(do
+                                        (when (mobile-util/native-iphone?)
+                                          (state/set-left-sidebar-open! false))
+                                        (route-handler/redirect-to-home!))}))
 
 (rum/defcs rtc-collaborators <
   rum/reactive
@@ -67,11 +67,11 @@
     (when rtc-graph-id
       [:div.rtc-collaborators.flex.gap-1.text-sm.py-2.bg-gray-01.items-center
        (shui/button-ghost-icon :user-plus
-        {:on-click #(shui/dialog-open!
-                     (fn []
-                       [:div.p-2.-mb-8
-                        [:h1.text-3xl.-mt-2.-ml-2 "Collaborators:"]
-                        (settings/settings-collaboration)]))})
+                               {:on-click #(shui/dialog-open!
+                                            (fn []
+                                              [:div.p-2.-mb-8
+                                               [:h1.text-3xl.-mt-2.-ml-2 "Collaborators:"]
+                                               (settings/settings-collaboration)]))})
 
        (when (seq online-users)
          (for [{user-email :user/email
@@ -187,35 +187,35 @@
                  (remove nil?)))]
 
     (shui/button-ghost-icon :dots
-      {:title (t :header/more)
-       :class "toolbar-dots-btn"
-       :on-pointer-down (fn [^js e]
-                          (shui/popup-show! (.-target e)
-                            (fn [{:keys [id]}]
-                              (for [{:keys [hr item title options icon]} (items)]
-                                (let [on-click' (:on-click options)
-                                      href (:href options)]
-                                  (if hr
-                                    (shui/dropdown-menu-separator)
-                                    (shui/dropdown-menu-item
-                                      (assoc options
-                                        :on-click (fn [^js e]
-                                                    (when on-click'
-                                                      (when-not (false? (on-click' e))
-                                                        (shui/popup-hide! id)))))
-                                      (or item
-                                        (if href
-                                          [:a.flex.items-center.w-full
-                                           {:href href :on-click #(shui/popup-hide! id)
-                                            :style {:color "inherit"}}
-                                           [:span.flex.items-center.gap-1.w-full
-                                            icon [:div title]]]
-                                          [:span.flex.items-center.gap-1.w-full
-                                           icon [:div title]])))))))
-                            {:align "end"
-                             :as-dropdown? true
-                             :content-props {:class "w-64"
-                                             :align-offset -32}}))})))
+                            {:title (t :header/more)
+                             :class "toolbar-dots-btn"
+                             :on-pointer-down (fn [^js e]
+                                                (shui/popup-show! (.-target e)
+                                                                  (fn [{:keys [id]}]
+                                                                    (for [{:keys [hr item title options icon]} (items)]
+                                                                      (let [on-click' (:on-click options)
+                                                                            href (:href options)]
+                                                                        (if hr
+                                                                          (shui/dropdown-menu-separator)
+                                                                          (shui/dropdown-menu-item
+                                                                           (assoc options
+                                                                                  :on-click (fn [^js e]
+                                                                                              (when on-click'
+                                                                                                (when-not (false? (on-click' e))
+                                                                                                  (shui/popup-hide! id)))))
+                                                                           (or item
+                                                                               (if href
+                                                                                 [:a.flex.items-center.w-full
+                                                                                  {:href href :on-click #(shui/popup-hide! id)
+                                                                                   :style {:color "inherit"}}
+                                                                                  [:span.flex.items-center.gap-1.w-full
+                                                                                   icon [:div title]]]
+                                                                                 [:span.flex.items-center.gap-1.w-full
+                                                                                  icon [:div title]])))))))
+                                                                  {:align "end"
+                                                                   :as-dropdown? true
+                                                                   :content-props {:class "w-64"
+                                                                                   :align-offset -32}}))})))
 
 (rum/defc back-and-forward
   < {:key-fn #(identity "nav-history-buttons")}
@@ -223,13 +223,13 @@
   [:div.flex.flex-row
    (ui/with-shortcut :go/backward "bottom"
      (shui/button-ghost-icon :arrow-left
-       {:title (t :header/go-back) :on-click #(js/window.history.back)
-        :class "it navigation nav-left"}))
+                             {:title (t :header/go-back) :on-click #(js/window.history.back)
+                              :class "it navigation nav-left"}))
 
    (ui/with-shortcut :go/forward "bottom"
      (shui/button-ghost-icon :arrow-right
-       {:title (t :header/go-forward) :on-click #(js/window.history.forward)
-        :class "it navigation nav-right"}))])
+                             {:title (t :header/go-forward) :on-click #(js/window.history.forward)
+                              :class "it navigation nav-right"}))])
 
 (rum/defc updater-tips-new-version
   [t]

@@ -4,7 +4,8 @@
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [malli.core :as m]
             [malli.error :as me]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [clojure.pprint :as pprint]))
 
 (def ^:private db-schema-validator (m/validator db-malli-schema/DB))
 (def ^:private db-schema-explainer (m/explainer db-malli-schema/DB))
@@ -41,8 +42,16 @@
           (let [explainer (get-schema-explainer (:closed-schema? validate-options))]
             (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
             (doseq [m invalid-ent-maps]
-              (prn {:entity-map m
-                    :errors (me/humanize (explainer [m]))}))
+              (let [m' (update m :block/properties (fn [properties]
+                                                     (map (fn [[p v]]
+                                                            [(:db/ident p) v])
+                                                          properties)))
+                    data {:entity-map m'
+                          :errors (me/humanize (explainer [m]))}]
+                (try
+                  (pprint/pprint data)
+                  (catch :default _e
+                    (prn data)))))
             false)
           true)))))
 
