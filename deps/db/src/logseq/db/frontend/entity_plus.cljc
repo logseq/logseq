@@ -61,7 +61,7 @@
     (if-let [e (find @*seen-immutable-entities eid)]
       (val e)
       (let [r (d/entity db eid)]
-        (vswap! *seen-immutable-entities assoc eid r)
+        (when r (vswap! *seen-immutable-entities assoc eid r))
         r))
     (d/entity db eid)))
 
