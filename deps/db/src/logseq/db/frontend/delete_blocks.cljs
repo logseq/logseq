@@ -5,7 +5,8 @@
             [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]
             [clojure.string :as string]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.entity-plus :as entity-plus]))
 
 (defn- replace-ref-with-deleted-block-title
   [block ref-raw-title]
@@ -57,7 +58,7 @@
     (when (seq retracted-block-ids)
       (let [retracted-blocks (map #(d/entity db %) retracted-block-ids)
             retracted-tx (build-retracted-tx retracted-blocks)
-            macros-tx (when-not (entity-util/db-based-graph? db)
+            macros-tx (when-not (entity-plus/db-based-graph? db)
                         (mapcat (fn [b]
                                   ;; Only delete if last reference
                                   (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))

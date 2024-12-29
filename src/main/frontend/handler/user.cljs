@@ -6,7 +6,7 @@
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [<! go]]
             [clojure.string :as string]
-            [frontend.common.missionary-util :as c.m]
+            [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.debug :as debug]
             [frontend.handler.config :as config-handler]

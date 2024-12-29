@@ -53,7 +53,7 @@
                  (common-file/block->content repo db (:block/uuid e) {} {})])))))
 
 (defn get-debug-datoms
-  [^Object db]
+  [conn ^Object db]
   (some->> (.exec db #js {:sql "select content from kvs"
                           :rowMode "array"})
            bean/->clj
@@ -61,26 +61,10 @@
                      (let [result (sqlite-util/transit-read (first result))]
                        (when (map? result)
                          (:keys result)))))
-           (group-by first)
-           (mapcat (fn [[_id col]]
-                     (let [ident (some (fn [[_e a v _t]]
-                                         (when (= a :db/ident)
-                                           v)) col)
-                           journal (some (fn [[_e a v _t]]
-                                           (when (= a :block/journal-day)
-                                             v)) col)]
-                       (map
-                        (fn [[e a v t]]
-                          (cond
-                            (and (contains? #{:block/title :block/name} a)
-                                 (not (or ident journal)))
-                            [e a (str "debug " e) t]
-
-                            (= a :block/uuid)
-                            [e a (str v) t]
-
-                            :else
-                            [e a v t]))
-                        col))))
-           (distinct)
-           (sort-by first)))
+           (map (fn [[e a v t]]
+                  (if (and (contains? #{:block/title :block/name} a)
+                           (let [entity (d/entity @conn e)]
+                             (and (not (:db/ident entity))
+                                  (not (ldb/journal? entity)))))
+                    (d/datom e a (str "debug " e) t)
+                    (d/datom e a v t))))))

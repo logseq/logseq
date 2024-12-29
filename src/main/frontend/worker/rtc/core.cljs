@@ -2,7 +2,6 @@
   "Main(use missionary) ns for rtc related fns"
   (:require [clojure.data :as data]
             [datascript.core :as d]
-            [frontend.common.missionary-util :as c.m]
             [frontend.worker.device :as worker-device]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client :as r.client]
@@ -17,6 +16,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.config :as common-config]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [malli.core :as ma]
             [missionary.core :as m])
@@ -180,6 +180,7 @@
    & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
   (let [ws-url                     (or debug-ws-url (ws-util/get-ws-url token))
         *auto-push?                (atom auto-push?)
+        *remote-profile?           (atom false)
         *last-calibrate-t          (atom nil)
         *online-users              (atom nil)
         *assets-sync-loop-canceler (atom nil)
@@ -195,10 +196,11 @@
         (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid conn *auto-push?)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push? *online-users)]
     (assert (some? *current-ws))
-    {:rtc-state-flow     (create-rtc-state-flow (create-ws-state-flow *current-ws))
-     :*rtc-auto-push?    *auto-push?
-     :*online-users      *online-users
-     :onstarted-task     started-dfv
+    {:rtc-state-flow       (create-rtc-state-flow (create-ws-state-flow *current-ws))
+     :*rtc-auto-push?      *auto-push?
+     :*rtc-remote-profile? *remote-profile?
+     :*online-users        *online-users
+     :onstarted-task       started-dfv
      :rtc-loop-task
      (holding-rtc-lock
       started-dfv
@@ -225,7 +227,7 @@
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
                      repo conn graph-uuid date-formatter
-                     get-ws-create-task add-log-fn))
+                     get-ws-create-task *remote-profile? add-log-fn))
 
                :online-users-updated
                (reset! *online-users (:online-users (:value event)))
@@ -246,16 +248,21 @@
             (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))))))}))
 
 (def ^:private empty-rtc-loop-metadata
-  {:graph-uuid nil
+  {:repo nil
+   :graph-uuid nil
    :user-uuid nil
    :rtc-state-flow nil
    :*rtc-auto-push? nil
+   :*rtc-remote-profile? nil
    :*online-users nil
    :*rtc-lock nil
    :canceler nil
    :*last-stop-exception nil})
 
-(defonce ^:private *rtc-loop-metadata (atom empty-rtc-loop-metadata))
+(defonce ^:private *rtc-loop-metadata (atom empty-rtc-loop-metadata
+                                            :validator
+                                            (fn [v] (= (set (keys empty-rtc-loop-metadata))
+                                                       (set (keys v))))))
 
 ;;; ================ API ================
 (defn new-task--rtc-start
@@ -268,7 +275,7 @@
         (let [user-uuid (:sub (worker-util/parse-jwt token))
               config (worker-state/get-config repo)
               date-formatter (common-config/get-date-formatter config)
-              {:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users onstarted-task]}
+              {:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
               (create-rtc-loop graph-uuid repo conn date-formatter token)
               *last-stop-exception (atom nil)
               canceler (c.m/run-task rtc-loop-task :rtc-loop-task
@@ -283,6 +290,7 @@
                                             :user-uuid user-uuid
                                             :rtc-state-flow rtc-state-flow
                                             :*rtc-auto-push? *rtc-auto-push?
+                                            :*rtc-remote-profile? *rtc-remote-profile?
                                             :*online-users *online-users
                                             :*rtc-lock *rtc-lock
                                             :canceler canceler
@@ -302,6 +310,11 @@
   []
   (when-let [*auto-push? (:*rtc-auto-push? @*rtc-loop-metadata)]
     (swap! *auto-push? not)))
+
+(defn rtc-toggle-remote-profile
+  []
+  (when-let [*rtc-remote-profile? (:*rtc-remote-profile? @*rtc-loop-metadata)]
+    (swap! *rtc-remote-profile? not)))
 
 (defn new-task--get-graphs
   [token]
@@ -356,14 +369,15 @@
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
       (let [{rtc-lock :*rtc-lock
-             :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *online-users
-                    *last-stop-exception]}
+             :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *rtc-remote-profile?
+                    *online-users *last-stop-exception]}
             (m/?< rtc-loop-metadata-flow)]
         (try
           (when (and repo rtc-state-flow *rtc-auto-push? rtc-lock)
             (m/?<
              (m/latest
-              (fn [rtc-state rtc-auto-push? rtc-lock online-users pending-local-ops-count local-tx remote-tx]
+              (fn [rtc-state rtc-auto-push? rtc-remote-profile?
+                   rtc-lock online-users pending-local-ops-count local-tx remote-tx]
                 {:graph-uuid graph-uuid
                  :user-uuid user-uuid
                  :unpushed-block-update-count pending-local-ops-count
@@ -372,9 +386,12 @@
                  :rtc-state rtc-state
                  :rtc-lock rtc-lock
                  :auto-push? rtc-auto-push?
+                 :remote-profile? rtc-remote-profile?
                  :online-users online-users
                  :last-stop-exception-ex-data (some-> *last-stop-exception deref ex-data)})
-              rtc-state-flow (m/watch *rtc-auto-push?) (m/watch rtc-lock) (m/watch *online-users)
+              rtc-state-flow
+              (m/watch *rtc-auto-push?) (m/watch *rtc-remote-profile?)
+              (m/watch rtc-lock) (m/watch *online-users)
               (client-op/create-pending-block-ops-count-flow repo)
               (rtc-log-and-state/create-local-t-flow graph-uuid)
               (rtc-log-and-state/create-remote-t-flow graph-uuid))))

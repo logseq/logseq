@@ -66,10 +66,10 @@
 (defn restore-and-setup-repo!
   "Restore the db of a graph from the persisted data, and setup. Create a new
   conn, or replace the conn in state with a new one."
-  [repo]
+  [repo & {:as opts}]
   (p/do!
    (state/set-db-restoring! true)
-   (db-restore/restore-graph! repo)
+   (db-restore/restore-graph! repo opts)
    (repo-config-handler/restore-repo-config! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))

@@ -80,11 +80,11 @@ frontend.ui/_emoji-init-data
 frontend.worker.rtc.op-mem-layer/_sync-loop-canceler
 ;; Used by shadow.cljs
 frontend.worker.db-worker/init
-;; WIP fn, remove when it's ready
-frontend.worker.rtc.asset-sync/<loop-for-assets-sync
 ;; Future use?
 frontend.worker.rtc.hash/hash-blocks
 ;; Repl fn
 frontend.rum/use-atom-in
 ;; missionary utils
-frontend.common.missionary-util/<!
+frontend.common.missionary/<!
+;; only used in deps/common
+frontend.common.missionary/background-task-running?

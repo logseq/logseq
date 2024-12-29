@@ -190,16 +190,13 @@
         (.setAttribute anchor "download" filename)
         (.click anchor)))))
 
-(defn export-repo-as-debug-json!
+(defn export-repo-as-debug-transit!
   [repo]
   (p/let [result (export-common-handler/<get-debug-datoms repo)
-          json-str (-> result
-                       bean/->js
-                       js/JSON.stringify)
-          filename (file-name (str repo "-debug-datoms") :json)
-          data-str (str "data:text/json;charset=utf-8,"
-                        (js/encodeURIComponent json-str))]
-    (when-let [anchor (gdom/getElement "download-as-json-debug")]
+          filename (file-name (str repo "-debug-datoms") :transit)
+          data-str (str "data:text/transit;charset=utf-8,"
+                        (js/encodeURIComponent result))]
+    (when-let [anchor (gdom/getElement "download-as-transit-debug")]
       (.setAttribute anchor "href" data-str)
       (.setAttribute anchor "download" filename)
       (.click anchor))))

@@ -1,13 +1,14 @@
 (ns frontend.db.rtc.debug-ui
   "Debug UI for rtc module"
   (:require [fipp.edn :as fipp]
-            [frontend.common.missionary-util :as c.m]
             [frontend.db :as db]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.user :as user]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -15,7 +16,6 @@
             [rum.core :as rum]))
 
 (defonce debug-state (:rtc/state @state/state))
-(defonce rtc-log-flow (m/watch (:rtc/log @state/state)))
 
 (defn- stop
   []
@@ -37,7 +37,7 @@
                                          logs)]
                              (reset! (get state ::logs) logs*)
                              logs*))
-                         nil rtc-log-flow)
+                         nil rtc-flows/rtc-log-flow)
                         ::sub-logs)]
                    (reset! (get state ::sub-log-canceler) canceler)
                    state))
@@ -102,6 +102,7 @@
             :remote-graphs (:remote-graphs debug-state*)
             :online-users (:online-users debug-state*)
             :auto-push? (:auto-push? debug-state*)
+            :remote-profile? (:remote-profile? debug-state*)
             :current-page (state/get-current-page)
             :blocks-count (when-let [page (state/get-current-page)]
                             (count (:block/_page (db/get-page page))))}
@@ -126,7 +127,15 @@
                               {:on-click
                                (fn []
                                  (let [^object worker @db-browser/*worker]
-                                   (.rtc-toggle-auto-push worker (state/get-current-repo))))})]
+                                   (.rtc-toggle-auto-push worker)))})]
+        [:div.mr-2 (ui/button (str "Toggle remote profile("
+                                   (if (:remote-profile? debug-state*)
+                                     "ON" "OFF")
+                                   ")")
+                              {:on-click
+                               (fn []
+                                 (let [^object worker @db-browser/*worker]
+                                   (.rtc-toggle-remote-profile worker)))})]
         [:div (shui/button
                {:variant :outline
                 :class "text-red-rx-09 border-red-rx-08 hover:text-red-rx-10"

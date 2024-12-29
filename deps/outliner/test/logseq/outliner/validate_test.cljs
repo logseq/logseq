@@ -1,8 +1,9 @@
 (ns logseq.outliner.validate-test
-  (:require [cljs.test :refer [deftest is are testing]]
+  (:require [cljs.test :refer [are deftest is testing]]
             [datascript.core :as d]
-            [logseq.outliner.validate :as outliner-validate]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.validate :as outliner-validate]))
 
 (deftest validate-block-title-unique-for-properties
   (let [conn (db-test/create-conn-with-blocks
@@ -97,10 +98,10 @@
 
     (testing "built-in tag can't have parent changed"
       (is (thrown-with-msg?
-            js/Error
-            #"Can't change.*built-in"
-            (outliner-validate/validate-parent-property (d/entity @conn :logseq.class/Task)
-                                                        [(d/entity @conn :logseq.class/Cards)]))))))
+           js/Error
+           #"Can't change.*built-in"
+           (outliner-validate/validate-parent-property (entity-plus/entity-memoized @conn :logseq.class/Task)
+                                                       [(entity-plus/entity-memoized @conn :logseq.class/Cards)]))))))
 
 (deftest validate-tags-property
   (let [conn (db-test/create-conn-with-blocks

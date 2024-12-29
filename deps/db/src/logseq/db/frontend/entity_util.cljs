@@ -1,22 +1,22 @@
 (ns logseq.db.frontend.entity-util
   "Lower level entity util fns used across db namespaces"
-  (:require [datascript.core :as d]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
+            [datascript.db]
             [datascript.impl.entity :as de])
   (:refer-clojure :exclude [object?]))
 
-(defn db-based-graph?
-  "Whether the current graph is db-only"
-  [db]
-  (when db
-    (= "db" (:kv/value (d/entity db :logseq.kv/db-type)))))
-
 (defn- has-tag?
   [entity tag-ident]
-  (let [tags (:block/tags entity)]
-    (some (fn [t] (or (= (:db/ident t) tag-ident)
-                      (= t tag-ident)))
-          (if (coll? tags) tags [tags]))))
+  (some (fn [t]
+          (or (keyword-identical? (:db/ident t) tag-ident)
+              (keyword-identical? t tag-ident)))
+        (:block/tags entity)))
+
+(comment
+  (require '[logseq.common.profile :as c.p])
+  (do (vreset! c.p/*key->call-count {})
+      (vreset! c.p/*key->time-sum {}))
+  (c.p/profile-fn! has-tag? :print-on-call? false))
 
 (defn internal-page?
   [entity]
@@ -24,8 +24,8 @@
 
 (defn class?
   [entity]
-  (or (= (:db/ident entity) :logseq.class/Tag)
-      (has-tag? entity :logseq.class/Tag)))
+  (or (has-tag? entity :logseq.class/Tag)
+      (keyword-identical? (:db/ident entity) :logseq.class/Tag)))
 
 (defn property?
   [entity]
@@ -38,7 +38,7 @@
    ;; db based graph
    (has-tag? entity :logseq.class/Whiteboard)
    ;; file based graph
-   (= "whiteboard" (:block/type entity))))
+   (identical? "whiteboard" (:block/type entity))))
 
 (defn closed-value?
   [entity]
@@ -51,7 +51,7 @@
    ;; db based graph
    (has-tag? entity :logseq.class/Journal)
    ;; file based graph
-   (= "journal" (:block/type entity))))
+   (identical? "journal" (:block/type entity))))
 
 (defn page?
   [entity]
