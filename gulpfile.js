@@ -6,7 +6,7 @@ const path = require('path')
 const gulp = require('gulp')
 const del = require('del')
 const ip = require('ip')
-const replace = require('gulp-replace');
+const replace = require('gulp-replace')
 
 const outputPath = path.join(__dirname, 'static')
 const resourcesPath = path.join(__dirname, 'resources')
@@ -19,26 +19,27 @@ const css = {
   watchCSS () {
     return cp.spawn(`yarn css:watch`, {
       shell: true,
-      stdio: 'inherit'
+      stdio: 'inherit',
     })
   },
 
   buildCSS (...params) {
     return gulp.series(
       () => exec(`yarn css:build`, {}),
-      css._optimizeCSSForRelease
+      css._optimizeCSSForRelease,
     )(...params)
   },
 
   _optimizeCSSForRelease () {
-    return gulp.src(path.join(outputPath, 'css', 'style.css'))
-      .pipe(gulp.dest(path.join(outputPath, 'css')))
-  }
+    return gulp.src(path.join(outputPath, 'css', 'style.css')).
+      pipe(gulp.dest(path.join(outputPath, 'css')))
+  },
 }
 
 const common = {
   clean () {
-    return del(['./static/**/*', '!./static/yarn.lock', '!./static/node_modules'])
+    return del(
+      ['./static/**/*', '!./static/yarn.lock', '!./static/node_modules'])
   },
 
   syncResourceFile () {
@@ -50,7 +51,7 @@ const common = {
     return gulp.series(
       () => gulp.src([
         './node_modules/@excalidraw/excalidraw/dist/excalidraw-assets/**',
-        '!**/*/i18n-*.js'
+        '!**/*/i18n-*.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets'))),
       () => gulp.src([
         'node_modules/katex/dist/katex.min.js',
@@ -70,11 +71,14 @@ const common = {
         'node_modules/react/umd/react.development.js',
         'node_modules/react-dom/umd/react-dom.production.min.js',
         'node_modules/react-dom/umd/react-dom.development.js',
-        'node_modules/prop-types/prop-types.min.js'
+        'node_modules/prop-types/prop-types.min.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
-        'node_modules/@tabler/icons-react/dist/umd/tabler-icons-react.min.js'
-      ]).pipe(replace('"@tabler/icons-react"]={},a.react,', '"tablerIcons"]={},a.React,')).pipe(gulp.dest(path.join(outputPath, 'js'))),
+        'node_modules/@tabler/icons-react/dist/umd/tabler-icons-react.min.js',
+      ]).
+        pipe(replace('"@tabler/icons-react"]={},a.react,',
+          '"tablerIcons"]={},a.React,')).
+        pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
         'node_modules/@glidejs/glide/dist/glide.min.js',
         'node_modules/@glidejs/glide/dist/css/glide.core.min.css',
@@ -83,7 +87,7 @@ const common = {
       () => gulp.src([
         'node_modules/pdfjs-dist/build/pdf.js',
         'node_modules/pdfjs-dist/build/pdf.worker.js',
-        'node_modules/pdfjs-dist/web/pdf_viewer.js'
+        'node_modules/pdfjs-dist/web/pdf_viewer.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'pdfjs'))),
       () => gulp.src([
         'node_modules/pdfjs-dist/cmaps/*.*',
@@ -92,37 +96,38 @@ const common = {
         'node_modules/inter-ui/inter.css',
         'node_modules/reveal.js/dist/theme/fonts/source-sans-pro/**',
       ]).pipe(gulp.dest(path.join(outputPath, 'css'))),
-      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*')
-        .pipe(gulp.dest(path.join(outputPath, 'css', 'Inter (web)'))),
+      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*').
+        pipe(gulp.dest(path.join(outputPath, 'css', 'Inter (web)'))),
       () => gulp.src([
         'node_modules/@tabler/icons-webfont/fonts/**',
-        'node_modules/katex/dist/fonts/*.woff2'
+        'node_modules/katex/dist/fonts/*.woff2',
       ]).pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
     )(...params)
   },
 
   keepSyncResourceFile () {
-    return gulp.watch(resourceFilePath, { ignoreInitial: true }, common.syncResourceFile)
+    return gulp.watch(resourceFilePath, { ignoreInitial: true },
+      common.syncResourceFile)
   },
 
   syncAllStatic () {
     return gulp.src([
       outputFilePath,
-      '!' + path.join(outputPath, 'node_modules/**')
+      '!' + path.join(outputPath, 'node_modules/**'),
     ]).pipe(gulp.dest(publicStaticPath))
   },
 
   syncJS_CSSinRt () {
     return gulp.src([
       path.join(outputPath, 'js/**'),
-      path.join(outputPath, 'css/**')
+      path.join(outputPath, 'css/**'),
     ], { base: outputPath }).pipe(gulp.dest(publicStaticPath))
   },
 
   keepSyncStaticInRt () {
     return gulp.watch([
       path.join(outputPath, 'js/**'),
-      path.join(outputPath, 'css/**')
+      path.join(outputPath, 'css/**'),
     ], { ignoreInitial: true }, common.syncJS_CSSinRt)
   },
 
@@ -136,7 +141,8 @@ const common = {
       try {
         await fetch(LOGSEQ_APP_SERVER_URL)
       } catch (e) {
-        return cb(new Error(`/* ❌ Please check if the service is ON. (${LOGSEQ_APP_SERVER_URL}) ❌ */`))
+        return cb(new Error(
+          `/* ❌ Please check if the service is ON. (${LOGSEQ_APP_SERVER_URL}) ❌ */`))
       }
     }
 
@@ -147,49 +153,63 @@ const common = {
     cp.execSync(`npx cap sync ${mode}`, {
       stdio: 'inherit',
       env: Object.assign(process.env, {
-        LOGSEQ_APP_SERVER_URL
-      })
+        LOGSEQ_APP_SERVER_URL,
+      }),
     })
 
     cp.execSync(`rm -rf ios/App/App/public/static/out`, {
-      stdio: 'inherit'
+      stdio: 'inherit',
     })
-
 
     cp.execSync(`npx cap run ${mode} --external`, {
       stdio: 'inherit',
       env: Object.assign(process.env, {
-        LOGSEQ_APP_SERVER_URL
-      })
+        LOGSEQ_APP_SERVER_URL,
+      }),
     })
 
     cb()
-  }
+  },
+
+  switchReactDevelopmentMode (cb) {
+    const reactFrom = path.join(outputPath, 'js', 'react.development.js')
+    const reactTo = path.join(outputPath, 'js', 'react.production.min.js')
+    cp.execSync(`mv ${reactFrom} ${reactTo}`, { stdio: 'inherit' })
+
+    const reactDomFrom = path.join(outputPath, 'js', 'react-dom.development.js')
+    const reactDomTo = path.join(outputPath, 'js',
+      'react-dom.production.min.js')
+    cp.execSync(`mv ${reactDomFrom} ${reactDomTo}`, { stdio: 'inherit' })
+
+    cb()
+  },
 }
 
 exports.electron = () => {
   if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
     cp.execSync('yarn', {
       cwd: outputPath,
-      stdio: 'inherit'
+      stdio: 'inherit',
     })
   }
 
   cp.execSync('yarn electron:dev', {
     cwd: outputPath,
-    stdio: 'inherit'
+    stdio: 'inherit',
   })
 }
 
 exports.electronMaker = async () => {
   cp.execSync('yarn cljs:release-electron', {
-    stdio: 'inherit'
+    stdio: 'inherit',
   })
 
   const pkgPath = path.join(outputPath, 'package.json')
   const pkg = require(pkgPath)
-  const version = fs.readFileSync(path.join(__dirname, 'src/main/frontend/version.cljs'))
-    .toString().match(/[0-9.]{3,}/)[0]
+  const version = fs.readFileSync(
+    path.join(__dirname, 'src/main/frontend/version.cljs')).
+    toString().
+    match(/[0-9.]{3,}/)[0]
 
   if (!version) {
     throw new Error('release version error in src/**/*/version.cljs')
@@ -201,18 +221,21 @@ exports.electronMaker = async () => {
   if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
     cp.execSync('yarn', {
       cwd: outputPath,
-      stdio: 'inherit'
+      stdio: 'inherit',
     })
   }
 
   cp.execSync('yarn electron:make', {
     cwd: outputPath,
-    stdio: 'inherit'
+    stdio: 'inherit',
   })
 }
 
 exports.cap = common.runCapWithLocalDevServerEntry
 exports.clean = common.clean
-exports.watch = gulp.series(common.syncResourceFile, common.syncAssetFiles, common.syncAllStatic,
+exports.watch = gulp.series(common.syncResourceFile,
+  common.syncAssetFiles, common.syncAllStatic,
+  common.switchReactDevelopmentMode,
   gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
-exports.build = gulp.series(common.clean, common.syncResourceFile, common.syncAssetFiles, css.buildCSS)
+exports.build = gulp.series(common.clean, common.syncResourceFile,
+  common.syncAssetFiles, css.buildCSS)
