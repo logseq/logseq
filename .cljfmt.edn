@@ -1,2 +1,3 @@
  {:extra-indents {missionary.core/sp [[:block 0]]
-                  missionary.core/ap [[:block 0]]}}
+                  missionary.core/ap [[:block 0]]}
+  :sort-ns-references? true}
