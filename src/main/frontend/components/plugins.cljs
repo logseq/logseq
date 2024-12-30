@@ -200,9 +200,9 @@
        :dangerouslySetInnerHTML {:__html content}}]]))
 
 (rum/defc remote-readme-display
-  [repo _content]
+  [{:keys [repo]} _content]
 
-  (let [src (str "lsp://logseq.com/marketplace.html?repo=" repo)]
+  (let [src (str "./marketplace.html?repo=" repo)]
     [:iframe.lsp-frame-readme {:src src}]))
 
 (defn security-warning
@@ -300,9 +300,9 @@
                true)]])
 
 (defn get-open-plugin-readme-handler
-  [url item repo]
+  [url {:keys [webPkg] :as item} repo]
   #(plugin-handler/open-readme!
-    url item (if repo remote-readme-display local-markdown-display)))
+    url item (if (or repo webPkg) remote-readme-display local-markdown-display)))
 
 (rum/defc plugin-item-card < rum/static
  [t {:keys [id name title version url description author icon iir repo sponsors webPkg] :as item}
