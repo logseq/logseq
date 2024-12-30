@@ -144,8 +144,9 @@
                           (util/stop e))}
        (ldb/object? page)
        (assoc :title (block-handler/block-unique-title page)))
-     [:span.page-icon icon]
-     [:span.page-title {:class (when untitled? "opacity-50")
+     [:span.page-icon {:key "page-icon"} icon]
+     [:span.page-title {:key "title"
+                        :class (when untitled? "opacity-50")
                         :style {:display "ruby"}}
       (cond
         (not (db/page? page))
@@ -159,7 +160,8 @@
 
      ;; dots trigger
      (shui/button
-      {:size :sm
+      {:key "more actions"
+       :size :sm
        :variant :ghost
        :class "absolute !bg-transparent right-0 top-0 px-1.5 scale-75 opacity-40 hidden group-hover:block hover:opacity-80 active:opacity-100"
        :on-click #(do
