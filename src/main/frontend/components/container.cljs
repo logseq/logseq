@@ -1,37 +1,36 @@
 (ns frontend.components.container
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
-            [frontend.version :refer [version]]
+            [dommy.core :as d]
+            [electron.ipc :as ipc]
+            [frontend.components.block :as block]
+            [frontend.components.content :as cp-content]
+            [frontend.components.dnd :as dnd-component]
             [frontend.components.find-in-page :as find-in-page]
+            [frontend.components.handbooks :as handbooks]
             [frontend.components.header :as header]
+            [frontend.components.icon :as icon]
             [frontend.components.journal :as journal]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as right-sidebar]
             [frontend.components.theme :as theme]
-            [frontend.components.dnd :as dnd-component]
-            [frontend.components.icon :as icon]
-            [frontend.components.handbooks :as handbooks]
-            [frontend.components.block :as block]
-            [dommy.core :as d]
-            [frontend.components.content :as cp-content]
+            [frontend.components.window-controls :as window-controls]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t tt]]
             [frontend.db :as db]
-            [electron.ipc :as ipc]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
+            [frontend.extensions.fsrs :as fsrs]
             [frontend.extensions.pdf.utils :as pdf-utils]
-            [frontend.storage :as storage]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.util.page :as page-util]
+            [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.handler.recent :as recent-handler]
-            [frontend.handler.block :as block-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -40,24 +39,25 @@
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
-            [logseq.shui.toaster.core :as shui-toaster]
-            [logseq.shui.dialog.core :as shui-dialog]
-            [logseq.shui.popup.core :as shui-popup]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.components.window-controls :as window-controls]
-            [medley.core :as medley]
+            [frontend.util.page :as page-util]
+            [frontend.version :refer [version]]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.path :as path]
+            [logseq.common.util.namespace :as ns-util]
+            [logseq.db :as ldb]
+            [logseq.shui.dialog.core :as shui-dialog]
+            [logseq.shui.popup.core :as shui-popup]
+            [logseq.shui.toaster.core :as shui-toaster]
+            [logseq.shui.ui :as shui]
+            [medley.core :as medley]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [logseq.db :as ldb]
-            [frontend.extensions.fsrs :as fsrs]
-            [logseq.common.util.namespace :as ns-util]))
+            [rum.core :as rum]))
 
 (rum/defc sidebar-content-group < rum/reactive
   [name {:keys [class count more header-props enter-show-more? collapsable?]} child]
@@ -99,7 +99,8 @@
                            [:<>
                             (when-not recent?
                               (x-menu-item
-                               {:on-click #(page-handler/<unfavorite-page! (if db-based? (str (:block/uuid page)) title))}
+                               {:key "unfavorite"
+                                :on-click #(page-handler/<unfavorite-page! (if db-based? (str (:block/uuid page)) title))}
                                (ctx-icon "star-off")
                                (t :page/unfavorite)
                                (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
@@ -110,16 +111,19 @@
                                                        (config/get-repo-fpath (state/get-current-repo) file-rpath))]
                               [:<>
                                (x-menu-item
-                                {:on-click #(ipc/ipc :openFileInFolder page-fpath)}
+                                {:key "open-in-folder"
+                                 :on-click #(ipc/ipc :openFileInFolder page-fpath)}
                                 (ctx-icon "folder")
                                 (t :page/open-in-finder))
 
                                (x-menu-item
-                                {:on-click #(js/window.apis.openPath page-fpath)}
+                                {:key "open with default app"
+                                 :on-click #(js/window.apis.openPath page-fpath)}
                                 (ctx-icon "file")
                                 (t :page/open-with-default-app))])
                             (x-menu-item
-                             {:on-click open-in-sidebar}
+                             {:key "open in sidebar"
+                              :on-click open-in-sidebar}
                              (ctx-icon "layout-sidebar-right")
                              (t :content/open-in-sidebar)
                              (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))]))]
@@ -169,7 +173,8 @@
 (defn sidebar-item
   [{:keys [on-click-handler class title icon icon-extension? active href shortcut more]}]
   [:div
-   {:class (util/classnames [class {:active active}])}
+   {:key class
+    :class (util/classnames [class {:active active}])}
    [:a.item.group.flex.items-center.text-sm.rounded-md.font-medium
     {:on-click on-click-handler
      :class (when active "active")
@@ -433,7 +438,8 @@
 
     [:<>
      [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
-      {:ref ref-el
+      {:key "left-sidebar"
+       :ref ref-el
        :style (cond-> {}
                 (and (number? offset-ratio)
                      (> touching-x-offset 0))
@@ -474,7 +480,8 @@
           (sidebar-recent-pages))]]]
 
      [:span.shade-mask
-      (cond-> {:on-click close-fn}
+      (cond-> {:on-click close-fn
+               :key "shade-mask"}
         (number? offset-ratio)
         (assoc :style {:opacity (cond-> offset-ratio
                                   (neg? offset-ratio)
