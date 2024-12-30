@@ -591,7 +591,6 @@ class PluginLocal extends EventEmitter<
     this._options.icon = icon && this._resolveResourceFullUrl(icon)
     this._options.theme = Boolean(logseq.theme || !!logseq.themes)
 
-    // TODO: strategy for Logseq plugins center
     if (this.isInstalledInDotRoot) {
       this._id = path.basename(localRoot)
     } else if (!this.isWebPlugin) {

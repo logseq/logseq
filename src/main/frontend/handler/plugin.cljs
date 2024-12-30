@@ -143,8 +143,8 @@
     (state/set-state! :plugin/installing pkg)
 
     (-> (load-marketplace-plugins false)
-      (p/then (fn [mfts]
-                (let [mft (some #(when (= (:id %) id) %) mfts)]
+      (p/then (fn [manifests]
+                (let [mft (some #(when (= (:id %) id) %) manifests)]
                   ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
                   (ipc/ipc :updateMarketPlugin (merge (dissoc pkg :logger) mft)))
                 true))
