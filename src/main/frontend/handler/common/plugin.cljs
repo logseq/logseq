@@ -37,34 +37,34 @@
   (js/window.apis.emit (name :lsp-updates) (bean/->js payload)))
 
 (defn async-install-or-update-for-web!
-  [{:keys [version repo only-check _plugin-action] :as mft}]
-  (js/console.log "debug:install-or-update" mft)
+  [{:keys [version repo only-check _plugin-action] :as manifest}]
+  (js/console.log "debug:install-or-update" manifest)
   (-> (fetch-web-plugin-entry-info repo version)
     (p/then (fn [{:keys [_version] :as web-pkg}]
-             (let [web-pkg (merge web-pkg (dissoc mft :stat))]
+             (let [web-pkg (merge web-pkg (dissoc manifest :stat))]
               (emit-lsp-updates!
                {:status     :completed
                 :only-check only-check
                 :payload    (if only-check
-                             (assoc mft :latest-version version :latest-notes "TODO: update notes")
-                             (assoc mft :dst repo :installed-version version :web-pkg web-pkg))}))))
+                             (assoc manifest :latest-version version :latest-notes "TODO: update notes")
+                             (assoc manifest :dst repo :installed-version version :web-pkg web-pkg))}))))
     (p/catch (fn [^js e]
                (emit-lsp-updates!
                  {:status :error
                   :only-check only-check
-                  :payload (assoc mft :error-code (.-message e))})))))
+                  :payload (assoc manifest :error-code (.-message e))})))))
 
 (defn install-marketplace-plugin!
   "Installs plugin given plugin map with id"
-  [{:keys [id] :as mft}]
+  [{:keys [id] :as manifest}]
   (when-not (and (:plugin/installing @state/state)
                  (installed? id))
     (p/create
      (fn [resolve]
-       (state/set-state! :plugin/installing mft)
+       (state/set-state! :plugin/installing manifest)
        (if (util/electron?)
-         (ipc/ipc :installMarketPlugin mft)
-         (async-install-or-update-for-web! mft))
+         (ipc/ipc :installMarketPlugin manifest)
+         (async-install-or-update-for-web! manifest))
        (resolve id)))))
 
 (defn unregister-plugin
