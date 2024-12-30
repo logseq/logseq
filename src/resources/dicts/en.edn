@@ -206,10 +206,6 @@
  :editor/collapse-block-children "Collapse all"
  :editor/delete-selection "Delete selected blocks"
  :editor/cycle-todo "Rotate the TODO state"
- :dev/show-page-data "(Dev) Show page data"
- :dev/show-block-data "(Dev) Show block data"
- :dev/show-block-ast "(Dev) Show block AST"
- :dev/show-page-ast "(Dev) Show page AST"
  :content/copy-export-as "Copy / Export as.."
  :content/copy-block-url "Copy block URL"
  :content/copy-block-ref "Copy block ref"
@@ -796,4 +792,5 @@
   :dev/show-page-data "(Dev) Show page data"
   :dev/show-page-ast "(Dev) Show page AST"
   :dev/replace-graph-with-db-file "(Dev) Replace graph with its db.sqlite file"
+  :dev/validate-db "(Dev) Validate current graph"
   :window/close "Close window"}}

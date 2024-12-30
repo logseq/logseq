@@ -1,17 +1,17 @@
 (ns frontend.handler.common.developer
   "Common fns for developer related functionality"
-  (:require [frontend.db :as db]
-            [cljs.pprint :as pprint]
-            [frontend.state :as state]
+  (:require [cljs.pprint :as pprint]
+            [datascript.impl.entity :as de]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.format.mldoc :as mldoc]
             [frontend.handler.notification :as notification]
+            [frontend.persist-db :as persist-db]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util.page :as page-util]
-            [frontend.format.mldoc :as mldoc]
-            [frontend.config :as config]
-            [frontend.persist-db :as persist-db]
-            [promesa.core :as p]
-            [datascript.impl.entity :as de]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [promesa.core :as p]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
@@ -87,6 +87,10 @@
       (if (get-in page-data [:block/file :file/content])
         (show-content-ast (get-in page-data [:block/file :file/content]) (:block/format page-data))
         (notification/show! "No page found" :warning)))))
+
+(defn ^:export validate-db []
+  (when-let [^Object worker @state/*db-worker]
+    (.validate-db worker (state/get-current-repo))))
 
 (defn import-chosen-graph
   [repo]
