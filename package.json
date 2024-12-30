@@ -20,6 +20,7 @@
         "gulp-replace": "^1.1.4",
         "gulp-postcss": "^10.0.0",
         "ip": "1.1.9",
+        "semver": "7.5.2",
         "karma": "^6.4.4",
         "karma-chrome-launcher": "^3.2.0",
         "karma-cljs-test": "^0.1.0",

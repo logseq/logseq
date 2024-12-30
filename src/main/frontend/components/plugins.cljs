@@ -516,7 +516,8 @@
                      :class "load-unpacked"
                      :on-click plugin-handler/load-unpacked-plugin}))
 
-         (unpacked-plugin-loader selected-unpacked-pkg)])]
+         (when (util/electron?)
+           (unpacked-plugin-loader selected-unpacked-pkg))])]
 
      [:div.flex.items-center.r
       ;; extra info
