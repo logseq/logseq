@@ -1,6 +1,7 @@
 (ns frontend.handler.config
   "Fns for setting repo config"
-  (:require [frontend.state :as state]
+  (:require [clojure.string :as string]
+            [frontend.state :as state]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
@@ -18,7 +19,7 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [content (db/get-file path)]
       (repo-config-handler/read-repo-config content)
-      (let [result (parse-repo-config content)
+      (let [result (parse-repo-config (if (string/blank? content) "{}" content))
             ks (if (vector? k) k [k])
             v (cond->> v
                        (map? v)
