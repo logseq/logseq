@@ -437,6 +437,7 @@
                                       "property" :logseq.class/Property
                                       "journal" :logseq.class/Journal
                                       "whiteboard" :logseq.class/Whiteboard
+                                      "asset" :logseq.class/Asset
                                       "closed value" nil
                                       (throw (ex-info "unsupported block/type" {:type v})))]
                             (cond->
