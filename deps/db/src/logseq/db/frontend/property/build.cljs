@@ -2,8 +2,8 @@
   "Builds core property concepts"
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.order :as db-order]
-            [datascript.core :as d]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- closed-value-new-block
   [block-id block-type value property]
@@ -37,7 +37,7 @@
 
 (defn closed-values->blocks
   [property]
-  (map (fn [{uuid' :uuid :keys [db-ident value icon schema]}]
+  (map (fn [{uuid' :uuid :keys [db-ident value icon schema properties]}]
          (cond->
           (build-closed-value-block
            uuid'
@@ -45,6 +45,8 @@
            value
            property
            {:db-ident db-ident :icon icon})
+           (seq properties)
+           (merge properties)
            true
            (assoc :block/order (db-order/gen-key))))
        (:closed-values property)))
@@ -61,26 +63,7 @@
     (into [property-tx]
           (closed-values->blocks property))))
 
-(defn build-property-value-block
-  "Builds a property value entity given a block map/entity, a property entity or
-  ident and its property value"
-  [block property value]
-  (-> (merge
-       {:block/uuid (d/squuid)
-        :block/format :markdown
-        :block/page (if (:block/page block)
-                      (:db/id (:block/page block))
-                     ;; page block
-                      (:db/id block))
-        :block/parent (:db/id block)
-        :logseq.property/created-from-property (if (= (:db/ident property) :logseq.property/default-value)
-                                                 (:db/id block)
-                                                 (or (:db/id property) {:db/ident (:db/ident property)}))
-        :block/order (db-order/gen-key)}
-       (if (db-property-type/property-value-content? (get-in block [:block/schema :type]) property)
-         {:property.value/content value}
-         {:block/title value}))
-      sqlite-util/block-with-timestamps))
+(def build-property-value-block db-property/build-property-value-block)
 
 (defn build-property-values-tx-m
   "Builds a map of property names to their property value blocks to be

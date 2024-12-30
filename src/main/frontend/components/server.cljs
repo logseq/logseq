@@ -13,11 +13,11 @@
 
 (rum/defcs panel-of-tokens
   < rum/reactive
-    (rum/local nil ::tokens)
-    {:will-mount
-     (fn [s]
-       (let [*tokens (s ::tokens)]
-         (reset! *tokens (get-in @state/state [:electron/server :tokens])) s))}
+  (rum/local nil ::tokens)
+  {:will-mount
+   (fn [s]
+     (let [*tokens (s ::tokens)]
+       (reset! *tokens (get-in @state/state [:electron/server :tokens])) s))}
   [_state close-panel]
 
   (let [server-state (state/sub :electron/server)
@@ -59,11 +59,11 @@
 
 (rum/defcs panel-of-configs
   < rum/reactive
-    (rum/local nil ::configs)
-    {:will-mount
-     (fn [s]
-       (let [*configs (s ::configs)]
-         (reset! *configs (:electron/server @state/state)) s))}
+  (rum/local nil ::configs)
+  {:will-mount
+   (fn [s]
+     (let [*configs (s ::configs)]
+       (reset! *configs (:electron/server @state/state)) s))}
   [_state close-panel]
 
   (let [server-state (state/sub :electron/server)
@@ -125,13 +125,13 @@
   [server-state]
 
   (rum/use-effect!
-    (fn []
-      (p/let [_ (p/delay 1000)
-              _ (ipc/ipc :server/load-state)]
-        (let [t (js/setTimeout #(when (state/sub [:electron/server :autostart])
-                                  (ipc/ipc :server/do :restart)) 1000)]
-          #(js/clearTimeout t))))
-    [])
+   (fn []
+     (p/let [_ (p/delay 1000)
+             _ (ipc/ipc :server/load-state)]
+       (let [t (js/setTimeout #(when (state/sub [:electron/server :autostart])
+                                 (ipc/ipc :server/do :restart)) 1000)]
+         #(js/clearTimeout t))))
+   [])
 
   (let [{:keys [status error]} server-state
         status   (keyword (util/safe-lower-case status))
@@ -139,54 +139,54 @@
         href     (and running? (str "http://" (:host server-state) ":" (:port server-state)))]
 
     (rum/use-effect!
-      #(when error
-         (notification/show! (str "[Server] " error) :error))
-      [error])
+     #(when error
+        (notification/show! (str "[Server] " error) :error))
+     [error])
 
     [:div.cp__server-indicator
      (shui/button-ghost-icon (if running? "api" "api-off")
-       {:on-click (fn [^js e]
-                    (shui/popup-show!
-                      (.-target e)
-                      (fn [{:keys [_close]}]
-                        (let [items [{:hr? true}
+                             {:on-click (fn [^js e]
+                                          (shui/popup-show!
+                                           (.-target e)
+                                           (fn [{:keys [_close]}]
+                                             (let [items [{:hr? true}
 
-                                     (cond
-                                       running?
-                                       {:title "Stop server"
-                                        :options {:on-click #(ipc/ipc :server/do :stop)}
-                                        :icon [:span.text-red-500.flex.items-center (ui/icon "player-stop")]}
+                                                          (cond
+                                                            running?
+                                                            {:title "Stop server"
+                                                             :options {:on-click #(ipc/ipc :server/do :stop)}
+                                                             :icon [:span.text-red-500.flex.items-center (ui/icon "player-stop")]}
 
-                                       :else
-                                       {:title "Start server"
-                                        :options {:on-click #(ipc/ipc :server/do :restart)}
-                                        :icon [:span.text-green-500.flex.items-center (ui/icon "player-play")]})
+                                                            :else
+                                                            {:title "Start server"
+                                                             :options {:on-click #(ipc/ipc :server/do :restart)}
+                                                             :icon [:span.text-green-500.flex.items-center (ui/icon "player-play")]})
 
-                                     {:title "Authorization tokens"
-                                      :options {:on-click #(shui/dialog-open!
-                                                             (fn []
-                                                               (panel-of-tokens shui/dialog-close!)))}
-                                      :icon (ui/icon "key")}
+                                                          {:title "Authorization tokens"
+                                                           :options {:on-click #(shui/dialog-open!
+                                                                                 (fn []
+                                                                                   (panel-of-tokens shui/dialog-close!)))}
+                                                           :icon (ui/icon "key")}
 
-                                     {:title "Server configurations"
-                                      :options {:on-click #(shui/dialog-open!
-                                                             (fn []
-                                                               (panel-of-configs shui/dialog-close!)))}
-                                      :icon (ui/icon "server-cog")}]]
+                                                          {:title "Server configurations"
+                                                           :options {:on-click #(shui/dialog-open!
+                                                                                 (fn []
+                                                                                   (panel-of-configs shui/dialog-close!)))}
+                                                           :icon (ui/icon "server-cog")}]]
 
-                          (cons
-                            [:div.links-header.flex.justify-center.py-2
-                             [:span.ml-1.text-sm.opacity-70
-                              (if-not running?
-                                (string/upper-case (or (:status server-state) "stopped"))
-                                [:a.hover:underline {:href href} href])]]
-                            (for [{:keys [hr? title options icon]} items]
-                              (cond
-                                hr?
-                                (shui/dropdown-menu-separator)
+                                               (cons
+                                                [:div.links-header.flex.justify-center.py-2
+                                                 [:span.ml-1.text-sm.opacity-70
+                                                  (if-not running?
+                                                    (string/upper-case (or (:status server-state) "stopped"))
+                                                    [:a.hover:underline {:href href} href])]]
+                                                (for [{:keys [hr? title options icon]} items]
+                                                  (cond
+                                                    hr?
+                                                    (shui/dropdown-menu-separator)
 
-                                :else
-                                (shui/dropdown-menu-item options
-                                  [:span.flex.items-center icon [:span.pl-1 title]]))))))
-                      {:as-dropdown? true
-                       :content-props {:onClick #(shui/popup-hide!)}}))})]))
+                                                    :else
+                                                    (shui/dropdown-menu-item options
+                                                                             [:span.flex.items-center icon [:span.pl-1 title]]))))))
+                                           {:as-dropdown? true
+                                            :content-props {:onClick #(shui/popup-hide!)}}))})]))

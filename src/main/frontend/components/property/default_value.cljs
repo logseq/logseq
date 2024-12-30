@@ -5,7 +5,6 @@
 
 (rum/defc default-value-config
   [property]
-  (let [default-value (:logseq.property/default-value property)]
-    (pv/property-value property
-                       (db/entity :logseq.property/default-value)
-                       default-value {})))
+  (pv/property-value property
+                     (db/entity :logseq.property/default-value)
+                     {}))

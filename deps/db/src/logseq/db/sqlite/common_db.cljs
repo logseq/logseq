@@ -198,9 +198,19 @@
                (d/datoms db :eavt (:db/id p)))))))
 
 (defn get-all-pages
+  "Get all pages including property page's default value"
   [db]
   (let [datoms (d/datoms db :avet :block/name)]
-    (mapcat (fn [d] (d/datoms db :eavt (:e d))) datoms)))
+    (mapcat (fn [d]
+              (let [datoms (d/datoms db :eavt (:e d))]
+                (mapcat
+                 (fn [d]
+                   (if (keyword-identical? (:a d) :logseq.property/default-value)
+                     (concat
+                      (d/datoms db :eavt (:v d))
+                      datoms)
+                     datoms))
+                 datoms))) datoms)))
 
 (defn get-page->refs-count
   [db]
@@ -250,9 +260,12 @@
         idents (mapcat (fn [id]
                          (when-let [e (d/entity db id)]
                            (d/datoms db :eavt (:db/id e))))
-                       [:logseq.kv/db-type :logseq.kv/graph-uuid :logseq.property/empty-placeholder
+                       [:logseq.kv/db-type
+                        :logseq.kv/schema-version
+                        :logseq.kv/graph-uuid
                         :logseq.kv/latest-code-lang
-                        :logseq.kv/graph-backup-folder])
+                        :logseq.kv/graph-backup-folder
+                        :logseq.property/empty-placeholder])
         favorites (when db-graph? (get-favorites db))
         views (when db-graph? (get-views-data db))
         latest-journals (get-latest-journals db 1)

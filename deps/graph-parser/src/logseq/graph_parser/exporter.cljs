@@ -28,7 +28,8 @@
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.common.util.namespace :as ns-util]))
+            [logseq.common.util.namespace :as ns-util]
+            [cljs-time.coerce :as tc]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -304,7 +305,8 @@
   or repeater usage and notify user that they aren't supported"
   [block page-names-to-uuids {:keys [user-config]}]
   (if-let [date-int (or (:block/deadline block) (:block/scheduled block))]
-    (let [existing-journal-page (some->> (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config))
+    (let [title (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config))
+          existing-journal-page (some->> title
                                          common-util/page-name-sanity-lc
                                          (get @page-names-to-uuids)
                                          (hash-map :block/uuid))
@@ -312,15 +314,15 @@
                          (or existing-journal-page
                             ;; FIXME: Register new pages so that two different refs to same new page
                             ;; don't create different uuids and thus an invalid page
-                             (let [page-m (sqlite-util/build-new-page
-                                           (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config)))]
+                             (let [page-m (sqlite-util/build-new-page title)]
                                (assoc page-m
                                       :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
                                       :block/journal-day date-int)))
-                         (assoc :block/tags #{:logseq.class/Journal}))]
+                         (assoc :block/tags #{:logseq.class/Journal}))
+          time-long (tc/to-long (date-time-util/int->local-date date-int))]
       {:block
        (-> block
-           (assoc :logseq.task/deadline [:block/uuid (:block/uuid deadline-page)])
+           (assoc :logseq.task/deadline time-long)
            (dissoc :block/deadline :block/scheduled :block/repeated?))
        :properties-tx (when-not existing-journal-page [deadline-page])})
     {:block block :properties-tx []}))
@@ -1158,7 +1160,7 @@
              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
         ;; Could do this only for existing pages but the added complexity isn't worth reducing the tx noise
         retract-page-tag-from-properties-tx (map #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)
-                                                  (concat property-pages-tx converted-property-pages-tx))
+                                                 (concat property-pages-tx converted-property-pages-tx))
         ;; Save properties on new property pages separately as they can contain new properties and thus need to be
         ;; transacted separately the property pages
         property-page-properties-tx (keep (fn [b]
@@ -1279,7 +1281,7 @@
            pages-tx')
      :retract-page-tag-from-classes-tx
      (mapv #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)
-                                              classes-tx)}))
+           classes-tx)}))
 
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:

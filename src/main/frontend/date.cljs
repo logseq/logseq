@@ -34,7 +34,7 @@
   [input]
   (try
     (->> (cond->> input
-          (string? input) (tf/parse (tf/formatters :date-time-no-ms)))
+           (string? input) (tf/parse (tf/formatters :date-time-no-ms)))
          (t/to-default-time-zone)
          (tf/unparse (tf/formatter "MMM do, yyyy")))
     (catch :default _e
@@ -58,12 +58,12 @@
   ([date]
    (let [formatter (state/get-date-formatter)]
      (try
-      (date-time-util/format date formatter)
-      (catch :default e
-        (log/error :parse-journal-date {:message  "Failed to parse date to journal name."
-                                        :date date
-                                        :format formatter})
-        (throw e))))))
+       (date-time-util/format date formatter)
+       (catch :default e
+         (log/error :parse-journal-date {:message  "Failed to parse date to journal name."
+                                         :date date
+                                         :format formatter})
+         (throw e))))))
 
 (defn journal-name-s [s]
   (try
@@ -170,7 +170,7 @@
 
 (defn js-date->journal-title
   [date]
-  (journal-name (tc/to-local-date date)))
+  (journal-name (t/to-default-time-zone date)))
 
 (defn js-date->goog-date
   [d]
@@ -213,8 +213,6 @@
    "Next Friday"
    "Next Saturday"
    "Next Sunday"])
-
-
 
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))

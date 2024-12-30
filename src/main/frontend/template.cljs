@@ -40,8 +40,6 @@
                         (get (variable-rules) (string/lower-case match))
                         :else
                         (if-let [nld (date/nld-parse match)]
-                          (let [;; NOTE: This following cannot handle timezones
-                               ;; date (tc/to-local-date-time nld)
-                                date (doto (goog.date.DateTime.) (.setTime (.getTime nld)))]
+                          (let [date (doto (goog.date.DateTime.) (.setTime (.getTime nld)))]
                             (page-ref/->page-ref (date/journal-name date)))
                           match))))))

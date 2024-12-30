@@ -64,15 +64,7 @@
     db-schema/schema-for-db-based-graph
     db-schema/schema))
 
-(defn block-with-timestamps
-  "Adds updated-at timestamp and created-at if it doesn't exist"
-  [block]
-  (let [updated-at (common-util/time-ms)
-        block (cond->
-               (assoc block :block/updated-at updated-at)
-                (nil? (:block/created-at block))
-                (assoc :block/created-at updated-at))]
-    block))
+(def block-with-timestamps common-util/block-with-timestamps)
 
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts. Takes
