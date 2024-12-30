@@ -554,7 +554,7 @@
         (p/catch #(do (js/console.warn %)
                       (notification/show! "No README content." :warning))))
       ;; market
-      (shui/dialog-open! (fn [_] (display repo nil)) {:label "plugin-readme"}))))
+      (shui/dialog-open! (fn [_] (display item nil)) {:label "plugin-readme"}))))
 
 (defn load-unpacked-plugin
   []
