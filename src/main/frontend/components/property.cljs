@@ -236,20 +236,7 @@
 
             ;; using class as property
             (and property (ldb/class? property))
-            (let [schema (assoc (:block/schema property)
-                                :type :node)]
-              (p/do!
-               (db/transact! (state/get-current-repo)
-                             [{:db/id (:db/id property)
-                               :db/ident (:db/ident property)
-                               :db/cardinality :db.cardinality/one
-                               :db/valueType :db.type/ref
-                               :db/index true
-                               :block/tags :logseq.class/Property
-                               :block/schema schema
-                               :property/schema.classes (:db/id property)}]
-                             {:outliner-op :save-block})
-               (reset! *show-new-property-config? false)))
+            (pv/<set-class-as-property! (state/get-current-repo) property)
 
             (or (not= :default type)
                 (and (= :default type) (seq (:property/closed-values property))))

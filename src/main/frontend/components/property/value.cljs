@@ -158,6 +158,20 @@
                                  (remove ldb/property?))]
     (or (seq selected-blocks) [block])))
 
+(defn <set-class-as-property!
+  [repo property]
+  (db/transact! repo
+                [{:db/id (:db/id property)
+                  :db/ident (:db/ident property)
+                  :db/cardinality :db.cardinality/one
+                  :db/valueType :db.type/ref
+                  :db/index true
+                  :block/tags :logseq.class/Property
+                  :block/schema (assoc (:block/schema property)
+                                       :type :node)
+                  :property/schema.classes (:db/id property)}]
+                {:outliner-op :save-block}))
+
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
   Otherwise, add a block's property and its value"
@@ -173,7 +187,10 @@
      (assert (qualified-keyword? property-id) "property to add must be a keyword")
      (p/do!
       (if (and class? class-schema?)
-        (db-property-handler/class-add-property! (:db/id block) property-id)
+        (p/do!
+         (when (ldb/class? property)
+           (<set-class-as-property! repo property))
+         (db-property-handler/class-add-property! (:db/id block) property-id))
         (let [block-ids (map :block/uuid blocks)]
           (if (and (db-property-type/all-ref-property-types (get-in property [:block/schema :type]))
                    (string? property-value))

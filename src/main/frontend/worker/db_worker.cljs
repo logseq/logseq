@@ -13,6 +13,7 @@
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.db.migrate :as db-migrate]
+            [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.device :as worker-device]
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
@@ -907,6 +908,11 @@
    [_this repo _page-block-uuid-str editor-info-str]
    (undo-redo/record-editor-info! repo (ldb/read-transit-str editor-info-str))
    nil)
+
+  (validate-db
+   [_this repo]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (worker-db-validate/validate-db @conn)))
 
   (dangerousRemoveAllDbs
    [this repo]
