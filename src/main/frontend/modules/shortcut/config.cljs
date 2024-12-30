@@ -1,34 +1,34 @@
 (ns frontend.modules.shortcut.config
-  (:require [clojure.string :as str]
+  (:require [clojure.data :as data]
+            [clojure.string :as str]
+            [electron.ipc :as ipc]
+            [frontend.commands :as commands]
             [frontend.components.commit :as commit]
-            [frontend.extensions.srs.handler :as srs]
+            [frontend.config :as config]
+            [frontend.dicts :as dicts]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.extensions.srs.handler :as srs]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.paste :as paste-handler]
+            [frontend.handler.export :as export-handler]
             [frontend.handler.history :as history]
+            [frontend.handler.journal :as journal-handler]
+            [frontend.handler.jump :as jump-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.paste :as paste-handler]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.journal :as journal-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.export :as export-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.window :as window-handler]
-            [frontend.handler.jump :as jump-handler]
-            [frontend.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
-            [frontend.commands :as commands]
-            [frontend.config :as config]
-            [electron.ipc :as ipc]
-            [promesa.core :as p]
-            [clojure.data :as data]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [promesa.core :as p]))
 
 (defn- search
   [mode]
@@ -603,7 +603,11 @@
 
    :dev/show-page-ast {:binding []
                        :inactive (not (state/developer-mode?))
-                       :fn :frontend.handler.common.developer/show-page-ast}})
+                       :fn :frontend.handler.common.developer/show-page-ast}
+
+   :dev/validate-db   {:binding []
+                       :inactive (not (state/developer-mode?))
+                       :fn :frontend.handler.common.developer/validate-db}})
 
 (let [keyboard-commands
       {::commands (set (keys all-built-in-keyboard-shortcuts))
@@ -809,6 +813,7 @@
           :dev/show-page-data
           :dev/show-page-ast
           :dev/replace-graph-with-db-file
+          :dev/validate-db
           :ui/customize-appearance])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
@@ -996,6 +1001,7 @@
      :dev/show-page-data
      :dev/show-page-ast
      :dev/replace-graph-with-db-file
+     :dev/validate-db
      :ui/clear-all-notifications]
 
     :shortcut.category/plugins

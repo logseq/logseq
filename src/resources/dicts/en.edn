@@ -796,4 +796,5 @@
   :dev/show-page-data "(Dev) Show page data"
   :dev/show-page-ast "(Dev) Show page AST"
   :dev/replace-graph-with-db-file "(Dev) Replace graph with its db.sqlite file"
+  :dev/validate-db "(Dev) Validate current graph"
   :window/close "Close window"}}
