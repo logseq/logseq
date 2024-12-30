@@ -594,14 +594,14 @@ class PluginLocal extends EventEmitter<
     // TODO: strategy for Logseq plugins center
     if (this.isInstalledInDotRoot) {
       this._id = path.basename(localRoot)
-    } else {
+    } else if (!this.isWebPlugin) {
       // development mode
-      if (!this.isWebPlugin && logseq.id) {
+      if (logseq.id) {
         this._id = logseq.id
       } else {
         logseq.id = this.id
         try {
-          await invokeHostExportedApi('save_plugin_config', url, {
+          await invokeHostExportedApi('save_plugin_package_json', url, {
             ...pkg,
             logseq,
           })
