@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v16"
+    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v17"
   },
   "scripts": {
     "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"

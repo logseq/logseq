@@ -170,10 +170,10 @@
           :size    :sm}
          "Uploading..."))
       (shui/button-ghost-icon :cloud
-        {:on-click #(shui/popup-show! (.-target %)
-                      (details online?)
-                      {:align "end"})
-         :class (util/classnames [{:cloud true
-                                   :on (and online? (= :open rtc-state))
-                                   :idle (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
-                                   :queuing (pos? unpushed-block-update-count)}])})]]))
+                              {:on-click #(shui/popup-show! (.-target %)
+                                                            (details online?)
+                                                            {:align "end"})
+                               :class (util/classnames [{:cloud true
+                                                         :on (and online? (= :open rtc-state))
+                                                         :idle (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
+                                                         :queuing (pos? unpushed-block-update-count)}])})]]))

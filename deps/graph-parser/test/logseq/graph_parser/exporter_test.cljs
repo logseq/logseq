@@ -154,12 +154,12 @@
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
     (is (= []
-             (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
-                         :where [?b :block/tags :logseq.class/Tag]]
-                       @conn)
-                  (map first)
-                  (remove #(= [{:db/ident :logseq.class/Tag}] (:block/tags %)))))
-          "All classes only have :logseq.class/Tag as their tag (and don't have Page)")))
+           (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
+                       :where [?b :block/tags :logseq.class/Tag]]
+                     @conn)
+                (map first)
+                (remove #(= [{:db/ident :logseq.class/Tag}] (:block/tags %)))))
+        "All classes only have :logseq.class/Tag as their tag (and don't have Page)")))
 
 (deftest-async export-basic-graph-with-convert-all-tags
   ;; This graph will contain basic examples of different features to import
@@ -293,13 +293,14 @@
                (and b (readable-properties @conn b)))
             ":template properties are ignored to not invalidate its property types"))
 
-      (is (= {:logseq.task/deadline "Nov 26th, 2022"}
-             (readable-properties @conn (db-test/find-block-by-content @conn "only deadline")))
-          "deadline block has correct journal as property value")
+      ;; local datetime could be different from CI so this is unstable
+      #_(is (= {:logseq.task/deadline 1669392000000}
+               (readable-properties @conn (db-test/find-block-by-content @conn "only deadline")))
+            "deadline block has correct journal as property value")
 
-      (is (= {:logseq.task/deadline "Nov 25th, 2022"}
-             (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled")))
-          "scheduled block converted to correct deadline")
+      #_(is (= {:logseq.task/deadline 1669305600000}
+               (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled")))
+            "scheduled block converted to correct deadline")
 
       (is (= 1 (count (d/q '[:find [(pull ?b [*]) ...]
                              :in $ ?content

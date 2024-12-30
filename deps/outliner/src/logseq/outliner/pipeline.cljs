@@ -7,7 +7,10 @@
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.entity-plus :as entity-plus]
-            [logseq.outliner.datascript-report :as ds-report]))
+            [logseq.outliner.datascript-report :as ds-report]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
+            [cljs-time.format :as tf]))
 
 (defn filter-deleted-blocks
   [datoms]
@@ -142,6 +145,12 @@
                   (when-let [e (d/entity db [:block/uuid id])]
                     (:db/id e))))))))
 
+(defn ^:api get-journal-day-from-long
+  [db v]
+  (when-let [date (t/to-default-time-zone (tc/from-long v))]
+    (let [day (js/parseInt (tf/unparse (tf/formatter "yyyyMMdd") date))]
+      (:e (first (d/datoms db :avet :block/journal-day day))))))
+
 (defn db-rebuild-block-refs
   "Rebuild block refs for DB graphs"
   [db block]
@@ -163,8 +172,8 @@
                                ;; parent block as they are dependent on their block for display
                                ;; and look weirdly recursive - https://github.com/logseq/db-test/issues/36
                                (not (:logseq.property/created-from-property block))))
-        property-value-refs (->> (vals properties)
-                                 (mapcat (fn [v]
+        property-value-refs (->> properties
+                                 (mapcat (fn [[property v]]
                                            (cond
                                              (page-or-object? v)
                                              [(:db/id v)]
@@ -173,7 +182,18 @@
                                              (map :db/id v)
 
                                              :else
-                                             nil))))
+                                             (let [datetime? (= :datetime (get-in (d/entity db property) [:block/schema :type]))]
+                                               (cond
+                                                 (and datetime? (coll? v))
+                                                 (keep #(get-journal-day-from-long db %) v)
+
+                                                 datetime?
+                                                 (when-let [journal-day (get-journal-day-from-long db v)]
+                                                   [journal-day])
+
+                                                 :else
+                                                 nil))))))
+
         property-refs (concat property-key-refs property-value-refs)
         content-refs (block-content-refs db block)]
     (->> (concat (map ref->eid (:block/tags block))

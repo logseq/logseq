@@ -640,7 +640,7 @@
                 (when-let [f (:init-collapsed (last (:rum/args state)))]
                   (f (::collapsed? state)))
                 state)}
-  [state header content {:keys [title-trigger? on-pointer-down class disable-on-pointer-down?
+  [state header content {:keys [title-trigger? on-pointer-down class
                                 _default-collapsed? _init-collapsed]}]
   (let [collapsed? (get state ::collapsed?)
         on-pointer-down (fn [e]
@@ -654,9 +654,9 @@
                       :header header
                       :title-trigger? title-trigger?
                       :collapsed? collapsed?})
-     [:div (cond-> {:class (if @collapsed? "hidden" "initial")}
-             (not disable-on-pointer-down?)
-             (assoc :on-pointer-down (fn [e] (.stopPropagation e))))
+     ;; Don't stop propagation for the pointer down event to the high level content container.
+     ;; That may cause the drag function to not work.
+     [:div {:class (if @collapsed? "hidden" "initial")}
       (if (fn? content)
         (if (not @collapsed?) (content) nil)
         content)]]))
@@ -1118,11 +1118,11 @@
                        (let [value (or (and (string? value) value)
                                        (.-value (gdom/getElement "time-picker")))]
                          (let [[h m] (string/split value ":")]
-                           (when selected
+                           (when (and date selected)
                              (.setHours date h m 0))
                            (default-on-select date))))
                      default-on-select)]
-    [:div.flex.flex-col.gap-2
+    [:div.flex.flex-col.gap-2.relative
      (single-calendar (assoc opts :on-select on-select'))
      (when (:datetime? opts)
        (time-picker (cond->

@@ -38,6 +38,14 @@
   (when date-formatter
     (tf/unparse (tf/formatter date-formatter) date)))
 
+(defn int->local-date
+  [day]
+  (let [s (str day)
+        year (js/parseInt (subs s 0 4))
+        month (dec (js/parseInt (subs s 4 6)))
+        day (js/parseInt (subs s 6))]
+    (js/Date. year month day)))
+
 (defn int->journal-title
   [day date-formatter]
   (when day
