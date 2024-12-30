@@ -4,6 +4,7 @@
             ["comlink" :as Comlink]
             [cljs-bean.core :as bean]
             [clojure.edn :as edn]
+            [clojure.set]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage] :as storage]
@@ -37,8 +38,7 @@
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]
-            [clojure.set]))
+            [shadow.cljs.modern :refer [defclass]]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -360,7 +360,8 @@
           (db-migrate/migrate conn search-db)
           (catch :default _e
             (when db-based?
-              (rebuild-db-from-datoms! conn db import-type))))
+              (rebuild-db-from-datoms! conn db import-type)
+              (db-migrate/migrate conn search-db))))
 
         (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 
