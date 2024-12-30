@@ -215,7 +215,7 @@
   (fn [path]
     (fs/read-file nil (util/node-path.join path "readme.md"))))
 
-(def ^:export save_plugin_config
+(def ^:export save_plugin_package_json
   (fn [path ^js data]
     (let [repo ""
           path (util/node-path.join path "package.json")]
