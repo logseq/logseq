@@ -3,11 +3,11 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.page :as page-handler]
+            [frontend.mixins :as mixins]
             [frontend.state :as state]
-            [rum.core :as rum]
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
-            [frontend.mixins :as mixins]))
+            [rum.core :as rum]))
 
 (rum/defc journal-cp < rum/reactive
   [page]
@@ -39,7 +39,9 @@
   (when (seq latest-journals)
     [:div#journals
      (for [journal latest-journals]
-       (journal-cp journal))]))
+       (rum/with-key
+         (journal-cp journal)
+         (str "journal-" (:db/id journal))))]))
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []
