@@ -28,8 +28,7 @@
 (defn installed?
   "For the given plugin id, returns boolean indicating if it is installed"
   [id]
-  (and (contains? (:plugin/installed-plugins @state/state) (keyword id))
-       (get-in @state/state [:plugin/installed-plugins (keyword id) :iir])))
+  (contains? (:plugin/installed-plugins @state/state) (keyword id)))
 
 (defn emit-lsp-updates!
   [payload]
@@ -37,17 +36,26 @@
   (js/window.apis.emit (name :lsp-updates) (bean/->js payload)))
 
 (defn async-install-or-update-for-web!
-  [{:keys [version repo only-check _plugin-action] :as manifest}]
-  (js/console.log "debug:install-or-update" manifest)
-  (-> (fetch-web-plugin-entry-info repo version)
-    (p/then (fn [{:keys [_version] :as web-pkg}]
-             (let [web-pkg (merge web-pkg (dissoc manifest :stat))]
+  [{:keys [version repo only-check] :as manifest}]
+  (js/console.log "[plugin]" (if only-check "Checking" "Installing") " #" repo)
+  (-> (fetch-web-plugin-entry-info repo (if only-check "" version))
+    (p/then (fn [web-pkg]
+             (let [web-pkg (merge web-pkg (dissoc manifest :stat))
+                   latest-version (:version web-pkg)
+                   valid-latest-version (when only-check
+                                          (let [coerced-current-version (util/sem-ver.coerce version)
+                                                coerced-latest-version (util/sem-ver.coerce latest-version)]
+                                            (if (and coerced-current-version
+                                                  coerced-latest-version
+                                                  (util/sem-ver.lt coerced-current-version coerced-latest-version))
+                                              latest-version
+                                              (throw (js/Error. :no-new-version)))))]
               (emit-lsp-updates!
-               {:status     :completed
-                :only-check only-check
-                :payload    (if only-check
-                             (assoc manifest :latest-version version :latest-notes "TODO: update notes")
-                             (assoc manifest :dst repo :installed-version version :web-pkg web-pkg))}))))
+                {:status :completed
+                 :only-check only-check
+                 :payload (if only-check
+                            (assoc manifest :latest-version valid-latest-version  :latest-notes "TODO: update notes")
+                            (assoc manifest :dst repo :installed-version version :web-pkg web-pkg))}))))
     (p/catch (fn [^js e]
                (emit-lsp-updates!
                  {:status :error

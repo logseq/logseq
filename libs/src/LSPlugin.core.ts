@@ -520,7 +520,7 @@ class PluginLocal extends EventEmitter<
       const url = path.join(localRoot, filePath)
       filePath = reg.test(url) ? url : PROTOCOL_FILE + url
     }
-    return !this.options.effect && this.isInstalledInDotRoot
+    return !this.options.effect && this.isInstalledInLocalDotRoot
       ? convertToLSPResource(filePath, this.dotPluginsRoot)
       : filePath
   }
@@ -559,7 +559,7 @@ class PluginLocal extends EventEmitter<
       'effect',
       'sponsors',
     ]
-      .concat(!this.isInstalledInDotRoot ? ['devEntry'] : [])
+      .concat(!this.isInstalledInLocalDotRoot ? ['devEntry'] : [])
       .forEach((k) => {
         this._options[k] = pkg[k]
       })
@@ -591,7 +591,7 @@ class PluginLocal extends EventEmitter<
     this._options.icon = icon && this._resolveResourceFullUrl(icon)
     this._options.theme = Boolean(logseq.theme || !!logseq.themes)
 
-    if (this.isInstalledInDotRoot) {
+    if (this.isInstalledInLocalDotRoot) {
       this._id = path.basename(localRoot)
     } else if (!this.isWebPlugin) {
       // development mode
@@ -645,7 +645,7 @@ class PluginLocal extends EventEmitter<
 
     let dirPathInstalled = null
     let tmp_file_method = 'write_user_tmp_file'
-    if (this.isInstalledInDotRoot) {
+    if (this.isInstalledInLocalDotRoot) {
       tmp_file_method = 'write_dotdir_file'
       dirPathInstalled = this._localRoot.replace(this.dotPluginsRoot, '')
       dirPathInstalled = path.join(DIR_PLUGINS, dirPathInstalled)
@@ -928,7 +928,7 @@ class PluginLocal extends EventEmitter<
     if (unregister) {
       await this.unload()
 
-      if (this.isWebPlugin || this.isInstalledInDotRoot) {
+      if (this.isWebPlugin || this.isInstalledInLocalDotRoot) {
         this._ctx.emit('unlink-plugin', this.id)
       }
 
@@ -999,7 +999,7 @@ class PluginLocal extends EventEmitter<
     return window.frontend.modules.layout.core
   }
 
-  get isInstalledInDotRoot() {
+  get isInstalledInLocalDotRoot() {
     if (this.isWebPlugin) return false
     const dotRoot = this.dotConfigRoot
     const plgRoot = this.localRoot
@@ -1103,7 +1103,7 @@ class PluginLocal extends EventEmitter<
     json.id = this.id
     json.err = this.loadErr
     json.usf = this.dotSettingsFile
-    json.iir = this.isInstalledInDotRoot
+    json.iir = this.isInstalledInLocalDotRoot
     json.lsr = this._resolveResourceFullUrl('/')
 
     if (settings === false) {
@@ -1349,7 +1349,7 @@ class LSPluginCore
         this.emit('registered', pluginLocal)
 
         // external plugins
-        if (!pluginLocal.isWebPlugin && !pluginLocal.isInstalledInDotRoot) {
+        if (!pluginLocal.isWebPlugin && !pluginLocal.isInstalledInLocalDotRoot) {
           externals.add(url)
         }
       }
@@ -1394,7 +1394,7 @@ class LSPluginCore
     for (const identity of plugins) {
       const p = this.ensurePlugin(identity)
 
-      if (!p.isWebPlugin && !p.isInstalledInDotRoot) {
+      if (!p.isWebPlugin && !p.isInstalledInLocalDotRoot) {
         unregisteredExternals.push(p.options.url)
       }
 

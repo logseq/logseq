@@ -144,9 +144,12 @@
 
     (-> (load-marketplace-plugins false)
       (p/then (fn [manifests]
-                (let [mft (some #(when (= (:id %) id) %) manifests)]
+                (let [mft (some #(when (= (:id %) id) %) manifests)
+                      opts (merge (dissoc pkg :logger) mft)]
                   ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
-                  (ipc/ipc :updateMarketPlugin (merge (dissoc pkg :logger) mft)))
+                  (if (util/electron?)
+                    (ipc/ipc :updateMarketPlugin opts)
+                    (plugin-common-handler/async-install-or-update-for-web! opts)))
                 true))
       (p/catch (fn [^js e]
                  (state/reset-all-updates-state)
