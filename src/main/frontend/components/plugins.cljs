@@ -801,7 +801,7 @@
          (when (seq sorted-plugins)
            (lazy-items-loader load-more-pages!))]])]))
 
-(rum/defcs installed-plugins
+(rum/defcs ^:large-vars/data-var installed-plugins
   < rum/static rum/reactive
   plugin-items-list-mixins
   (rum/local "" ::search-key)
