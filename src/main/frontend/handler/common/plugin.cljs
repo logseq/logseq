@@ -43,8 +43,8 @@
              (let [web-pkg (merge web-pkg (dissoc manifest :stat))
                    latest-version (:version web-pkg)
                    valid-latest-version (when only-check
-                                          (let [coerced-current-version (util/sem-ver.coerce version)
-                                                coerced-latest-version (util/sem-ver.coerce latest-version)]
+                                          (let [coerced-current-version (.coerce util/sem-ver version)
+                                                coerced-latest-version (.coerce util/sem-ver latest-version)]
                                             (if (and coerced-current-version
                                                   coerced-latest-version
                                                   (util/sem-ver.lt coerced-current-version coerced-latest-version))
