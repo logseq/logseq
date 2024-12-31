@@ -207,8 +207,8 @@
 (defn setup-install-listener!
   []
   (let [channel (name :lsp-updates)
-        listener (fn [_ctx ^js _e]
-                   (let [e (or _e _ctx)]
+        listener (fn [ctx ^js evt]
+                   (let [e (or evt ctx)]
                      (when-let [{:keys [status payload only-check]} (bean/->clj e)]
                        (case (keyword status)
 
