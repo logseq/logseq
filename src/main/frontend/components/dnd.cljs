@@ -94,7 +94,7 @@
                        :else
                        (rum/with-key (sortable-item prop (:content item)) id))))
         children' (if parent-node
-                    [parent-node children]
+                    [parent-node {:key "parent-node"} children]
                     children)]
     (dnd-context
      dnd-opts
