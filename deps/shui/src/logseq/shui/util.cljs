@@ -59,6 +59,7 @@
   (let [[opts children] (if (map? (first args))
                           [(first args) (rest args)]
                           [{} args])
+        children (some->> children (remove nil?))
         type# (first children)
         children# (daiquiri.interpreter/interpret children)
         children# (if (= 1 (count children#)) (first children#) children#)

@@ -372,7 +372,7 @@
           :title (block-handler/block-unique-title page)
           :draggable true
           :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
-          :data-ref name}
+          :data-ref (str name)}
          (page-name page (icon/get-node-icon-cp page {:size 16}) true)])])))
 
 (defn get-default-home-if-valid
@@ -380,7 +380,7 @@
   (when-let [default-home (state/get-default-home)]
     (let [page (:page default-home)
           page (when (and (string? page)
-                          (not (string/blank? page)))
+                       (not (string/blank? page)))
                  (db/get-page page))]
       (if page
         default-home
