@@ -197,8 +197,9 @@
                             (when (text/namespace-page? page)
                               (->> (common-util/split-namespace-pages page)
                                    (map (fn [page]
-                                          (-> (gp-block/page-name->map page db true date-formatter)
-                                              (assoc :block/format format))))))))
+                                          (cond-> (gp-block/page-name->map page db true date-formatter)
+                                            (not db-based?)
+                                            (assoc :block/format format))))))))
         pages (->> (concat
                     [page-map]
                     @ref-pages

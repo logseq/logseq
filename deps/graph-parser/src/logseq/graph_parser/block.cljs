@@ -453,7 +453,7 @@
        (when-not (and (vector? form)
                       (= (first form) "Custom")
                       (= (second form) "query"))
-         (when-let [page (get-page-reference form (:format block))]
+         (when-let [page (get-page-reference form (get block :format :markdown))]
            (when-let [page' (when-not (db-namespace-page? db-based? page)
                               page)]
              (swap! *refs conj page')))
@@ -522,7 +522,7 @@
         content (when content
                   (let [content (text/remove-level-spaces content format block-pattern)]
                     (if (or (:pre-block? block)
-                            (= (:format block) :org))
+                            (= (get block :format :markdown) :org))
                       content
                       (gp-mldoc/remove-indentation-spaces content (inc (:level block)) false))))]
     (if (= format :org)
@@ -619,7 +619,7 @@
     properties))
 
 (defn- construct-block
-  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter parse-block remove-properties?]}]
+  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter parse-block remove-properties? db-graph-mode? export-to-db-graph?]}]
   (let [id (get-custom-id-or-new-id properties)
         ref-pages-in-properties (->> (:page-refs properties)
                                      (remove string/blank?))
@@ -652,16 +652,19 @@
                 block)
         title (cond->> (get-block-content encoded-content block format pos-meta block-pattern)
                 remove-properties?
-                (gp-property/remove-properties (:format block)))
+                (gp-property/remove-properties (get block :format :markdown)))
         block (assoc block :block/title title)
         block (if (seq timestamps)
                 (merge block (timestamps->scheduled-and-deadline timestamps))
                 block)
+        db-based? (or db-graph-mode? export-to-db-graph?)
         block (-> block
                   (assoc :body body)
-                  (with-page-block-refs db date-formatter {:parse-block parse-block})
-                  (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))
-                  (update :refs (fn [refs] (map #(if (map? %) (assoc % :block/format format) %) refs))))
+                  (with-page-block-refs db date-formatter {:parse-block parse-block}))
+        block (if db-based? block
+                  (-> block
+                      (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))
+                      (update :refs (fn [refs] (map #(if (map? %) (assoc % :block/format format) %) refs)))))
         block (update block :refs concat (:block-refs properties))
         {:keys [created-at updated-at]} (:properties properties)
         block (cond-> block
