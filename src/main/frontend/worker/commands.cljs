@@ -1,13 +1,13 @@
 (ns frontend.worker.commands
   "Invoke commands based on user settings"
-  (:require [datascript.core :as d]
-            [logseq.db.frontend.property.type :as db-property-type]
+  (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.outliner.pipeline :as outliner-pipeline]
+            [datascript.core :as d]
             [frontend.worker.handler.page.db-based.page :as worker-db-page]
-            [logseq.common.util.date-time :as date-time-util]))
+            [logseq.common.util.date-time :as date-time-util]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 ;; TODO: allow users to add command or configure it through #Command (which parent should be #Code)
 (def *commands
@@ -172,8 +172,11 @@
     (mapcat (fn [[e datoms]]
               (let [entity (d/entity db e)
                     commands (filter (fn [[_command {:keys [entity-conditions tx-conditions]}]]
-                                       (and (every? #(satisfy-condition? db entity % nil) entity-conditions)
-                                            (every? #(satisfy-condition? db entity % datoms) tx-conditions))) @*commands)]
+                                       (and
+                                        (if (seq entity-conditions)
+                                          (every? #(satisfy-condition? db entity % nil) entity-conditions)
+                                          true)
+                                        (every? #(satisfy-condition? db entity % datoms) tx-conditions))) @*commands)]
                 (mapcat
                  (fn [command]
                    (execute-command db entity command))

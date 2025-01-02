@@ -1,14 +1,14 @@
 (ns logseq.db.frontend.property
   "Property related fns for DB graphs and frontend/datascript usage"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
             [flatland.ordered.map :refer [ordered-map]]
+            [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.db-ident :as db-ident]
-            [clojure.set :as set]
             [logseq.db.frontend.order :as db-order]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.common.util :as common-util]))
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (defn build-property-value-block
   "Builds a property value entity given a block map/entity, a property entity or
@@ -313,7 +313,8 @@
            [:logseq.task/priority.medium "Medium" "priorityLvlMedium"]
            [:logseq.task/priority.high "High" "priorityLvlHigh"]
            [:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]])
-    :properties {:logseq.property/hide-empty-value true}}
+    :properties {:logseq.property/hide-empty-value true
+                 :logseq.property/enable-history? true}}
    :logseq.task/status
    {:title "Status"
     :schema
@@ -335,7 +336,8 @@
            [:logseq.task/status.done "Done" "Done" true]
            [:logseq.task/status.canceled "Canceled" "Cancelled"]])
     :properties {:logseq.property/hide-empty-value true
-                 :logseq.property/default-value :logseq.task/status.todo}
+                 :logseq.property/default-value :logseq.task/status.todo
+                 :logseq.property/enable-history? true}
     :queryable? true}
    :logseq.task/deadline
    {:title "Deadline"
@@ -520,7 +522,27 @@
                                  :schema
                                  {:type :string
                                   :hide? false
-                                  :public? true}}))
+                                  :public? true}}
+   :logseq.property/enable-history? {:title "Enable property history"
+                                     :schema {:type :checkbox
+                                              :public? true
+                                              :view-context :property}}
+   :logseq.property/history {:title "Property history"
+                             :schema {:type :entity
+                                      :cardinality :many
+                                      :hide? true}}
+   :logseq.property.history/block {:title "History block"
+                                   :schema {:type :block
+                                            :hide? true}}
+   :logseq.property.history/property {:title "History property"
+                                      :schema {:type :property
+                                               :hide? true}}
+   :logseq.property.history/ref-value {:title "History value"
+                                       :schema {:type :entity
+                                                :hide? true}}
+   :logseq.property.history/scalar-value {:title "History scalar value"
+                                          :schema {:type :any
+                                                   :hide? true}}))
 
 (def built-in-properties
   (->> built-in-properties*
