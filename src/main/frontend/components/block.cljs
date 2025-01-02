@@ -4130,7 +4130,7 @@
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:class (when doc-mode? "document-mode")
-        :container-id (:container-id state)}
+        :containerid (:container-id state)}
        (block-list (assoc config :container-id (:container-id state))
                    blocks)])))
 
