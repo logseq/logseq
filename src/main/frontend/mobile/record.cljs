@@ -3,7 +3,6 @@
             ["capacitor-voice-recorder" :refer [VoiceRecorder]]
             [clojure.string :as string]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]

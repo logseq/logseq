@@ -9,7 +9,6 @@
             [frontend.handler.export.common :as common :refer [*state*]]
             [frontend.handler.export.zip-helper :refer [get-level goto-last
                                                         goto-level]]
-            [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [hiccups.runtime :as h]
             [malli.core :as m]))

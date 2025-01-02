@@ -9,7 +9,6 @@
             [frontend.handler.export.common :as common :refer
              [*state* indent newline* raw-text simple-ast-malli-schema
               simple-asts->string space]]
-            [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
             [logseq.graph-parser.schema.mldoc :as mldoc-schema]

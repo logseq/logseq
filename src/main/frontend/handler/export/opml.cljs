@@ -12,7 +12,6 @@
              [*state* raw-text simple-asts->string space]]
             [frontend.handler.export.zip-helper :refer [get-level goto-last
                                                         goto-level]]
-            [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
             [hiccups.runtime :as h]
