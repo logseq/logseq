@@ -55,7 +55,7 @@
                  :only-check only-check
                  :payload (if only-check
                             (assoc manifest :latest-version valid-latest-version  :latest-notes "TODO: update notes")
-                            (assoc manifest :dst repo :installed-version version :web-pkg web-pkg))}))))
+                            (assoc manifest :dst repo :version latest-version :web-pkg web-pkg))}))))
     (p/catch (fn [^js e]
                (emit-lsp-updates!
                  {:status :error
