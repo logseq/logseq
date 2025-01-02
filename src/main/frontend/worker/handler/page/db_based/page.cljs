@@ -172,7 +172,7 @@
   (let [date-formatter (:logseq.property.journal/title-format (entity-plus/entity-memoized db :logseq.class/Journal))
         title (sanitize-title title*)
         types (cond class?
-                    #{:logseq.class/Tag}
+                    #{:logseq.class/Tag :logseq.class/Page}
                     whiteboard?
                     #{:logseq.class/Whiteboard}
                     today-journal?
@@ -187,7 +187,8 @@
                    (not (ldb/class? existing-page))
                    (or (ldb/property? existing-page) (ldb/internal-page? existing-page)))
           ;; Convert existing user property or page to class
-          (let [tx-data (db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :db/ident :block/created-at]))]
+          (let [tx-data [(db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :db/ident :block/created-at]))
+                         [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
             {:tx-meta tx-meta
              :tx-data tx-data})))
       (let [format    :markdown
