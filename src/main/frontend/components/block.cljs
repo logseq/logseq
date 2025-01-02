@@ -2736,7 +2736,7 @@
            :on-click (fn [e]
                        (shui/popup-show! (.-target e)
                                          (fn []
-                                           [:div.p-2.text-muted-foreground.text-sm
+                                           [:div.p-2.text-muted-foreground.text-sm.max-h-96
                                             [:div.font-medium.mb-2 "Status history:"]
                                             [:div.flex.flex-col.gap-1
                                              (for [item status-history]
