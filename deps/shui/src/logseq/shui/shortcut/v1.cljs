@@ -62,26 +62,28 @@
                                      "bg-transparent cursor-default active:bg-gray-03 hover:text-gray-11 opacity-80"))
                        :size size}
                       (for [[index tile] (map-indexed vector tiles)]
-                        [:<>
-                         (when (< 0 index)
-                           [:span.ui__button__tile-separator])
-                         [:span.ui__button__tile tile]]))))
+                        [:span {:key index}
+                         [:<>
+                          (when (< 0 index)
+                            [:span.ui__button__tile-separator])
+                          [:span.ui__button__tile tile]]]))))
 
 (rum/defc root
   [shortcut & {:keys [size theme interactive?]
-               :or   {size  :xs
-                      interactive? true
-                      theme :gray}}]
+               :or {size :xs
+                    interactive? true
+                    theme :gray}}]
   (when (seq shortcut)
     (let [shortcuts (if (coll? shortcut)
                       [shortcut]
                       (parse-shortcuts shortcut))
           opts {:interactive? interactive?}]
       (for [[index binding] (map-indexed vector shortcuts)]
-        [:<>
+        [:span
+         {:key (str index)}
          (when (< 0 index)
-           [:div.text-gray-11.text-sm {:key "sep"} "|"])
-         (if (coll? (first binding))   ; + included
+           [:span.text-gray-11.text-sm {:key "sep"} "|"])
+         (if (coll? (first binding))                        ; + included
            (for [[idx ks] (map-indexed vector binding)]
              (rum/with-key
                (part ks size opts)
