@@ -49,7 +49,9 @@
                         (when (db-property-util/built-in-has-ref-value? k)
                           [k v])))
                 (into {})))]
-      (cond-> [(if class? (db-class/build-new-class db page') page')]
+      (cond-> (if class? [(db-class/build-new-class db page')
+                          [:db/retract [:block/uuid (:block/uuid page)] :block/tags :logseq.class/Page]]
+                  [page'])
         (seq property-vals-tx-m)
         (into (vals property-vals-tx-m))
         true
@@ -172,7 +174,7 @@
   (let [date-formatter (:logseq.property.journal/title-format (entity-plus/entity-memoized db :logseq.class/Journal))
         title (sanitize-title title*)
         types (cond class?
-                    #{:logseq.class/Tag :logseq.class/Page}
+                    #{:logseq.class/Tag}
                     whiteboard?
                     #{:logseq.class/Whiteboard}
                     today-journal?
