@@ -466,7 +466,9 @@
       (let [e (d/entity db :logseq.task/deadline)
             datoms (d/datoms db :avet :logseq.task/deadline)]
         (concat
-         [[:db/retract (:db/id e) :db/valueType]]
+         [[:db/retract (:db/id e) :db/valueType]
+          {:db/id (:db/id e)
+           :block/schema (assoc (:block/schema e) :type :datetime)}]
          (map
           (fn [d]
             (if-let [day (:block/journal-day (d/entity db (:v d)))]
