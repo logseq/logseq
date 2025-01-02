@@ -224,6 +224,10 @@
                                    (.reload pl)
                                    #(do
                                       ;;(if theme (select-a-plugin-theme id))
+                                      (when (not (util/electron?))
+                                        (set! (.-version (.-options pl)) (:version web-pkg))
+                                        (set! (.-webPkg (.-options pl)) (bean/->js web-pkg))
+                                        (invoke-exported-api :save_installed_web_plugin (.toJSON pl false)))
                                       (notification/show!
                                         (t :plugin/update-plugin name (.-version (.-options pl))) :success)
                                       (state/consume-updates-from-coming-plugin! payload true))))
