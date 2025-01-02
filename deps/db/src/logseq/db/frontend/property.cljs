@@ -586,7 +586,7 @@
     ;; attribute ns is for db attributes that don't start with :block
     "logseq.property.attribute"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
-    "logseq.property.user"})
+    "logseq.property.user" "logseq.property.history"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
