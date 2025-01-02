@@ -86,10 +86,11 @@ and handles unexpected failure."
                    (let [ast (format/to-edn title format parse-config)]
                      (extract-blocks ast title format {:parse-block block})))
           new-block (first blocks)
-          block (cond->
-                 (merge block new-block)
+          block (cond-> (merge block new-block)
                   (> (count blocks) 1)
-                  (assoc :block/warning :multiple-blocks))
+                  (assoc :block/warning :multiple-blocks)
+                  db-based?
+                  (dissoc :block/format))
           block (dissoc block :block.temp/ast-body :block/level)]
       (if uuid (assoc block :block/uuid uuid) block))))
 
