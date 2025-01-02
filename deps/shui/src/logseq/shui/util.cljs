@@ -59,12 +59,19 @@
   (let [[opts children] (if (map? (first args))
                           [(first args) (rest args)]
                           [{} args])
+        children (some->> children (remove nil?))
         type# (first children)
+        children# (daiquiri.interpreter/interpret children)
+        children# (if (= 1 (count children#)) (first children#) children#)
         ;; we have to make sure to check if the children is sequential
         ;; as a list can be returned, eg: from a (for)
-        new-children (if (sequential? type#)
-                       [(daiquiri.interpreter/interpret children)]
-                       (daiquiri.interpreter/interpret children))
+        new-children (if (and (not (nil? children#))
+                           (not (empty? children))
+                           (or (not (array? children#))
+                             ;; maybe list children
+                             (not (vector? type#))))
+                       [children#] children#)
+
         ;; convert any options key value to a React element, if
         ;; a valid html element tag is used, using sablono (rum.daiquiri)
         vector->react-elems (fn [[key val]]

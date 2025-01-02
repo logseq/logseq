@@ -2630,7 +2630,7 @@
            (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
         (ui/icon "x" {:size 14
                       :style {:margin-top 1}})]
-       [:a.hash-symbol {:style {:margin-left 5}}
+       [:a.hash-symbol.select-none {:style {:margin-left 5}}
         "#"])
      (page-cp (assoc config
                      :disable-preview? true
@@ -4130,7 +4130,7 @@
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:class (when doc-mode? "document-mode")
-        :container-id (:container-id state)}
+        :containerid (:container-id state)}
        (block-list (assoc config :container-id (:container-id state))
                    blocks)])))
 

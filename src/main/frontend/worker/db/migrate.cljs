@@ -597,24 +597,34 @@
                               (= (:db/ident data) :logseq.kv/schema-version)
                               nil
 
-                              (:db/ident data)
-                              data
-
-                              (:block/name data)
-                              (if-let [page (ldb/get-page @conn (:block/name data))]
+                              (:block/uuid data)
+                              (if-let [block (d/entity @conn [:block/uuid (:block/uuid data)])]
                                 (do
-                                  (swap! *uuids assoc (:block/uuid data) (:block/uuid page))
-                                  (assoc data :block/uuid (:block/uuid page)))
+                                  (swap! *uuids assoc (:block/uuid data) (:block/uuid block))
+                                  (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
+                                    (reduce
+                                     (fn [data [k existing-value]]
+                                       (update data k
+                                               (fn [v]
+                                                 (if (and (coll? v) (not (map? v)))
+                                                   (concat v (if (coll? existing-value) existing-value [existing-value]))
+                                                   (if (some? existing-value) existing-value v)))))
+                                     data
+                                     existing-data)))
                                 data)
 
                               :else
                               data)
                             data))))
         ;; using existing page's uuid
-        data' (walk/postwalk
+        data' (walk/prewalk
                (fn [f]
-                 (if (and (vector? f) (= :block/uuid (first f)) (@*uuids (second f)))
+                 (cond
+                   (and (de/entity? f) (:block/uuid f))
+                   (or (:db/ident f) [:block/uuid (:block/uuid f)])
+                   (and (vector? f) (= :block/uuid (first f)) (@*uuids (second f)))
                    [:block/uuid (@*uuids (second f))]
+                   :else
                    f))
                data)]
     (d/transact! conn data' {:fix-db? true
