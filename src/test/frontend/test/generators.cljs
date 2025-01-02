@@ -3,7 +3,6 @@
   (:require [clojure.test.check.generators :as gen]
             [datascript.core :as d]))
 
-
 (defn gen-available-block-uuid
   [db & {:keys [page-uuid]}]
   (let [query (cond-> '[:find ?block-uuid]
@@ -46,9 +45,7 @@
       (gen/elements coll)
       (gen/return nil))))
 
-
 ;;; generators for outliner operations
-
 
 (defn gen-insert-blocks-op
   [db & {:keys [opts] :as args}]
@@ -58,8 +55,7 @@
       (let [block-uuid (random-uuid)]
         [:insert-blocks
          [[{:block/uuid block-uuid
-            :block/title content
-            :block/format :markdown}]
+            :block/title content}]
           (:db/id (d/entity db [:block/uuid target-block-uuid]))
           opts]]))))
 

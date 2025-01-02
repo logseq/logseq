@@ -1,15 +1,15 @@
 (ns frontend.worker.handler.page
   "Page operations"
-  (:require [logseq.db :as ldb]
-            [logseq.graph-parser.db :as gp-db]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
+            [frontend.worker.handler.page.db-based.page :as db-worker-page]
+            [frontend.worker.handler.page.file-based.page :as file-worker-page]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [frontend.worker.handler.page.db-based.page :as db-worker-page]
-            [frontend.worker.handler.page.file-based.page :as file-worker-page]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.db :as gp-db]))
 
 (defn rtc-create-page!
   [conn config title {:keys [uuid]}]
@@ -17,10 +17,9 @@
   (let [date-formatter    (common-config/get-date-formatter config)
         title (db-worker-page/sanitize-title title)
         page-name (common-util/page-name-sanity-lc title)
-        page              (-> (gp-block/page-name->map title @conn true date-formatter
-                                                       {:page-uuid uuid
-                                                        :skip-existing-page-check? true})
-                              (assoc :block/format :markdown))
+        page              (gp-block/page-name->map title @conn true date-formatter
+                                                   {:page-uuid uuid
+                                                    :skip-existing-page-check? true})
         result            (ldb/transact! conn [page] {:persist-op? false
                                                       :outliner-op :create-page})]
     [result page-name (:block/uuid page)]))

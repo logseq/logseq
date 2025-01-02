@@ -71,7 +71,7 @@
 
 (defn ^:export show-block-ast []
   (if-let [{:block/keys [title format]} (:block (first (state/get-editor-args)))]
-    (show-content-ast title format)
+    (show-content-ast title (or format :markdown))
     (notification/show! "No block found" :warning)))
 
 (defn ^:export show-page-data []
@@ -85,7 +85,8 @@
     (let [page-data (db/pull '[:block/format {:block/file [:file/content]}]
                              (page-util/get-current-page-id))]
       (if (get-in page-data [:block/file :file/content])
-        (show-content-ast (get-in page-data [:block/file :file/content]) (:block/format page-data))
+        (show-content-ast (get-in page-data [:block/file :file/content])
+                          (get page-data :block/format :markdown))
         (notification/show! "No page found" :warning)))))
 
 (defn ^:export validate-db []

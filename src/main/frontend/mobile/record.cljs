@@ -47,7 +47,7 @@
   (p/let [page (or (state/get-current-page) (string/lower-case (date/journal-name)))
           filename (str (date/get-date-time-string-2) ".aac")
           edit-block (state/get-edit-block)
-          format (or (:block/format edit-block) (db/get-page-format page))
+          format (get edit-block :block/format :markdown)
           path (assets-handler/get-asset-path filename)
           _file (p/catch
                  (.writeFile Filesystem (clj->js {:data database64

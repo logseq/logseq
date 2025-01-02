@@ -4,20 +4,20 @@
   ;; Disable clj linters since we don't support clj
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})
-  (:require [clojure.set :as set]
+  (:require #?(:org.babashka/nbb [logseq.common.log :as log]
+               :default [lambdaisland.glogi :as log])
+            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [logseq.graph-parser.text :as text]
-            [logseq.common.util :as common-util]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.property :as gp-property]
             [logseq.common.config :as common-config]
-            #?(:org.babashka/nbb [logseq.common.log :as log]
-               :default [lambdaisland.glogi :as log])
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [logseq.db :as ldb]))
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
 
 (defn- filepath->page-name
   [filepath]
@@ -225,11 +225,15 @@
                           (let [block-ref-pages (seq (:block/refs block))]
                             (when block-ref-pages
                               (swap! ref-pages set/union (set block-ref-pages)))
-                            (-> block
-                                (dissoc :ref-pages)
-                                (assoc :block/format format
-                                       :block/page [:block/name page-name]
-                                       :block/refs block-ref-pages)))))
+                            (cond->
+                             (-> block
+                                 (dissoc :ref-pages)
+                                 (assoc :block/page [:block/name page-name]
+                                        :block/refs block-ref-pages))
+                              (not db-based?)
+                              (assoc :block/format format)
+                              db-based?
+                              (dissoc :block/format)))))
                       blocks)
           [properties invalid-properties properties-text-values]
           (if (:block/pre-block? (first blocks))

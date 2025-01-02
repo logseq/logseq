@@ -249,7 +249,6 @@
   [[:block/uuid :uuid]
    [:block/created-at :int]
    [:block/updated-at :int]
-   [:block/format [:enum :markdown]]
    ;; Injected by update-properties-in-ents
    [:block/properties {:optional true} block-properties]
    [:block/tags {:optional true} block-tags]

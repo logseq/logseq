@@ -48,12 +48,10 @@
      :block/uuid page1-uuid
      :block/created-at 1724836490809
      :block/updated-at 1724836490809
-     :block/type "page"
-     :block/format :markdown}
+     :block/type "page"}
     {:block/uuid block1-uuid
      :block/updated-at 1724836490810
      :block/created-at 1724836490810
-     :block/format :markdown
      :block/title "block1"
      :block/parent "page"
      :block/order "a0"
@@ -65,13 +63,11 @@
           :block/title "insert-500-blocks"
           :block/created-at 1725024677501
           :block/updated-at 1725024677501
-          :block/type "page"
-          :block/format :markdown}
+          :block/type "page"}
          (map (fn [i order]
                 {:block/uuid (random-uuid)
                  :block/created-at 1725024677501
                  :block/updated-at 1725024677501
-                 :block/format :markdown
                  :block/title (str "x" i)
                  :block/parent "page"
                  :block/order order
@@ -83,7 +79,6 @@
      :block/updated-at 1725455235108
      :block/created-at 1725455235108
      :block/journal-day 20240907
-     :block/format :markdown
      :block/title "Sep 7th, 2024"
      :block/name "sep 7th, 2024"
      :block/type "journal"}
@@ -105,12 +100,10 @@
      :block/title "move-blocks-concurrently"
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/type "page"
-     :block/format :markdown}
+     :block/type "page"}
     {:block/uuid block2-uuid
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/format :markdown
      :block/title "x1"
      :block/parent "page"
      :block/order "a0"
@@ -118,7 +111,6 @@
     {:block/uuid block3-uuid
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/format :markdown
      :block/title "x2"
      :block/parent "page"
      :block/order "a1"
@@ -126,7 +118,6 @@
     {:block/uuid block4-uuid
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/format :markdown
      :block/title "x3"
      :block/parent "page"
      :block/order "a2"
@@ -134,7 +125,6 @@
     {:block/uuid block5-uuid
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/format :markdown
      :block/title "x4"
      :block/parent "page"
      :block/order "a3"
@@ -142,7 +132,6 @@
     {:block/uuid block6-uuid
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/format :markdown
      :block/title "x5"
      :block/parent "page"
      :block/order "a4"
@@ -150,7 +139,6 @@
     {:block/uuid block7-uuid
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/format :markdown
      :block/title "x6"
      :block/parent "page"
      :block/order "a5"
@@ -192,13 +180,11 @@
      :block/title "step6-delete-blocks"
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/type "page"
-     :block/format :markdown}
+     :block/type "page"}
     {:db/id "b1"
      :block/uuid step6-block1-uuid
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/format :markdown
      :block/title "x1"
      :block/parent "page"
      :block/order "a0"
@@ -207,7 +193,6 @@
      :block/uuid step6-block2-uuid
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/format :markdown
      :block/title "x2"
      :block/parent "b1"
      :block/order "a0"
@@ -216,7 +201,6 @@
      :block/uuid step6-block3-uuid
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/format :markdown
      :block/title "x3"
      :block/parent "page"
      :block/order "a1"
@@ -225,7 +209,6 @@
      :block/uuid step6-block4-uuid
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/format :markdown
      :block/title "x4"
      :block/parent "b3"
      :block/order "a0"
@@ -234,7 +217,6 @@
      :block/uuid step6-block5-uuid
      :block/created-at 1725024677501
      :block/updated-at 1725024677501
-     :block/format :markdown
      :block/title "x5"
      :block/parent "b4"
      :block/order "a0"

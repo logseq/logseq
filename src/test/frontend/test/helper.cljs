@@ -193,15 +193,13 @@ This can be called in synchronous contexts as no async fns should be invoked"
        :block/page page-id
        :block/parent page-id
        :block/order (db-order/gen-key nil)
-       :block/title "block 1"
-       :block/format :markdown}
+       :block/title "block 1"}
       ;; second block
       {:block/uuid second-block-uuid
        :block/page page-id
        :block/parent page-id
        :block/order (db-order/gen-key nil)
-       :block/title "block 2"
-       :block/format :markdown}]
+       :block/title "block 2"}]
      (map sqlite-util/block-with-timestamps))))
 
 (defn start-and-destroy-db

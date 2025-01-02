@@ -1,15 +1,14 @@
 (ns logseq.db.frontend.property.build
   "Builds core property concepts"
-  (:require [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.order :as db-order]
+  (:require [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- closed-value-new-block
   [block-id block-type value property]
   (let [property-id (:db/ident property)]
-    (merge {:block/format :markdown
-            :block/uuid block-id
+    (merge {:block/uuid block-id
             :block/page property-id
             :block/closed-value-property property-id
             :logseq.property/created-from-property (if (= property-id :logseq.property/default-value)

@@ -9,9 +9,9 @@
             [frontend.worker.rtc.db-listener :as subject]
             [frontend.worker.rtc.fixture :as r.fixture]
             [frontend.worker.state :as worker-state]
+            [logseq.db.test.helper :as db-test]
             [logseq.outliner.batch-tx :as batch-tx]
-            [logseq.outliner.core :as outliner-core]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.outliner.core :as outliner-core]))
 
 (t/use-fixtures :each
   test-helper/db-based-start-and-destroy-db-map-fixture
@@ -49,7 +49,6 @@
                    [:db/add 1000000 :block/updated-at 1716882111476]
                    [:db/add 1000000 :block/created-at 1716882111476]
                    [:db/add 1000000 :block/schema {:type :number}]
-                   [:db/add 1000000 :block/format :markdown]
                    [:db/add 1000000 :db/cardinality :db.cardinality/one]
                    [:db/add 1000000 :db/ident :user.property/qqq]
                    [:db/add 1000000 :block/tags :logseq.class/Property]
@@ -87,7 +86,6 @@
                    [:db/add 1000000 :block/updated-at 1720019497643 536870954]
                    [:db/add 1000000 :logseq.property/parent :logseq.class/Root 536870954]
                    [:db/add 1000000 :block/created-at 1720019497643 536870954]
-                   [:db/add 1000000 :block/format :markdown 536870954]
                    [:db/add 1000000 :db/ident :user.class/zzz 536870954]
                    [:db/add 1000000 :block/tags :logseq.class/Tag 536870954]
                    [:db/add 1000000 :block/name "zzz" 536870954]
@@ -135,11 +133,9 @@
           (batch-tx/with-batch-tx-mode conn
             {:persist-op? true}
             (outliner-core/insert-blocks! repo conn [{:block/uuid block-uuid1
-                                                      :block/title "block1"
-                                                      :block/format :markdown}
+                                                      :block/title "block1"}
                                                      {:block/uuid block-uuid2
-                                                      :block/title "block2"
-                                                      :block/format :markdown}]
+                                                      :block/title "block2"}]
                                           target-entity
                                           {:sibling? false :keep-uuid? true}))
           (is (=

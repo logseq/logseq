@@ -6,19 +6,19 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
+            [logseq.common.date :as common-date]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.order :as db-order]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.utf8 :as utf8]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.common.date :as common-date]))
+            [logseq.graph-parser.utf8 :as utf8]))
 
 (defn heading-block?
   [block]
@@ -684,7 +684,7 @@
                              (let [replace-str (re-pattern
                                                 (str
                                                  "\n*\\s*"
-                                                 (if (= :markdown (:block/format block))
+                                                 (if (= :markdown (get block :block/format :markdown))
                                                    (str "id" gp-property/colons " " (:block/uuid block))
                                                    (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
                                (string/replace-first c replace-str ""))))))

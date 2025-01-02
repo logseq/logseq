@@ -1336,7 +1336,7 @@
   [config metadata s full-text]
   (let [media-formats (set (map name config/media-formats))
         metadata-show (:show (common-util/safe-read-map-string metadata))
-        format (get-in config [:block :block/format])]
+        format (get-in config [:block :block/format] :markdown)]
     (or
      (and
       (= :org format)
@@ -1474,7 +1474,7 @@
                            id label*)))
 
       ["Page_ref" page]
-      (let [format (get-in config [:block :block/format])]
+      (let [format (get-in config [:block :block/format] :markdown)]
         (if (and (= format :org)
                  (show-link? config nil page page)
                  (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext page))))
@@ -1495,7 +1495,7 @@
             [protocol path] (or (and (= "Complex" (first url)) url)
                                 (and (= "File" (first url)) ["file" (second url)]))]
         (cond
-          (and (= (get-in config [:block :block/format]) :org)
+          (and (= (get-in config [:block :block/format] :markdown) :org)
                (= "Complex" protocol)
                (= (string/lower-case (:protocol path)) "id")
                (string? (:link path))
@@ -2195,7 +2195,8 @@
 
 (rum/defc ^:large-vars/cleanup-todo text-block-title
   [config {:block/keys [format marker pre-block? properties] :as block}]
-  (let [block (if-not (:block.temp/ast-title block)
+  (let [format (or format :markdown)
+        block (if-not (:block.temp/ast-title block)
                 (merge block (block/parse-title-and-body uuid format pre-block?
                                                          (:block/title block)))
                 block)
@@ -2405,7 +2406,7 @@
             (rum/with-key elem (str (random-uuid)))))
 
         :else
-        (inline-text config (:block/format block) (str v)))]]))
+        (inline-text config (get block :block/format :markdown) (str v)))]]))
 
 (rum/defc properties-cp
   [config {:block/keys [pre-block?] :as block}]
@@ -2750,7 +2751,8 @@
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
-  (let [collapsed? (:collapsed? config)
+  (let [format (or format :markdown)
+        collapsed? (:collapsed? config)
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? (state/get-current-repo))
         content (if db-based?
@@ -2908,7 +2910,8 @@
                     ::hide-block-refs? (atom default-hide?)
                     ::refs-count *refs-count)))}
   [state config {:block/keys [uuid format] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count?]}]
-  (let [*hide-block-refs? (get state ::hide-block-refs?)
+  (let [format (or format :markdown)
+        *hide-block-refs? (get state ::hide-block-refs?)
         *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
         editor-box (state/get-component :editor/box)
@@ -3099,7 +3102,7 @@
                                  [block (page-cp {} block)]
                                  (let [result (block/parse-title-and-body
                                                uuid
-                                               (:block/format block)
+                                               (get block :block/format :markdown)
                                                (:block/pre-block? block)
                                                title)
                                        ast-body (:block.temp/ast-body result)
@@ -3197,7 +3200,7 @@
 
             (contains? transfer-types "Files")
             (let [files (.-files data-transfer)
-                  format (:block/format target-block)]
+                  format (get target-block :block/format :markdown)]
               ;; When editing, this event will be handled by editor-handler/upload-asset(editor-on-paste)
               (when (and (config/local-file-based-graph? repo) (not (state/editing?)))
                 ;; Basically the same logic as editor-handler/upload-asset,
@@ -3510,7 +3513,7 @@
             (block-reference {} (str uuid) nil)
           ;; Not embed self
             [:div.flex.flex-col.w-full
-             (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? title))
+             (let [block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) pre-block? title))
                    hide-block-refs-count? (or (and (:embed? config)
                                                    (= (:block/uuid block) (:embed-id config)))
                                               table?)]

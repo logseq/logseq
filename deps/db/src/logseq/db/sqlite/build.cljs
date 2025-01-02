@@ -5,24 +5,24 @@
   temporary db ids. The generated tx-data is used to create DB graphs that
   persist to sqlite or for testing with in-memory databases. See `Options` for
   the EDN format and `build-blocks-tx` which is the main fn to build tx data"
-  (:require [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.property.build :as db-property-build]
+  (:require [cljs.pprint :as pprint]
+            [clojure.set :as set]
+            [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
-            [clojure.string :as string]
-            [clojure.set :as set]
-            [datascript.core :as d]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.order :as db-order]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.db-ident :as db-ident]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.uuid :as common-uuid]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.build :as db-property-build]
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.sqlite.util :as sqlite-util]
             [malli.core :as m]
-            [malli.error :as me]
-            [cljs.pprint :as pprint]
-            [logseq.common.uuid :as common-uuid]))
+            [malli.error :as me]))
 
 ;; should match definition in translate-property-value
 (defn page-prop-value?
@@ -113,7 +113,6 @@
 
 (defn- ->block-tx [{:keys [build/properties] :as m} properties-config page-uuids all-idents page-id]
   (let [new-block {:db/id (new-db-id)
-                   :block/format :markdown
                    :block/page {:db/id page-id}
                    :block/order (db-order/gen-key nil)
                    :block/parent (or (:block/parent m) {:db/id page-id})}
@@ -357,8 +356,7 @@
                       {:db/id (or (:db/id page) (new-db-id))
                        :block/title (or (:block/title page) (string/capitalize (:block/name page)))
                        :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/title page)))
-                       :block/tags #{:logseq.class/Page}
-                       :block/format :markdown}
+                       :block/tags #{:logseq.class/Page}}
                       (dissoc page :build/properties :db/id :block/name :block/title :build/tags))
             pvalue-tx-m (->property-value-tx-m new-page (:build/properties page) properties all-idents)]
         (into

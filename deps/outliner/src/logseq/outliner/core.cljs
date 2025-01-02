@@ -133,44 +133,6 @@
 
 (declare move-blocks)
 
-(comment
-  (defn- create-linked-page-when-save
-    [repo conn db date-formatter txs-state block-entity m tags-has-class?]
-    (if tags-has-class?
-      (let [content (state/get-edit-content)
-            linked-page (some-> content #(gp-block/extract-plain repo %))
-            sanity-linked-page (some-> linked-page util/page-name-sanity-lc)
-            linking-page? (and (not (string/blank? sanity-linked-page))
-                               @(:editor/create-page? @state/state))]
-        (when linking-page?
-          (let [existing-ref-id (some (fn [r]
-                                        (when (= sanity-linked-page (:block/name r))
-                                          (:block/uuid r)))
-                                      (:block/refs m))
-                page-m (gp-block/page-name->map linked-page (or existing-ref-id true)
-                                                db true date-formatter)
-                _ (when-not (d/entity db [:block/uuid (:block/uuid page-m)])
-                    (ldb/transact! conn [page-m]))
-                merge-tx (let [children (:block/_parent block-entity)
-                               page (d/entity db [:block/uuid (:block/uuid page-m)])
-                               [target sibling?] (get-last-child-or-self db page)]
-                           (when (seq children)
-                             (:tx-data
-                              (move-blocks repo conn children target
-                                           {:sibling? sibling?
-                                            :outliner-op :move-blocks}))))]
-            (swap! txs-state (fn [txs]
-                               (concat txs
-                                       [(assoc page-m
-                                               :block/tags (:block/tags m)
-                                               :block/format :markdown)
-                                        {:db/id (:db/id block-entity)
-                                         :block/title ""
-                                         :block/refs []
-                                         :block/link [:block/uuid (:block/uuid page-m)]}]
-                                       merge-tx))))))
-      (reset! (:editor/create-page? @state/state) false))))
-
 (defn- file-rebuild-block-refs
   [repo db date-formatter {:block/keys [properties] :as block}]
   (let [property-key-refs (keys properties)
@@ -301,7 +263,7 @@
               (outliner-validate/validate-block-title db (:block/title m*) block-entity))
           m (cond-> m*
               db-based?
-              (dissoc :block/pre-block? :block/priority :block/marker :block/properties-order))]
+              (dissoc :block/format :block/pre-block? :block/priority :block/marker :block/properties-order))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)

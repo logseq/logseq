@@ -1,12 +1,12 @@
 (ns frontend.worker.export
   "Export data"
-  (:require [datascript.core :as d]
+  (:require [cljs-bean.core :as bean]
+            [datascript.core :as d]
             [frontend.common.file.core :as common-file]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.outliner.tree :as otree]
-            [cljs-bean.core :as bean]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.outliner.tree :as otree]))
 
 (defn- safe-keywordize
   [block]
@@ -35,7 +35,7 @@
                                      (let [b' (if (seq (:block/properties b))
                                                 (update b :block/title
                                                         (fn [content]
-                                                          (gp-property/remove-properties (:block/format b) content)))
+                                                          (gp-property/remove-properties (get b :block/format :markdown) content)))
                                                 b)]
                                        (safe-keywordize b'))) blocks))
                     children (if whiteboard?
