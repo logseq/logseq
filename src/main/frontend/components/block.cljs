@@ -64,6 +64,7 @@
             [frontend.template :as template]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.file-based.clock :as clock]
             [frontend.util.file-based.drawer :as drawer]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
@@ -2718,19 +2719,34 @@
 (rum/defc task-spent-time-cp
   [block]
   (when (and (state/enable-timetracking?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
-    (let [[time-spent set-time-spent!] (rum/use-state nil)]
+    (let [[result set-result!] (rum/use-state nil)
+          repo (state/get-current-repo)
+          [status-history time-spent] result]
       (rum/use-effect!
        (fn []
-         (p/let [time (db-async/<task-spent-time (state/get-current-repo) (:db/id block))]
-           (set-time-spent! time)))
+         (p/let [result (db-async/<task-spent-time repo (:db/id block))]
+           (set-result! result)))
        [])
       (when (and time-spent (> time-spent 0))
         [:div.text-sm.time-spent.ml-1
          (shui/button
           {:variant :ghost
            :size :sm
-           :class "text-muted-foreground !py-0 !px-1 h-6"}
-          (str time-spent "s"))]))))
+           :class "text-muted-foreground !py-0 !px-1 h-6"
+           :on-click (fn [e]
+                       (shui/popup-show! (.-target e)
+                                         (fn []
+                                           [:div.p-2.text-muted-foreground.text-sm
+                                            [:div.font-medium.mb-2 "Status history:"]
+                                            [:div.flex.flex-col.gap-1
+                                             (for [item status-history]
+                                               (let [status (:logseq.property.history/ref-value item)]
+                                                 [:div.flex.flex-row.gap-1.items-center.text-sm
+                                                  (icon-component/get-node-icon-cp status {:size 14 :color? true})
+                                                  [:div (:block/title status)]
+                                                  [:div (date/int->local-time-2 (:block/created-at item))]]))]])
+                                         {:align :end}))}
+          (clock/seconds->days:hours:minutes:seconds time-spent))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]

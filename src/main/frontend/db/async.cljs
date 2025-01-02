@@ -348,7 +348,7 @@
                        :where
                        [?b :logseq.property.history/block ?block-id]]
                      block-id)]
-    (->> (sort-by :created-at result)
+    (->> (sort-by :block/created-at result)
          (map (fn [b] (db/entity (:db/id b)))))))
 
 (defn <task-spent-time
@@ -358,19 +358,20 @@
                           (fn [b] (= :logseq.task/status (:db/ident (:logseq.property.history/property b))))
                           history)]
     (when (seq status-history)
-      (loop [[item & others] (rest status-history)
-             last-item (first status-history)
-             time 0]
-        (if item
-          (let [last-status (:db/ident (:logseq.property.history/ref-value last-item))
-                this-status (:db/ident (:logseq.property.history/ref-value item))
-                time' (if (or (= last-status :logseq.task/status.doing)
-                              (= this-status :logseq.task/status.done))
-                        (+ time
-                           (- (:block/created-at item) (:block/created-at last-item)))
-                        time)]
-            (recur others item time'))
-          (int (/ time 1000)))))))
+      (let [time (loop [[item & others] (rest status-history)
+                        last-item (first status-history)
+                        time 0]
+                   (if item
+                     (let [last-status (:db/ident (:logseq.property.history/ref-value last-item))
+                           this-status (:db/ident (:logseq.property.history/ref-value item))
+                           time' (if (or (= last-status :logseq.task/status.doing)
+                                         (= this-status :logseq.task/status.done))
+                                   (+ time
+                                      (- (:block/created-at item) (:block/created-at last-item)))
+                                   time)]
+                       (recur others item time'))
+                     (int (/ time 1000))))]
+        [status-history time]))))
 
 (comment
   (defn <fetch-all-pages
