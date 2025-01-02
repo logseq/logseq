@@ -1,16 +1,16 @@
 (ns logseq.outliner.pipeline
   "Core fns for use with frontend worker and node"
-  (:require [datascript.core :as d]
-            [datascript.impl.entity :as de]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs-time.format :as tf]
             [clojure.set :as set]
+            [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.entity-plus :as entity-plus]
-            [logseq.outliner.datascript-report :as ds-report]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
-            [cljs-time.format :as tf]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.outliner.datascript-report :as ds-report]))
 
 (defn filter-deleted-blocks
   [datoms]
@@ -161,7 +161,8 @@
                     (->> (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties)
                          (into {}))
                     ;; both page and parent shouldn't be counted as refs
-                    (dissoc :block/parent :block/page))
+                    (dissoc :block/parent :block/page
+                            :logseq.property.history/block :logseq.property.history/property :logseq.property.history/ref-value))
         property-key-refs (->> (keys properties)
                                (remove private-built-in-props))
         page-or-object? (fn [block]
