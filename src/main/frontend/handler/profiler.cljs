@@ -6,14 +6,15 @@
 
 (def ^:private *fn-symbol->key->call-count (volatile! {}))
 (def ^:private *fn-symbol->key->time-sum (volatile! {}))
-(def ^:private *fn-symbol->origin-fn (volatile! {}))
+
+(def *fn-symbol->origin-fn (atom {}))
 
 (defn- get-profile-fn
   [fn-sym original-fn custom-key-fn]
   (fn profile-fn-inner [& args]
-    (let [start (cljs.core/system-time)
+    (let [start (system-time)
           r (apply original-fn args)
-          elapsed-time (- (cljs.core/system-time) start)
+          elapsed-time (- (system-time) start)
           k (when custom-key-fn (custom-key-fn r))]
       (vswap! *fn-symbol->key->call-count update-in [fn-sym :total] inc)
       (vswap! *fn-symbol->key->time-sum update-in [fn-sym :total] #(+ % elapsed-time))
@@ -29,7 +30,7 @@
         s (munge (name fn-sym))]
     (if-let [original-fn (find-ns-obj (str ns "." s))]
       (let [profiled-fn (get-profile-fn fn-sym original-fn custom-key-fn)]
-        (vswap! *fn-symbol->origin-fn assoc fn-sym original-fn)
+        (swap! *fn-symbol->origin-fn assoc fn-sym original-fn)
         (g/set (find-ns-obj ns) s profiled-fn))
       (throw (ex-info (str "fn-sym not found: " fn-sym) {})))))
 
@@ -40,29 +41,22 @@
     (vswap! *fn-symbol->key->call-count dissoc fn-sym)
     (vswap! *fn-symbol->key->time-sum dissoc fn-sym)
     (when-let [origin-fn (get @*fn-symbol->origin-fn fn-sym)]
-      (some-> (find-ns-obj ns) (g/set s origin-fn)))
-    (vswap! *fn-symbol->origin-fn dissoc fn-sym)))
-
-;;;
+      (some-> (find-ns-obj ns) (g/set s origin-fn))
+      (swap! *fn-symbol->origin-fn dissoc fn-sym))))
 
 (defn reset-report!
   []
   (vreset! *fn-symbol->key->call-count {})
   (vreset! *fn-symbol->key->time-sum {}))
 
-(defn get-profiling-fns
-  []
-  (keys @*fn-symbol->origin-fn))
-
 (defn profile-report
   []
   {:call-count @*fn-symbol->key->call-count
    :time-sum @*fn-symbol->key->time-sum})
 
-
 (comment
   (register-fn! 'datascript.core/entity)
-  (prn :profiling (get-profiling-fns))
+  (prn :profiling (keys @*fn-symbol->origin-fn))
   (prn :report)
   (pprint/pprint (profile-report))
   (reset-report!)
