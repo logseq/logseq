@@ -603,15 +603,14 @@
                                   (swap! *uuids assoc (:block/uuid data) (:block/uuid block))
                                   (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
                                     (reduce
-                                     (fn [data [k v]]
+                                     (fn [data [k existing-value]]
                                        (update data k
-                                               (fn [existing-value]
+                                               (fn [v]
                                                  (if (and (coll? v) (not (map? v)))
                                                    (concat v (if (coll? existing-value) existing-value [existing-value]))
-                                                   (or existing-value v)))))
+                                                   (if (some? existing-value) existing-value v)))))
                                      data
-                                     existing-data)
-                                    (merge data)))
+                                     existing-data)))
                                 data)
 
                               :else
