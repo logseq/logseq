@@ -2,32 +2,32 @@
   (:require [clojure.string :as string]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
+            [frontend.components.property.default-value :as pdv]
+            [frontend.components.property.value :as pv]
+            [frontend.components.select :as select]
             [frontend.config :as config]
-            [frontend.handler.common.developer :as dev-common-handler]
-            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
+            [frontend.db.model :as model]
+            [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
+            [frontend.ui :as ui]
             [frontend.util :as util]
+            [goog.dom :as gdom]
             [logseq.db :as ldb]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.core :as outliner-core]
-            [logseq.shui.ui :as shui]
             [logseq.shui.popup.core :as shui-popup]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [goog.dom :as gdom]
-            [rum.core :as rum]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.components.property.value :as pv]
-            [frontend.components.property.default-value :as pdv]
-            [frontend.components.select :as select]
-            [frontend.db.model :as model]
-            [frontend.handler.db-based.page :as db-page-handler]
-            [frontend.ui :as ui]))
+            [rum.core :as rum]))
 
 (defn- re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
@@ -625,7 +625,8 @@
      (when (and (contains? db-property-type/default-value-ref-property-types property-type)
                 (not (db-property/many? property))
                 (not (and enable-closed-values?
-                          (seq (:property/closed-values property)))))
+                          (seq (:property/closed-values property))))
+                (not= :logseq.property/enable-history? (:db/ident property)))
        (default-value-subitem property))
 
      (when enable-closed-values?
@@ -670,33 +671,34 @@
                                               (p/then update-cardinality-fn))
                                           (update-cardinality-fn))))})))
 
-     (let [property-type (get-in property [:block/schema :type])
-           group' (->> [(when (and (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
-                                   (contains? #{:default :number :date :checkbox :node} property-type)
-                                   (not
-                                    (and (= :default property-type)
-                                         (empty? (:property/closed-values property))
-                                         (contains? #{nil :properties} (:position property-schema)))))
-                          (let [position (:position property-schema)]
-                            (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
-                                                       :item-props {:class "ui__position-trigger-item"}
-                                                       :disabled? config/publishing?
-                                                       :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :position position)))})))
+     (when (not= :logseq.property/enable-history? (:db/ident property))
+       (let [property-type (get-in property [:block/schema :type])
+             group' (->> [(when (and (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+                                     (contains? #{:default :number :date :checkbox :node} property-type)
+                                     (not
+                                      (and (= :default property-type)
+                                           (empty? (:property/closed-values property))
+                                           (contains? #{nil :properties} (:position property-schema)))))
+                            (let [position (:position property-schema)]
+                              (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
+                                                         :item-props {:class "ui__position-trigger-item"}
+                                                         :disabled? config/publishing?
+                                                         :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :position position)))})))
 
-                        (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
-                          (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
-                                                     :disabled? config/publishing?
-                                                     :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
-                                                                                                                      (assoc property-schema :hide? %) {})}))
-                        (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
-                          (dropdown-editor-menuitem {:icon :eye-off :title "Hide empty value" :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
-                                                     :disabled? config/publishing?
-                                                     :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
-                                                                                                                         :logseq.property/hide-empty-value
-                                                                                                                         (not (:logseq.property/hide-empty-value property)))}))]
-                       (remove nil?))]
-       (when (> (count group') 0)
-         (cons (shui/dropdown-menu-separator) group')))
+                          (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+                            (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
+                                                       :disabled? config/publishing?
+                                                       :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
+                                                                                                                        (assoc property-schema :hide? %) {})}))
+                          (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+                            (dropdown-editor-menuitem {:icon :eye-off :title "Hide empty value" :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
+                                                       :disabled? config/publishing?
+                                                       :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
+                                                                                                                           :logseq.property/hide-empty-value
+                                                                                                                           (not (:logseq.property/hide-empty-value property)))}))]
+                         (remove nil?))]
+         (when (> (count group') 0)
+           (cons (shui/dropdown-menu-separator) group'))))
 
      (when owner-block
        [:<>
