@@ -1,8 +1,7 @@
 (ns frontend.handler.profiler
   "Provides fns for profiling.
   TODO: support both main thread and worker thread."
-  (:require [clojure.pprint :as pprint]
-            [goog.object :as g]))
+  (:require [goog.object :as g]))
 
 (def ^:private *fn-symbol->key->call-count (volatile! {}))
 (def ^:private *fn-symbol->key->time-sum (volatile! {}))

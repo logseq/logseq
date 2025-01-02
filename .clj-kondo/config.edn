@@ -51,7 +51,6 @@
   {:aliases {cljs.reader reader
              cljs-time.core t
              cljs-time.coerce tc
-             clojure.string string
              datascript.core d
              datascript.transit dt
              datascript.db ddb
