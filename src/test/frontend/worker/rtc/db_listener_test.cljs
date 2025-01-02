@@ -98,17 +98,18 @@
            [[:update-page {:block-uuid #uuid "66856a29-6eb3-4122-af97-8580a853c6a6"}]
             [:update {:block-uuid #uuid "66856a29-6eb3-4122-af97-8580a853c6a6",
                       :av-coll
-                      [[:block/updated-at "[\"~#'\",1720019497643]"]
-                       [:block/created-at "[\"~#'\",1720019497643]"]
-                       [:block/tags #uuid "00000002-5389-0208-3000-000000000000"]
-                       [:block/title "[\"~#'\",\"zzz\"]"]
-                       [:logseq.property/parent #uuid "00000002-2737-8382-7000-000000000000"]
+                      (set
+                       [[:block/updated-at "[\"~#'\",1720019497643]"]
+                        [:block/created-at "[\"~#'\",1720019497643]"]
+                        [:block/tags #uuid "00000002-5389-0208-3000-000000000000"]
+                        [:block/title "[\"~#'\",\"zzz\"]"]
+                        [:logseq.property/parent #uuid "00000002-2737-8382-7000-000000000000"]
                        ;;1. shouldn't have :db/ident, :db/ident is special, will be handled later
-                       ]}]]
+                        ])}]]
            (map (fn [[op-type _t op-value]]
                   [op-type (cond-> op-value
                              (:av-coll op-value)
-                             (assoc :av-coll (map #(take 2 %) (:av-coll op-value))))])
+                             (assoc :av-coll (set (map #(take 2 %) (:av-coll op-value)))))])
                 ops))))))
 
 (deftest listen-db-changes-and-validate-generated-rtc-ops
