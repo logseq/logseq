@@ -527,12 +527,8 @@
                                      :schema {:type :checkbox
                                               :public? true
                                               :view-context :property}}
-   :logseq.property/history {:title "Property history"
-                             :schema {:type :entity
-                                      :cardinality :many
-                                      :hide? true}}
    :logseq.property.history/block {:title "History block"
-                                   :schema {:type :block
+                                   :schema {:type :entity
                                             :hide? true}}
    :logseq.property.history/property {:title "History property"
                                       :schema {:type :property

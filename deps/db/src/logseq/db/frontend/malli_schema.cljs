@@ -2,14 +2,14 @@
   "Malli schemas and fns for logseq.db.frontend.*"
   (:require [clojure.set :as set]
             [clojure.string :as string]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.frontend.property.type :as db-property-type]
             [datascript.core :as d]
-            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.schema :as db-schema]))
 
 ;; :db/ident malli schemas
 ;; =======================
@@ -239,10 +239,10 @@
    ;; Ensure use of :logseq.class/Page is consistent and simple. Doing so reduces complexity elsewhere
    ;; and allows for Page to exist as its own public concept later
    #_[:fn {:error/message "should not have other built-in private tags when tagged with #Page"}
-    (fn [[_k v {:keys [page-class-id private-tag-ids]}]]
-      (if (contains? v page-class-id)
-        (empty? (set/intersection (disj v page-class-id) private-tag-ids))
-        true))]])
+      (fn [[_k v {:keys [page-class-id private-tag-ids]}]]
+        (if (contains? v page-class-id)
+          (empty? (set/intersection (disj v page-class-id) private-tag-ids))
+          true))]])
 
 (def page-or-block-attrs
   "Common attributes for page and normal blocks"
@@ -389,6 +389,15 @@
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
 
+(def property-history-block
+  (vec
+   (concat
+    [:map]
+    [[:block/uuid :uuid]
+     [:block/created-at :int]
+     [:block/properties block-properties]
+     [:block/tx-id {:optional true} :int]])))
+
 (def closed-value-block*
   (vec
    (concat
@@ -424,7 +433,8 @@
    normal-block
    closed-value-block
    whiteboard-block
-   property-value-block])
+   property-value-block
+   property-history-block])
 
 (def asset-block
   "A block tagged with #Asset"
