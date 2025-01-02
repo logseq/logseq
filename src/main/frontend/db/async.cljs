@@ -1,25 +1,25 @@
 (ns frontend.db.async
   "Async queries"
-  (:require [promesa.core :as p]
-            [frontend.state :as state]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs-time.format :as tf]
+            [datascript.core :as d]
             [frontend.config :as config]
-            [frontend.db.utils :as db-utils]
+            [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.db.async.util :as db-async-util]
             [frontend.db.file-based.async :as file-async]
-            [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [logseq.db.frontend.rules :as rules]
-            [frontend.persist-db.browser :as db-browser]
-            [datascript.core :as d]
             [frontend.db.react :as react]
-            [frontend.date :as date]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
-            [cljs-time.format :as tf]
-            [logseq.db :as ldb]
-            [frontend.util :as util]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.file-based.property.util :as property-util]
-            [logseq.db.frontend.property :as db-property]))
+            [frontend.persist-db.browser :as db-browser]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.rules :as rules]
+            [promesa.core :as p]))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
@@ -339,6 +339,38 @@
                        [?b :logseq.property/asset ?pdf-id]]
                      pdf-id)]
     result))
+
+(defn <get-block-properties-history
+  [graph block-id]
+  (p/let [result (<q graph {:transact-db? true}
+                     '[:find [(pull ?b [*]) ...]
+                       :in $ ?block-id
+                       :where
+                       [?b :logseq.property.history/block ?block-id]]
+                     block-id)]
+    (->> (sort-by :created-at result)
+         (map (fn [b] (db/entity (:db/id b)))))))
+
+(defn <task-spent-time
+  [graph block-id]
+  (p/let [history (<get-block-properties-history graph block-id)
+          status-history (filter
+                          (fn [b] (= :logseq.task/status (:db/ident (:logseq.property.history/property b))))
+                          history)]
+    (when (seq status-history)
+      (loop [[item & others] (rest status-history)
+             last-item (first status-history)
+             time 0]
+        (if item
+          (let [last-status (:db/ident (:logseq.property.history/ref-value last-item))
+                this-status (:db/ident (:logseq.property.history/ref-value item))
+                time' (if (or (= last-status :logseq.task/status.doing)
+                              (= this-status :logseq.task/status.done))
+                        (+ time
+                           (- (:block/created-at item) (:block/created-at last-item)))
+                        time)]
+            (recur others item time'))
+          (int (/ time 1000)))))))
 
 (comment
   (defn <fetch-all-pages

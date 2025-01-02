@@ -2715,11 +2715,29 @@
            (when-let [property (db/entity pid)]
              (pv/property-value block property (assoc opts :show-tooltip? true))))]))))
 
+(rum/defc task-spent-time-cp
+  [block]
+  (when (and (state/enable-timetracking?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
+    (let [[time-spent set-time-spent!] (rum/use-state nil)]
+      (rum/use-effect!
+       (fn []
+         (p/let [time (db-async/<task-spent-time (state/get-current-repo) (:db/id block))]
+           (set-time-spent! time)))
+       [])
+      (when (and time-spent (> time-spent 0))
+        [:div.text-sm.time-spent.ml-1
+         (shui/button
+          {:variant :ghost
+           :size :sm
+           :class "text-muted-foreground !py-0 !px-1 h-6"}
+          (str time-spent "s"))]))))
+
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [collapsed? (:collapsed? config)
         repo (state/get-current-repo)
-        content (if (config/db-based-graph? (state/get-current-repo))
+        db-based? (config/db-based-graph? (state/get-current-repo))
+        content (if db-based?
                   (:block/raw-title block)
                   (property-util/remove-built-in-properties format (:block/raw-title block)))
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
@@ -2791,7 +2809,9 @@
          [:div.block-head-wrap
           (block-title config block)])
 
-       (file-block/clock-summary-cp block ast-body)]
+       (if db-based?
+         (task-spent-time-cp block)
+         (file-block/clock-summary-cp block ast-body))]
 
       (when deadline
         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
