@@ -201,17 +201,20 @@
                                       ;; Ignore new class tags from extract e.g. :logseq.class/Journal
                                       (logseq-class-ident? %)))
                          (map #(vector :block/uuid (get-page-uuid (:page-names-to-uuids per-file-state) (:block/name %) {:block %})))
-                         set)
-          page-classes (into #{:logseq.class/Page} db-class/page-children-classes)]
+                         set)]
       (cond-> block
         true
         (update :block/tags convert-tags-to-classes db per-file-state user-options all-idents)
-        ;; ensure pages are a Page
         true
         (update :block/tags (fn [tags]
-                              (if (seq (set/intersection (set tags) page-classes))
-                                tags
-                                (conj (vec tags) :logseq.class/Page))))
+                              (cond-> (set tags)
+                                ;; ensure pages at least have a Page
+                                true
+                                (conj :logseq.class/Page)
+                                ;; Remove Page if another Page-like class is already present
+                                (seq (set/intersection (disj (set tags) :logseq.class/Page)
+                                                       db-class/page-classes))
+                                (disj :logseq.class/Page))))
         (seq page-tags)
         (merge {:logseq.property/page-tags page-tags})))
     block))
@@ -1343,8 +1346,10 @@
         ;; uuids to be valid. Also upstream-properties-tx comes after blocks-tx to possibly override blocks
         tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx'' classes-tx' blocks-index blocks-tx)
         tx' (common-util/fast-remove-nils tx)
-        ;; _ (prn :tx-counts (map count (vector whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx)))
-        ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :tx tx'}))
+        ;; (prn :tx-counts (map #(vector %1 (count %2))
+        ;;                        [:whiteboard-pages :pages-index :page-properties-tx :property-page-properties-tx :pages-tx' :classes-tx :blocks-index :blocks-tx]
+        ;;                        [whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx]))
+        ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :pages-tx pages-tx :tx tx'}))
         main-tx-report (d/transact! conn tx' {::new-graph? true})
 
         upstream-properties-tx
