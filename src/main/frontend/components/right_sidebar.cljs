@@ -22,7 +22,8 @@
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.handler.route :as route-handler]
             [logseq.db :as ldb]
-            [frontend.components.icon :as icon]))
+            [frontend.components.icon :as icon]
+            [frontend.components.profiler :as profiler]))
 
 (rum/defc toggle
   []
@@ -132,6 +133,10 @@
     :rtc
     [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
      (rtc-debug-ui/rtc-debug-ui)]
+
+    :profiler
+    [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
+     (profiler/profiler)]
 
     ["" [:span]]))
 
@@ -407,7 +412,12 @@
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                        (state/sidebar-add-block! repo "rtc" :rtc))}
-            "(Dev) RTC"]])]]
+            "(Dev) RTC"]])
+        (when (state/sub [:ui/developer-mode?])
+          [:div.text-sm
+           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                       (state/sidebar-add-block! repo "profiler" :profiler))}
+            "(Dev) Profiler"]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?
