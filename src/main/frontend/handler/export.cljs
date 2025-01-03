@@ -1,6 +1,8 @@
 (ns ^:no-doc frontend.handler.export
   (:require
+   ["/frontend/utils" :as utils]
    ["@capacitor/filesystem" :refer [Encoding Filesystem]]
+   [cljs-bean.core :as bean]
    [cljs.pprint :as pprint]
    [clojure.set :as s]
    [clojure.string :as string]
@@ -9,22 +11,20 @@
    [frontend.db :as db]
    [frontend.extensions.zip :as zip]
    [frontend.external.roam-export :as roam-export]
+   [frontend.handler.assets :as assets-handler]
+   [frontend.handler.export.common :as export-common-handler]
    [frontend.handler.notification :as notification]
+   [frontend.idb :as idb]
    [frontend.mobile.util :as mobile-util]
-   [logseq.publishing.html :as publish-html]
+   [frontend.persist-db :as persist-db]
    [frontend.state :as state]
    [frontend.util :as util]
    [goog.dom :as gdom]
    [lambdaisland.glogi :as log]
-   [promesa.core :as p]
-   [frontend.persist-db :as persist-db]
-   [cljs-bean.core :as bean]
-   [frontend.handler.export.common :as export-common-handler]
-   [frontend.handler.assets :as assets-handler]
-   [logseq.db.sqlite.common-db :as sqlite-common-db]
    [logseq.db :as ldb]
-   [frontend.idb :as idb]
-   ["/frontend/utils" :as utils])
+   [logseq.db.sqlite.common-db :as sqlite-common-db]
+   [logseq.publishing.html :as publish-html]
+   [promesa.core :as p])
   (:import
    [goog.string StringBuffer]))
 
@@ -265,7 +265,10 @@
                    file-content (.text file)
                    data (persist-db/<export-db repo {:return-data? true})
                    decoded-content (.decode (js/TextDecoder.) data)]
-             (when (not= file-content decoded-content)
+             (if (= file-content decoded-content)
+               (do
+                 (println "Graph has not been updated since last export.")
+                 :graph-not-changed)
                (p/do!
                 (when (> (.-size file) 0)
                   (.move backup-handle backups-handle (str (util/time-ms) ".db.sqlite")))
