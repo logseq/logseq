@@ -89,7 +89,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [clojure.set :as set]))
 
 ;; local state
 (defonce *dragging?
@@ -2642,12 +2643,15 @@
   "Tags without inline or hidden tags"
   [config block]
   (when (:block/raw-title block)
-    (let [block-tags (->>
+    (let [hidden-internal-tags (cond-> ldb/internal-tags
+                                 (:show-tag-and-property-classes? config)
+                                 (set/difference #{:logseq.class/Tag :logseq.class/Property}))
+          block-tags (->>
                       (:block/tags block)
                       (remove (fn [t]
                                 (or (ldb/inline-tag? (:block/raw-title block) t)
                                     (:logseq.property.class/hide-from-node t)
-                                    (contains? ldb/internal-tags (:db/ident t))))))
+                                    (contains? hidden-internal-tags (:db/ident t))))))
           popup-opts {:align :end
                       :content-props {:on-click (fn [] (shui/popup-hide!))
                                       :class "w-60"}}

@@ -485,6 +485,7 @@
         :sidebar? sidebar?
         :hide-children? true
         :container-id container-id
+        :show-tag-and-property-classes? true
         :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))}
        page)]]))
 
