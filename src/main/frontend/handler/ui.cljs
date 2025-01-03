@@ -86,7 +86,7 @@
    {:post [(nil? %)]}
    (when clear-query-state?
      (react/clear-query-state!))
-   (doseq [component (keys @react/query-components)]
+   (doseq [component (keys @react/component->query-key)]
      (rum/request-render component))
    (when-let [component (state/get-root-component)]
      (rum/request-render component))
