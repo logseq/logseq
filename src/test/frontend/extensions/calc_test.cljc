@@ -1,7 +1,7 @@
 (ns frontend.extensions.calc-test
-  (:require [clojure.test :as test :refer [are deftest testing]]
-            [clojure.string :as str]
-            [clojure.edn :as edn]
+  (:require [clojure.edn :as edn]
+            [clojure.string :as string]
+            [clojure.test :as test :refer [are deftest testing]]
             [frontend.extensions.calc :as calc]))
 
 (defn convert-bigNum [b]
@@ -173,7 +173,7 @@
     (are [final-env exprs] (let [env (calc/new-env)]
                              (doseq [expr exprs]
                                (calc/eval env (calc/parse expr)))
-                            (= final-env (into {} (for [[k v] @env] [k (convert-bigNum v)]))))
+                             (= final-env (into {} (for [[k v] @env] [k (convert-bigNum v)]))))
       {"a" 1 "b" 2}          ["a = 1" "b = a + 1"]
       {"a" 1 "b" 0}          ["a = 1" "b = -a + 1"]
       {"a" 1 "b" 3}          ["a = 1" "b=a*2+1"]
@@ -184,22 +184,22 @@
     (are [final-env exprs] (let [env (calc/new-env)]
                              (doseq [expr exprs]
                                (calc/eval env (calc/parse expr)))
-                            (= final-env (into {} (for [[k v] @env] [k (convert-bigNum v)]))))
+                             (= final-env (into {} (for [[k v] @env] [k (convert-bigNum v)]))))
       {"a" 2}              ["a = 1" "a = 2"]
       {"a" 2 "b" 2}        ["a = 1" "b = a + 1" "a = b"]
       {"variable" 1 "x" 0} ["variable = 1 + 0 * 2" "x = log(variable)" "x = variable - 1"])))
 
 (deftest last-value
   (testing "last value is set"
-    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+    (are [values exprs] (= values (calc/eval-lines (string/join "\n" exprs)))
       ["42" "126"]            ["6*7" "last*3"]
       ["25" "5"]              ["3^2+4^2" "sqrt(last)"]
       ["6" nil nil nil "12"]  ["2*3" "# a comment" "" "   " "last*2"])))
 
 (deftest formatting
   (testing "display normal"
-    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
-      [nil "1000000"]     [":format norm" "1e6" ]
+    (are [values exprs] (= values (calc/eval-lines (string/join "\n" exprs)))
+      [nil "1000000"]     [":format norm" "1e6"]
       [nil "1000000"]     [":format norm 7" "1e6"]
       [nil "1e+6"]        [":format norm 6" "1e6"]
       [nil "3.14"]        [":format norm 3" "PI"]
@@ -209,7 +209,7 @@
       [nil "123400000"]   [":format normal 9" "1.234e8"]
       [nil "1.234e+8"]    [":format normal 8" "1.234e8"]))
   (testing "display fixed"
-    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+    (are [values exprs] (= values (calc/eval-lines (string/join "\n" exprs)))
       [nil "0.123450"]    [":format fix 6" "0.12345"]
       [nil "0.1235"]      [":format fix 4" "0.12345"]
       [nil "2.7183"]      [":format fixed 4" "E"]
@@ -217,7 +217,7 @@
       [nil "4.000e-4"]    [":format fix 3" "0.0004"]
       [nil "1.00e+21"]    [":format fixed 2" "1e21+0.1"]))
   (testing "display scientific"
-    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+    (are [values exprs] (= values (calc/eval-lines (string/join "\n" exprs)))
       [nil "1e+6"]        [":format sci" "1e6"]
       [nil "3.142e+0"]    [":format sci 3" "PI"]
       [nil "3.14e+2"]     [":format scientific" "3.14*10^2"])))
@@ -234,7 +234,7 @@
       2.00101    "2 101/100000"
       -99.2      "-99 8/40"))
   (testing "display fractions"
-    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+    (are [values exprs] (= values (calc/eval-lines (string/join "\n" exprs)))
       [nil "4 3/8"]           [":format frac" "4.375"]
       [nil "-7 1/4"]          [":format fraction" "-7.25"]
       [nil "2"]               [":format fractions" "19/20 + 1 1/20"]
@@ -242,10 +242,10 @@
       [nil "3.14157"]         [":format frac" "3.14157"]
       [nil "3 14157/100000"]  [":format frac 100000" "3.14157"]))
   (testing "display improper fractions"
-    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+    (are [values exprs] (= values (calc/eval-lines (string/join "\n" exprs)))
       [nil "35/8"]            [":format improper" "4.375"]
       [nil "-29/4"]           [":format imp" "-7.25"]
-      [nil "3.14157"]         [":format improper" "3.14157" ]
+      [nil "3.14157"]         [":format improper" "3.14157"]
       [nil "314157/100000"]   [":format imp 100000" "3.14157"])))
 
 (deftest base-conversion
@@ -257,10 +257,10 @@
       324.0     "0x100 + 0o100 + 0b100"
       32.0      "0b100 * 0b1000"))
   (testing "mixed base output"
-    (are [values exprs] (= values (calc/eval-lines (str/join "\n" exprs)))
+    (are [values exprs] (= values (calc/eval-lines (string/join "\n" exprs)))
       ["12345" "0x3039"]          ["12345" ":hex"]
       ["12345" "0o30071"]         ["12345" ":oct"]
-      ["12345" "0b11000000111001"]["12345" ":bin"]
+      ["12345" "0b11000000111001"] ["12345" ":bin"]
       [nil "0b100000000"]         [":bin" "0b10000 * 0b10000"]
       [nil "-0xff"]               [":hex" "-255"])))
 
