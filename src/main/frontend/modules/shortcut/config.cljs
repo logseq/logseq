@@ -1,6 +1,6 @@
 (ns frontend.modules.shortcut.config
   (:require [clojure.data :as data]
-            [clojure.string :as str]
+            [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.commit :as commit]
@@ -1026,7 +1026,7 @@
    (swap! *config assoc-in [handler-id id] shortcut-map)
    (when-not config-only?
      (swap! *shortcut-cmds assoc id (:cmd shortcut-map))
-     (let [plugin? (str/starts-with? (str id) ":plugin.")
+     (let [plugin? (string/starts-with? (str id) ":plugin.")
            category (or (:category shortcut-map)
                         (if plugin?
                           :shortcut.category/plugins
