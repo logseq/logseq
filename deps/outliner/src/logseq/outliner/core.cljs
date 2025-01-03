@@ -743,13 +743,21 @@
   [conn blocks]
   (let [top-level-blocks (filter-top-level-blocks @conn blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
-        top-level-blocks (->> (get-top-level-blocks top-level-blocks non-consecutive?)
-                              (remove ldb/page?))
+        top-level-blocks* (->> (get-top-level-blocks top-level-blocks non-consecutive?)
+                               (remove ldb/page?))
+        top-level-blocks (remove :logseq.property/built-in? top-level-blocks*)
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
         end-block (last top-level-blocks)
         delete-one-block? (or (= 1 (count top-level-blocks)) (= start-block end-block))]
+
+    ;; Validate before `when` since top-level-blocks will be empty when deleting one built-in block
+    (when (seq (filter :logseq.property/built-in? top-level-blocks*))
+      (throw (ex-info "Built-in nodes can't be deleted"
+                      {:type :notification
+                       :payload {:message "Built-in nodes can't be deleted"
+                                 :type :error}})))
     (when (seq top-level-blocks)
       (let [from-property (:logseq.property/created-from-property start-block)
             default-value-property? (and (:logseq.property/default-value from-property)
