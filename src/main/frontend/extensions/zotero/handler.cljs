@@ -1,15 +1,15 @@
 (ns frontend.extensions.zotero.handler
   (:require [cljs.core.async :refer [<! go]]
             [cljs.core.async.interop :refer [p->c]]
-            [clojure.string :as str]
+            [clojure.string :as string]
+            [frontend.db :as db]
             [frontend.extensions.zotero.api :as zotero-api]
             [frontend.extensions.zotero.extractor :as extractor]
             [frontend.extensions.zotero.setting :as setting]
-            [frontend.handler.notification :as notification]
-            [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.db :as db]
+            [frontend.state :as state]
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
@@ -31,7 +31,7 @@
         (let [items    (<! (api-fn key))
               md-items (->> items
                             (map extractor/extract)
-                            (remove str/blank?))]
+                            (remove string/blank?))]
           (when (not-empty md-items)
             (p->c
              (p/let [result (editor-handler/api-insert-new-block! first-block {:page page-name})]
@@ -52,7 +52,7 @@
 
 (defn- create-abstract-note!
   [page-name abstract-note]
-  (when-not (str/blank? abstract-note)
+  (when-not (string/blank? abstract-note)
     (p/let [block (editor-handler/api-insert-new-block!
                    "[[Abstract]]" {:page page-name})]
       (editor-handler/api-insert-new-block!
@@ -76,8 +76,8 @@
      (let [{:keys [page-name properties abstract-note]} (extractor/extract item)]
        (p->c
         (p/do!
-         (when-not (str/blank? page-name)
-           (if (db/page-exists? (str/lower-case page-name) "page")
+         (when-not (string/blank? page-name)
+           (if (db/page-exists? (string/lower-case page-name) "page")
              ;; FIXME: Overwrite if it has a zotero tag (which means created by Zotero)
              (if (setting/setting :overwrite-mode?)
                (page-handler/<delete!

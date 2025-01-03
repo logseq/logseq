@@ -4,9 +4,9 @@
             [cljs-http.client :as http]
             [cljs.core.async :as async
              :refer [<! >! alt! chan close! go go-loop]]
-            [clojure.string :as str]
-            [frontend.util :as util]
-            [frontend.extensions.zotero.setting :as setting]))
+            [clojure.string :as string]
+            [frontend.extensions.zotero.setting :as setting]
+            [frontend.util :as util]))
 
 (defn config []
   {:api-version 3
@@ -39,14 +39,14 @@
                        :next "rel=\"next\""
                        :prev "rel=\"prev\"")
         links
-        (str/split
+        (string/split
          (:link (cske/transform-keys csk/->kebab-case-keyword headers)) ",")
         next-link   (->> links
-                         (filter (fn [l] (str/includes? l include-text)))
+                         (filter (fn [l] (string/includes? l include-text)))
                          first)]
     (when next-link
-      (let [start    (str/index-of next-link "<")
-            end      (str/last-index-of next-link ">;")
+      (let [start    (string/index-of next-link "<")
+            end      (string/last-index-of next-link ">;")
             next-url (subs next-link (inc start) end)]
         (or
          (->
