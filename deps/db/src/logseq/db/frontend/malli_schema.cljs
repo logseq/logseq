@@ -390,13 +390,11 @@
     page-or-block-attrs)))
 
 (def property-history-block
-  (vec
-   (concat
-    [:map]
-    [[:block/uuid :uuid]
-     [:block/created-at :int]
-     [:block/properties block-properties]
-     [:block/tx-id {:optional true} :int]])))
+  [:map
+   [:block/uuid :uuid]
+   [:block/created-at :int]
+   [:block/properties block-properties]
+   [:block/tx-id {:optional true} :int]])
 
 (def closed-value-block*
   (vec

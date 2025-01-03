@@ -358,8 +358,7 @@
                           (fn [b] (= :logseq.task/status (:db/ident (:logseq.property.history/property b))))
                           history)]
     (when (seq status-history)
-      (let [time (loop [[item & others] (rest status-history)
-                        last-item (first status-history)
+      (let [time (loop [[last-item item & others] status-history
                         time 0]
                    (if item
                      (let [last-status (:db/ident (:logseq.property.history/ref-value last-item))
@@ -369,7 +368,7 @@
                                    (+ time
                                       (- (:block/created-at item) (:block/created-at last-item)))
                                    time)]
-                       (recur others item time'))
+                       (recur (cons item others) time'))
                      (int (/ time 1000))))]
         [status-history time]))))
 
