@@ -442,6 +442,9 @@
   [:map
    [:block/uuid :uuid]
    [:block/tx-id {:optional true} :int]
+   ;; App doesn't use timestamps but migrations may
+   [:block/created-at {:optional true} :int]
+   [:block/updated-at {:optional true} :int]
    [:file/content :string]
    [:file/path :string]
    [:file/size {:optional true} :int]
