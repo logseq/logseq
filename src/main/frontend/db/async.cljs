@@ -369,7 +369,11 @@
                              (quot 1000))
                          (let [time' (if (or
                                           (= last-status :logseq.task/status.doing)
-                                          (= this-status :logseq.task/status.done))
+                                          (and
+                                           (not (contains? #{:logseq.task/status.canceled
+                                                             :logseq.task/status.backlog
+                                                             :logseq.task/status.done} last-status))
+                                           (= this-status :logseq.task/status.done)))
                                        (+ time (- (:block/created-at item) (:block/created-at last-item)))
                                        time)]
                            (recur (cons item others) time'))))
