@@ -362,14 +362,18 @@
                         time 0]
                    (if item
                      (let [last-status (:db/ident (:logseq.property.history/ref-value last-item))
-                           this-status (:db/ident (:logseq.property.history/ref-value item))
-                           time' (if (or (= last-status :logseq.task/status.doing)
-                                         (= this-status :logseq.task/status.done))
-                                   (+ time
-                                      (- (:block/created-at item) (:block/created-at last-item)))
-                                   time)]
-                       (recur (cons item others) time'))
-                     (int (/ time 1000))))]
+                           this-status (:db/ident (:logseq.property.history/ref-value item))]
+                       (if (and (= this-status :logseq.task/status.doing)
+                                (empty? others))
+                         (-> (+ time (- (tc/to-long (t/now)) (:block/created-at item)))
+                             (quot 1000))
+                         (let [time' (if (or
+                                          (= last-status :logseq.task/status.doing)
+                                          (= this-status :logseq.task/status.done))
+                                       (+ time (- (:block/created-at item) (:block/created-at last-item)))
+                                       time)]
+                           (recur (cons item others) time'))))
+                     (quot time 1000)))]
         [status-history time]))))
 
 (comment
