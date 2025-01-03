@@ -238,11 +238,11 @@
         true))]
    ;; Ensure use of :logseq.class/Page is consistent and simple. Doing so reduces complexity elsewhere
    ;; and allows for Page to exist as its own public concept later
-   #_[:fn {:error/message "should not have other built-in private tags when tagged with #Page"}
-      (fn [[_k v {:keys [page-class-id private-tag-ids]}]]
-        (if (contains? v page-class-id)
-          (empty? (set/intersection (disj v page-class-id) private-tag-ids))
-          true))]])
+   [:fn {:error/message "should not have other built-in private tags when tagged with #Page"}
+    (fn [[_k v {:keys [page-class-id private-tag-ids]}]]
+      (if (contains? v page-class-id)
+        (empty? (set/intersection (disj v page-class-id) private-tag-ids))
+        true))]])
 
 (def page-or-block-attrs
   "Common attributes for page and normal blocks"
