@@ -382,19 +382,20 @@
 
 (defn- human-date-label
   [date]
-  (let [today (t/today)]
+  (let [today (t/today)
+        today-y (t/year today)
+        today-m (t/month today)
+        today-d (t/day today)
+        same-day? (fn [date]
+                    (and (= today-y (t/year date)) (= today-m (t/month date)) (= today-d (t/day date))))]
     (cond
-      (and (or (t/after? date today)
-               (t/equal? date today))
-           (t/before? date (t/plus today (t/days 1))))
+      (same-day? date)
       "Today"
-      (and (or (t/equal? date (t/plus today (t/days 1)))
-               (t/after? date (t/plus today (t/days 1))))
-           (t/before? date (t/plus today (t/days 2))))
+      (let [tomorrow (t/minus date (t/days 1))]
+        (same-day? tomorrow))
       "Tomorrow"
-      (and (or (t/equal? date (t/minus today (t/days 1)))
-               (t/after? date (t/minus today (t/days 1))))
-           (t/before? date today))
+      (let [yesterday (t/plus date (t/days 1))]
+        (same-day? yesterday))
       "Yesterday"
       :else
       nil)))
