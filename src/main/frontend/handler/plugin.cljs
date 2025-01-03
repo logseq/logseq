@@ -13,6 +13,7 @@
             [frontend.state :as state]
             [medley.core :as medley]
             [frontend.fs :as fs]
+            [frontend.idb :as idb]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -37,7 +38,7 @@
 (defn invoke-exported-api
   [type & args]
   (try
-    (apply js-invoke (aget js/window.logseq "api") type args)
+    (apply js-invoke (aget js/window.logseq "api") (name type) args)
     (catch :default e (js/console.error e))))
 
 (defn markdown-to-html
@@ -54,9 +55,21 @@
 (defonce stats-url (str central-endpoint "stats.json"))
 (declare select-a-plugin-theme)
 
+(defn setup-global-apis-for-web!
+  []
+  (when (and util/web-platform?
+          (nil? js/window.apis))
+    (let [^js e (js/window.EventEmitter3.)]
+      (set! (. js/window -apis) e))))
+
+(defn unlink-plugin-for-web!
+  [key]
+  (invoke-exported-api :unlink_installed_web_plugin key)
+  (invoke-exported-api :unlink_plugin_user_settings key))
+
 (defn load-plugin-preferences
   []
-  (-> (invoke-exported-api "load_user_preferences")
+  (-> (invoke-exported-api :load_user_preferences)
     (p/then #(bean/->clj %))
     (p/then #(state/set-state! :plugin/preferences %))
     (p/catch
@@ -86,7 +99,9 @@
       (fn [resolve reject]
         (let [on-ok (fn [res]
                       (if-let [res (and res (bean/->clj res))]
-                        (let [pkgs (:packages res)]
+                        (let [pkgs (:packages res)
+                              pkgs (if (util/electron?) pkgs
+                                     (some->> pkgs (filterv #(not (true? (:effect %))))))]
                           (state/set-state! :plugin/marketplace-pkgs pkgs)
                           (resolve pkgs))
                         (reject nil)))]
@@ -128,10 +143,13 @@
     (state/set-state! :plugin/installing pkg)
 
     (-> (load-marketplace-plugins false)
-      (p/then (fn [mfts]
-                (let [mft (some #(when (= (:id %) id) %) mfts)]
+      (p/then (fn [manifests]
+                (let [mft (some #(when (= (:id %) id) %) manifests)
+                      opts (merge (dissoc pkg :logger) mft)]
                   ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
-                  (ipc/ipc :updateMarketPlugin (merge (dissoc pkg :logger) mft)))
+                  (if (util/electron?)
+                    (ipc/ipc :updateMarketPlugin opts)
+                    (plugin-common-handler/async-install-or-update-for-web! opts)))
                 true))
       (p/catch (fn [^js e]
                  (state/reset-all-updates-state)
@@ -189,68 +207,82 @@
 (defn setup-install-listener!
   []
   (let [channel (name :lsp-updates)
-        listener (fn [_ ^js e]
-                   (when-let [{:keys [status payload only-check]} (bean/->clj e)]
-                     (case (keyword status)
+        listener (fn [ctx ^js evt]
+                   (let [e (or evt ctx)]
+                     (when-let [{:keys [status payload only-check]} (bean/->clj e)]
+                       (case (keyword status)
 
-                       :completed
-                       (let [{:keys [id dst name title theme]} payload
-                             name (or title name "Untitled")]
-                         (if only-check
-                           (state/consume-updates-from-coming-plugin! payload false)
-                           (if (plugin-common-handler/installed? id)
-                             (when-let [^js pl (get-plugin-inst id)] ;; update
-                               (p/then
-                                 (.reload pl)
-                                 #(do
-                                    ;;(if theme (select-a-plugin-theme id))
-                                    (notification/show!
-                                      (t :plugin/update-plugin name (.-version (.-options pl))) :success)
-                                    (state/consume-updates-from-coming-plugin! payload true))))
+                         :completed
+                         (let [{:keys [id dst name title theme web-pkg]} payload
+                               name (or title name "Untitled")]
+                           (if only-check
+                             (state/consume-updates-from-coming-plugin! payload false)
+                             (if (plugin-common-handler/installed? id)
+                               ;; update plugin
+                               (when-let [^js pl (get-plugin-inst id)]
+                                 (p/then
+                                   (.reload pl)
+                                   #(do
+                                      ;;(if theme (select-a-plugin-theme id))
+                                      (when (not (util/electron?))
+                                        (set! (.-version (.-options pl)) (:version web-pkg))
+                                        (set! (.-webPkg (.-options pl)) (bean/->js web-pkg))
+                                        (invoke-exported-api :save_installed_web_plugin (.toJSON pl false)))
+                                      (notification/show!
+                                        (t :plugin/update-plugin name (.-version (.-options pl))) :success)
+                                      (state/consume-updates-from-coming-plugin! payload true))))
+                               ;; register plugin
+                               (-> (js/LSPluginCore.register (bean/->js {:key id :url dst :webPkg web-pkg}))
+                                 (p/then (fn []
+                                           (when-let [^js pl (get-plugin-inst id)]
+                                             (when theme (js/setTimeout #(select-a-plugin-theme id) 300))
+                                             (when (.-isWebPlugin pl)
+                                               (invoke-exported-api :save_installed_web_plugin (.toJSON pl false)))
+                                             (notification/show!
+                                               (t :plugin/installed-plugin name) :success))))
+                                 (p/catch (fn [^js e]
+                                            (notification/show!
+                                              (str "Install failed: " name "\n" (.-message e))
+                                              :error)))))))
 
-                             (do                            ;; register new
-                               (p/then
-                                 (js/LSPluginCore.register (bean/->js {:key id :url dst}))
-                                 (fn [] (when theme (js/setTimeout #(select-a-plugin-theme id) 300))))
+                         :error
+                         (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))
+                               fake-error? (contains? #{:no-new-version} error-code)
+                               [msg type] (case error-code
+
+                                            :no-new-version
+                                            [(t :plugin/up-to-date ":)") :success]
+
+                                            [error-code :error])
+                               pending? (seq (:plugin/updates-pending @state/state))]
+
+                           (if (and only-check pending?)
+                             (state/consume-updates-from-coming-plugin! payload false)
+
+                             (do
+                               ;; consume failed download updates
+                               (when (and (not only-check) (not pending?))
+                                 (state/consume-updates-from-coming-plugin! payload true))
+
+                               ;; notify human tips
                                (notification/show!
-                                 (t :plugin/installed-plugin name) :success)))))
+                                 (str
+                                   (if (= :error type) "[Error]" "")
+                                   (str "<" (:id payload) "> ")
+                                   msg) type)))
 
-                       :error
-                       (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:\[]+" ""))
-                             fake-error? (contains? #{:no-new-version} error-code)
-                             [msg type] (case error-code
+                           (when-not fake-error?
+                             (js/console.error "Update Error:" (:error-code payload))))
 
-                                          :no-new-version
-                                          [(t :plugin/up-to-date ":)") :success]
-
-                                          [error-code :error])
-                             pending? (seq (:plugin/updates-pending @state/state))]
-
-                         (if (and only-check pending?)
-                           (state/consume-updates-from-coming-plugin! payload false)
-
-                           (do
-                             ;; consume failed download updates
-                             (when (and (not only-check) (not pending?))
-                               (state/consume-updates-from-coming-plugin! payload true))
-
-                             ;; notify human tips
-                             (notification/show!
-                               (str
-                                 (if (= :error type) "[Error]" "")
-                                 (str "<" (:id payload) "> ")
-                                 msg) type)))
-
-                         (when-not fake-error?
-                           (js/console.error "Update Error:" (:error-code payload))))
-
-                       :default))
+                         :default)))
 
                    ;; reset
                    (js/setTimeout #(state/set-state! :plugin/installing nil) 512)
                    true)]
-
-    (js/window.apis.addListener channel listener)))
+    (js/window.apis.addListener channel listener)
+    ;; teardown
+    (fn []
+      (js/window.apis.removeListener channel listener))))
 
 (defn- normalize-plugin-metadata
   [metadata]
@@ -526,7 +558,7 @@
         (p/catch #(do (js/console.warn %)
                       (notification/show! "No README content." :warning))))
       ;; market
-      (shui/dialog-open! (fn [_] (display repo nil)) {:label "plugin-readme"}))))
+      (shui/dialog-open! (fn [_] (display item nil)) {:label "plugin-readme"}))))
 
 (defn load-unpacked-plugin
   []
@@ -579,40 +611,54 @@
   (when-let [type (and block (str "slot:" (:block/uuid block)))]
     (hook-plugin-editor type (merge payload block) nil)))
 
-(defn get-ls-dotdir-root
+(defonce *ls-dotdir-root (atom nil))
+(defn get-ls-dotdir-root [] @*ls-dotdir-root)
+
+(defn init-ls-dotdir-root
   []
-  (ipc/ipc "getLogseqDotDirRoot"))
+  (-> (if (util/electron?)
+        (ipc/ipc "getLogseqDotDirRoot")
+        "LSPUserDotRoot/")
+    (p/then #(do (reset! *ls-dotdir-root %) %))))
+
 
 (defn make-fn-to-load-dotdir-json
-  [dirname default]
+  [dirname ^js default]
   (fn [key]
     (when-let [key (and key (name key))]
-      (p/let [repo ""
-              path (get-ls-dotdir-root)
-              exist? (fs/file-exists? path dirname)
-              _ (when-not exist? (fs/mkdir! (util/node-path.join path dirname)))
-              path (util/node-path.join path dirname (str key ".json"))
-              _ (fs/create-if-not-exists repo nil path (or default "{}"))
-              json (fs/read-file nil path)]
-        [path (js/JSON.parse json)]))))
+      (let [repo ""
+            path (get-ls-dotdir-root)
+            path (util/node-path.join path dirname (str key ".json"))]
+        (if (util/electron?)
+          (p/let [exist? (fs/file-exists? path dirname)
+                  _ (when-not exist? (fs/mkdir! (util/node-path.join path dirname)))
+                  _ (fs/create-if-not-exists repo nil path (js/JSON.stringify default))
+                  json (fs/read-file nil path)]
+            [path (js/JSON.parse json)])
+          (p/let [data (idb/get-item path)]
+            [path (or data default)]))))))
 
 (defn make-fn-to-save-dotdir-json
   [dirname]
-  (fn [key content]
+  (fn [key ^js data]
     (when-let [key (and key (name key))]
-      (p/let [repo ""
-              path (get-ls-dotdir-root)
-              path (util/node-path.join path dirname (str key ".json"))]
-        (fs/write-file! repo nil path content {:skip-compare? true})))))
+      (let [repo ""
+            path (get-ls-dotdir-root)
+            path (util/node-path.join path dirname (str key ".json"))]
+        (if (util/electron?)
+          (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true})
+          (idb/set-item! path data))))))
 
 (defn make-fn-to-unlink-dotdir-json
   [dirname]
   (fn [key]
     (when-let [key (and key (name key))]
-      (p/let [repo ""
-              path (get-ls-dotdir-root)
-              path (util/node-path.join path dirname (str key ".json"))]
-        (fs/unlink! repo path nil)))))
+      (let [repo ""
+            path (get-ls-dotdir-root)
+            path (util/node-path.join path dirname (str key ".json"))]
+        (if (util/electron?)
+          (fs/unlink! repo path nil)
+          (idb/remove-item! path))))))
 
 (defn show-themes-modal!
   ([] (show-themes-modal! false))
@@ -629,12 +675,17 @@
 
 (defn- get-user-default-plugins
   []
-  (p/catch
-   (p/let [files ^js (ipc/ipc "getUserDefaultPlugins")
-           files (js->clj files)]
-     (map #(hash-map :url %) files))
-   (fn [e]
-     (js/console.error e))))
+  (-> (if (util/electron?)
+        (ipc/ipc "getUserDefaultPlugins")
+        (invoke-exported-api :load_installed_web_plugins))
+      (p/then #(bean/->clj %))
+      (p/then (fn [plugins]
+                (if (util/electron?)
+                  (map #(hash-map :url %) plugins)
+                  (some->> (vals plugins)
+                           (filter #(:url %))))))
+      (p/catch (fn [e]
+                 (js/console.error "[get-user-default-plugins:error]" e)))))
 
 (defn set-auto-checking!
   [v]
@@ -728,11 +779,11 @@
 (rum/defc lsp-indicator < rum/reactive
   []
   (let [text (state/sub :plugin/indicator-text)]
-    (when-not (= text "END")
-      [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
-       [:span.flex.items-center.justify-center.w-60.flex-col
-        [:small.scale-250.opacity-70.mb-10.animate-pulse (svg/logo)]
-        [:small.block.text-sm.relative.opacity-50 {:style {:right "-8px"}} text]]])))
+    [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
+     [:span.flex.items-center.justify-center.flex-col
+      [:small.scale-250.opacity-50.mb-10.animate-pulse (svg/logo)]
+      [:small.block.text-sm.relative.opacity-50 {:style {:right "-8px" :min-height "24px"}}
+       (str text)]]]))
 
 (defn ^:large-vars/cleanup-todo init-plugins!
   [callback]
@@ -742,9 +793,7 @@
     (rum/mount
       (lsp-indicator) el))
 
-  (state/set-state! :plugin/indicator-text "LOADING")
-
-  (-> (p/let [root (get-ls-dotdir-root)
+  (-> (p/let [root (init-ls-dotdir-root)
               _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
 
               clear-commands! (fn [pid]
@@ -758,14 +807,20 @@
 
               _ (doto js/LSPluginCore
                   (.on "registered"
-                    (fn [^js pl]
-                      (register-plugin
-                        (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
+                       (fn [^js pl]
+                         (register-plugin
+                           (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
+
+                  (.on "beforeload"
+                       (fn [^js pl]
+                         (let [text (if (util/electron?)
+                                      (util/format "Load plugin: %s..." (.-id pl)) "Loading")]
+                           (state/set-state! :plugin/indicator-text text))))
 
                   (.on "reloaded"
-                    (fn [^js pl]
-                      (register-plugin
-                        (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
+                       (fn [^js pl]
+                         (register-plugin
+                           (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
 
                   (.on "unregistered" (fn [pid]
                                         (let [pid (keyword pid)]
@@ -778,7 +833,9 @@
 
                   (.on "unlink-plugin" (fn [pid]
                                          (let [pid (keyword pid)]
-                                           (ipc/ipc "uninstallMarketPlugin" (name pid)))))
+                                           (if (util/electron?)
+                                             (ipc/ipc :uninstallMarketPlugin (name pid))
+                                             (unlink-plugin-for-web! pid)))))
 
                   (.on "beforereload" (fn [^js pl]
                                         (let [pid (.-id pl)]
@@ -791,12 +848,13 @@
 
                   (.on "themes-changed" (fn [^js themes]
                                           (swap! state/state assoc :plugin/installed-themes
-                                            (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
+                                                 (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
 
-                  (.on "theme-selected" (fn [^js theme]
+                  (.on "theme-selected" (fn [^js theme ^js opts]
                                           (let [theme (bean/->clj theme)
+                                                _opts (bean/->clj opts)
                                                 url (:url theme)
-                                                mode (:mode theme)]
+                                                mode (or (:mode theme) (state/sub :ui/theme))]
                                             (when mode
                                               (state/set-custom-theme! mode theme)
                                               (state/set-theme-mode! mode))
@@ -808,41 +866,52 @@
                                                     custom-theme (dissoc themes :mode)
                                                     mode (:mode themes)]
                                                 (state/set-custom-theme! {:light (if (nil? (:light custom-theme)) {:mode "light"} (:light custom-theme))
-                                                                          :dark (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
+                                                                          :dark  (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
                                                 (state/set-theme-mode! mode))))
 
                   (.on "settings-changed" (fn [id ^js settings]
                                             (let [id (keyword id)]
                                               (when (and settings
-                                                      (contains? (:plugin/installed-plugins @state/state) id))
+                                                         (contains? (:plugin/installed-plugins @state/state) id))
                                                 (update-plugin-settings-state id (bean/->clj settings))))))
 
                   (.on "ready" (fn [^js perf-table]
                                  (when-let [plugins (and perf-table (.entries perf-table))]
                                    (->> plugins
-                                     (keep
-                                       (fn [[_k ^js v]]
-                                         (when-let [end (and (some-> v (.-o) (.-disabled) (not))
-                                                          (.-e v))]
-                                           (when (and (number? end)
-                                                   ;; valid end time
-                                                   (> end 0)
-                                                   ;; greater than 6s
-                                                   (> (- end (.-s v)) 6000))
-                                             v))))
-                                     ((fn [perfs]
-                                        (doseq [perf perfs]
-                                          (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)])))))))))
+                                        (keep
+                                          (fn [[_k ^js v]]
+                                            (when-let [end (and (some-> v (.-o) (.-disabled) (not))
+                                                                (.-e v))]
+                                              (when (and (number? end)
+                                                         ;; valid end time
+                                                         (> end 0)
+                                                         ;; greater than 6s
+                                                         (> (- end (.-s v)) 6000))
+                                                v))))
+                                        ((fn [perfs]
+                                           (doseq [perf perfs]
+                                             (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)])))))))))
 
               default-plugins (get-user-default-plugins)
-
-              _ (.register js/LSPluginCore (bean/->js (if (seq default-plugins) default-plugins [])) true)])
+              [plugins0, plugins-async] (if (and (seq default-plugins)
+                                         (not (util/electron?)))
+                                     ((juxt (fn [its] (filterv #(:theme %) its))
+                                        (fn [its] (filterv #(not (:theme %)) its)))
+                                      default-plugins)
+                                     [default-plugins])
+              _ (.register js/LSPluginCore (bean/->js (if (seq plugins0) plugins0 [])) true)]
+        plugins-async)
 
     (p/then
-      (fn []
-        (state/set-state! :plugin/indicator-text "END")
+      (fn [plugins-async]
+        (state/set-state! :plugin/indicator-text nil)
         ;; wait for the plugin register async messages
-        (js/setTimeout #(callback) 64)))
+        (js/setTimeout
+          (fn [] (callback)
+            (some-> (seq plugins-async)
+              (p/delay 16)
+              (p/then #(.register js/LSPluginCore (bean/->js plugins-async) true))))
+          (if (util/electron?) 64 0))))
     (p/catch
      (fn [^js e]
        (log/error :setup-plugin-system-error e)
@@ -853,7 +922,10 @@
   [callback]
   (if (not config/lsp-enabled?)
     (callback)
-    (init-plugins! callback)))
+    (do
+      (idb/start)
+      (setup-global-apis-for-web!)
+      (init-plugins! callback))))
 
 (comment
   {:pending (count (:plugin/updates-pending @state/state))

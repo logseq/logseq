@@ -467,8 +467,8 @@
   nil)
 
 
-(defmethod handle :installMarketPlugin [_ [_ mft]]
-  (plugin/install-or-update! mft))
+(defmethod handle :installMarketPlugin [_ [_ manifest]]
+  (plugin/install-or-update! manifest))
 
 (defmethod handle :updateMarketPlugin [_ [_ pkg]]
   (plugin/install-or-update! pkg))

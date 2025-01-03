@@ -87,7 +87,7 @@
       :ui/settings-open?                     false
       :ui/sidebar-open?                      false
       :ui/sidebar-width                      "40%"
-      :ui/left-sidebar-open?                 (boolean (storage/get "ls-left-sidebar-open?"))
+      :ui/left-sidebar-open?                 (boolean (storage/get :ls-left-sidebar-open?))
       :ui/theme                              (or (storage/get :ui/theme) "light")
       :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
       :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
@@ -204,7 +204,7 @@
       :mobile/app-state-change                 (atom nil)
 
       ;; plugin
-      :plugin/enabled                        (and (util/electron?)
+      :plugin/enabled                        (and util/plugin-platform?
                                                   ;; true false :theme-only
                                                   ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
       :plugin/preferences                    nil

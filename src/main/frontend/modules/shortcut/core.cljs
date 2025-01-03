@@ -288,6 +288,6 @@
                          (boolean? binding)))
                 (assoc id binding)))]
       ;; TODO: exclude current graph config shortcuts
-      (when (nil? binding)
-        (config-handler/set-config! :shortcuts (into-shortcuts graph-shortcuts)))
-      (global-config-handler/set-global-config-kv! :shortcuts (into-shortcuts global-shortcuts)))))
+      (config-handler/set-config! :shortcuts (into-shortcuts graph-shortcuts))
+      (when (util/electron?)
+        (global-config-handler/set-global-config-kv! :shortcuts (into-shortcuts global-shortcuts))))))

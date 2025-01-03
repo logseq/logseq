@@ -98,11 +98,13 @@ class PluginSettings extends EventEmitter<'change' | 'reset'> {
       return
     }
 
-    this.emit('change', Object.assign({}, this._settings), o)
+    this.emit('change', { ...this._settings }, o)
   }
 
   set settings(value: Record<string, any>) {
-    this._settings = value
+    const o = deepMerge({}, this._settings)
+    this._settings = value || {}
+    this.emit('change', { ...this._settings }, o)
   }
 
   get settings(): Record<string, any> {
@@ -153,6 +155,7 @@ interface PluginLocalOptions {
   name: string
   version: string
   mode: 'shadow' | 'iframe'
+  webPkg?: any // web plugin package.json data
   settingsSchema?: SettingSchemaDesc[]
   settings?: PluginSettings
   effect?: boolean
@@ -506,40 +509,45 @@ class PluginLocal extends EventEmitter<
   _resolveResourceFullUrl(filePath: string, localRoot?: string) {
     if (!filePath?.trim()) return
     localRoot = localRoot || this._localRoot
+
+    if (this.isWebPlugin) {
+      // TODO: strategy for Logseq plugins center
+      return `https://pub-80f42b85b62c40219354a834fcf2bbfa.r2.dev/${path.join(localRoot, filePath)}`
+    }
+
     const reg = /^(http|file)/
     if (!reg.test(filePath)) {
       const url = path.join(localRoot, filePath)
       filePath = reg.test(url) ? url : PROTOCOL_FILE + url
     }
-    return !this.options.effect && this.isInstalledInDotRoot
+    return !this.options.effect && this.isInstalledInLocalDotRoot
       ? convertToLSPResource(filePath, this.dotPluginsRoot)
       : filePath
   }
 
   async _preparePackageConfigs() {
-    const { url } = this._options
-    let pkg: any
+    const { url, webPkg } = this._options
+    let pkg: any = webPkg
 
-    try {
-      if (!url) {
-        throw new Error('Can not resolve package config location')
+    if (!pkg) {
+      try {
+        if (!url) {
+          throw new Error('Can not resolve package config location')
+        }
+
+        debug('prepare package root', url)
+
+        pkg = await invokeHostExportedApi('load_plugin_config', url)
+
+        if (!pkg || ((pkg = JSON.parse(pkg)), !pkg)) {
+          throw new Error(`Parse package config error #${url}/package.json`)
+        }
+      } catch (e) {
+        throw new IllegalPluginPackageError(e.message)
       }
-
-      debug('prepare package root', url)
-
-      pkg = await invokeHostExportedApi('load_plugin_config', url)
-
-      if (!pkg || ((pkg = JSON.parse(pkg)), !pkg)) {
-        throw new Error(`Parse package config error #${url}/package.json`)
-      }
-    } catch (e) {
-      throw new IllegalPluginPackageError(e.message)
     }
 
-    const localRoot = (this._localRoot = safetyPathNormalize(url))
-    const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
-
-      // Pick legal attrs
+    // Pick legal attrs
     ;[
       'name',
       'author',
@@ -551,18 +559,24 @@ class PluginLocal extends EventEmitter<
       'effect',
       'sponsors',
     ]
-      .concat(!this.isInstalledInDotRoot ? ['devEntry'] : [])
+      .concat(!this.isInstalledInLocalDotRoot ? ['devEntry'] : [])
       .forEach((k) => {
         this._options[k] = pkg[k]
       })
 
+    const { repo, version } = this._options
+    const localRoot = (this._localRoot = this.isWebPlugin ? `${repo}/${version}` : safetyPathNormalize(url))
+    const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
     const validateEntry = (main) => main && /\.(js|html)$/.test(main)
 
     // Entry from main
     const entry = logseq.entry || logseq.main || pkg.main
+
     if (validateEntry(entry)) {
       // Theme has no main
       this._options.entry = this._resolveResourceFullUrl(entry, localRoot)
+
+      // development mode entry
       this._options.devEntry = logseq.devEntry
 
       if (logseq.mode) {
@@ -577,16 +591,16 @@ class PluginLocal extends EventEmitter<
     this._options.icon = icon && this._resolveResourceFullUrl(icon)
     this._options.theme = Boolean(logseq.theme || !!logseq.themes)
 
-    // TODO: strategy for Logseq plugins center
-    if (this.isInstalledInDotRoot) {
+    if (this.isInstalledInLocalDotRoot) {
       this._id = path.basename(localRoot)
-    } else {
+    } else if (!this.isWebPlugin) {
+      // development mode
       if (logseq.id) {
         this._id = logseq.id
       } else {
         logseq.id = this.id
         try {
-          await invokeHostExportedApi('save_plugin_config', url, {
+          await invokeHostExportedApi('save_plugin_package_json', url, {
             ...pkg,
             logseq,
           })
@@ -631,7 +645,7 @@ class PluginLocal extends EventEmitter<
 
     let dirPathInstalled = null
     let tmp_file_method = 'write_user_tmp_file'
-    if (this.isInstalledInDotRoot) {
+    if (this.isInstalledInLocalDotRoot) {
       tmp_file_method = 'write_dotdir_file'
       dirPathInstalled = this._localRoot.replace(this.dotPluginsRoot, '')
       dirPathInstalled = path.join(DIR_PLUGINS, dirPathInstalled)
@@ -674,9 +688,10 @@ class PluginLocal extends EventEmitter<
       if (!options.url) return
 
       if (!options.url.startsWith('http') && this._localRoot) {
-        options.url = path.join(this._localRoot, options.url)
+        options.url = this._resolveResourceFullUrl(options.url, this._localRoot)
+
         // file:// for native
-        if (!options.url.startsWith('file:')) {
+        if (!this.isWebPlugin && !options.url.startsWith('file:')) {
           options.url = 'assets://' + options.url
         }
       }
@@ -850,6 +865,8 @@ class PluginLocal extends EventEmitter<
         return
       }
 
+      this._ctx.emit('beforeload', this)
+
       await this._tryToNormalizeEntry()
 
       this._caller = new LSPluginCaller(this)
@@ -870,6 +887,8 @@ class PluginLocal extends EventEmitter<
       })
 
       this._dispose(cleanInjectedScripts.bind(this))
+
+      this._ctx.emit('loadeded', this)
     } catch (e) {
       this.logger.error('load', e, true)
 
@@ -909,7 +928,7 @@ class PluginLocal extends EventEmitter<
     if (unregister) {
       await this.unload()
 
-      if (this.isInstalledInDotRoot) {
+      if (this.isWebPlugin || this.isInstalledInLocalDotRoot) {
         this._ctx.emit('unlink-plugin', this.id)
       }
 
@@ -971,12 +990,17 @@ class PluginLocal extends EventEmitter<
     }
   }
 
+  get isWebPlugin() {
+    return this._ctx.isWebPlatform || !!this.options.webPkg
+  }
+
   get layoutCore(): any {
     // @ts-expect-error
     return window.frontend.modules.layout.core
   }
 
-  get isInstalledInDotRoot() {
+  get isInstalledInLocalDotRoot() {
+    if (this.isWebPlugin) return false
     const dotRoot = this.dotConfigRoot
     const plgRoot = this.localRoot
     return dotRoot && plgRoot && plgRoot.startsWith(dotRoot)
@@ -1074,14 +1098,19 @@ class PluginLocal extends EventEmitter<
     this._sdk = value
   }
 
-  toJSON() {
+  toJSON(settings = true) {
     const json = { ...this.options } as any
     json.id = this.id
     json.err = this.loadErr
     json.usf = this.dotSettingsFile
-    json.iir = this.isInstalledInDotRoot
+    json.iir = this.isInstalledInLocalDotRoot
     json.lsr = this._resolveResourceFullUrl('/')
-    json.settings = json.settings?.toJSON()
+
+    if (settings === false) {
+      delete json.settings
+    } else {
+      json.settings = json.settings?.toJSON()
+    }
 
     return json
   }
@@ -1105,6 +1134,8 @@ class LSPluginCore
     | 'reset-custom-theme'
     | 'settings-changed'
     | 'unlink-plugin'
+    | 'beforeload'
+    | 'loadeded'
     | 'beforereload'
     | 'reloaded'
   >
@@ -1181,10 +1212,10 @@ class LSPluginCore
 
     // If there is currently a theme that has been set
     if (currentTheme) {
-      await this.selectTheme(currentTheme, { effect: false })
+      await this.selectTheme(currentTheme, { effect: false, emit: false })
     } else if (legacyTheme) {
       // Otherwise compatible with older versions
-      await this.selectTheme(legacyTheme, { effect: false })
+      await this.selectTheme(legacyTheme, { effect: false, emit: false })
     }
   }
 
@@ -1235,7 +1266,7 @@ class LSPluginCore
     try {
       this._isRegistering = true
 
-      const userConfigRoot = this._options.dotConfigRoot
+      const _userConfigRoot = this._options.dotConfigRoot
       const readyIndicator = (this._readyIndicator = deferred())
 
       await this.loadUserPreferences()
@@ -1318,7 +1349,7 @@ class LSPluginCore
         this.emit('registered', pluginLocal)
 
         // external plugins
-        if (!pluginLocal.isInstalledInDotRoot) {
+        if (!pluginLocal.isWebPlugin && !pluginLocal.isInstalledInLocalDotRoot) {
           externals.add(url)
         }
       }
@@ -1363,7 +1394,7 @@ class LSPluginCore
     for (const identity of plugins) {
       const p = this.ensurePlugin(identity)
 
-      if (!p.isInstalledInDotRoot) {
+      if (!p.isWebPlugin && !p.isInstalledInLocalDotRoot) {
         unregisteredExternals.push(p.options.url)
       }
 
@@ -1488,6 +1519,10 @@ class LSPluginCore
     return cleanInjectedUI(id)
   }
 
+  get isWebPlatform() {
+    return this.options.dotConfigRoot?.startsWith('LSPUserDotRoot')
+  }
+
   get registeredPlugins(): Map<PluginLocalIdentity, PluginLocal> {
     return this._registeredPlugins
   }
@@ -1543,10 +1578,7 @@ class LSPluginCore
     } = {}
   ) {
     const { effect, emit } = Object.assign(
-      {},
-      { effect: true, emit: true },
-      options
-    )
+      { effect: true, emit: true }, options)
 
     // Clear current theme before injecting.
     if (this._currentTheme) {
@@ -1581,7 +1613,7 @@ class LSPluginCore
     }
 
     if (emit) {
-      this.emit('theme-selected', theme)
+      this.emit('theme-selected', theme, options)
     }
   }
 

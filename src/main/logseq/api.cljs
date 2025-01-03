@@ -19,6 +19,7 @@
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.db :as db]
+            [frontend.idb :as idb]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-custom :as query-custom]
@@ -205,16 +206,18 @@
 
 (def ^:export load_plugin_config
   (fn [path]
-    (fs/read-file nil (util/node-path.join path "package.json"))))
+    (if (util/electron?)
+      (fs/read-file nil (util/node-path.join path "package.json"))
+      (do (js/console.log "==>>> TODO: load plugin package.json from local???")
+        ""))))
 
 (def ^:export load_plugin_readme
   (fn [path]
     (fs/read-file nil (util/node-path.join path "readme.md"))))
 
-(def ^:export save_plugin_config
+(def ^:export save_plugin_package_json
   (fn [path ^js data]
     (let [repo ""
-
           path (util/node-path.join path "package.json")]
       (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
 
@@ -354,30 +357,57 @@
 
 (def ^:export load_user_preferences
   (fn []
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            path (util/node-path.join path "preferences.json")
-            _    (fs/create-if-not-exists repo nil path)
-            json (fs/read-file nil path)
-            json (if (string/blank? json) "{}" json)]
-      (js/JSON.parse json))))
+    (let [repo ""
+          path (plugin-handler/get-ls-dotdir-root)
+          path (util/node-path.join path "preferences.json")]
+      (if (util/electron?)
+        (p/let [_ (fs/create-if-not-exists repo nil path)
+                json (fs/read-file nil path)
+                json (if (string/blank? json) "{}" json)]
+          (js/JSON.parse json))
+        (p/let [json (idb/get-item path)]
+          (or json #js {}))))))
 
 (def ^:export save_user_preferences
   (fn [^js data]
     (when data
-      (p/let [repo ""
-              path (plugin-handler/get-ls-dotdir-root)
-              path (util/node-path.join path "preferences.json")]
-        (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
+      (let [repo ""
+            path (plugin-handler/get-ls-dotdir-root)
+            path (util/node-path.join path "preferences.json")]
+        (if (util/electron?)
+          (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true})
+          (idb/set-item! path data))))))
 
 (def ^:export load_plugin_user_settings
   ;; results [path data]
-  (plugin-handler/make-fn-to-load-dotdir-json "settings" "{}"))
+  (plugin-handler/make-fn-to-load-dotdir-json "settings" #js {}))
 
 (def ^:export save_plugin_user_settings
   (fn [key ^js data]
     ((plugin-handler/make-fn-to-save-dotdir-json "settings")
-     key (js/JSON.stringify data nil 2))))
+     key data)))
+
+(defn ^:export load_installed_web_plugins
+ []
+ (let [getter (plugin-handler/make-fn-to-load-dotdir-json "installed-plugins-for-web" #js {})]
+        (some-> (getter :all) (p/then second))))
+
+(defn ^:export save_installed_web_plugin
+ ([^js plugin] (save_installed_web_plugin plugin false))
+ ([^js plugin remove?]
+  (when-let [id (some-> plugin (.-key) (name))]
+   (let [setter (plugin-handler/make-fn-to-save-dotdir-json "installed-plugins-for-web")
+         plugin (js/JSON.parse (js/JSON.stringify plugin))]
+    (p/let [^js plugins (or (load_installed_web_plugins) #js {})]
+           (if (true? remove?)
+            (when (aget plugins id)
+             (js-delete plugins id))
+            (gobj/set plugins id plugin))
+           (setter :all plugins))))))
+
+(defn ^:export unlink_installed_web_plugin
+ [key]
+ (save_installed_web_plugin #js {:key key} true))
 
 (def ^:export unlink_plugin_user_settings
   (plugin-handler/make-fn-to-unlink-dotdir-json "settings"))
@@ -1017,10 +1047,10 @@
 
 (def ^:export __install_plugin
   (fn [^js manifest]
-    (when-let [{:keys [repo id] :as mft} (bean/->clj manifest)]
+    (when-let [{:keys [repo id] :as manifest} (bean/->clj manifest)]
       (if-not (and repo id)
         (throw (js/Error. "[required] :repo :id"))
-        (plugin-common-handler/install-marketplace-plugin mft)))))
+        (plugin-common-handler/install-marketplace-plugin! manifest)))))
 
 ;; db
 (defn ^:export q
