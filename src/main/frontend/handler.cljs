@@ -136,6 +136,8 @@
 
 (defn start!
   [render]
+
+  (idb/start)
   (test/setup-test!)
   (get-system-info)
   (set-global-error-notification!)
@@ -156,7 +158,6 @@
       (p/catch (fn [_e]
                  (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
                  (state/set-indexedb-support! false))))
-  (idb/start)
 
   (react/run-custom-queries-when-idle!)
 

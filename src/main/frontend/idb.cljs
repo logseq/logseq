@@ -64,4 +64,5 @@
 (defn start
   "This component's only responsibility is to create a Store object"
   []
-  (reset! store (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
+  (when (nil? @store)
+    (reset! store (idb-keyval/newStore "localforage" "keyvaluepairs" 2))))

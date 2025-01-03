@@ -2,7 +2,6 @@ import path from 'path/path.js'
 
 // TODO split the capacitor abilities to a separate file for capacitor APIs
 import { Capacitor } from '@capacitor/core'
-import { StatusBar, Style } from '@capacitor/status-bar'
 import { Clipboard as CapacitorClipboard } from '@capacitor/clipboard'
 
 if (typeof window === 'undefined') {

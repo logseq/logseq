@@ -200,9 +200,9 @@
        :dangerouslySetInnerHTML {:__html content}}]]))
 
 (rum/defc remote-readme-display
-  [repo _content]
+  [{:keys [repo]} _content]
 
-  (let [src (str "lsp://logseq.com/marketplace.html?repo=" repo)]
+  (let [src (str "./marketplace.html?repo=" repo)]
     [:iframe.lsp-frame-readme {:src src}]))
 
 (defn security-warning
@@ -231,7 +231,7 @@
     [:a.btn
      {:class    (util/classnames [{:disabled   (or installed? installing-or-updating?)
                                    :installing installing-or-updating?}])
-      :on-click #(plugin-common-handler/install-marketplace-plugin item)}
+      :on-click #(plugin-common-handler/install-marketplace-plugin! item)}
      (if installed?
        (t :plugin/installed)
        (if installing-or-updating?
@@ -249,24 +249,27 @@
      [:strong (ui/icon "settings")]
      [:ul.menu-list
       [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t :plugin/open-settings)]
-      [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
+      (when (util/electron?)
+        [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)])
       [:li {:on-click #(plugin-handler/open-report-modal! id name)} (t :plugin/report-security)]
       [:li {:on-click
             #(-> (shui/dialog-confirm!
                   [:b (t :plugin/delete-alert name)])
                  (p/then (fn []
-                           (plugin-common-handler/unregister-plugin id)
-                           (plugin-config-handler/remove-plugin id))))}
+                          (plugin-common-handler/unregister-plugin id)
+
+                          (when (util/electron?)
+                           (plugin-config-handler/remove-plugin id)))))}
        (t :plugin/uninstall)]]]
 
     (when (seq sponsors)
-      [:div.de.sponsors
-       [:strong (ui/icon "coffee")]
-       [:ul.menu-list
-        (for [link sponsors]
-          [:li {:key link}
-           [:a {:href link :target "_blank"}
-            [:span.flex.items-center link (ui/icon "external-link")]]])]])]
+     [:div.de.sponsors
+      [:strong (ui/icon "coffee")]
+      [:ul.menu-list
+       (for [link sponsors]
+        [:li {:key link}
+         [:a {:href link :target "_blank"}
+          [:span.flex.items-center link (ui/icon "external-link")]]])]])]
 
    [:div.r.flex.items-center
     (when (and unpacked? (not disabled?))
@@ -297,74 +300,75 @@
                true)]])
 
 (defn get-open-plugin-readme-handler
-  [url item repo]
+  [url {:keys [webPkg] :as item} repo]
   #(plugin-handler/open-readme!
-    url item (if repo remote-readme-display local-markdown-display)))
+    url item (if (or repo webPkg) remote-readme-display local-markdown-display)))
 
 (rum/defc plugin-item-card < rum/static
-  [t {:keys [id name title version url description author icon iir repo sponsors] :as item}
-   disabled? market? *search-key has-other-pending?
-   installing-or-updating? installed? stat coming-update]
+ [t {:keys [id name title version url description author icon iir repo sponsors webPkg] :as item}
+  disabled? market? *search-key has-other-pending?
+  installing-or-updating? installed? stat coming-update]
 
-  (let [name        (or title name "Untitled")
-        unpacked?   (not iir)
-        new-version (state/coming-update-new-version? coming-update)]
-    [:div.cp__plugins-item-card
-     {:key   (str "lsp-card-" id)
-      :class (util/classnames
-              [{:market          market?
-                :installed       installed?
-                :updating        installing-or-updating?
-                :has-new-version new-version}])}
+ (let [name (or title name "Untitled")
+       web? (not (nil? webPkg))
+       unpacked? (and (not web?) (not iir))
+       new-version (state/coming-update-new-version? coming-update)]
+  [:div.cp__plugins-item-card
+   {:key   (str "lsp-card-" id)
+    :class (util/classnames
+            [{:market          market?
+              :installed       installed?
+              :updating        installing-or-updating?
+              :has-new-version new-version}])}
 
-     [:div.l.link-block.cursor-pointer
+   [:div.l.link-block.cursor-pointer
+    {:on-click (get-open-plugin-readme-handler url item repo)}
+    (if (and icon (not (string/blank? icon)))
+     [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
+     svg/folder)
+
+    (when (and (not market?) unpacked?)
+     [:span.flex.justify-center.text-xs.text-error.pt-2 (t :plugin/unpacked)])]
+
+   [:div.r
+    [:h3.head.text-xl.font-bold.pt-1.5
+
+     [:span.l.link-block.cursor-pointer
       {:on-click (get-open-plugin-readme-handler url item repo)}
-      (if (and icon (not (string/blank? icon)))
-        [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
-        svg/folder)
+      name]
+     (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
 
-      (when (and (not market?) unpacked?)
-        [:span.flex.justify-center.text-xs.text-error.pt-2 (t :plugin/unpacked)])]
+    [:div.desc.text-xs.opacity-70
+     [:p description]
+     ;;[:small (js/JSON.stringify (bean/->js settings))]
+     ]
 
-     [:div.r
-      [:h3.head.text-xl.font-bold.pt-1.5
+    ;; Author & Identity
+    [:div.flag
+     [:p.text-xs.pr-2.flex.justify-between
+      [:small {:on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
+                           (reset! *search-key (str "@" author))
+                           (.select el))} author]
+      [:small {:on-click #(do
+                           (notification/show! "Copied!" :success)
+                           (util/copy-to-clipboard! id))}
+       (str "ID: " id)]]]
 
-       [:span.l.link-block.cursor-pointer
-        {:on-click (get-open-plugin-readme-handler url item repo)}
-        name]
-       (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
+    ;; Github repo
+    [:div.flag.is-top.opacity-50
+     (when repo
+      [:a.flex {:target "_blank"
+                :href   (plugin-handler/gh-repo-url repo)}
+       (svg/github {:width 16 :height 16})])]
 
-      [:div.desc.text-xs.opacity-70
-       [:p description]
-       ;;[:small (js/JSON.stringify (bean/->js settings))]
-       ]
+    (if market?
+     ;; market ctls
+     (card-ctls-of-market item stat installed? installing-or-updating?)
 
-      ;; Author & Identity
-      [:div.flag
-       [:p.text-xs.pr-2.flex.justify-between
-        [:small {:on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
-                              (reset! *search-key (str "@" author))
-                              (.select el))} author]
-        [:small {:on-click #(do
-                              (notification/show! "Copied!" :success)
-                              (util/copy-to-clipboard! id))}
-         (str "ID: " id)]]]
-
-      ;; Github repo
-      [:div.flag.is-top.opacity-50
-       (when repo
-         [:a.flex {:target "_blank"
-                   :href   (plugin-handler/gh-repo-url repo)}
-          (svg/github {:width 16 :height 16})])]
-
-      (if market?
-        ;; market ctls
-        (card-ctls-of-market item stat installed? installing-or-updating?)
-
-        ;; installed ctls
-        (card-ctls-of-installed
-         id name url sponsors unpacked? disabled?
-         installing-or-updating? has-other-pending? new-version item))]]))
+     ;; installed ctls
+     (card-ctls-of-installed
+      id name url sponsors unpacked? disabled?
+      installing-or-updating? has-other-pending? new-version item))]]))
 
 (rum/defc panel-tab-search < rum/static
   [search-key *search-key *search-ref]
@@ -501,7 +505,7 @@
      [:div.flex.items-center.l
       (category-tabs t total-nums category #(reset! *category %))
 
-      (when (and develop-mode? (not market?))
+      (when (and develop-mode? (util/electron?) (not market?))
         [:div
          (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
                     :arrow true}
@@ -512,7 +516,8 @@
                      :class "load-unpacked"
                      :on-click plugin-handler/load-unpacked-plugin}))
 
-         (unpacked-plugin-loader selected-unpacked-pkg)])]
+         (when (util/electron?)
+           (unpacked-plugin-loader selected-unpacked-pkg))])]
 
      [:div.flex.items-center.r
       ;; extra info
@@ -600,16 +605,18 @@
                             [{:title [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
                               :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}])
 
-                          [{:title [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings-page/network-proxy)]
-                            :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}]
+                          (when (util/electron?)
+                           [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings-page/network-proxy)]
+                             :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}
 
-                          [{:title [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
-                            :options {:on-click plugin-config-handler/open-replace-plugins-modal}}]
+                            {:title   [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
+                             :options {:on-click plugin-config-handler/open-replace-plugins-modal}}])
 
                           [{:hr true}]
 
-                          (when (state/developer-mode?)
-                            [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
+                          (when (and (state/developer-mode?)
+                                     (util/electron?))
+                           [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
                               :options {:on-click
                                         #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                            (js/apis.openPath (str root "/preferences.json")))}}
@@ -794,7 +801,7 @@
          (when (seq sorted-plugins)
            (lazy-items-loader load-more-pages!))]])]))
 
-(rum/defcs installed-plugins
+(rum/defcs ^:large-vars/data-var installed-plugins
   < rum/static rum/reactive
   plugin-items-list-mixins
   (rum/local "" ::search-key)
@@ -891,8 +898,11 @@
                                true nil (get coming-updates pid)))
            (:id item)))]
 
-      (when (seq sorted-plugins)
-        (lazy-items-loader load-more-pages!))]]))
+      (if (seq sorted-plugins)
+        (lazy-items-loader load-more-pages!)
+        [:div.flex.items-center.justify-center.py-28.flex-col.gap-2.opacity-30
+         (shui/tabler-icon "list-search" {:size 40})
+         [:span.text-sm "Nothing Founded."]])]]))
 
 (rum/defcs waiting-coming-updates
   < rum/reactive
@@ -1246,22 +1256,31 @@
      [market?])
 
     [:div.cp__plugins-page
-     {:ref       *el-ref
+     {:ref *el-ref
+      :class (when-not (util/electron?) "web-platform")
       :tab-index "-1"}
-     [:h1 (t :plugins)]
-     (security-warning)
 
-     [:hr.my-4]
+     [:h1 (t :plugins)]
+
+     (when (util/electron?)
+       [:<>
+        (security-warning)
+        [:hr.my-4]])
 
      [:div.tabs.flex.items-center.justify-center
       [:div.tabs-inner.flex.items-center
-       (ui/button [:span.it (t :plugin/installed)]
-                  :on-click #(set-active! :installed)
-                  :intent (if-not market? "" "link"))
+       (shui/button {:on-click #(set-active! :installed)
+                     :class (when (not market?) "active")
+                     :size :sm
+                     :variant :text}
+         (t :plugin/installed))
 
-       (ui/button [:span.mk (svg/apps 16) (t :plugin/marketplace)]
-                  :on-click #(set-active! :marketplace)
-                  :intent (if market? "" "link"))]]
+       (shui/button {:on-click #(set-active! :marketplace)
+                     :class (when market? "active")
+                     :size :sm
+                     :variant :text}
+         (shui/tabler-icon "apps")
+         (t :plugin/marketplace))]]
 
      [:div.panels
       (if market?
