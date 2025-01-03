@@ -293,14 +293,13 @@
                (and b (readable-properties @conn b)))
             ":template properties are ignored to not invalidate its property types"))
 
-      ;; local datetime could be different from CI so this is unstable
-      #_(is (= {:logseq.task/deadline 1669392000000}
-               (readable-properties @conn (db-test/find-block-by-content @conn "only deadline")))
-            "deadline block has correct journal as property value")
+      (is (= {:logseq.task/deadline (date-time-util/journal-day->ms 20221126)}
+             (readable-properties @conn (db-test/find-block-by-content @conn "only deadline")))
+          "deadline block has correct journal as property value")
 
-      #_(is (= {:logseq.task/deadline 1669305600000}
-               (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled")))
-            "scheduled block converted to correct deadline")
+      (is (= {:logseq.task/deadline (date-time-util/journal-day->ms 20221125)}
+             (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled")))
+          "scheduled block converted to correct deadline")
 
       (is (= 1 (count (d/q '[:find [(pull ?b [*]) ...]
                              :in $ ?content
