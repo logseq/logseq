@@ -49,7 +49,9 @@
                         (when (db-property-util/built-in-has-ref-value? k)
                           [k v])))
                 (into {})))]
-      (cond-> [(if class? (db-class/build-new-class db page') page')]
+      (cond-> (if class? [(db-class/build-new-class db page')
+                          [:db/retract [:block/uuid (:block/uuid page)] :block/tags :logseq.class/Page]]
+                  [page'])
         (seq property-vals-tx-m)
         (into (vals property-vals-tx-m))
         true
@@ -187,7 +189,8 @@
                    (not (ldb/class? existing-page))
                    (or (ldb/property? existing-page) (ldb/internal-page? existing-page)))
           ;; Convert existing user property or page to class
-          (let [tx-data (db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :db/ident :block/created-at]))]
+          (let [tx-data [(db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :db/ident :block/created-at]))
+                         [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
             {:tx-meta tx-meta
              :tx-data tx-data})))
       (let [format    :markdown

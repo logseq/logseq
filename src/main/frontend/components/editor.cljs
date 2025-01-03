@@ -161,8 +161,7 @@
                                                                 #{:logseq.class/Tag}
                                                                 ;; Page existence here should be the same as entity-util/page?.
                                                                 ;; Don't show 'New page' if a page has any of these tags
-                                                                (into #{:logseq.class/Page :logseq.class/Tag :logseq.class/Property}
-                                                                      db-class/page-children-classes)))
+                                                                db-class/page-classes))
                                            (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
                                      partial-matched-pages
                                      (if db-tag?
