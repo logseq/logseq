@@ -596,6 +596,12 @@
                               (= (:db/ident data) :logseq.kv/schema-version)
                               nil
 
+                              (:file/path data)
+                              (if-let [block (d/entity @conn [:file/path (:file/path data)])]
+                                (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
+                                  (merge data existing-data))
+                                data)
+
                               (:block/uuid data)
                               (if-let [block (d/entity @conn [:block/uuid (:block/uuid data)])]
                                 (do
