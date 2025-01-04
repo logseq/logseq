@@ -7,10 +7,10 @@
             [cljs-time.format :as tf]
             [cljs-time.local :as tl]
             [frontend.state :as state]
-            [logseq.common.util.date-time :as date-time-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.common.date :as common-date]))
+            [logseq.common.date :as common-date]
+            [logseq.common.util.date-time :as date-time-util]))
 
 (defn nld-parse
   [s]
@@ -73,17 +73,20 @@
                                       :date-str s})
       nil)))
 
+(defn start-of-day [date]
+  (t/date-time (t/year date) (t/month date) (t/day date)))
+
 (defn today
   []
   (journal-name))
 
 (defn tomorrow
   []
-  (journal-name (t/plus (t/today) (t/days 1))))
+  (journal-name (t/plus (start-of-day (tl/local-now)) (t/days 1))))
 
 (defn yesterday
   []
-  (journal-name (t/minus (t/today) (t/days 1))))
+  (journal-name (t/minus (start-of-day (tl/local-now)) (t/days 1))))
 
 (defn get-local-date
   []
