@@ -365,7 +365,7 @@ These tasks are specific to database graphs. For these tasks there is a one time
 
   ```sh
   # One or more graphs can be validated e.g.
-  $ bb dev:validate-db test-db schema -c -g
+  $ bb dev:validate-db test-db schema
   Read graph test-db with 1572 datoms, 220 entities and 13 properties
   Valid!
   Read graph schema with 26105 datoms, 2320 entities and 3168 properties
