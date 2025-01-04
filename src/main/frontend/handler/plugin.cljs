@@ -627,38 +627,38 @@
   (fn [key]
     (when-let [key (and key (name key))]
       (let [repo ""
-            path (get-ls-dotdir-root)
-            path (util/node-path.join path dirname (str key ".json"))]
+            dotroot (get-ls-dotdir-root)
+            filepath (util/node-path.join dotroot dirname (str key ".json"))]
         (if (util/electron?)
-          (p/let [exist? (fs/file-exists? path dirname)
-                  _ (when-not exist? (fs/mkdir! (util/node-path.join path dirname)))
-                  _ (fs/create-if-not-exists repo nil path (js/JSON.stringify default))
-                  json (fs/read-file nil path)]
-            [path (js/JSON.parse json)])
-          (p/let [data (idb/get-item path)]
-            [path (or data default)]))))))
+          (p/let [exist? (fs/file-exists? filepath)
+                  _ (when-not exist? (fs/mkdir! filepath))
+                  _ (fs/create-if-not-exists repo nil filepath (js/JSON.stringify default))
+                  json (fs/read-file nil filepath)]
+            [filepath (js/JSON.parse json)])
+          (p/let [data (idb/get-item filepath)]
+            [filepath (or data default)]))))))
 
 (defn make-fn-to-save-dotdir-json
   [dirname]
   (fn [key ^js data]
     (when-let [key (and key (name key))]
       (let [repo ""
-            path (get-ls-dotdir-root)
-            path (util/node-path.join path dirname (str key ".json"))]
+            dotroot (get-ls-dotdir-root)
+            filepath (util/node-path.join dotroot dirname (str key ".json"))]
         (if (util/electron?)
-          (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true})
-          (idb/set-item! path data))))))
+          (fs/write-file! repo nil filepath (js/JSON.stringify data nil 2) {:skip-compare? true})
+          (idb/set-item! filepath data))))))
 
 (defn make-fn-to-unlink-dotdir-json
   [dirname]
   (fn [key]
     (when-let [key (and key (name key))]
       (let [repo ""
-            path (get-ls-dotdir-root)
-            path (util/node-path.join path dirname (str key ".json"))]
+            dotroot (get-ls-dotdir-root)
+            filepath (util/node-path.join dotroot dirname (str key ".json"))]
         (if (util/electron?)
-          (fs/unlink! repo path nil)
-          (idb/remove-item! path))))))
+          (fs/unlink! repo filepath nil)
+          (idb/remove-item! filepath))))))
 
 (defn show-themes-modal!
   ([] (show-themes-modal! false))
