@@ -101,7 +101,7 @@
                       (if-let [res (and res (bean/->clj res))]
                         (let [pkgs (:packages res)
                               pkgs (if (util/electron?) pkgs
-                                     (some->> pkgs (filterv #(not (true? (:effect %))))))]
+                                     (some->> pkgs (filterv #(or (true? (:web %)) (not (true? (:effect %)))))))]
                           (state/set-state! :plugin/marketplace-pkgs pkgs)
                           (resolve pkgs))
                         (reject nil)))]
