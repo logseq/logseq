@@ -93,15 +93,18 @@
   {:did-mount (fn [state]
                 (open-root-block! state)
                 state)}
-  [page-e blocks config sidebar? whiteboard? _block-uuid]
+  [page-e blocks config sidebar? whiteboard? _block-uuid page-outline?]
   (when page-e
-    (let [hiccup (component-block/->hiccup blocks config {})]
+    (let [hiccup (if page-outline?
+                   (component-block/->page-outline blocks config {})
+                   (component-block/->hiccup blocks config {}))]
       [:div.page-blocks-inner {:style {:margin-left (if whiteboard? 0 -20)
                                        :min-height 29}}
        (rum/with-key
          (content/content (str (:block/uuid page-e))
                           {:hiccup   hiccup
-                           :sidebar? sidebar?})
+                           :sidebar? sidebar?
+                           :page-outline? page-outline?})
          (str (:block/uuid page-e) "-hiccup"))])))
 
 (declare page-cp)
@@ -204,7 +207,7 @@
                                   (date/journal-title->int (date/today))))
                      (state/pub-event! [:journal/insert-template page-name])))
                  state)}
-  [state page-e {:keys [sidebar? whiteboard?] :as config}]
+  [state page-e {:keys [sidebar? whiteboard? page-outline?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
@@ -244,11 +247,12 @@
                                        (string/blank? (:block/title block')))))]
             [:div
              {:class (when add-button? "show-add-button")}
-             (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
-             (let [args (if block-id
+             (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id page-outline?)
+             (when-not (or config/publishing? page-outline?)
+               (let [args (if block-id
                           {:block-uuid block-id}
                           {:page page-name})]
-               (add-button args (:container-id config)))]))))))
+                 (add-button args (:container-id config)))])))))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -764,6 +768,15 @@
      "-"
      (or (:page-name option)
          (get-page-name state)))))
+
+(rum/defc handle-page-outline < rum/reactive
+  {:init (fn [state]
+           (db-async/<get-block (state/get-current-repo) (state/get-current-page))
+           state)}
+  [page]
+  (when-let [repo (state/get-current-repo)]
+    (page-blocks-cp repo page {:sidebar? true
+                               :page-outline? true})))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 

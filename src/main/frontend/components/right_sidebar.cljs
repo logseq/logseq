@@ -53,6 +53,33 @@
                  :scroll-container (get-scrollable-container)
                  :repo repo}))
 
+(rum/defc page-outline < rum/reactive db-mixins/query
+  [repo]
+  [:div.contents.flex-col.flex.ml-3
+   (if-let [page-name-or-uuid (state/get-current-page)]
+     (if-let [page-or-block-e (db/get-page page-name-or-uuid)]
+       (if-let [zoom-e (:block/page page-or-block-e)]
+         (let [page-name (:block/name zoom-e)
+               page-e (db/get-page page-name)]
+           [(let [uuid (:block/uuid page-or-block-e)]
+              [:style (str "
+                             .item-type-page-outline .block-content {
+                                       &:not([blockid='" uuid "']) {
+                                                 opacity: 0.6;
+                                       }
+
+                                       &[blockid='" uuid "'] .as-heading {
+                                                 background-color: var(--ls-block-highlight-color);
+                                       }
+                             }
+                     ")]
+              (block/breadcrumb {:block false} repo (:block/uuid page-e) {:show-page? true
+                                                                          :indent? false}))
+            (page/handle-page-outline page-e page-name)])
+         (page/handle-page-outline page-or-block-e page-name-or-uuid))
+       [:div.ml-6.text-sm (t :right-side-bar/page-outline-no-found)])
+     [:div.ml-6.text-sm (t :right-side-bar/page-outline-no-found)])])
+
 (rum/defc shortcut-settings
   []
   [:div.contents.flex-col.flex.ml-3
@@ -70,6 +97,11 @@
 (defn build-sidebar-item
   [repo idx db-id block-type *db-id init-key]
   (case (keyword block-type)
+
+    :page-outline
+    [[:.flex.items-center.page-outline (shui/tabler-icon "line-height" {:class "text-md mr-2"}) (t :right-side-bar/page-outline)]
+     (page-outline repo)]
+
     :contents
     [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
      (page-cp repo "contents")]
@@ -393,6 +425,11 @@
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                      (state/sidebar-add-block! repo "contents" :contents))}
           (t :right-side-bar/contents)]]
+
+        [:div.text-sm
+         [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                     (state/sidebar-add-block! repo "page-outline" :page-outline))}
+          (t :right-side-bar/page-outline)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn []
