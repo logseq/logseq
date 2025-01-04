@@ -1,6 +1,7 @@
 (ns frontend.components.property.value
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
+            [cljs-time.local :as local]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
@@ -298,6 +299,14 @@
          (when done-choice
            (db-property/property-value-content done-choice))]])]))
 
+(defn- get-local-journal-date-time
+  [year month day]
+  (let [[op h m] (:offset (t/default-time-zone))
+        f (if (= op :-) t/plus t/minus)]
+    (-> (t/date-time year month day)
+        (f (t/hours h))
+        (f (t/minutes m)))))
+
 (rum/defcs calendar-inner < rum/reactive db-mixins/query
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
   {:init (fn [state]
@@ -320,7 +329,10 @@
         value (get block (:db/ident property))
         value (cond
                 (map? value)
-                (js/Date. (date/journal-title->long (:block/title value)))
+                (when-let [day (:block/journal-day value)]
+                  (let [t (tc/to-date-time (date/journal-day->ts day))]
+                    (js/Date.
+                     (get-local-journal-date-time (t/year t) (t/month t) (t/day t)))))
 
                 (number? value)
                 (js/Date. value)
@@ -330,26 +342,25 @@
                   (.setHours d 0 0 0)
                   d))
         *ident (::identity state)
-        initial-day (or (some-> value (.getTime) (js/Date.)) (js/Date.))
+        initial-day value
         initial-month (when value
-                        (js/Date. (.getFullYear value) (.getMonth value)))
+                        (let [d (tc/to-date-time value)]
+                          (js/Date. (t/last-day-of-the-month  (t/date-time (t/year d) (t/month d))))))
         select-handler!
         (fn [^js d]
-          ;; force local to UTC
           (when d
-            (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
-              (let [journal (date/js-date->journal-title gd)]
-                (p/do!
-                 (when-not (db/get-page journal)
-                   (page-handler/<create! journal {:redirect? false
-                                                   :create-first-block? false}))
-                 (when (fn? on-change)
-                   (let [value (if datetime? (tc/to-long d) (db/get-page journal))]
-                     (on-change value)))
-                 (when-not datetime?
-                   (shui/popup-hide! id)
-                   (ui/hide-popups-until-preview-popup!)
-                   (shui/dialog-close!)))))))]
+            (let [journal (date/js-date->journal-title d)]
+              (p/do!
+               (when-not (db/get-page journal)
+                 (page-handler/<create! journal {:redirect? false
+                                                 :create-first-block? false}))
+               (when (fn? on-change)
+                 (let [value (if datetime? (tc/to-long d) (db/get-page journal))]
+                   (on-change value)))
+               (when-not datetime?
+                 (shui/popup-hide! id)
+                 (ui/hide-popups-until-preview-popup!)
+                 (shui/dialog-close!))))))]
     [:div.flex.flex-row.gap-2
      [:div.flex.flex-col
       (ui/nlp-calendar
@@ -380,32 +391,30 @@
                                   :title "Overdue"))
        content])))
 
-(defn- human-date-label
-  [date]
-  (let [today (t/today)
-        today-y (t/year today)
-        today-m (t/month today)
-        today-d (t/day today)
-        same-day? (fn [date]
-                    (and (= today-y (t/year date)) (= today-m (t/month date)) (= today-d (t/day date))))]
+(defn- human-date-label [date]
+  (let [given-date (date/start-of-day date)
+        now (local/local-now)
+        today (date/start-of-day now)
+        tomorrow (t/plus today (t/days 1))
+        yesterday (t/minus today (t/days 1))]
     (cond
-      (same-day? date)
-      "Today"
-      (let [tomorrow (t/minus date (t/days 1))]
-        (same-day? tomorrow))
-      "Tomorrow"
-      (let [yesterday (t/plus date (t/days 1))]
-        (same-day? yesterday))
+      (and (t/before? given-date today) (not (t/before? given-date yesterday)))
       "Yesterday"
-      :else
-      nil)))
+
+      (and (not (t/before? given-date today)) (t/before? given-date tomorrow))
+      "Today"
+
+      (and (not (t/before? given-date tomorrow)) (t/before? given-date (t/plus tomorrow (t/days 1))))
+      "Tomorrow"
+
+      :else nil)))
 
 (rum/defc datetime-value
   [value property-id repeated-task?]
-  (when-let [date (tc/from-long value)]
+  (when-let [date (t/to-default-time-zone (tc/from-long value))]
     (let [content [:div.ls-datetime.flex.flex-row.gap-1.items-center
                    (when-let [page-cp (state/get-component :block/page-cp)]
-                     (let [page-title (date/journal-name (date/js-date->goog-date (js/Date. value)))]
+                     (let [page-title (date/journal-name date)]
                        (rum/with-key
                          (page-cp {:disable-preview? true
                                    :show-non-exists-page? true
@@ -469,7 +478,7 @@
           (ui/icon "repeat" {:size 14 :class "opacity-40"}))
         (cond
           (map? value)
-          (let [date (tc/to-date-time (date/journal-title->long (:block/title value)))
+          (let [date (tc/to-date-time (date/journal-day->ts (:block/journal-day value)))
                 compare-value (some-> date
                                       (t/plus (t/days 1))
                                       (t/minus (t/seconds 1)))
@@ -477,7 +486,7 @@
                           (rum/with-key
                             (page-cp {:disable-preview? true
                                       :meta-click? other-position?
-                                      :label (human-date-label date)} value)
+                                      :label (human-date-label (t/to-default-time-zone date))} value)
                             (:db/id value)))]
             (if (or repeated-task? (contains? #{:logseq.task/deadline :logseq.task/scheduled} (:db/id property)))
               (overdue compare-value content)
@@ -501,19 +510,11 @@
                          :datetime? datetime?
                          :multiple-values? multiple-values?
                          :on-change (fn [value]
-                                      (let [journal (when (number? value)
-                                                      (date/journal-name (date/js-date->goog-date (js/Date. value))))]
-                                        (p/do!
-                                         (when-not (db/get-page journal)
-                                           (page-handler/<create! journal
-                                                                  {:redirect? false
-                                                                   :create-first-block? false
-                                                                   :tags #{:logseq.class/Journal}}))
-                                         (property-handler/set-block-property! repo (:block/uuid block)
-                                                                               (:db/ident property)
-                                                                               (if datetime?
-                                                                                 value
-                                                                                 (:db/id value))))))
+                                      (property-handler/set-block-property! repo (:block/uuid block)
+                                                                            (:db/ident property)
+                                                                            (if datetime?
+                                                                              value
+                                                                              (:db/id value))))
                          :del-btn? (some? value)
                          :on-delete (fn []
                                       (property-handler/set-block-property! repo (:block/uuid block)
