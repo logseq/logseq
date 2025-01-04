@@ -17,7 +17,8 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.common.date :as common-date]))
 
 (defn heading-block?
   [block]
@@ -235,7 +236,7 @@
                                            v' (text/parse-property k v mldoc-ast user-config)]
                                        [k' v' mldoc-ast v])
                                      (do (swap! *invalid-properties conj k)
-                                       nil)))))
+                                         nil)))))
                           (remove #(nil? (second %))))
           page-refs (get-page-ref-names-from-properties properties user-config)
           block-refs (extract-block-refs properties)
@@ -297,6 +298,68 @@
 
 (def convert-page-if-journal (memoize convert-page-if-journal-impl))
 
+;; Hack to detect export as some fns are too deeply nested to be refactored to get explicit option
+(def *export-to-db-graph? (atom false))
+
+(defn- page-name-string->map
+  [original-page-name db date-formatter
+   {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check?]}]
+  (let [db-based? (ldb/db-based-graph? db)
+        original-page-name (common-util/remove-boundary-slashes original-page-name)
+        [original-page-name' page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
+        namespace? (and (or (not db-based?) @*export-to-db-graph?)
+                        (not (boolean (text/get-nested-page-name original-page-name')))
+                        (text/namespace-page? original-page-name'))
+        page-entity (when (and db (not skip-existing-page-check?))
+                      (if class?
+                        (ldb/get-case-page db original-page-name')
+                        (ldb/get-page db original-page-name')))
+        original-page-name' (or from-page (:block/title page-entity) original-page-name')
+        page (merge
+              {:block/name page-name
+               :block/title original-page-name'}
+              (when (and original-page-name
+                         (not= (string/lower-case original-page-name)
+                               (string/lower-case original-page-name'))
+                         (not @*export-to-db-graph?))
+                {:block.temp/original-page-name original-page-name})
+              (if (and class? page-entity (:db/ident page-entity))
+                {:block/uuid (:block/uuid page-entity)
+                 :db/ident (:db/ident page-entity)}
+                (let [new-uuid* (if (uuid? page-uuid)
+                                  page-uuid
+                                  (if journal-day
+                                    (common-uuid/gen-uuid :journal-page-uuid journal-day)
+                                    (common-uuid/gen-uuid)))
+                      new-uuid (if skip-existing-page-check?
+                                 new-uuid*
+                                 (or
+                                  (cond page-entity       (:block/uuid page-entity)
+                                        (uuid? page-uuid) page-uuid)
+                                  new-uuid*))]
+                  {:block/uuid new-uuid}))
+              (when namespace?
+                (let [namespace' (first (common-util/split-last "/" original-page-name))]
+                  (when-not (string/blank? namespace')
+                    {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace')}})))
+              (when (and with-timestamp? (or skip-existing-page-check? (not page-entity))) ;; Only assign timestamp on creating new entity
+                (let [current-ms (common-util/time-ms)]
+                  {:block/created-at current-ms
+                   :block/updated-at current-ms}))
+              (if journal-day
+                (cond-> {:block/journal-day journal-day}
+                  db-based?
+                  (assoc :block/tags [:logseq.class/Journal])
+                  (not db-based?)
+                  (assoc :block/type "journal"))
+                {}))]
+    [page page-entity]))
+
+(defn sanitize-hashtag-name
+  "This must be kept in sync with its reverse operation in logseq.db.frontend.content"
+  [s]
+  (string/replace s "#" "HashTag-"))
+
 ;; TODO: refactor
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
@@ -306,74 +369,79 @@
     as there's no chance to introduce timestamps via editing in page
    `skip-existing-page-check?`: if true, allows pages to have the same name"
   [original-page-name db with-timestamp? date-formatter
-   & {:keys [page-uuid from-page class? skip-existing-page-check?]}]
+   & {:keys [page-uuid class?] :as options}]
   (when-not (and db (common-util/uuid-string? original-page-name)
                  (not (ldb/page? (d/entity db [:block/uuid (uuid original-page-name)]))))
-    (let [db-based? (ldb/db-based-graph? db)
-          original-page-name (string/trim original-page-name)
+    (let [original-page-name (-> (string/trim original-page-name)
+                                 sanitize-hashtag-name)
           [page _page-entity] (cond
-                               (and original-page-name (string? original-page-name))
-                               (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
-                                     [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
-                                     namespace? (and (not db-based?)
-                                                     (not (boolean (text/get-nested-page-name original-page-name)))
-                                                     (text/namespace-page? original-page-name))
-                                     page-entity (when (and db (not skip-existing-page-check?))
-                                                   (if class?
-                                                     (ldb/get-case-page db original-page-name)
-                                                     (ldb/get-page db original-page-name)))
-                                     original-page-name (or from-page (:block/title page-entity) original-page-name)
-                                     page (merge
-                                           {:block/name page-name
-                                            :block/title original-page-name}
-                                           (if (and class? page-entity (:db/ident page-entity))
-                                             {:block/uuid (:block/uuid page-entity)
-                                              :db/ident (:db/ident page-entity)}
-                                             (let [new-uuid* (if (uuid? page-uuid)
-                                                               page-uuid
-                                                               (if journal-day
-                                                                 (common-uuid/gen-uuid :journal-page-uuid journal-day)
-                                                                 (common-uuid/gen-uuid)))
-                                                   new-uuid (if skip-existing-page-check?
-                                                              new-uuid*
-                                                              (or
-                                                               (cond page-entity       (:block/uuid page-entity)
-                                                                     (uuid? page-uuid) page-uuid)
-                                                               new-uuid*))]
-                                               {:block/uuid new-uuid}))
-                                           (when namespace?
-                                             (let [namespace' (first (common-util/split-last "/" original-page-name))]
-                                               (when-not (string/blank? namespace')
-                                                 {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace')}})))
-                                           (when (and with-timestamp? (or skip-existing-page-check? (not page-entity))) ;; Only assign timestamp on creating new entity
-                                             (let [current-ms (common-util/time-ms)]
-                                               {:block/created-at current-ms
-                                                :block/updated-at current-ms}))
-                                           (if journal-day
-                                             (cond-> {:block/type "journal"
-                                                      :block/journal-day journal-day}
-                                               db-based?
-                                               (assoc :block/tags [:logseq.class/Journal]))
-                                             {}))]
-                                 [page page-entity])
+                                (and original-page-name (string? original-page-name))
+                                (page-name-string->map original-page-name db date-formatter
+                                                       (assoc options :with-timestamp? with-timestamp?))
+                                :else
+                                (let [page (cond (and (map? original-page-name) (:block/uuid original-page-name))
+                                                 original-page-name
 
-                               :else
-                               (let [page (cond (and (map? original-page-name) (:block/uuid original-page-name))
-                                                original-page-name
+                                                 (map? original-page-name)
+                                                 (assoc original-page-name :block/uuid (or page-uuid (d/squuid)))
 
-                                                (map? original-page-name)
-                                                (assoc original-page-name :block/uuid (or page-uuid (d/squuid)))
-
-                                                :else
-                                                nil)]
-                                 [page nil]))]
+                                                 :else
+                                                 nil)]
+                                  [page nil]))]
       (when page
-        (let [type (if class? "class" (or (:block/type page) "page"))]
-          (assoc page :block/type type))))))
+        (if (ldb/db-based-graph? db)
+          (let [tags (if class? [:logseq.class/Tag]
+                         (or (:block/tags page)
+                             [:logseq.class/Page]))]
+            (assoc page :block/tags tags))
+          (assoc page :block/type (or (:block/type page) "page")))))))
+
+(defn- db-namespace-page?
+  "Namespace page that're not journal pages"
+  [db-based? page]
+  (and db-based?
+       (text/namespace-page? page)
+       (not (common-date/valid-journal-title-with-slash? page))))
+
+(defn- ref->map
+  [db *col {:keys [date-formatter db-based? *name->id tag?]}]
+  (let [col (remove string/blank? @*col)
+        children-pages (when-not db-based?
+                         (->> (mapcat (fn [p]
+                                        (let [p (if (map? p)
+                                                  (:block/title p)
+                                                  p)]
+                                          (when (string? p)
+                                            (let [p (or (text/get-nested-page-name p) p)]
+                                              (when (text/namespace-page? p)
+                                                (common-util/split-namespace-pages p))))))
+                                      col)
+                              (remove string/blank?)
+                              (distinct)))
+        col (->> (distinct (concat col children-pages))
+                 (remove nil?))]
+    (map
+     (fn [item]
+       (let [macro? (and (map? item)
+                         (= "macro" (:type item)))]
+         (when-not macro?
+           (let [m (page-name->map item db true date-formatter {:class? tag?})
+                 result (cond->> m
+                          (and db-based? tag? (not (:db/ident m)))
+                          (db-class/build-new-class db))
+                 page-name (if db-based? (:block/title result) (:block/name result))
+                 id (get @*name->id page-name)]
+             (when (nil? id)
+               (swap! *name->id assoc page-name (:block/uuid result)))
+             ;; Changing a :block/uuid should be done cautiously here as it can break
+             ;; the identity of built-in concepts in db graphs
+             (if id
+               (assoc result :block/uuid id)
+               result))))) col)))
 
 (defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} db date-formatter parse-block]
-  (let [db-based? (ldb/db-based-graph? db)
+  (let [db-based? (and (ldb/db-based-graph? db) (not *export-to-db-graph?))
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))
@@ -386,57 +454,35 @@
                       (= (first form) "Custom")
                       (= (second form) "query"))
          (when-let [page (get-page-reference form (:format block))]
-           (swap! *refs conj page))
+           (when-let [page' (when-not (db-namespace-page? db-based? page)
+                              page)]
+             (swap! *refs conj page')))
          (when-let [tag (get-tag form)]
            (let [tag (text/page-ref-un-brackets! tag)]
-             (when (common-util/tag-valid? tag)
-               (swap! *refs conj tag)
-               (swap! *structured-tags conj tag))))
+             (when-let [tag' (when-not (db-namespace-page? db-based? tag)
+                               tag)]
+               (when (common-util/tag-valid? tag')
+                 (swap! *refs conj tag')
+                 (swap! *structured-tags conj tag')))))
          form))
      (concat title body))
     (swap! *refs #(remove string/blank? %))
     (let [*name->id (atom {})
-          ref->map-fn (fn [*col tag?]
-                        (let [col (remove string/blank? @*col)
-                              children-pages (when-not db-based?
-                                               (->> (mapcat (fn [p]
-                                                              (let [p (if (map? p)
-                                                                        (:block/title p)
-                                                                        p)]
-                                                                (when (string? p)
-                                                                  (let [p (or (text/get-nested-page-name p) p)]
-                                                                    (when (text/namespace-page? p)
-                                                                      (common-util/split-namespace-pages p))))))
-                                                            col)
-                                                    (remove string/blank?)
-                                                    (distinct)))
-                              col (->> (distinct (concat col children-pages))
-                                       (remove nil?))]
-                          (map
-                           (fn [item]
-                             (let [macro? (and (map? item)
-                                               (= "macro" (:type item)))]
-                               (when-not macro?
-                                 (let [m (page-name->map item db true date-formatter {:class? tag?})
-                                       result (cond->> m
-                                                (and tag? (not (:db/ident m)))
-                                                (db-class/build-new-class db))
-                                       page-name (:block/name result)
-                                       id (get @*name->id page-name)]
-                                   (when (nil? id)
-                                     (swap! *name->id assoc page-name (:block/uuid result)))
-                                   (if id
-                                     (assoc result :block/uuid id)
-                                     result))))) col)))
-          refs (->> (ref->map-fn *refs false)
+          ref->map-options {:db-based? db-based?
+                            :date-formatter date-formatter
+                            :*name->id *name->id}
+          refs (->> (ref->map db *refs ref->map-options)
                     (remove nil?)
                     (map (fn [ref]
-                           (if-let [entity (ldb/get-case-page db (:block/title ref))]
-                             (if (= (:db/id parse-block) (:db/id entity))
-                               ref
-                               (select-keys entity [:block/uuid :block/title :block/name]))
-                             ref))))
-          tags (ref->map-fn *structured-tags true)]
+                           (let [ref' (if-let [entity (ldb/get-case-page db (:block/title ref))]
+                                        (if (= (:db/id parse-block) (:db/id entity))
+                                          ref
+                                          (select-keys entity [:block/uuid :block/title :block/name]))
+                                        ref)]
+                             (cond-> ref'
+                               (:block.temp/original-page-name ref)
+                               (assoc :block.temp/original-page-name (:block.temp/original-page-name ref)))))))
+          tags (ref->map db *structured-tags (assoc ref->map-options :tag? true))]
       (assoc block
              :refs refs
              :tags tags))))
@@ -635,13 +681,13 @@
       (update :block/properties-text-values dissoc :id)
       (update :block/properties-order #(vec (remove #{:id} %)))
       (update :block/title (fn [c]
-                         (let [replace-str (re-pattern
-                                            (str
-                                             "\n*\\s*"
-                                             (if (= :markdown (:block/format block))
-                                               (str "id" gp-property/colons " " (:block/uuid block))
-                                               (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
-                           (string/replace-first c replace-str ""))))))
+                             (let [replace-str (re-pattern
+                                                (str
+                                                 "\n*\\s*"
+                                                 (if (= :markdown (:block/format block))
+                                                   (str "id" gp-property/colons " " (:block/uuid block))
+                                                   (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
+                               (string/replace-first c replace-str ""))))))
 
 (defn block-exists-in-another-page?
   "For sanity check only.

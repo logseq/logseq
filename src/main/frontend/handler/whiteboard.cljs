@@ -69,7 +69,7 @@
     {:db/id (:db/id page-entity)
      :block/title page-name
      :block/name (util/page-name-sanity-lc page-name)
-     :block/type "whiteboard"
+     :block/tags :logseq.class/Whiteboard
      :block/format :markdown
      :logseq.property/ls-type :whiteboard-page
      :logseq.property.tldraw/page tldraw-page
@@ -342,7 +342,7 @@
   []
   (p/let [^js res (js/fetch "./whiteboard/onboarding.edn") ;; do we need to cache it?
           text (.text res)
-          edn (common-util/safe-read-string text)]
+          edn (common-util/safe-read-map-string text)]
     edn))
 
 (defn clone-whiteboard-from-edn

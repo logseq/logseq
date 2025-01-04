@@ -13,7 +13,7 @@
    [logseq.outliner.op]
    [frontend.state :as state]
    [frontend.util :as util]
-   [frontend.util.drawer :as drawer]
+   [frontend.util.file-based.drawer :as drawer]
    [goog.dom :as gdom]
    [logseq.graph-parser.block :as gp-block]
    [logseq.db.sqlite.util :as sqlite-util]
@@ -22,7 +22,8 @@
    [frontend.handler.property.util :as pu]
    [dommy.core :as dom]
    [goog.object :as gobj]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [datascript.impl.entity :as de]))
 
 ;;  Fns
 
@@ -150,8 +151,8 @@
         own-order-list-type  (some-> type str string/lower-case)
         own-order-list-index (some->> own-order-list-type (get-idx-of-order-list-block block))]
     (assoc config :own-order-list-type own-order-list-type
-                  :own-order-list-index own-order-list-index
-                  :own-order-number-list? (= own-order-list-type "number"))))
+           :own-order-list-index own-order-list-index
+           :own-order-number-list? (= own-order-list-type "number"))))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
@@ -171,12 +172,14 @@
     (state/set-editor-last-input-time! repo (util/time-ms))))
 
 (defn- edit-block-aux
-  [repo block content text-range {:keys [container-id]}]
+  [repo block content text-range {:keys [container-id direction event pos]}]
   (when block
     (let [container-id (or container-id
                            (state/get-current-editor-container-id)
                            :unknown-container)]
-      (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range {:container-id container-id}))
+      (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range
+                          {:db (db/get-db)
+                           :container-id container-id :direction direction :event event :pos pos}))
     (mark-last-input-time! repo)))
 
 (defn sanity-block-content
@@ -186,22 +189,46 @@
     (-> (property-util/remove-built-in-properties format content)
         (drawer/remove-logbook))))
 
+(defn block-unique-title
+  "Multiple pages/objects may have the same `:block/title`.
+   Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
+  [block]
+  (let [block-e (cond
+                  (de/entity? block)
+                  block
+                  (uuid? (:block/uuid block))
+                  (db/entity [:block/uuid (:block/uuid block)])
+                  :else
+                  block)
+        tags (remove (fn [t]
+                       (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
+                           (ldb/private-tags (:db/ident t))))
+                     (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))]
+    (if (seq tags)
+      (str (:block/title block)
+           " "
+           (string/join
+            ", "
+            (keep (fn [tag]
+                    (when-let [title (:block/title tag)]
+                      (str "#" title)))
+                  tags)))
+      (:block/title block))))
+
 (defn edit-block!
-  [block pos & {:keys [_container-id custom-content tail-len]
-                :or {tail-len 0}
+  [block pos & {:keys [_container-id custom-content tail-len save-code-editor?]
+                :or {tail-len 0
+                     save-code-editor? true}
                 :as opts}]
   (when (and (not config/publishing?) (:block/uuid block))
     (p/do!
-     (state/pub-event! [:editor/save-code-editor])
+     (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
      (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
        (state/clear-edit! {:clear-editing-block? false}))
      (when-let [block-id (:block/uuid block)]
        (let [repo (state/get-current-repo)
-             db-graph? (config/db-based-graph? repo)
              block (or (db/entity [:block/uuid block-id]) block)
-             content (if (and db-graph? (:block/name block))
-                       (:block/title block)
-                       (or custom-content (:block/title block) ""))
+             content (or custom-content (:block/title block) "")
              content-length (count content)
              text-range (cond
                           (vector? pos)
@@ -217,7 +244,7 @@
                           (subs content 0 pos))
              content (sanity-block-content repo (:block/format block) content)]
          (state/clear-selection!)
-         (edit-block-aux repo block content text-range opts))))))
+         (edit-block-aux repo block content text-range (assoc opts :pos pos)))))))
 
 (defn- get-original-block-by-dom
   [node]
@@ -402,7 +429,6 @@
                                 (set! (.. more -style -opacity) "30%"))))))
                       :else
                       nil)))))))))))
-
 
 (defn on-touch-end
   [_event block uuid *show-left-menu? *show-right-menu?]

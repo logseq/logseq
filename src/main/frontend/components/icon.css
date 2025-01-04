@@ -10,8 +10,8 @@
   > .bd {
     @apply pt-[96px] py-1 h-full;
 
-    &.all, &:has(.search-result) {
-      @apply overflow-y-scroll;
+    &.all {
+      @apply overflow-y-auto;
     }
   }
 
@@ -53,7 +53,7 @@
   }
 
   .pane-section {
-    @apply pl-2 overflow-y-scroll h-full;
+    @apply pl-2 overflow-y-auto h-full;
 
     color: var(--ls-color-icon-preset);
 
@@ -68,7 +68,7 @@
     }
 
     &.has-virtual-list {
-      @apply h-[285px] overflow-y-visible;
+      @apply h-[300px] overflow-y-visible;
 
       &.searching-result {
         @apply h-auto;
@@ -163,4 +163,8 @@
 
 .ls-icon-picker {
   @apply w-auto overflow-hidden;
+}
+
+.ls-icon-color-wrap em-emoji {
+  @apply !w-auto !h-auto;
 }

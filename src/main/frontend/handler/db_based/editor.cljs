@@ -8,7 +8,6 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.op :as outliner-op]
@@ -43,7 +42,8 @@
         title->ref (zipmap (map :block/title cached-refs) cached-refs)]
     (map (fn [x]
            (if-let [ref (and (map? x) (title->ref (:block/title x)))]
-             ref
+             (assoc ref :block.temp/original-page-name
+                    (:block.temp/original-page-name x))
              x))
          refs)))
 
@@ -66,7 +66,7 @@
         result (-> block
                    (merge (if level {:block/level level} {}))
                    (assoc :block/title
-                          (db-content/refs->special-id-ref (:block/title block) (:block/refs block))))]
+                          (db-content/title-ref->id-ref (:block/title block) (:block/refs block))))]
     result))
 
 (defn save-file!
@@ -90,46 +90,14 @@
              (= path "logseq/custom.css")
              (ui-handler/add-style-if-exists!))))))
 
-(defn- set-heading-aux!
-  [block-id heading]
-  (let [block (db/pull [:block/uuid block-id])
-        old-heading (pu/lookup (:block/properties block) :logseq.property/heading)]
-    (cond
-      ;; nothing changed for first two cases
-      (or (and (nil? old-heading) (nil? heading))
-          (and (true? old-heading) (true? heading))
-          (= old-heading heading))
-      nil
-
-      (or (and (nil? old-heading) (true? heading))
-          (and (true? old-heading) (nil? heading)))
-      nil
-
-      (and (or (nil? heading) (true? heading))
-           (number? old-heading))
-      (let [content (commands/clear-markdown-heading (:block/title block))]
-        {:block/title content
-         :block/uuid (:block/uuid block)})
-
-      (and (or (nil? old-heading) (true? old-heading))
-           (number? heading))
-      (let [content (commands/set-markdown-heading (:block/title block) heading)]
-        {:block/title content
-         :block/uuid (:block/uuid block)})
-
-        ;; heading-num1 -> heading-num2
-      :else
-      (let [content (-> block
-                        :block/title
-                        commands/clear-markdown-heading
-                        (commands/set-markdown-heading heading))]
-        {:block/uuid (:block/uuid block)
-         :block/title content}))))
-
 (defn batch-set-heading!
   [repo block-ids heading]
   (ui-outliner-tx/transact!
    {:outliner-op :save-block}
-   (doseq [block (keep #(set-heading-aux! % heading) block-ids)]
-     (outliner-op/save-block! block))
+   (doseq [id block-ids]
+     (let [e (db/entity [:block/uuid id])
+           title (commands/clear-markdown-heading (:block/title e))
+           block {:block/uuid (:block/uuid e)
+                  :block/title title}]
+       (outliner-op/save-block! block)))
    (property-handler/batch-set-block-property! repo block-ids :logseq.property/heading heading)))

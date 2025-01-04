@@ -46,7 +46,7 @@
   get-current-page
   remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   q
-  query-state query-components remove-custom-query! set-new-result!])
+  query-state component->query-key set-new-result!])
 
 (defn start-db-conn!
   ([repo]
@@ -73,7 +73,7 @@
 (defn set-file-last-modified-at!
   "Refresh file timestamps to DB"
   [repo path last-modified-at]
-  (when (and repo path last-modified-at)
+  (when (and repo (not (config/db-based-graph? repo)) path last-modified-at)
     (transact! repo
                [{:file/path path
                  :file/last-modified-at last-modified-at}] {})))

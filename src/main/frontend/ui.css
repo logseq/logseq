@@ -53,22 +53,20 @@
 }
 
 .ui__notifications {
-  position: fixed;
+  @apply fixed top-12 pointer-events-none w-full;
+
   z-index: var(--ls-z-index-level-4);
-  width: 100%;
-  top: 3.2em;
-  pointer-events: none;
 
   &-content {
-    @apply inset-0 flex items-end justify-center px-4 py-3
-    pointer-events-none sm:px-6 sm:py-3 sm:items-start
+    @apply inset-0 flex items-end justify-center px-4 py-2
+    pointer-events-none sm:px-6 sm:py-2 sm:items-start
     sm:justify-end;
   }
 
   .notification-area {
     @apply border;
 
-    background-color: or(--ls-notification-background, --lx-gray-03, --ls-tertiary-background-color, --rx-gray-03);
+    background-color: or(--ls-notification-background, --lx-gray-02, --ls-tertiary-background-color, --rx-gray-03);
     color: or(--ls-notification-text-color, --lx-gray-11, --ls-primary-text-color, --rx-gray-11);
 
     &:has(.ls-wrap-widen) {
@@ -166,10 +164,19 @@
 
 .ui__dialog-content {
   &[label=flashcards__cp] {
+    @apply px-5 pt-6 pb-4;
+
     .ui__dialog-main-content {
-      @apply max-h-[85vh] overflow-auto;
+      @apply max-h-[85vh] min-h-[65vh] overflow-auto p-1;
     }
   }
+}
+
+@media (min-width: 820px) {
+    .ui__dialog-content[label=flashcards__cp] {
+        min-width: 800px;
+        max-width: min(85%, 980px);
+    }
 }
 
 .instruction {
@@ -302,18 +309,28 @@ html.is-mobile {
   background: var(--lx-gray-08, rgb(212, 212, 212));
 }
 
-.ls-months-picker {
-  @apply grid grid-cols-3;
+input[type='range'] {
+  accent-color: var(--lx-accent-10, var(--rx-blue-10));
+}
 
-  > .ui__button {
-    @apply text-xs bg-transparent;
+.ls-dialog-select {
+  @apply w-auto !max-w-fit p-0;
 
-    &.current {
-      @apply bg-secondary;
-    }
+  .cp__select-main {
+    @apply m-0;
+  }
+
+  .item-results-wrap {
+    @apply px-2;
   }
 }
 
-input[type='range'] {
-  accent-color: var(--lx-accent-10, var(--rx-blue-10));
+.ls-foldable-header {
+  .as-toggle {
+    @apply opacity-60 cursor-pointer select-none active:opacity-50;
+  }
+}
+
+.ls-foldable-title-control {
+  margin-left: -27px;
 }

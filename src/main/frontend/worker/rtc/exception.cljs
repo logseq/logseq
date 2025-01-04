@@ -30,6 +30,15 @@ the server will put it to s3 and return its presigned-url to clients.")
 (sr/defkeyword :rtc.exception/different-graph-skeleton
   "remote graph skeleton data is different from local's.")
 
+(sr/defkeyword :rtc.exception/bad-request-body
+  "bad request body, rejected by server-schema")
+
+(sr/defkeyword :rtc.exception/not-allowed
+  "this api-call is not allowed")
+
+(sr/defkeyword :rtc.exception/ws-timeout
+  "websocket timeout")
+
 (def ex-remote-graph-not-exist
   (ex-info "remote graph not exist" {:type :rtc.exception/remote-graph-not-exist}))
 
@@ -43,9 +52,14 @@ the server will put it to s3 and return its presigned-url to clients.")
 (def ex-local-not-rtc-graph
   (ex-info "RTC is not supported for this local-graph" {:type :rtc.exception/not-rtc-graph}))
 
+(def ex-bad-request-body
+  (ex-info "bad request body" {:type :rtc.exception/bad-request-body}))
+
+(def ex-not-allowed
+  (ex-info "not allowed" {:type :rtc.exception/not-allowed}))
+
 (def ex-unknown-server-error
   (ex-info "Unknown server error" {:type :rtc.exception/unknown-server-error}))
-
 
 (defn ->map
   [e]

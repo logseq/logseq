@@ -30,8 +30,8 @@
 
    * :create-first-block?      - when true, create an empty block if the page is empty.
    * :uuid                     - when set, use this uuid instead of generating a new one.
-   * :class?                   - when true, adds a :block/type 'class'
-   * :whiteboard?              - when true, adds a :block/type 'whiteboard'
+   * :class?                   - when true, adds a :block/tags ':logseq.class/Tag'
+   * :whiteboard?              - when true, adds a :block/tags ':logseq.class/Whiteboard'
    * :tags                     - tag uuids that are added to :block/tags
    * :persist-op?              - when true, add an update-page op
    * :properties               - properties to add to the page
@@ -46,7 +46,7 @@
   [repo page-entity]
   (when (sqlite-util/db-based-graph? repo)
     (let [refs (:block/_refs page-entity)
-          id-ref->page #(db-content/special-id-ref->page % [page-entity])]
+          id-ref->page #(db-content/content-id-ref->page % [page-entity])]
       (when (seq refs)
         (let [tx-data (mapcat (fn [{:block/keys [raw-title] :as ref}]
                                 ;; block content
@@ -86,10 +86,19 @@
                 file-path (:file/path file)
                 delete-file-tx (when file
                                  [[:db.fn/retractEntity [:file/path file-path]]])
+                delete-property-tx (when (ldb/property? page)
+                                     (let [datoms (d/datoms @conn :avet (:db/ident page))]
+                                       (map (fn [d] [:db/retract (:e d) (:a d)]) datoms)))
                 delete-page-tx (concat (db-refs->page repo page)
+                                       delete-property-tx
                                        [[:db.fn/retractEntity (:db/id page)]])
-
+                restore-class-parent-tx (when db-based?
+                                          (->> (filter (fn [p] (ldb/class? p)) (:logseq.property/_parent page))
+                                               (map (fn [p]
+                                                      {:db/id (:db/id p)
+                                                       :logseq.property/parent :logseq.class/Root}))))
                 tx-data (concat truncate-blocks-tx-data
+                                restore-class-parent-tx
                                 delete-page-tx
                                 delete-file-tx)]
 

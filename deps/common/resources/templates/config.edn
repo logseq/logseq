@@ -26,6 +26,7 @@
  {:journals ""}
 
  ;; Set a custom date format for the journal page title.
+ ;; This is _only_ for file graphs.
  ;; Default value: "MMM do, yyyy"
  ;; e.g., "Jan 19th, 2038"
  ;; Example usage e.g., "Tue 19th, Jan 2038"

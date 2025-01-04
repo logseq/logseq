@@ -1,13 +1,10 @@
 @charset "utf-8";
-@import "tailwindcss/base";
-@import "tailwindcss/components";
-@import "tailwindcss/utilities";
 
 @import "packages/ui/src/radix.css";
 @import "packages/ui/src/radix-hsl.css";
 @import "packages/ui/src/vars-classic.css";
 @import "packages/ui/src/colors.css";
-@import "packages/ui/src/index.css";
+@import "packages/ui/src/index.css";  /* Tailwind base imported here */
 @import "resources/css/shui.css";
 @import "inter-ui/inter.css";
 @import "reveal.js/dist/reveal.css";
@@ -24,4 +21,5 @@
 @import "pdfjs-dist/web/pdf_viewer.css";
 @import "resources/css/tabler-extension.css";
 @import "resources/css/codemirror.lsradix.css";
+@import "@tabler/icons-webfont/tabler-icons.min.css";
 @import-glob "src/main/frontend/**/[!_]*.css";

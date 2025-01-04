@@ -15,7 +15,9 @@
             [reitit.frontend.easy :as rfe]
             [frontend.context.i18n :refer [t]]
             [clojure.string :as string]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [frontend.handler.notification :as notification]
+            [logseq.db :as ldb]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
@@ -80,29 +82,33 @@
              (and (string? page-name) (not (string/blank? page-name))))
      (let [page (db/get-page page-name)
            whiteboard? (db/whiteboard-page? page)]
-       (if-let [source (db/get-alias-source-page (state/get-current-repo) (:db/id page))]
-         (redirect-to-page! (:block/uuid source) opts)
-         (do
+       (if (and (not config/dev?)
+                (or (ldb/hidden? page)
+                    (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
+         (notification/show! "Cannot go to an internal page." :warning)
+         (if-let [source (db/get-alias-source-page (state/get-current-repo) (:db/id page))]
+           (redirect-to-page! (:block/uuid source) opts)
+           (do
            ;; Always skip onboarding when loading an existing whiteboard
-           (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
-           (when-let [db-id (:db/id page)]
-             (recent-handler/add-page-to-recent! db-id click-from-recent?))
-           (if (and whiteboard?  (= (str page-name) (state/get-current-page)) block-id)
-             (state/focus-whiteboard-shape block-id)
-             (let [m (cond->
-                      (default-page-route (str page-name))
+             (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
+             (when-let [db-id (:db/id page)]
+               (recent-handler/add-page-to-recent! db-id click-from-recent?))
+             (if (and whiteboard?  (= (str page-name) (state/get-current-page)) block-id)
+               (state/focus-whiteboard-shape block-id)
+               (let [m (cond->
+                        (default-page-route (str page-name))
 
-                       block-id
-                       (assoc :query-params (if whiteboard?
-                                              {:block-id block-id}
-                                              {:anchor (str "ls-block-" block-id)}))
+                         block-id
+                         (assoc :query-params (if whiteboard?
+                                                {:block-id block-id}
+                                                {:anchor (str "ls-block-" block-id)}))
 
-                       anchor
-                       (assoc :query-params {:anchor anchor})
+                         anchor
+                         (assoc :query-params {:anchor anchor})
 
-                       (boolean? push)
-                       (assoc :push push))]
-               (redirect! m)))))))))
+                         (boolean? push)
+                         (assoc :push push))]
+                 (redirect! m))))))))))
 
 (defn get-title
   [name path-params]
@@ -178,7 +184,9 @@
 (defn jump-to-anchor!
   [anchor-text]
   (when anchor-text
-    (js/setTimeout #(ui-handler/highlight-element! anchor-text) 200)))
+    (js/setTimeout #(ui-handler/highlight-element! anchor-text) 200)
+    (when-let [f (:editor/virtualized-scroll-fn @state/state)]
+      (f))))
 
 (defn set-route-match!
   [route]
@@ -193,11 +201,12 @@
                    100)))
 
 (defn go-to-search!
-  [search-mode]
-  (search-handler/clear-search! false)
-  (when search-mode
-    (state/set-search-mode! search-mode))
-  (state/pub-event! [:go/search]))
+  ([search-mode] (go-to-search! search-mode nil))
+  ([search-mode args]
+   (search-handler/clear-search! false)
+   (when search-mode
+     (state/set-search-mode! search-mode args))
+   (state/pub-event! [:go/search])))
 
 (defn sidebar-journals!
   []

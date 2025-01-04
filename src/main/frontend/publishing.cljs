@@ -1,31 +1,28 @@
 (ns frontend.publishing
   "Entry ns for publishing build. Provides frontend for publishing single page
   application"
-  (:require [frontend.state :as state]
-            [datascript.core :as d]
-            [datascript.transit :as dt]
-            [frontend.db :as db]
-            [rum.core :as rum]
-            [frontend.handler.route :as route-handler]
-            [frontend.page :as page]
+  (:require [cljs.reader :as reader]
             [clojure.string :as string]
-            [frontend.routes :as routes]
-            [frontend.context.i18n :as i18n]
-            [reitit.frontend :as rf]
-            [reitit.frontend.easy :as rfe]
-            [cljs.reader :as reader]
             [frontend.components.block :as block]
             [frontend.components.editor :as editor]
             [frontend.components.page :as page-component]
             [frontend.components.reference :as reference]
             [frontend.components.whiteboard :as whiteboard]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.handler.events :as events]
+            [frontend.context.i18n :as i18n]
             [frontend.handler.command-palette :as command-palette]
-            [frontend.persist-db.browser :as db-browser]
-            [promesa.core :as p]
+            [frontend.handler.events :as events]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.ui :as ui-handler]))
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.page :as page]
+            [frontend.persist-db.browser :as db-browser]
+            [frontend.routes :as routes]
+            [frontend.state :as state]
+            [promesa.core :as p]
+            [reitit.frontend :as rf]
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -58,11 +55,10 @@
     (let [repo (-> @state/state :config keys first)]
       (state/set-current-repo! repo)
       (p/let [_ (repo-handler/restore-and-setup-repo! repo)
-              _ (let [data (unescape-html data)
-                      db (dt/read-transit-str data)
-                      datoms (d/datoms db :eavt)]
-                  (db/transact! repo datoms {:init-db? true
-                                             :new-graph? true}))]
+              _ (let [db-transit-str (unescape-html data)]
+                  (when-let [^js worker @state/*db-worker]
+                    (.resetDB worker repo db-transit-str)))
+              _ (repo-handler/restore-and-setup-repo! repo)]
         (state/set-db-restoring! false)
         (ui-handler/re-render-root!)))))
 
@@ -88,16 +84,19 @@
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page-component/page-cp)
+  (state/set-component! :block/->hiccup block/->hiccup)
   (state/set-component! :block/linked-references reference/block-linked-references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/breadcrumb block/breadcrumb)
   (state/set-component! :block/blocks-container block/blocks-container)
   (state/set-component! :block/reference block/block-reference)
   (state/set-component! :block/properties-cp block/db-properties-cp)
   (state/set-component! :block/embed block/block-embed)
   (state/set-component! :block/page-cp block/page-cp)
   (state/set-component! :block/inline-text block/inline-text)
+  (state/set-component! :block/asset-cp block/asset-cp)
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 

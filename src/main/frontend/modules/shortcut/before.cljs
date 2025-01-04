@@ -7,10 +7,10 @@
 (defn prevent-default-behavior
   [f]
   (fn [e]
-    (f e)
-    ;; return false to prevent default browser behavior
-    ;; and stop event from bubbling
-    (.preventDefault e)
+    (when-not (false? (f e))
+      ;; return false to skip prevent default browser behavior
+      ;; and stop event from bubbling
+      (.preventDefault e))
     false))
 
 (defn enable-when-not-editing-mode!

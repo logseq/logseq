@@ -1,13 +1,13 @@
 (ns helper
   (:require [cljs.test :as t :refer [is]]
-            [datascript.transit :as dt]
             [const]
             [datascript.core :as d]
-            [frontend.common.missionary-util :as c.m]
+            [datascript.transit :as dt]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.state :as worker-state]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.batch-tx :as batch-tx]
@@ -91,11 +91,11 @@
   #_:clj-kondo/ignore
   (me/find
    client-op
-    [?op-type _ {:block-uuid ?block-uuid :av-coll [[!a !v _ !add] ...]}]
-    [?op-type ?block-uuid (map vector !a !v !add)]
+   [?op-type _ {:block-uuid ?block-uuid :av-coll [[!a !v _ !add] ...]}]
+   [?op-type ?block-uuid (map vector !a !v !add)]
 
-    [?op-type _ {:block-uuid ?block-uuid}]
-    [?op-type ?block-uuid]))
+   [?op-type _ {:block-uuid ?block-uuid}]
+   [?op-type ?block-uuid]))
 
 (defn new-task--wait-all-client-ops-sent
   [& {:keys [timeout] :or {timeout 10000}}]
@@ -103,7 +103,7 @@
     (let [r (m/? (m/timeout
                   (m/reduce (fn [_ v]
                               (when (and (= :rtc.log/push-local-update (:type v))
-                                         (empty? (client-op/get-all-ops const/downloaded-test-repo)))
+                                         (empty? (client-op/get-all-block-ops const/downloaded-test-repo)))
                                 (is (nil? (:ex-data v)))
                                 (reduced v)))
                             rtc-log-and-state/rtc-log-flow)
@@ -154,6 +154,34 @@
                       (block-title-pred-fn first-block-title))
          (throw (ex-info (str "wait message from other client " retry-message) {:missionary/retry true})))
        first-block-title))))
+
+(defn new-task--client1-sync-barrier-1->2
+  [message]
+  (m/sp
+    (m/? (new-task--send-message-to-other-client (str message "-client1")))
+    (m/? (new-task--wait-message-from-other-client #(= (str message "-client2") %)))
+    (log "sync-barrier-1->2" message)))
+
+(defn new-task--client2-sync-barrier-1->2
+  [message]
+  (m/sp
+    (m/? (new-task--wait-message-from-other-client #(= (str message "-client1") %)))
+    (m/? (new-task--send-message-to-other-client (str message "-client2")))
+    (log "sync-barrier-1->2" message)))
+
+(defn new-task--client1-sync-barrier-2->1
+  [message]
+  (m/sp
+    (m/? (new-task--wait-message-from-other-client #(= (str message "-client2") %)))
+    (m/? (new-task--send-message-to-other-client (str message "-client1")))
+    (log "sync-barrier-2->1" message)))
+
+(defn new-task--client2-sync-barrier-2->1
+  [message]
+  (m/sp
+    (m/? (new-task--send-message-to-other-client (str message "-client2")))
+    (m/? (new-task--wait-message-from-other-client #(= (str message "-client1") %)))
+    (log "sync-barrier-2->1" message)))
 
 (defn transact!
   [conn tx-data]

@@ -5,8 +5,8 @@ necessary db filtering"
             [goog.string :as gstring]
             [goog.string.format]
             [datascript.transit :as dt]
-            [logseq.publishing.db :as db]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [datascript.core :as d]
+            [logseq.publishing.db :as db]))
 
 ;; Copied from hiccup but tweaked for publish usage
 ;; Any changes here should also be made in frontend.publishing/unescape-html
@@ -23,22 +23,22 @@ necessary db filtering"
 ;; Copied from https://github.com/babashka/babashka/blob/8c1077af00c818ade9e646dfe1297bbe24b17f4d/examples/notes.clj#L21
 (defn- html [v]
   (cond (vector? v)
-    (let [tag (first v)
-          attrs (second v)
-          attrs (when (map? attrs) attrs)
-          elts (if attrs (nnext v) (next v))
-          tag-name (name tag)]
-      (gstring/format "<%s%s>%s</%s>\n" tag-name (html attrs) (html elts) tag-name))
-    (map? v)
-    (string/join ""
-                 (keep (fn [[k v]]
+        (let [tag (first v)
+              attrs (second v)
+              attrs (when (map? attrs) attrs)
+              elts (if attrs (nnext v) (next v))
+              tag-name (name tag)]
+          (gstring/format "<%s%s>%s</%s>\n" tag-name (html attrs) (html elts) tag-name))
+        (map? v)
+        (string/join ""
+                     (keep (fn [[k v]]
                          ;; Skip nil values because some html tags haven't been
                          ;; given values through html-options
-                         (when (some? v)
-                           (gstring/format " %s=\"%s\"" (name k) v))) v))
-    (seq? v)
-    (string/join " " (map html v))
-    :else (str v)))
+                             (when (some? v)
+                               (gstring/format " %s=\"%s\"" (name k) v))) v))
+        (seq? v)
+        (string/join " " (map html v))
+        :else (str v)))
 
 (defn- ^:large-vars/html publishing-html
   [transit-db app-state options]
@@ -54,7 +54,6 @@ necessary db filtering"
              {:content
               "minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no",
               :name "viewport"}]
-            [:link {:type "text/css", :href "static/css/tabler-icons.min.css", :rel "stylesheet"}]
             [:link {:type "text/css", :href "static/css/style.css", :rel "stylesheet"}]
             [:link {:type "text/css", :href "static/css/custom.css", :rel "stylesheet"}]
             [:link {:type "text/css", :href "static/css/export.css", :rel "stylesheet"}]
@@ -137,21 +136,23 @@ necessary db filtering"
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the
 generated index.html string and assets used by the html"
-  [db* {:keys [app-state repo-config html-options db-graph?]}]
+  [db* {:keys [repo app-state repo-config html-options db-graph? dev?]}]
   (let [all-pages-public? (if-let [value (:publishing/all-pages-public? repo-config)]
                             value
                             (:all-pages-public? repo-config))
         [db asset-filenames'] (if all-pages-public?
                                 (db/clean-export! db* {:db-graph? db-graph?})
                                 (db/filter-only-public-pages-and-blocks db* {:db-graph? db-graph?}))
+        _ (when dev?
+            (println "Exporting" (count (d/datoms db :eavt)) "of" (count (d/datoms db* :eavt)) "datoms and"
+                     (count asset-filenames') "asset(s)..."))
         asset-filenames (remove nil? asset-filenames')
 
         db-str (dt/write-transit-str db)
-        repo-name (if db-graph? (str sqlite-util/db-version-prefix "Demo") "Demo")
         ;; The repo-name is used by the client and thus determines whether
         ;; it's a db graph or not
         state (assoc app-state
-                     :config {repo-name repo-config})
+                     :config {repo repo-config})
         raw-html-str (publishing-html db-str state html-options)]
     {:html raw-html-str
      :asset-filenames asset-filenames}))

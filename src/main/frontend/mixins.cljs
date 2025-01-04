@@ -3,7 +3,8 @@
   (:require [rum.core :as rum]
             [goog.dom :as dom]
             [frontend.util :refer [profile] :as util]
-            [frontend.state :as state])
+            [frontend.state :as state]
+            [goog.functions :as gfun])
   (:import [goog.events EventHandler]))
 
 (defn detach
@@ -129,21 +130,11 @@
               :toggle-fn (fn []
                            (swap! open? not)))))))
 
-(def component-editing-mode
-  {:will-mount
-   (fn [state]
-     (state/set-block-component-editing-mode! true)
-     state)
-   :will-unmount
-   (fn [state]
-     (state/set-block-component-editing-mode! false)
-     state)})
-
 (def container-id
   "Notice: the first parameter needs to be a `config` with `id`, optional `sidebar?`, `whiteboard?`"
   {:init (fn [state]
            (let [config (first (:rum/args state))
-                 key (select-keys config [:id :sidebar? :whiteboard? :embed? :custom-query? :query :current-block])
+                 key (select-keys config [:id :sidebar? :whiteboard? :embed? :custom-query? :query :current-block :table?])
                  container-id (or (:container-id config) (state/get-container-id key))]
              (assoc state :container-id container-id)))})
 
@@ -156,3 +147,11 @@
        (profile
         (str "Render " desc)
         (render-fn state))))})
+
+(defn use-debounce
+  "A rumext custom hook that debounces the value changes"
+  [ms value]
+  (let [[state update-fn] (rum/use-state value)
+        update-fn (rum/use-callback (gfun/debounce update-fn ms) [])]
+    (rum/use-effect! #(update-fn value) #js [value])
+    state))

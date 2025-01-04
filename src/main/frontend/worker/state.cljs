@@ -10,6 +10,8 @@
 (sr/defkeyword :undo/repo->page-block-uuid->redo-ops
   "{repo {<page-block-uuid> [op1 op2 ...]}}")
 
+(defonce *main-thread (atom nil))
+
 (defonce *state (atom {:worker/object nil
 
                        :db/latest-transact-time {}
@@ -26,14 +28,13 @@
 
                        ;; new implementation
                        :undo/repo->ops (atom {})
-                       :redo/repo->ops (atom {})
-                       }))
+                       :redo/repo->ops (atom {})}))
 
 (defonce *rtc-ws-url (atom nil))
 
 (defonce *sqlite (atom nil))
 ;; repo -> {:db conn :search conn :client-ops conn}
-(defonce *sqlite-conns (atom nil))
+(defonce *sqlite-conns (atom {}))
 ;; repo -> conn
 (defonce *datascript-conns (atom nil))
 
@@ -118,7 +119,3 @@
 (defn set-rtc-downloading-graph!
   [value]
   (swap! *state assoc :rtc/downloading-graph? value))
-
-(defn rtc-downloading-graph?
-  []
-  (:rtc/downloading-graph? @*state))

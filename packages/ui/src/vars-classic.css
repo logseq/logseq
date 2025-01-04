@@ -49,7 +49,7 @@ html[data-theme=light][data-color=logseq] {
   --ls-active-secondary-color: #00477c;
   --ls-block-properties-background-color: var(--ls-secondary-background-color);
   --ls-page-properties-background-color: var(--ls-secondary-background-color);
-  --ls-block-ref-link-text-color: #d8e1e8;
+  --ls-block-ref-link-text-color: var(--ls-link-text-color);
   --ls-border-color: #ccc;
   --ls-secondary-border-color: #e2e2e2;
   --ls-tertiary-border-color: rgba(200, 200, 200, 0.3);
@@ -107,7 +107,7 @@ html[data-theme=dark][data-color=logseq] {
   --ls-active-secondary-color: #d0e8e8;
   --ls-block-properties-background-color: #06323e;
   --ls-page-properties-background-color: #06323e;
-  --ls-block-ref-link-text-color: #1a6376;
+  --ls-block-ref-link-text-color: #377f91;
   --ls-border-color: #0e5263;
   --ls-secondary-border-color: #126277;
   --ls-tertiary-border-color: rgba(0, 2, 0, 0.1);

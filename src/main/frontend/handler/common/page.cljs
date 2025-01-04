@@ -20,8 +20,8 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.db-based.editor :as db-editor-handler]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.common.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]
+            [frontend.handler.notification :as notification]))
 
 (defn- wrap-tags
   "Tags might have multiple words"
@@ -42,31 +42,39 @@
   ([title {:keys [redirect?]
            :or   {redirect? true}
            :as options}]
-   (p/let [repo (state/get-current-repo)
-           conn (db/get-db repo false)
-           db-based? (config/db-based-graph? repo)
-           title (if (and db-based? (string/includes? title " #")) ; tagged page
-                   (wrap-tags title)
-                   title)
-           parsed-result (when db-based? (db-editor-handler/wrap-parse-block {:block/title title}))
-           title' (if (and db-based? (seq (:block/tags parsed-result)))
-                    (string/trim (first
-                                  (or (common-util/split-first (str "#" db-content/page-ref-special-chars) (:block/title parsed-result))
-                                      (common-util/split-first (str "#" page-ref/left-brackets db-content/page-ref-special-chars) (:block/title parsed-result)))))
-                    title)
-           options' (if db-based?
-                      (update options :tags concat (:block/tags parsed-result))
-                      options)
-           result (ui-outliner-tx/transact!
-                   {:outliner-op :create-page}
-                   (outliner-op/create-page! title' options'))
-           [_page-name page-uuid] (ldb/read-transit-str result)]
-     (when redirect?
-       (route-handler/redirect-to-page! page-uuid))
-     (let [page (db/get-page (or page-uuid title'))]
-       (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
-         (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
-       page))))
+   (when (string? title)
+     (p/let [repo (state/get-current-repo)
+             conn (db/get-db repo false)
+             db-based? (config/db-based-graph? repo)
+             title (if (and db-based? (string/includes? title " #")) ; tagged page
+                     (wrap-tags title)
+                     title)
+             parsed-result (when db-based? (db-editor-handler/wrap-parse-block {:block/title title}))
+             has-tags? (and db-based? (seq (:block/tags parsed-result)))
+             title' (if has-tags?
+                      (some-> (first
+                               (common-util/split-first (str "#" page-ref/left-brackets) (:block/title parsed-result)))
+                              string/trim)
+                      title)]
+       (if (and has-tags? (nil? title'))
+         (notification/show! "Page name can't include \"#\"." :warning)
+         (when-not (string/blank? title')
+           (p/let [options' (if db-based?
+                              (cond->
+                               (update options :tags concat (:block/tags parsed-result))
+                                (nil? (:split-namespace? options))
+                                (assoc :split-namespace? true))
+                              options)
+                   result (ui-outliner-tx/transact!
+                           {:outliner-op :create-page}
+                           (outliner-op/create-page! title' options'))
+                   [_page-name page-uuid] (ldb/read-transit-str result)]
+             (when redirect?
+               (route-handler/redirect-to-page! page-uuid))
+             (let [page (db/get-page (or page-uuid title'))]
+               (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
+                 (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
+               page))))))))
 
 ;; favorite fns
 ;; ============
@@ -118,16 +126,13 @@
 (defn <db-favorite-page!
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (let [favorites-page (db/get-page common-config/favorites-page-name)]
-    (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
-      (p/do!
-       (when-not favorites-page (ldb/create-favorites-page!
- (state/get-current-repo)))
-       (ui-outliner-tx/transact!
-        {:outliner-op :insert-blocks}
-        (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]
-                                    (db/get-page common-config/favorites-page-name)
-                                    {}))))))
+  (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
+    (p/do!
+     (ui-outliner-tx/transact!
+      {:outliner-op :insert-blocks}
+      (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]
+                                  (db/get-page common-config/favorites-page-name)
+                                  {})))))
 
 (defn <db-unfavorite-page!
   [page-block-uuid]
@@ -137,9 +142,7 @@
      {:outliner-op :delete-blocks}
      (outliner-op/delete-blocks! [block] {}))))
 
-
 ;; favorites fns end ================
-
 
 (defn <delete!
   "Deletes a page. If delete is successful calls ok-handler. Otherwise calls error-handler
@@ -151,19 +154,27 @@
     (when-let [page-uuid (or (and (uuid? page-uuid-or-name) page-uuid-or-name)
                              (:block/uuid (db/get-page page-uuid-or-name)))]
       (when @state/*db-worker
-        (-> (p/let [res (ui-outliner-tx/transact!
-                         {:outliner-op :delete-page}
-                         (outliner-op/delete-page! page-uuid))
-                    res' (ldb/read-transit-str res)]
-              (if res'
-                (when ok-handler (ok-handler))
-                (when error-handler (error-handler))))
-            (p/catch (fn [error]
-                       (js/console.error error))))))))
+        (let [page (db/entity [:block/uuid page-uuid])
+              default-home (state/get-default-home)
+              home-page? (= (:block/title page) (:page default-home))]
+          (p/do!
+           (when home-page?
+             (p/do!
+              (config-handler/set-config! :default-home (dissoc default-home :page))
+              (config-handler/set-config! :feature/enable-journals? true)
+              (notification/show! "Journals enabled" :success)))
+           (-> (p/let [res (ui-outliner-tx/transact!
+                            {:outliner-op :delete-page}
+                            (outliner-op/delete-page! page-uuid))
+                       res' (ldb/read-transit-str res)]
+                 (if res'
+                   (when ok-handler (ok-handler))
+                   (when error-handler (error-handler))))
+               (p/catch (fn [error]
+                          (js/console.error error))))))))))
 
 ;; other fns
 ;; =========
-
 
 (defn after-page-deleted!
   [repo page-name file-path tx-meta]

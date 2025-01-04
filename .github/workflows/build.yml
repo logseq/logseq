@@ -14,7 +14,7 @@ env:
   CLOJURE_VERSION: '1.11.1.1413'
   JAVA_VERSION: '11'
   # This is the latest node version we can run.
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
   BABASHKA_VERSION: '1.0.168'
 
 jobs:
@@ -82,6 +82,9 @@ jobs:
 
       - name: Run some ClojureScript tests against DB version
         run: DB_GRAPH=1 node static/tests.js -r frontend.db.query-dsl-test
+
+      - name: Run ClojureScript query tests against DB version with basic query type
+        run: DB_GRAPH=1 DB_QUERY_TYPE=basic node static/tests.js -r frontend.db.query-dsl-test
 
       - name: Run ClojureScript tests
         run: node static/tests.js -e fix-me

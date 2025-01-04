@@ -32,7 +32,13 @@
 (def block5-uuid #uuid "f3c48e62-1726-4492-b42a-a36f4de7b32f")
 (def block6-uuid #uuid "23f51a53-db85-465a-9f18-6ca94e59f56c")
 (def block7-uuid #uuid "83f99937-fe0a-4d33-81ce-7fe5837baad3")
-;;; -----------------------------------------
+;;; ----- delete-blocks case ---------
+(def step6-page-uuid #uuid "e22dafa5-b3b4-405d-b93d-470caa420e10")
+(def step6-block1-uuid #uuid "776acd4a-d011-4985-bfc2-14ee7bbd6a28")
+(def step6-block2-uuid #uuid "ba3998c2-8059-4f9e-9e76-2760d2f14512")
+(def step6-block3-uuid #uuid "f9ce5393-370a-43dd-a721-aaa5ef83d3ff")
+(def step6-block4-uuid #uuid "db00bb0d-2bef-49e7-96ed-b4882cdf5686")
+(def step6-block5-uuid #uuid "d34e8a9c-5e87-4511-b982-2bf2ebc82607")
 
 (def ^:large-vars/data-var tx-data-map
   {:create-page
@@ -71,7 +77,7 @@
                  :block/order order
                  :block/page "page"})
               (range 500) (db-order/gen-n-keys 500 "a0" "a1")))
-   :add-task-properties-to-block1
+   :step3-add-task-properties-to-block1
    [{:db/id "id-0907"
      :block/uuid #uuid "00000001-2024-0907-0000-000000000000"
      :block/updated-at 1725455235108
@@ -86,6 +92,12 @@
      :block/tags :logseq.class/Task
      :logseq.task/status :logseq.task/status.done
      :logseq.task/deadline "id-0907"}]
+   :step3-toggle-status-TODO
+   [{:block/uuid block1-uuid
+     :logseq.task/status :logseq.task/status.todo}]
+   :step3-toggle-status-DOING
+   [{:block/uuid block1-uuid
+     :logseq.task/status :logseq.task/status.doing}]
    :move-blocks-concurrently-1
    [{:db/id "page"
      :block/uuid page3-uuid
@@ -167,4 +179,69 @@
      :block/order "a0"}
     {:block/uuid block4-uuid
      :block/parent [:block/uuid block7-uuid]
-     :block/order "a0"}]})
+     :block/order "a0"}]
+   :step6-delete-blocks-client1-1
+   ;; - 1
+   ;;   - 2
+   ;; - 3
+   ;;   - 4
+   ;;     - 5
+   [{:db/id "page"
+     :block/uuid step6-page-uuid
+     :block/name "step6-delete-blocks"
+     :block/title "step6-delete-blocks"
+     :block/created-at 1725024677501
+     :block/updated-at 1725024677501
+     :block/type "page"
+     :block/format :markdown}
+    {:db/id "b1"
+     :block/uuid step6-block1-uuid
+     :block/created-at 1725024677501
+     :block/updated-at 1725024677501
+     :block/format :markdown
+     :block/title "x1"
+     :block/parent "page"
+     :block/order "a0"
+     :block/page "page"}
+    {:db/id "b2"
+     :block/uuid step6-block2-uuid
+     :block/created-at 1725024677501
+     :block/updated-at 1725024677501
+     :block/format :markdown
+     :block/title "x2"
+     :block/parent "b1"
+     :block/order "a0"
+     :block/page "page"}
+    {:db/id "b3"
+     :block/uuid step6-block3-uuid
+     :block/created-at 1725024677501
+     :block/updated-at 1725024677501
+     :block/format :markdown
+     :block/title "x3"
+     :block/parent "page"
+     :block/order "a1"
+     :block/page "page"}
+    {:db/id "b4"
+     :block/uuid step6-block4-uuid
+     :block/created-at 1725024677501
+     :block/updated-at 1725024677501
+     :block/format :markdown
+     :block/title "x4"
+     :block/parent "b3"
+     :block/order "a0"
+     :block/page "page"}
+    {:db/id "b5"
+     :block/uuid step6-block5-uuid
+     :block/created-at 1725024677501
+     :block/updated-at 1725024677501
+     :block/format :markdown
+     :block/title "x5"
+     :block/parent "b4"
+     :block/order "a0"
+     :block/page "page"}]
+   :step6-delete-blocks-client1-2
+   ;; only block3 left
+   [[:db/retractEntity [:block/uuid step6-block1-uuid]]
+    [:db/retractEntity [:block/uuid step6-block2-uuid]]
+    [:db/retractEntity [:block/uuid step6-block4-uuid]]
+    [:db/retractEntity [:block/uuid step6-block5-uuid]]]})

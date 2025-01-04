@@ -95,8 +95,7 @@
            (page-handler/init-commands!)
 
            (watch-for-date!)
-           (when (util/electron?) (file-handler/watch-for-current-graph-dir!))
-           (state/pub-event! [:graph/restored (state/get-current-repo)])))
+           (when (util/electron?) (file-handler/watch-for-current-graph-dir!))))
         (p/catch (fn [error]
                    (log/error :exception error))))))
 
@@ -113,16 +112,19 @@
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page/page-cp)
+  (state/set-component! :block/->hiccup block/->hiccup)
   (state/set-component! :block/linked-references reference/block-linked-references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/breadcrumb block/breadcrumb)
   (state/set-component! :block/reference block/block-reference)
   (state/set-component! :block/blocks-container block/blocks-container)
   (state/set-component! :block/properties-cp block/db-properties-cp)
   (state/set-component! :block/embed block/block-embed)
   (state/set-component! :block/page-cp block/page-cp)
   (state/set-component! :block/inline-text block/inline-text)
+  (state/set-component! :block/asset-cp block/asset-cp)
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 
@@ -134,6 +136,8 @@
 
 (defn start!
   [render]
+
+  (idb/start)
   (test/setup-test!)
   (get-system-info)
   (set-global-error-notification!)
@@ -154,7 +158,6 @@
       (p/catch (fn [_e]
                  (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
                  (state/set-indexedb-support! false))))
-  (idb/start)
 
   (react/run-custom-queries-when-idle!)
 

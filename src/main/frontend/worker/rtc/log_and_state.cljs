@@ -2,6 +2,7 @@
   "Fns to generate rtc related logs"
   (:require [frontend.common.schema-register :as sr]
             [frontend.worker.util :as worker-util]
+            [frontend.common.missionary :as c.m]
             [malli.core :as ma]
             [missionary.core :as m]))
 
@@ -25,7 +26,11 @@
    :rtc.log/apply-remote-update
    :rtc.log/push-local-update
 
-   :rtc.asset.log/cancelled])
+   :rtc.asset.log/cancelled
+   :rtc.asset.log/upload-assets
+   :rtc.asset.log/download-assets
+   :rtc.asset.log/remove-assets
+   :rtc.asset.log/initial-download-missing-assets-count])
 
 (def ^:private rtc-log-type-validator (ma/validator rtc-log-type-schema))
 
@@ -61,16 +66,14 @@
   [graph-uuid]
   (->> (m/watch *graph-uuid->local-t)
        (m/eduction (keep (fn [m] (get m (ensure-uuid graph-uuid)))))
-       (m/reductions {} nil)
-       (m/latest identity)))
+       c.m/continue-flow))
 
 (defn create-remote-t-flow
   [graph-uuid]
   {:pre [(some? graph-uuid)]}
   (->> (m/watch *graph-uuid->remote-t)
        (m/eduction (keep (fn [m] (get m (ensure-uuid graph-uuid)))))
-       (m/reductions {} nil)
-       (m/latest identity)))
+       c.m/continue-flow))
 
 (defn update-local-t
   [graph-uuid local-t]

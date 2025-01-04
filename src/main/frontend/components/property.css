@@ -29,9 +29,7 @@
   margin-left: 0;
 }
 
-.ls-block .property-pair,
-.property-block .property-value,
-.block-property-value {
+.ls-block .property-pair, .ls-sidebar-page-properties .property-pair, .property-block .property-value, .block-property-value {
   margin-left: 7px;
 }
 
@@ -44,10 +42,8 @@
 }
 
 .ls-properties-area {
-  @apply grid;
-
   .property-pair {
-    @apply grid grid-cols-5 gap-1;
+    @apply flex flex-row flex-wrap space-x-1;
 
     .jtrigger {
       @apply relative;
@@ -179,11 +175,17 @@
 
 .positioned-properties, .property-value-inner {
   .select-item {
-    @apply flex items-center;
+    @apply flex items-center shrink-0;
   }
 
   .ls-icon-priorityLvlUrgent {
     @apply text-orange-rx-08;
+  }
+}
+
+.property-value-inner {
+  .select-item {
+    @apply flex items-center shrink;
   }
 }
 
@@ -262,6 +264,8 @@ a.control-link {
 }
 
 .property-value-container {
+  @apply flex-1 shrink-0;
+  min-width: 100px;
   min-height: 29px;
 }
 
@@ -271,6 +275,7 @@ a.control-link {
 
 .property-key {
   /* Same height with one-line block container */
+  min-width: 160px;
   min-height: 29px;
 
   h1.title, h2.title {
@@ -287,11 +292,32 @@ a.control-link {
   }
 }
 
+.ls-card-item {
+    .property-key, .property-value-container {
+        min-width: initial;
+    }
+}
+
 .property-key-inner {
-  @apply flex flex-row items-center gap-1 relative;
+  @apply flex flex-row items-start gap-1 relative;
+
+  .property-icon {
+    @apply flex items-center;
+    height: 28px;
+
+    button {
+      margin-top: -1px;
+    }
+  }
+  .editor-inner {
+    textarea {
+      field-sizing: content;
+    }
+  }
 }
 
 .property-select {
+  max-width: 600px;
   .menu-link:hover, a.menu-link.chosen {
     .iconTablerExtBacklog {
       @apply text-gray-08;
@@ -324,7 +350,7 @@ a.control-link {
   }
 
   .inner-wrap {
-    @apply flex items-center w-full justify-between;
+    @apply flex items-center w-full justify-between gap-1 flex-wrap;
 
     > strong {
       @apply flex items-center gap-1 font-normal opacity-90;
@@ -389,29 +415,20 @@ a.control-link {
       @apply flex items-center gap-1 relative;
 
       .ls-icon-grip-vertical {
-        @apply opacity-50 cursor-move active:opacity-80;
+        @apply cursor-move;
       }
 
       > strong {
         @apply text-sm px-0.5 flex-grow cursor-pointer font-normal
-        select-none active:opacity-60;
+        select-none;
       }
 
       > .ui__button {
-        @apply !p-0 !w-7 !h-7 overflow-hidden flex-shrink-0;
+          @apply !p-0 !w-5 !h-5 overflow-hidden flex-shrink-0 text-muted-foreground hover:text-foreground;
       }
 
-      > a.del {
-        @apply items-center absolute right-0 top-0 px-1 py-[7px] scale-90 hidden
-        opacity-80 hover:opacity-100 active:opacity-80 text-gray-08 hover:text-red-700;
-      }
-
-      &:hover a.del {
-        @apply flex;
-      }
-
-      &:hover .ls-icon-grip-vertical {
-        @apply opacity-80;
+      > .del {
+        @apply hover:text-red-700;
       }
     }
   }

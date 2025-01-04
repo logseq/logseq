@@ -5,7 +5,8 @@
             [frontend.common.schema-register :include-macros true :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.client-op :as client-op]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- latest-add?->v->t
   [add?->v->t]
@@ -21,14 +22,12 @@
 
 (def ^:private watched-attrs
   #{:block/title :block/created-at :block/updated-at :block/alias
-    :block/tags :block/type :block/schema :block/link :block/journal-day
+    :block/tags :block/schema :block/link :block/journal-day
     :property/schema.classes :property.value/content
     :db/index :db/valueType :db/cardinality})
 
 (def ^:private watched-attr-ns
-  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"
-    "logseq.property.linked-references"
-    "logseq.class" "logseq.kv"})
+  (conj db-property/logseq-property-namespaces "logseq.class" "logseq.kv"))
 
 (defn- watched-attr?
   [attr]
@@ -124,9 +123,21 @@
 (sr/defkeyword :persist-op?
   "tx-meta option, generate rtc ops when not nil (default true)")
 
+(defn- entity-datoms=>a->add?->v->t
+  [entity-datoms]
+  (reduce
+   (fn [m datom]
+     (let [[_e a v t add?] datom]
+       (assoc-in m [a add? v] t)))
+   {} entity-datoms))
+
 (defmethod db-listener/listen-db-changes :gen-rtc-ops
-  [_ {:keys [_tx-data tx-meta db-before db-after
-             repo _id->attr->datom e->a->add?->v->t same-entity-datoms-coll]}]
+  [_
+   {:keys [repo same-entity-datoms-coll id->same-entity-datoms]}
+   {:keys [_tx-data tx-meta db-before db-after]}]
   (when (and (client-op/rtc-db-graph? repo)
              (:persist-op? tx-meta true))
-    (generate-rtc-ops repo db-before db-after same-entity-datoms-coll e->a->add?->v->t)))
+    (let [e->a->add?->v->t (update-vals
+                            id->same-entity-datoms
+                            entity-datoms=>a->add?->v->t)]
+      (generate-rtc-ops repo db-before db-after same-entity-datoms-coll e->a->add?->v->t))))

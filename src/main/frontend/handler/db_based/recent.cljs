@@ -23,4 +23,7 @@
        (take 20)
        (keep db/entity)
        (filter db/page?)
-       (remove ldb/hidden?)))
+       (remove ldb/hidden?)
+       (remove (fn [e]
+                 (and (ldb/property? e)
+                      (true? (get-in e [:block/schema :hide?])))))))

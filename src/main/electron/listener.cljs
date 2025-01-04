@@ -2,6 +2,7 @@
   "System-component-like ns that defines listeners by event name to receive ipc
   messages from electron's main process"
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.db.model :as db-model]
@@ -19,14 +20,14 @@
             [logseq.common.util :as common-util]
             [promesa.core :as p]
             [frontend.handler.property.util :as pu]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.db.async :as db-async]))
 
 (defn- safe-api-call
   "Force the callback result to be nil, otherwise, ipc calls could lead to
   window crash."
   [k f]
   (js/window.apis.on k (fn [data] (f data) nil)))
-
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
   []
@@ -86,11 +87,12 @@
                          (route-handler/redirect-to-page! page-name {:block-id block-id}))
 
                        block-id
-                       (if-let [block (db-model/get-block-by-uuid block-id)]
-                         (if (pu/shape-block? block)
-                           (route-handler/redirect-to-page! (get-in block [:block/page :block/uuid]) {:block-id block-id})
-                           (route-handler/redirect-to-page! block-id))
-                         (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false))
+                       (p/let [block (db-async/<get-block (state/get-current-repo) block-id)]
+                         (if block
+                           (if (pu/shape-block? block)
+                             (route-handler/redirect-to-page! (get-in block [:block/page :block/uuid]) {:block-id block-id})
+                             (route-handler/redirect-to-page! block-id))
+                           (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false)))
 
                        file
                        (if-let [db-page-name (db-model/get-file-page file false)]
@@ -123,15 +125,21 @@
                  (fn [^js data]
                    (let [sync-id (.-syncId data)
                          method  (.-method data)
+                         ns-method (some-> method (string/split "@"))
+                         ns' (first ns-method)
+                         method' (last ns-method)
                          args    (.-args data)
-                         ret-fn! #(ipc/invoke (str :electron.server/sync! sync-id) %)]
+                         ret-fn! #(ipc/invoke (str :electron.server/sync! sync-id) %)
+                         app? (contains? #{"app" "editor"} ns')
+                         ^js sdk1 (aget js/window.logseq "api")
+                         ^js sdk2 (aget js/window.logseq "sdk")]
 
                      (try
                        (println "invokeLogseqAPI:" method)
-                       (let [^js apis (aget js/window.logseq "api")]
-                         (when-not (aget apis method)
+                       (let [^js methodTarget (if app? sdk1 (aget sdk2 ns'))]
+                         (when-not methodTarget
                            (throw (js/Error. (str "MethodNotExist: " method))))
-                         (-> (p/promise (apply js-invoke apis method args))
+                         (-> (p/promise (apply js-invoke methodTarget method' args))
                              (p/then #(ret-fn! %))
                              (p/catch #(ret-fn! {:error %}))))
                        (catch js/Error e

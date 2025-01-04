@@ -48,12 +48,12 @@
            (do
              (state/set-current-repo! nil)
              (when-let [graph (:url (first (state/get-repos)))]
-              (notification/show! (str "Removed graph "
-                                       (pr-str (text-util/get-graph-name-from-path url))
-                                       ". Redirecting to graph "
-                                       (pr-str (text-util/get-graph-name-from-path graph)))
-                                  :success)
-              (state/pub-event! [:graph/switch graph {:persist? false}])))
+               (notification/show! (str "Removed graph "
+                                        (pr-str (text-util/get-graph-name-from-path url))
+                                        ". Redirecting to graph "
+                                        (pr-str (text-util/get-graph-name-from-path graph)))
+                                   :success)
+               (state/pub-event! [:graph/switch graph {:persist? false}])))
            (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success)))))))
 
 (defn start-repo-db-if-not-exists!
@@ -66,10 +66,10 @@
 (defn restore-and-setup-repo!
   "Restore the db of a graph from the persisted data, and setup. Create a new
   conn, or replace the conn in state with a new one."
-  [repo]
+  [repo & {:as opts}]
   (p/do!
    (state/set-db-restoring! true)
-   (db-restore/restore-graph! repo)
+   (db-restore/restore-graph! repo opts)
    (repo-config-handler/restore-repo-config! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
@@ -95,14 +95,14 @@
     (state/reset-parsing-state!)
     (let [dir (config/get-repo-dir repo)]
       (when-not (state/unlinked-dir? dir)
-       (route-handler/redirect-to-home!)
-       (let [local? (config/local-file-based-graph? repo)]
-         (if local?
-           (nfs-rebuild-index! repo ok-handler)
-           (rebuild-index! repo))
-         (js/setTimeout
-          (route-handler/redirect-to-home!)
-          500))))))
+        (route-handler/redirect-to-home!)
+        (let [local? (config/local-file-based-graph? repo)]
+          (if local?
+            (nfs-rebuild-index! repo ok-handler)
+            (rebuild-index! repo))
+          (js/setTimeout
+           (route-handler/redirect-to-home!)
+           500))))))
 
 (defn get-repos
   []
@@ -146,8 +146,8 @@
 (defn get-detail-graph-info
   [url]
   (when-let [graphs (seq (and url (combine-local-&-remote-graphs
-                                    (state/get-repos)
-                                    (state/get-remote-file-graphs))))]
+                                   (state/get-repos)
+                                   (state/get-remote-file-graphs))))]
     (first (filter #(when-let [url' (:url %)]
                       (= url url')) graphs))))
 
@@ -184,7 +184,9 @@
 (defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
    (p/let [config (migrate-db-config config/config-default-content)
-           _ (persist-db/<new full-graph-name {:config config})
+           _ (persist-db/<new full-graph-name
+                              (cond-> {:config config}
+                                file-graph-import? (assoc :import-type :file-graph)))
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
            _ (restore-and-setup-repo! full-graph-name)

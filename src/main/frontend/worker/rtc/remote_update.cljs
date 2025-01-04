@@ -6,6 +6,7 @@
             [datascript.core :as d]
             [frontend.common.schema-register :as sr]
             [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
@@ -14,6 +15,7 @@
             [logseq.clj-fractional-indexing :as index]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.outliner.batch-tx :as batch-tx]
@@ -166,16 +168,13 @@
           (apply-remote-remove-ops-helper conn other-ops)]
       ;; move to page-block's first child
       (doseq [block-uuid block-uuids-need-move]
-        (transact-db! :move-blocks&persist-op
-                      repo conn
-                      [(d/entity @conn [:block/uuid block-uuid])]
-                      (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))
-                      false))
+        (when-let [b (d/entity @conn [:block/uuid block-uuid])]
+          (when-let [target-b
+                     (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))]
+            (transact-db! :move-blocks&persist-op repo conn [b] target-b false))))
       (doseq [block-uuid block-uuids-to-remove]
-        (transact-db! :delete-blocks
-                      repo conn date-formatter
-                      [(d/entity @conn [:block/uuid block-uuid])]
-                      {})))))
+        (when-let [b (d/entity @conn [:block/uuid block-uuid])]
+          (transact-db! :delete-blocks repo conn date-formatter [b] {}))))))
 
 (defn- insert-or-move-block
   [repo conn block-uuid remote-parents remote-block-order move? op-value]
@@ -230,18 +229,48 @@
   (doseq [op remove-page-ops]
     (worker-page/delete! repo conn (:block-uuid op) {:persist-op? false})))
 
+(defn- get-schema-ref+cardinality
+  [db-schema attr]
+  (when-let [k-schema (get db-schema attr)]
+    [(= :db.type/ref (:db/valueType k-schema))
+     (= :db.cardinality/many (:db/cardinality k-schema))]))
+
 (defn- patch-remote-attr-map-by-local-av-coll
-  [attr-map av-coll]
-  (let [a->add->v+t (reduce
-                     (fn [m [a v t add?]]
-                       (assoc-in m [a add?] [v t]))
-                     {} av-coll)]
-    (into attr-map
-          (keep
-           (fn [[remote-a _remote-v]]
-             (when-let [v (get-in a->add->v+t [remote-a true 0])]
-               [remote-a v])))
-          attr-map)))
+  [remote-attr-map local-av-coll]
+  (let [a->add->v-set
+        (reduce
+         (fn [m [a v _t add?]]
+           (let [{add-vset true retract-vset false} (get m a {true #{} false #{}})]
+             (assoc m a {true ((if add? conj disj) add-vset v)
+                         false ((if add? disj conj) retract-vset v)})))
+         {} local-av-coll)
+        updated-remote-attr-map1
+        (keep
+         (fn [[remote-a remote-v]]
+           (when-let [{add-vset true retract-vset false} (get a->add->v-set remote-a)]
+             [remote-a
+              (if (coll? remote-v)
+                (-> (set remote-v)
+                    (set/union add-vset)
+                    (set/difference retract-vset)
+                    vec)
+                (cond
+                  (seq add-vset) (first add-vset)
+                  (contains? retract-vset remote-v) nil))]))
+         remote-attr-map)
+        updated-remote-attr-map2
+        (keep
+         (fn [[a add->v-set]]
+           (when-let [ns (namespace a)]
+             (when (and (not (contains? #{"block"} ns))
+                        ;; FIXME: only handle non-block/xxx attrs,
+                        ;; because some :block/xxx attrs are card-one, we only generate card-many values here
+                        (not (contains? remote-attr-map a)))
+               (when-let [v-set (not-empty (get add->v-set true))]
+                 [a (vec v-set)]))))
+         a->add->v-set)]
+    (into remote-attr-map
+          (concat updated-remote-attr-map1 updated-remote-attr-map2))))
 
 (defn- update-remote-data-by-local-unpushed-ops
   "when remote-data request client to move/update/remove/... blocks,
@@ -273,13 +302,20 @@
                                 remote-op)]
                (assoc affected-blocks-map block-uuid remote-op*))
              affected-blocks-map))
+         :remove
+         ;; TODO: if this block's updated by others, we shouldn't remove it
+         ;; but now, we don't know who updated this block recv from remote
+         ;; once we have this attr(:block/updated-by, :block/created-by), we can finish this TODO
+         (let [block-uuid (:block-uuid local-op-value)]
+           (dissoc affected-blocks-map block-uuid))
+
          ;;else
          affected-blocks-map)))
    affected-blocks-map local-unpushed-ops))
 
 (defn- affected-blocks->diff-type-ops
   [repo affected-blocks]
-  (let [unpushed-ops (client-op/get-all-ops repo)
+  (let [unpushed-ops (client-op/get-all-block-ops repo)
         affected-blocks-map* (if unpushed-ops
                                (update-remote-data-by-local-unpushed-ops
                                 affected-blocks unpushed-ops)
@@ -330,7 +366,6 @@
     :block/updated-at
     :block/created-at
     :block/alias
-    :block/type
     :block/schema
     :block/tags
     :block/link
@@ -338,18 +373,20 @@
     :property/schema.classes
     :property.value/content})
 
+(def ^:private watched-attr-ns
+  (conj db-property/logseq-property-namespaces "logseq.class" "logseq.kv"))
+
 (defn- update-op-watched-attr?
   [attr]
   (or (contains? update-op-watched-attrs attr)
       (when-let [ns (namespace attr)]
-        (or (= "logseq.task" ns)
-            (string/ends-with? ns ".property")))))
+        (or (contains? watched-attr-ns ns)
+            (string/ends-with? ns ".property")
+            (string/ends-with? ns ".class")))))
 
 (defn- diff-block-kv->tx-data
   [db db-schema e k local-v remote-v]
-  (let [k-schema (get db-schema k)
-        ref? (= :db.type/ref (:db/valueType k-schema))
-        card-many? (= :db.cardinality/many (:db/cardinality k-schema))]
+  (when-let [[ref? card-many?] (get-schema-ref+cardinality db-schema k)]
     (case [ref? card-many?]
       [true true]
       (let [[local-only remote-only] (data/diff (set local-v) (set remote-v))]
@@ -362,15 +399,18 @@
       [true false]
       (let [remote-block-uuid (if (coll? remote-v) (first remote-v) remote-v)]
         (when (not= local-v remote-block-uuid)
-          (when-let [db-id (:db/id (d/entity db [:block/uuid remote-block-uuid]))]
-            [[:db/add e k db-id]])))
+          (if (nil? remote-block-uuid)
+            [[:db/retract e k]]
+            (when-let [db-id (:db/id (d/entity db [:block/uuid remote-block-uuid]))]
+              [[:db/add e k db-id]]))))
+
       [false false]
       (let [remote-v* (if (coll? remote-v)
                         (first (map ldb/read-transit-str remote-v))
                         (ldb/read-transit-str remote-v))]
         (when (not= local-v remote-v*)
           (if (nil? remote-v*)
-            [[:db/retract e k local-v]]
+            [[:db/retract e k]]
             [[:db/add e k remote-v*]])))
 
       [false true]
@@ -404,32 +444,29 @@
   (let [db-schema (d/schema db)
         local-block-map (->> ent
                              (filter (comp update-op-watched-attr? first))
-                             (map (fn [[k v]]
-                                    (let [k-schema (get db-schema k)
-                                          ref? (= :db.type/ref (:db/valueType k-schema))
-                                          card-many? (= :db.cardinality/many (:db/cardinality k-schema))]
-                                      [k
-                                       (case [ref? card-many?]
-                                         [true true]
-                                         (keep (fn [x] (when-let [e (:db/id x)] (:block/uuid (d/entity db e)))) v)
-                                         [true false]
-                                         (let [v* (some->> (:db/id v) (d/entity db) :block/uuid)]
-                                           (assert (some? v*) v)
-                                           v*)
-                                         ;; else
-                                         v)])))
+                             (keep (fn [[k v]]
+                                     (when-let [[ref? card-many?] (get-schema-ref+cardinality db-schema k)]
+                                       [k
+                                        (case [ref? card-many?]
+                                          [true true]
+                                          (keep (fn [x] (when-let [e (:db/id x)] (:block/uuid (d/entity db e)))) v)
+                                          [true false]
+                                          (let [v* (some->> (:db/id v) (d/entity db) :block/uuid)]
+                                            (assert (some? v*) v)
+                                            v*)
+                                          ;; else
+                                          v)])))
                              (into {}))
         remote-block-map (->> op-value
                               (filter (comp update-op-watched-attr? first))
-                              (map (fn [[k v]]
+                              (keep (fn [[k v]]
                                      ;; all non-built-in attrs is card-many in remote-op,
                                      ;; convert them according to the client db-schema
-                                     (let [k-schema (get db-schema k)
-                                           card-many? (= :db.cardinality/many (:db/cardinality k-schema))]
-                                       [k
-                                        (if (and (coll? v) (not card-many?))
-                                          (first v)
-                                          v)])))
+                                      (when-let [[_ref? card-many?] (get-schema-ref+cardinality db-schema k)]
+                                        [k
+                                         (if (and (coll? v) (not card-many?))
+                                           (first v)
+                                           v)])))
                               (into {}))]
     (diff-block-map->tx-data db (:db/id ent) local-block-map remote-block-map)))
 
@@ -536,7 +573,8 @@
 
         (< local-tx remote-t-before)
         (do (add-log-fn :rtc.log/apply-remote-update {:sub-type :need-pull-remote-data
-                                                      :remote-t remote-t :local-t local-tx})
+                                                      :remote-t remote-t :local-t local-tx
+                                                      :remote-t-before remote-t-before})
             (throw (ex-info "need pull earlier remote-data"
                             {:type ::need-pull-remote-data
                              :local-tx local-tx})))
@@ -549,7 +587,8 @@
               sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)
               update-ops (vals update-ops-map)
               update-page-ops (vals update-page-ops-map)
-              remove-page-ops (vals remove-page-ops-map)]
+              remove-page-ops (vals remove-page-ops-map)
+              db-before @conn]
           (js/console.groupCollapsed "rtc/apply-remote-ops-log")
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
                                              :persist-op? false
@@ -563,6 +602,9 @@
           ;; NOTE: we cannot set :persist-op? = true when batch-tx/with-batch-tx-mode (already set to false)
           ;; and there're some transactions in `apply-remote-remove-ops` need to :persist-op?=true
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
+          ;; wait all remote-ops transacted into db,
+          ;; then start to check any asset-updates in remote
+          (r.asset/emit-remote-asset-updates-from-block-ops db-before remove-ops)
           (js/console.groupEnd)
 
           (client-op/update-local-tx repo remote-t)

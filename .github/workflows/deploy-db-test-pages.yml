@@ -5,8 +5,8 @@ on:
     branches: ["test/db"]
 
 env:
-  CLOJURE_VERSION: "1.10.1.763"
-  NODE_VERSION: "18"
+  CLOJURE_VERSION: "1.11.1.1413"
+  NODE_VERSION: '20'
   JAVA_VERSION: "11"
 
 jobs:
@@ -44,6 +44,9 @@ jobs:
           yarn gulp:build && clojure -M:cljs release app  --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content false :source-map-detail-level :symbols}}'
           rsync -avz --exclude node_modules --exclude android --exclude ios ./static/ ./public/static/
           ls -lR ./public
+        env:
+          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
+          LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Publish to Cloudflare Pages
         uses: cloudflare/pages-action@1

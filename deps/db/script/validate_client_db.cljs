@@ -20,10 +20,9 @@
   "Validate datascript db as a vec of entity maps"
   [db ent-maps* {:keys [verbose group-errors humanize closed-maps]}]
   (let [ent-maps (db-malli-schema/update-properties-in-ents db ent-maps*)
-        schema (db-validate/update-schema db-malli-schema/DB db {:closed-schema? closed-maps})]
-    (if-let [explanation (->> ent-maps
-                         (m/explain schema)
-                         not-empty)]
+        explainer (db-validate/get-schema-explainer closed-maps)]
+    (if-let [explanation (binding [db-malli-schema/*db-for-validate-fns* db]
+                           (->> ent-maps explainer not-empty))]
       (do
         (if group-errors
           (let [ent-errors (db-validate/group-errors-by-entity db ent-maps (:errors explanation))]

@@ -12,7 +12,7 @@
   org.clj-commons/digest
   {:mvn/version "1.4.100"}}
  :pods
- {clj-kondo/clj-kondo {:version "2023.05.26"}
+ {clj-kondo/clj-kondo {:version "2024.09.27"}
   org.babashka/fswatcher {:version "0.0.3"}
   org.babashka/go-sqlite3 {:version "0.1.0"}}
  :tasks
@@ -88,6 +88,10 @@
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/graph-parser" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq -cp src:../outliner/src script/db_import.cljs" *command-line-args*)}
+
+  dev:db-import-many
+  {:doc "Import multiple file graphs to db graphs"
+   :task logseq.tasks.dev/db-import-many}
 
   dev:db-datoms
   {:doc "Write db's datoms to a file"

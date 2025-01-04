@@ -31,7 +31,7 @@
 
     > article {
       @apply p-4 flex-1 min-h-[12rem] w-screen overflow-y-auto;
-      @apply md:max-h-[70vh] md:w-[44rem];
+      @apply md:h-[70vh] md:w-[44rem];
     }
 
     > aside > .cp__settings-header,
@@ -89,7 +89,7 @@
     }
 
     .panel-wrap {
-      @apply p-1;
+      @apply p-1 flex flex-col gap-4;
 
       @screen sm {
         width: 600px;
@@ -97,9 +97,6 @@
 
       > .it {
         @apply sm:grid sm:grid-cols-3 sm:gap-6;
-
-        margin-bottom: 0;
-        padding-bottom: 12px;
 
         label {
           min-height: 28px;
@@ -146,19 +143,6 @@
 
         &:first-of-type {
           padding-top: 14px;
-        }
-      }
-
-      &.is-general {
-        > .it {
-          margin-bottom: 8px;
-        }
-
-      }
-
-      &.is-advanced {
-        > .it {
-          margin-bottom: 8px;
         }
       }
 
@@ -251,15 +235,7 @@
   }
 
   &-appearance-modal-inner {
-    @apply -m-2 -mb-3;
-
-    & > .it {
-      @apply mb-3;
-    }
-
-    label[for=toggle_radix_theme] {
-      @apply pt-2;
-    }
+    @apply -m-2 -mb-3 flex flex-col gap-4;
 
     .keyboard-shortcut {
       @apply relative -top-[3px];

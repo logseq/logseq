@@ -6,13 +6,13 @@
   to call from the commandline. Once this test runner is stable enough we should
   contribute it upstream"
   {:dev/always true} ;; necessary for test-data freshness
-  (:require [shadow.test.env :as env]
-            [clojure.tools.cli :as cli]
-            [clojure.string :as str]
+  (:require [cljs.test :as ct]
             [clojure.set :as set]
+            [clojure.string :as string]
+            [clojure.tools.cli :as cli]
+            [goog.string :as gstring]
             [shadow.test :as st]
-            [cljs.test :as ct]
-            [goog.string :as gstring]))
+            [shadow.test.env :as env]))
 
 ;; Cljs.test customization
 ;; Inherit behavior from default reporter
@@ -58,8 +58,8 @@
   (let [{:keys [errors] :as parsed-input}
         (apply cli/parse-opts args cli-opts parse-opts-options)]
     (if (seq errors)
-      (do (println (str/join "\n" (into ["Options failed to parse:"] errors)))
-        (js/process.exit 1))
+      (do (println (string/join "\n" (into ["Options failed to parse:"] errors)))
+          (js/process.exit 1))
       parsed-input)))
 
 (defn- get-selected-tests
@@ -80,11 +80,11 @@ returns selected tests and namespaces to run"
                                      #(seq (set/intersection exclude (set (keys (meta %)))))
                                      test-vars)))
         test-syms (cond (some? focused-tests)
-                    focused-tests
-                    namespace
-                    [namespace]
-                    namespace-regex
-                    (filter #(re-find namespace-regex (str %)) test-namespaces))]
+                        focused-tests
+                        namespace
+                        [namespace]
+                        namespace-regex
+                        (filter #(re-find namespace-regex (str %)) test-namespaces))]
     test-syms))
 
 ;; This is a patched version of https://github.com/thheller/shadow-cljs/blob/f271b3c40d3ccd4e587b0ffeaa2713d2f642114a/src/main/shadow/test/node.cljs#L44-L56

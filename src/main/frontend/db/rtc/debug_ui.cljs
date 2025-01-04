@@ -1,13 +1,14 @@
 (ns frontend.db.rtc.debug-ui
   "Debug UI for rtc module"
   (:require [fipp.edn :as fipp]
-            [frontend.common.missionary-util :as c.m]
             [frontend.db :as db]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.user :as user]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -15,17 +16,17 @@
             [rum.core :as rum]))
 
 (defonce debug-state (:rtc/state @state/state))
-(defonce rtc-log-flow (m/watch (:rtc/log @state/state)))
 
 (defn- stop
   []
   (let [^object worker @db-browser/*worker]
-    (.rtc-stop2 worker))
+    (.rtc-stop worker))
   (reset! debug-state nil))
 
 (rum/defcs ^:large-vars/cleanup-todo rtc-debug-ui < rum/reactive
   (rum/local nil ::logs)
   (rum/local nil ::sub-log-canceler)
+  (rum/local nil ::keys-state)
   {:will-mount (fn [state]
                  (let [canceler
                        (c.m/run-task
@@ -36,7 +37,7 @@
                                          logs)]
                              (reset! (get state ::logs) logs*)
                              logs*))
-                         nil rtc-log-flow)
+                         nil rtc-flows/rtc-log-flow)
                         ::sub-logs)]
                    (reset! (get state ::sub-log-canceler) canceler)
                    state))
@@ -59,7 +60,7 @@
        {:size :sm
         :on-click (fn [_]
                     (let [^object worker @db-browser/*worker]
-                      (p/let [result (.rtc-get-debug-state2 worker)
+                      (p/let [result (.rtc-get-debug-state worker)
                               new-state (ldb/read-transit-str result)]
                         (swap! debug-state (fn [old] (merge old new-state))))))}
        (shui/tabler-icon "refresh") "state")
@@ -70,7 +71,7 @@
         (fn [_]
           (let [token (state/get-auth-id-token)
                 ^object worker @db-browser/*worker]
-            (p/let [result (.rtc-get-graphs2 worker token)
+            (p/let [result (.rtc-get-graphs worker token)
                     graph-list (ldb/read-transit-str result)]
               (swap! debug-state assoc
                      :remote-graphs
@@ -101,6 +102,7 @@
             :remote-graphs (:remote-graphs debug-state*)
             :online-users (:online-users debug-state*)
             :auto-push? (:auto-push? debug-state*)
+            :remote-profile? (:remote-profile? debug-state*)
             :current-page (state/get-current-page)
             :blocks-count (when-let [page (state/get-current-page)]
                             (count (:block/_page (db/get-page page))))}
@@ -114,7 +116,7 @@
          :on-click (fn []
                      (let [token (state/get-auth-id-token)
                            ^object worker @db-browser/*worker]
-                       (.rtc-start2 worker (state/get-current-repo) token)))}
+                       (.rtc-start worker (state/get-current-repo) token)))}
         (shui/tabler-icon "player-play") "start")
 
        [:div.my-2.flex
@@ -125,7 +127,15 @@
                               {:on-click
                                (fn []
                                  (let [^object worker @db-browser/*worker]
-                                   (.rtc-toggle-auto-push worker (state/get-current-repo))))})]
+                                   (.rtc-toggle-auto-push worker)))})]
+        [:div.mr-2 (ui/button (str "Toggle remote profile("
+                                   (if (:remote-profile? debug-state*)
+                                     "ON" "OFF")
+                                   ")")
+                              {:on-click
+                               (fn []
+                                 (let [^object worker @db-browser/*worker]
+                                   (.rtc-toggle-remote-profile worker)))})]
         [:div (shui/button
                {:variant :outline
                 :class "text-red-rx-09 border-red-rx-08 hover:text-red-rx-10"
@@ -144,9 +154,9 @@
                                       user-email (when-not user-uuid (:grant-access-to-user debug-state*))]
                                   (when-let [graph-uuid (:graph-uuid debug-state*)]
                                     (let [^object worker @db-browser/*worker]
-                                      (.rtc-grant-graph-access2 worker token graph-uuid
-                                                                (some-> user-uuid vector ldb/write-transit-str)
-                                                                (some-> user-email vector ldb/write-transit-str))))))})
+                                      (.rtc-grant-graph-access worker token graph-uuid
+                                                               (some-> user-uuid vector ldb/write-transit-str)
+                                                               (some-> user-email vector ldb/write-transit-str))))))})
 
         [:b "➡️"]
         [:input.form-input.my-2.py-1
@@ -214,7 +224,7 @@
                                     token (state/get-auth-id-token)
                                     remote-graph-name (:upload-as-graph-name debug-state*)
                                     ^js worker @db-browser/*worker]
-                                (.rtc-async-upload-graph2 worker repo token remote-graph-name)))})
+                                (.rtc-async-upload-graph worker repo token remote-graph-name)))})
       [:b "➡️"]
       [:input.form-input.my-2.py-1.w-32
        {:on-change (fn [e] (swap! debug-state assoc :upload-as-graph-name (util/evalue e)))
@@ -231,7 +241,7 @@
                                 (let [token (state/get-auth-id-token)
                                       ^object worker @db-browser/*worker]
                                   (prn ::delete-graph graph-uuid)
-                                  (.rtc-delete-graph2 worker token graph-uuid))))})
+                                  (.rtc-delete-graph worker token graph-uuid))))})
 
       (shui/select
        {:on-value-change (fn [v]
@@ -245,4 +255,77 @@
        (shui/select-content
         (shui/select-group
          (for [{:keys [graph-uuid graph-status]} (:remote-graphs debug-state*)]
-           (shui/select-item {:value graph-uuid :disabled (some? graph-status)} graph-uuid)))))]]))
+           (shui/select-item {:value graph-uuid :disabled (some? graph-status)} graph-uuid)))))]
+
+     [:hr.my-2]
+
+     (let [*keys-state (get state ::keys-state)
+           keys-state @*keys-state]
+       [:div
+        [:div.pb-2.flex.flex-row.items-center.gap-2
+         (shui/button
+          {:size :sm
+           :on-click (fn [_]
+                       (let [^object worker @db-browser/*worker]
+                         (p/let [result1 (.rtc-get-graph-keys worker (state/get-current-repo))
+                                 graph-keys (ldb/read-transit-str result1)
+                                 result2 (some->> (state/get-auth-id-token) (.device-list-devices worker))
+                                 devices (ldb/read-transit-str result2)]
+                           (swap! (get state ::keys-state) #(merge % graph-keys {:devices devices})))))}
+          (shui/tabler-icon "refresh") "keys-state")]
+        [:div.pb-4
+         [:pre.select-text
+          (-> {:devices (:devices keys-state)
+               :graph-aes-key-jwk (:aes-key-jwk keys-state)}
+              (fipp/pprint {:width 20})
+              with-out-str)]]
+        (shui/button
+         {:size :sm
+          :on-click (fn [_]
+                      (let [^object worker @db-browser/*worker]
+                        (when-let [device-uuid (not-empty (:remove-device-device-uuid keys-state))]
+                          (when-let [token (state/get-auth-id-token)]
+                            (.device-remove-device worker token device-uuid)))))}
+         "Remove device:")
+        [:input.form-input.my-2.py-1.w-32
+         {:on-change (fn [e] (swap! *keys-state assoc :remove-device-device-uuid (util/evalue e)))
+          :on-focus (fn [e] (let [v (.-value (.-target e))]
+                              (when (= v "device-uuid here")
+                                (set! (.-value (.-target e)) ""))))
+          :placeholder "device-uuid here"}]
+        (shui/button
+         {:size :sm
+          :on-click (fn [_]
+                      (let [^object worker @db-browser/*worker]
+                        (when-let [device-uuid (not-empty (:remove-public-key-device-uuid keys-state))]
+                          (when-let [key-name (not-empty (:remove-public-key-key-name keys-state))]
+                            (when-let [token (state/get-auth-id-token)]
+                              (.device-remove-device-public-key worker token device-uuid key-name))))))}
+         "Remove public-key:")
+        [:input.form-input.my-2.py-1.w-32
+         {:on-change (fn [e] (swap! *keys-state assoc :remove-public-key-device-uuid (util/evalue e)))
+          :on-focus (fn [e] (let [v (.-value (.-target e))]
+                              (when (= v "device-uuid here")
+                                (set! (.-value (.-target e)) ""))))
+          :placeholder "device-uuid here"}]
+        [:input.form-input.my-2.py-1.w-32
+         {:on-change (fn [e] (swap! *keys-state assoc :remove-public-key-key-name (util/evalue e)))
+          :on-focus (fn [e] (let [v (.-value (.-target e))]
+                              (when (= v "key-name here")
+                                (set! (.-value (.-target e)) ""))))
+          :placeholder "key-name here"}]
+        (shui/button
+         {:size :sm
+          :on-click (fn [_]
+                      (let [^object worker @db-browser/*worker]
+                        (when-let [token (state/get-auth-id-token)]
+                          (when-let [device-uuid (not-empty (:sync-private-key-device-uuid keys-state))]
+                            (.rtc-sync-current-graph-encrypted-aes-key
+                             worker token (ldb/write-transit-str [(parse-uuid device-uuid)]))))))}
+         "Sync CurrentGraph EncryptedAesKey")
+        [:input.form-input.my-2.py-1.w-32
+         {:on-change (fn [e] (swap! *keys-state assoc :sync-private-key-device-uuid (util/evalue e)))
+          :on-focus (fn [e] (let [v (.-value (.-target e))]
+                              (when (= v "device-uuid here")
+                                (set! (.-value (.-target e)) ""))))
+          :placeholder "device-uuid here"}]])]))

@@ -67,13 +67,12 @@
 
        [:<>
         [:div.sm:flex.sm:items-start
-         [:div.mt-3.text-center.sm:mt-0.sm:text-left.mb-2
+         [:div.mt-3.text-center.sm:mt-0.sm:text-left.mb-2.w-full
           (if (nil? @*git-status)
             [:div "Loading..."]
             [:div.flex.w-full.flex-col
              [:h2.text-xl "You have uncommitted changes: "]
              [:pre.max-h-96.overflow-y-auto.bg-gray-02
-              {:class "md:max-w-[700px]"}
               (prettify-git-status @*git-status)]])
           [:h3#modal-headline.text-lg.leading-6.font-medium
            "Your commit message:"]]]

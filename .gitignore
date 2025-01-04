@@ -36,7 +36,12 @@ strings.csv
 resources/electron.js
 .lsp/.cache
 .clj-kondo/.cache
-.clj-kondo/babashka/sci
+.clj-kondo/babashka
+.clj-kondo/http-kit
+.clj-kondo/metosin/malli
+.clj-kondo/rewrite-clj
+.clj-kondo/taoensso
+.clj-kondo/funcool
 /libs/dist/
 charlie/
 .vscode

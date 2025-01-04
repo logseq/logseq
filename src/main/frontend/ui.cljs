@@ -2,11 +2,10 @@
   "Main ns for reusable components"
   (:require ["@logseq/react-tweet-embed" :as react-tweet-embed]
             ["react-intersection-observer" :as react-intersection-observer]
-            ["react-resize-context" :as Resize]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            ["react-virtuoso" :refer [Virtuoso]]
+            ["react-virtuoso" :refer [Virtuoso VirtuosoGrid]]
             ["@emoji-mart/data" :as emoji-data]
             ["emoji-mart" :as emoji-mart]
             [cljs-bean.core :as bean]
@@ -36,7 +35,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [frontend.date :as date]))
 
 (declare icon)
 
@@ -44,9 +44,8 @@
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 (defonce virtualized-list (r/adapt-class Virtuoso))
+(defonce virtualized-grid (r/adapt-class VirtuosoGrid))
 
-(def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
-(def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 (def useInView (gobj/get react-intersection-observer "useInView"))
@@ -59,11 +58,11 @@
 (defn last-shui-preview-popup?
   []
   (= "ls-preview-popup"
-    (some-> (shui-popup/get-last-popup) :content-props :class)))
+     (some-> (shui-popup/get-last-popup) :content-props :class)))
 (defn hide-popups-until-preview-popup!
   []
   (while (and (shui-popups?)
-           (not (last-shui-preview-popup?)))
+              (not (last-shui-preview-popup?)))
     (shui/popup-hide!)))
 
 (def built-in-colors
@@ -76,10 +75,10 @@
    "gray"])
 
 (defn ->block-background-color
- [color]
- (if (some #{color} built-in-colors)
-   (str "var(--ls-highlight-color-" color ")")
-   color))
+  [color]
+  (if (some #{color} built-in-colors)
+    (str "var(--ls-highlight-color-" color ")")
+    color))
 
 (defn built-in-color?
   [color]
@@ -179,9 +178,9 @@
                (reset! (:open? state) true))
              (let [on-toggle (:on-toggle opts)]
                (when (fn? on-toggle)
-                (add-watch (:open? state) ::listen-open-value
-                           (fn [_ _ _ _]
-                             (on-toggle @(:open? state)))))))
+                 (add-watch (:open? state) ::listen-open-value
+                            (fn [_ _ _ _]
+                              (on-toggle @(:open? state)))))))
            state)}
   [state content-fn modal-content-fn
    & [{:keys [modal-class z-index trigger-class _initial-open? *toggle-fn
@@ -220,11 +219,11 @@
      (dissoc options :only-child?) child]
     [:a.flex.justify-between.menu-link
      (cond-> options
-             (true? no-padding?)
-             (assoc :class (str class " no-padding"))
+       (true? no-padding?)
+       (assoc :class (str class " no-padding"))
 
-             true
-             (dissoc :no-padding?))
+       true
+       (dissoc :no-padding?))
 
      [:span.flex-1 child]
      (when shortcut
@@ -242,15 +241,15 @@
                  links (remove nil? links)]
              (for [{icon' :icon :keys [options title key hr hover-detail item _as-link?]} links]
                (let [new-options
-                           (merge options
-                                  (cond->
-                                    {:title    hover-detail
-                                     :on-click (fn [e]
-                                                 (when-not (false? (when-let [on-click-fn (:on-click options)]
-                                                                     (on-click-fn e)))
-                                                   (close-fn)))}
-                                    key
-                                    (assoc :key key)))
+                     (merge options
+                            (cond->
+                             {:title    hover-detail
+                              :on-click (fn [e]
+                                          (when-not (false? (when-let [on-click-fn (:on-click options)]
+                                                              (on-click-fn e)))
+                                            (close-fn)))}
+                              key
+                              (assoc :key key)))
                      child (if hr
                              nil
                              (or item
@@ -261,8 +260,8 @@
                  (if hr
                    [:hr.menu-separator {:key (or key "dropdown-hr")}]
                    (rum/with-key
-                    (menu-link new-options child)
-                    title)))))
+                     (menu-link new-options child)
+                     title)))))
 
            wrapper-children
            [:.menu-links-wrapper
@@ -318,12 +317,12 @@
            [:div.flex-shrink-0.flex {:style {:margin-top -9
                                              :margin-right -18}}
             (button
-              {:button-props {:aria-label "Close"}
-               :variant :ghost
-               :class "hover:bg-transparent hover:text-foreground"
-               :on-click (fn []
-                           (notification/clear! uid))
-               :icon "x"})]]]]]])))
+             {:button-props {:aria-label "Close"}
+              :variant :ghost
+              :class "hover:bg-transparent hover:text-foreground scale-90"
+              :on-click (fn []
+                          (notification/clear! uid))
+              :icon "x"})]]]]]])))
 
 (declare button)
 
@@ -332,9 +331,9 @@
   [:div.ui__notifications-content
    [:div.pointer-events-auto.notification-clear
     (button (t :notification/clear-all)
-     :intent "logseq"
-     :on-click (fn []
-                 (notification/clear-all!)))]])
+            :intent "logseq"
+            :on-click (fn []
+                        (notification/clear-all!)))]])
 
 (rum/defc notification < rum/reactive
   []
@@ -349,7 +348,7 @@
                                     :key     (name k)}
                                    (fn [state]
                                      (notification-content state (:content v) (:status v) k)))))
-                           contents)
+                              contents)
            clear-all (when (> (count contents) 1)
                        (css-transition
                         {:timeout 100
@@ -363,7 +362,7 @@
   [input opts]
   (let [time-fn (fn []
                   (try
-                    (util/time-ago input)
+                    (util/human-time input)
                     (catch :default e
                       (js/console.error e)
                       input)))
@@ -512,43 +511,53 @@
            empty-placeholder
            item-render
            class
-           header]}]
+           header
+           grouped?]}]
   (let [*current-idx (get state ::current-idx)
-        *groups (atom #{})]
+        *groups (atom #{})
+        render-f (fn [matched]
+                   (for [[idx item] (medley/indexed matched)]
+                     (let [react-key (str idx)
+                           item-cp
+                           [:div.menu-link-wrap
+                            {:key react-key
+                   ;; mouse-move event to indicate that cursor moved by user
+                             :on-mouse-move  #(reset! *current-idx idx)}
+                            (let [chosen? (= @*current-idx idx)]
+                              (menu-link
+                               {:id (str "ac-" react-key)
+                                :tab-index "0"
+                                :class (when chosen? "chosen")
+                       ;; TODO: should have more tests on touch devices
+                       ;:on-pointer-down #(util/stop %)
+                                :on-click (fn [e]
+                                            (util/stop e)
+                                            (when-not (:disabled? item)
+                                              (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                                (on-shift-chosen item)
+                                                (on-chosen item e))))}
+                               (if item-render (item-render item chosen?) item)))]]
+
+                       (let [group-name (and (fn? get-group-name) (get-group-name item))]
+                         (if (and group-name (not (contains? @*groups group-name)))
+                           (do
+                             (swap! *groups conj group-name)
+                             [:div
+                              [:div.ui__ac-group-name group-name]
+                              item-cp])
+                           item-cp)))))]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
         (when header header)
-        (for [[idx item] (medley/indexed matched)]
-          [:<>
-           {:key idx}
-           (let [item-cp
-                 [:div.menu-link-wrap
-                  {:key            idx
-                   ;; mouse-move event to indicate that cursor moved by user
-                   :on-mouse-move  #(reset! *current-idx idx)}
-                  (let [chosen? (= @*current-idx idx)]
-                    (menu-link
-                     {:id (str "ac-" idx)
-                      :tab-index "0"
-                      :class (when chosen? "chosen")
-                       ;; TODO: should have more tests on touch devices
-                       ;:on-pointer-down #(util/stop %)
-                      :on-click (fn [e]
-                                  (util/stop e)
-                                  (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                    (on-shift-chosen item)
-                                    (on-chosen item e)))}
-                     (if item-render (item-render item chosen?) item)))]]
-
-             (let [group-name (and (fn? get-group-name) (get-group-name item))]
-               (if (and group-name (not (contains? @*groups group-name)))
-                 (do
-                   (swap! *groups conj group-name)
-                   [:div
-                    [:div.ui__ac-group-name group-name]
-                    item-cp])
-                 item-cp)))])]
+        (if grouped?
+          (for [[group matched] (group-by :group matched)]
+            (if group
+              [:div
+               [:div.ui__ac-group-name group]
+               (render-f matched)]
+              (render-f matched)))
+          (render-f matched))]
        (when empty-placeholder
          empty-placeholder))]))
 
@@ -576,125 +585,6 @@
       (first binding)
       (shortcut-utils/decorate-binding binding))))
 
-(rum/defc modal-overlay
-  [state close-fn close-backdrop?]
-  [:div.ui__modal-overlay
-   {:class    (case state
-                "entering" "ease-out duration-300 opacity-0"
-                "entered" "ease-out duration-300 opacity-100"
-                "exiting" "ease-in duration-200 opacity-100"
-                "exited" "ease-in duration-200 opacity-0")
-    :on-click #(when close-backdrop? (close-fn))}
-   [:div.absolute.inset-0.opacity-75]])
-
-(rum/defc modal-panel-content-cp <
-  mixins/component-editing-mode
-  [panel-content close-fn]
-  (panel-content close-fn))
-
-(rum/defc modal-panel
-  [show? panel-content transition-state close-fn fullscreen? close-btn? style]
-  [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm
-   (cond->
-    {:class (case transition-state
-              "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
-              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
-              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
-     (seq style)
-     (assoc :style style))
-   [:div.ui__modal-close-wrap
-    (when-not (false? close-btn?)
-      [:a.ui__modal-close
-       {:aria-label "Close"
-        :type       "button"
-        :on-click   close-fn}
-       [:svg.h-6.w-6
-        {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
-        [:path
-         {:d               "M6 18L18 6M6 6l12 12"
-          :stroke-width    "2"
-          :stroke-linejoin "round"
-          :stroke-linecap  "round"}]]])]
-   (when show?
-     [:div (cond-> {:class (if fullscreen? "" "panel-content")}
-             (seq style)
-             (assoc :style style))
-      (modal-panel-content-cp panel-content close-fn)])])
-
-(rum/defc modal < rum/reactive
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/hide-when-esc-or-outside
-      state
-      :on-hide (fn []
-                 (some->
-                  (.querySelector (rum/dom-node state) "button.ui__modal-close")
-                  (.click)))
-      :outside? false)
-     (mixins/on-key-down
-      state
-      {;; enter
-       13 (fn [state e]
-            (.preventDefault e)
-            (some->
-             (.querySelector (rum/dom-node state) "button.ui__modal-enter")
-             (.click)))})))
-  []
-  (let [modal-panel-content (state/sub :modal/panel-content)
-        fullscreen? (state/sub :modal/fullscreen?)
-        close-btn? (state/sub :modal/close-btn?)
-        close-backdrop? (state/sub :modal/close-backdrop?)
-        show? (state/sub :modal/show?)
-        label (state/sub :modal/label)
-        style (state/sub :modal/style)
-        class (state/sub :modal/class)
-        close-fn (fn []
-                   (state/close-modal!)
-                   (state/close-settings!))
-        modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
-    [:div.ui__modal
-     {:style {:z-index (if show? 999 -1)
-              :display (if show? "flex" "none")}
-      :label label
-      :class class}
-     (css-transition
-      {:in show? :timeout 0}
-      (fn [state]
-        (modal-overlay state close-fn close-backdrop?)))
-     (css-transition
-      {:in show? :timeout 0}
-      (fn [state]
-        (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn? style)))]))
-
-(rum/defc sub-modal < rum/reactive
-  []
-  (when-let [modals (seq (state/sub :modal/subsets))]
-    (for [[idx modal'] (medley/indexed modals)]
-      (let [id (:modal/id modal')
-            modal-panel-content (:modal/panel-content modal')
-            close-btn? (:modal/close-btn? modal')
-            close-backdrop? (:modal/close-backdrop? modal')
-            show? (:modal/show? modal')
-            label (:modal/label modal')
-            style (:modal/style modal')
-            class (:modal/class modal')
-            close-fn (fn []
-                       (state/close-sub-modal! id))
-            modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
-        [:div.ui__modal.is-sub-modal
-         {:style {:z-index (if show? (+ 999 idx) -1)}
-          :label label
-          :class class}
-         (css-transition
-          {:in show? :timeout 0}
-          (fn [state]
-            (modal-overlay state close-fn close-backdrop?)))
-         (css-transition
-          {:in show? :timeout 0}
-          (fn [state]
-            (modal-panel show? modal-panel-content state close-fn false close-btn? style)))]))))
-
 (defn loading
   ([] (loading (t :loading)))
   ([content] (loading content nil))
@@ -714,24 +604,27 @@
   (rum/local false ::control?)
   [state {:keys [on-pointer-down header title-trigger? collapsed?]}]
   (let [control? (get state ::control?)]
-    [:div.content
+    [:div.ls-foldable-title.content
      [:div.flex-1.flex-row.foldable-title (cond->
-                                            {:on-mouse-over #(reset! control? true)
-                                             :on-mouse-out  #(reset! control? false)}
+                                           {:on-mouse-over #(reset! control? true)
+                                            :on-mouse-out  #(reset! control? false)}
                                             title-trigger?
                                             (assoc :on-pointer-down on-pointer-down
                                                    :class "cursor"))
-      [:div.flex.flex-row.items-center
+      [:div.flex.flex-row.items-center.ls-foldable-header.gap-1
+       {:on-click (fn [^js e]
+                    (let [^js target (.-target e)]
+                      (when (some-> target (.closest ".as-toggle"))
+                        (reset! collapsed? (not @collapsed?)))))}
        (when-not (mobile-util/native-platform?)
-         [:a.block-control.opacity-50.hover:opacity-100.mr-2
-          (cond->
-            {:style    {:width       14
-                        :height      16
-                        :margin-left -30}}
-            (not title-trigger?)
-            (assoc :on-pointer-down on-pointer-down))
-          [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
-           (rotating-arrow @collapsed?)]])
+         (let [style {:width 14 :height 16}]
+           [:a.ls-foldable-title-control.block-control.opacity-50.hover:opacity-100
+            (cond->
+             {:style style}
+              (not title-trigger?)
+              (assoc :on-pointer-down on-pointer-down))
+            [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
+             (rotating-arrow @collapsed?)]]))
        (if (fn? header)
          (header @collapsed?)
          header)]]]))
@@ -751,18 +644,19 @@
                                 _default-collapsed? _init-collapsed]}]
   (let [collapsed? (get state ::collapsed?)
         on-pointer-down (fn [e]
-                        (util/stop e)
-                        (swap! collapsed? not)
-                        (when on-pointer-down
-                          (on-pointer-down @collapsed?)))]
+                          (util/stop e)
+                          (swap! collapsed? not)
+                          (when on-pointer-down
+                            (on-pointer-down @collapsed?)))]
     [:div.flex.flex-col
      {:class class}
      (foldable-title {:on-pointer-down on-pointer-down
                       :header header
                       :title-trigger? title-trigger?
                       :collapsed? collapsed?})
-     [:div {:class (if @collapsed? "hidden" "initial")
-            :on-pointer-down (fn [e] (.stopPropagation e))}
+     ;; Don't stop propagation for the pointer down event to the high level content container.
+     ;; That may cause the drag function to not work.
+     [:div {:class (if @collapsed? "hidden" "initial")}
       (if (fn? content)
         (if (not @collapsed?) (content) nil)
         content)]]))
@@ -799,8 +693,9 @@
      (fn [state error _info]
        (log/error :exception error)
        (notification/show!
-        (str "Error caught by UI!\n " error)
-        :error)
+        [:div.flex.flex-col.gap-2
+         [:div (str "Error caught by UI!\n " error)]
+         (str (.-stack error))] `:error)
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]
   (if (some? error)
@@ -947,7 +842,7 @@
       :on-change #(let [value (util/evalue %)]
                     (reset! *value value))
       :on-pointer-up #(let [value (util/evalue %)]
-                      (on-change value))}]))
+                        (on-change value))}]))
 
 (rum/defcs tweet-embed < (rum/local true :loading?)
   [state id]
@@ -966,9 +861,9 @@
            :or   {small? false}
            :as   opts}]
   (let [button-props (merge
-                       (dissoc opts
-                         :theme :background :href :variant :class :intent :small? :icon :icon-props :disabled? :button-props)
-                       button-props)
+                      (dissoc opts
+                              :theme :background :href :variant :class :intent :small? :icon :icon-props :disabled? :button-props)
+                      button-props)
         props (merge {:variant (cond
                                  (= theme :gray) :ghost
                                  (= background "gray") :secondary
@@ -979,10 +874,10 @@
                       :size    (if small? :xs (or size :sm))
                       :icon    icon'
                       :class   (if (and (string? background)
-                                     (not (contains? #{"gray" "red"} background)))
+                                        (not (contains? #{"gray" "red"} background)))
                                  (str class " primary-" background) class)
                       :muted   disabled?}
-                button-props)
+                     button-props)
 
         icon'' (when icon' (shui/tabler-icon icon' icon-props))
         href? (not (string/blank? href))
@@ -1007,7 +902,7 @@
    [:span.ui__point.overflow-hidden.rounded-full.inline-block
     (merge {:class (str (util/hiccup->class klass) " " class)
             :style (merge {:width size :height size} style)}
-      (dissoc opts :style :class))]))
+           (dissoc opts :style :class))]))
 
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
@@ -1130,7 +1025,7 @@
 (rum/defc DelDateButton
   [on-delete]
   (shui/button {:variant :outline :size :sm :class "del-date-btn" :on-click on-delete}
-    (shui/tabler-icon "trash")))
+               (shui/tabler-icon "trash" {:size 15})))
 
 (defonce month-values
   [:January :February :March :April :May
@@ -1140,59 +1035,139 @@
 (defn get-month-label
   [n]
   (some->> n (nth month-values)
-    (name)))
+           (name)))
 
-(rum/defc DateMonthsPicker
-  [value on-select]
-  [:div.ls-months-picker
-   (for [[idx m] (medley/indexed month-values)
-         :let [m' (cljs.core/name m)]]
-     (shui/button {:on-click (fn []
-                               (let [^js e (js/Event. "change")]
-                                 (js/Object.defineProperty e "target"
-                                   #js {:value #js {:value idx} :enumerable true})
-                                 (on-select e)
-                                 (shui/popup-hide!)))
-                   :variant :secondary
-                   :class (when (= idx value) "current")}
-       m'))])
-
-(rum/defc DateNavSelect
+(rum/defc date-year-month-select
   [{:keys [name value onChange _children]}]
   [:div.months-years-nav
    (if (= name "years")
-     [:label [:input.py-0.px-1.w-auto
-              {:type "number" :value value :on-change onChange :min 1 :max 9999}]]
+     (shui/input
+      {:on-change (fn [v] (when v (onChange v)))
+       :class "h-6 ml-2 !w-auto !px-2"
+       :value value
+       :type "number"
+       :min 1
+       :max 9999})
 
-     ;; months
-     ;[:select {:on-change onChange :value value :data-month value} children]
-     [:span.cursor-pointer.pr-1.pl-2.active:opacity-80.select-none
-      {:on-click (fn [^js e]
-                   (shui/popup-show! (.-target e)
-                     (fn []
-                       (DateMonthsPicker value onChange))
-                     {:align "start"
-                      :content-props {:class "w-[220px]"
-                                      :onOpenAutoFocus #(.preventDefault %)}}))}
-      (get-month-label value)])])
+     (shui/dropdown-menu
+      (shui/dropdown-menu-trigger
+       {:as-child true}
+       (shui/button {:variant :ghost
+                     :class "!px-2 !py-0 h-6 border border-input rounded-md"
+                     :size :sm}
+                    (get-month-label value)))
+      (shui/dropdown-menu-content
+       (for [[idx month] (medley/indexed month-values)
+             :let [label (clojure.core/name month)]]
+         (shui/dropdown-menu-checkbox-item
+          {:checked (= value idx)
+           :on-select (fn []
+                        (let [^js e (js/Event. "change")]
+                          (js/Object.defineProperty e "target"
+                                                    #js {:value #js {:value idx} :enumerable true})
+                          (onChange e)))}
+          label)))))])
 
 (defn single-calendar
-  [{:keys [del-btn? on-delete on-select] :as opts}]
+  [{:keys [del-btn? on-delete on-select on-day-click] :as opts}]
   (shui/calendar
-    (merge
-      {:mode "single"
-       :caption-layout "dropdown-buttons"
-       :fromYear 1899
-       :toYear 2099
-       :components (cond-> {:Dropdown #(DateNavSelect (bean/bean %))}
-                     del-btn? (assoc :Head #(DelDateButton on-delete)))
-       :class-names {:months "" :root (when del-btn? "has-del-btn")}
-       :on-day-key-down (fn [^js d _ ^js e]
-                          (when (= "Enter" (.-key e))
-                            (on-select d)))}
-      opts)))
+   (merge
+    {:mode "single"
+     :caption-layout "dropdown-buttons"
+     :fromYear 1000
+     :toYear 3000
+     :components (cond-> {:Dropdown #(date-year-month-select (bean/bean %))}
+                   del-btn? (assoc :Head #(DelDateButton on-delete)))
+     :class-names {:months "" :root (when del-btn? "has-del-btn")}
+     :on-day-key-down (fn [^js d _ ^js e]
+                        (when (= "Enter" (.-key e))
+                          (let [on-select' (or on-select on-day-click)]
+                            (on-select' d))))}
+    opts)))
+
+(defn- get-current-hh-mm
+  []
+  (let [current-time-s (first (.split (.toTimeString (js/Date.)) " "))]
+    (subs current-time-s 0 (- (count current-time-s) 3))))
+
+(rum/defc time-picker
+  [{:keys [on-change default-value]}]
+  [:div.flex.flex-row.items-center.gap-2.mx-3.mb-3
+   (shui/input
+    {:id "time-picker"
+     :type "time"
+     :class "!py-0 !w-max !h-8"
+     :default-value (or default-value "00:00")
+     :on-blur (fn [e]
+                (on-change (util/evalue e)))})
+   (shui/button
+    {:variant :ghost
+     :size :sm
+     :class "text-muted-foreground"
+     :on-click (fn []
+                 (let [value (get-current-hh-mm)]
+                   (set! (.-value (gdom/getElement "time-picker")) value)
+                   (on-change value)))}
+    "Use current time")])
+
+(rum/defc nlp-calendar
+  [{:keys [selected on-select on-day-click] :as opts}]
+  (let [default-on-select (or on-select on-day-click)
+        on-select' (if (:datetime? opts)
+                     (fn [date value]
+                       (let [value (or (and (string? value) value)
+                                       (.-value (gdom/getElement "time-picker")))]
+                         (let [[h m] (string/split value ":")]
+                           (when (and date selected)
+                             (.setHours date h m 0))
+                           (default-on-select date))))
+                     default-on-select)]
+    [:div.flex.flex-col.gap-2.relative
+     (single-calendar (assoc opts :on-select on-select'))
+     (when (:datetime? opts)
+       (time-picker (cond->
+                     {:on-change (fn [value] (on-select' selected value))}
+                      selected
+                      (assoc :default-value (str (util/zero-pad (.getHours selected))
+                                                 ":"
+                                                 (util/zero-pad (.getMinutes selected)))))))
+
+     (shui/input
+      {:type "text"
+       :placeholder "e.g. Next week"
+       :class "mx-3 mb-3"
+       :style {:width "initial"
+               :tab-index -1}
+       :auto-complete (if (util/chrome?) "chrome-off" "off")
+       :on-mouse-down util/stop-propagation
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (let [value (util/evalue e)]
+                          (when-not (string/blank? value)
+                            (let [result (date/nld-parse value)]
+                              (if-let [date (and result (doto (goog.date.DateTime.) (.setTime (.getTime result))))]
+                                (let [on-select' (or (:on-select opts) (:on-day-click opts))]
+                                  (on-select' date))
+                                (notification/show! (str (pr-str value) " is not a valid date. Please try again") :warning)))))))})]))
+
+(rum/defc skeleton
+  []
+  [:div.space-y-2
+   (shui/skeleton {:class "h-8 w-1/3 mb-8"})
+   (shui/skeleton {:class "h-6 w-full"})
+   (shui/skeleton {:class "h-6 w-full"})])
+
+(rum/defc indicator-progress-pie
+  [percentage]
+  (let [*el (rum/use-ref nil)]
+    (rum/use-effect!
+     #(when-let [^js el (rum/deref *el)]
+        (set! (.. el -style -backgroundImage)
+              (util/format "conic-gradient(var(--ls-pie-fg-color) %s%, var(--ls-pie-bg-color) %s%)" percentage percentage)))
+     [percentage])
+    [:span.cp__file-sync-indicator-progress-pie {:ref *el}]))
 
 (comment
   (rum/defc emoji-picker
-   [opts]
-   (EmojiPicker. (assoc opts :data emoji-data))))
+    [opts]
+    (EmojiPicker. (assoc opts :data emoji-data))))

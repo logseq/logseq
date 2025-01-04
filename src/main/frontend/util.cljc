@@ -11,6 +11,7 @@
             ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
             ["path-complete-extname" :as pathCompleteExtname]
+            ["semver" :as semver]
             [frontend.loader :refer [load]]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
@@ -49,8 +50,8 @@
      (-name [this] (str this))
      (-namespace [_] nil)))
 
-
 #?(:cljs (defonce ^js node-path utils/nodePath))
+#?(:cljs (defonce ^js sem-ver semver))
 #?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
 #?(:cljs (defn app-scroll-container-node
            ([]
@@ -95,7 +96,6 @@
        {:malli/schema [:=> [:cat :string] :string]}
        [s]
        (sanitizeFilename (str s)))))
-
 
 #?(:cljs
    (do
@@ -148,7 +148,8 @@
    (do
      (def nfs? (and (not (electron?))
                     (not (mobile-util/native-platform?))))
-     (def web-platform? nfs?)))
+     (def web-platform? nfs?)
+     (def plugin-platform? (or web-platform? (electron?)))))
 
 #?(:cljs
    (defn file-protocol?
@@ -221,8 +222,7 @@
                        (string/replace #"\)$" "")
                        (string/split #","))
                rgb (take 3 rgb)]
-           (rgb2hex rgb)))))
-)
+           (rgb2hex rgb))))))
 
 #?(:cljs
    (defn set-android-theme
@@ -239,15 +239,15 @@
    (defn set-theme-light
      []
      (p/do!
-       (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
-       (set-android-theme))))
+      (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
+      (set-android-theme))))
 
 #?(:cljs
    (defn set-theme-dark
      []
      (p/do!
-       (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
-       (set-android-theme))))
+      (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
+      (set-android-theme))))
 
 (defn find-first
   [pred coll]
@@ -305,7 +305,6 @@
      (if (string? x)
        (parse-double x)
        x)))
-
 
 #?(:cljs
    (defn debounce
@@ -605,7 +604,6 @@
   [s substr]
   (string/starts-with? s substr))
 
-
 #?(:cljs
    (def distinct-by common-util/distinct-by))
 
@@ -693,13 +691,13 @@
    ;; for widen char
    (defn safe-dec-current-pos-from-end
      [input current-pos]
-     (if-let [len (and (string? input) (.-length input))]
+     (if-let [len (and (number? current-pos) (string? input) (.-length input))]
        (if-let [input (and (>= len 2) (<= current-pos len)
-                             (.substring input (max (- current-pos 20) 0) current-pos))]
+                           (.substring input (max (- current-pos 20) 0) current-pos))]
          (try
            (let [^js splitter (GraphemeSplitter.)
-                 ^js input (.splitGraphemes splitter input)]
-             (- current-pos (.-length (.pop input))))
+                 ^js input' (.splitGraphemes splitter input)]
+             (- current-pos (.-length (.pop input'))))
            (catch :default e
              (js/console.error e)
              (dec current-pos)))
@@ -710,9 +708,9 @@
    ;; for widen char
    (defn safe-inc-current-pos-from-start
      [input current-pos]
-     (if-let [len (and (string? input) (.-length input))]
+     (if-let [len (and (number? current-pos) (string? input) (.-length input))]
        (if-let [input (and (>= len 2) (<= current-pos len)
-                             (.substr input current-pos 20))]
+                           (.substr input current-pos 20))]
          (try
            (let [^js splitter (GraphemeSplitter.)
                  ^js input (.splitGraphemes splitter input)]
@@ -876,51 +874,63 @@
            (gdom/getElement section "id"))))))
 
 #?(:cljs
-   (defn get-elem-idx
-     [nodes node]
-     (let [equal? (fn [^js a ^js b]
-                    (or (some-> b (= a))
-                        (and a b (= (.-id a) (.-id b)))))]
-       (first (filter number? (map-indexed (fn [idx b] (when (equal? b node) idx)) nodes))))))
+   (defn- skip-same-top-blocks
+     [blocks block]
+     (let [property? (= (d/attr block "data-is-property") "true")
+           properties-area (rec-get-node block "ls-properties-area")]
+       (remove (fn [b]
+                 (and
+                  (not= b block)
+                  (or (= (when b (.-top (.getBoundingClientRect b)))
+                         (when block (.-top (.getBoundingClientRect block))))
+                      (when property?
+                        (and (not= (d/attr b "data-is-property") "true")
+                             (gdom/contains properties-area b)))))) blocks))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed
      "Gets previous non-collapsed block. If given a container
       looks up blocks in that container e.g. for embed"
      ([block] (get-prev-block-non-collapsed block {}))
-     ([block {:keys [container]}]
+     ([block {:keys [container up-down?]}]
       (when-let [blocks (if container
                           (get-blocks-noncollapse container)
                           (get-blocks-noncollapse))]
-        (when-let [index (get-elem-idx blocks block)]
-          (let [idx (dec index)]
-            (when (>= idx 0)
-              (nth-safe blocks idx))))))))
+        (let [blocks (if up-down?
+                       (skip-same-top-blocks blocks block)
+                       blocks)]
+          (when-let [index (.indexOf blocks block)]
+            (let [idx (dec index)]
+              (when (>= idx 0)
+                (nth-safe blocks idx)))))))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed-non-embed
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
                             remove-embedded-blocks)]
-       (when-let [index (get-elem-idx blocks block)]
-           (let [idx (dec index)]
-             (when (>= idx 0)
-               (nth-safe blocks idx)))))))
+       (when-let [index (.indexOf blocks block)]
+         (let [idx (dec index)]
+           (when (>= idx 0)
+             (nth-safe blocks idx)))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed
-     [block]
+     [block {:keys [up-down?]}]
      (when-let [blocks (and block (get-blocks-noncollapse))]
-       (when-let [index (get-elem-idx blocks block)]
-         (let [idx (inc index)]
-           (when (>= (count blocks) idx)
-             (nth-safe blocks idx)))))))
+       (let [blocks (if up-down?
+                      (skip-same-top-blocks blocks block)
+                      blocks)]
+         (when-let [index (.indexOf blocks block)]
+           (let [idx (inc index)]
+             (when (>= (count blocks) idx)
+               (nth-safe blocks idx))))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed-skip
      [block]
      (when-let [blocks (get-blocks-noncollapse)]
-       (when-let [index (get-elem-idx blocks block)]
+       (when-let [index (.indexOf blocks block)]
          (loop [idx (inc index)]
            (when (>= (count blocks) idx)
              (let [block (nth-safe blocks idx)
@@ -1234,7 +1244,6 @@
    (defn shift-key? [e]
      (gobj/get e "shiftKey")))
 
-
 #?(:cljs
    (defn right-click?
      [e]
@@ -1317,8 +1326,8 @@
           (let [event-composing? (some-> (.getBrowserEvent e) (.-isComposing))]
             (if include-process?
               (or event-composing?
-                (= (gobj/get e "keyCode") 229)
-                (= (gobj/get e "key") "Process"))
+                  (= (gobj/get e "keyCode") 229)
+                  (= (gobj/get e "key") "Process"))
               event-composing?)))))))
 
 #?(:cljs
@@ -1357,26 +1366,34 @@
 
 ;; https://stackoverflow.com/questions/32511405/how-would-time-ago-function-implementation-look-like-in-clojure
 #?(:cljs
-   (defn time-ago
+   (defn human-time
      "time: inst-ms or js/Date"
-     [time]
-     (let [units [{:name "second" :limit 60 :in-second 1}
+     [time & {:keys [ago? after?]
+              :or {ago? true
+                   after? false}}]
+     (let [ago? (if after? false ago?)
+           units [{:name "second" :limit 60 :in-second 1}
                   {:name "minute" :limit 3600 :in-second 60}
                   {:name "hour" :limit 86400 :in-second 3600}
                   {:name "day" :limit 604800 :in-second 86400}
                   {:name "week" :limit 2629743 :in-second 604800}
                   {:name "month" :limit 31556926 :in-second 2629743}
                   {:name "year" :limit js/Number.MAX_SAFE_INTEGER :in-second 31556926}]
-           diff (t/in-seconds (t/interval (if (instance? js/Date time) time (js/Date. time)) (t/now)))]
+           time' (if (instance? js/Date time) time (js/Date. time))
+           now (t/now)
+           diff (t/in-seconds (if ago? (t/interval time' now) (t/interval now time')))]
        (if (< diff 5)
-         "just now"
+         (if ago? "just now" (str diff "seconds"))
          (let [unit (first (drop-while #(or (>= diff (:limit %))
                                             (not (:limit %)))
                                        units))]
            (-> (/ diff (:in-second unit))
                Math/floor
                int
-               (#(str % " " (:name unit) (when (> % 1) "s") " ago"))))))))
+               (#(str % " " (:name unit) (when (> % 1) "s")
+                      (when ago? " ago")
+                      (when after? " later")))))))))
+
 #?(:cljs
    (def JS_ROOT
      (when-not node-test?
@@ -1480,7 +1497,6 @@ Arg *stop: atom, reset to true to stop the loop"
                (async/<! (async/timeout 5000))
                (recur))))))))
 
-
 (defmacro concatv
   "Vector version of concat. non-lazy"
   [& args]
@@ -1495,13 +1511,6 @@ Arg *stop: atom, reset to true to stop the loop"
   "Vector version of remove. non-lazy"
   [pred coll]
   `(vec (remove ~pred ~coll)))
-
-#?(:cljs
-   (defn safe-with-meta
-     [o meta]
-     (if (satisfies? IMeta o)
-       (with-meta o meta)
-       o)))
 
 ;; from rum
 #?(:cljs
@@ -1530,3 +1539,9 @@ Arg *stop: atom, reset to true to stop the loop"
                 (js->clj)
                 (into {})
                 (walk/keywordize-keys)))))))
+
+#?(:cljs
+   (defn get-cm-instance
+     [^js target]
+     (when target
+       (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))

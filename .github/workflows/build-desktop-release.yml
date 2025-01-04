@@ -48,7 +48,7 @@ on:
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
   JAVA_VERSION: '11'
 
 jobs:
@@ -390,7 +390,7 @@ jobs:
 
   build-macos-x64:
     needs: [ compile-cljs ]
-    runs-on: macos-12
+    runs-on: macos-13
 
     steps:
       - name: Download The Static Asset
@@ -466,7 +466,7 @@ jobs:
 
   build-macos-arm64:
     needs: [ compile-cljs ]
-    runs-on: macos-12
+    runs-on: macos-14
 
     steps:
       - name: Download The Static Asset
@@ -568,7 +568,7 @@ jobs:
       - name: Sign Windows Executable
         run: |
           ls -lah ./builds
-          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.digicert.com ./builds/*.exe
+          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.sectigo.com ./builds/*.exe
         env:
           PASS: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
 

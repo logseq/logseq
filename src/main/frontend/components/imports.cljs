@@ -29,6 +29,7 @@
             [rum.core :as rum]
             [logseq.shui.ui :as shui]
             [logseq.shui.dialog.core :as shui-dialog]
+            [logseq.shui.form.core :as form-core]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db :as ldb]))
@@ -42,8 +43,10 @@
   []
   (notification/show! "Import finished!" :success)
   (shui/dialog-close! :import-indicator)
+  (state/clear-async-query-state!)
   (ui-handler/re-render-root!)
-  (route-handler/redirect-to-home!))
+  (route-handler/redirect-to-home!)
+  (js/setTimeout ui-handler/re-render-root! 500))
 
 (defn- roam-import-handler
   [e]
@@ -66,7 +69,7 @@
                           :error))))
 
 (defn- lsq-import-handler
-  [e & {:keys [sqlite? graph-name]}]
+  [e & {:keys [sqlite? debug-transit? graph-name]}]
   (let [file      (first (array-seq (.-files (.-target e))))
         file-name (some-> (gobj/get file "name")
                           (string/lower-case))
@@ -94,6 +97,31 @@
                                        (prn :debug :aborted)
                                        (js/console.error e)))
             (.readAsArrayBuffer reader file))))
+
+      debug-transit?
+      (let [graph-name (string/trim graph-name)]
+        (cond
+          (string/blank? graph-name)
+          (notification/show! "Empty graph name." :error)
+
+          (repo-handler/graph-already-exists? graph-name)
+          (notification/show! "Please specify another name as another graph with this name already exists!" :error)
+
+          :else
+          (do
+            (state/set-state! :graph/importing :logseq)
+            (let [reader (js/FileReader.)
+                  import-f import-handler/import-from-debug-transit!]
+              (set! (.-onload reader)
+                    (fn [e]
+                      (let [text (.. e -target -result)]
+                        (import-f
+                         graph-name
+                         text
+                         #(do
+                            (state/set-state! :graph/importing nil)
+                            (finished-cb))))))
+              (.readAsText reader file)))))
 
       (or edn? json?)
       (do
@@ -139,11 +167,11 @@
 (rum/defcs set-graph-name-dialog
   < rum/reactive
   (rum/local "" ::input)
-  [state sqlite-input-e opts]
+  [state input-e opts]
   (let [*input (::input state)
         on-submit #(if (repo/invalid-graph-name? @*input)
                      (repo/invalid-graph-name-warning)
-                     (lsq-import-handler sqlite-input-e (assoc opts :graph-name @*input)))]
+                     (lsq-import-handler input-e (assoc opts :graph-name @*input)))]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -163,78 +191,92 @@
                  {:on-click on-submit})]]))
 
 (rum/defc import-file-graph-dialog
-  [initial-name on-graph-name-confirmed]
-  (let [[graph-input set-graph-input!] (rum/use-state initial-name)
-        [tag-classes-input set-tag-classes-input!] (rum/use-state "")
-        [property-classes-input set-property-classes-input!] (rum/use-state "")
-        [property-parent-classes-input set-property-parent-classes-input!] (rum/use-state "")
-        on-submit #(do (on-graph-name-confirmed
-                        {:graph-name graph-input
-                         :tag-classes tag-classes-input
-                         :property-classes property-classes-input
-                         :property-parent-classes property-parent-classes-input})
-                       (shui/dialog-close!))]
-    [:div.container
-     [:div.sm:flex.sm:items-start
-      [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.leading-6.font-medium
-        "New graph name:"]]]
-     (shui/input
-      {:class "my-2 mb-4"
-       :auto-focus true
-       :default-value graph-input
-       :on-change (fn [e]
-                    (set-graph-input! (util/evalue e)))
-       :on-key-down (fn [e]
-                      (when (= "Enter" (util/ekey e))
-                        (on-submit)))})
+  [initial-name on-submit-fn]
+  [:div.border.p-6.rounded.bg-gray-01.mt-4
+   (let [form-ctx (form-core/use-form
+                   {:defaultValues {:graph-name initial-name
+                                    :convert-all-tags? true
+                                    :tag-classes ""
+                                    :remove-inline-tags? true
+                                    :property-classes ""
+                                    :property-parent-classes ""}
+                    :yupSchema (-> (.object form-core/yup)
+                                   (.shape #js {:graph-name (-> (.string form-core/yup) (.required))})
+                                   (.required))})
+         handle-submit (:handleSubmit form-ctx)
+         on-submit-valid (handle-submit
+                          (fn [^js e]
+                            ;; (js/console.log "[form] submit: " e (js->clj e))
+                            (on-submit-fn (js->clj e :keywordize-keys true))
+                            (shui/dialog-close!)))
+         [convert-all-tags-input set-convert-all-tags-input!] (rum/use-state true)]
 
-     [:div.sm:flex.sm:items-start
-      [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.leading-6.font-medium
-        "(Optional) Tags to import as new tags:"]
-       [:span.text-xs
-        "Tags are case insensitive and separated by commas"]]]
-     (shui/input
-      {:class "my-2 mb-4"
-       :default-value tag-classes-input
-       :on-change (fn [e]
-                    (set-tag-classes-input! (util/evalue e)))
-       :on-key-down (fn [e]
-                      (when (= "Enter" (util/ekey e))
-                        (on-submit)))})
+     (shui/form-provider form-ctx
+                         [:form
+                          {:on-submit on-submit-valid}
 
-     [:div.sm:flex.sm:items-start
-      [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.leading-6.font-medium
-        "(Optional) Properties whose values are imported as new tags e.g. 'type':"]
-       [:span.text-xs
-        "Properties are case insensitive and separated by commas"]]]
-     (shui/input
-      {:class "my-2 mb-4"
-       :default-value property-classes-input
-       :on-change (fn [e]
-                    (set-property-classes-input! (util/evalue e)))
-       :on-key-down (fn [e]
-                      (when (= "Enter" (util/ekey e))
-                        (on-submit)))})
+                          (shui/form-field {:name "graph-name"}
+                                           (fn [field error]
+                                             (shui/form-item
+                                              (shui/form-label "New graph name")
+                                              (shui/form-control
+                                               (shui/input (merge {:placeholder "Graph name"} field)))
+                                              (when error
+                                                (shui/form-description
+                                                 [:b.text-red-800 (:message error)])))))
 
-     [:div.sm:flex.sm:items-start
-      [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.leading-6.font-medium
-        "(Optional) Properties whose values are imported as parents of new tags e.g. 'parent':"]
-       [:span.text-xs
-        "Properties are case insensitive and separated by commas"]]]
-     (shui/input
-      {:class "my-2 mb-4"
-       :default-value property-parent-classes-input
-       :on-change (fn [e]
-                    (set-property-parent-classes-input! (util/evalue e)))
-       :on-key-down (fn [e]
-                      (when (= "Enter" (util/ekey e))
-                        (on-submit)))})
+                          (shui/form-field {:name "convert-all-tags?"}
+                                           (fn [field]
+                                             (shui/form-item
+                                              {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
+                                              (shui/form-label "Import all tags")
+                                              (shui/form-control
+                                               (shui/checkbox {:checked (:value field)
+                                                               :on-checked-change (fn [e]
+                                                                                    ((:onChange field) e)
+                                                                                    (set-convert-all-tags-input! (not convert-all-tags-input)))})))))
 
-     (shui/button {:size :sm :on-click on-submit} "Submit")]))
+                          (shui/form-field {:name "tag-classes"}
+                                           (fn [field _error]
+                                             (shui/form-item
+                                              {:class "pt-3"}
+                                              (shui/form-label "Import specific tags")
+                                              (shui/form-control
+                                               (shui/input (merge field
+                                                                  {:placeholder "tag 1, tag 2" :disabled convert-all-tags-input})))
+                                              (shui/form-description "Tags are case insensitive"))))
+
+                          (shui/form-field {:name "remove-inline-tags?"}
+                                           (fn [field]
+                                             (shui/form-item
+                                              {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
+                                              (shui/form-label "Remove inline tags")
+                                              (shui/form-description "Default behavior for DB graphs")
+                                              (shui/form-control
+                                               (shui/checkbox {:checked (:value field)
+                                                               :on-checked-change (:onChange field)})))))
+
+                          (shui/form-field {:name "property-classes"}
+                                           (fn [field _error]
+                                             (shui/form-item
+                                              {:class "pt-3"}
+                                              (shui/form-label "Import additional tags from property values")
+                                              (shui/form-control
+                                               (shui/input (merge {:placeholder "e.g. type"} field)))
+                                              (shui/form-description
+                                               "Properties are case insensitive and separated by commas"))))
+
+                          (shui/form-field {:name "property-parent-classes"}
+                                           (fn [field _error]
+                                             (shui/form-item
+                                              {:class "pt-3"}
+                                              (shui/form-label "Import tag parents from property values")
+                                              (shui/form-control
+                                               (shui/input (merge {:placeholder "e.g. parent"} field)))
+                                              (shui/form-description
+                                               "Properties are case insensitive and separated by commas"))))
+
+                          (shui/button {:type "submit" :class "right-0 mt-3"} "Submit")]))])
 
 (defn- counts-from-entities
   [entities]
@@ -303,17 +345,21 @@
                    (fs/write-file! repo repo-dir (:path file) content {:skip-transact? true})))))))
 
 (defn- import-file-graph
-  [*files {:keys [graph-name tag-classes property-classes property-parent-classes]} config-file]
+  [*files
+   {:keys [graph-name tag-classes property-classes property-parent-classes] :as user-options}
+   config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] "Config files")
   (p/let [start-time (t/now)
           _ (repo-handler/new-db! graph-name {:file-graph-import? true})
           repo (state/get-current-repo)
           db-conn (db/get-db repo false)
-          options {;; user options
-                   :tag-classes (set (string/split tag-classes #",\s*"))
-                   :property-classes (set (string/split property-classes #",\s*"))
-                   :property-parent-classes (set (string/split property-parent-classes #",\s*"))
+          options {:user-options
+                   (merge
+                    (dissoc user-options :graph-name)
+                    {:tag-classes (some-> tag-classes string/trim not-empty  (string/split #",\s*") set)
+                     :property-classes (some-> property-classes string/trim not-empty  (string/split #",\s*") set)
+                     :property-parent-classes (some-> property-parent-classes string/trim not-empty  (string/split #",\s*") set)})
                    ;; common options
                    :notify-user show-notification
                    :set-ui-state state/set-state!
@@ -344,32 +390,30 @@
     (finished-cb)))
 
 (defn import-file-to-db-handler
-  "Import from a graph folder as a DB-based graph.
-
-- Page name, journal name creation"
-  [ev _opts]
-  (let [^js file-objs (array-seq (.-files (.-target ev)))
-        original-graph-name (string/replace (.-webkitRelativePath (first file-objs)) #"/.*" "")
-        import-graph-fn (fn [user-inputs]
-                          (let [files (->> file-objs
-                                           (map #(hash-map :file-object %
-                                                           :path (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))))
-                                           (remove #(and (not (string/starts-with? (:path %) "assets/"))
+  "Import from a graph folder as a DB-based graph"
+  [ev opts]
+  (let [^js file-objs (if ev (array-seq (.-files (.-target ev))) #js [])
+        original-graph-name (if (first file-objs)
+                              (string/replace (.-webkitRelativePath (first file-objs)) #"/.*" "")
+                              "")
+        import-graph-fn (or (:import-graph-fn opts)
+                            (fn [user-inputs]
+                              (let [files (->> file-objs
+                                               (map #(hash-map :file-object %
+                                                               :path (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))))
+                                               (remove #(and (not (string/starts-with? (:path %) "assets/"))
                                                          ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
-                                                         (fs-util/ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
-                            (if-let [config-file (first (filter #(= (:path %) "logseq/config.edn") files))]
-                              (import-file-graph files user-inputs config-file)
-                              (notification/show! "Import failed as the file 'logseq/config.edn' was not found for a Logseq graph."
-                                                  :error))))]
+                                                             (fs-util/ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
+                                (if-let [config-file (first (filter #(= (:path %) "logseq/config.edn") files))]
+                                  (import-file-graph files user-inputs config-file)
+                                  (notification/show! "Import failed as the file 'logseq/config.edn' was not found for a Logseq graph."
+                                                      :error)))))]
     (shui/dialog-open!
      #(import-file-graph-dialog original-graph-name
                                 (fn [{:keys [graph-name] :as user-inputs}]
                                   (cond
                                     (repo/invalid-graph-name? graph-name)
                                     (repo/invalid-graph-name-warning)
-
-                                    (string/blank? graph-name)
-                                    (notification/show! "Empty graph name." :error)
 
                                     (repo-handler/graph-already-exists? graph-name)
                                     (notification/show! "Please specify another name as another graph with this name already exists!" :error)
@@ -397,14 +441,14 @@
 (rum/defc import-indicator
   [importing?]
   (rum/use-effect!
-    (fn []
-      (when (and importing? (not (shui-dialog/get-modal :import-indicator)))
-        (shui/dialog-open! indicator-progress
-          {:id :import-indicator
-           :content-props
-           {:onPointerDownOutside #(.preventDefault %)
-            :onOpenAutoFocus #(.preventDefault %)}})))
-    [importing?])
+   (fn []
+     (when (and importing? (not (shui-dialog/get-modal :import-indicator)))
+       (shui/dialog-open! indicator-progress
+                          {:id :import-indicator
+                           :content-props
+                           {:onPointerDownOutside #(.preventDefault %)
+                            :onOpenAutoFocus #(.preventDefault %)}})))
+   [importing?])
   [:<>])
 
 (rum/defc importer < rum/reactive
@@ -415,72 +459,89 @@
      (import-indicator importing?)
      (when-not importing?
        (setups/setups-container
-         :importer
-         [:article.flex.flex-col.items-center.importer.py-16.px-8
-          [:section.c.text-center
-           [:h1 (t :on-boarding/importing-title)]
-           [:h2 (t :on-boarding/importing-desc)]]
-          [:section.d.md:flex.flex-col
-           [:label.action-input.flex.items-center.mx-2.my-2
-            [:span.as-flex-center [:i (svg/logo 28)]]
-            [:span.flex.flex-col
-             [[:strong "SQLite"]
-              [:small (t :on-boarding/importing-sqlite-desc)]]]
-            [:input.absolute.hidden
-             {:id "import-sqlite-db"
-              :type "file"
-              :on-change (fn [e]
-                           (shui/dialog-open!
-                             #(set-graph-name-dialog e {:sqlite? true})))}]]
+        :importer
+        [:article.flex.flex-col.items-center.importer.py-16.px-8
+         [:section.c.text-center
+          [:h1 (t :on-boarding/importing-title)]
+          [:h2 (t :on-boarding/importing-desc)]]
+         [:section.d.md:flex.flex-col
+          [:label.action-input.flex.items-center.mx-2.my-2
+           [:span.as-flex-center [:i (svg/logo 28)]]
+           [:span.flex.flex-col
+            [[:strong "SQLite"]
+             [:small (t :on-boarding/importing-sqlite-desc)]]]
+           [:input.absolute.hidden
+            {:id "import-sqlite-db"
+             :type "file"
+             :on-change (fn [e]
+                          (shui/dialog-open!
+                           #(set-graph-name-dialog e {:sqlite? true})))}]]
 
-           (when (or (util/electron?) util/web-platform?)
-             [:label.action-input.flex.items-center.mx-2.my-2
-              [:span.as-flex-center [:i (svg/logo 28)]]
-              [:span.flex.flex-col
-               [[:strong "File to DB graph"]
-                [:small "Import a file-based Logseq graph folder into a new DB graph"]]]
-              [:input.absolute.hidden
-               {:id "import-file-graph"
-                :type "file"
-                :webkitdirectory "true"
-                :on-change (debounce (fn [e]
-                                       (import-file-to-db-handler e {}))
-                             1000)}]])
+          (when (or (util/electron?) util/web-platform?)
+            [:label.action-input.flex.items-center.mx-2.my-2
+             [:span.as-flex-center [:i (svg/logo 28)]]
+             [:span.flex.flex-col
+              [[:strong "File to DB graph"]
+               [:small "Import a file-based Logseq graph folder into a new DB graph"]]]
+             ;; Test form style changes
+             #_[:a.button {:on-click #(import-file-to-db-handler nil {:import-graph-fn js/alert})} "Open"]
+             [:input.absolute.hidden
+              {:id "import-file-graph"
+               :type "file"
+               :webkitdirectory "true"
+               :on-change (debounce (fn [e]
+                                      (import-file-to-db-handler e {}))
+                                    1000)}]])
 
-           (when (and (util/electron?) support-file-based?)
-             [:label.action-input.flex.items-center.mx-2.my-2
-              [:span.as-flex-center [:i (svg/logo 28)]]
-              [:span.flex.flex-col
-               [[:strong "EDN / JSON"]
-                [:small (t :on-boarding/importing-lsq-desc)]]]
-              [:input.absolute.hidden
-               {:id "import-lsq"
-                :type "file"
-                :on-change lsq-import-handler}]])
+          (when (or (util/electron?) util/web-platform?)
+            [:label.action-input.flex.items-center.mx-2.my-2
+             [:span.as-flex-center [:i (svg/logo 28)]]
+             [:span.flex.flex-col
+              [[:strong "Debug Transit"]
+               [:small "Import debug transit file into a new DB graph"]]]
+             ;; Test form style changes
+             #_[:a.button {:on-click #(import-file-to-db-handler nil {:import-graph-fn js/alert})} "Open"]
+             [:input.absolute.hidden
+              {:id "import-debug-transit"
+               :type "file"
+               :on-change (fn [e]
+                            (shui/dialog-open!
+                             #(set-graph-name-dialog e {:debug-transit? true})))}]])
 
-           (when (and (util/electron?) support-file-based?)
-             [:label.action-input.flex.items-center.mx-2.my-2
-              [:span.as-flex-center [:i (svg/roam-research 28)]]
-              [:div.flex.flex-col
-               [[:strong "RoamResearch"]
-                [:small (t :on-boarding/importing-roam-desc)]]]
-              [:input.absolute.hidden
-               {:id "import-roam"
-                :type "file"
-                :on-change roam-import-handler}]])
+          (when (and (util/electron?) support-file-based?)
+            [:label.action-input.flex.items-center.mx-2.my-2
+             [:span.as-flex-center [:i (svg/logo 28)]]
+             [:span.flex.flex-col
+              [[:strong "EDN / JSON"]
+               [:small (t :on-boarding/importing-lsq-desc)]]]
+             [:input.absolute.hidden
+              {:id "import-lsq"
+               :type "file"
+               :on-change lsq-import-handler}]])
 
-           (when (and (util/electron?) support-file-based?)
-             [:label.action-input.flex.items-center.mx-2.my-2
-              [:span.as-flex-center.ml-1 (ui/icon "sitemap" {:size 26})]
-              [:span.flex.flex-col
-               [[:strong "OPML"]
-                [:small (t :on-boarding/importing-opml-desc)]]]
+          (when (and (util/electron?) support-file-based?)
+            [:label.action-input.flex.items-center.mx-2.my-2
+             [:span.as-flex-center [:i (svg/roam-research 28)]]
+             [:div.flex.flex-col
+              [[:strong "RoamResearch"]
+               [:small (t :on-boarding/importing-roam-desc)]]]
+             [:input.absolute.hidden
+              {:id "import-roam"
+               :type "file"
+               :on-change roam-import-handler}]])
 
-              [:input.absolute.hidden
-               {:id "import-opml"
-                :type "file"
-                :on-change opml-import-handler}]])]
+          (when (and (util/electron?) support-file-based?)
+            [:label.action-input.flex.items-center.mx-2.my-2
+             [:span.as-flex-center.ml-1 (ui/icon "sitemap" {:size 26})]
+             [:span.flex.flex-col
+              [[:strong "OPML"]
+               [:small (t :on-boarding/importing-opml-desc)]]]
 
-          (when (= "picker" (:from query-params))
-            [:section.e
-             [:a.button {:on-click #(route-handler/redirect-to-home!)} "Skip"]])]))]))
+             [:input.absolute.hidden
+              {:id "import-opml"
+               :type "file"
+               :on-change opml-import-handler}]])]
+
+         (when (= "picker" (:from query-params))
+           [:section.e
+            [:a.button {:on-click #(route-handler/redirect-to-home!)} "Skip"]])]))]))

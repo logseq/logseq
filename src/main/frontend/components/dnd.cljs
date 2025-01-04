@@ -3,7 +3,7 @@
             [cljs-bean.core :as bean]
             ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy horizontalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
-            ["@dnd-kit/core" :refer [DndContext closestCenter PointerSensor useSensor useSensors]]
+            ["@dnd-kit/core" :refer [DndContext closestCenter MouseSensor useSensor useSensors]]
             [frontend.rum :as r]
             [frontend.state :as state]))
 
@@ -42,7 +42,7 @@
         [items-state set-items] (rum/use-state items')
         _ (rum/use-effect! (fn [] (set-items items')) [col])
         [_active-id set-active-id] (rum/use-state nil)
-        sensors (useSensors (useSensor PointerSensor (bean/->js {:activationConstraint {:distance 8}})))
+        sensors (useSensors (useSensor MouseSensor (bean/->js {:activationConstraint {:distance 8}})))
         dnd-opts {:sensors sensors
                   :collisionDetection closestCenter
                   :onDragStart (fn [event]
@@ -94,7 +94,7 @@
                        :else
                        (rum/with-key (sortable-item prop (:content item)) id))))
         children' (if parent-node
-                    [parent-node children]
+                    [parent-node {:key "parent-node"} children]
                     children)]
     (dnd-context
      dnd-opts

@@ -152,49 +152,124 @@
 (def ^:large-vars/data-var db-query-dsl-rules
   "Rules used by frontend.query.dsl for db graphs"
   (merge
-   (dissoc query-dsl-rules :namespace)
-   {:page-tags
-    '[(page-tags ?p ?tags)
-      [?p :block/tags ?t]
-      [?t :block/name ?tag]
-      [(missing? $ ?p :block/link)]
-      [(contains? ?tags ?tag)]]
+   (dissoc query-dsl-rules :namespace
+           :page-property :has-page-property
+           :page-tags :all-page-tags)
 
-    :has-page-property
-    '[(has-page-property ?p ?prop)
-      [?p :block/name]
-      [?p ?prop _]
-      [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]]
+   (dissoc rules :namespace)
 
-    :page-property
-    '[(page-property ?p ?prop ?val)
-      [?p :block/name]
+   {:between
+    '[(between ?b ?start ?end)
+      [?b :block/page ?p]
+      [?p :block/tags :logseq.class/Journal]
+      [?p :block/journal-day ?d]
+      [(>= ?d ?start)]
+      [(<= ?d ?end)]]
+
+    :existing-property-value
+    '[;; non-ref value
+      [(existing-property-value ?b ?prop ?val)
+       [?prop-e :db/ident ?prop]
+       [(missing? $ ?prop-e :db/valueType)]
+       [?b ?prop ?val]]
+      ;; ref value
+      [(existing-property-value ?b ?prop ?val)
+       [?prop-e :db/ident ?prop]
+       [?prop-e :db/valueType :db.type/ref]
+       [?b ?prop ?pv]
+       (or [?pv :block/title ?val]
+           [?pv :property.value/content ?val])]]
+
+    :property-missing-value
+    '[(property-missing-value ?b ?prop-e ?default-p ?default-v)
+      [?t :logseq.property.class/properties ?prop-e]
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
-      [?p ?prop ?pv]
+      (object-has-class-property? ?b ?prop)
+       ;; Notice: `(missing? )` doesn't work here because `de/entity`
+       ;; returns the default value if there's no value yet.
+      [(get-else $ ?b ?prop "N/A") ?prop-v]
+      [(= ?prop-v "N/A")]
+      [?prop-e ?default-p ?default-v]]
+
+    :property-scalar-default-value
+    '[(property-scalar-default-value ?b ?prop-e ?default-p ?val)
+      (property-missing-value ?b ?prop-e ?default-p ?default-v)
+      [(missing? $ ?prop-e :db/valueType)]
+      [?prop-e ?default-p ?val]]
+
+    :property-default-value
+    '[(property-default-value ?b ?prop-e ?default-p ?val)
+      (property-missing-value ?b ?prop-e ?default-p ?default-v)
       (or
-       ;; non-ref value
-       (and
-        [(missing? $ ?prop-e :db/valueType)]
-        [?p ?prop ?val])
-       ;; ref value
-       (and
-        [?prop-e :db/valueType :db.type/ref]
-        (or [?pv :block/title ?val]
-            [?pv :property.value/content ?val])))]
+       [?default-v :block/title ?val]
+       [?default-v :property.value/content ?val])]
 
+    :property-value
+    '[[(property-value ?b ?prop-e ?val)
+       [?prop-e :db/ident ?prop]
+       (existing-property-value ?b ?prop ?val)]
+      [(property-value ?b ?prop-e ?val)
+       (or
+        (and
+         [(missing? $ ?prop-e :db/valueType)]
+         (property-scalar-default-value ?b ?prop-e :logseq.property/scalar-default-value ?val))
+        (and
+         [?prop-e :db/valueType :db.type/ref]
+         (property-default-value ?b ?prop-e :logseq.property/default-value ?val)))]]
+
+    :object-has-class-property
+    '[(object-has-class-property? ?b ?prop)
+      [?prop-e :db/ident ?prop]
+      [?t :logseq.property.class/properties ?prop-e]
+      [?b :block/tags ?tc]
+      (or
+       [(= ?t ?tc)]
+       (parent ?t ?tc))]
+
+    :has-property-or-default-value
+    '[(has-property-or-default-value? ?b ?prop)
+      [?prop-e :db/ident ?prop]
+      (or
+       [?b ?prop _]
+       (and (object-has-class-property? ?b ?prop)
+            (or [?prop-e :logseq.property/default-value _]
+                [?prop-e :logseq.property/scalar-default-value _])))]
+
+    ;; Checks if a property exists for simple queries. Supports default values
+    :has-simple-query-property
+    '[(has-simple-query-property ?b ?prop)
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/tags :logseq.class/Property]
+      (has-property-or-default-value? ?b ?prop)
+      [?prop-e :block/schema ?prop-schema]
+      [(get ?prop-schema :public? true) ?public]
+      [(= true ?public)]]
+
+    ;; Same as has-simple-query-property except it returns public and private properties like :block/title
+    :has-private-simple-query-property
+    '[(has-private-simple-query-property ?b ?prop)
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/tags :logseq.class/Property]
+      (has-property-or-default-value? ?b ?prop)]
+
+    ;; Checks if a property exists for any features that are not simple queries
     :has-property
     '[(has-property ?b ?prop)
       [?b ?prop _]
-      [(missing? $ ?b :block/name)]
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]]
+      [?prop-e :block/tags :logseq.class/Property]
+      [?prop-e :block/schema ?prop-schema]
+      [(get ?prop-schema :public? true) ?public]
+      [(= true ?public)]]
 
+    ;; Checks if a property has a value for any features that are not simple queries
     :property
     '[(property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
+      [?prop-e :block/tags :logseq.class/Property]
+      [?prop-e :block/schema ?prop-schema]
+      [(get ?prop-schema :public? true) ?public]
+      [(= true ?public)]
       [?b ?prop ?pv]
       (or
        ;; non-ref value
@@ -205,8 +280,32 @@
        (and
         [?prop-e :db/valueType :db.type/ref]
         (or [?pv :block/title ?val]
-            [?pv :property.value/content ?val])))
-      [(missing? $ ?b :block/name)]]
+            [?pv :property.value/content ?val])))]
+
+    ;; Checks if a property has a value for simple queries. Supports default values
+    :simple-query-property
+    '[(simple-query-property ?b ?prop ?val)
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/tags :logseq.class/Property]
+      [?prop-e :block/schema ?prop-schema]
+      [(get ?prop-schema :public? true) ?public]
+      [(get ?prop-schema :type) ?type]
+      [(= true ?public)]
+      (property-value ?b ?prop-e ?val)]
+
+    ;; Same as property except it returns public and private properties like :block/title
+    :private-simple-query-property
+    '[(private-simple-query-property ?b ?prop ?val)
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/tags :logseq.class/Property]
+      (property-value ?b ?prop-e ?val)]
+
+    :tags
+    '[(tags ?b ?tags)
+      [?b :block/tags ?t]
+      [?t :block/name ?tag]
+      [(missing? $ ?b :block/link)]
+      [(contains? ?tags ?tag)]]
 
     :task
     '[(task ?b ?statuses)
@@ -225,7 +324,26 @@
   becomes long or brittle, we could do scan rules for their deps with something
   like find-rules-in-where"
   {:task #{:property}
-   :priority #{:property}})
+   :priority #{:property}
+   :property-missing-value #{:object-has-class-property}
+   :has-property-or-default-value #{:object-has-class-property}
+   :object-has-class-property #{:parent}
+   :has-simple-query-property #{:has-property-or-default-value}
+   :has-private-simple-query-property #{:has-property-or-default-value}
+   :property-default-value #{:existing-property-value :property-missing-value}
+   :property-scalar-default-value #{:existing-property-value :property-missing-value}
+   :property-value #{:property-default-value :property-scalar-default-value}
+   :simple-query-property #{:property-value}
+   :private-simple-query-property #{:property-value}})
+
+(defn- get-full-deps
+  [deps rules-deps]
+  (loop [deps' deps
+         result #{}]
+    (if (seq deps')
+      (recur (mapcat rules-deps deps')
+             (into result deps'))
+      result)))
 
 (defn extract-rules
   "Given a rules map and the rule names to extract, returns a vector of rules to
@@ -235,9 +353,9 @@
    No dependencies are detected by default though we could add it later e.g. find-rules-in-where"
   ([rules-m] (extract-rules rules-m (keys rules-m)))
   ([rules-m rules' & {:keys [deps]}]
-   (let [rules-with-deps (concat rules'
-                                 (when (map? deps)
-                                   (mapcat deps rules')))]
+   (let [rules-with-deps (if (map? deps)
+                           (get-full-deps rules' deps)
+                           rules')]
      (vec
       (mapcat #(let [val (rules-m %)]
                  ;; if vector?, rule has multiple clauses

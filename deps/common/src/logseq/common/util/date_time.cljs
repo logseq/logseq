@@ -38,6 +38,14 @@
   (when date-formatter
     (tf/unparse (tf/formatter date-formatter) date)))
 
+(defn int->local-date
+  [day]
+  (let [s (str day)
+        year (js/parseInt (subs s 0 4))
+        month (dec (js/parseInt (subs s 4 6)))
+        day (js/parseInt (subs s 6))]
+    (js/Date. year month day)))
+
 (defn int->journal-title
   [day date-formatter]
   (when day
@@ -79,3 +87,12 @@
   [date]
   (parse-long
    (string/replace (ymd date) "/" "")))
+
+(defn journal-day->ms
+  "Convert :block/journal-day int to ms timestamp in current timezone"
+  [journal-day]
+  (let [journal-day' (str journal-day)
+        year (js/parseInt (subs journal-day' 0 4))
+        month (dec (js/parseInt (subs journal-day' 4 6)))
+        day (js/parseInt (subs journal-day' 6 8))]
+    (.getTime (new js/Date year month day))))

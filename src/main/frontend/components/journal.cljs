@@ -3,18 +3,18 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.page :as page-handler]
+            [frontend.mixins :as mixins]
             [frontend.state :as state]
-            [rum.core :as rum]
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
-            [frontend.mixins :as mixins]))
+            [rum.core :as rum]))
 
 (rum/defc journal-cp < rum/reactive
   [page]
   [:div.journal-item.content {:key (:db/id page)}
    (let [repo (state/sub :git/current-repo)]
      (page/page-cp {:repo repo
-                 :page-name (str (:block/uuid page))}))])
+                    :page-name (str (:block/uuid page))}))])
 
 (defn on-scroll
   [node {:keys [threshold on-load]
@@ -39,7 +39,9 @@
   (when (seq latest-journals)
     [:div#journals
      (for [journal latest-journals]
-       (journal-cp journal))]))
+       (rum/with-key
+         (journal-cp journal)
+         (str "journal-" (:db/id journal))))]))
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []

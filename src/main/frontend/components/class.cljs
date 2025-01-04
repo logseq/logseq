@@ -13,7 +13,7 @@
     (when (seq children)
       [:ul
        (for [child (sort-by :block/title children)]
-         (let [title [:li.ml-2 (block/page-reference false (:block/title child) {:show-brackets? false} nil)]]
+         (let [title [:li.ml-2 (block/page-reference false (:block/uuid child) {:show-brackets? false} nil)]]
            (if (seq (:logseq.property/_parent child))
              (ui/foldable
               title
@@ -29,7 +29,8 @@
           default-collapsed? (> (count children-pages) 30)]
       [:div.mt-4
        (ui/foldable
-        [:h2.font-medium "Children (" (count children-pages) ")"]
-        [:div.mt-2.ml-1 (class-children-aux class {:default-collapsed? default-collapsed?})]
+        [:div.font-medium.opacity-50
+         (str "Children (" (count children-pages) ")")]
+        [:div.ml-1.mt-2 (class-children-aux class {:default-collapsed? default-collapsed?})]
         {:default-collapsed? false
          :title-trigger? true})])))

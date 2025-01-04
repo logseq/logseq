@@ -49,7 +49,6 @@
     [:div.references-blocks.faster.fade-in {:ref *ref}
      (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                       {:id (str (:block/uuid page-entity))
-                                       :scroll-container *ref
                                        :ref? true
                                        :breadcrumb-show? true
                                        :group-by-page? true
@@ -66,8 +65,9 @@
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-medium (t :linked-references/reference-count (when (or (seq (:included filters))
-                                                                       (seq (:excluded filters))) filter-n) total)]
+      [:div.font-medium.opacity-50
+       (t :linked-references/reference-count (when (or (seq (:included filters))
+                                                       (seq (:excluded filters))) filter-n) total)]
       [:a.filter.fade-link
        {:title (t :linked-references/filter-heading)
         :on-mouse-over (fn [_e]
@@ -159,7 +159,7 @@
     (reset! *ref-pages ref-pages)
     (when (or (seq (:included filters)) (seq (:excluded filters)) (> filter-n 0))
       [:div.references.page-linked.flex-1.flex-row
-       [:div.content.pt-6
+       [:div.content.pt-2
         (references-cp page-entity *filters total filter-n filtered-ref-blocks' *ref-pages)]])))
 
 (rum/defcs references* < rum/reactive db-mixins/query
@@ -219,7 +219,8 @@
       [:div.references.page-unlinked.mt-6.flex-1.flex-row.faster.fade-in
        [:div.content.flex-1
         (ui/foldable
-         [:h2.font-medium (t :unlinked-references/reference-count @n-ref)]
+         [:div.font-medium.opacity-50
+          (t :unlinked-references/reference-count @n-ref)]
          (fn [] (unlinked-references-aux page n-ref))
          {:default-collapsed? true
           :title-trigger? true})]])))

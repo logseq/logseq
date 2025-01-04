@@ -1,23 +1,24 @@
 (ns frontend.test.helper
   "Common helper fns for tests"
-  (:require [frontend.handler.file-based.repo :as file-repo-handler]
-            [frontend.state :as state]
-            [frontend.db.conn :as conn]
-            [clojure.string :as string]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.db :as db]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.page :as page-handler]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.graph-parser.text :as text]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [frontend.background-tasks]
             [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.conn :as conn]
+            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.file-based.repo :as file-repo-handler]
+            [frontend.handler.file-based.status :as status]
+            [frontend.state :as state]
+            [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.sqlite.build :as sqlite-build]
-            [frontend.handler.file-based.status :as status]
-            [logseq.outliner.db-pipeline :as db-pipeline]
-            [frontend.worker.handler.page :as worker-page]))
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.graph-parser.text :as text]
+            [logseq.outliner.db-pipeline :as db-pipeline]))
 
 (def node? (exists? js/process))
 
@@ -153,9 +154,12 @@
 (defn load-test-files-for-db-graph
   [options*]
   (let [;; Builds options from markdown :file/content unless given explicit build-blocks config
-        options (if (:page (first options*))
-                  {:pages-and-blocks options* :auto-create-ontology? true}
-                  (build-blocks-tx-options options*))
+        options (cond (:page (first options*))
+                      {:pages-and-blocks options* :auto-create-ontology? true}
+                      (:pages-and-blocks options*)
+                      (assoc options* :auto-create-ontology? true)
+                      :else
+                      (build-blocks-tx-options options*))
         {:keys [init-tx block-props-tx]} (sqlite-build/build-blocks-tx options)]
     (db/transact! test-db init-tx)
     (when (seq block-props-tx)
@@ -236,7 +240,7 @@ This can be called in synchronous contexts as no async fns should be invoked"
   [repo block-uuid content {:keys [tags]}]
   (editor-handler/save-block! repo block-uuid content)
   (doseq [tag tags]
-    (page-handler/add-tag repo block-uuid (db/get-page tag))))
+    (db-page-handler/add-tag repo block-uuid (db/get-page tag))))
 
 (defn create-page!
   [title & {:as opts}]

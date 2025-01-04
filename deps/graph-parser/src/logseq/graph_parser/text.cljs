@@ -6,7 +6,8 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.util.namespace :as ns-util]))
 
 (def get-file-basename page-ref/get-file-basename)
 
@@ -149,10 +150,5 @@
             new-val
             v'))))))
 
-(defn namespace-page?
-  [page-name]
-  (and (string? page-name)
-       (string/includes? page-name "/")
-       (not (string/starts-with? page-name "../"))
-       (not (string/starts-with? page-name "./"))
-       (not (common-util/url? page-name))))
+(def namespace-page? ns-util/namespace-page?)
+(def get-namespace-last-part ns-util/get-last-part)

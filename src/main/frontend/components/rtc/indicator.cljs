@@ -1,15 +1,16 @@
 (ns frontend.components.rtc.indicator
   "RTC state indicator"
   (:require [cljs-time.core :as t]
-            [frontend.common.missionary-util :as c.m]
-            [frontend.components.rtc.flows :as rtc-flows]
+            [clojure.pprint :as pprint]
+            [frontend.db :as db]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.common.missionary :as c.m]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
-            [rum.core :as rum]
-            [clojure.pprint :as pprint]))
+            [rum.core :as rum]))
 
 (comment
   (def rtc-state-schema
@@ -55,6 +56,47 @@
       (reset! *update-detail-info-canceler canceler))))
 (run-task--update-detail-info)
 
+(rum/defc assets-progressing < rum/reactive
+  []
+  (let [repo (state/get-current-repo)
+        progress (state/sub :rtc/asset-upload-download-progress {:path-in-sub-atom [repo]})
+        downloading (->>
+                     (keep (fn [[id {:keys [direction loaded total]}]]
+                             (when (and (= direction :download)
+                                        (not= loaded total)
+                                        (number? loaded) (number? total))
+                               (when-let [block (db/entity [:block/uuid (uuid id)])]
+                                 {:block block
+                                  :percent (int (* 100 (/ loaded total)))}))) progress)
+                     (sort-by (fn [{:keys [block]}] (:block/title block))))
+        uploading (->> (keep (fn [[id {:keys [direction loaded total]}]]
+                               (when (and (= direction :upload)
+                                          (not= loaded total)
+                                          (number? loaded) (number? total))
+                                 (when-let [block (db/entity [:block/uuid (uuid id)])]
+                                   {:block block
+                                    :percent (int (* 100 (/ loaded total)))}))) progress)
+                       (sort-by (fn [{:keys [block]}] (:block/title block))))]
+    [:div.assets-sync-progress.flex.flex-col.gap-2
+     (when (seq downloading)
+       [:details
+        [:summary
+         (util/format "Downloading assets (%s)" (count downloading))]
+        [:div.flex.flex-col.gap-1.text-sm
+         (for [{:keys [block percent]} downloading]
+           [:div.flex.flex-row.gap-1.items-center
+            (ui/indicator-progress-pie percent)
+            (:block/title block)])]])
+     (when (seq uploading)
+       [:details
+        [:summary
+         (util/format "Uploading assets (%s)" (count uploading))]
+        [:div.flex.flex-col.gap-1.text-sm
+         (for [{:keys [block percent]} uploading]
+           [:div.flex.flex-row.gap-1.items-center
+            (ui/indicator-progress-pie percent)
+            (:block/title block)])]])]))
+
 (rum/defcs details < rum/reactive
   (rum/local false ::expand-debug-info?)
   [state online?]
@@ -67,6 +109,8 @@
      [:div [:span.font-medium.mr-1 (or pending-local-ops 0)] "pending local changes"]
      ;; FIXME: pending-server-ops
      [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] "pending server changes"]
+     (assets-progressing)
+
      ;; FIXME: What's the type for downloaded log?
      (when-let [latest-log (some (fn [l] (when (contains? #{:rtc.log/push-local-update} (:type l)) l)) misc-logs)]
        (when-let [time (:created-at latest-log)]
@@ -102,36 +146,34 @@
          (> 600
             (/ (- (t/now) created-at) 1000)))))
 
-
 (rum/defc indicator < rum/reactive
-          []
-          (let [detail-info                 (rum/react *detail-info)
-                _                           (state/sub :auth/id-token)
-                online?                     (state/sub :network/online?)
-                uploading?'                  (uploading? detail-info)
-                downloading?'                (downloading? detail-info)
-                rtc-state                   (:rtc-state detail-info)
-                unpushed-block-update-count (:pending-local-ops detail-info)]
-            [:div.cp__rtc-sync
-             [:div.cp__rtc-sync-indicator.flex.flex-row.items-center.gap-1
-              (when downloading?'
-                (shui/button
-                 {:class   "opacity-50"
-                  :variant :ghost
-                  :size    :sm}
-                 "Downloading..."))
-              (when uploading?'
-                (shui/button
-                 {:class   "opacity-50"
-                  :variant :ghost
-                  :size    :sm}
-                 "Uploading..."))
-              [:a.button.cloud
-               {:on-click #(shui/popup-show! (.-target %)
-                                             (details online?)
-                                             {:align "end"})
-                :class    (util/classnames [{:on      (and online? (= :open rtc-state))
-                                             :idle    (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
-                                             :queuing (pos? unpushed-block-update-count)}])}
-               [:span.flex.items-center
-                (ui/icon "cloud" {:size ui/icon-size})]]]]))
+  []
+  (let [detail-info                 (rum/react *detail-info)
+        _                           (state/sub :auth/id-token)
+        online?                     (state/sub :network/online?)
+        uploading?'                  (uploading? detail-info)
+        downloading?'                (downloading? detail-info)
+        rtc-state                   (:rtc-state detail-info)
+        unpushed-block-update-count (:pending-local-ops detail-info)]
+    [:div.cp__rtc-sync
+     [:div.cp__rtc-sync-indicator.flex.flex-row.items-center.gap-1
+      (when downloading?'
+        (shui/button
+         {:class   "opacity-50"
+          :variant :ghost
+          :size    :sm}
+         "Downloading..."))
+      (when uploading?'
+        (shui/button
+         {:class   "opacity-50"
+          :variant :ghost
+          :size    :sm}
+         "Uploading..."))
+      (shui/button-ghost-icon :cloud
+                              {:on-click #(shui/popup-show! (.-target %)
+                                                            (details online?)
+                                                            {:align "end"})
+                               :class (util/classnames [{:cloud true
+                                                         :on (and online? (= :open rtc-state))
+                                                         :idle (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
+                                                         :queuing (pos? unpushed-block-update-count)}])})]]))

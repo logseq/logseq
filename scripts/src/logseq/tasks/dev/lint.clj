@@ -29,6 +29,7 @@
         dir-to-files (->> (shell {:out :string} "git diff --name-only")
                           :out
                           string/split-lines
+                          (filter #(re-find #"\.(cljs|clj|cljc)$" %))
                           (group-by #(first (re-find dir-regex %)))
                           ;; remove files that aren't in a kondo dir
                           ((fn [x] (dissoc x nil))))]
@@ -37,10 +38,10 @@
           (let [dir (if (= dir* "src") "." dir*)
                 files (mapv #(string/replace-first % (str dir "/") "") files*)
                 cmd (str "cd " dir " && clj-kondo --lint " (string/join " " files))
-               _ (println cmd)
-               res (apply shell {:dir dir :continue :true} "clj-kondo --lint" files)]
+                _ (println cmd)
+                res (apply shell {:dir dir :continue :true} "clj-kondo --lint" files)]
            (when (pos? (:exit res)) (System/exit (:exit res)))))
-        (println "No files have changed to lint."))))
+        (println "No clj* files have changed to lint."))))
 
 (defn- validate-frontend-not-in-worker
   []
