@@ -1078,10 +1078,10 @@
   dependencies:
     "@types/ms" "*"
 
-"@types/dompurify@2.3.3":
-  version "2.3.3"
-  resolved "https://registry.yarnpkg.com/@types/dompurify/-/dompurify-2.3.3.tgz#c24c92f698f77ed9cc9d9fa7888f90cf2bfaa23f"
-  integrity sha512-nnVQSgRVuZ/843oAfhA25eRSNzUFcBPk/LOiw5gm8mD9/X7CNcbRkQu/OsjCewO8+VIYfPxUnXvPEVGenw14+w==
+"@types/dompurify@2.4.0":
+  version "2.4.0"
+  resolved "https://registry.yarnpkg.com/@types/dompurify/-/dompurify-2.4.0.tgz#fd9706392a88e0e0e6d367f3588482d817df0ab9"
+  integrity sha512-IDBwO5IZhrKvHFUl+clZxgf3hn2b/lU6H1KaBShPkQyGJUQ0xwebezIPSuiyGwfz1UzJWQl4M7BDxtHtCCPlTg==
   dependencies:
     "@types/trusted-types" "*"
 
@@ -1593,10 +1593,10 @@ deepmerge@4.3.1:
   resolved "https://registry.yarnpkg.com/deepmerge/-/deepmerge-4.3.1.tgz#44b5f2147cd3b00d4b56137685966f26fd25dd4a"
   integrity sha512-3sUqbMEc77XqpdNO7FRyRog+eW3ph+GYCbj+rK+uYyRMuwsVy0rMiVtPn+QJlKFvWP/1PYpapqYn0Me2knFn+A==
 
-dompurify@2.3.8:
-  version "2.3.8"
-  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-2.3.8.tgz#224fe9ae57d7ebd9a1ae1ac18c1c1ca3f532226f"
-  integrity sha512-eVhaWoVibIzqdGYjwsBWodIQIaXFSB+cKDf4cfxLMsK0xiud6SE+/WCVx/Xw/UwQsa4cS3T2eITcdtmTg2UKcw==
+dompurify@2.5.4:
+  version "2.5.4"
+  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-2.5.4.tgz#347e91070963b22db31c7c8d0ce9a0a2c3c08746"
+  integrity sha512-l5NNozANzaLPPe0XaAwvg3uZcHtDBnziX/HjsY1UcDj1MxTK8Dd0Kv096jyPK5HRzs/XM5IMj20dW8Fk+HnbUA==
 
 dot-case@^3.0.4:
   version "3.0.4"

@@ -168,24 +168,13 @@
       (ui/button "Cancel" :background "gray" :class "opacity-50" :on-click close-fn)
       (ui/button "Create remote graph" :on-click on-confirm)]]))
 
-(rum/defc indicator-progress-pie
-  [percentage]
-
-  (let [*el (rum/use-ref nil)]
-    (rum/use-effect!
-     #(when-let [^js el (rum/deref *el)]
-        (set! (.. el -style -backgroundImage)
-              (util/format "conic-gradient(var(--ls-pie-fg-color) %s%, var(--ls-pie-bg-color) %s%)" percentage percentage)))
-     [percentage])
-    [:span.cp__file-sync-indicator-progress-pie {:ref *el}]))
-
 (rum/defc last-synced-cp < rum/reactive
   []
   (let [last-synced-at (state/sub [:file-sync/graph-state
                                    (state/get-current-file-sync-graph-uuid)
                                    :file-sync/last-synced-at])
         last-synced-at (if last-synced-at
-                         (util/time-ago (tc/from-long (* last-synced-at 1000)))
+                         (util/human-time (tc/from-long (* last-synced-at 1000)))
                          "just now")]
     [:div.cl
      [:span.opacity-60 "Last change was"]
@@ -456,7 +445,7 @@
                                           percent (or (:percent progress) 0)]
                                       (if (and (number? percent)
                                                (< percent 100))
-                                        (indicator-progress-pie percent)
+                                        (ui/indicator-progress-pie percent)
                                         (ui/icon "circle-check")))
                                     (ui/icon "arrow-narrow-down"))}) downloading-files)
 
@@ -480,7 +469,7 @@
                                           percent (or (:percent progress) 0)]
                                       (if (and (number? percent)
                                                (< percent 100))
-                                        (indicator-progress-pie percent)
+                                        (ui/indicator-progress-pie percent)
                                         (ui/icon "circle-check")))
                                     (ui/icon "arrow-up"))}) uploading-files)
 
@@ -527,42 +516,42 @@
     (util/format "Sync graph \"%s\" to local" (:GraphName graph))]
 
    (ui/button
-     "Open a local directory"
-     :class "block w-full mt-4"
-     :size :lg
-     :on-click #(do
-                  (state/close-modal!)
-                  (fs-sync/<sync-stop)
-                  (->
-                    (page-handler/ls-dir-files!
-                      (fn [{:keys [url]}]
-                        (file-sync-handler/init-remote-graph url graph)
-                        (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
+    "Open a local directory"
+    :class "block w-full mt-4"
+    :size :lg
+    :on-click #(do
+                 (state/close-modal!)
+                 (fs-sync/<sync-stop)
+                 (->
+                  (page-handler/ls-dir-files!
+                   (fn [{:keys [url]}]
+                     (file-sync-handler/init-remote-graph url graph)
+                     (js/setTimeout (fn [] (repo-handler/refresh-repos!)) 200))
 
-                      {:on-open-dir
-                       (fn [result]
-                         (prn ::on-open-dir result)
-                         (let [empty-dir? (not (seq (:files result)))
-                               root (:path result)]
-                           (cond
-                             (string/blank? root)
-                             (p/rejected (js/Error. nil))   ;; cancel pick a directory
+                   {:on-open-dir
+                    (fn [result]
+                      (prn ::on-open-dir result)
+                      (let [empty-dir? (not (seq (:files result)))
+                            root (:path result)]
+                        (cond
+                          (string/blank? root)
+                          (p/rejected (js/Error. nil))   ;; cancel pick a directory
 
-                             empty-dir?
-                             (p/resolved nil)
+                          empty-dir?
+                          (p/resolved nil)
 
-                             :else                          ; dir is not empty
-                             (-> (if (util/electron?)
-                                   (ipc/ipc :readGraphTxIdInfo root)
-                                   (fs-util/read-graphs-txid-info root))
-                               (p/then (fn [^js info]
-                                         (when (or (nil? info)
-                                                 (nil? (second info))
-                                                 (not= (second info) (:GraphUUID graph)))
-                                           (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
-                                             (p/resolved nil)
-                                             (p/rejected (js/Error. nil))))))))))}) ;; cancel pick a non-empty directory
-                    (p/catch (fn [])))))
+                          :else                          ; dir is not empty
+                          (-> (if (util/electron?)
+                                (ipc/ipc :readGraphTxIdInfo root)
+                                (fs-util/read-graphs-txid-info root))
+                              (p/then (fn [^js info]
+                                        (when (or (nil? info)
+                                                  (nil? (second info))
+                                                  (not= (second info) (:GraphUUID graph)))
+                                          (if (js/confirm "This directory is not empty, are you sure to sync the remote graph to it? Make sure to back up the directory first.")
+                                            (p/resolved nil)
+                                            (p/rejected (js/Error. nil))))))))))}) ;; cancel pick a non-empty directory
+                  (p/catch (fn [])))))
 
    [:div.text-xs.opacity-50.px-1.flex-row.flex.items-center.p-2
     (ui/icon "alert-circle")
@@ -646,12 +635,12 @@
 
             ;; without cache
             (let [load-file' (fn [repo-url file]
-                              (-> (fs-util/read-repo-file repo-url file)
-                                  (p/then
-                                   (fn [content]
-                                     (set-version-content content)
-                                     (set-content-ready? true)
-                                     (swap! (rum/deref *ref-contents) assoc k content)))))]
+                               (-> (fs-util/read-repo-file repo-url file)
+                                   (p/then
+                                    (fn [content]
+                                      (set-version-content content)
+                                      (set-content-ready? true)
+                                      (swap! (rum/deref *ref-contents) assoc k content)))))]
               (if (and file-uuid version-uuid)
                 ;; read remote content
                 (async/go
@@ -704,7 +693,7 @@
      [:div.cp__file-sync-page-histories-right
       [:h1.title.text-xl
        "Current version"]
-      (page/page-blocks-cp (state/get-current-repo) page-entity nil)]
+      (page/page-blocks-cp page-entity nil)]
 
      ;; ready loading
      [:div.flex.items-center.h-full.justify-center.w-full.absolute.ready-loading
@@ -806,7 +795,6 @@
     ;;  [:li.it
     ;;   [:h1.dark:text-white "50G"]
     ;;   [:h2 "Total Storage"]]]
-
 
    [:div.pt-6.flex.justify-end.space-x-2
     (ui/button "Done" :on-click close-fn)]])

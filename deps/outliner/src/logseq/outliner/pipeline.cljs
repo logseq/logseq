@@ -6,7 +6,11 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.entity-plus :as entity-plus]))
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.outliner.datascript-report :as ds-report]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
+            [cljs-time.format :as tf]))
 
 (defn filter-deleted-blocks
   [datoms]
@@ -75,7 +79,7 @@
                  (let [page? (ldb/page? block)
                        from-property (:logseq.property/created-from-property block)
                        parents' (when-not page?
-                                 (ldb/get-block-parents db-after (:block/uuid block) {}))
+                                  (ldb/get-block-parents db-after (:block/uuid block) {}))
                        parents-refs (->> (cond->>
                                           (mapcat :block/path-refs parents')
                                            from-property
@@ -103,7 +107,7 @@
              blocks)
      distinct)))
 
-(defn compute-block-path-refs-tx
+(defn ^:api compute-block-path-refs-tx
   "Main fn for computing path-refs"
   [tx-report blocks]
   (let [refs-tx (compute-block-path-refs tx-report blocks)
@@ -136,10 +140,16 @@
   (let [content (or (:block/raw-title block)
                     (:block/title block))]
     (when (string? content)
-      (->> (db-content/get-matched-special-ids content)
+      (->> (db-content/get-matched-ids content)
            (map (fn [id]
                   (when-let [e (d/entity db [:block/uuid id])]
                     (:db/id e))))))))
+
+(defn ^:api get-journal-day-from-long
+  [db v]
+  (when-let [date (t/to-default-time-zone (tc/from-long v))]
+    (let [day (js/parseInt (tf/unparse (tf/formatter "yyyyMMdd") date))]
+      (:e (first (d/datoms db :avet :block/journal-day day))))))
 
 (defn db-rebuild-block-refs
   "Rebuild block refs for DB graphs"
@@ -147,8 +157,11 @@
   (let [private-built-in-props (set (keep (fn [[k v]] (when-not (get-in v [:schema :public?]) k))
                                           db-property/built-in-properties))
         ;; explicit lookup in order to be nbb compatible
-        properties (->> (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties)
-                        (into {}))
+        properties (->
+                    (->> (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties)
+                         (into {}))
+                    ;; both page and parent shouldn't be counted as refs
+                    (dissoc :block/parent :block/page))
         property-key-refs (->> (keys properties)
                                (remove private-built-in-props))
         page-or-object? (fn [block]
@@ -159,8 +172,8 @@
                                ;; parent block as they are dependent on their block for display
                                ;; and look weirdly recursive - https://github.com/logseq/db-test/issues/36
                                (not (:logseq.property/created-from-property block))))
-        property-value-refs (->> (vals properties)
-                                 (mapcat (fn [v]
+        property-value-refs (->> properties
+                                 (mapcat (fn [[property v]]
                                            (cond
                                              (page-or-object? v)
                                              [(:db/id v)]
@@ -169,7 +182,18 @@
                                              (map :db/id v)
 
                                              :else
-                                             nil))))
+                                             (let [datetime? (= :datetime (get-in (d/entity db property) [:block/schema :type]))]
+                                               (cond
+                                                 (and datetime? (coll? v))
+                                                 (keep #(get-journal-day-from-long db %) v)
+
+                                                 datetime?
+                                                 (when-let [journal-day (get-journal-day-from-long db v)]
+                                                   [journal-day])
+
+                                                 :else
+                                                 nil))))))
+
         property-refs (concat property-key-refs property-value-refs)
         content-refs (block-content-refs db block)]
     (->> (concat (map ref->eid (:block/tags block))
@@ -181,3 +205,29 @@
          ;; Remove alias ref to avoid recursive display bugs
          (remove #(contains? (set (map :db/id (:block/alias block))) %))
          (remove nil?))))
+
+(defn- rebuild-block-refs-tx
+  [{:keys [db-after]} blocks]
+  (mapcat (fn [block]
+            (when (d/entity db-after (:db/id block))
+              (let [refs (db-rebuild-block-refs db-after block)]
+                (when (seq refs)
+                  [[:db/retract (:db/id block) :block/refs]
+                   {:db/id (:db/id block)
+                    :block/refs refs}]))))
+          blocks))
+
+(defn transact-new-db-graph-refs
+  "Transacts :block/refs and :block/path-refs for a new or imported DB graph"
+  [conn tx-report]
+  (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
+        refs-tx-report (when-let [refs-tx (and (seq blocks) (rebuild-block-refs-tx tx-report blocks))]
+                         (ldb/transact! conn refs-tx {:pipeline-replace? true}))
+        blocks' (if refs-tx-report
+                  (keep (fn [b] (d/entity (:db-after refs-tx-report) (:db/id b))) blocks)
+                  blocks)
+        block-path-refs-tx (distinct (compute-block-path-refs-tx tx-report blocks'))
+        path-refs-tx-report (when (seq block-path-refs-tx)
+                              (ldb/transact! conn block-path-refs-tx {:pipeline-replace? true}))]
+    {:refs-tx-report refs-tx-report
+     :path-refs-tx-export path-refs-tx-report}))

@@ -38,7 +38,7 @@
             (let [v (get config k)
                   v (if (fn? v) (apply v args) v)]
               (if (vector? v) (assoc config k (interpret v)) config)))
-    config ks))
+          config ks))
 
 ;; {:id :title :description :content :footer :open? :on-close ...}
 (def ^:private *modals (atom []))
@@ -49,7 +49,7 @@
   [id]
   (when id
     (some->> (medley/indexed @*modals)
-      (filter #(= id (:id (second %)))) (first))))
+             (filter #(= id (:id (second %)))) (first))))
 
 (defn update-modal!
   [id ks val]
@@ -90,13 +90,14 @@
         config (cond-> config
                  (fn? content)
                  (assoc :content (content config)))]
-    (upsert-modal! config)))
+    (upsert-modal! (assoc-in config [:content-props :onOpenAutoFocus]
+                             #(.preventDefault %)))))
 
 (defn alert!
   [content-or-config & config']
   (let [deferred (p/deferred)]
     (open! content-or-config
-      (merge {:alert? :default :deferred deferred} (first config')))
+           (merge {:alert? :default :deferred deferred} (first config')))
     (p/promise deferred)))
 
 (defn confirm!
@@ -106,6 +107,10 @@
 (defn get-last-modal-id
   []
   (some-> (last @*modals) (:id)))
+
+(defn get-first-modal-id
+  []
+  (some-> (first @*modals) (:id)))
 
 (defn close!
   ([] (close! (get-last-modal-id)))
@@ -121,45 +126,45 @@
   (let [{:keys [id title description content footer on-open-change align open?
                 auto-width? close-btn? root-props content-props]} config
         props (dissoc config
-                :id :title :description :content :footer :auto-width? :close-btn?
-                :align :on-open-change :open? :root-props :content-props)
+                      :id :title :description :content :footer :auto-width? :close-btn?
+                      :align :on-open-change :open? :root-props :content-props)
         props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
     (rum/use-effect!
-      (fn []
-        (when (false? open?)
-          (js/setTimeout #(detach-modal! id) 128)))
-      [open?])
+     (fn []
+       (when (false? open?)
+         (js/setTimeout #(detach-modal! id) 128)))
+     [open?])
 
     (dialog
-      (merge root-props
-        {:key (str "modal-" id)
-         :open open?
-         :on-open-change (fn [v]
-                           (let [set-open! #(update-modal! id :open? %)]
-                             (if (fn? on-open-change)
-                               (on-open-change {:value v :set-open! set-open!})
-                               (set-open! v))))})
-      (let [onPointerDownOutside (:onPointerDownOutside content-props)
-            content-props (assoc content-props
-                            :onPointerDownOutside
-                            (fn [^js e]
-                              (when (fn? onPointerDownOutside)
-                                (onPointerDownOutside e))
-                              (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
-                                (.preventDefault e))))]
-        (dialog-content
-          (cond-> (merge props content-props)
-            auto-width? (assoc :data-auto-width true)
-            (false? close-btn?) (assoc :data-close-btn false))
-          (when title
-            (dialog-header
-              (when title (dialog-title title))
-              (when description (dialog-description description))))
-          (when content
-            [:div.ui__dialog-main-content content])
-          (when footer
-            (dialog-footer footer)))))))
+     (merge root-props
+            {:key (str "modal-" id)
+             :open open?
+             :on-open-change (fn [v]
+                               (let [set-open! #(update-modal! id :open? %)]
+                                 (if (fn? on-open-change)
+                                   (on-open-change {:value v :set-open! set-open!})
+                                   (set-open! v))))})
+     (let [onPointerDownOutside (:onPointerDownOutside content-props)
+           content-props (assoc content-props
+                                :onPointerDownOutside
+                                (fn [^js e]
+                                  (when (fn? onPointerDownOutside)
+                                    (onPointerDownOutside e))
+                                  (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
+                                    (.preventDefault e))))]
+       (dialog-content
+        (cond-> (merge props content-props)
+          auto-width? (assoc :data-auto-width true)
+          (false? close-btn?) (assoc :data-close-btn false))
+        (when title
+          (dialog-header
+           (when title (dialog-title title))
+           (when description (dialog-description description))))
+        (when content
+          [:div.ui__dialog-main-content content])
+        (when footer
+          (dialog-footer footer)))))))
 
 (rum/defc alert-inner
   [config]
@@ -167,35 +172,34 @@
         props (dissoc config :id :title :description :content :footer :deferred :open? :alert?)]
 
     (rum/use-effect!
-      (fn []
-        (when (false? open?)
-          (js/setTimeout #(detach-modal! id) 128)))
-      [open?])
+     (fn []
+       (when (false? open?)
+         (js/setTimeout #(detach-modal! id) 128)))
+     [open?])
 
     (alert-dialog
-      {:key (str "alert-" id)
-       :open open?
-       :on-open-change #(update-modal! id :open? %)}
-      (alert-dialog-content props
-        (when (or title description)
-          (alert-dialog-header
-            {:class "ui__alert-dialog-header"}
-            (when title (alert-dialog-title title))
-            (when description (alert-dialog-description description))))
+     {:key (str "alert-" id)
+      :open open?
+      :on-open-change #(update-modal! id :open? %)}
+     (alert-dialog-content props
+                           (when (or title description)
+                             (alert-dialog-header
+                              {:class "ui__alert-dialog-header"}
+                              (when title (alert-dialog-title title))
+                              (when description (alert-dialog-description description))))
 
-        (when content
-          [:div.ui__alert-dialog-main-content content])
+                           (when content
+                             [:div.ui__alert-dialog-main-content content])
 
-        (alert-dialog-footer
-          {:class "ui__alert-dialog-footer"}
-          (if footer
-            footer
-            [:<>
-             (base/button
-               {:key "ok"
-                :on-click #(do (close!) (p/resolve! deferred true))
-                :size :sm
-                } "OK")]))))))
+                           (alert-dialog-footer
+                            {:class "ui__alert-dialog-footer"}
+                            (if footer
+                              footer
+                              [:<>
+                               (base/button
+                                {:key "ok"
+                                 :on-click #(do (close!) (p/resolve! deferred true))
+                                 :size :sm} "OK")]))))))
 
 (rum/defc confirm-inner
   [config]
@@ -206,56 +210,55 @@
         *reminder-ref (rum/use-ref nil)]
 
     (rum/use-effect!
-      (fn []
-        (when ready?
-          (js/setTimeout
-            #(some-> (rum/deref *ok-ref) (.focus)) 128)))
-      [ready?])
+     (fn []
+       (when ready?
+         (js/setTimeout
+          #(some-> (rum/deref *ok-ref) (.focus)) 128)))
+     [ready?])
 
     (rum/use-effect!
-      (fn []
-        (try
-          (if-let [reminder-v (and reminder? (js/localStorage.getItem (str id)))]
-            (if (< (- (js/Date.now) reminder-v) (* 1000 60 10))
-              (do (detach-modal! id) (p/resolve! deferred true))
-              (set-ready! true))
-            (set-ready! true))
-          (catch js/Error _e
-            (set-ready! true))))
-      [])
+     (fn []
+       (try
+         (if-let [reminder-v (and reminder? (js/localStorage.getItem (str id)))]
+           (if (< (- (js/Date.now) reminder-v) (* 1000 60 10))
+             (do (detach-modal! id) (p/resolve! deferred true))
+             (set-ready! true))
+           (set-ready! true))
+         (catch js/Error _e
+           (set-ready! true))))
+     [])
 
     (when ready?
       (alert-inner
-        (assoc config
-          :data-mode :confirm
-          :overlay-props
-          {:on-click #(when outside-cancel? (close!) (p/reject! deferred nil))}
+       (assoc config
+              :data-mode :confirm
+              :overlay-props
+              {:on-click #(when outside-cancel? (close!) (p/reject! deferred nil))}
 
-          :footer
-          [:<>
-           [:span.flex.items-center.pt-1
-            (when (and id data-reminder)
-              [:label.flex.items-center.gap-1.text-sm
-               (form/checkbox {:ref *reminder-ref})
-               [:span.opacity-50 "Don't remind me again"]])]
-           [:span.flex.gap-2
-            (base/button
-              {:key "cancel"
-               :on-click #(do (close!) (p/reject! deferred false))
-               :variant :outline
-               :size :sm}
-              "Cancel")
-            (base/button
-              {:key "ok"
-               :ref *ok-ref
-               :on-click (fn []
-                           (when-let [^js reminder (and id data-reminder (rum/deref *reminder-ref))]
-                             (when (= "checked" (.-state (.-dataset reminder)))
-                               (js/localStorage.setItem (str id) (js/Date.now))))
-                           (close!)
-                           (p/resolve! deferred true))
-               :size :sm
-               } "OK")]])))))
+              :footer
+              [:<>
+               [:span.flex.items-center.pt-1
+                (when (and id data-reminder)
+                  [:label.flex.items-center.gap-1.text-sm
+                   (form/checkbox {:ref *reminder-ref})
+                   [:span.opacity-50 "Don't remind me again"]])]
+               [:span.flex.gap-2
+                (base/button
+                 {:key "cancel"
+                  :on-click #(do (close!) (p/reject! deferred false))
+                  :variant :outline
+                  :size :sm}
+                 "Cancel")
+                (base/button
+                 {:key "ok"
+                  :ref *ok-ref
+                  :on-click (fn []
+                              (when-let [^js reminder (and id data-reminder (rum/deref *reminder-ref))]
+                                (when (= "checked" (.-state (.-dataset reminder)))
+                                  (js/localStorage.setItem (str id) (js/Date.now))))
+                              (close!)
+                              (p/resolve! deferred true))
+                  :size :sm} "OK")]])))))
 
 (rum/defc install-modals
   < rum/static
@@ -266,8 +269,8 @@
       (let [id (:id config)
             alert? (:alert? config)
             config (interpret-vals config
-                     [:title :description :content :footer]
-                     {:id id})]
+                                   [:title :description :content :footer]
+                                   {:id id})]
         (case alert?
           :default
           (alert-inner config)

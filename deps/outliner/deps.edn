@@ -8,5 +8,5 @@
   metosin/malli {:mvn/version "0.16.1"}}
  :aliases
  {:clj-kondo
-  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}
    :main-opts  ["-m" "clj-kondo.main"]}}}

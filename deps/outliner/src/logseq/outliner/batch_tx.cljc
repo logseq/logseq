@@ -1,8 +1,7 @@
 (ns logseq.outliner.batch-tx
   "Batch process multiple transactions.
   When batch-processing, don't refresh ui."
-  #?(:cljs (:require-macros [logseq.outliner.batch-tx]))
-  #?(:cljs (:require [logseq.common.util :as common-util])))
+  #?(:cljs (:require-macros [logseq.outliner.batch-tx])))
 
 (defmacro with-batch-tx-mode
   "1. start batch-tx mode
@@ -28,20 +27,10 @@
 #?(:cljs
    (do
      (defonce ^:private state
-       (atom {;; store all tx-data when batch-processing
-              :batch/txs []
-              ;; store db before batch-tx
+       (atom {;; store db before batch-tx
               :batch/db-before nil
               ;; Opts for with-batch-tx-mode
               :batch/opts nil}))
-
-     (defn get-batch-txs
-       []
-       (->> (:batch/txs @state)
-            (sort-by :tx)
-            ;; We need all the values for :many properties
-            (common-util/distinct-by-last-wins (fn [[e a v _tx added]] [e a v added]))))
-
      (defn ^:api set-batch-db-before!
        [db]
        (swap! state assoc :batch/db-before db))
@@ -58,12 +47,7 @@
        []
        (:batch/opts @state))
 
-     (defn conj-batch-txs!
-       [tx-data]
-       (swap! state update :batch/txs (fn [data] ((fnil into []) data tx-data))))
-
      (defn ^:api exit-batch-txs-mode!
        []
-       (swap! state assoc :batch/txs [])
        (swap! state assoc :batch/db-before nil)
        (swap! state assoc :batch/opts nil))))

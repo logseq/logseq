@@ -3,11 +3,17 @@
             [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.model :as db-model]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.windows :refer [resolve-own-container] :as pdf-windows]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
+            [frontend.config :as config]
+            [frontend.db.conn :as conn]
+            [logseq.publishing.db :as publish-db]
+            [frontend.db.utils :as db-utils]
+            [frontend.db.async :as db-async]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -57,11 +63,11 @@
      [hl-block-colored?])
 
     (rum/use-effect!
-      (fn []
-        (let [b (boolean auto-open-ctx-menu?)]
-          (state/set-state! :pdf/auto-open-ctx-menu? b)
-          (storage/set "ls-pdf-auto-open-ctx-menu" b)))
-      [auto-open-ctx-menu?])
+     (fn []
+       (let [b (boolean auto-open-ctx-menu?)]
+         (state/set-state! :pdf/auto-open-ctx-menu? b)
+         (storage/set "ls-pdf-auto-open-ctx-menu" b)))
+     [auto-open-ctx-menu?])
 
     (rum/use-effect!
      (fn []
@@ -263,14 +269,14 @@
                    :small? true :on-click #(do (do-find! {:type :again :prev? true}) (util/stop %))})
 
        (ui/button
-         {:icon "chevron-down"
-          :intent "link"
-          :small? true :on-click #(do (do-find! {:type :again}) (util/stop %))})
+        {:icon "chevron-down"
+         :intent "link"
+         :small? true :on-click #(do (do-find! {:type :again}) (util/stop %))})
 
        (ui/button
-         {:icon "x"
-          :intent "link"
-          :small? true :on-click close-finder!})]
+        {:icon "x"
+         :intent "link"
+         :small? true :on-click close-finder!})]
 
       [:div.result-inner
        (when-let [status (and entered-active?
@@ -315,10 +321,10 @@
          (fn [idx itm]
            (let [parent (str parent "-items-" idx)]
              (rum/with-key
-              (pdf-outline-item
-               viewer
-               (merge itm {:parent parent})
-               ops) parent))) items)])]))
+               (pdf-outline-item
+                viewer
+                (merge itm {:parent parent})
+                ops) parent))) items)])]))
 
 (rum/defc pdf-outline
   [^js viewer _visible? set-visible!]
@@ -363,50 +369,71 @@
          [:section
           (map-indexed (fn [idx itm]
                          (rum/with-key
-                          (pdf-outline-item
-                           viewer
-                           (merge itm {:parent idx})
-                           {:upt-outline-node! upt-outline-node!})
-                          idx))
+                           (pdf-outline-item
+                            viewer
+                            (merge itm {:parent idx})
+                            {:upt-outline-node! upt-outline-node!})
+                           idx))
                        outline-data)]
          [:section.is-empty "No outlines"])])))
+
+(rum/defc area-image-for-db
+  [repo id]
+  (let [[src set-src!] (rum/use-state nil)]
+    (rum/use-effect!
+      (fn []
+        (p/let [_ (db-async/<get-block repo id {:children? false})
+                block (db-model/get-block-by-uuid id)]
+          (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
+                                              (conn/get-db (state/get-current-repo))
+                                              block
+                                              (db-utils/pull (:db/id (:block/page block)))))]
+            (-> asset-path' (assets-handler/<make-asset-url)
+              (p/then #(set-src! %))))))
+      [])
+
+    (when (string? src)
+      [:p.area-wrap [:img {:src src}]])))
 
 (rum/defc pdf-highlights-list
   [^js viewer]
 
   (let [[active, set-active!] (rum/use-state false)]
     (rum/with-context
-     [hls-state *highlights-ctx*]
-     (let [hls (sort-by :page (or (seq (:initial-hls hls-state))
-                                  (:latest-hls hls-state)))]
+      [hls-state *highlights-ctx*]
+      (let [hls (sort-by :page (or (seq (:initial-hls hls-state))
+                                   (:latest-hls hls-state)))
+            repo (state/get-current-repo)
+            db-graph? (config/db-based-graph? repo)]
 
-       (for [{:keys [id content properties page] :as hl} hls
-             :let [goto-ref! #(pdf-assets/goto-block-ref! hl)]]
-         [:div.extensions__pdf-highlights-list-item
-          {:key             id
-           :class           (when (= active id) "active")
-           :on-click        (fn []
-                              (pdf-utils/scroll-to-highlight viewer hl)
-                              (set-active! id))
-           :on-double-click goto-ref!}
-          [:h6.flex
-           [:span.flex.items-center
-            [:small {:data-color (:color properties)}]
-            [:strong "Page " page]]
+        (for [{:keys [id content properties page] :as hl} hls
+              :let [goto-ref! #(pdf-assets/goto-block-ref! hl)]]
+          [:div.extensions__pdf-highlights-list-item
+           {:key             id
+            :class           (when (= active id) "active")
+            :on-click        (fn []
+                               (pdf-utils/scroll-to-highlight viewer hl)
+                               (set-active! id))
+            :on-double-click goto-ref!}
+           [:h6.flex
+            [:span.flex.items-center
+             [:small {:data-color (:color properties)}]
+             [:strong "Page " page]]
 
-           [:button
-            {:title    (t :pdf/linked-ref)
-             :on-click goto-ref!}
-            (ui/icon "external-link")]]
+            [:button
+             {:title    (t :pdf/linked-ref)
+              :on-click goto-ref!}
+             (ui/icon "external-link")]]
 
-
-          (if-let [img-stamp (:image content)]
-            (let [fpath (pdf-assets/resolve-area-image-file
-                         img-stamp (state/get-current-pdf) hl)
-                  fpath (assets-handler/make-asset-url fpath)]
-              [:p.area-wrap
-               [:img {:src fpath}]])
-            [:p.text-wrap (:text content)])])))))
+           (if-let [img-stamp (:image content)]
+             (if db-graph?
+               (area-image-for-db repo id)
+               (let [fpath (pdf-assets/resolve-area-image-file
+                             img-stamp (state/get-current-pdf) hl)
+                     fpath (assets-handler/<make-asset-url fpath)]
+                 [:p.area-wrap
+                  [:img {:src fpath}]]))
+             [:p.text-wrap (:text content)])])))))
 
 (rum/defc pdf-outline-&-highlights
   [^js viewer visible? set-visible!]
@@ -513,12 +540,11 @@
          (svg/adjustments 18)]
 
         ;; selection
-        (when (pdf-utils/support-area?)
-          [:a.button
-           {:title (str "Area highlight (" (if util/mac? "⌘" "Shift") ")")
-            :class (when area-mode? "is-active")
-            :on-click #(set-area-mode! (not area-mode?))}
-           (svg/icon-area 18)])
+        [:a.button
+         {:title (str "Area highlight (" (if util/mac? "⌘" "Shift") ")")
+          :class (when area-mode? "is-active")
+          :on-click #(set-area-mode! (not area-mode?))}
+         (svg/icon-area 18)]
 
         [:a.button
          {:title    "Highlight mode"

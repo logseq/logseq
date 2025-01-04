@@ -28,6 +28,7 @@
             [cljs-bean.core :as bean]
             [frontend.db.async :as db-async]
             [logseq.common.util :as common-util]
+            [logseq.shui.ui :as shui]
             [frontend.util.text :as text-util]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
@@ -77,12 +78,12 @@
                           (-> b
                               (update :block/uuid str)
                               (update :block/title #(->> (text-util/cut-by % "$pfts_2lqh>$" "$<pfts_2lqh$")
-                                                           (apply str))))) blocks)]
+                                                         (apply str))))) blocks)]
       (clj->js {:blocks blocks}))))
 
 (defn save-asset-handler
   [file]
-  (-> (editor-handler/save-assets! (state/get-current-repo) [(js->clj file)])
+  (-> (editor-handler/file-based-save-assets! (state/get-current-repo) [(js->clj file)])
       (p/then
        (fn [res]
          (when-let [[asset-file-name _ full-file-path] (and (seq res) (first res))]
@@ -126,13 +127,14 @@
                           (str (:block/uuid (db/get-page block-id-str)))))
    :exportToImage (fn [page-uuid-str options]
                     (assert (common-util/uuid-string? page-uuid-str))
-                    (state/set-modal! #(export/export-blocks (uuid page-uuid-str) (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
+                    (shui/dialog-open!
+                     #(export/export-blocks (uuid page-uuid-str) (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
    :isWhiteboardPage (fn [page-name]
                        (when-let [entity (db/get-page page-name)]
                          (model/whiteboard-page? entity)))
    :isMobile util/mobile?
    :saveAsset save-asset-handler
-   :makeAssetUrl assets-handler/make-asset-url
+   :makeAssetUrl assets-handler/<make-asset-url
    :inflateAsset (fn [src] (clj->js (pdf-assets/inflate-asset src)))
    :setCurrentPdf (fn [src] (state/set-current-pdf! (if src (pdf-assets/inflate-asset src) nil)))
    :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))

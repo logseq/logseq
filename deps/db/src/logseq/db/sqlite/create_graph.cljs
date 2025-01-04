@@ -8,7 +8,10 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.config :as common-config]
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn- mark-block-as-built-in [block]
   (assoc block :logseq.property/built-in? true))
@@ -16,19 +19,27 @@
 (defn build-initial-properties*
   [built-in-properties]
   (mapcat
-   (fn [[db-ident {:keys [schema title closed-values] :as m}]]
+   (fn [[db-ident {:keys [schema title closed-values properties] :as m}]]
      (let [prop-name (or title (name (:name m)))
-           blocks (if closed-values
-                    (db-property-build/build-closed-values
-                     db-ident
-                     prop-name
-                     {:db/ident db-ident :block/schema schema :closed-values closed-values}
-                     {})
-                    [(sqlite-util/build-new-property
-                      db-ident
-                      schema
-                      {:title prop-name})])]
-       blocks))
+           [property & others] (if closed-values
+                                 (db-property-build/build-closed-values
+                                  db-ident
+                                  prop-name
+                                  {:db/ident db-ident :block/schema schema :closed-values closed-values}
+                                  {:properties properties})
+                                 [(sqlite-util/build-new-property
+                                   db-ident
+                                   schema
+                                   {:title prop-name
+                                    :properties properties})])]
+       (->> (concat
+             [(dissoc property :logseq.property/default-value)]
+             others
+             (when-let [default-value (:logseq.property/default-value property)]
+               (when-let [id (:block/uuid property)]
+                 [{:block/uuid id
+                   :logseq.property/default-value default-value}])))
+            (remove nil?))))
    (dissoc built-in-properties :logseq.property/built-in?)))
 
 (defn- build-initial-properties
@@ -49,14 +60,15 @@
                    ;; Adding built-ins must come after initial properties
                    [(mark-block-as-built-in' built-in-property)]
                    (map mark-block-as-built-in' properties)
-                   (keep #(when (= "closed value" (:block/type %)) (mark-block-as-built-in' %))
+                   (keep #(when (entity-util/closed-value? %)
+                            (mark-block-as-built-in' %))
                          properties))]
     (doseq [m tx]
       (when-let [block-uuid (and (:db/ident m) (:block/uuid m))]
         (assert (string/starts-with? (str block-uuid) "00000002") m)))
 
     {:tx tx
-     :properties (filter #(= (:block/type %) "property") properties)}))
+     :properties (filter entity-util/property? properties)}))
 
 (def built-in-pages-names
   #{"Contents"})
@@ -66,7 +78,6 @@
              (->> (keep :db/ident tx)
                   frequencies
                   (keep (fn [[k v]] (when (> v 1) k)))
-                  (remove #{:logseq.class/Root})
                   seq)]
     (throw (ex-info (str "The following :db/idents are not unique and clobbered each other: "
                          (vec conflicting-idents))
@@ -82,7 +93,7 @@
          (let [schema-properties (mapv
                                   (fn [db-ident]
                                     (let [property (get db-ident->properties db-ident)]
-                                      (assert property (str "Built-in property " db-ident "is not defined yet"))
+                                      (assert property (str "Built-in property " db-ident " is not defined yet"))
                                       db-ident))
                                   (:properties schema))]
            (cond->
@@ -100,17 +111,53 @@
   [db-ident->properties]
   (build-initial-classes* db-class/built-in-classes db-ident->properties))
 
+(defn build-initial-views
+  "Builds initial blocks used for storing views. Used by db and file graphs"
+  []
+  (let [page-id (common-uuid/gen-uuid)]
+    [(sqlite-util/block-with-timestamps
+      {:block/uuid page-id
+       :block/name common-config/views-page-name
+       :block/title common-config/views-page-name
+       :block/tags [:logseq.class/Page]
+       :block/schema {:public? false}
+       :block/format :markdown
+       :logseq.property/built-in? true})
+     (sqlite-util/block-with-timestamps
+      {:block/uuid (common-uuid/gen-uuid)
+       :block/title "All Pages Default View"
+       :block/format :markdown
+       :block/parent [:block/uuid page-id]
+       :block/order (db-order/gen-key nil)
+       :block/page [:block/uuid page-id]
+       :logseq.property/view-for [:block/uuid page-id]
+       :logseq.property/built-in? true})]))
+
+(defn- build-favorites-page
+  []
+  [(sqlite-util/block-with-timestamps
+    {:block/uuid (common-uuid/gen-uuid)
+     :block/name common-config/favorites-page-name
+     :block/title common-config/favorites-page-name
+     :block/tags [:logseq.class/Page]
+     :block/schema {:public? false}
+     :block/format :markdown
+     :logseq.property/built-in? true})])
+
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
-  [config-content]
-  (let [initial-data [(sqlite-util/kv :logseq.kv/db-type "db")
-                      (sqlite-util/kv :logseq.kv/schema-version db-schema/version)
-                      (sqlite-util/kv :logseq.kv/graph-initial-schema-version db-schema/version)
-                      (sqlite-util/kv :logseq.kv/graph-created-at (common-util/time-ms))
-                      ;; Empty property value used by db.type/ref properties
-                      {:db/ident :logseq.property/empty-placeholder}
-                      {:db/ident :logseq.class/Root}]
+  [config-content & {:keys [import-type]}]
+  (assert (string? config-content))
+  (let [initial-data (cond->
+                      [(sqlite-util/kv :logseq.kv/db-type "db")
+                       (sqlite-util/kv :logseq.kv/schema-version db-schema/version)
+                       (sqlite-util/kv :logseq.kv/graph-initial-schema-version db-schema/version)
+                       (sqlite-util/kv :logseq.kv/graph-created-at (common-util/time-ms))
+                       ;; Empty property value used by db.type/ref properties
+                       {:db/ident :logseq.property/empty-placeholder}]
+                       import-type
+                       (into (sqlite-util/import-tx import-type)))
         initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content
@@ -131,7 +178,16 @@
         default-classes (build-initial-classes db-ident->properties)
         default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
                            (map mark-block-as-built-in))
-        tx (vec (concat initial-data properties-tx default-classes
-                        initial-files default-pages))]
+        hidden-pages (concat (build-initial-views) (build-favorites-page))
+        ;; These classes bootstrap our tags and properties as they depend on each other e.g.
+        ;; Root <-> Tag, classes-tx depends on logseq.property/parent, properties-tx depends on Property
+        bootstrap-class? (fn [c] (contains? #{:logseq.class/Root :logseq.class/Property :logseq.class/Tag} (:db/ident c)))
+        bootstrap-classes (filter bootstrap-class? default-classes)
+        bootstrap-class-ids (map #(select-keys % [:db/ident :block/uuid]) bootstrap-classes)
+        classes-tx (concat (map #(dissoc % :db/ident) bootstrap-classes)
+                           (remove bootstrap-class? default-classes))
+        ;; Order of tx is critical. bootstrap-class-ids bootstraps properties-tx and classes-tx
+        tx (vec (concat bootstrap-class-ids initial-data properties-tx classes-tx
+                        initial-files default-pages hidden-pages))]
     (validate-tx-for-duplicate-idents tx)
     tx))

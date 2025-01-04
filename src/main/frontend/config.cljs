@@ -43,8 +43,7 @@
       (def USER-POOL-ID "us-east-1_dtagLnju8")
       (def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
       (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com")
-      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")
-      )
+      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing"))
 
   (do (def FILE-SYNC-PROD? false)
       (def LOGIN-URL
@@ -58,7 +57,6 @@
       (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
       (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")
       (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")))
-
 
 (goog-define ENABLE-RTC-SYNC-PRODUCTION false)
 (if ENABLE-RTC-SYNC-PRODUCTION
@@ -76,9 +74,9 @@
 
 ;; User level configuration for whether plugins are enabled
 (defonce lsp-enabled?
-         (and (util/electron?)
-              (not (false? feature-plugin-system-on?))
-              (state/lsp-enabled?-or-theme)))
+  (and util/plugin-platform?
+    (not (false? feature-plugin-system-on?))
+    (state/lsp-enabled?-or-theme)))
 
 (defn plugin-config-enabled?
   []
@@ -153,10 +151,10 @@
                      (util/safe-lower-case)
                      (keyword))]
      (boolean
-       (some
-         (fn [s]
-           (contains? s input))
-         formats)))))
+      (some
+       (fn [s]
+         (contains? s input))
+       formats)))))
 
 (defn ext-of-video?
   ([s] (ext-of-video? s true))
@@ -345,7 +343,7 @@
    (demo-graph? (state/get-current-repo)))
   ([repo-url]
    (or (nil? repo-url) (= repo-url demo-repo)
-     (string/ends-with? repo-url demo-repo))))
+       (string/ends-with? repo-url demo-repo))))
 
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
@@ -376,10 +374,12 @@
        (string/starts-with? s local-db-prefix)))
 
 (defn db-based-graph?
-  [s]
-  (boolean
-   (and (string? s)
-        (sqlite-util/db-based-graph? s))))
+  ([]
+   (db-based-graph? (state/get-current-repo)))
+  ([s]
+   (boolean
+    (and (string? s)
+         (sqlite-util/db-based-graph? s)))))
 
 (defn get-local-asset-absolute-path
   [s]
@@ -505,8 +505,12 @@
 
 (defn get-current-repo-assets-root
   []
-  (when-let [repo-dir (and (local-file-based-graph? (state/get-current-repo))
-                           (get-repo-dir (state/get-current-repo)))]
+  (when-let [repo-dir (get-repo-dir (state/get-current-repo))]
+    (path/path-join repo-dir "assets")))
+
+(defn get-repo-assets-root
+  [repo]
+  (when-let [repo-dir (get-repo-dir repo)]
     (path/path-join repo-dir "assets")))
 
 (defn get-custom-js-path

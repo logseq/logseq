@@ -27,7 +27,7 @@
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         sqlite-build-edn (merge {:auto-create-ontology? true}
                                 (-> (resolve-path edn-path) fs/readFileSync str edn/read-string))
-        conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
+        conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath) :import-type :cli/create-graph})
         {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx sqlite-build-edn)]
     (println "Generating" (count (filter :block/name init-tx)) "pages and"
              (count (filter :block/title init-tx)) "blocks ...")

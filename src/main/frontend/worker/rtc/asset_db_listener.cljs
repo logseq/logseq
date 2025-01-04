@@ -1,38 +1,41 @@
 (ns frontend.worker.rtc.asset-db-listener
   "Listen asset-block changes in db, generate asset-sync operations"
   (:require [datascript.core :as d]
-            [frontend.common.schema-register :as sr]
             [frontend.worker.db-listener :as db-listener]
-            [frontend.worker.rtc.asset :as r.asset]
-            [frontend.worker.rtc.client-op :as client-op]))
+            [frontend.worker.rtc.client-op :as client-op]
+            [logseq.db :as ldb]))
 
-(defn entity-datoms=>action+asset-uuid
-  [db-after entity-datoms]
+(defn- max-t
+  [entity-datoms]
+  (apply max (map (fn [[_e _a _v t]] t) entity-datoms)))
+
+(defn- asset-related-attrs-changed?
+  [entity-datoms]
+  (some (fn [[_e a]] (= :logseq.property.asset/checksum a)) entity-datoms))
+
+(defn- entity-datoms=>ops
+  [db-before db-after entity-datoms]
   (when-let [e (ffirst entity-datoms)]
-    (let [ent (d/entity db-after e)
-          block-uuid (:block/uuid ent)
-          block-type (:block/type ent)]
-      (when (and block-uuid (= block-type "asset"))
-        (when-let [action (r.asset/asset-block->upload+download-action ent)]
-          [action block-uuid])))))
+    (let [ent-after (d/entity db-after e)
+          ent-before (d/entity db-before e)]
+      (cond
+        (and (some-> ent-after ldb/asset?)
+             (asset-related-attrs-changed? entity-datoms))
+        [[:update-asset (max-t entity-datoms) {:block-uuid (:block/uuid ent-after)}]]
 
-(defn generate-asset-change-events
-  [db-after same-entity-datoms-coll]
-  (let [action->asset-uuids
-        (->> same-entity-datoms-coll
-             (keep (partial entity-datoms=>action+asset-uuid db-after))
-             (reduce
-              (fn [action->asset-uuids [action asset-uuid]]
-                (update action->asset-uuids action (fnil conj #{}) asset-uuid))
-              {}))]
-    (reset! r.asset/*global-asset-change-event action->asset-uuids)))
+        (and (some-> ent-before ldb/asset?)
+             (nil? ent-after))
+        [[:remove-asset (max-t entity-datoms) {:block-uuid (:block/uuid ent-before)}]]))))
 
-(sr/defkeyword :generate-asset-change-events?
-  "tx-meta option, generate events to notify asset-sync (default true)")
+(defn generate-asset-ops
+  [repo db-before db-after same-entity-datoms-coll]
+  (when-let [ops (not-empty (mapcat (partial entity-datoms=>ops db-before db-after) same-entity-datoms-coll))]
+    (client-op/add-asset-ops repo ops)))
 
 (defmethod db-listener/listen-db-changes :gen-asset-change-events
-  [_ {:keys [_tx-data tx-meta _db-before db-after
-             repo _id->attr->datom _e->a->add?->v->t same-entity-datoms-coll]}]
+  [_
+   {:keys [repo same-entity-datoms-coll]}
+   {:keys [_tx-data tx-meta db-before db-after]}]
   (when (and (client-op/rtc-db-graph? repo)
-             (:generate-asset-change-events? tx-meta true))
-    (generate-asset-change-events db-after same-entity-datoms-coll)))
+             (:persist-op? tx-meta true))
+    (generate-asset-ops repo db-before db-after same-entity-datoms-coll)))

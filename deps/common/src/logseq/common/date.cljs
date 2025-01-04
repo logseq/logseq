@@ -1,45 +1,52 @@
-(ns frontend.common.date
+(ns logseq.common.date
   "Date related fns shared by worker and frontend namespaces. Eventually some
    of this should go to logseq.common.util.date-time"
   (:require [cljs-time.format :as tf]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [clojure.string :as string]))
 
 (def default-journal-filename-formatter "yyyy_MM_dd")
+
+(defonce built-in-journal-title-formatters
+  (list
+   "do MMM yyyy"
+   "do MMMM yyyy"
+   "MMM do, yyyy"
+   "MMMM do, yyyy"
+   "E, dd-MM-yyyy"
+   "E, dd.MM.yyyy"
+   "E, MM/dd/yyyy"
+   "E, yyyy/MM/dd"
+   "EEE, dd-MM-yyyy"
+   "EEE, dd.MM.yyyy"
+   "EEE, MM/dd/yyyy"
+   "EEE, yyyy/MM/dd"
+   "EEEE, dd-MM-yyyy"
+   "EEEE, dd.MM.yyyy"
+   "EEEE, MM/dd/yyyy"
+   "EEEE, yyyy/MM/dd"
+   "dd-MM-yyyy"
+     ;; This tyle will mess up other date formats like "2022-08" "2022Q4" "2022/10"
+     ;;  "dd.MM.yyyy"
+   "MM/dd/yyyy"
+   "MM-dd-yyyy"
+   "MM_dd_yyyy"
+   "yyyy/MM/dd"
+   "yyyy-MM-dd"
+   "yyyy-MM-dd EEEE"
+   "yyyy_MM_dd"
+   "yyyyMMdd"
+   "yyyy年MM月dd日"))
+
+(defonce slash-journal-title-formatters
+  (filter #(string/includes? % "/") built-in-journal-title-formatters))
 
 (defn journal-title-formatters
   [date-formatter]
   (->
    (cons
     date-formatter
-    (list
-     "do MMM yyyy"
-     "do MMMM yyyy"
-     "MMM do, yyyy"
-     "MMMM do, yyyy"
-     "E, dd-MM-yyyy"
-     "E, dd.MM.yyyy"
-     "E, MM/dd/yyyy"
-     "E, yyyy/MM/dd"
-     "EEE, dd-MM-yyyy"
-     "EEE, dd.MM.yyyy"
-     "EEE, MM/dd/yyyy"
-     "EEE, yyyy/MM/dd"
-     "EEEE, dd-MM-yyyy"
-     "EEEE, dd.MM.yyyy"
-     "EEEE, MM/dd/yyyy"
-     "EEEE, yyyy/MM/dd"
-     "dd-MM-yyyy"
-     ;; This tyle will mess up other date formats like "2022-08" "2022Q4" "2022/10"
-     ;;  "dd.MM.yyyy"
-     "MM/dd/yyyy"
-     "MM-dd-yyyy"
-     "MM_dd_yyyy"
-     "yyyy/MM/dd"
-     "yyyy-MM-dd"
-     "yyyy-MM-dd EEEE"
-     "yyyy_MM_dd"
-     "yyyyMMdd"
-     "yyyy年MM月dd日"))
+    built-in-journal-title-formatters)
    (distinct)))
 
 (defn normalize-date
@@ -63,14 +70,18 @@
   (and title
        (normalize-date (common-util/capitalize-all title) date-formatter)))
 
-(defn valid-journal-title?
+(defn ^:api valid-journal-title?
   "This is a loose rule, requires double check by journal-title->custom-format.
 
    BUG: This also accepts strings like 3/4/5 as journal titles"
   [title date-formatter]
   (boolean (normalize-journal-title title date-formatter)))
 
-(defn date->file-name
+(defn ^:api valid-journal-title-with-slash?
+  [title]
+  (some #(valid-journal-title? title %) slash-journal-title-formatters))
+
+(defn ^:api date->file-name
   "Date object to filename format"
   [date journal-filename-formatter]
   (let [formatter (if journal-filename-formatter

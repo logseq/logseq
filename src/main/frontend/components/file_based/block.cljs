@@ -1,7 +1,11 @@
 (ns frontend.components.file-based.block
   (:require [clojure.string :as string]
+            [frontend.commands :as commands]
+            [frontend.components.file-based.datetime :as datetime-comp]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.file-based.repeated :as repeated]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.util.file-based.clock :as clock]
             [frontend.util.file-based.drawer :as drawer]
@@ -107,3 +111,44 @@
                    [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
                     [:a.fade-link
                      summary]])]))))
+
+(rum/defc timestamp-editor
+  [ast *show-datapicker?]
+  (let [*trigger-ref (rum/use-ref nil)]
+    (rum/use-effect!
+     (fn []
+       (let [pid (shui/popup-show!
+                  (.closest (rum/deref *trigger-ref) "a")
+                  (datetime-comp/date-picker nil nil (repeated/timestamp->map ast))
+                  {:id :timestamp-editor
+                   :align :start
+                   :root-props {:onOpenChange #(reset! *show-datapicker? %)}
+                   :content-props {:onEscapeKeyDown #(reset! *show-datapicker? false)}})]
+         #(do (shui/popup-hide! pid)
+              (reset! *show-datapicker? false))))
+     [])
+    [:i {:ref *trigger-ref}]))
+
+(rum/defcs timestamp-cp
+  < rum/reactive
+  (rum/local false ::show-datepicker?)
+  [state block typ ast]
+  (let [ts-block-id (get-in (state/sub [:editor/set-timestamp-block]) [:block :block/uuid])
+        _active? (= (get block :block/uuid) ts-block-id)
+        *show-datapicker? (get state ::show-datepicker?)]
+    [:div.flex.flex-col.gap-4.timestamp
+     [:div.text-sm.flex.flex-row
+      [:div.opacity-50.font-medium.timestamp-label
+       (str typ ": ")]
+      [:a.opacity-80.hover:opacity-100
+       {:on-pointer-down (fn [e]
+                           (util/stop e)
+                           (state/clear-editor-action!)
+                           (editor-handler/escape-editing)
+                           (reset! *show-datapicker? true)
+                           (reset! commands/*current-command typ)
+                           (state/set-timestamp-block! {:block block
+                                                        :typ typ}))}
+       [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]
+       (when (and _active? @*show-datapicker?)
+         (timestamp-editor ast *show-datapicker?))]]]))

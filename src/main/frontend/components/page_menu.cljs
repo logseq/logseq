@@ -1,51 +1,50 @@
 (ns frontend.components.page-menu
-  (:require [frontend.commands :as commands]
+  (:require [electron.ipc :as ipc]
+            [frontend.commands :as commands]
             [frontend.components.export :as export]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [logseq.db :as ldb]
+            [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.common.developer :as dev-common-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.property.util :as pu]
+            [frontend.handler.shell :as shell]
+            [frontend.handler.user :as user-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [logseq.shui.ui :as shui]
-            [promesa.core :as p]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
-            [frontend.handler.shell :as shell]
-            [frontend.mobile.util :as mobile-util]
-            [electron.ipc :as ipc]
-            [frontend.config :as config]
-            [frontend.handler.user :as user-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
             [logseq.common.path :as path]
-            [frontend.handler.property.util :as pu]))
+            [logseq.db :as ldb]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
 
 (defn- delete-page!
   [page]
   (page-handler/<delete! (:block/uuid page)
-                        (fn []
-                          (notification/show! (str "Page " (:block/title page) " was deleted successfully!")
-                                              :success))
-                        {:error-handler (fn [{:keys [msg]}]
-                                          (notification/show! msg :warning))}))
+                         (fn []
+                           (notification/show! (str "Page " (:block/title page) " was deleted successfully!")
+                                               :success))
+                         {:error-handler (fn [{:keys [msg]}]
+                                           (notification/show! msg :warning))}))
 
 (defn delete-page-confirm!
   [page]
   (when page
     (-> (shui/dialog-confirm!
-          {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
-                   [:span.top-1.relative
-                    (shui/tabler-icon "alert-triangle")]
-                   (if (config/db-based-graph? (state/get-current-repo))
-                     (t :page/db-delete-confirmation)
-                     (t :page/delete-confirmation))]
-           :content [:p.opacity-60 (str "- " (:block/title page))]
-           :outside-cancel? true})
-      (p/then #(delete-page! page))
-      (p/catch #()))))
+         {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
+                  [:span.top-1.relative
+                   (shui/tabler-icon "alert-triangle")]
+                  (if (config/db-based-graph? (state/get-current-repo))
+                    (t :page/db-delete-confirmation)
+                    (t :page/delete-confirmation))]
+          :content [:p.opacity-60 (str "- " (:block/title page))]
+          :outside-cancel? true})
+        (p/then #(delete-page! page))
+        (p/catch #()))))
 
 (defn ^:large-vars/cleanup-todo page-menu
   [page]
@@ -69,13 +68,7 @@
                                     (file-sync-handler/get-current-graph-uuid))]
       (when (not block?)
         (->>
-         [(when (not= (state/get-current-page) (str (:block/uuid page)))
-            {:title   (t :page/go-to-page)
-             :options {:on-click
-                       (fn []
-                         (route-handler/redirect-to-page! (:block/uuid page)))}})
-
-          (when-not config/publishing?
+         [(when-not config/publishing?
             {:title   (if favorited?
                         (t :page/unfavorite)
                         (t :page/add-to-favorites))
@@ -162,7 +155,7 @@
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page page-name) action)}}))
 
-          (when (and db-based? (= (:block/type page) "page"))
+          (when (and db-based? (ldb/internal-page? page))
             {:title (t :page/convert-to-tag)
              :options {:on-click (fn []
                                    (db-page-handler/convert-to-tag! page))}})

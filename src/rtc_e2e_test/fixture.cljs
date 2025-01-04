@@ -3,11 +3,11 @@
             [const]
             [datascript.core :as d]
             [example]
-            [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.state :as worker-state]
             [helper]
+            [frontend.common.missionary :as c.m]
             [missionary.core :as m]))
 
 (def install-some-consts

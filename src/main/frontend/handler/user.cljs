@@ -6,7 +6,7 @@
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [<! go]]
             [clojure.string :as string]
-            [frontend.common.missionary-util :as c.m]
+            [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.debug :as debug]
             [frontend.handler.config :as config-handler]
@@ -255,6 +255,17 @@
                   (-> (state/get-auth-id-token) parse-jwt expired?))
           (ex-info "empty or expired token and refresh failed" {:anom :expired-token}))))))
 
+(def task--ensure-id&access-token
+  (m/sp
+    (let [id-token (state/get-auth-id-token)]
+      (when (or (nil? id-token)
+                (-> id-token parse-jwt almost-expired-or-expired?))
+        (prn (str "refresh tokens... " (tc/to-string (t/now))))
+        (c.m/<? (<refresh-id-token&access-token))
+        (when (or (nil? (state/get-auth-id-token))
+                  (-> (state/get-auth-id-token) parse-jwt expired?))
+          (throw (ex-info "empty or expired token and refresh failed" {:type :expired-token})))))))
+
 (defn <user-uuid
   []
   (go
@@ -263,6 +274,10 @@
       (user-uuid))))
 
 ;;; user groups
+
+(defn team-member?
+  []
+  (contains? (state/user-groups) "team"))
 
 (defn alpha-user?
   []

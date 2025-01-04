@@ -77,7 +77,7 @@
                  :block/order order
                  :block/page "page"})
               (range 500) (db-order/gen-n-keys 500 "a0" "a1")))
-   :add-task-properties-to-block1
+   :step3-add-task-properties-to-block1
    [{:db/id "id-0907"
      :block/uuid #uuid "00000001-2024-0907-0000-000000000000"
      :block/updated-at 1725455235108
@@ -92,6 +92,12 @@
      :block/tags :logseq.class/Task
      :logseq.task/status :logseq.task/status.done
      :logseq.task/deadline "id-0907"}]
+   :step3-toggle-status-TODO
+   [{:block/uuid block1-uuid
+     :logseq.task/status :logseq.task/status.todo}]
+   :step3-toggle-status-DOING
+   [{:block/uuid block1-uuid
+     :logseq.task/status :logseq.task/status.doing}]
    :move-blocks-concurrently-1
    [{:db/id "page"
      :block/uuid page3-uuid

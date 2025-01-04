@@ -1,4 +1,4 @@
-.property-value-inner:not([data-type="default"]):not([data-type="property"]) {
+.property-value-inner:not([data-type="default"]):not([data-type="url"]):not([data-type="property"]) {
   @apply cursor-pointer;
   &:hover, .as-scalar-value-wrap:hover {
     @apply bg-gray-02 rounded transition-[background-color] duration-300;
@@ -18,5 +18,12 @@
         @apply max-h-[250px];
       }
     }
+  }
+}
+
+.overdue {
+  @apply text-yellow-rx-08 dark:text-yellow-rx-10;
+  :not(.ls-datetime) .page-ref {
+    @apply text-yellow-rx-08 dark:text-yellow-rx-10;
   }
 }

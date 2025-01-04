@@ -1,21 +1,24 @@
 (ns frontend.extensions.srs
+  "SRS fns, will be deprecated in db-based version.
+  see also `frontend.extensions.fsrs`"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.local :as tl]
             [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.commands :as commands]
             [frontend.components.block :as component-block]
             [frontend.components.editor :as editor]
             [frontend.components.macro :as component-macro]
             [frontend.components.select :as component-select]
             [frontend.components.svg :as svg]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
+            [frontend.format.mldoc :as mldoc]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.file :as property-file]
@@ -24,11 +27,9 @@
             [frontend.template :as template]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.format.mldoc :as mldoc]
             [frontend.util.file-based.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [rum.core :as rum]))
@@ -124,9 +125,7 @@
                                       card-next-schedule-property "nil"
                                       card-last-score-property "nil"}))
 
-
 ;;; used by other ns
-
 
 (defn card-block?
   [block]
@@ -190,10 +189,8 @@
       [-1 1 ef next-of-matrix]
       [(fix-2f next-interval) (+ 1 repeats) (fix-2f next-ef) next-of-matrix])))
 
-
 ;;; ================================================================
 ;;; card protocol
-
 
 (defprotocol ICard
   (get-root-block [this]))
@@ -203,7 +200,6 @@
   (show-cycle [this phase])
 
   (show-cycle-config [this phase]))
-
 
 (defn- has-cloze?
   [blocks]
@@ -267,16 +263,8 @@
      (let [result (if (string/blank? query-string)
                     (:block/_refs (db/get-page card-hash-tag))
                     (let [query-string (template/resolve-dynamic-template! query-string)
-                          query-string (if-not (or (string/blank? query-string)
-                                                   (string/starts-with? query-string "(")
-                                                   (string/starts-with? query-string "["))
-                                         (page-ref/->page-ref (string/trim query-string))
-                                         query-string)
-                          {query* :query :keys [sort-by rules]} (query-dsl/parse query-string {:db-graph? (config/db-based-graph? repo)})
-                          query** (util/concat-without-nil
-                                  [['?b :block/refs '?br] ['?br :block/name card-hash-tag]]
-                                  (if (coll? (first query*)) query* [query*]))]
-                      (when-let [query' (query-dsl/query-wrapper query**
+                          {query* :query :keys [sort-by rules]} (query-dsl/parse query-string {:db-graph? (config/db-based-graph? repo)})]
+                      (when-let [query' (query-dsl/query-wrapper query*
                                                                  {:blocks? true
                                                                   :block-attrs [:db/id :block/properties]})]
                         (let [result (query-react/react-query repo
@@ -309,10 +297,8 @@
     {:total (count blocks)
      :result sort-by-next-schedule}))
 
-
 ;;; ================================================================
 ;;; operations
-
 
 (defn- get-next-interval
   [card score]
@@ -626,8 +612,8 @@
             (fn [{:keys [toggle-fn]}]
               [:div.ml-1.text-sm.font-medium.cursor
                {:on-pointer-down (fn [e]
-                                 (util/stop e)
-                                 (toggle-fn))}
+                                   (util/stop e)
+                                   (toggle-fn))}
                [:span.flex (if (string/blank? query-string) (t :flashcards/modal-select-all) query-string)
                 [:span {:style {:margin-top 2}}
                  (svg/caret-down)]]])
@@ -669,8 +655,8 @@
               {:icon "letter-a"
                :intent "link"
                :on-click (fn [e]
-                          (util/stop e)
-                          (swap! *preview-mode? not)
+                           (util/stop e)
+                           (swap! *preview-mode? not)
                            (reset! *card-index 0))
                :button-props {:id "preview-all-cards"}
                :small? true}
@@ -696,8 +682,8 @@
           (when (and (not modal?) (not @*preview-mode?))
             {:on-click (fn []
                          (shui/dialog-open!
-                           #(cards (assoc config :modal? true) {:query-string query-string})
-                           {:id :srs}))})
+                          #(cards (assoc config :modal? true) {:query-string query-string})
+                          {:id :srs}))})
           (let [view-fn (if modal? view-modal view)
                 blocks (if @*preview-mode? query-result review-cards)
                 blocks (if @*random-mode? (shuffle blocks) blocks)]
@@ -771,34 +757,26 @@
 (commands/register-slash-command ["Cards"
                                   [[:editor/input "{{cards }}" {:backward-pos 2}]]
                                   "Create a cards query"
-                                  {:db-graph? false
-                                   :icon :icon/cards}])
+                                  {:icon :icon/cards
+                                   :db-graph? false}])
 
 (commands/register-slash-command ["Cloze"
                                   [[:editor/input "{{cloze }}" {:backward-pos 2}]]
                                   "Create a cloze"
-                                  {:db-graph? false
-                                   :icon :icon/eye-question}])
+                                  {:icon :icon/eye-question}])
 
 ;; handlers
 (defn add-card-tag-to-block
   "given a block struct, adds the #card to title and returns
    a seq of [original-block new-content-string]"
   [block]
-    (when-let [content (:block/title block)]
-      (let [format (:block/format block)
-            content (-> (property-file/remove-built-in-properties-when-file-based
-                         (state/get-current-repo) (:block/format block) content)
-                        (drawer/remove-logbook))
-            [title body] (mldoc/get-title&body content format)]
-        [block (str title " #" card-hash-tag "\n" body)])))
-
-(defn make-block-a-card!
-  [block-id]
-  (when-let [block (db/entity [:block/uuid block-id])]
-    (let [block-content (add-card-tag-to-block block)
-          new-content (get block-content 1)]
-      (editor-handler/save-block! (state/get-current-repo) block-id new-content))))
+  (when-let [content (:block/title block)]
+    (let [format (:block/format block)
+          content (-> (property-file/remove-built-in-properties-when-file-based
+                       (state/get-current-repo) (:block/format block) content)
+                      (drawer/remove-logbook))
+          [title body] (mldoc/get-title&body content format)]
+      [block (str title " #" card-hash-tag "\n" body)])))
 
 (defn batch-make-cards!
   ([] (batch-make-cards! (state/get-selection-block-ids)))

@@ -2,24 +2,34 @@
   "Provides util handler fns for pages"
   (:require [cljs.reader :as reader]
             [clojure.string :as string]
+            [datascript.core :as d]
+            [datascript.impl.entity :as de]
+            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
+            [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.fs :as fs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.common.page :as page-common-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.property :as property-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.graph :as graph-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
+            [frontend.handler.ui :as ui-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -29,23 +39,13 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.common.util.block-ref :as block-ref]
-            [promesa.core :as p]
-            [logseq.common.path :as path]
-            [electron.ipc :as ipc]
-            [frontend.context.i18n :refer [t]]
-            [frontend.persist-db.browser :as db-browser]
-            [datascript.core :as d]
-            [frontend.db.conn :as conn]
             [logseq.db :as ldb]
             [logseq.graph-parser.db :as gp-db]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.modules.outliner.op :as outliner-op]
-            [frontend.handler.property.util :as pu]
-            [datascript.impl.entity :as de]
-            [frontend.handler.db-based.page :as db-page-handler]))
+            [logseq.graph-parser.text :as text]
+            [promesa.core :as p]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
@@ -79,7 +79,6 @@
          (page-common-handler/db-favorited? page-block-uuid)))
       (page-common-handler/file-favorited? page-name))))
 
-
 (defn get-favorites
   "return page-block entities"
   []
@@ -97,7 +96,6 @@
                               (mapv util/safe-page-name-sanity-lc)
                               (distinct))]
           (keep (fn [page-name] (db/get-page page-name)) page-names))))))
-
 
 ;; FIXME: add whiteboard
 (defn- get-directory
@@ -168,7 +166,7 @@
 (defn load-more-journals!
   []
   (when (has-more-journals?)
-    (state/set-journals-length! (+ (:journals-length @state/state) 1))))
+    (state/set-journals-length! (+ (:journals-length @state/state) 7))))
 
 (defn update-public-attribute!
   [page value]
@@ -231,19 +229,18 @@
 
 (defn get-all-pages
   [repo]
-  (let [graph-specific-hidden?
-        (if (config/db-based-graph? repo)
+  (let [db-based? (config/db-based-graph? repo)
+        graph-specific-hidden?
+        (if db-based?
           (fn [p]
             (and (ldb/property? p) (ldb/built-in? p)))
           (fn [p]
             (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
-    (->> (db/get-all-pages repo)
-         (remove (fn [p]
-                   (let [name (:block/name p)]
-                     (or (util/uuid-string? name)
-                         (common-config/draw? name)
-                         (graph-specific-hidden? p)))))
-         (common-handler/fix-pages-timestamps))))
+    (cond->>
+     (->> (db/get-all-pages repo)
+          (remove graph-specific-hidden?))
+      (not db-based?)
+      (common-handler/fix-pages-timestamps))))
 
 (defn get-filters
   [page]
@@ -321,9 +318,12 @@
                      (string/replace-first (str (t :new-tag) " ") "")
                      (string/replace-first (str (t :new-page) " ") ""))
           wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
-          wrapped-tag (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
-                        (page-ref/->page-ref chosen)
-                        chosen)
+          chosen-last-part (if (text/namespace-page? chosen)
+                             (text/get-namespace-last-part chosen)
+                             chosen)
+          wrapped-tag (if (and (util/safe-re-find #"\s+" chosen-last-part) (not wrapped?))
+                        (page-ref/->page-ref chosen-last-part)
+                        chosen-last-part)
           q (if (editor-handler/get-selected-text) "" q)
           last-pattern (if wrapped?
                          q
@@ -346,37 +346,44 @@
 (defn- page-on-chosen-handler
   [id format q db-based?]
   (fn [chosen-result e]
-        (util/stop e)
-        (state/clear-editor-action!)
-        (p/let [chosen-result (if (:block/uuid chosen-result)
-                                (db/entity [:block/uuid (:block/uuid chosen-result)])
-                                chosen-result)
-                chosen (:block/title chosen-result)
-                chosen' (string/replace-first chosen (str (t :new-page) " ") "")
-                ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
-                           (cond
-                             db-based?
-                             (page-ref/->page-ref (:block/uuid chosen-result))
-                             :else
-                             (block-ref/->block-ref (:block/uuid chosen-result)))
-                           (get-page-ref-text chosen'))
-                result (when db-based?
-                         (when-not (de/entity? chosen-result)
-                           (<create! chosen'
-                                     {:redirect? false
-                                      :create-first-block? false})))
-                ref-text' (if result (page-ref/->page-ref (:block/title result)) ref-text)]
-          (p/do!
-           (editor-handler/insert-command! id
-                                           ref-text'
-                                           format
-                                           {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
-                                            :end-pattern page-ref/right-brackets
-                                            :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
-                                            :command :page-ref})
-           (p/let [chosen-result (or result chosen-result)]
-             (when (de/entity? chosen-result)
-               (state/conj-block-ref! chosen-result)))))))
+    (util/stop e)
+    (state/clear-editor-action!)
+    (p/let [chosen-result (if (:block/uuid chosen-result)
+                            (db/entity [:block/uuid (:block/uuid chosen-result)])
+                            chosen-result)
+            chosen (:block/title chosen-result)
+            chosen' (string/replace-first chosen (str (t :new-page) " ") "")
+            [chosen' chosen-result] (or (when (and (:nlp-date? chosen-result) (not (de/entity? chosen-result)))
+                                          (when-let [result (date/nld-parse chosen')]
+                                            (let [d (doto (goog.date.DateTime.) (.setTime (.getTime result)))
+                                                  gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
+                                                  page (date/js-date->journal-title gd)]
+                                              [page (db/get-page page)])))
+                                        [chosen' chosen-result])
+            ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
+                       (page-ref/->page-ref (:block/uuid chosen-result))
+                       (get-page-ref-text chosen'))
+            result (when db-based?
+                     (when-not (de/entity? chosen-result)
+                       (<create! chosen'
+                                 {:redirect? false
+                                  :create-first-block? false
+                                  :split-namespace? true})))
+            ref-text' (if result
+                        (let [title (:block/title result)]
+                          (page-ref/->page-ref title))
+                        ref-text)]
+      (p/do!
+       (editor-handler/insert-command! id
+                                       ref-text'
+                                       format
+                                       {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
+                                        :end-pattern page-ref/right-brackets
+                                        :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
+                                        :command :page-ref})
+       (p/let [chosen-result (or result chosen-result)]
+         (when (de/entity? chosen-result)
+           (state/conj-block-ref! chosen-result)))))))
 
 (defn on-chosen-handler
   [input id pos format]
@@ -418,7 +425,6 @@
                           (<create! title {:redirect? false
                                            :split-namespace? false
                                            :create-first-block? (not template)
-                                           :journal? true
                                            :today-journal? true})
                           (state/pub-event! [:journal/insert-template today-page])
                           (ui-handler/re-render-root!)

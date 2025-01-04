@@ -3,8 +3,10 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.commands :as commands]
+            [frontend.date :as date]
             [frontend.format.block :as block]
             [frontend.db :as db]
+            [frontend.db.query-dsl :as query-dsl]
             [frontend.format.mldoc :as mldoc]
             [frontend.state :as state]
             [frontend.modules.outliner.op :as outliner-op]
@@ -12,12 +14,15 @@
             [frontend.util :as util]
             [frontend.util.file-based.clock :as clock]
             [frontend.util.file-based.drawer :as drawer]
+            [frontend.handler.file-based.repeated :as repeated]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.file-based.status :as status]
             [frontend.handler.property.file :as property-file]
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.property.util :as property-util]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]))
 
 (defn- remove-non-existed-refs!
@@ -177,7 +182,7 @@
              (number? heading))
         (let [block' (set-block-property-aux! block :heading nil)
               properties (assoc (:block/properties block) :heading heading)
-              content (commands/set-markdown-heading (:block/title block') heading)]
+              content (commands/file-based-set-markdown-heading (:block/title block') heading)]
           (merge block' {:block/title content :block/properties properties}))
 
         ;; heading-num1 -> heading-num2
@@ -186,7 +191,7 @@
               content (-> block
                           :block/title
                           commands/clear-markdown-heading
-                          (commands/set-markdown-heading heading))]
+                          (commands/file-based-set-markdown-heading heading))]
           {:block/uuid (:block/uuid block)
            :block/properties properties
            :block/title content}))
@@ -211,3 +216,62 @@
                  block-ids)
         col (remove nil? col)]
     (file-property-handler/batch-set-block-property-aux! col)))
+
+(defn valid-dsl-query-block?
+  "Whether block has a valid dsl query."
+  [block]
+  (->> (:block/macros (db/entity (:db/id block)))
+       (some (fn [macro]
+               (let [properties (:block/properties macro)
+                     macro-name (:logseq.macro-name properties)
+                     macro-arguments (:logseq.macro-arguments properties)]
+                 (when-let [query-body (and (= "query" macro-name) (not-empty (string/join " " macro-arguments)))]
+                   (seq (:query
+                         (try
+                           (query-dsl/parse-query query-body)
+                           (catch :default _e
+                             nil))))))))))
+
+(defn valid-custom-query-block?
+  "Whether block has a valid custom query."
+  [block]
+  (let [entity (db/entity (:db/id block))
+        content (:block/title entity)]
+    (when content
+      (when (and (string/includes? content "#+BEGIN_QUERY")
+                 (string/includes? content "#+END_QUERY"))
+        (let [ast (mldoc/->edn (string/trim content) (or (:block/format entity) :markdown))
+              q (mldoc/extract-first-query-from-ast ast)]
+          (some? (:query (common-util/safe-read-map-string q))))))))
+
+(defn update-timestamps-content!
+  [{:block/keys [repeated? marker format] :as block} content]
+  (if repeated?
+    (let [scheduled-ast (block-handler/get-scheduled-ast block)
+          deadline-ast (block-handler/get-deadline-ast block)
+          content (some->> (filter repeated/repeated? [scheduled-ast deadline-ast])
+                           (map (fn [ts]
+                                  [(repeated/timestamp->text ts)
+                                   (repeated/next-timestamp-text ts)]))
+                           (reduce (fn [content [old new]]
+                                     (string/replace content old new))
+                                   content))
+          content (string/replace-first
+                   content marker
+                   (case marker
+                     "DOING"
+                     "TODO"
+
+                     "NOW"
+                     "LATER"
+
+                     marker))
+          content (clock/clock-out format content)
+          content (drawer/insert-drawer
+                   format content "logbook"
+                   (util/format (str (if (= :org format) "-" "*")
+                                     " State \"DONE\" from \"%s\" [%s]")
+                                marker
+                                (date/get-date-time-string-3)))]
+      content)
+    content))

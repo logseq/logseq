@@ -1,4 +1,16 @@
 .ls-table {
+  .asset-container {
+    @apply my-1;
+  }
+
+  img {
+    @apply max-h-[200px] !max-w-[80px] overflow-hidden;
+  }
+
+  a.tag {
+    @apply text-sm whitespace-nowrap;
+  }
+
   .ls-block {
     @apply w-full py-0;
   }
@@ -21,6 +33,10 @@
     }
   }
 
+  .ls-table-row {
+    @apply min-h-[33px];
+  }
+
   .ls-table-header {
     @apply flex flex-row items-center w-fit absolute left-0 top-0;
 
@@ -39,19 +55,42 @@
       min-width: unset;
       top: 40px !important;
     }
+
+    .ls-table-header-cell {
+      position: relative;
+
+      > .ui__button {
+        @apply overflow-hidden;
+      }
+    }
   }
 
   .ls-table-header-cell {
-    @apply cursor-pointer transition-colors hover:bg-muted/50 text-left align-middle font-medium text-muted-foreground overflow-x-hidden border-r;
+    @apply cursor-pointer transition-colors hover:bg-muted/50 text-left align-middle font-medium text-muted-foreground border-r;
   }
 
   .ls-table-footer {
     @apply absolute left-0 bottom-[8px] w-full;
   }
 
+  .ls-table-resize-handle {
+    @apply absolute top-0 -right-0.5 w-1 h-full cursor-col-resize bg-accent-08 rounded
+    hover:opacity-70 active:opacity-100 opacity-0 delay-300 transition-opacity;
+  }
+
   div[data-viewport-type="window"] {
     min-width: 100%;
     width: auto !important;
+  }
+}
+
+html.is-resizing-buf {
+  .ls-table-resize-handle:not(.is-active) {
+    @apply hidden;
+  }
+
+  .ls-table .ls-table-header-cell {
+    @apply pointer-events-none;
   }
 }
 

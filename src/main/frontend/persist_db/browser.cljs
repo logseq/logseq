@@ -14,7 +14,8 @@
             [frontend.handler.worker :as worker-handler]
             [logseq.db :as ldb]
             [frontend.db.transact :as db-transact]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [frontend.handler.assets :as assets-handler]))
 
 (defonce *worker state/*db-worker)
 
@@ -40,11 +41,11 @@
                    (.sync-app-state worker (ldb/write-transit-str new-state)))))))
 
 (defn get-route-data
-    [route-match]
-    (when (seq route-match)
-      {:to (get-in route-match [:data :name])
-       :path-params (:path-params route-match)
-       :query-params (:query-params route-match)}))
+  [route-match]
+  (when (seq route-match)
+    {:to (get-in route-match [:data :name])
+     :path-params (:path-params route-match)
+     :query-params (:query-params route-match)}))
 
 (defn- sync-ui-state!
   [^js worker]
@@ -84,6 +85,35 @@
                  (ldb/write-transit-str context))
       (notification/show! "Latest change was not saved! Please restart the application." :error))))
 
+(defn- with-write-transit-str
+  [p]
+  (p/chain p ldb/write-transit-str))
+
+(deftype Main []
+  Object
+  (readAsset [_this repo asset-block-id asset-type]
+    (assets-handler/<read-asset repo asset-block-id asset-type))
+  (writeAsset [_this repo asset-block-id asset-type data]
+    (assets-handler/<write-asset repo asset-block-id asset-type data))
+  (unlinkAsset [_this repo asset-block-id asset-type]
+    (assets-handler/<unlink-asset repo asset-block-id asset-type))
+  (get-all-asset-file-paths [_this repo]
+    (with-write-transit-str
+      (assets-handler/<get-all-asset-file-paths repo)))
+  (get-asset-file-metadata [_this repo asset-block-id asset-type]
+    (with-write-transit-str
+      (assets-handler/<get-asset-file-metadata repo asset-block-id asset-type)))
+  (rtc-upload-asset [_this repo asset-block-uuid-str asset-type checksum put-url]
+    (with-write-transit-str
+      (js/Promise.
+       (assets-handler/new-task--rtc-upload-asset repo asset-block-uuid-str asset-type checksum put-url))))
+  (rtc-download-asset [_this repo asset-block-uuid-str asset-type get-url]
+    (with-write-transit-str
+      (js/Promise.
+       (assets-handler/new-task--rtc-download-asset repo asset-block-uuid-str asset-type get-url))))
+  (testFn [_this]
+    (prn :debug :works)))
+
 (defn start-db-worker!
   []
   (when-not util/node-test?
@@ -93,6 +123,7 @@
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
           wrapped-worker (Comlink/wrap worker)
           t1 (util/time-ms)]
+      (Comlink/expose (Main.) worker)
       (worker-handler/handle-message! worker wrapped-worker)
       (reset! *worker wrapped-worker)
       (-> (p/let [_ (.init wrapped-worker config/RTC-WS-URL)
@@ -133,7 +164,9 @@
 (defn- sqlite-error-handler
   [error]
   (if (= "NoModificationAllowedError"  (.-name error))
-    (state/pub-event! [:show/multiple-tabs-error-dialog])
+    (do
+      (js/console.error error)
+      (state/pub-event! [:show/multiple-tabs-error-dialog]))
     (notification/show! [:div (str "SQLiteDB error: " error)] :error)))
 
 (defrecord InBrowser []
@@ -157,13 +190,13 @@
     (when-let [^js sqlite @*worker]
       (.releaseAccessHandles sqlite repo)))
 
-  (<fetch-initial-data [_this repo _opts]
+  (<fetch-initial-data [_this repo opts]
     (when-let [^js sqlite @*worker]
       (-> (p/let [db-exists? (.dbExists sqlite repo)
                   disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                   _ (when disk-db-data
                       (.importDb sqlite repo disk-db-data))
-                  _ (.createOrOpenDB sqlite repo (ldb/write-transit-str {}))]
+                  _ (.createOrOpenDB sqlite repo (ldb/write-transit-str opts))]
             (.getInitialData sqlite repo))
           (p/catch sqlite-error-handler))))
 

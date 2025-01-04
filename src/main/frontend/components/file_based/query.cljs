@@ -31,7 +31,7 @@
 (rum/defc custom-query-header
   [{:keys [dsl-query?] :as config}
    {:keys [title query] :as q}
-   {:keys [collapsed? result table? current-block view-f page-list? query-error-atom fulltext-query-result-atom]}]
+   {:keys [collapsed? result table? current-block view-f page-list? query-error-atom]}]
   (let [dsl-page-query? (and dsl-query?
                              (false? (:blocks? (query-dsl/parse-query query))))
         full-text-search? (and dsl-query?
@@ -82,4 +82,4 @@
            (query-refresh-button query-time {:full-text-search? full-text-search?
                                              :on-pointer-down (fn [e]
                                                                 (util/stop e)
-                                                                (query-result/trigger-custom-query! config q query-error-atom fulltext-query-result-atom))}))]])]))
+                                                                (query-result/trigger-custom-query! config q query-error-atom (fn [])))}))]])]))

@@ -151,8 +151,12 @@ main.ls-fold-button-on-right {
   }
 }
 
+#root-container.theme-container {
+  @apply outline-none;
+}
+
 main.theme-container-inner {
-  --left-sidebar-bg-color: var(--lx-gray-02, hsl(var(--secondary, var(--rx-gray-03-hsl))));
+  --left-sidebar-bg-color: var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--secondary, var(--rx-gray-03-hsl)))));
 }
 
 html[data-font='serif'] .ls-block, .ls-font-serif {

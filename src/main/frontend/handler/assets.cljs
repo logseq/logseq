@@ -1,5 +1,6 @@
 (ns ^:no-doc frontend.handler.assets
-  (:require [clojure.string :as string]
+  (:require [cljs-http-missionary.client :as http]
+            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
@@ -7,9 +8,11 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
+            [frontend.common.missionary :as c.m]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [medley.core :as medley]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defn alias-enabled?
@@ -100,7 +103,6 @@
         (path/path-join "file://" (common-util/safe-decode-uri-component path))
         (path/path-join "file://" path))
 
-
       :else ;; relative path or alias path
       (resolve-asset-real-path-url (state/get-current-repo) path))))
 
@@ -153,7 +155,7 @@
 
 (defonce *assets-url-cache (atom {}))
 
-(defn make-asset-url
+(defn <make-asset-url
   "Make asset URL for UI element, to fill img.src"
   [path] ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)
   (if config/publishing?
@@ -197,3 +199,138 @@
                 (p/let [url (js/URL.createObjectURL file)]
                   (swap! *assets-url-cache assoc (keyword handle-path) url)
                   url)))))))))
+
+(defn- decode-digest
+  [^js/Uint8Array digest]
+  (.. (js/Array.from digest)
+      (map (fn [s] (.. s (toString 16) (padStart 2 "0"))))
+      (join "")))
+
+(defn get-file-checksum
+  [^js/Blob file]
+  (-> (.arrayBuffer file)
+      (.then (fn [buf] (js/crypto.subtle.digest "SHA-256" buf)))
+      (.then (fn [dig] (js/Uint8Array. dig)))
+      (.then decode-digest)))
+
+(defn <get-all-assets
+  []
+  (when-let [path (config/get-current-repo-assets-root)]
+    (p/let [result (p/catch (fs/readdir path {:path-only? true})
+                            (constantly nil))]
+      (p/all (map (fn [path]
+                    (p/let [data (fs/read-file path "" {})]
+                      (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
+                        [path' data]))) result)))))
+
+(defn ensure-assets-dir!
+  [repo]
+  (p/let [repo-dir (config/get-repo-dir repo)
+          assets-dir "assets"
+          _ (fs/mkdir-if-not-exists (path/path-join repo-dir assets-dir))]
+    [repo-dir assets-dir]))
+
+(defn get-asset-path
+  "Get asset path from filename, ensure assets dir exists"
+  [filename]
+  (p/let [[repo-dir assets-dir] (ensure-assets-dir! (state/get-current-repo))]
+    (path/path-join repo-dir assets-dir filename)))
+
+(defn <get-all-asset-file-paths
+  [repo]
+  (when-let [path (config/get-repo-assets-root repo)]
+    (p/catch (fs/readdir path {:path-only? true})
+             (constantly nil))))
+
+(defn <read-asset
+  [repo asset-block-id asset-type]
+  (let [repo-dir (config/get-repo-dir repo)
+        file-path (path/path-join common-config/local-assets-dir
+                                  (str asset-block-id "." asset-type))]
+    (fs/read-file repo-dir file-path {})))
+
+(defn <get-asset-file-metadata
+  [repo asset-block-id asset-type]
+  (-> (p/let [file (<read-asset repo asset-block-id asset-type)
+              blob (js/Blob. (array file) (clj->js {:type "image"}))
+              checksum (get-file-checksum blob)]
+        {:checksum checksum})
+      (p/catch (constantly nil))))
+
+(defn <write-asset
+  [repo asset-block-id asset-type data]
+  (let [asset-block-id-str (str asset-block-id)
+        repo-dir (config/get-repo-dir repo)
+        file-path (path/path-join common-config/local-assets-dir
+                                  (str asset-block-id-str "." asset-type))]
+    (fs/write-file! repo repo-dir file-path data {})))
+
+(defn <unlink-asset
+  [repo asset-block-id asset-type]
+  (let [file-path (path/path-join (config/get-repo-dir repo)
+                                  common-config/local-assets-dir
+                                  (str asset-block-id "." asset-type))]
+    (p/catch (fs/unlink! repo file-path {}) (constantly nil))))
+
+(defn new-task--rtc-upload-asset
+  [repo asset-block-uuid-str asset-type checksum put-url]
+  (assert (and asset-type checksum))
+  (m/sp
+    (let [asset-file (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
+          *progress-flow (atom nil)
+          http-task (http/put put-url {:headers {"x-amz-meta-checksum" checksum
+                                                 "x-amz-meta-type" asset-type}
+                                       :body asset-file
+                                       :with-credentials? false
+                                       :*progress-flow *progress-flow})]
+      (c.m/run-task
+       (m/reduce (fn [_ v]
+                   (state/update-state!
+                    :rtc/asset-upload-download-progress
+                    (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
+                 @*progress-flow)
+       :upload-asset-progress
+       :succ (constantly nil))
+      (let [{:keys [status] :as r} (m/? http-task)]
+        (when-not (http/unexceptional-status? status)
+          {:ex-data {:type :rtc.exception/upload-asset-failed :data (dissoc r :body)}})))))
+
+(defn new-task--rtc-download-asset
+  [repo asset-block-uuid-str asset-type get-url]
+  (m/sp
+    (let [*progress-flow (atom nil)
+          http-task (http/get get-url {:with-credentials? false
+                                       :response-type :array-buffer
+                                       :*progress-flow *progress-flow})]
+      (c.m/run-task
+       (m/reduce (fn [_ v]
+                   (state/update-state!
+                    :rtc/asset-upload-download-progress
+                    (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
+                 @*progress-flow)
+       :download-asset-progress
+       :succ (constantly nil))
+      (let [{:keys [status body] :as r} (m/? http-task)]
+        (if-not (http/unexceptional-status? status)
+          {:ex-data {:type :rtc.exception/download-asset-failed :data (dissoc r :body)}}
+          (do (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body))
+              nil))))))
+
+(comment
+  ;; read asset
+  (p/let [repo "logseq_db_demo"
+          ;; Existing asset block's id
+          asset-block-id-str "672c5a1d-8171-4259-9f35-470c3c67e37f"
+          asset-type "png"
+          data (<read-asset repo asset-block-id-str asset-type)]
+    (js/console.dir data))
+
+  ;; write asset
+  (p/let [repo "logseq_db_demo"
+          ;; Existing asset block's id
+          asset-block-id-str "672c5a1d-8171-4259-9f35-470c3c67e37f"
+          asset-type "png"
+          data (<read-asset repo asset-block-id-str asset-type)
+          new-asset-id (random-uuid)
+          result (<write-asset repo new-asset-id asset-type data)]
+    (js/console.dir result)))

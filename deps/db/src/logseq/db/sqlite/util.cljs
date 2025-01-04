@@ -64,15 +64,7 @@
     db-schema/schema-for-db-based-graph
     db-schema/schema))
 
-(defn block-with-timestamps
-  "Adds updated-at timestamp and created-at if it doesn't exist"
-  [block]
-  (let [updated-at (common-util/time-ms)
-        block (cond->
-               (assoc block :block/updated-at updated-at)
-                (nil? (:block/created-at block))
-                (assoc :block/created-at updated-at))]
-    block))
+(def block-with-timestamps common-util/block-with-timestamps)
 
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts. Takes
@@ -80,7 +72,7 @@
    * :title - Case sensitive property name. Defaults to deriving this from db-ident
    * :block-uuid - :block/uuid for property"
   ([db-ident prop-schema] (build-new-property db-ident prop-schema {}))
-  ([db-ident prop-schema {:keys [title block-uuid ref-type?]}]
+  ([db-ident prop-schema {:keys [title block-uuid ref-type? properties]}]
    (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
@@ -91,7 +83,7 @@
      (block-with-timestamps
       (cond->
        {:db/ident db-ident'
-        :block/type "property"
+        :block/tags #{:logseq.class/Property}
         :block/format :markdown
         :block/schema (merge {:type :default} (dissoc prop-schema :classes :cardinality))
         :block/name (common-util/page-name-sanity-lc (name prop-name))
@@ -105,7 +97,9 @@
         (seq classes)
         (assoc :property/schema.classes classes)
         (or ref-type? (contains? db-property-type/all-ref-property-types (:type prop-schema)))
-        (assoc :db/valueType :db.type/ref))))))
+        (assoc :db/valueType :db.type/ref)
+        (seq properties)
+        (merge properties))))))
 
 (defn build-new-class
   "Build a standard new class so that it is consistent across contexts"
@@ -113,9 +107,10 @@
   {:pre [(qualified-keyword? (:db/ident block))]}
   (block-with-timestamps
    (cond-> (merge block
-                  {:block/type "class"
-                   :block/format :markdown})
-     (not= (:db/ident block) :logseq.class/Root)
+                  {:block/format :markdown
+                   :block/tags (set (conj (:block/tags block) :logseq.class/Tag))})
+     (and (not= (:db/ident block) :logseq.class/Root)
+          (nil? (:logseq.property/parent block)))
      (assoc :logseq.property/parent :logseq.class/Root))))
 
 (defn build-new-page
@@ -126,7 +121,7 @@
     :block/title page-name
     :block/uuid (d/squuid)
     :block/format :markdown
-    :block/type "page"}))
+    :block/tags #{:logseq.class/Page}}))
 
 (defn kv
   "Creates a key-value pair tx with the key and value respectively stored under
@@ -135,3 +130,10 @@
   {:pre [(= "logseq.kv" (namespace k))]}
   {:db/ident k
    :kv/value value})
+
+(defn import-tx
+  "Creates tx for an import given an import-type"
+  [import-type]
+  [(kv :logseq.kv/import-type import-type)
+   ;; Timestamp is useful as this can occur much later than :logseq.kv/graph-created-at
+   (kv :logseq.kv/imported-at (common-util/time-ms))])

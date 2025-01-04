@@ -25,7 +25,8 @@
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
             [frontend.handler.file-based.status :as file-based-status]
-            [frontend.handler.db-based.property :as db-property-handler]))
+            [frontend.handler.db-based.property :as db-property-handler]
+            [logseq.common.util.macro :as macro-util]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -137,6 +138,102 @@
   [[:editor/input "" {:last-pattern command-trigger}]
    [:editor/search-block :embed]])
 
+(defn db-based-query
+  []
+  [[:editor/input "" {:last-pattern command-trigger}]
+   [:editor/run-query-command]])
+
+(defn file-based-query
+  []
+  [[:editor/input (str macro-util/query-macro " }}") {:backward-pos 2}]
+   [:editor/exit]])
+
+(defn query-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    (db-based-query)
+    (file-based-query)))
+
+(defn- calc-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    [[:editor/input "" {:last-pattern command-trigger}]
+     [:editor/upsert-type-block :code "calc"]
+     [:codemirror/focus]]
+    [[:editor/input "```calc\n\n```" {:type "block"
+                                      :backward-pos 4}]
+     [:codemirror/focus]]))
+
+(defn ->block
+  ([type]
+   (->block type nil))
+  ([type optional]
+   (let [format (get (state/get-edit-block) :block/format)
+         markdown-src? (and (= format :markdown)
+                            (= (string/lower-case type) "src"))
+         [left right] (cond
+                        markdown-src?
+                        ["```" "\n```"]
+
+                        :else
+                        (->> ["#+BEGIN_%s" "\n#+END_%s"]
+                             (map #(util/format %
+                                                (string/upper-case type)))))
+         template (str
+                   left
+                   (if optional (str " " optional) "")
+                   "\n"
+                   right)
+         backward-pos (if (= type "src")
+                        (+ 1 (count right))
+                        (count right))]
+     [[:editor/input template {:type "block"
+                               :last-pattern command-trigger
+                               :backward-pos backward-pos}]])))
+
+(defn- advanced-query-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    [[:editor/input "" {:last-pattern command-trigger}]
+     [:editor/set-property :block/tags :logseq.class/Query]
+     [:editor/set-property :logseq.property/query ""]
+     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.node/display-type :code]
+     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/lang "clojure"]]
+    (->block "query")))
+
+(defn db-based-code-block
+  []
+  [[:editor/input "" {:last-pattern command-trigger}]
+   [:editor/upsert-type-block :code]
+   [:editor/exit]])
+
+(defn file-based-code-block
+  []
+  [[:editor/input "```\n```\n" {:type "block"
+                                :backward-pos 5
+                                :only-breakline? true}]
+   [:editor/select-code-block-mode]])
+
+(defn code-block-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    (db-based-code-block)
+    (file-based-code-block)))
+
+(defn quote-block-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    [[:editor/input "" {:last-pattern command-trigger}]
+     [:editor/set-property :logseq.property.node/display-type :quote]]
+    (->block "quote")))
+
+(defn math-block-steps
+  []
+  (if (config/db-based-graph? (state/get-current-repo))
+    [[:editor/input "" {:last-pattern command-trigger}]
+     [:editor/set-property :logseq.property.node/display-type :math]]
+    (->block "export" "latex")))
+
 (defn get-statuses
   []
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
@@ -165,7 +262,7 @@
 (defn db-based-priorities
   []
   (map (fn [e] (:block/title e))
-    (db-pu/get-closed-property-values :logseq.task/priority)))
+       (db-pu/get-closed-property-values :logseq.task/priority)))
 
 (defn get-priorities
   []
@@ -205,39 +302,11 @@
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
 
-(defn ->block
-  ([type]
-   (->block type nil))
-  ([type optional]
-   (let [format (get (state/get-edit-block) :block/format)
-         markdown-src? (and (= format :markdown)
-                            (= (string/lower-case type) "src"))
-         [left right] (cond
-                        markdown-src?
-                        ["```" "\n```"]
-
-                        :else
-                        (->> ["#+BEGIN_%s" "\n#+END_%s"]
-                             (map #(util/format %
-                                                (string/upper-case type)))))
-         template (str
-                   left
-                   (if optional (str " " optional) "")
-                   "\n"
-                   right)
-         backward-pos (if (= type "src")
-                        (+ 1 (count right))
-                        (count right))]
-     [[:editor/input template {:type "block"
-                               :last-pattern command-trigger
-                               :backward-pos backward-pos}]])))
-
 (defn ->properties
   []
   [[:editor/clear-current-slash]
    [:editor/insert-properties]
    [:editor/move-cursor-to-properties]])
-
 
 (defn ^:large-vars/cleanup-todo commands-map
   [get-page-ref-text]
@@ -272,11 +341,18 @@
                         {:last-pattern command-trigger
                          :backward-pos 6}]] "Create a underline text decoration"
           :icon/underline])
-       ["Code block" [[:editor/input "```\n```\n" {:type "block"
-                                                   :backward-pos 5
-                                                   :only-breakline? true}]
-                      [:editor/select-code-block-mode]] "Insert code block"
-        :icon/code]]
+       ["Code block"
+        (code-block-steps)
+        "Insert code block"
+        :icon/code]
+       ["Quote"
+        (quote-block-steps)
+        "Create a quote block"
+        :icon/quote]
+       ["Math block"
+        (math-block-steps)
+        "Create a latex block"
+        :icon/math]]
 
       (headings)
 
@@ -284,9 +360,8 @@
       (get-statuses)
       [["Deadline" [[:editor/clear-current-slash]
                     [:editor/set-deadline]] "" :icon/calendar-stats]
-       (when-not db?
-         ["Scheduled" [[:editor/clear-current-slash]
-                       [:editor/set-scheduled]] "" :icon/calendar-month])]
+       ["Scheduled" [[:editor/clear-current-slash]
+                     [:editor/set-scheduled]] "" :icon/calendar-month]]
 
       ;; priority
       (get-priorities)
@@ -315,45 +390,36 @@
         :icon/numberedChildren]]
 
       ;; https://orgmode.org/manual/Structure-Templates.html
-      (cond->
-       [["Quote" (->block "quote")
-         "Create a quote block"
-         :icon/quote-block
-         "BLOCK TYPE"]
-        ;; Should this be replaced by "Code block"?
-        ["Src" (->block "src") "Create a code block"]
-        ["Advanced Query" (->block "query") "Create an advanced query block"]
-        ["Latex export" (->block "export" "latex") "Create a latex block"]
-        ["Note" (->block "note") "Create a note block"]
-        ["Tip" (->block "tip") "Create a tip block"]
-        ["Important" (->block "important") "Create an important block"]
-        ["Caution" (->block "caution") "Create a caution block"]
-        ["Pinned" (->block "pinned") "Create a pinned block"]
-        ["Warning" (->block "warning") "Create a warning block"]
-        ["Example" (->block "example") "Create an example block"]
-        ["Export" (->block "export") "Create an export block"]
-        ["Verse" (->block "verse") "Create a verse block"]
-        ["Ascii" (->block "export" "ascii") "Create an ascii block"]
-        ["Center" (->block "center") "Create a center block"]]
+      (when-not db?
+        (cond->
+         [;; Should this be replaced by "Code block"?
+          ["Src" (->block "src") "Create a code block"]
+          ["Math block" (->block "export" "latex") "Create a latex block"]
+          ["Note" (->block "note") "Create a note block"]
+          ["Tip" (->block "tip") "Create a tip block"]
+          ["Important" (->block "important") "Create an important block"]
+          ["Caution" (->block "caution") "Create a caution block"]
+          ["Pinned" (->block "pinned") "Create a pinned block"]
+          ["Warning" (->block "warning") "Create a warning block"]
+          ["Example" (->block "example") "Create an example block"]
+          ["Export" (->block "export") "Create an export block"]
+          ["Verse" (->block "verse") "Create a verse block"]
+          ["Ascii" (->block "export" "ascii") "Create an ascii block"]
+          ["Center" (->block "center") "Create a center block"]]
 
         ;; FIXME: current page's format
-        (= :org (state/get-preferred-format))
-        (conj ["Properties" (->properties)]))
+          (= :org (state/get-preferred-format))
+          (conj ["Properties" (->properties)])))
 
       ;; advanced
-      [["Query"
-        [[:editor/input "{{query }}" {:backward-pos 2}]
-         [:editor/set-property :block/tags (:db/id (db/entity :logseq.class/Query))]
-         [:editor/exit]]
-        query-doc
-        :icon/query
-        "ADVANCED"]
+      [["Query" (query-steps) query-doc :icon/query "ADVANCED"]
+       ["Advanced Query" (advanced-query-steps) "Create an advanced query block" :icon/query]
        (when-not db?
          ["Zotero" (zotero-steps) "Import Zotero journal article" :icon/circle-letter-z])
        ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
-       ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
-                                                       :backward-pos 4}]
-                      [:codemirror/focus]] "Insert a calculator" :icon/calculator]
+       ["Calculator"
+        (calc-steps)
+        "Insert a calculator" :icon/calculator]
        (when-not db?
          ["Draw" (fn []
                    (let [file (draw/file-name)
@@ -688,6 +754,19 @@
     (when-let [block (state/get-edit-block)]
       (db-property-handler/set-block-property! (:db/id block) property-id value))))
 
+(defmethod handle-step :editor/set-property-on-block-property [[_ block-property-id property-id value]]
+  (when (config/db-based-graph? (state/get-current-repo))
+    (let [updated-block (when-let [block-uuid (:block/uuid (state/get-edit-block))]
+                          (db/entity [:block/uuid block-uuid]))
+          block-property-value (get updated-block block-property-id)]
+      (when block-property-value
+        (db-property-handler/set-block-property! (:db/id block-property-value) property-id value)))))
+
+(defmethod handle-step :editor/upsert-type-block [[_ type lang]]
+  (when (config/db-based-graph? (state/get-current-repo))
+    (when-let [block (state/get-edit-block)]
+      (state/pub-event! [:editor/upsert-type-block {:block block :type type :lang lang}]))))
+
 (defn- file-based-set-priority
   [priority]
   (when-let [input-id (state/get-edit-input-id)]
@@ -720,6 +799,9 @@
     (state/pub-event! [:editor/new-property {:property-key "Deadline"}])
     (handle-step [:editor/show-date-picker :deadline])))
 
+(defmethod handle-step :editor/run-query-command [[_]]
+  (state/pub-event! [:editor/run-query-command]))
+
 (defmethod handle-step :editor/insert-properties [[_ _] _format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
@@ -735,33 +817,27 @@
         (property-file/goto-properties-end-when-file-based format current-input)
         (cursor/move-cursor-backward current-input 3)))))
 
-(defonce markdown-heading-pattern #"^#+\s+")
-(defn set-markdown-heading
+(defn file-based-set-markdown-heading
   [content heading]
   (let [heading-str (apply str (repeat heading "#"))]
-    (if (util/safe-re-find markdown-heading-pattern content)
-      (string/replace-first content
-                            markdown-heading-pattern
-                            (str heading-str " "))
+    (if (util/safe-re-find common-util/markdown-heading-pattern content)
+      (common-util/clear-markdown-heading content)
       (str heading-str " " (string/triml content)))))
 
-(defn clear-markdown-heading
-  [content]
-  [:pre (string? content)]
-  (string/replace-first content
-                        markdown-heading-pattern
-                        ""))
+(def clear-markdown-heading common-util/clear-markdown-heading)
 
 (defmethod handle-step :editor/set-heading [[_ heading]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [current-block (state/get-edit-block)
             format (:block/format current-block)]
-        (if (= format :markdown)
-          (let [edit-content (gobj/get current-input "value")
-                new-content (set-markdown-heading edit-content heading)]
-            (state/set-edit-content! input-id new-content))
-          (state/pub-event! [:editor/set-org-mode-heading current-block heading]))))))
+        (if (config/db-based-graph?)
+          (state/pub-event! [:editor/set-heading current-block heading])
+          (if (= format :markdown)
+            (let [edit-content (gobj/get current-input "value")
+                  new-content (file-based-set-markdown-heading edit-content heading)]
+              (state/set-edit-content! input-id new-content))
+            (state/pub-event! [:editor/set-heading current-block heading])))))))
 
 (defmethod handle-step :editor/search-page [_]
   (state/set-editor-action! :page-search))
@@ -823,11 +899,11 @@
 (defmethod handle-step :editor/select-code-block-mode [[_]]
   (-> (p/delay 50)
       (p/then
-        (fn []
-          (when-let [input (state/get-input)]
+       (fn []
+         (when-let [input (state/get-input)]
             ;; update action cursor position
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
-            (state/set-editor-action! :select-code-block-mode))))))
+           (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+           (state/set-editor-action! :select-code-block-mode))))))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
@@ -835,8 +911,8 @@
 
 (defmethod handle-step :editor/exit [[_]]
   (p/do!
-    (state/pub-event! [:editor/save-current-block])
-    (state/clear-edit!)))
+   (state/pub-event! [:editor/save-current-block])
+   (state/clear-edit!)))
 
 (defmethod handle-step :editor/new-property [[_]]
   (state/pub-event! [:editor/new-property]))
@@ -846,8 +922,11 @@
 
 (defn handle-steps
   [vector' format]
-  (doseq [step vector']
-    (handle-step step format)))
+  (if (config/db-based-graph? (state/get-current-repo))
+    (p/doseq [step vector']
+      (handle-step step format))
+    (doseq [step vector']
+      (handle-step step format))))
 
 (defn exec-plugin-simple-command!
   [pid {:keys [block-id] :as cmd} action]

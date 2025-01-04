@@ -9,7 +9,7 @@
             [logseq.graph-parser.text :as text]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [frontend.common.date :as common-date]
+            [logseq.common.date :as common-date]
             [logseq.db.frontend.order :as db-order]))
 
 (defn- file-based-properties-block

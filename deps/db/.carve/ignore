@@ -15,6 +15,8 @@ logseq.db.frontend.inputs/resolve-input
 ;; API
 logseq.db.frontend.class/build-new-class
 ;; API
+logseq.db.frontend.class/page-children-classes
+;; API
 logseq.db.frontend.db-ident/ensure-unique-db-ident
 ;; API
 logseq.db.sqlite.build/create-blocks

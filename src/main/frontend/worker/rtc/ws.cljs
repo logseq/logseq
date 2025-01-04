@@ -2,10 +2,10 @@
   "Websocket wrapped by missionary.
   based on
   https://github.com/ReilySiegel/missionary-websocket/blob/master/src/com/reilysiegel/missionary/websocket.cljs"
-  (:require [cljs-http.client :as http]
-            [frontend.common.missionary-util :as c.m]
+  (:require [cljs-http-missionary.client :as http]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
+            [frontend.common.missionary :as c.m]
             [missionary.core :as m]))
 
 (defn- get-state
@@ -55,7 +55,7 @@
 (defn- create-mws*
   [url]
   (m/sp
-    (if-let [[mbx ws close-dfv] (m/? (open-ws-task url))]
+    (let [[mbx ws close-dfv] (m/? (open-ws-task url))]
       {:raw-ws ws
        :send (fn [data]
                (m/sp
@@ -72,8 +72,7 @@
             (m/amb
              (handle-close
               (m/? (m/race close-dfv mbx)))
-             (recur)))))}
-      (throw (ex-info "open ws timeout(10s)" {:missionary/retry true})))))
+             (recur)))))})))
 
 (defn closed?
   [mws]
@@ -94,7 +93,8 @@
      (try
        (if-let [ws (m/? (m/timeout (create-mws* url) open-ws-timeout))]
          ws
-         (throw (ex-info "open websocket timeout" {:missionary/retry true})))
+         (throw (ex-info "open websocket timeout" {:missionary/retry true
+                                                   :type :rtc.exception/ws-timeout})))
        (catch js/CloseEvent e
          (throw (ex-info "failed to open websocket conn"
                          {:missionary/retry true}
@@ -158,7 +158,7 @@
     (m/ap
       (let [resp (m/?> f)]
         (if-let [s3-presign-url (:s3-presign-url resp)]
-          (let [{:keys [status body]} (c.m/<? (http/get s3-presign-url {:with-credentials? false}))]
+          (let [{:keys [status body]} (m/? (http/get s3-presign-url {:with-credentials? false}))]
             (if (http/unexceptional-status? status)
               (rtc-const/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
               {:req-id (:req-id resp)
@@ -185,6 +185,7 @@
                    timeout-ms))]
       (when-not result
         (throw (ex-info (str "recv timeout (" timeout-ms "ms)") {:missionary/retry true
+                                                                 :type :rtc.exception/ws-timeout
                                                                  :message message})))
       result)))
 

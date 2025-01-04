@@ -36,7 +36,8 @@
 (def db-graph-paths
   "Paths _only_ for DB graphs"
   ["src/main/frontend/handler/db_based"
-   "src/main/frontend/worker/handler/page/db_based"
+   ;; TODO: Re-enable if db namespace support is moved elsewhere
+  ;;  "src/main/frontend/worker/handler/page/db_based"
    "src/main/frontend/components/class.cljs"
    "src/main/frontend/components/property.cljs"
    "src/main/frontend/components/property"
@@ -89,24 +90,35 @@
   []
   (let [file-concepts (->>
                        ;; from logseq.db.frontend.schema
-                       [:block/properties-text-values :block/pre-block :recent/pages :block/file :block/properties-order
-                        :block/marker :block/priority :block/scheduled :block/deadline :block/macros]
+                       [:block/namespace :block/properties-text-values :block/pre-block :recent/pages :block/file :block/properties-order
+                        :block/repeated :block/deadline :block/scheduled :block/priority :block/marker :block/macros
+                        :block/type]
                        (map str)
                        (into [;; e.g. block/properties :title
                               "block/properties :"
                               "block/name"
                               ;; anything org mode
                               "org"
+                              "#+BEGIN_"
+                              "#+END_"
                               "pre-block"
-                              "namespace"
                               "db/get-page"
                               "/page-name-sanity-lc"]))
+        ;; For now use the whole code line. If this is too brittle can make this smaller
+        allowed-exceptions #{"{:block/name page-title})))"
+                             "{:block/name page-title})"
+                             "(when-not (db/get-page journal)"
+                             "(let [value (if datetime? (tc/to-long d) (db/get-page journal))]"}
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" file-concepts) ")")
-                   db-graph-paths)]
-    (when-not (and (= 1 (:exit res)) (= "" (:out res)))
+                   db-graph-paths)
+        invalid-lines (when (= 0 (:exit res))
+                        (remove #(->> (string/split % #":\s+") second string/trim (contains? allowed-exceptions))
+                                (string/split-lines (:out res))))]
+    (when (> (:exit res) 1) (System/exit 1))
+    (when (and (= 0 (:exit res)) (seq invalid-lines))
       (println "The following files should not have contained file specific concepts:")
-      (println (:out res))
+      (println (string/join "\n" invalid-lines))
       (System/exit 1))))
 
 (defn- validate-db-concepts-not-in-file

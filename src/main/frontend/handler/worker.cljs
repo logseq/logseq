@@ -4,8 +4,9 @@
             [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
-            [promesa.core :as p]
-            [logseq.db :as ldb]))
+            [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defmulti handle identity)
 
@@ -25,6 +26,9 @@
 (defmethod handle :notification [_ _worker data]
   (apply notification/show! data))
 
+(defmethod handle :log [_ _worker [name level data]]
+  (log/log name level data))
+
 (defmethod handle :add-repo [_ _worker data]
   (state/add-repo! {:url (:repo data)})
   (state/pub-event! [:graph/switch (:repo data) {:rtc-download? true}]))
@@ -39,6 +43,12 @@
 (defmethod handle :rtc-log [_ _worker log]
   (state/pub-event! [:rtc/log log]))
 
+(defmethod handle :export-current-db [_]
+  (state/pub-event! [:db/export-sqlite]))
+
+(defmethod handle :capture-error [_ _worker data]
+  (state/pub-event! [:capture-error data]))
+
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))
 
@@ -50,7 +60,7 @@
           (let [data (.-data event)]
             (if (= data "keepAliveResponse")
               (.postMessage worker "keepAliveRequest")
-              (when-not (= (.-type data) "RAW")
+              (when-not (contains? #{"RAW" "APPLY" "RELEASE"} (.-type data))
                 ;; Log thrown exceptions from comlink
                 ;; https://github.com/GoogleChromeLabs/comlink/blob/dffe9050f63b1b39f30213adeb1dd4b9ed7d2594/src/comlink.ts#L223-L236
                 (if (and (= "HANDLER" (.-type data)) (= "throw" (.-name data)))

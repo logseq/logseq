@@ -1,73 +1,73 @@
 (ns logseq.db
   "Main namespace for public db fns. For DB and file graphs.
    For shared file graph only fns, use logseq.graph-parser.db"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
+            [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.util.namespace :as ns-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.delete-blocks :as delete-blocks] ;; Load entity extensions
-            [logseq.db.frontend.entity-plus]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property])
+            [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
-
-;; Use it as an input argument for datalog queries
-(def block-attrs
-  '[:db/id
-    :block/uuid
-    :block/parent
-    :block/order
-    :block/collapsed?
-    :block/format
-    :block/refs
-    :block/_refs
-    :block/path-refs
-    :block/tags
-    :block/link
-    :block/title
-    :block/marker
-    :block/priority
-    :block/properties
-    :block/properties-order
-    :block/properties-text-values
-    :block/pre-block?
-    :block/scheduled
-    :block/deadline
-    :block/repeated?
-    :block/created-at
-    :block/updated-at
-    ;; TODO: remove this in later releases
-    :block/heading-level
-    :block/file
-    :logseq.property/parent
-    {:block/page [:db/id :block/name :block/title :block/journal-day]}
-    {:block/_parent ...}])
 
 (defonce *transact-fn (atom nil))
 (defn register-transact-fn!
   [f]
   (when f (reset! *transact-fn f)))
 
+(defn- remove-temp-block-data
+  [tx-data]
+  (let [remove-block-temp-f (fn [m]
+                              (->> (remove (fn [[k _v]] (= "block.temp" (namespace k))) m)
+                                   (into {})))]
+    (map (fn [m]
+           (if (map? m)
+             (cond->
+              (remove-block-temp-f m)
+               (and (seq (:block/refs m))
+                    (every? map? (:block/refs m)))
+               (update :block/refs (fn [refs] (map remove-block-temp-f refs))))
+             m))
+         tx-data)))
+
+(defn assert-no-entities
+  [tx-data]
+  (walk/prewalk
+   (fn [f]
+     (if (de/entity? f)
+       (throw (ex-info "ldb/transact! doesn't support Entity"
+                       {:entity f
+                        :tx-data tx-data}))
+       f))
+   tx-data))
+
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
   ([repo-or-conn tx-data]
    (transact! repo-or-conn tx-data nil))
   ([repo-or-conn tx-data tx-meta]
+   (when (or (exists? js/process)
+             (and (exists? js/window) js/window.goog.DEBUG))
+     (assert-no-entities tx-data))
    (let [tx-data (map (fn [m]
                         (if (map? m)
                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                  :block.temp/ast-title :block.temp/ast-body :block/level :block/container :db/other-tx
+                                  :block/level :block/container :db/other-tx
                                   :block/unordered)
                           m)) tx-data)
-         tx-data (->> (common-util/fast-remove-nils tx-data)
+         tx-data (->> (remove-temp-block-data tx-data)
+                      (common-util/fast-remove-nils)
                       (remove empty?))
          delete-blocks-tx (when-not (string? repo-or-conn)
                             (delete-blocks/update-refs-and-macros @repo-or-conn tx-data tx-meta))
@@ -90,6 +90,7 @@
              (throw e))))))))
 
 (def page? entity-util/page?)
+(def internal-page? entity-util/internal-page?)
 (def class? entity-util/class?)
 (def property? entity-util/property?)
 (def closed-value? entity-util/closed-value?)
@@ -97,7 +98,12 @@
 (def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
 (def object? entity-util/object?)
+(def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
+(def get-entity-types entity-util/get-entity-types)
+(def internal-tags db-class/internal-tags)
+(def private-tags db-class/private-tags)
+(def hidden-tags db-class/hidden-tags)
 
 (defn sort-by-order
   [blocks]
@@ -173,7 +179,6 @@
   (assert (or (de/entity? block) (nil? block)))
   (first (sort-by-order (:block/_parent block))))
 
-
 (defn get-pages
   [db]
   (->> (d/q
@@ -187,36 +192,42 @@
 
 (def get-first-page-by-name sqlite-common-db/get-first-page-by-name)
 
-(def db-based-graph? entity-util/db-based-graph?)
+(def db-based-graph? entity-plus/db-based-graph?)
 
 (defn page-exists?
-  "Whether a page exists with the `type`."
-  [db page-name type']
+  "Returns truthy value if page exists.
+   For db graphs, returns all page db ids that given title and one of the given `tags`.
+   For file graphs, returns page entity if it exists"
+  [db page-name tags]
   (when page-name
     (if (db-based-graph? db)
-      ;; Classes and properties are case sensitive
-      (if (#{"class" "property"} type')
-        (seq
-         (d/q
-          '[:find [?p ...]
-            :in $ ?name ?type
-            :where
-            [?p :block/title ?name]
-            [?p :block/type ?type]]
-          db
-          page-name
-          type'))
-        ;; TODO: Decouple db graphs from file specific :block/name
-        (seq
-         (d/q
-          '[:find [?p ...]
-            :in $ ?name ?type
-            :where
-            [?p :block/name ?name]
-            [?p :block/type ?type]]
-          db
-          (common-util/page-name-sanity-lc page-name)
-          type')))
+      (let [tags' (if (coll? tags) (set tags) #{tags})]
+        ;; Classes and properties are case sensitive and can be looked up
+        ;; as such in case-sensitive contexts e.g. no Page
+        (if (and (seq tags') (every? #{:logseq.class/Tag :logseq.class/Property} tags'))
+          (seq
+           (d/q
+            '[:find [?p ...]
+              :in $ ?name [?tag-ident ...]
+              :where
+              [?p :block/title ?name]
+              [?p :block/tags ?tag]
+              [?tag :db/ident ?tag-ident]]
+            db
+            page-name
+            tags'))
+          ;; TODO: Decouple db graphs from file specific :block/name
+          (seq
+           (d/q
+            '[:find [?p ...]
+              :in $ ?name [?tag-ident ...]
+              :where
+              [?p :block/name ?name]
+              [?p :block/tags ?tag]
+              [?tag :db/ident ?tag-ident]]
+            db
+            (common-util/page-name-sanity-lc page-name)
+            tags'))))
       (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))))
 
 (defn get-page
@@ -434,7 +445,6 @@
     (when (seq refs)
       (d/pull-many db '[*] (map :db/id refs)))))
 
-
 (defn get-block-refs-count
   [db id]
   (some-> (d/entity db id)
@@ -461,12 +471,10 @@
   [db]
   (->>
    (d/datoms db :avet :block/name)
-   (distinct)
-   (map #(d/entity db (:e %)))
-   (filter page?)
-   (remove hidden?)
-   (remove (fn [page]
-             (common-util/uuid-string? (:block/name page))))))
+   (keep (fn [d]
+           (let [e (d/entity db (:e d))]
+             (when-not (or (hidden? e) (internal-tags (:db/ident e)))
+               e))))))
 
 (defn built-in?
   "Built-in page or block"
@@ -482,21 +490,21 @@
        (contains? (set (get-in (db-class/built-in-classes (:db/ident class-entity)) [:schema :properties]))
                   (:db/ident property-entity))))
 
+(defn private-built-in-page?
+  "Private built-in pages should not be navigable or searchable by users. Later it
+   could be useful to use this for the All Pages view"
+  [page]
+  (cond (property? page)
+        (not (public-built-in-property? page))
+        (or (class? page) (internal-page? page))
+        false
+        ;; Default to true for closed value and future internal types.
+        ;; Other types like whiteboard are not considered because they aren't built-in
+        :else
+        true))
+
 (def write-transit-str sqlite-util/write-transit-str)
 (def read-transit-str sqlite-util/read-transit-str)
-
-(defn create-favorites-page!
-
-  "Creates hidden favorites page for storing favorites"
-  [repo]
-  (transact!
-   repo
-   [(sqlite-util/block-with-timestamps
-     {:block/uuid (common-uuid/gen-uuid)
-      :block/name common-config/favorites-page-name
-      :block/title common-config/favorites-page-name
-      :block/type "hidden"
-      :block/format :markdown})]))
 
 (defn build-favorite-tx
   "Builds tx for a favorite block in favorite page"
@@ -504,27 +512,6 @@
   {:block/link [:block/uuid favorite-uuid]
    :block/title ""
    :block/format :markdown})
-
-(defn create-views-page!
-  "Creates hidden all pages for storing views"
-  [conn]
-  (let [page-id (common-uuid/gen-uuid)]
-    (transact!
-     conn
-     [(sqlite-util/block-with-timestamps
-       {:block/uuid page-id
-        :block/name common-config/views-page-name
-        :block/title common-config/views-page-name
-        :block/type "hidden"
-        :block/format :markdown})
-      (sqlite-util/block-with-timestamps
-       {:block/uuid (common-uuid/gen-uuid)
-        :block/title "All Pages Default View"
-        :block/format :markdown
-        :block/parent [:block/uuid page-id]
-        :block/order (db-order/gen-key nil)
-        :block/page [:block/uuid page-id]
-        :logseq.property/view-for [:block/uuid page-id]})])))
 
 (defn get-key-value
   [db key-ident]
@@ -573,22 +560,49 @@
 
 (defn get-all-properties
   [db]
-  (->> (d/datoms db :avet :block/type "property")
+  (->> (d/datoms db :avet :block/tags :logseq.class/Property)
        (map (fn [d]
               (d/entity db (:e d))))))
 
-(defn get-class-parents
-  [class]
-  (let [*classes (atom #{})]
-    (when-let [parent (:logseq.property/parent class)]
-      (loop [current-parent parent]
-        (when (and
-               current-parent
-               (class? parent)
-               (not (contains? @*classes (:db/id parent))))
-          (swap! *classes conj (:db/id current-parent))
-          (recur (:logseq.property/parent current-parent)))))
-    @*classes))
+(defn get-page-parents
+  [node & {:keys [node-class?]}]
+  (when-let [parent (:logseq.property/parent node)]
+    (loop [current-parent parent
+           parents' []]
+      (if (and
+           current-parent
+           (if node-class? (class? current-parent) true)
+           (not (contains? parents' current-parent)))
+        (recur (:logseq.property/parent current-parent)
+               (conj parents' current-parent))
+        (vec (reverse parents'))))))
+
+(defn get-title-with-parents
+  [entity]
+  (if (or (entity-util/class? entity) (entity-util/internal-page? entity))
+    (let [parents' (->> (get-page-parents entity)
+                        (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
+                        vec)]
+      (string/join
+       ns-util/parent-char
+       (map :block/title (conj (vec parents') entity))))
+    (:block/title entity)))
+
+(defn get-classes-parents
+  [tags]
+  (let [tags' (filter class? tags)
+        result (mapcat get-page-parents tags' {:node-class? true})]
+    (set result)))
+
+(defn class-instance?
+  "Whether `object` is an instance of `class`"
+  [class object]
+  (let [tags (:block/tags object)
+        tags-ids (set (map :db/id tags))]
+    (or
+     (contains? tags-ids (:db/id class))
+     (let [class-parent-ids (set (map :db/id (get-classes-parents tags)))]
+       (contains? (set/union class-parent-ids tags-ids) (:db/id class))))))
 
 (defn get-all-pages-views
   [db]
@@ -599,5 +613,23 @@
 (defn inline-tag?
   [block-raw-title tag]
   (assert (string? block-raw-title) "block-raw-title should be a string")
-  (or (string/includes? block-raw-title (str "#" (db-content/block-id->special-id-ref (:block/uuid tag))))
-      (string/includes? block-raw-title (str "#" db-content/page-ref-special-chars (:block/uuid tag)))))
+  (string/includes? block-raw-title (str "#" (page-ref/->page-ref (:block/uuid tag)))))
+
+(defonce node-display-type-classes
+  #{:logseq.class/Code-block :logseq.class/Math-block :logseq.class/Quote-block})
+
+(defn get-class-ident-by-display-type
+  [display-type]
+  (case display-type
+    :code :logseq.class/Code-block
+    :math :logseq.class/Math-block
+    :quote :logseq.class/Quote-block
+    nil))
+
+(defn get-display-type-by-class-ident
+  [class-ident]
+  (case class-ident
+    :logseq.class/Code-block :code
+    :logseq.class/Math-block :math
+    :logseq.class/Quote-block :quote
+    nil))

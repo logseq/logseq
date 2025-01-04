@@ -5,7 +5,6 @@
             [frontend.components.journal :as journal]
             [frontend.components.page :as page]
             [frontend.components.all-pages :as all-pages]
-            ;; [frontend.components.all-pages2 :as all-pages]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.settings :as settings]
@@ -13,7 +12,7 @@
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
             [frontend.components.user.login :as login]
-            [logseq.shui.demo2 :as shui]
+            [logseq.shui.demo :as shui]
             [frontend.components.imports :as imports]
             [frontend.config :as config]
             [logseq.db :as ldb]
@@ -40,7 +39,7 @@
                    whiteboard? (ldb/whiteboard? (db/get-page page-name))]
                (if whiteboard?
                  (whiteboard/whiteboard-route route-match)
-                 (page/page-cp route-match))))}]
+                 (page/page-cp (assoc route-match :current-page? true)))))}]
 
    ["/page/:name/block/:block-route-name"
     {:name :page-block

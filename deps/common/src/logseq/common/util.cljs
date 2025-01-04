@@ -82,9 +82,18 @@
   [v]
   (string/trim (subs v 1 (dec (count v)))))
 
+(defn wrapped-by
+  [v start end]
+  (and (string? v) (>= (count v) 2)
+       (= start (first v)) (= end (last v))))
+
 (defn wrapped-by-quotes?
   [v]
-  (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
+  (wrapped-by v "\"" "\""))
+
+(defn wrapped-by-parens?
+  [v]
+  (wrapped-by v "(" ")"))
 
 (defn url?
   "Test if it is a `protocol://`-style URL.
@@ -161,7 +170,6 @@
            (map string/capitalize)
            (string/join " ")))
 
-
 (defn distinct-by
   "Copy from medley"
   [f coll]
@@ -177,9 +185,9 @@
     (step (seq coll) #{})))
 
 (defn distinct-by-last-wins
-     [f col]
-     {:pre [(sequential? col)]}
-     (reverse (distinct-by f (reverse col))))
+  [f col]
+  {:pre [(sequential? col)]}
+  (reverse (distinct-by f (reverse col))))
 
 (defn normalize-format
   [format]
@@ -217,8 +225,20 @@
       false)))
 
 (defn safe-read-string
+  "Reads an edn string and returns nil if it fails to parse"
   ([content]
    (safe-read-string {} content))
+  ([{:keys [log-error?] :or {log-error? true} :as opts} content]
+   (try
+     (reader/read-string (dissoc opts :log-error?) content)
+     (catch :default e
+       (when log-error? (log/error :parse/read-string-failed e))
+       nil))))
+
+(defn safe-read-map-string
+  "Reads an edn map string and returns {} if it fails to parse"
+  ([content]
+   (safe-read-map-string {} content))
   ([opts content]
    (try
      (reader/read-string opts content)
@@ -315,7 +335,6 @@
   [s old-value new-value]
   (string/replace-first s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
 
-
 (defn sort-coll-by-dependency
   "Sort the elements in the collection based on dependencies.
 coll:  [{:id 1 :depend-on 2} {:id 2 :depend-on 3} {:id 3}]
@@ -348,3 +367,20 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
                 (vreset! seen-ids #{})
                 (recur (conj r id) rest-ids* (first rest-ids*))))))]
     (mapv id->elem sorted-ids)))
+
+(defonce markdown-heading-pattern #"^#+\s+")
+
+(defn clear-markdown-heading
+  [content]
+  {:pre [(string? content)]}
+  (string/replace-first content markdown-heading-pattern ""))
+
+(defn block-with-timestamps
+  "Adds updated-at timestamp and created-at if it doesn't exist"
+  [block]
+  (let [updated-at (time-ms)
+        block (cond->
+               (assoc block :block/updated-at updated-at)
+                (nil? (:block/created-at block))
+                (assoc :block/created-at updated-at))]
+    block))

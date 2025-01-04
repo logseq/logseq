@@ -10,7 +10,8 @@
             [clojure.pprint :as pp]
             [clojure.edn :as edn]
             [clojure.data :as data]
-            [clojure.core.async :as async]))
+            [clojure.core.async :as async]
+            [clojure.string :as string]))
 
 (defn test
   "Run tests. Pass args through to cmd 'yarn cljs:run-test'"
@@ -80,8 +81,8 @@
 (defn publishing-backend
   "Builds publishing backend and copies over supporting frontend assets"
   [& args]
-  (apply shell {:dir "scripts"}
-         "yarn -s nbb-logseq -cp src -m logseq.tasks.dev.publishing"
+  (apply shell {:dir "deps/publishing" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+         "yarn -s nbb-logseq -cp src:../graph-parser/src script/publishing.cljs"
          (into ["static"] args)))
 
 (defn watch-publishing-frontend
@@ -100,3 +101,13 @@
         (do (println "Waiting for publishing frontend to build...")
             (Thread/sleep 1000)
             (recur (inc n)))))))
+
+(defn db-import-many
+  [& args]
+  (let [parent-graph-dir "./out"
+        [file-graphs import-options] (split-with #(not (string/starts-with? % "-")) args)]
+    (doseq [file-graph file-graphs]
+      (let [db-graph (fs/path parent-graph-dir (fs/file-name file-graph))]
+        (println "Importing" (str db-graph) "...")
+        (apply shell "bb" "dev:db-import" file-graph db-graph import-options)
+        (shell "bb" "dev:validate-db" db-graph "-gHc")))))

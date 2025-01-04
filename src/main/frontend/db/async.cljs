@@ -8,11 +8,13 @@
             [frontend.db.file-based.async :as file-async]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
+            [logseq.db.frontend.rules :as rules]
             [frontend.persist-db.browser :as db-browser]
             [datascript.core :as d]
             [frontend.db.react :as react]
             [frontend.date :as date]
             [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
             [cljs-time.format :as tf]
             [logseq.db :as ldb]
             [frontend.util :as util]
@@ -51,28 +53,34 @@
 
 (defn <db-based-get-all-properties
   "Return seq of all property names except for private built-in properties."
-  [graph]
-  (p/let [result (<q graph
-                     {:transact-db? false}
-                     '[:find [(pull ?e [:block/uuid :db/ident :block/title :block/schema]) ...]
-                       :where
-                       [?e :block/type "property"]
-                       [?e :block/title]])]
-    (->> result
-         ;; remove private built-in properties
-         (remove #(and (:db/ident %)
-                       (db-property/logseq-property? (:db/ident %))
-                       (not (ldb/public-built-in-property? %))
-                       (not= (:db/ident %) :logseq.property/icon))))))
+  [graph & {:keys [remove-built-in-property? remove-non-queryable-built-in-property?]
+            :or {remove-built-in-property? true
+                 remove-non-queryable-built-in-property? false}}]
+  (let [result (->> (d/datoms (db/get-db graph) :avet :block/tags :logseq.class/Property)
+                    (map (fn [datom] (db/entity (:e datom))))
+                    (sort-by (juxt ldb/built-in? :block/title)))]
+    (cond->> result
+      remove-built-in-property?
+      ;; remove private built-in properties
+      (remove (fn [p]
+                (let [ident (:db/ident p)]
+                  (and (ldb/built-in? p)
+                       (not (ldb/public-built-in-property? p))
+                       (not= ident :logseq.property/icon)))))
+      remove-non-queryable-built-in-property?
+      (remove (fn [p]
+                (let [ident (:db/ident p)]
+                  (and (ldb/built-in? p)
+                       (not (:queryable? (db-property/built-in-properties ident))))))))))
 
 (defn <get-all-properties
   "Returns all public properties as property maps including their
   :block/title and :db/ident. For file graphs the map only contains
   :block/title"
-  []
+  [& {:as opts}]
   (when-let [graph (state/get-current-repo)]
     (if (config/db-based-graph? graph)
-      (<db-based-get-all-properties graph)
+      (<db-based-get-all-properties graph opts)
       (p/let [properties (file-async/<file-based-get-all-properties graph)
               hidden-properties (set (map name (property-util/hidden-properties)))]
         (remove #(hidden-properties (:block/title %)) properties)))))
@@ -87,15 +95,20 @@
   "For db graphs, returns property value ids for given property db-ident.
    Separate from file version because values are lazy loaded"
   [graph property-id]
-  (let [empty-id (:db/id (db/entity :logseq.property/empty-placeholder))]
-    (<q graph {:transact-db? false}
-        '[:find [?v ...]
-          :in $ ?property-id ?empty-id
-          :where
-          [?b ?property-id ?v]
-          [(not= ?v ?empty-id)]]
-        property-id
-        empty-id)))
+  (let [default-value-id (:db/id (:logseq.property/default-value (db/entity property-id)))
+        empty-id (:db/id (db/entity :logseq.property/empty-placeholder))]
+    (p/let [result (<q graph {:transact-db? false}
+                       '[:find [?v ...]
+                         :in $ ?property-id ?empty-id
+                         :where
+                         [?b ?property-id ?v]
+                         [(not= ?v ?empty-id)]]
+                       property-id
+                       empty-id)]
+      (if default-value-id
+        ;; put default value the first
+        (concat [default-value-id] result)
+        result))))
 
 (comment
   (defn <get-block-property-value-entity
@@ -117,10 +130,11 @@
 (defn <get-block
   [graph name-or-uuid & {:keys [children? nested-children?]
                          :or {children? true
-                              nested-children? false}}]
+                              nested-children? false}
+                         :as opts}]
   (let [name' (str name-or-uuid)
         *async-queries (:db/async-queries @state/state)
-        async-requested? (get @*async-queries name')
+        async-requested? (get @*async-queries [name' opts])
         e (cond
             (number? name-or-uuid)
             (db/entity name-or-uuid)
@@ -134,7 +148,7 @@
     (if (or (:block.temp/fully-loaded? e) async-requested?)
       e
       (when-let [^Object sqlite @db-browser/*worker]
-        (swap! *async-queries assoc name' true)
+        (swap! *async-queries assoc [name' opts] true)
         (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
         (p/let [result (.get-block-and-children sqlite graph id (ldb/write-transit-str
                                                                  {:children? children?
@@ -169,11 +183,11 @@
   (when-let [page (some-> page-name (db-model/get-page))]
     (when-let [^Object worker @db-browser/*worker]
       (p/let [result (.get-block-and-children worker
-                       (state/get-current-repo)
-                       (str (:block/uuid page))
-                       (ldb/write-transit-str
-                         {:children? true
-                          :nested-children? false}))]
+                                              (state/get-current-repo)
+                                              (str (:block/uuid page))
+                                              (ldb/write-transit-str
+                                               {:children? true
+                                                :nested-children? false}))]
         (some-> result (ldb/read-transit-str) (:children))))))
 
 (defn <get-block-refs
@@ -216,33 +230,52 @@
     (let [future-days (state/get-scheduled-future-days)
           date-format (tf/formatter "yyyyMMdd")
           current-day (tf/parse date-format (str date))
-          future-day (some->> (t/plus current-day (t/days future-days))
+          future-date (t/plus current-day (t/days future-days))
+          future-day (some->> future-date
                               (tf/unparse date-format)
-                              (parse-long))]
-      (when future-day
-        (when-let [repo (state/get-current-repo)]
-          (p/let [result (<q repo {}
-                             '[:find [(pull ?block ?block-attrs) ...]
-                               :in $ ?day ?future ?block-attrs
-                               :where
-                               (or
-                                [?block :block/scheduled ?d]
-                                [?block :block/deadline ?d])
-                               [(get-else $ ?block :block/repeated? false) ?repeated]
-                               [(get-else $ ?block :block/marker "NIL") ?marker]
-                               [(not= ?marker "DONE")]
-                               [(not= ?marker "CANCELED")]
-                               [(not= ?marker "CANCELLED")]
-                               [(<= ?d ?future)]
-                               (or-join [?repeated ?d ?day]
-                                        [(true? ?repeated)]
-                                        [(>= ?d ?day)])]
-                             date
-                             future-day
-                             db-model/block-attrs)]
-            (->> result
-                 db-model/sort-by-order-recursive
-                 db-utils/group-by-page)))))))
+                              (parse-long))
+          start-time (date/journal-day->ts date)
+          future-time (tc/to-long future-date)]
+      (when-let [repo (and future-day (state/get-current-repo))]
+        (p/let [result
+                (if (config/db-based-graph? repo)
+                  (<q repo {}
+                      '[:find [(pull ?block ?block-attrs) ...]
+                        :in $ ?start-time ?end-time ?block-attrs
+                        :where
+                        (or [?block :logseq.task/scheduled ?n]
+                            [?block :logseq.task/deadline ?n])
+                        [(>= ?n ?start-time)]
+                        [(<= ?n ?end-time)]
+                        [?block :logseq.task/status ?status]
+                        [?status :db/ident ?status-ident]
+                        [(not= ?status-ident :logseq.task/status.done)]
+                        [(not= ?status-ident :logseq.task/status.canceled)]]
+                      start-time
+                      future-time
+                      '[*])
+                  (<q repo {}
+                      '[:find [(pull ?block ?block-attrs) ...]
+                        :in $ ?day ?future ?block-attrs
+                        :where
+                        (or
+                         [?block :block/scheduled ?d]
+                         [?block :block/deadline ?d])
+                        [(get-else $ ?block :block/repeated? false) ?repeated]
+                        [(get-else $ ?block :block/marker "NIL") ?marker]
+                        [(not= ?marker "DONE")]
+                        [(not= ?marker "CANCELED")]
+                        [(not= ?marker "CANCELLED")]
+                        [(<= ?d ?future)]
+                        (or-join [?repeated ?d ?day]
+                                 [(true? ?repeated)]
+                                 [(>= ?d ?day)])]
+                      date
+                      future-day
+                      db-model/file-graph-block-attrs))]
+          (->> result
+               db-model/sort-by-order-recursive
+               db-utils/group-by-page))))))
 
 (defn <get-tag-pages
   [graph tag-id]
@@ -258,9 +291,11 @@
   [graph property-ident]
   (<q graph {:transact-db? true}
       '[:find [(pull ?b [*]) ...]
-        :in $ ?property-ident
+        :in $ % ?prop
         :where
-        [?b ?property-ident]]
+        (has-property-or-default-value? ?b ?prop)]
+      (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
+                           {:deps rules/rules-dependencies})
       property-ident))
 
 (defn <get-tag-objects
@@ -283,12 +318,27 @@
         [?b :logseq.property/view-for ?class-id]]
       class-id))
 
-(defn <get-tags
-  [graph]
-  (<q graph {:transact-db? false}
-      '[:find [(pull ?tag [:db/id :block/title])]
-        :where
-        [?tag :block/type "class"]]))
+(defn <get-asset-with-checksum
+  [graph checksum]
+  (p/let [result (<q graph {:transact-db? true}
+                     '[:find [(pull ?b [*]) ...]
+                       :in $ ?checksum
+                       :where
+                       [?b :logseq.property.asset/checksum ?checksum]]
+                     checksum)]
+    (some-> (first result)
+            :db/id
+            db/entity)))
+
+(defn <get-pdf-annotations
+  [graph pdf-id]
+  (p/let [result (<q graph {:transact-db? true}
+                     '[:find [(pull ?b [*]) ...]
+                       :in $ ?pdf-id
+                       :where
+                       [?b :logseq.property/asset ?pdf-id]]
+                     pdf-id)]
+    result))
 
 (comment
   (defn <fetch-all-pages

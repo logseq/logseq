@@ -21,21 +21,21 @@
     "forge": "./forge.config.js"
   },
   "dependencies": {
-    "@fastify/cors": "8.2.0",
-    "@logseq/rsapi": "0.0.84",
+    "@fastify/cors": "10.0.1",
+    "@logseq/rsapi": "0.0.91",
     "@sentry/electron": "2.5.1",
     "abort-controller": "3.0.0",
     "chokidar": "^3.5.1",
     "command-exists": "1.2.9",
     "diff-match-patch": "1.0.5",
-    "dugite": "2.5.1",
+    "dugite": "2.7.1",
     "electron-deeplink": "1.0.10",
     "electron-dl": "3.3.0",
     "electron-log": "4.3.1",
     "electron-squirrel-startup": "1.0.0",
     "electron-window-state": "5.0.3",
     "extract-zip": "2.0.1",
-    "fastify": "latest",
+    "fastify": "5.1.0",
     "fs-extra": "9.1.0",
     "https-proxy-agent": "7.0.2",
     "node-fetch": "2.6.7",
@@ -43,8 +43,7 @@
     "posthog-js": "1.10.2",
     "semver": "7.5.2",
     "socks-proxy-agent": "8.0.2",
-    "update-electron-app": "2.0.1",
-    "electron-devtools-installer": "3.2.0"
+    "update-electron-app": "2.0.1"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.3.1",
@@ -55,13 +54,17 @@
     "@electron-forge/maker-squirrel": "^7.3.1",
     "@electron-forge/maker-zip": "^7.3.1",
     "@electron/rebuild": "3.2.10",
-    "electron": "28.3.1",
-    "electron-builder": "^22.11.7",
-    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git"
+    "electron": "31.7.5",
+    "electron-builder": "25.1.8",
+    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git",
+    "electron-devtools-installer": "^3.2.0"
   },
   "resolutions": {
-    "**/electron": "28.3.1",
-    "**/node-abi": "3.51.0",
-    "**/node-gyp": "9.0.0"
+    "**/electron": "31.7.5",
+    "**/node-abi": "3.68.0",
+    "**/node-gyp": "10.0.1",
+    "string-width": "^4.2.0",
+    "wrap-ansi": "^7.0.0",
+    "strip-ansi": "^6.0.1"
   }
 }

@@ -2,7 +2,7 @@
  :deps
  {org.clojure/clojure                   {:mvn/version "1.11.1"}
   org.clojure/clojurescript             {:mvn/version "1.11.132"}
-  funcool/promesa                       {:mvn/version "4.0.2"}
+  funcool/promesa                       {:mvn/version "11.0.678"}
   rum/rum                               {:mvn/version "0.12.9"}
   medley/medley                         {:mvn/version "1.4.0"}
   cljs-bean/cljs-bean                   {:mvn/version "1.5.0"}}}

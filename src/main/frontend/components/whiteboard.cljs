@@ -86,7 +86,7 @@
   [page]
   (let [{:block/keys [updated-at created-at]} page]
     (str (if (= created-at updated-at) (t :whiteboard/dashboard-card-created) (t :whiteboard/dashboard-card-edited))
-         (util/time-ago (js/Date. updated-at)))))
+         (util/human-time (js/Date. updated-at)))))
 
 (rum/defc dashboard-preview-card
   [whiteboard {:keys [checked on-checked-change show-checked?]}]
@@ -161,14 +161,14 @@
             :on-click
             (fn []
               (shui/dialog-open!
-                (page/batch-delete-dialog
-                  (map (fn [id]
-                         (some (fn [w] (when (= (:db/id w) id) w)) whiteboards))
-                    checked-page-ids)
-                  false
-                  (fn []
-                    (set-checked-page-ids #{})
-                    (route-handler/redirect-to-whiteboard-dashboard!)))))}))]
+               (page/batch-delete-dialog
+                (map (fn [id]
+                       (some (fn [w] (when (= (:db/id w) id) w)) whiteboards))
+                     checked-page-ids)
+                false
+                (fn []
+                  (set-checked-page-ids #{})
+                  (route-handler/redirect-to-whiteboard-dashboard!)))))}))]
        [:div
         {:ref ref}
         [:div.gap-8.grid.grid-rows-auto

@@ -1,38 +1,23 @@
 .cp__header {
-  @apply shadow z-10;
+  @apply shadow z-10 flex items-center justify-between sticky top-0 left-0 right-0 leading-none whitespace-nowrap;
+
   -webkit-app-region: drag;
 
   padding-top: calc(var(--ls-headbar-inner-top-padding));
   margin-top: var(--ls-win32-title-bar-height);
   height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex: 0 0 auto;
-  position: sticky;
-  top: 0;
-  left: 0;
-  right: 0;
-  line-height: 1;
-  white-space: nowrap;
 
   > .l {
-    @apply pl-2;
+    @apply pl-2 h-full min-w-[var(--ls-left-sidebar-width)];
 
-    min-width: var(--ls-left-sidebar-width);
-    height: 100%;
-    align-items: center;
-    transition: padding-left .2s;
+    > div {
+      @apply items-center;
+    }
   }
 
   > .r {
-    align-items: center;
-    flex: 1;
-    justify-content: flex-end;
-    padding-right: 6px;
+    @apply flex flex-1 items-center justify-end pr-1.5;
   }
-
-  /* To prevent header glitch on Safari */
 
   > .l, > .r {
     -webkit-transform: translate3d(0, 0, 0);
@@ -40,18 +25,15 @@
   }
 
   .button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    @apply flex items-center justify-center;
 
     .ti, .tie {
-      font-size: 20px;
+      @apply text-[20px];
     }
   }
 
   .ui-items-container .button {
-    width: auto;
-    padding: 0 8px;
+    @apply w-auto py-0 px-1.5;
   }
 
   svg.warning {
@@ -177,7 +159,7 @@
 
   &:hover {
     @screen md {
-      background: var(--lx-gray-04, var(--ls-tertiary-background-color, var(--rx-gray-04)));
+      background: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
     }
   }
 }
@@ -265,12 +247,6 @@ html.is-native-ipad {
     }
   }
 
-  .left-sidebar-inner  {
-    > .wrap {
-      padding-top: 20px;
-    }
-  }
-
   .cp__right-sidebar {
     &-settings {
       margin-top: -4px;
@@ -325,6 +301,11 @@ html.is-zoomed-native-ios {
 .drag-region {
   user-select: none;
   -webkit-app-region: drag;
+}
+
+.recent-slider {
+  user-select: initial;
+  -webkit-app-region: no-drag
 }
 
 /* TODO: remote for prod */

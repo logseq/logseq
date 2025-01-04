@@ -9,7 +9,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.extensions.slide :as slide]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
@@ -23,36 +22,36 @@
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.handler.route :as route-handler]
             [logseq.db :as ldb]
-            [frontend.components.icon :as icon]))
+            [frontend.components.icon :as icon]
+            [frontend.components.profiler :as profiler]))
 
 (rum/defc toggle
   []
   (when-not (util/sm-breakpoint?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
-      [:button.button.icon.toggle-right-sidebar
-       {:title (t :right-side-bar/toggle-right-sidebar)
-        :on-click ui-handler/toggle-right-sidebar!}
-       (ui/icon "layout-sidebar-right" {:size 20})])))
+      (shui/button-ghost-icon :layout-sidebar-right
+                              {:title (t :right-side-bar/toggle-right-sidebar)
+                               :class "toggle-right-sidebar"
+                               :on-click ui-handler/toggle-right-sidebar!}))))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
   (let [id (:block/uuid block)]
-    (page/page-cp {:parameters  {:path {:name (str id)}}}
-                :sidebar?    true
-                :sidebar/idx idx
-                :repo        repo)))
+    (page/page-cp {:parameters  {:path {:name (str id)}}
+                   :sidebar?    true
+                   :sidebar/idx idx
+                   :repo        repo})))
+
+(defn get-scrollable-container
+  []
+  (js/document.querySelector ".sidebar-item-list"))
 
 (rum/defc page-cp < rum/reactive
   [repo page-name]
-  (page/page-cp {:parameters {:path {:name page-name}}}
-              :sidebar?   true
-              :repo       repo))
-
-(rum/defc contents < rum/reactive db-mixins/query
-  []
-  [:div.contents.flex-col.flex.ml-3
-   (when-let [contents-page (db/get-page "contents")]
-     (page/contents-page contents-page))])
+  (page/page-cp {:parameters {:path {:name page-name}}
+                 :sidebar?   true
+                 :scroll-container (get-scrollable-container)
+                 :repo repo}))
 
 (rum/defc page-outline < rum/reactive db-mixins/query
   [repo]
@@ -90,7 +89,6 @@
   [repo block idx sidebar-key ref?]
   (when-let [block-id (:block/uuid block)]
     [[:.flex.items-center {:class (when ref? "ml-2")}
-      (ui/icon "letter-n" {:class "text-md mr-2"})
       (block/breadcrumb {:id     "block-parent"
                          :block? true
                          :sidebar-key sidebar-key} repo block-id {:indent? false})]
@@ -106,7 +104,7 @@
 
     :contents
     [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
-     (contents)]
+     (page-cp repo "contents")]
 
     :help
     [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :right-side-bar/help)] (onboarding/help)]
@@ -132,8 +130,8 @@
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])
           page (db/entity repo lookup)]
       (if (ldb/page? page)
-        [[:.flex.items-center.page-title
-          (icon/get-node-icon-cp page {:class "text-md mr-2"})
+        [[:.flex.items-center.page-title.gap-1
+          (icon/get-node-icon-cp page {:class "text-md"})
           [:span.overflow-hidden.text-ellipsis (:block/title page)]]
          (page-cp repo (str (:block/uuid page)))]
         (block-with-breadcrumb repo page idx [repo db-id block-type] false)))
@@ -167,6 +165,10 @@
     :rtc
     [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
      (rtc-debug-ui/rtc-debug-ui)]
+
+    :profiler
+    [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
+     (profiler/profiler)]
 
     ["" [:span]]))
 
@@ -388,11 +390,11 @@
      [])
 
     (rum/use-effect!
-      (fn []
+     (fn []
         ;; sidebar animation duration
-        (js/setTimeout
-          #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
-      [sidebar-open?])
+       (js/setTimeout
+        #(reset! ui-handler/*right-sidebar-resized-at (js/Date.now)) 300))
+     [sidebar-open?])
 
     [:.resizer
      {:ref              el-ref
@@ -447,7 +449,12 @@
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                        (state/sidebar-add-block! repo "rtc" :rtc))}
-            "(Dev) RTC"]])]]
+            "(Dev) RTC"]])
+        (when (state/sub [:ui/developer-mode?])
+          [:div.text-sm
+           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                       (state/sidebar-add-block! repo "profiler" :profiler))}
+            "(Dev) Profiler"]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?
