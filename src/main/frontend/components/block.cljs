@@ -2711,6 +2711,7 @@
          (for [pid properties]
            (let [property (db/entity pid)]
              [:div.flex.flex-row.items-center.gap-1
+              {:key (str pid)}
               [:div.flex.flex-row.items-center
                (property-component/property-key-cp block property opts)
                [:div.select-none ":"]]
@@ -2719,7 +2720,9 @@
          {:class (name position)}
          (for [pid properties]
            (when-let [property (db/entity pid)]
-             (pv/property-value block property (assoc opts :show-tooltip? true))))]))))
+             (rum/with-key
+               (pv/property-value block property (assoc opts :show-tooltip? true))
+               (str pid))))]))))
 
 (rum/defc status-history-cp
   [status-history]
@@ -3134,9 +3137,10 @@
                                (map (fn [x]
                                       (if (and (vector? x) (second x))
                                         (let [[block label] x]
-                                          (rum/with-key (breadcrumb-fragment config block label opts) (:block/uuid block)))
-                                        [:span.opacity-70 "⋯"])))
-                               (interpose (breadcrumb-separator)))]
+                                          (rum/with-key (breadcrumb-fragment config block label opts)
+                                            (str (:block/uuid block))))
+                                        [:span.opacity-70 {:key "dots"} "⋯"])))
+                               (interpose (rum/with-key (breadcrumb-separator) "icon")))]
           (when (seq breadcrumbs)
             [:div.breadcrumb.block-parents
              {:class (when (seq breadcrumbs)
