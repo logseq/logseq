@@ -70,15 +70,14 @@
     title))
 
 (defn build-first-block-tx
-  [page-uuid format]
+  [page-uuid]
   (let [page-id [:block/uuid page-uuid]]
     [(sqlite-util/block-with-timestamps
       {:block/uuid (ldb/new-block-id)
        :block/page page-id
        :block/parent page-id
        :block/order (db-order/gen-key nil nil)
-       :block/title ""
-       :block/format format})]))
+       :block/title ""})]))
 
 (defn- get-page-by-parent-name
   [db parent-title child-title]
@@ -115,11 +114,10 @@
                                     (ldb/get-page db part)
                                     (get-page-by-parent-name db (nth parts (dec idx)) part))
                              result (or page
-                                        (-> (gp-block/page-name->map part db true date-formatter
-                                                                     {:page-uuid (when last-part? block-uuid)
-                                                                      :skip-existing-page-check? true
-                                                                      :class? class?})
-                                            (assoc :block/format :markdown)))]
+                                        (gp-block/page-name->map part db true date-formatter
+                                                                 {:page-uuid (when last-part? block-uuid)
+                                                                  :skip-existing-page-check? true
+                                                                  :class? class?}))]
                          result))
                      parts))]
          (cond
@@ -193,14 +191,12 @@
                          [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
             {:tx-meta tx-meta
              :tx-data tx-data})))
-      (let [format    :markdown
-            page      (-> (gp-block/page-name->map title db true date-formatter
-                                                   {:class? class?
-                                                    :page-uuid (when (uuid? uuid) uuid)
-                                                    :skip-existing-page-check? (if (some? skip-existing-page-check?)
-                                                                                 skip-existing-page-check?
-                                                                                 true)})
-                          (assoc :block/format format))
+      (let [page      (gp-block/page-name->map title db true date-formatter
+                                               {:class? class?
+                                                :page-uuid (when (uuid? uuid) uuid)
+                                                :skip-existing-page-check? (if (some? skip-existing-page-check?)
+                                                                             skip-existing-page-check?
+                                                                             true)})
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
                              (let [pages (split-namespace-pages db page date-formatter)]
                                [(last pages) (butlast pages)])
@@ -222,7 +218,7 @@
                                       create-first-block?
                                       (not (or whiteboard? class?))
                                       page-txs)
-                                 (build-first-block-tx (:block/uuid (first page-txs)) format))
+                                 (build-first-block-tx (:block/uuid (first page-txs))))
                 txs      (concat
                           ;; transact doesn't support entities
                           (remove de/entity? parents)

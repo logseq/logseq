@@ -1,27 +1,27 @@
 (ns frontend.components.plugins
-  (:require [rum.core :as rum]
-            [frontend.state :as state]
-            [cljs-bean.core :as bean]
-            [frontend.context.i18n :refer [t]]
-            [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.plugin-config :as plugin-config-handler]
-            [frontend.handler.common.plugin :as plugin-common-handler]
-            [frontend.search :as search]
-            [frontend.util :as util]
-            [frontend.mixins :as mixins]
-            [frontend.config :as config]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [electron.ipc :as ipc]
-            [promesa.core :as p]
-            [frontend.components.svg :as svg]
             [frontend.components.plugins-settings :as plugins-settings]
+            [frontend.components.svg :as svg]
+            [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
+            [frontend.handler.common.plugin :as plugin-common-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.storage :as storage]
+            [frontend.handler.plugin-config :as plugin-config-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.mixins :as mixins]
             [frontend.rum :as rum-utils]
-            [clojure.string :as string]))
+            [frontend.search :as search]
+            [frontend.state :as state]
+            [frontend.storage :as storage]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (declare open-waiting-updates-modal!)
 (defonce PER-PAGE-SIZE 15)
@@ -256,20 +256,20 @@
             #(-> (shui/dialog-confirm!
                   [:b (t :plugin/delete-alert name)])
                  (p/then (fn []
-                          (plugin-common-handler/unregister-plugin id)
+                           (plugin-common-handler/unregister-plugin id)
 
-                          (when (util/electron?)
-                           (plugin-config-handler/remove-plugin id)))))}
+                           (when (util/electron?)
+                             (plugin-config-handler/remove-plugin id)))))}
        (t :plugin/uninstall)]]]
 
     (when (seq sponsors)
-     [:div.de.sponsors
-      [:strong (ui/icon "coffee")]
-      [:ul.menu-list
-       (for [link sponsors]
-        [:li {:key link}
-         [:a {:href link :target "_blank"}
-          [:span.flex.items-center link (ui/icon "external-link")]]])]])]
+      [:div.de.sponsors
+       [:strong (ui/icon "coffee")]
+       [:ul.menu-list
+        (for [link sponsors]
+          [:li {:key link}
+           [:a {:href link :target "_blank"}
+            [:span.flex.items-center link (ui/icon "external-link")]]])]])]
 
    [:div.r.flex.items-center
     (when (and unpacked? (not disabled?))
@@ -305,70 +305,70 @@
     url item (if (or repo webPkg) remote-readme-display local-markdown-display)))
 
 (rum/defc plugin-item-card < rum/static
- [t {:keys [id name title version url description author icon iir repo sponsors webPkg] :as item}
-  disabled? market? *search-key has-other-pending?
-  installing-or-updating? installed? stat coming-update]
+  [t {:keys [id name title version url description author icon iir repo sponsors webPkg] :as item}
+   disabled? market? *search-key has-other-pending?
+   installing-or-updating? installed? stat coming-update]
 
- (let [name (or title name "Untitled")
-       web? (not (nil? webPkg))
-       unpacked? (and (not web?) (not iir))
-       new-version (state/coming-update-new-version? coming-update)]
-  [:div.cp__plugins-item-card
-   {:key   (str "lsp-card-" id)
-    :class (util/classnames
-            [{:market          market?
-              :installed       installed?
-              :updating        installing-or-updating?
-              :has-new-version new-version}])}
+  (let [name (or title name "Untitled")
+        web? (not (nil? webPkg))
+        unpacked? (and (not web?) (not iir))
+        new-version (state/coming-update-new-version? coming-update)]
+    [:div.cp__plugins-item-card
+     {:key   (str "lsp-card-" id)
+      :class (util/classnames
+              [{:market          market?
+                :installed       installed?
+                :updating        installing-or-updating?
+                :has-new-version new-version}])}
 
-   [:div.l.link-block.cursor-pointer
-    {:on-click (get-open-plugin-readme-handler url item repo)}
-    (if (and icon (not (string/blank? icon)))
-     [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
-     svg/folder)
-
-    (when (and (not market?) unpacked?)
-     [:span.flex.justify-center.text-xs.text-error.pt-2 (t :plugin/unpacked)])]
-
-   [:div.r
-    [:h3.head.text-xl.font-bold.pt-1.5
-
-     [:span.l.link-block.cursor-pointer
+     [:div.l.link-block.cursor-pointer
       {:on-click (get-open-plugin-readme-handler url item repo)}
-      name]
-     (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
+      (if (and icon (not (string/blank? icon)))
+        [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
+        svg/folder)
 
-    [:div.desc.text-xs.opacity-70
-     [:p description]
+      (when (and (not market?) unpacked?)
+        [:span.flex.justify-center.text-xs.text-error.pt-2 (t :plugin/unpacked)])]
+
+     [:div.r
+      [:h3.head.text-xl.font-bold.pt-1.5
+
+       [:span.l.link-block.cursor-pointer
+        {:on-click (get-open-plugin-readme-handler url item repo)}
+        name]
+       (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
+
+      [:div.desc.text-xs.opacity-70
+       [:p description]
      ;;[:small (js/JSON.stringify (bean/->js settings))]
-     ]
+       ]
 
     ;; Author & Identity
-    [:div.flag
-     [:p.text-xs.pr-2.flex.justify-between
-      [:small {:on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
-                           (reset! *search-key (str "@" author))
-                           (.select el))} author]
-      [:small {:on-click #(do
-                           (notification/show! "Copied!" :success)
-                           (util/copy-to-clipboard! id))}
-       (str "ID: " id)]]]
+      [:div.flag
+       [:p.text-xs.pr-2.flex.justify-between
+        [:small {:on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
+                              (reset! *search-key (str "@" author))
+                              (.select el))} author]
+        [:small {:on-click #(do
+                              (notification/show! "Copied!" :success)
+                              (util/copy-to-clipboard! id))}
+         (str "ID: " id)]]]
 
     ;; Github repo
-    [:div.flag.is-top.opacity-50
-     (when repo
-      [:a.flex {:target "_blank"
-                :href   (plugin-handler/gh-repo-url repo)}
-       (svg/github {:width 16 :height 16})])]
+      [:div.flag.is-top.opacity-50
+       (when repo
+         [:a.flex {:target "_blank"
+                   :href   (plugin-handler/gh-repo-url repo)}
+          (svg/github {:width 16 :height 16})])]
 
-    (if market?
+      (if market?
      ;; market ctls
-     (card-ctls-of-market item stat installed? installing-or-updating?)
+        (card-ctls-of-market item stat installed? installing-or-updating?)
 
      ;; installed ctls
-     (card-ctls-of-installed
-      id name url sponsors unpacked? disabled?
-      installing-or-updating? has-other-pending? new-version item))]]))
+        (card-ctls-of-installed
+         id name url sponsors unpacked? disabled?
+         installing-or-updating? has-other-pending? new-version item))]]))
 
 (rum/defc panel-tab-search < rum/static
   [search-key *search-key *search-ref]
@@ -606,17 +606,17 @@
                               :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}])
 
                           (when (util/electron?)
-                           [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings-page/network-proxy)]
-                             :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}
+                            [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings-page/network-proxy)]
+                              :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}
 
-                            {:title   [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
-                             :options {:on-click plugin-config-handler/open-replace-plugins-modal}}])
+                             {:title   [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
+                              :options {:on-click plugin-config-handler/open-replace-plugins-modal}}])
 
                           [{:hr true}]
 
                           (when (and (state/developer-mode?)
                                      (util/electron?))
-                           [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
+                            [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
                               :options {:on-click
                                         #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                            (js/apis.openPath (str root "/preferences.json")))}}
@@ -1273,14 +1273,14 @@
                      :class (when (not market?) "active")
                      :size :sm
                      :variant :text}
-         (t :plugin/installed))
+                    (t :plugin/installed))
 
        (shui/button {:on-click #(set-active! :marketplace)
                      :class (when market? "active")
                      :size :sm
                      :variant :text}
-         (shui/tabler-icon "apps")
-         (t :plugin/marketplace))]]
+                    (shui/tabler-icon "apps")
+                    (t :plugin/marketplace))]]
 
      [:div.panels
       (if market?

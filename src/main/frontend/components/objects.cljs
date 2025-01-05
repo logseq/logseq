@@ -1,26 +1,26 @@
 (ns frontend.components.objects
   "Provides table views for class objects and property related objects"
-  (:require [frontend.components.views :as views]
+  (:require [clojure.string :as string]
+            [frontend.components.filepicker :as filepicker]
+            [frontend.components.views :as views]
             [frontend.db :as db]
-            [logseq.db :as ldb]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
+            [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
-            [frontend.state :as state]
-            [logseq.outliner.property :as outliner-property]
-            [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
-            [frontend.db.react :as react]
-            [logseq.shui.ui :as shui]
-            [frontend.util :as util]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util :as util]
             [logseq.common.config :as common-config]
-            [frontend.components.filepicker :as filepicker]
-            [clojure.string :as string]))
+            [logseq.db :as ldb]
+            [logseq.outliner.property :as outliner-property]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defn- get-class-objects
   [class]
@@ -256,21 +256,21 @@
                    :show-add-property? false
                    ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
                    :on-delete-rows (when-not (:logseq.property/built-in? property)
-                                             (fn [table selected-rows]
-                                               (let [pages (->> selected-rows (filter ldb/page?) (remove :logseq.property/built-in?))
-                                                     blocks (->> selected-rows (remove ldb/page?) (remove :logseq.property/built-in?))]
-                                                 (p/do!
-                                                  (set-data! (get-property-related-objects (state/get-current-repo) property))
-                                                  (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                                    (f {}))
-                                                  (ui-outliner-tx/transact!
-                                                   {:outliner-op :delete-blocks}
-                                                   (when (seq blocks)
-                                                     (outliner-op/delete-blocks! blocks nil))
-                                                   (let [page-ids (map :db/id pages)
-                                                         tx-data (map (fn [pid] [:db/retract pid (:db/ident property)]) page-ids)]
-                                                     (when (seq tx-data)
-                                                       (outliner-op/transact! tx-data {:outliner-op :save-block}))))))))}))))
+                                     (fn [table selected-rows]
+                                       (let [pages (->> selected-rows (filter ldb/page?) (remove :logseq.property/built-in?))
+                                             blocks (->> selected-rows (remove ldb/page?) (remove :logseq.property/built-in?))]
+                                         (p/do!
+                                          (set-data! (get-property-related-objects (state/get-current-repo) property))
+                                          (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                            (f {}))
+                                          (ui-outliner-tx/transact!
+                                           {:outliner-op :delete-blocks}
+                                           (when (seq blocks)
+                                             (outliner-op/delete-blocks! blocks nil))
+                                           (let [page-ids (map :db/id pages)
+                                                 tx-data (map (fn [pid] [:db/retract pid (:db/ident property)]) page-ids)]
+                                             (when (seq tx-data)
+                                               (outliner-op/transact! tx-data {:outliner-op :save-block}))))))))}))))
 
 ;; Show all nodes containing the given property
 (rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id

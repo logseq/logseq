@@ -2,19 +2,18 @@
   "export blocks/pages as text"
   (:refer-clojure :exclude [map filter mapcat concat remove newline])
   (:require [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.zip :as zip]
+            [frontend.format.mldoc :as mldoc]
             [frontend.handler.export.common :as common :refer
              [*state* indent newline* raw-text simple-ast-malli-schema
               simple-asts->string space]]
-            [logseq.graph-parser.schema.mldoc :as mldoc-schema]
-            [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
-            [frontend.format.mldoc :as mldoc]
+            [logseq.graph-parser.schema.mldoc :as mldoc-schema]
             [malli.core :as m]
-            [promesa.core :as p]
-            [frontend.config :as config]))
+            [promesa.core :as p]))
 
 ;;; block-ast, inline-ast -> simple-ast
 
@@ -67,7 +66,7 @@
                      ""))
         current-level (get *state* :current-level 1)
         indent' (when (> current-level 1)
-                 (indent (dec current-level) 0))
+                  (indent (dec current-level) 0))
         items* (block-list items :in-list? true)]
     (concatv [indent' number* checkbox* space]
              content*
@@ -503,7 +502,6 @@
             simple-asts (mapcatv block-ast->simple-ast ast***)]
         (simple-asts->string simple-asts)))))
 
-
 (defn export-blocks-as-markdown
   "options:
   :indent-style \"dashes\" | \"spaces\" | \"no-indent\"
@@ -521,8 +519,8 @@
              (common/get-page-content root-block-uuids-or-page-uuid)
              (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
            first-block (and (coll? root-block-uuids-or-page-uuid)
-                          (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
-           format (or (:block/format first-block) (state/get-preferred-format))]
+                            (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
+           format (get first-block :block/format :markdown)]
        (export-helper content format options))
      (catch :default e
        (js/console.error e)))))

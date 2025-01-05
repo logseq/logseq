@@ -380,7 +380,7 @@
   (when-let [default-home (state/get-default-home)]
     (let [page (:page default-home)
           page (when (and (string? page)
-                       (not (string/blank? page)))
+                          (not (string/blank? page)))
                  (db/get-page page))]
       (if page
         default-home
@@ -598,7 +598,7 @@
                    :upload-files
                    {:drop (fn [_e files]
                             (when-let [id (state/get-edit-input-id)]
-                              (let [format (:block/format (state/get-edit-block))]
+                              (let [format (get (state/get-edit-block) :block/format :markdown)]
                                 (editor-handler/upload-asset! id files format editor-handler/*asset-uploading? true))))})
                   (common-handler/listen-to-scroll! element)
                   (when (:margin-less-pages? (first (:rum/args state))) ;; makes sure full screen pages displaying without scrollbar

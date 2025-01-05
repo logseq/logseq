@@ -189,8 +189,7 @@
               (transact-db! :move-blocks repo conn [b] local-parent false)
               (transact-db! :insert-blocks repo conn
                             [{:block/uuid block-uuid
-                              :block/title ""
-                              :block/format :markdown}]
+                              :block/title ""}]
                             local-parent {:sibling? false :keep-uuid? true}))
             (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
 

@@ -1,61 +1,61 @@
 (ns ^:no-doc logseq.api
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
-            [goog.object :as gobj]
-            [datascript.core :as d]
-            [frontend.db.conn :as conn]
-            [logseq.common.util :as common-util]
-            [logseq.sdk.core]
-            [logseq.sdk.git]
-            [logseq.sdk.experiments]
-            [logseq.sdk.utils :as sdk-utils]
-            [logseq.sdk.ui :as sdk-ui]
-            [logseq.sdk.assets :as sdk-assets]
             [clojure.string :as string]
+            [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
-            [frontend.handler.config :as config-handler]
-            [frontend.handler.recent :as recent-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.db :as db]
-            [frontend.idb :as idb]
             [frontend.db.async :as db-async]
+            [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.query-custom :as query-custom]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.utils :as db-utils]
             [frontend.db.query-react :as query-react]
+            [frontend.db.utils :as db-utils]
             [frontend.fs :as fs]
+            [frontend.handler.code :as code-handler]
+            [frontend.handler.command-palette :as palette-handler]
+            [frontend.handler.common.plugin :as plugin-common-handler]
+            [frontend.handler.config :as config-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.db-based.property :as db-property-handler]
-            [logseq.outliner.core :as outliner-core]
+            [frontend.handler.recent :as recent-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.search :as search-handler]
+            [frontend.handler.shell :as shell]
+            [frontend.idb :as idb]
+            [frontend.loader :as loader]
+            [frontend.modules.layout.core]
             [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.handler.command-palette :as palette-handler]
-            [frontend.modules.shortcut.core :as st]
             [frontend.modules.shortcut.config :as shortcut-config]
+            [frontend.modules.shortcut.core :as st]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.loader :as loader]
-            [goog.dom :as gdom]
-            [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [reitit.frontend.easy :as rfe]
             [frontend.version :as fv]
-            [frontend.handler.shell :as shell]
-            [frontend.modules.layout.core]
-            [frontend.handler.code :as code-handler]
-            [frontend.handler.search :as search-handler]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [logseq.api.block :as api-block]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.property.util :as db-property-util]))
+            [logseq.db.frontend.property.util :as db-property-util]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.sdk.assets :as sdk-assets]
+            [logseq.sdk.core]
+            [logseq.sdk.experiments]
+            [logseq.sdk.git]
+            [logseq.sdk.ui :as sdk-ui]
+            [logseq.sdk.utils :as sdk-utils]
+            [promesa.core :as p]
+            [reitit.frontend.easy :as rfe]))
 
 ;; Alert: this namespace shouldn't invoke any reactive queries
 
@@ -209,7 +209,7 @@
     (if (util/electron?)
       (fs/read-file nil (util/node-path.join path "package.json"))
       (do (js/console.log "==>>> TODO: load plugin package.json from local???")
-        ""))))
+          ""))))
 
 (def ^:export load_plugin_readme
   (fn [path]
@@ -388,26 +388,26 @@
      key data)))
 
 (defn ^:export load_installed_web_plugins
- []
- (let [getter (plugin-handler/make-fn-to-load-dotdir-json "installed-plugins-for-web" #js {})]
-        (some-> (getter :all) (p/then second))))
+  []
+  (let [getter (plugin-handler/make-fn-to-load-dotdir-json "installed-plugins-for-web" #js {})]
+    (some-> (getter :all) (p/then second))))
 
 (defn ^:export save_installed_web_plugin
- ([^js plugin] (save_installed_web_plugin plugin false))
- ([^js plugin remove?]
-  (when-let [id (some-> plugin (.-key) (name))]
-   (let [setter (plugin-handler/make-fn-to-save-dotdir-json "installed-plugins-for-web")
-         plugin (js/JSON.parse (js/JSON.stringify plugin))]
-    (p/let [^js plugins (or (load_installed_web_plugins) #js {})]
-           (if (true? remove?)
-            (when (aget plugins id)
+  ([^js plugin] (save_installed_web_plugin plugin false))
+  ([^js plugin remove?]
+   (when-let [id (some-> plugin (.-key) (name))]
+     (let [setter (plugin-handler/make-fn-to-save-dotdir-json "installed-plugins-for-web")
+           plugin (js/JSON.parse (js/JSON.stringify plugin))]
+       (p/let [^js plugins (or (load_installed_web_plugins) #js {})]
+         (if (true? remove?)
+           (when (aget plugins id)
              (js-delete plugins id))
-            (gobj/set plugins id plugin))
-           (setter :all plugins))))))
+           (gobj/set plugins id plugin))
+         (setter :all plugins))))))
 
 (defn ^:export unlink_installed_web_plugin
- [key]
- (save_installed_web_plugin #js {:key key} true))
+  [key]
+  (save_installed_web_plugin #js {:key key} true))
 
 (def ^:export unlink_plugin_user_settings
   (plugin-handler/make-fn-to-unlink-dotdir-json "settings"))
@@ -779,7 +779,7 @@
                 block (if before
                         (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))) block)]
             (some-> (editor-handler/insert-block-tree-after-target
-                     (:db/id block) sibling bb (:block/format block) keep-uuid?)
+                     (:db/id block) sibling bb (get block :block/format :markdown) keep-uuid?)
                     (p/then (fn [results]
                               (some-> results (ldb/read-transit-str)
                                       :blocks (sdk-utils/normalize-keyword-for-json) (bean/->js)))))))))))

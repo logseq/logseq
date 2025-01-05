@@ -474,6 +474,19 @@
               [:db/retract (:e d) :logseq.task/deadline]))
           datoms))))))
 
+(defn- remove-block-format-from-db
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [datoms (d/datoms db :avet :block/uuid)
+            tx-data (map
+                     (fn [d]
+                       [:db/retract (:e d) :block/format])
+                     datoms)]
+        (ldb/transact! conn tx-data {:db-migrate? true})
+        (d/reset-schema! conn (dissoc (:schema db) :block/format))
+        []))))
+
 (defn- deprecate-logseq-user-ns
   [conn _search-db]
   (let [db @conn]
@@ -582,7 +595,8 @@
    [55 {:fix update-deadline-to-datetime}]
    [56 {:properties [:logseq.property/enable-history?
                      :logseq.property.history/block :logseq.property.history/property
-                     :logseq.property.history/ref-value :logseq.property.history/scalar-value]}]])
+                     :logseq.property.history/ref-value :logseq.property.history/scalar-value]}]
+   [57 {:fix remove-block-format-from-db}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

@@ -644,8 +644,8 @@
      (when (util/electron?)
        (when (not= (boolean value) on?)
          (ui/button (t :plugin/restart)
-           :on-click #(js/logseq.api.relaunch)
-           :small? true :intent "logseq")))]))
+                    :on-click #(js/logseq.api.relaunch)
+                    :small? true :intent "logseq")))]))
 
 (rum/defc http-server-enabled-switcher
   [t]

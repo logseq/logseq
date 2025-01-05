@@ -1,18 +1,18 @@
 (ns validate-client-db
   "Script that validates the datascript db of a DB graph
    NOTE: This script is also used in CI to confirm our db's schema is up to date"
-  (:require [logseq.db.sqlite.cli :as sqlite-cli]
+  (:require ["os" :as os]
+            ["path" :as node-path]
+            [babashka.cli :as cli]
+            [cljs.pprint :as pprint]
+            [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.validate :as db-validate]
-            [datascript.core :as d]
-            [clojure.string :as string]
-            [nbb.core :as nbb]
+            [logseq.db.sqlite.cli :as sqlite-cli]
             [malli.core :as m]
-            [babashka.cli :as cli]
-            ["path" :as node-path]
-            ["os" :as os]
-            [cljs.pprint :as pprint]
-            [malli.error :as me]))
+            [malli.error :as me]
+            [nbb.core :as nbb]))
 
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"

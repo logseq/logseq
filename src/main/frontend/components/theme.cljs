@@ -1,20 +1,20 @@
 (ns frontend.components.theme
   (:require [electron.ipc :as ipc]
-            [frontend.extensions.pdf.core :as pdf]
+            [frontend.components.settings :as settings]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
+            [frontend.extensions.pdf.core :as pdf]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
-            [frontend.util :as util]
-            [frontend.state :as state]
-            [frontend.components.settings :as settings]
             [frontend.rum :refer [use-mounted]]
+            [frontend.state :as state]
             [frontend.storage :as storage]
-            [rum.core :as rum]
-            [frontend.context.i18n :refer [t]]))
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [logseq.shui.ui :as shui]
+            [rum.core :as rum]))
 
 (rum/defc scrollbar-measure
   []
@@ -87,8 +87,8 @@
      #(when config/lsp-enabled?
         (plugin-handler/load-plugin-preferences)
         (comp
-          (plugin-handler/setup-install-listener!)
-          (plugin-config-handler/setup-install-listener!)))
+         (plugin-handler/setup-install-listener!)
+         (plugin-config-handler/setup-install-listener!)))
      [])
 
     (rum/use-effect!

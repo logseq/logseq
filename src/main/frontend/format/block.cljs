@@ -6,12 +6,12 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.format :as format]
+            [frontend.format.mldoc :as mldoc]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.property :as gp-property]
             [lambdaisland.glogi :as log]
-            [frontend.format.mldoc :as mldoc]))
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
@@ -29,7 +29,7 @@ and handles unexpected failure."
                                              :db-graph-mode? (config/db-based-graph? repo)})]
         (if (config/db-based-graph? repo)
           (map (fn [block]
-                 (cond-> (dissoc block :block/properties :block/macros :block/properties-order)
+                 (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
                    (:block/properties block)
                    (merge (update-keys (:block/properties block)
                                        (fn [k]
@@ -79,16 +79,18 @@ and handles unexpected failure."
           parse-config (mldoc/get-default-config format)
           ;; Disable extraction for display-type blocks as there isn't a reason to have
           ;; it enabled yet and can cause visible bugs when '#' is used
-          blocks (if (and (config/db-based-graph? (state/get-current-repo))
+          db-based? (config/db-based-graph? (state/get-current-repo))
+          blocks (if (and db-based?
                           (:logseq.property.node/display-type block))
                    [block]
                    (let [ast (format/to-edn title format parse-config)]
                      (extract-blocks ast title format {:parse-block block})))
           new-block (first blocks)
-          block (cond->
-                 (merge block new-block)
+          block (cond-> (merge block new-block)
                   (> (count blocks) 1)
-                  (assoc :block/warning :multiple-blocks))
+                  (assoc :block/warning :multiple-blocks)
+                  db-based?
+                  (dissoc :block/format))
           block (dissoc block :block.temp/ast-body :block/level)]
       (if uuid (assoc block :block/uuid uuid) block))))
 
@@ -97,7 +99,7 @@ and handles unexpected failure."
    (when (map? block)
      (merge block
             (parse-title-and-body (:block/uuid block)
-                                  (:block/format block)
+                                  (get block :block/format :markdown)
                                   (:block/pre-block? block)
                                   (:block/title block)))))
   ([block-uuid format pre-block? content]

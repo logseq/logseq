@@ -49,7 +49,7 @@
                        nil
 
                        :else " ")
-        format (:block/format block)]
+        format (get block :block/format :markdown)]
     (p/let [filename (take-or-choose-photo)]
       (when (not-empty filename)
         (commands/simple-insert!

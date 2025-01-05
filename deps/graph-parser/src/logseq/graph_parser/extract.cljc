@@ -4,20 +4,20 @@
   ;; Disable clj linters since we don't support clj
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})
-  (:require [clojure.set :as set]
+  (:require #?(:org.babashka/nbb [logseq.common.log :as log]
+               :default [lambdaisland.glogi :as log])
+            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [logseq.graph-parser.text :as text]
-            [logseq.common.util :as common-util]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.property :as gp-property]
             [logseq.common.config :as common-config]
-            #?(:org.babashka/nbb [logseq.common.log :as log]
-               :default [lambdaisland.glogi :as log])
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [logseq.db :as ldb]))
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
 
 (defn- filepath->page-name
   [filepath]
@@ -190,6 +190,33 @@
           (log/error :gp-extract/attach-block-ids-not-match "attach-block-ids-if-match: block-ids provided, but doesn't match the number of blocks, ignoring")))
       blocks))
 
+(defn- build-pages-aux
+  [db db-based? options page-map ref-pages date-formatter format]
+  (let [namespace-pages (when (or (not db-based?) (:export-to-db-graph? options))
+                          (let [page (:block/title page-map)]
+                            (when (text/namespace-page? page)
+                              (->> (common-util/split-namespace-pages page)
+                                   (map (fn [page]
+                                          (cond-> (gp-block/page-name->map page db true date-formatter)
+                                            (not db-based?)
+                                            (assoc :block/format format))))))))
+        pages (->> (concat
+                    [page-map]
+                    @ref-pages
+                    namespace-pages)
+                     ;; remove block references
+                   (remove vector?)
+                   (remove nil?)
+                   (filter :block/name))
+        pages (common-util/distinct-by :block/name pages)
+        pages (remove nil? pages)]
+    (map (fn [page]
+           (let [page-id (or (when db
+                               (:block/uuid (ldb/get-page db (:block/name page))))
+                             (d/squuid))]
+             (assoc page :block/uuid page-id)))
+         pages)))
+
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
   "uri-encoded? - if is true, apply URL decode on the file path
@@ -225,11 +252,15 @@
                           (let [block-ref-pages (seq (:block/refs block))]
                             (when block-ref-pages
                               (swap! ref-pages set/union (set block-ref-pages)))
-                            (-> block
-                                (dissoc :ref-pages)
-                                (assoc :block/format format
-                                       :block/page [:block/name page-name]
-                                       :block/refs block-ref-pages)))))
+                            (cond->
+                             (-> block
+                                 (dissoc :ref-pages)
+                                 (assoc :block/page [:block/name page-name]
+                                        :block/refs block-ref-pages))
+                              (not db-based?)
+                              (assoc :block/format format)
+                              db-based?
+                              (dissoc :block/format)))))
                       blocks)
           [properties invalid-properties properties-text-values]
           (if (:block/pre-block? (first blocks))
@@ -238,29 +269,7 @@
              (:block/properties-text-values (first blocks))]
             [properties [] {}])
           page-map (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
-          namespace-pages (when (or (not db-based?) (:export-to-db-graph? options))
-                            (let [page (:block/title page-map)]
-                              (when (text/namespace-page? page)
-                                (->> (common-util/split-namespace-pages page)
-                                     (map (fn [page]
-                                            (-> (gp-block/page-name->map page db true date-formatter)
-                                                (assoc :block/format format))))))))
-          pages (->> (concat
-                      [page-map]
-                      @ref-pages
-                      namespace-pages)
-                     ;; remove block references
-                     (remove vector?)
-                     (remove nil?)
-                     (filter :block/name))
-          pages (common-util/distinct-by :block/name pages)
-          pages (remove nil? pages)
-          pages (map (fn [page]
-                       (let [page-id (or (when db
-                                           (:block/uuid (ldb/get-page db (:block/name page))))
-                                         (d/squuid))]
-                         (assoc page :block/uuid page-id)))
-                     pages)
+          pages (build-pages-aux db db-based? options page-map ref-pages date-formatter format)
           blocks (->> (remove nil? blocks)
                       (map (fn [b] (dissoc b :block.temp/ast-title :block.temp/ast-body :block/level :block/children :block/meta))))]
       [pages blocks])

@@ -1,12 +1,12 @@
 (ns logseq.db.frontend.validate
   "Validate frontend db for DB graphs"
-  (:require [datascript.core :as d]
+  (:require [clojure.pprint :as pprint]
+            [datascript.core :as d]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [malli.core :as m]
             [malli.error :as me]
-            [malli.util :as mu]
-            [clojure.pprint :as pprint]))
+            [malli.util :as mu]))
 
 (def ^:private db-schema-validator (m/validator db-malli-schema/DB))
 (def ^:private db-schema-explainer (m/explainer db-malli-schema/DB))

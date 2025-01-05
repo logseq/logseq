@@ -1,8 +1,8 @@
 (ns frontend.components.imports
   "Import data into Logseq."
-  (:require [clojure.string :as string]
-            [cljs-time.core :as t]
+  (:require [cljs-time.core :as t]
             [cljs.pprint :as pprint]
+            [clojure.string :as string]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -23,15 +23,15 @@
             [frontend.util.fs :as fs-util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.graph-parser.exporter :as gp-exporter]
-            [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.shui.ui :as shui]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.form.core :as form-core]
-            [lambdaisland.glogi :as log]
-            [logseq.db.frontend.validate :as db-validate]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.

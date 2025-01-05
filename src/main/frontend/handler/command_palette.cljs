@@ -1,12 +1,12 @@
 (ns frontend.handler.command-palette
   "System-component-like ns for command palette's functionality"
   (:require [cljs.spec.alpha :as s]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.spec :as spec]
             [frontend.state :as state]
-            [lambdaisland.glogi :as log]
-            [frontend.storage :as storage]))
+            [frontend.storage :as storage]
+            [lambdaisland.glogi :as log]))
 
 (s/def :command/id keyword?)
 (s/def :command/desc string?)

@@ -4,6 +4,7 @@
   (:require [cljs-http-missionary.client :as http]
             [clojure.set :as set]
             [datascript.core :as d]
+            [frontend.common.missionary :as c.m]
             [frontend.worker.crypt :as crypt]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.client-op :as client-op]
@@ -12,7 +13,6 @@
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
-            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.schema :as db-schema]
@@ -161,11 +161,6 @@
            parent
            (page-of-block id->block-map parent)))))))
 
-(defn- convert-block-fields
-  [block]
-  (cond-> block
-    (:block/uuid block)        (assoc :block/format :markdown)))
-
 (defn- fill-block-fields
   [blocks]
   (let [groups (group-by #(boolean (:block/name %)) blocks)
@@ -173,10 +168,9 @@
         id->block (into {} (map (juxt :db/id identity) blocks))
         block-id->page-id (into {} (map (fn [b] [(:db/id b) (:db/id (page-of-block id->block b))]) other-blocks))]
     (mapv (fn [b]
-            (let [b (convert-block-fields b)]
-              (if-let [page-id (block-id->page-id (:db/id b))]
-                (assoc b :block/page page-id)
-                b)))
+            (if-let [page-id (block-id->page-id (:db/id b))]
+              (assoc b :block/page page-id)
+              b))
           blocks)))
 
 (defn- blocks->card-one-attrs

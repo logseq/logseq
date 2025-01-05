@@ -2,13 +2,13 @@
   "DB query result view"
   (:require [frontend.components.views :as views]
             [frontend.db :as db]
-            [logseq.db :as ldb]
-            [rum.core :as rum]
             [frontend.mixins :as mixins]
-            [promesa.core :as p]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
-            [frontend.state]))
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.state]
+            [logseq.db :as ldb]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defn- columns
   [config result]
