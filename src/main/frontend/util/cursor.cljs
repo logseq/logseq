@@ -199,7 +199,37 @@
 (defn textarea-cursor-last-row? [input]
   (textarea-cursor-rect-last-row? (get-caret-pos input)))
 
-(defn- next-cursor-pos-up-down [direction cursor]
+(defn- next-cursor-pos-up-down 
+  ([direction cursor]
+   (let [offset-fn (if (= :down direction) first last)]
+     (next-cursor-pos-up-down direction cursor offset-fn)))
+   
+  ([direction cursor offset-fn]
+   (let [elms  (-> (gdom/getElement "mock-text")
+                   gdom/getChildren
+                   array-seq)
+         chars (->> elms
+                    (map mock-char-pos)
+                    (group-by :top))
+         tops  (sort (keys chars))
+         tops-p (partition-by #(== (:top cursor) %) tops)
+         line-next
+         (if (= :up direction)
+           (-> tops-p first offset-fn)
+           (-> tops-p last offset-fn))
+         lefts
+         (->> (get chars line-next)
+              (partition-by (fn [char-pos]
+                              (<= (:left char-pos) (:left cursor)))))
+         left-a (-> lefts first last)
+         left-c (-> lefts last first)
+         closer
+         (if (> 2 (count lefts))
+           left-a
+           (closer left-a cursor left-c))]
+     (:pos closer))))
+
+(defn- last-cursor-pos-up-down [direction cursor]
   (let [elms  (-> (gdom/getElement "mock-text")
                   gdom/getChildren
                   array-seq)
@@ -208,12 +238,12 @@
                    (group-by :top))
         tops  (sort (keys chars))
         tops-p (partition-by #(== (:top cursor) %) tops)
-        line-next
+        target-line
         (if (= :up direction)
-          (-> tops-p first last)
-          (-> tops-p last first))
+          (-> tops-p first first)
+          (-> tops-p last last))
         lefts
-        (->> (get chars line-next)
+        (->> (get chars target-line)
              (partition-by (fn [char-pos]
                              (<= (:left char-pos) (:left cursor)))))
         left-a (-> lefts first last)
@@ -233,6 +263,12 @@
 
 (defn move-cursor-down [input]
   (move-cursor-up-down input :down))
+
+(defn move-cursor-first-row [input]
+  (move-cursor-to input (next-cursor-pos-up-down :up (get-caret-pos input) first)))
+
+(defn move-cursor-last-row [input]
+  (move-cursor-to input (next-cursor-pos-up-down :down (get-caret-pos input) last)))
 
 (defn select-up-down [input direction anchor cursor-rect]
   (let [next-cursor (next-cursor-pos-up-down direction cursor-rect)]

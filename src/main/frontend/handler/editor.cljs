@@ -1282,6 +1282,74 @@
         (state/drop-last-selection-block!))))
   nil)
 
+(defn- compute-target-page-up-down
+  [direction current-block]
+  (let [blocks (util/get-blocks-noncollapse)
+        visible-blocks (filter util/element-visible? blocks)
+        blocks-per-page (count visible-blocks)
+        f (case direction
+            :up #(nth % 2 (first %))
+            :down #(nth % -2 (last %)))
+        target-block (f visible-blocks)
+        scroll-target target-block
+        [f pos-f round-f] (case direction
+                            :up [util/get-prev-nth-block-non-collapsed util/is-block-before? Math/floor]
+                            :down [util/get-next-nth-block-non-collapsed util/is-block-after? Math/round])]
+
+    (if (pos-f current-block target-block)
+      [(f current-block blocks-per-page) (f current-block (round-f (/ blocks-per-page 2)))]
+      [target-block scroll-target])))
+
+(defn- compute-blocks-for-page-selection
+  [direction current-block]
+  (let [[target-block scroll-target] (compute-target-page-up-down direction current-block)
+        blocks-between (util/get-nodes-between-two-nodes current-block target-block "ls-block")]
+    [blocks-between scroll-target]))
+    
+(defn- select-page-block-up-down
+  [direction]
+  (cond
+    ;; when editing, quit editing and select next page of blocks
+    (state/editing?)
+    (let [current-block (gdom/getElement (state/get-editing-block-dom-id))
+          [blocks-to-select scroll-target] (compute-blocks-for-page-selection direction current-block)]
+      (when current-block
+        (util/scroll-to-block scroll-target)
+        (state/exit-editing-and-set-selected-blocks! blocks-to-select)))
+
+    ;; when selection and one block selected, select next page of blocks
+    (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
+    (let [current-block (first (state/get-selection-blocks))
+          [blocks-to-select scroll-target] (compute-blocks-for-page-selection direction current-block)]
+      (when blocks-to-select
+        (util/scroll-to-block scroll-target)
+        (state/conj-selection-block! blocks-to-select direction)))
+
+    ;; if same direction, keep conj on same direction
+    (and (state/selection?) (= direction (state/get-selection-direction)))
+    (let [first-last (if (= :up direction) first last)
+          current-block (first-last (state/get-selection-blocks))
+          [blocks-to-select scroll-target] (compute-blocks-for-page-selection direction current-block)]
+      (when blocks-to-select
+        (util/scroll-to-block scroll-target)
+        (state/conj-selection-block! blocks-to-select direction)))
+
+    ;; if different direction, deselect the blocks for one page
+    (state/selection?)
+    (let [last-first (if (= :up direction) last first)
+          current-block (last-first (state/get-selection-blocks))
+          first-last (if (= :up direction) first last)
+          start-block (first-last (state/get-selection-blocks))
+          [blocks-to-deselect scroll-target] (compute-blocks-for-page-selection direction current-block)]
+      (when blocks-to-deselect
+        (util/scroll-to-block scroll-target)
+        (state/drop-selection-block! blocks-to-deselect)
+        (and (empty? (state/get-selection-blocks)) 
+             (do 
+               (util/scroll-to-block start-block)
+               (state/set-selection-blocks! [start-block] direction))))))
+  nil)
+
 (defn on-select-block
   [direction]
   (fn [_event]
@@ -2562,6 +2630,18 @@
       (util/scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
+
+(defn- select-page-up-down
+  [direction]
+  (let [selected-blocks (state/get-selection-blocks)
+        selected (case direction
+                   :up (first selected-blocks)
+                   :down (last selected-blocks))
+        [target-block scroll-target] (compute-target-page-up-down direction selected)]
+    (when (and target-block (dom/attr target-block "blockid"))
+      (util/scroll-to-block scroll-target)
+      (state/exit-editing-and-set-selected-blocks! [target-block]))))
+
 (defn- move-cross-boundary-up-down
   [direction]
   (let [input (state/get-input)
@@ -2581,6 +2661,32 @@
 
         (let [new-id (string/replace (gobj/get sibling-block "id") "ls-block" "edit-block")
               new-uuid (cljs.core/uuid sibling-block-id)
+              block (db/pull repo '[*] [:block/uuid new-uuid])]
+          (edit-block! block
+                       [direction line-pos]
+                       new-id)))
+      (case direction
+        :up (cursor/move-cursor-to input 0)
+        :down (cursor/move-cursor-to-end input)))))
+
+(defn- move-cross-boundary-page-up-down
+  [direction]
+  (let [input (state/get-input)
+        line-pos (util/get-first-or-last-line-pos input)
+        repo (state/get-current-repo)
+        current-block (gdom/getElement (state/get-editing-block-dom-id))
+        [target-block] (compute-target-page-up-down direction current-block)
+        {:block/keys [uuid content format]} (state/get-edit-block)]
+
+    (if target-block
+      (when-let [target-block-id (dom/attr target-block "blockid")]
+        (let [value (state/get-edit-content)]
+          (when (not= (clean-content! format content)
+                      (string/trim value))
+            (save-block! repo uuid value)))
+
+        (let [new-id (string/replace (gobj/get target-block "id") "ls-block" "edit-block")
+              new-uuid (cljs.core/uuid target-block-id)
               block (db/pull repo '[*] [:block/uuid new-uuid])]
           (edit-block! block
                        [direction line-pos]
@@ -2634,6 +2740,28 @@
             (save-block! repo uuid value)))
         (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
           (edit-block! block pos id))))))
+
+(defn keydown-page-up-down-handler
+  [direction]
+  (let [input (state/get-input)
+        selected-start (util/get-selection-start input)
+        selected-end (util/get-selection-end input)
+        up? (= direction :up)
+        down? (= direction :down)]
+    (cond
+      (not= selected-start selected-end)
+      (if up?
+        (cursor/move-cursor-to input selected-start)
+        (cursor/move-cursor-to input selected-end))
+
+      (or (and up? (cursor/textarea-cursor-first-row? input))
+          (and down? (cursor/textarea-cursor-last-row? input)))
+      (move-cross-boundary-page-up-down direction)
+
+      :else
+      (if up?
+        (cursor/move-cursor-first-row input)
+        (cursor/move-cursor-last-row input)))))
 
 (defn keydown-arrow-handler
   [direction]
@@ -3271,6 +3399,44 @@
         (select-first-last direction)))
     nil))
 
+(defn shortcut-page-up-down [direction]
+  (fn [e]
+    (when (and (not (auto-complete?))
+               (not (slide-focused?))
+               (not (state/get-timestamp-block)))
+      (util/stop e)
+      (cond
+        (state/editing?)
+        (keydown-page-up-down-handler direction)
+        
+        (state/selection?)
+        (select-page-up-down direction)
+        
+        ;; if there is an edit-input-id set, we are probably still on editing mode, that is not fully initialized
+        (not (state/get-edit-input-id))
+        (select-first-last direction)))
+    nil))
+
+(defn shortcut-select-page-up-down [direction]
+  (fn [e]
+    (util/stop e)
+    (if (state/editing?)
+      (let [input (state/get-input)
+            selected-start (util/get-selection-start input)
+            selected-end (util/get-selection-end input)
+            [anchor cursor] (case (util/get-selection-direction input)
+                              "backward" [selected-end selected-start]
+                              [selected-start selected-end])
+            cursor-rect (cursor/get-caret-pos input cursor)]
+        (if
+          ;; if the move is to cross block boundary, select the whole block
+         (or (and (= direction :up) (cursor/textarea-cursor-rect-first-row? cursor-rect))
+             (and (= direction :down) (cursor/textarea-cursor-rect-last-row? cursor-rect)))
+          (select-page-block-up-down direction)
+          ;; simulate text selection
+          (cursor/select-up-down input direction anchor cursor-rect)))
+      (select-page-block-up-down direction))))
+
 (defn shortcut-select-up-down [direction]
   (fn [e]
     (util/stop e)
@@ -3311,6 +3477,16 @@
         (edit-block! block
                     (if left? 0 :max)
                     block-id)))))
+
+(defn shortcut-top-bottom [direction]
+  (fn [e]
+    (when (and (not (auto-complete?))
+               (not (slide-focused?))
+               (not (state/get-timestamp-block))
+               (not (state/editing?)))
+      (util/stop e)
+        (select-first-last (if (= direction :up) :down :up))
+    nil)))
 
 (defn shortcut-left-right [direction]
   (fn [e]
