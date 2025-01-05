@@ -1,13 +1,14 @@
 (ns frontend.worker.commands
   "Invoke commands based on user settings"
-  (:require [datascript.core :as d]
-            [logseq.db.frontend.property.type :as db-property-type]
+  (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.outliner.pipeline :as outliner-pipeline]
+            [datascript.core :as d]
             [frontend.worker.handler.page.db-based.page :as worker-db-page]
-            [logseq.common.util.date-time :as date-time-util]))
+            [logseq.common.util.date-time :as date-time-util]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 ;; TODO: allow users to add command or configure it through #Command (which parent should be #Code)
 (def *commands
@@ -19,7 +20,13 @@
       :tx-conditions [{:property :status
                        :value :done}]
       :actions [[:reschedule]
-                [:set-property :status :todo]]}]]))
+                [:set-property :status :todo]]}]
+    [:property-history
+     {:title "Record property history"
+      :tx-conditions [{:kind :datom-attribute-check?
+                       :property :logseq.property/enable-history?
+                       :value true}]
+      :actions [[:record-property-history]]}]]))
 
 (defn- get-property
   [entity property]
@@ -59,9 +66,9 @@
 
 (defn satisfy-condition?
   "Whether entity or updated datoms satisfy the `condition`"
-  [db entity {:keys [property value]} datoms]
+  [db entity {:keys [kind property value]} datoms]
   (let [property' (get-property entity property)
-        value (get-value entity property value)]
+        value' (get-value entity property value)]
     (when-let [property-entity (d/entity db property')]
       (let [value-matches? (fn [datom-value]
                              (let [ref? (contains? db-property-type/all-ref-property-types (:type (:block/schema property-entity)))
@@ -75,20 +82,26 @@
                                               :else
                                               datom-value)]
                                (cond
-                                 (qualified-keyword? value)
-                                 (and (map? db-value) (= value (:db/ident db-value)))
+                                 (qualified-keyword? value')
+                                 (and (map? db-value) (= value' (:db/ident db-value)))
 
                                  ref?
                                  (or
-                                  (and (uuid? value) (= (:block/uuid db-value) value))
-                                  (= value (db-property/property-value-content db-value))
-                                  (= value (:db/id db-value)))
+                                  (and (uuid? value') (= (:block/uuid db-value) value'))
+                                  (= value' (db-property/property-value-content db-value))
+                                  (= value' (:db/id db-value)))
 
                                  :else
-                                 (= db-value value))))]
+                                 (= db-value value'))))]
         (if (seq datoms)
-          (some (fn [d] (and (value-matches? (:v d)) (:added d)))
-                (filter (fn [d] (= property' (:a d))) datoms))
+          (case kind
+            :datom-attribute-check?
+            (some (fn [d]
+                    (= value' (get (d/entity db (:a d)) property)))
+                  datoms)
+
+            (some (fn [d] (and (value-matches? (:v d)) (:added d)))
+                  (filter (fn [d] (= property' (:a d))) datoms)))
           (value-matches? nil))))))
 
 (defmulti handle-command (fn [action-id & _others] action-id))
@@ -136,7 +149,7 @@
                         (t/plus (t/now) delta))]
         (tc/to-long next-time)))))
 
-(defmethod handle-command :reschedule [_ db entity]
+(defmethod handle-command :reschedule [_ db entity _datoms]
   (let [property-ident (or (:db/ident (:logseq.task/scheduled-on-property entity))
                            :logseq.task/scheduled)
         frequency (db-property/property-value-content (:logseq.task/recur-frequency entity))
@@ -155,16 +168,41 @@
            (when value
              [[:db/add (:db/id entity) property-ident value]])))))))
 
-(defmethod handle-command :set-property [_ _db entity property value]
+(defmethod handle-command :set-property [_ _db entity _datoms property value]
   (let [property' (get-property entity property)
         value' (get-value entity property value)]
     [[:db/add (:db/id entity) property' value']]))
 
+(defmethod handle-command :record-property-history [_ db entity datoms]
+  (let [changes (keep (fn [d]
+                        (let [property (d/entity db (:a d))]
+                          (when (and (true? (get property :logseq.property/enable-history?))
+                                     (:added d))
+                            {:property property
+                             :value (:v d)}))) datoms)
+        created-at (tc/to-long (t/now))]
+    (map
+     (fn [{:keys [property value]}]
+       (let [ref? (= :db.type/ref (:db/valueType property))
+             value-key (if ref? :logseq.property.history/ref-value :logseq.property.history/scalar-value)]
+         {:block/uuid (ldb/new-block-id)
+          value-key value
+          :logseq.property.history/block (:db/id entity)
+          :logseq.property.history/property (:db/id property)
+          :block/created-at created-at}))
+     changes)))
+
+(defmethod handle-command :default [command _db entity datoms]
+  (throw (ex-info "Unhandled command"
+                  {:command command
+                   :entity entity
+                   :datoms datoms})))
+
 (defn execute-command
   "Build tx-data"
-  [db entity [_command {:keys [actions]}]]
+  [db entity datoms [_command {:keys [actions]}]]
   (mapcat (fn [action]
-            (apply handle-command (first action) db entity (rest action))) actions))
+            (apply handle-command (first action) db entity datoms (rest action))) actions))
 
 (defn run-commands
   [{:keys [tx-data db-after]}]
@@ -172,10 +210,13 @@
     (mapcat (fn [[e datoms]]
               (let [entity (d/entity db e)
                     commands (filter (fn [[_command {:keys [entity-conditions tx-conditions]}]]
-                                       (and (every? #(satisfy-condition? db entity % nil) entity-conditions)
-                                            (every? #(satisfy-condition? db entity % datoms) tx-conditions))) @*commands)]
+                                       (and
+                                        (if (seq entity-conditions)
+                                          (every? #(satisfy-condition? db entity % nil) entity-conditions)
+                                          true)
+                                        (every? #(satisfy-condition? db entity % datoms) tx-conditions))) @*commands)]
                 (mapcat
                  (fn [command]
-                   (execute-command db entity command))
+                   (execute-command db entity datoms command))
                  commands)))
             (group-by :e tx-data))))

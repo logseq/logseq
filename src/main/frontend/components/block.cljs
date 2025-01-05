@@ -64,6 +64,7 @@
             [frontend.template :as template]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.file-based.clock :as clock]
             [frontend.util.file-based.drawer :as drawer]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
@@ -2719,11 +2720,55 @@
            (when-let [property (db/entity pid)]
              (pv/property-value block property (assoc opts :show-tooltip? true))))]))))
 
+(rum/defc status-history-cp
+  [status-history]
+  (let [[sort-desc? set-sort-desc!] (rum/use-state true)]
+    [:div.p-2.text-muted-foreground.text-sm.max-h-96
+     [:div.font-medium.mb-2.flex.flex-row.gap-2.items-center
+      [:div "Status history"]
+      (shui/button-ghost-icon (if sort-desc? :arrow-down :arrow-up)
+                              {:title "Sort order"
+                               :class "text-muted-foreground !h-4 !w-4"
+                               :icon-props {:size 14}
+                               :on-click #(set-sort-desc! (not sort-desc?))})]
+     [:div.flex.flex-col.gap-1
+      (for [item (if sort-desc? (reverse status-history) status-history)]
+        (let [status (:logseq.property.history/ref-value item)]
+          [:div.flex.flex-row.gap-1.items-center.text-sm.justify-between
+           [:div.flex.flex-row.gap-1.items-center
+            (icon-component/get-node-icon-cp status {:size 14 :color? true})
+            [:div (:block/title status)]]
+           [:div (date/int->local-time-2 (:block/created-at item))]]))]]))
+
+(rum/defc task-spent-time-cp
+  [block]
+  (when (and (state/enable-timetracking?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
+    (let [[result set-result!] (rum/use-state nil)
+          repo (state/get-current-repo)
+          [status-history time-spent] result]
+      (rum/use-effect!
+       (fn []
+         (p/let [result (db-async/<task-spent-time repo (:db/id block))]
+           (set-result! result)))
+       [(:logseq.task/status block)])
+      (when (and time-spent (> time-spent 0))
+        [:div.text-sm.time-spent.ml-1
+         (shui/button
+          {:variant :ghost
+           :size :sm
+           :class "text-muted-foreground !py-0 !px-1 h-6"
+           :on-click (fn [e]
+                       (shui/popup-show! (.-target e)
+                                         (fn [] (status-history-cp status-history))
+                                         {:align :end}))}
+          (clock/seconds->days:hours:minutes:seconds time-spent))]))))
+
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [collapsed? (:collapsed? config)
         repo (state/get-current-repo)
-        content (if (config/db-based-graph? (state/get-current-repo))
+        db-based? (config/db-based-graph? (state/get-current-repo))
+        content (if db-based?
                   (:block/raw-title block)
                   (property-util/remove-built-in-properties format (:block/raw-title block)))
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
@@ -2795,7 +2840,9 @@
          [:div.block-head-wrap
           (block-title config block)])
 
-       (file-block/clock-summary-cp block ast-body)]
+       (if db-based?
+         (task-spent-time-cp block)
+         (file-block/clock-summary-cp block ast-body))]
 
       (when deadline
         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
