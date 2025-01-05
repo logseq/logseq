@@ -1,8 +1,8 @@
 (ns frontend.components.imports
   "Import data into Logseq."
-  (:require [clojure.string :as string]
-            [cljs-time.core :as t]
+  (:require [cljs-time.core :as t]
             [cljs.pprint :as pprint]
+            [clojure.string :as string]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -23,16 +23,15 @@
             [frontend.util.fs :as fs-util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.graph-parser.exporter :as gp-exporter]
-            [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.shui.ui :as shui]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.form.core :as form-core]
-            [lambdaisland.glogi :as log]
-            [logseq.db.frontend.validate :as db-validate]
-            [logseq.db :as ldb]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -278,16 +277,6 @@
 
                           (shui/button {:type "submit" :class "right-0 mt-3"} "Submit")]))])
 
-(defn- counts-from-entities
-  [entities]
-  {:entities (count entities)
-   :pages (count (filter :block/name entities))
-   :blocks (count (filter :block/title entities))
-   :classes (count (filter ldb/class? entities))
-   :objects (count (filter #(seq (:block/tags %)) entities))
-   :properties (count (filter ldb/property? entities))
-   :property-values (count (mapcat :block/properties entities))})
-
 (defn- validate-imported-data
   [db import-state files]
   (when-let [org-files (seq (filter #(= "org" (path/file-ext (:path %))) files))]
@@ -320,12 +309,12 @@
     (if errors
       (do
         (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")
-                                   :counts (assoc (counts-from-entities entities) :datoms datom-count)})
+                                   :counts (assoc (db-validate/graph-counts db entities) :datoms datom-count)})
         (pprint/pprint errors)
         (notification/show! (str "Import detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
                             :warning false))
       (log/info :import-valid {:msg "Valid import!"
-                               :counts (assoc (counts-from-entities entities) :datoms datom-count)}))))
+                               :counts (assoc (db-validate/graph-counts db entities) :datoms datom-count)}))))
 
 (defn- show-notification [{:keys [msg level ex-data]}]
   (if (= :error level)

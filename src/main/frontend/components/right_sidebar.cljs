@@ -2,27 +2,28 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.block :as block]
+            [frontend.components.cmdk.core :as cmdk]
+            [frontend.components.icon :as icon]
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
+            [frontend.components.profiler :as profiler]
             [frontend.components.shortcut-help :as shortcut-help]
-            [frontend.components.cmdk.core :as cmdk]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.extensions.slide :as slide]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
             [frontend.util :as util]
+            [logseq.db :as ldb]
+            [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
-            [frontend.handler.route :as route-handler]
-            [logseq.db :as ldb]
-            [frontend.components.icon :as icon]))
+            [rum.core :as rum]))
 
 (rum/defc toggle
   []
@@ -132,6 +133,10 @@
     :rtc
     [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
      (rtc-debug-ui/rtc-debug-ui)]
+
+    :profiler
+    [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
+     (profiler/profiler)]
 
     ["" [:span]]))
 
@@ -407,7 +412,12 @@
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                        (state/sidebar-add-block! repo "rtc" :rtc))}
-            "(Dev) RTC"]])]]
+            "(Dev) RTC"]])
+        (when (state/sub [:ui/developer-mode?])
+          [:div.text-sm
+           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                       (state/sidebar-add-block! repo "profiler" :profiler))}
+            "(Dev) Profiler"]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?

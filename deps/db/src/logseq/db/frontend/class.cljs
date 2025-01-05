@@ -1,9 +1,9 @@
 (ns logseq.db.frontend.class
   "Class related fns for DB graphs and frontend/datascript usage"
-  (:require [logseq.db.sqlite.util :as sqlite-util]
+  (:require [clojure.set :as set]
+            [flatland.ordered.map :refer [ordered-map]]
             [logseq.db.frontend.db-ident :as db-ident]
-            [clojure.set :as set]
-            [flatland.ordered.map :refer [ordered-map]]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Main class vars
 ;; ===============
@@ -87,6 +87,11 @@
    (keep (fn [[class-ident m]]
            (when (= (get-in m [:properties :logseq.property/parent]) :logseq.class/Page) class-ident))
          built-in-classes)))
+
+(def page-classes
+  "Built-in classes that behave like a page. Classes should match entity-util/page?"
+  (into #{:logseq.class/Page :logseq.class/Tag :logseq.class/Property}
+        page-children-classes))
 
 (def internal-tags
   "Built-in classes that are hidden on a node and all pages view"

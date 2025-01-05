@@ -4,17 +4,17 @@
   It'll be great if we can find an automatically resolving and performant
   solution.
   "
-  (:require [frontend.date :as date]
+  (:require [clojure.core.async :as async]
+            [datascript.core :as d]
+            [frontend.date :as date]
+            [frontend.db.async.util :as db-async-util]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [clojure.core.async :as async]
-            [frontend.db.async.util :as db-async-util]
-            [promesa.core :as p]
-            [datascript.core :as d]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -28,7 +28,9 @@
 (def ^:dynamic *reactive-queries* nil)
 
 ;; component -> query-key
-(defonce query-components (atom {}))
+(defonce component->query-key (volatile! {}))
+;; query-key -> component-set
+(defonce query-key->components (volatile! {}))
 
 (defn set-new-result!
   [k new-result]
@@ -54,19 +56,23 @@
   (swap! query-state dissoc k))
 
 (defn add-query-component!
-  [key component]
-  (when (and key component)
-    (swap! query-components update component (fn [col] (set (conj col key))))))
+  [k component]
+  (when (and k component)
+    (vswap! component->query-key update component (fnil conj #{}) k)
+    (vswap! query-key->components update k (fnil conj #{}) component)))
 
 (defn remove-query-component!
   [component]
-  (when-let [queries (get @query-components component)]
-    (let [all-queries (apply concat (vals @query-components))]
-      (doseq [query queries]
-        (let [matched-queries (filter #(= query %) all-queries)]
-          (when (= 1 (count matched-queries))
-            (remove-q! query))))))
-  (swap! query-components dissoc component))
+  (when-let [queries (get @component->query-key component)]
+    (doseq [query queries]
+      (vswap! query-key->components
+              (fn [m]
+                (if-let [components* (not-empty (disj (get m query) component))]
+                  (assoc m query components*)
+                  (dissoc m query))))
+      (when (empty? (get @query-key->components query))
+        (remove-q! query))))
+  (vswap! component->query-key dissoc component))
 
 ;; Reactive query
 

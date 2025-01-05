@@ -1,13 +1,13 @@
 (ns frontend.extensions.video.youtube
-  (:require [rum.core :as rum]
-            [cljs.core.async :refer [<! chan go] :as a]
+  (:require [cljs.core.async :refer [<! chan go] :as a]
+            [clojure.string :as string]
             [frontend.components.svg :as svg]
+            [frontend.handler.notification :as notification]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [clojure.string :as str]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.handler.notification :as notification]))
+            [rum.core :as rum]))
 
 (defn- load-yt-script []
   (js/console.log "load yt script")
@@ -79,7 +79,7 @@
                          (when (or (> idx 0)
                                    (not= v "00"))
                            v)))
-         (str/join ":"))))
+         (string/join ":"))))
 
 (defn dom-after-video-node? [video-node target]
   (not (zero?
@@ -92,11 +92,11 @@
                          (filter
                           (fn [node]
                             (let [src (gobj/get node "src" "")]
-                              (str/includes? src "youtube.com"))))
+                              (string/includes? src "youtube.com"))))
                          (filter #(dom-after-video-node? % target))
                          last)]
     (let [id (gobj/get iframe "id" "")
-          id (str/replace-first id #"youtube-player-" "")]
+          id (string/replace-first id #"youtube-player-" "")]
       (get (get @state/state :youtube/players) id))))
 
 (rum/defc timestamp

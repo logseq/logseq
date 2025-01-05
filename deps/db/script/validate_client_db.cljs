@@ -1,20 +1,18 @@
 (ns validate-client-db
   "Script that validates the datascript db of a DB graph
    NOTE: This script is also used in CI to confirm our db's schema is up to date"
-  (:require [logseq.db.sqlite.cli :as sqlite-cli]
+  (:require ["os" :as os]
+            ["path" :as node-path]
+            [babashka.cli :as cli]
+            [cljs.pprint :as pprint]
+            [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.frontend.property :as db-property]
-            [datascript.core :as d]
-            [clojure.string :as string]
-            [nbb.core :as nbb]
+            [logseq.db.sqlite.cli :as sqlite-cli]
             [malli.core :as m]
-            [babashka.cli :as cli]
-            ["path" :as node-path]
-            ["os" :as os]
-            [cljs.pprint :as pprint]
             [malli.error :as me]
-            [logseq.db :as ldb]))
+            [nbb.core :as nbb]))
 
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"
@@ -57,12 +55,15 @@
   {:help {:alias :h
           :desc "Print help"}
    :humanize {:alias :H
+              :default true
               :desc "Humanize errors as an alternative to -v"}
    :verbose {:alias :v
              :desc "Print more info"}
    :closed-maps {:alias :c
+                 :default true
                  :desc "Validate maps marked with closed as :closed"}
    :group-errors {:alias :g
+                  :default true
                   :desc "Groups errors by their entity id"}})
 
 (defn- validate-graph [graph-dir options]
@@ -77,14 +78,9 @@
                     (js/process.exit 1)))
         datoms (d/datoms @conn :eavt)
         ent-maps (db-malli-schema/datoms->entities datoms)]
-    (println "Read graph" (str db-name " with " (count datoms) " datoms, "
-                               (count ent-maps) " entities, "
-                               (count (filter :block/name ent-maps)) " pages, "
-                               (count (filter :block/title ent-maps)) " blocks, "
-                               (count (filter ldb/class? ent-maps)) " tags, "
-                               (count (filter #(seq (:block/tags %)) ent-maps)) " objects, "
-                               (count (filter ldb/property? ent-maps)) " properties and "
-                               (count (mapcat db-property/properties ent-maps)) " property pairs"))
+    (println "Read graph" (str db-name " with counts: "
+                               (pr-str (assoc (db-validate/graph-counts @conn ent-maps)
+                                              :datoms (count datoms)))))
     (validate-client-db @conn ent-maps options)))
 
 (defn -main [argv]

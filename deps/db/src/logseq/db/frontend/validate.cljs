@@ -1,11 +1,12 @@
 (ns logseq.db.frontend.validate
   "Validate frontend db for DB graphs"
-  (:require [datascript.core :as d]
+  (:require [clojure.pprint :as pprint]
+            [datascript.core :as d]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.property :as db-property]
             [malli.core :as m]
             [malli.error :as me]
-            [malli.util :as mu]
-            [clojure.pprint :as pprint]))
+            [malli.util :as mu]))
 
 (def ^:private db-schema-validator (m/validator db-malli-schema/DB))
 (def ^:private db-schema-explainer (m/explainer db-malli-schema/DB))
@@ -103,8 +104,23 @@
         errors (binding [db-malli-schema/*db-for-validate-fns* db]
                  (-> ent-maps closed-db-schema-explainer :errors))]
     (cond-> {:datom-count (count datoms)
-             :entities ent-maps}
+             :entities ent-maps*}
       (some? errors)
       (assoc :errors (map #(-> (dissoc % :errors-by-type)
                                (update :errors (fn [errs] (me/humanize {:errors errs}))))
                           (group-errors-by-entity db ent-maps errors))))))
+
+(defn graph-counts
+  "Calculates graph-wide counts given a graph's db and its entities from :eavt datoms"
+  [db entities]
+  (let [classes-count (count (d/datoms db :avet :block/tags :logseq.class/Tag))
+        properties-count (count (d/datoms db :avet :block/tags :logseq.class/Property))]
+    {:entities (count entities)
+     :pages (count (filter :block/name entities))
+     ;; Nodes that aren't pages
+     :blocks (count (filter :block/parent entities))
+     :classes classes-count
+     :properties properties-count
+     ;; Objects that aren't classes or properties
+     :objects (- (count (d/datoms db :avet :block/tags)) classes-count properties-count)
+     :property-pairs (count (mapcat #(-> % db-property/properties (dissoc :block/tags)) entities))}))

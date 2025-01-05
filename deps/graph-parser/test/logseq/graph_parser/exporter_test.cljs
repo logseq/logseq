@@ -1,27 +1,27 @@
 (ns ^:node-only logseq.graph-parser.exporter-test
-  (:require [cljs.test :refer [testing is]]
-            [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
-            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
-            [datascript.core :as d]
-            [clojure.string :as string]
-            [clojure.set :as set]
+  (:require ["fs" :as fs]
             ["path" :as node-path]
-            ["fs" :as fs]
+            [cljs.test :refer [testing is]]
+            [clojure.set :as set]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
-            [promesa.core :as p]
-            [logseq.db.frontend.validate :as db-validate]
-            [logseq.graph-parser.exporter :as gp-exporter]
+            [logseq.common.util.date-time :as date-time-util]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
-            [logseq.outliner.db-pipeline :as db-pipeline]
-            [logseq.db.test.helper :as db-test]
             [logseq.db.frontend.rules :as rules]
-            [logseq.common.util.date-time :as date-time-util]
+            [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.graph-parser.exporter :as gp-exporter]
+            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
+            [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
+            [logseq.outliner.db-pipeline :as db-pipeline]
+            [promesa.core :as p]))
 
 ;; Helpers
 ;; =======
@@ -293,14 +293,13 @@
                (and b (readable-properties @conn b)))
             ":template properties are ignored to not invalidate its property types"))
 
-      ;; local datetime could be different from CI so this is unstable
-      #_(is (= {:logseq.task/deadline 1669392000000}
-               (readable-properties @conn (db-test/find-block-by-content @conn "only deadline")))
-            "deadline block has correct journal as property value")
+      (is (= {:logseq.task/deadline (date-time-util/journal-day->ms 20221126)}
+             (readable-properties @conn (db-test/find-block-by-content @conn "only deadline")))
+          "deadline block has correct journal as property value")
 
-      #_(is (= {:logseq.task/deadline 1669305600000}
-               (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled")))
-            "scheduled block converted to correct deadline")
+      (is (= {:logseq.task/deadline (date-time-util/journal-day->ms 20221125)}
+             (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled")))
+          "scheduled block converted to correct deadline")
 
       (is (= 1 (count (d/q '[:find [(pull ?b [*]) ...]
                              :in $ ?content

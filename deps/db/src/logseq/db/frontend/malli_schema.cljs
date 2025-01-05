@@ -133,7 +133,7 @@
   ;; properties in their schema that they depend on
   (let [exceptions-to-block-properties (conj required-properties :block/tags)
         page-class-id (:db/id (d/entity db :logseq.class/Page))
-        private-tag-ids (set (map #(:db/id (d/entity db %)) db-class/private-tags))]
+        all-page-class-ids (set (map #(:db/id (d/entity db %)) db-class/page-classes))]
     (mapv
      (fn [ent]
        (reduce (fn [m [k v]]
@@ -149,7 +149,7 @@
                                    v
                                    (merge (select-keys ent [:logseq.property/built-in?])
                                           {:page-class-id page-class-id
-                                           :private-tag-ids private-tag-ids})]))
+                                           :all-page-class-ids all-page-class-ids})]))
                      (assoc m k v))))
                {}
                ent))
@@ -238,11 +238,11 @@
         true))]
    ;; Ensure use of :logseq.class/Page is consistent and simple. Doing so reduces complexity elsewhere
    ;; and allows for Page to exist as its own public concept later
-   #_[:fn {:error/message "should not have other built-in private tags when tagged with #Page"}
-      (fn [[_k v {:keys [page-class-id private-tag-ids]}]]
-        (if (contains? v page-class-id)
-          (empty? (set/intersection (disj v page-class-id) private-tag-ids))
-          true))]])
+   [:fn {:error/message "should not have other built-in page tags when tagged with #Page"}
+    (fn [[_k v {:keys [page-class-id all-page-class-ids]}]]
+      (if (contains? v page-class-id)
+        (empty? (set/intersection (disj v page-class-id) all-page-class-ids))
+        true))]])
 
 (def page-or-block-attrs
   "Common attributes for page and normal blocks"
@@ -389,13 +389,11 @@
     page-or-block-attrs)))
 
 (def property-history-block
-  (vec
-   (concat
-    [:map]
-    [[:block/uuid :uuid]
-     [:block/created-at :int]
-     [:block/properties block-properties]
-     [:block/tx-id {:optional true} :int]])))
+  [:map
+   [:block/uuid :uuid]
+   [:block/created-at :int]
+   [:block/properties block-properties]
+   [:block/tx-id {:optional true} :int]])
 
 (def closed-value-block*
   (vec
@@ -451,6 +449,9 @@
   [:map
    [:block/uuid :uuid]
    [:block/tx-id {:optional true} :int]
+   ;; App doesn't use timestamps but migrations may
+   [:block/created-at {:optional true} :int]
+   [:block/updated-at {:optional true} :int]
    [:file/content :string]
    [:file/path :string]
    [:file/size {:optional true} :int]

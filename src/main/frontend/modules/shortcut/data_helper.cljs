@@ -1,7 +1,7 @@
 (ns frontend.modules.shortcut.data-helper
-  (:require [clojure.set :refer [rename-keys] :as set]
-            [clojure.string :as str]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
+            [clojure.set :refer [rename-keys] :as set]
+            [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -20,27 +20,27 @@
               {id (if binding-only?
                     (get user-shortcuts id binding)
                     (assoc opts :user-binding (get user-shortcuts id)
-                                :handler-id (get-group id)
-                                :id id))}))
+                           :handler-id (get-group id)
+                           :id id))}))
        (into {})))
 
 (defn- flatten-bindings-by-key
   [config user-shortcuts]
   (reduce-kv
-    (fn [r handler-id vs]
-      (reduce-kv
-        (fn [r id {:keys [binding]}]
-          (if-let [ks (get user-shortcuts id binding)]
-            (let [ks (if (sequential? ks) ks [ks])]
-              (reduce (fn [a k]
-                        (let [k (shortcut-utils/undecorate-binding k)
-                              k' (shortcut-utils/safe-parse-string-binding k)
-                              k' (bean/->clj k')]
-                          (-> a
-                              (assoc-in [k' :key] k)
-                              (assoc-in [k' :refs id] handler-id)))) r ks))
-            r)) r vs))
-    {} config))
+   (fn [r handler-id vs]
+     (reduce-kv
+      (fn [r id {:keys [binding]}]
+        (if-let [ks (get user-shortcuts id binding)]
+          (let [ks (if (sequential? ks) ks [ks])]
+            (reduce (fn [a k]
+                      (let [k (shortcut-utils/undecorate-binding k)
+                            k' (shortcut-utils/safe-parse-string-binding k)
+                            k' (bean/->clj k')]
+                        (-> a
+                            (assoc-in [k' :key] k)
+                            (assoc-in [k' :refs id] handler-id)))) r ks))
+          r)) r vs))
+   {} config))
 
 (def m-flatten-bindings-by-id
   (util/memoize-last flatten-bindings-by-id))
@@ -65,13 +65,13 @@
   (let [{:keys [id desc cmd]} binding-map
         desc (or desc (:desc cmd) (some-> id (shortcut-utils/decorate-namespace) (t)))]
     (if (or (nil? desc)
-            (and (string? desc) (str/starts-with? desc "{Missing")))
+            (and (string? desc) (string/starts-with? desc "{Missing")))
       (str id) desc)))
 
 (defn mod-key [shortcut]
   (when (string? shortcut)
-    (str/replace shortcut #"(?i)mod"
-                 (if util/mac? "meta" "ctrl"))))
+    (string/replace shortcut #"(?i)mod"
+                    (if util/mac? "meta" "ctrl"))))
 
 (defn shortcut-binding
   "override by user custom binding"
@@ -88,10 +88,10 @@
 
       :else
       (->>
-        (if (string? shortcut)
-          [shortcut]
-          shortcut)
-        (mapv mod-key)))))
+       (if (string? shortcut)
+         [shortcut]
+         shortcut)
+       (mapv mod-key)))))
 
 (defn shortcut-item
   [id]
@@ -102,14 +102,14 @@
   (let [dict (get-bindings-ids-map)
         plugin? (= name :shortcut.category/plugins)]
     (->> (if plugin?
-           (->> (keys dict) (filter #(str/starts-with? (str %) ":plugin.")))
+           (->> (keys dict) (filter #(string/starts-with? (str %) ":plugin.")))
            (shortcut-config/get-category-shortcuts name))
          (mapv (fn [k] [k (assoc (get dict k) :category name)])))))
 
 (defn shortcuts-map-full
   []
   (->> (vals @shortcut-config/*config)
-    (into {})))
+       (into {})))
 
 (defn shortcuts-map-by-handler-id
   ([handler-id]
@@ -123,15 +123,15 @@
                         (into {}))
          before (-> raw meta :before)]
      (cond->> handler-m
-              state (reduce-kv (fn [r k handle-fn]
-                                 (let [handle-fn' (if (volatile? state)
-                                                    (fn [*state & args] (apply handle-fn (cons @*state args)))
-                                                    handle-fn)]
-                                   (assoc r k (partial handle-fn' state))))
-                               {})
-              before (reduce-kv (fn [r k f]
-                                  (assoc r k (before f (get raw' k))))
-                                {})))))
+       state (reduce-kv (fn [r k handle-fn]
+                          (let [handle-fn' (if (volatile? state)
+                                             (fn [*state & args] (apply handle-fn (cons @*state args)))
+                                             handle-fn)]
+                            (assoc r k (partial handle-fn' state))))
+                        {})
+       before (reduce-kv (fn [r k f]
+                           (assoc r k (before f (get raw' k))))
+                         {})))))
 
 ;; if multiple bindings, gen seq for first binding only for now
 (defn gen-shortcut-seq [id]
@@ -139,8 +139,8 @@
     (if (false? bindings)
       []
       (-> bindings
-        last
-        (str/split #" |\+")))))
+          last
+          (string/split #" |\+")))))
 
 (defn binding-for-display [k binding]
   (let [tmp (cond
@@ -158,11 +158,11 @@
               :else
               (->> binding
                    (map shortcut-utils/decorate-binding)
-                   (str/join " | ")))]
+                   (string/join " | ")))]
 
     ;; Display "cmd" rather than "meta" to the user to describe the Mac
     ;; mod key, because that's what the Mac keyboards actually say.
-    (str/replace tmp "meta" "cmd")))
+    (string/replace tmp "meta" "cmd")))
 
 (defn get-group
   "Given shortcut key, return handler group
@@ -208,10 +208,10 @@
                            (when-let [{:keys [key refs]} o]
                              [k [key (reduce-kv (fn [r id handler-id']
                                                   (if (and
-                                                        (not (contains? exclude-ids id))
-                                                        (or (= handler-ids #{handler-id'})
-                                                            (and (set? handler-ids) (contains? handler-ids handler-id'))
-                                                            (and global? (contains? global-handlers handler-id'))))
+                                                       (not (contains? exclude-ids id))
+                                                       (or (= handler-ids #{handler-id'})
+                                                           (and (set? handler-ids) (contains? handler-ids handler-id'))
+                                                           (and global? (contains? global-handlers handler-id'))))
                                                     (assoc r id handler-id')
                                                     r))
                                                 {} refs)]]))]
@@ -233,19 +233,19 @@
     (when-let [target (some-> target (mod-key) (shortcut-utils/safe-parse-string-binding) (bean/->clj))]
       (->> from-binding
            (filterv
-             #(when-let [from (some-> % (mod-key) (shortcut-utils/safe-parse-string-binding) (bean/->clj))]
-                (or (= from target)
-                    (and (or (= (count from) 1)
-                             (= (count target) 1))
-                         (= (first target) (first from))))))))))
+            #(when-let [from (some-> % (mod-key) (shortcut-utils/safe-parse-string-binding) (bean/->clj))]
+               (or (= from target)
+                   (and (or (= (count from) 1)
+                            (= (count target) 1))
+                        (= (first target) (first from))))))))))
 
 (defn shortcut-data-by-id [id]
   (let [binding (shortcut-binding id)
         data (-> (shortcuts-map-full) id)]
     (assoc
-      data
-      :binding
-      (binding-for-display id binding))))
+     data
+     :binding
+     (binding-for-display id binding))))
 
 (defn shortcuts->commands [handler-id]
   (let [m (get @shortcut-config/*config handler-id)]

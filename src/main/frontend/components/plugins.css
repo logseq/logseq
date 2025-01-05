@@ -22,36 +22,29 @@
     }
 
     .tabs {
-      .ui__button {
-        margin: 0 8px;
+      &-inner {
+        @apply flex gap-3 p-1 bg-gray-02 rounded-md;
 
-        > span {
-          display: flex;
-          align-items: center;
-          font-size: 16px;
-          font-weight: normal;
+        .ui__button {
+          @apply flex items-center opacity-70 px-3;
 
-          svg {
-            margin-right: 6px;
+          &.active {
+            @apply bg-gray-04 opacity-100;
           }
-        }
-
-        &.active {
         }
       }
     }
 
     .panels {
-      margin: 0 -32px -24px;
+      @apply mx-[-20px] mt-2 -mb-2;
     }
 
     .secondary-tabs {
-      button {
-        margin-right: 5px;
-        background: transparent;
+      .ui__button {
+        @apply mr-1.5 bg-transparent border border-b-2;
 
         .ti, .tie {
-          margin-right: 3px;
+          @apply mr-1;
         }
 
         &.active {
@@ -95,26 +88,15 @@
       }
 
       &.contribute {
-        position: absolute;
-        top: -46px;
-        right: 20px;
-        background: transparent;
-        font-size: 12px;
-        opacity: .8;
-        display: none;
-
-        @screen md {
-          display: block;
-        }
+        @apply absolute top-[-42px] right-5 bg-transparent text-xs opacity-60 hidden sm:block;
       }
 
       &.load-unpacked {
-        opacity: .9;
-        background: transparent;
+        @apply opacity-90 bg-transparent;
       }
 
       &.sort-or-filter-by, &.more-do {
-        padding: 0 6px;
+        @apply py-0 px-1.5;
       }
 
       &.picked {
@@ -162,6 +144,12 @@
         }
       }
     }
+
+    &.web-platform {
+      .cp__plugins-item-lists {
+        @apply max-h-[80vh] h-[calc(100vh-320px)];
+      }
+    }
   }
 
   &-installed {
@@ -181,7 +169,7 @@
   }
 
   &-item-lists {
-    @apply w-full max-h-[56vh] overflow-y-auto;
+    @apply w-full max-h-[80vh] h-[calc(100vh-480px)] overflow-y-auto;
 
     &-inner {
       @apply grid grid-flow-row gap-3 px-4
@@ -469,25 +457,29 @@
 
   &-settings {
     &-inner {
-      position: relative;
-      padding: 10px 0 20px;
+      @apply relative pt-2.5 pb-5 px-0;
 
       > .edit-file {
-        position: absolute;
-        top: 12px;
-        right: 8px;
+        @apply absolute top-3 right-2;
+      }
+
+      &[data-mode=code] {
+        @apply pt-2;
+
+        > .edit-file {
+          @apply -top-4;
+        }
       }
 
       .heading-item {
-        margin: 12px 12px 6px;
-        border-bottom: 1px solid var(--ls-border-color, #738694);
+        @apply pt-3 px-3 pb-1.5 border-b;
 
         h2 {
-          font-weight: bold;
+          @apply font-bold;
         }
 
         small:empty {
-          display: none;
+          @apply hidden;
         }
       }
 

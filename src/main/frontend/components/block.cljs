@@ -4,6 +4,7 @@
   (:require ["/frontend/utils" :as utils]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as e]
@@ -2644,12 +2645,15 @@
   "Tags without inline or hidden tags"
   [config block]
   (when (:block/raw-title block)
-    (let [block-tags (->>
+    (let [hidden-internal-tags (cond-> ldb/internal-tags
+                                 (:show-tag-and-property-classes? config)
+                                 (set/difference #{:logseq.class/Tag :logseq.class/Property}))
+          block-tags (->>
                       (:block/tags block)
                       (remove (fn [t]
                                 (or (ldb/inline-tag? (:block/raw-title block) t)
                                     (:logseq.property.class/hide-from-node t)
-                                    (contains? ldb/internal-tags (:db/ident t))))))
+                                    (contains? hidden-internal-tags (:db/ident t))))))
           popup-opts {:align :end
                       :content-props {:on-click (fn [] (shui/popup-hide!))
                                       :class "w-60"}}
@@ -2717,6 +2721,26 @@
            (when-let [property (db/entity pid)]
              (pv/property-value block property (assoc opts :show-tooltip? true))))]))))
 
+(rum/defc status-history-cp
+  [status-history]
+  (let [[sort-desc? set-sort-desc!] (rum/use-state true)]
+    [:div.p-2.text-muted-foreground.text-sm.max-h-96
+     [:div.font-medium.mb-2.flex.flex-row.gap-2.items-center
+      [:div "Status history"]
+      (shui/button-ghost-icon (if sort-desc? :arrow-down :arrow-up)
+                              {:title "Sort order"
+                               :class "text-muted-foreground !h-4 !w-4"
+                               :icon-props {:size 14}
+                               :on-click #(set-sort-desc! (not sort-desc?))})]
+     [:div.flex.flex-col.gap-1
+      (for [item (if sort-desc? (reverse status-history) status-history)]
+        (let [status (:logseq.property.history/ref-value item)]
+          [:div.flex.flex-row.gap-1.items-center.text-sm.justify-between
+           [:div.flex.flex-row.gap-1.items-center
+            (icon-component/get-node-icon-cp status {:size 14 :color? true})
+            [:div (:block/title status)]]
+           [:div (date/int->local-time-2 (:block/created-at item))]]))]]))
+
 (rum/defc task-spent-time-cp
   [block]
   (when (and (state/enable-timetracking?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
@@ -2736,16 +2760,7 @@
            :class "text-muted-foreground !py-0 !px-1 h-6"
            :on-click (fn [e]
                        (shui/popup-show! (.-target e)
-                                         (fn []
-                                           [:div.p-2.text-muted-foreground.text-sm.max-h-96
-                                            [:div.font-medium.mb-2 "Status history:"]
-                                            [:div.flex.flex-col.gap-1
-                                             (for [item status-history]
-                                               (let [status (:logseq.property.history/ref-value item)]
-                                                 [:div.flex.flex-row.gap-1.items-center.text-sm
-                                                  (icon-component/get-node-icon-cp status {:size 14 :color? true})
-                                                  [:div (:block/title status)]
-                                                  [:div (date/int->local-time-2 (:block/created-at item))]]))]])
+                                         (fn [] (status-history-cp status-history))
                                          {:align :end}))}
           (clock/seconds->days:hours:minutes:seconds time-spent))]))))
 

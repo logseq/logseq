@@ -43,8 +43,7 @@
                    (if (zero? hours) "" (str hours "h")))
 
       (> minutes 0)
-      (util/format "%s%s%s"
-                   (if (zero? days) "" (str days "d"))
+      (util/format "%s%s"
                    (if (zero? hours) "" (str hours "h"))
                    (if (zero? minutes) "" (str minutes "m")))
       :else

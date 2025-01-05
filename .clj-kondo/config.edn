@@ -48,69 +48,70 @@
                              frontend.pubsub]}
 
   :consistent-alias
-  {:aliases {cljs.reader reader
-             cljs-time.core t
+  {:aliases {"/electron/utils" js-utils
+             "path" node-path
              cljs-time.coerce tc
+             cljs-time.core t
+             cljs.reader reader
+             clojure.string string
              datascript.core d
-             datascript.transit dt
              datascript.db ddb
+             datascript.transit dt
              electron.ipc ipc
              electron.utils utils
-             "/electron/utils" js-utils
              frontend.commands commands
-             frontend.components.block.macros block-macros
-             frontend.components.query query
-             frontend.components.query.result query-result
-             frontend.components.class class-component
-             frontend.components.property property-component
-             frontend.components.title title
              frontend.common.date common-date
              frontend.common.file.core common-file
              frontend.common.file.util wfu
              frontend.common.missionary-util c.m
              frontend.common.schema-register sr
              frontend.common.search-fuzzy fuzzy
+             frontend.components.block.macros block-macros
+             frontend.components.class class-component
+             frontend.components.property property-component
+             frontend.components.query query
+             frontend.components.query.result query-result
+             frontend.components.title title
              frontend.config config
              frontend.date date
              frontend.db db
              frontend.db-mixins db-mixins
-             frontend.db.query-dsl query-dsl
-             frontend.db.react react
              frontend.db.query-custom query-custom
+             frontend.db.query-dsl query-dsl
              frontend.db.query-react query-react
+             frontend.db.react react
              frontend.db.util db-utils
              frontend.diff diff
              frontend.encrypt encrypt
              frontend.extensions.sci sci
-             frontend.format.mldoc mldoc
              frontend.format.block block
+             frontend.format.mldoc mldoc
              frontend.fs fs
-             frontend.fs.memory-fs memory-fs
              frontend.fs.capacitor-fs capacitor-fs
+             frontend.fs.memory-fs memory-fs
              frontend.fs.nfs nfs
-             frontend.handler.extract extract
              frontend.handler.common common-handler
-             frontend.handler.common.file file-common-handler
-             frontend.handler.common.plugin plugin-common-handler
              frontend.handler.common.developer dev-common-handler
+             frontend.handler.common.file file-common-handler
              frontend.handler.common.page page-common-handler
+             frontend.handler.common.plugin plugin-common-handler
              frontend.handler.config config-handler
-             frontend.handler.editor.property editor-property
-             frontend.handler.events events
-             frontend.handler.global-config global-config-handler
-             frontend.handler.ui ui-handler
-             frontend.handler.notification notification
-             frontend.handler.page page-handler
              frontend.handler.db-based.editor db-editor-handler
              frontend.handler.db-based.page db-page-handler
              frontend.handler.db-based.property db-property-handler
              frontend.handler.db-based.property.util db-pu
+             frontend.handler.editor.property editor-property
+             frontend.handler.events events
+             frontend.handler.extract extract
              frontend.handler.file-based.page file-page-handler
-             frontend.handler.file-based.property file-property-handler
              frontend.handler.file-based.page-property file-page-property
+             frontend.handler.file-based.property file-property-handler
              frontend.handler.file-based.property.util property-util
              frontend.handler.file-based.recent file-recent-handler
              frontend.handler.file-based.repo file-repo-handler
+             frontend.handler.global-config global-config-handler
+             frontend.handler.notification notification
+             frontend.handler.page page-handler
              frontend.handler.plugin plugin-handler
              frontend.handler.plugin-config plugin-config-handler
              frontend.handler.property.file property-file
@@ -120,11 +121,12 @@
              frontend.handler.repo-config repo-config-handler
              frontend.handler.route route-handler
              frontend.handler.search search-handler
+             frontend.handler.ui ui-handler
              frontend.idb idb
              frontend.loader loader
              frontend.mixins mixins
-             frontend.modules.outliner.ui ui-outliner-tx
              frontend.mobile.util mobile-util
+             frontend.modules.outliner.ui ui-outliner-tx
              frontend.page page
              frontend.persist-db persist-db
              frontend.schema.handler.common-config common-config-schema
@@ -137,37 +139,37 @@
              frontend.util.file-based.clock clock
              frontend.util.file-based.drawer drawer
              frontend.util.page page-util
-             frontend.util.property property
              frontend.util.persist-var persist-var
+             frontend.util.property property
              frontend.util.text text-util
-             frontend.util.url url-util
              frontend.util.thingatpt thingatpt
-             frontend.worker.pipeline worker-pipeline
-             frontend.worker.util worker-util
-             frontend.worker.state worker-state
+             frontend.util.url url-util
              frontend.worker.handler.page worker-page
+             frontend.worker.pipeline worker-pipeline
+             frontend.worker.state worker-state
+             frontend.worker.util worker-util
              lambdaisland.glogi log
              logseq.common.config common-config
-             logseq.common.graph common-graph
              logseq.common.date-time-util date-time-util
+             logseq.common.graph common-graph
              logseq.common.path path
              logseq.common.util common-util
-             logseq.common.util.page-ref page-ref
              logseq.common.util.block-ref block-ref
              logseq.common.util.macro macro-util
              logseq.common.util.namespace ns-util
+             logseq.common.util.page-ref page-ref
              logseq.db ldb
-             logseq.db.frontend.content db-content
              logseq.db.frontend.class db-class
+             logseq.db.frontend.content db-content
              logseq.db.frontend.db-ident db-ident
+             logseq.db.frontend.entity-plus entity-plus
+             logseq.db.frontend.entity-util entity-util
              logseq.db.frontend.inputs db-inputs
              logseq.db.frontend.order db-order
              logseq.db.frontend.property db-property
              logseq.db.frontend.property.build db-property-build
              logseq.db.frontend.property.type db-property-type
              logseq.db.frontend.property.util db-property-util
-             logseq.db.frontend.entity-plus entity-plus
-             logseq.db.frontend.entity-util entity-util
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
              logseq.db.frontend.validate db-validate
@@ -175,21 +177,20 @@
              logseq.db.sqlite.util sqlite-util
              logseq.db.test.helper db-test
              logseq.graph-parser graph-parser
-             logseq.graph-parser.text text
-             logseq.graph-parser.db gp-db
              logseq.graph-parser.block gp-block
+             logseq.graph-parser.db gp-db
              logseq.graph-parser.mldoc gp-mldoc
              logseq.graph-parser.property gp-property
+             logseq.graph-parser.text text
              logseq.outliner.batch-tx batch-tx
              logseq.outliner.core outliner-core
+             logseq.outliner.datascript-report ds-report
              logseq.outliner.op outliner-op
              logseq.outliner.pipeline outliner-pipeline
              logseq.outliner.validate outliner-validate
-             logseq.outliner.datascript-report ds-report
-             logseq.shui.ui shui
              logseq.shui.popup.core shui-popup
+             logseq.shui.ui shui
              medley.core medley
-             "path" node-path
              promesa.core p}}
 
   :namespace-name-mismatch {:level :warning}

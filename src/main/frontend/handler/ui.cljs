@@ -12,10 +12,10 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
-            [logseq.shui.dialog.core :as shui-dialog]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.path :as path]
+            [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -86,7 +86,7 @@
    {:post [(nil? %)]}
    (when clear-query-state?
      (react/clear-query-state!))
-   (doseq [component (keys @react/query-components)]
+   (doseq [component (keys @react/component->query-key)]
      (rum/request-render component))
    (when-let [component (state/get-root-component)]
      (rum/request-render component))

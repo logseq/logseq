@@ -429,7 +429,6 @@
         ;; don't have :block/type indexed
         datoms (->> (d/datoms db :eavt)
                     (filter (fn [d] (= :block/type (:a d)))))
-        journal-entity (d/entity db :logseq.class/Journal)
         tx-data (mapcat (fn [{:keys [e _a v]}]
                           (let [tag (case v
                                       "page" :logseq.class/Page
@@ -445,8 +444,6 @@
                               (some? tag)
                               (conj [:db/add e :block/tags tag])))) datoms)]
     (concat
-     ;; set journal's tag to `#Page`
-     [[:db/add (:db/id journal-entity) :block/tags :logseq.class/Page]]
      tx-data
      (when block-type-entity
        [[:db/retractEntity (:db/id block-type-entity)]]))))
@@ -466,7 +463,9 @@
       (let [e (d/entity db :logseq.task/deadline)
             datoms (d/datoms db :avet :logseq.task/deadline)]
         (concat
-         [[:db/retract (:db/id e) :db/valueType]]
+         [[:db/retract (:db/id e) :db/valueType]
+          {:db/id (:db/id e)
+           :block/schema (assoc (:block/schema e) :type :datetime)}]
          (map
           (fn [d]
             (if-let [day (:block/journal-day (d/entity db (:v d)))]
@@ -613,6 +612,12 @@
                             (cond
                               (= (:db/ident data) :logseq.kv/schema-version)
                               nil
+
+                              (:file/path data)
+                              (if-let [block (d/entity @conn [:file/path (:file/path data)])]
+                                (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
+                                  (merge data existing-data))
+                                data)
 
                               (:block/uuid data)
                               (if-let [block (d/entity @conn [:block/uuid (:block/uuid data)])]

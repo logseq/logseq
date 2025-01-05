@@ -358,19 +358,26 @@
                           (fn [b] (= :logseq.task/status (:db/ident (:logseq.property.history/property b))))
                           history)]
     (when (seq status-history)
-      (let [time (loop [[item & others] (rest status-history)
-                        last-item (first status-history)
+      (let [time (loop [[last-item item & others] status-history
                         time 0]
                    (if item
                      (let [last-status (:db/ident (:logseq.property.history/ref-value last-item))
-                           this-status (:db/ident (:logseq.property.history/ref-value item))
-                           time' (if (or (= last-status :logseq.task/status.doing)
-                                         (= this-status :logseq.task/status.done))
-                                   (+ time
-                                      (- (:block/created-at item) (:block/created-at last-item)))
-                                   time)]
-                       (recur others item time'))
-                     (int (/ time 1000))))]
+                           this-status (:db/ident (:logseq.property.history/ref-value item))]
+                       (if (and (= this-status :logseq.task/status.doing)
+                                (empty? others))
+                         (-> (+ time (- (tc/to-long (t/now)) (:block/created-at item)))
+                             (quot 1000))
+                         (let [time' (if (or
+                                          (= last-status :logseq.task/status.doing)
+                                          (and
+                                           (not (contains? #{:logseq.task/status.canceled
+                                                             :logseq.task/status.backlog
+                                                             :logseq.task/status.done} last-status))
+                                           (= this-status :logseq.task/status.done)))
+                                       (+ time (- (:block/created-at item) (:block/created-at last-item)))
+                                       time)]
+                           (recur (cons item others) time'))))
+                     (quot time 1000)))]
         [status-history time]))))
 
 (comment

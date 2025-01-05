@@ -1,11 +1,11 @@
 (ns frontend.db.query-dsl-test
   (:require [cljs.test :refer [are deftest testing use-fixtures is]]
-            [clojure.string :as str]
-            [logseq.common.util.page-ref :as page-ref]
+            [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.util :as util]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files load-test-files-for-db-graph]]))
+            [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files load-test-files-for-db-graph]]
+            [frontend.util :as util]
+            [logseq.common.util.page-ref :as page-ref]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
@@ -58,7 +58,7 @@
   [query]
   (if js/process.env.DB_GRAPH
     (some-> query
-            (str/replace "(page-tags" "(tags"))
+            (string/replace "(page-tags" "(tags"))
     query))
 
 (defn- dsl-query
@@ -105,7 +105,7 @@
   [{:block/keys [title]}]
   (some->> title
            (re-find #"[^\[]+")
-           str/trim))
+           string/trim))
 
 (defn- block-property-queries-test
   []
@@ -126,51 +126,51 @@ prop-d:: [[nada]]"}])
 
   (testing "Blocks have given property value"
     (is (= #{"b1" "b2"}
-           (set (map (comp first str/split-lines :block/title)
+           (set (map (comp first string/split-lines :block/title)
                      (dsl-query "(property prop-a val-a)")))))
 
     (is (= ["b2"]
-           (map (comp first str/split-lines :block/title)
+           (map (comp first string/split-lines :block/title)
                 (dsl-query "(property prop-b val-b)")))))
 
   (is (= ["b2"]
-         (map (comp first str/split-lines :block/title)
+         (map (comp first string/split-lines :block/title)
               (dsl-query "(and (property prop-b val-b))")))
       "Blocks have property value with empty AND")
 
   (is (= ["b3"]
-         (map (comp first str/split-lines :block/title)
+         (map (comp first string/split-lines :block/title)
               (dsl-query "(and (property prop-c \"page c\"))")))
       "Blocks have property value from a set of values")
 
   (is (= ["b3"]
-         (map (comp first str/split-lines :block/title)
+         (map (comp first string/split-lines :block/title)
               (dsl-query "(and (property prop-c \"page c\") (property prop-c \"page b\"))")))
       "Blocks have ANDed property values")
 
   (is (= #{"b2" "b3"}
          (set
-          (map (comp first str/split-lines :block/title)
+          (map (comp first string/split-lines :block/title)
                (dsl-query "(or (property prop-c \"page c\") (property prop-b val-b))"))))
       "Blocks have ORed property values")
 
   (is (= ["b1"]
-         (map (comp first str/split-lines :block/title)
+         (map (comp first string/split-lines :block/title)
               (dsl-query "(property prop-num 2000)")))
       "Blocks have integer property value")
 
   (is (= ["b3"]
-         (map (comp first str/split-lines :block/title)
+         (map (comp first string/split-lines :block/title)
               (dsl-query "(property prop-linked-num 3000)")))
       "Blocks have property with integer page value")
 
   (is (= ["b3"]
-         (map (comp first str/split-lines :block/title)
+         (map (comp first string/split-lines :block/title)
               (dsl-query "(property prop-d no-space-link)")))
       "Blocks have property value with no space")
 
   (is (= #{"b3" "b4"}
-         (set (map (comp first str/split-lines :block/title)
+         (set (map (comp first string/split-lines :block/title)
                    (dsl-query "(property prop-d)"))))
       "Blocks that have a property"))
 
@@ -296,7 +296,7 @@ prop-d:: [[nada]]"}])
                                   {:file/path (str "pages/page" idx ".md")
                                    :file/content (if (seq tags)
                                                    (str "page-prop:: b\n- block for page" idx
-                                                        "\ntagz:: " (str/join ", " (map page-ref/->page-ref tags)))
+                                                        "\ntagz:: " (string/join ", " (map page-ref/->page-ref tags)))
                                                    "")})))
         _ (load-test-files pages)
         {:keys [result time]}
