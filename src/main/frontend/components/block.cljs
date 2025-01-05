@@ -2757,7 +2757,7 @@
          (shui/button
           {:variant :ghost
            :size :sm
-           :class "text-muted-foreground !py-0 !px-1 h-6"
+           :class "text-muted-foreground !py-0 !px-1 h-6 font-normal"
            :on-click (fn [e]
                        (shui/popup-show! (.-target e)
                                          (fn [] (status-history-cp status-history))
