@@ -32,7 +32,7 @@
               new-properties (zipmap (map second items)
                                      (map last items))]
           (when-let [block (db/entity [:block/uuid block-id])]
-            (let [format (:block/format block)
+            (let [format (get block :block/format :markdown)
                   content (:block/title block)
                   properties (:block/properties block)
                   properties-text-values (:block/properties-text-values block)

@@ -10,6 +10,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.extensions.fsrs :as fsrs]
             [frontend.extensions.srs :as srs]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.editor :as editor-handler]
@@ -21,7 +22,6 @@
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
@@ -29,10 +29,10 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
-            [promesa.core :as p]
-            [rum.core :as rum]
             [logseq.db :as ldb]
-            [frontend.extensions.fsrs :as fsrs]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; TODO i18n support
 
@@ -348,7 +348,8 @@
                {:key "(Dev) Show block AST"
                 :on-click (fn []
                             (let [block (db/entity [:block/uuid block-id])]
-                              (dev-common-handler/show-content-ast (:block/title block) (:block/format block))))}
+                              (dev-common-handler/show-content-ast (:block/title block)
+                                                                   (get block :block/format :markdown))))}
                (t :dev/show-block-ast))
               (shui/dropdown-menu-item
                {:key "(Dev) Show block content history"

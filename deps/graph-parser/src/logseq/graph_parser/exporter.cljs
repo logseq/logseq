@@ -1,35 +1,35 @@
 (ns logseq.graph-parser.exporter
   "Exports a file graph to DB graph. Used by the File to DB graph importer and
   by nbb-logseq CLIs"
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
+  (:require [cljs-time.coerce :as tc]
+            [cljs.pprint]
             [clojure.edn :as edn]
+            [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.graph-parser.extract :as extract]
-            [logseq.common.uuid :as common-uuid]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
-            [logseq.common.config :as common-config]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.common.util.macro :as macro-util]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.rules :as rules]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.common.util.page-ref :as page-ref]
-            [promesa.core :as p]
-            [cljs.pprint]
-            [logseq.db.frontend.order :as db-order]
-            [logseq.db.frontend.db-ident :as db-ident]
-            [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.block :as gp-block]
+            [logseq.common.util.macro :as macro-util]
             [logseq.common.util.namespace :as ns-util]
-            [cljs-time.coerce :as tc]))
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.uuid :as common-uuid]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.build :as db-property-build]
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.rules :as rules]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.extract :as extract]
+            [logseq.graph-parser.property :as gp-property]
+            [promesa.core :as p]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -885,10 +885,9 @@
                    (update-block-priority options)
                    add-missing-timestamps
                    ;; old whiteboards may have this
-                   (dissoc :block/left)
+                   (dissoc :block/left :block/format)
                    ;; ((fn [x] (prn :block-out x) x))
-                   ;; TODO: org-mode content needs to be handled
-                   (assoc :block/format :markdown))]
+                   )]
     ;; Order matters as properties are referenced in block
     (concat properties-tx deadline-properties-tx [block'])))
 
@@ -909,8 +908,6 @@
         (journal-created-ats (:block/name m))
         (assoc :block/created-at (journal-created-ats (:block/name m))))
       add-missing-timestamps
-      ;; TODO: org-mode content needs to be handled
-      (assoc :block/format :markdown)
       (dissoc :block/whiteboard?)
       (update-page-tags db user-options per-file-state all-idents)))
 
@@ -980,6 +977,8 @@
                  (not (:block/tags page)))
             (assoc :block/tags [:logseq.class/Page])))]
     (cond-> page'
+      true
+      (dissoc :block/format)
       (:block/namespace page)
       ((fn [block']
          (merge (build-new-namespace-page block')
@@ -1313,8 +1312,7 @@
                               (filter ldb/whiteboard?)
                               (map (fn [page-block]
                                      (-> page-block
-                                         (assoc :block/format :markdown
-                                                :logseq.property/ls-type :whiteboard-page)))))
+                                         (assoc :logseq.property/ls-type :whiteboard-page)))))
         pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
         blocks-tx (->> blocks
                        (remove :block/pre-block?)

@@ -1,29 +1,29 @@
 (ns frontend.handler.file-based.editor
   "File-based graph implementation"
   (:require [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.commands :as commands]
+            [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.format.block :as block]
             [frontend.db :as db]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
-            [frontend.state :as state]
+            [frontend.handler.block :as block-handler]
+            [frontend.handler.file-based.property :as file-property-handler]
+            [frontend.handler.file-based.property.util :as property-util]
+            [frontend.handler.file-based.repeated :as repeated]
+            [frontend.handler.file-based.status :as status]
+            [frontend.handler.property.file :as property-file]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.file-based.clock :as clock]
             [frontend.util.file-based.drawer :as drawer]
-            [frontend.handler.file-based.repeated :as repeated]
-            [frontend.handler.block :as block-handler]
-            [frontend.handler.file-based.status :as status]
-            [frontend.handler.property.file :as property-file]
-            [frontend.handler.file-based.property :as file-property-handler]
-            [frontend.handler.file-based.property.util :as property-util]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]))
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -67,7 +67,7 @@
   [block value]
   (if (and (state/enable-timetracking?)
            (not= (:block/title block) value))
-    (let [format (:block/format block)
+    (let [format (get block :block/format :markdown)
           new-marker (last (util/safe-re-find (status/marker-pattern format) (or value "")))
           new-value (with-marker-time value block format
                       new-marker
@@ -140,7 +140,7 @@
   (when-let [block (cond (string? block-or-id) (db/entity [:block/uuid (uuid block-or-id)])
                          (uuid? block-or-id) (db/entity [:block/uuid block-or-id])
                          :else block-or-id)]
-    (let [format (:block/format block)
+    (let [format (get block :block/format :markdown)
           content (:block/title block)
           properties (:block/properties block)
           properties (if (nil? value)
@@ -158,7 +158,7 @@
 (defn- set-heading-aux!
   [block-id heading]
   (let [block (db/pull [:block/uuid block-id])
-        format (:block/format block)
+        format (get block :block/format :markdown)
         old-heading (get-in block [:block/properties :heading])]
     (if (= format :markdown)
       (cond
@@ -240,7 +240,7 @@
     (when content
       (when (and (string/includes? content "#+BEGIN_QUERY")
                  (string/includes? content "#+END_QUERY"))
-        (let [ast (mldoc/->edn (string/trim content) (or (:block/format entity) :markdown))
+        (let [ast (mldoc/->edn (string/trim content) (get entity :block/format :markdown))
               q (mldoc/extract-first-query-from-ast ast)]
           (some? (:query (common-util/safe-read-map-string q))))))))
 

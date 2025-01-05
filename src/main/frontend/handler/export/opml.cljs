@@ -4,19 +4,18 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [clojure.zip :as z]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.zip :as zip]
+            [frontend.format.mldoc :as mldoc]
             [frontend.handler.export.common :as common :refer
              [*state* raw-text simple-asts->string space]]
             [frontend.handler.export.zip-helper :refer [get-level goto-last
                                                         goto-level]]
-            [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
             [hiccups.runtime :as h]
-            [frontend.format.mldoc :as mldoc]
-            [promesa.core :as p]
-            [frontend.config :as config]))
+            [promesa.core :as p]))
 
 ;;; *opml-state*
 (def ^:private ^:dynamic
@@ -151,7 +150,6 @@
            (mapcatv (fn [inline] (cons space (inline-ast->simple-ast inline))) inline-coll)
            [(raw-text "}")]))
 
-
 (defn- inline-superscript
   [inline-coll]
   (concatv [(raw-text "^{")]
@@ -214,7 +212,6 @@
 (defn- inline-email
   [{:keys [local_part domain]}]
   [(raw-text (str "<" local_part "@" domain ">"))])
-
 
 (defn- inline-ast->simple-ast
   [inline]
@@ -448,7 +445,7 @@
                  "untitled")
          first-block (and (coll? root-block-uuids-or-page-uuid)
                           (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
-         format (or (:block/format first-block) (state/get-preferred-format))]
+         format (get first-block :block/format :markdown)]
      (export-helper content format options :title title))))
 
 (defn- export-files-as-opml

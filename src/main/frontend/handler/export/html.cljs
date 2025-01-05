@@ -5,13 +5,12 @@
             [clojure.string :as string]
             [clojure.zip :as z]
             [frontend.db :as db]
+            [frontend.format.mldoc :as mldoc]
             [frontend.handler.export.common :as common :refer [*state*]]
             [frontend.handler.export.zip-helper :refer [get-level goto-last
                                                         goto-level]]
-            [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [hiccups.runtime :as h]
-            [frontend.format.mldoc :as mldoc]
             [malli.core :as m]))
 
 (def ^:private hiccup-malli-schema
@@ -425,8 +424,8 @@
           (common/get-page-content root-block-uuids-or-page-uuid)
           (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
         first-block (and (coll? root-block-uuids-or-page-uuid)
-                          (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
-        format (or (:block/format first-block) (state/get-preferred-format))]
+                         (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
+        format (get first-block :block/format :markdown)]
     (export-helper content format options)))
 
 ;;; export fns (ends)

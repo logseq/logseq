@@ -2,16 +2,16 @@
   "Helper fns for creating a DB graph"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.config :as common-config]
-            [logseq.db.frontend.order :as db-order]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- mark-block-as-built-in [block]
   (assoc block :logseq.property/built-in? true))
@@ -121,12 +121,10 @@
        :block/title common-config/views-page-name
        :block/tags [:logseq.class/Page]
        :block/schema {:public? false}
-       :block/format :markdown
        :logseq.property/built-in? true})
      (sqlite-util/block-with-timestamps
       {:block/uuid (common-uuid/gen-uuid)
        :block/title "All Pages Default View"
-       :block/format :markdown
        :block/parent [:block/uuid page-id]
        :block/order (db-order/gen-key nil)
        :block/page [:block/uuid page-id]
@@ -141,7 +139,6 @@
      :block/title common-config/favorites-page-name
      :block/tags [:logseq.class/Page]
      :block/schema {:public? false}
-     :block/format :markdown
      :logseq.property/built-in? true})])
 
 (defn build-db-initial-data

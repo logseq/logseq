@@ -771,9 +771,9 @@
    a seq of [original-block new-content-string]"
   [block]
   (when-let [content (:block/title block)]
-    (let [format (:block/format block)
+    (let [format (get block :block/format :markdown)
           content (-> (property-file/remove-built-in-properties-when-file-based
-                       (state/get-current-repo) (:block/format block) content)
+                       (state/get-current-repo) format content)
                       (drawer/remove-logbook))
           [title body] (mldoc/get-title&body content format)]
       [block (str title " #" card-hash-tag "\n" body)])))

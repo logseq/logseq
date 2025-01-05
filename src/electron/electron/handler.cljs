@@ -16,23 +16,23 @@
             [clojure.string :as string]
             [electron.backup-file :as backup-file]
             [electron.configs :as cfgs]
+            [electron.db :as db]
             [electron.file-sync-rsapi :as rsapi]
             [electron.find-in-page :as find]
             [electron.fs-watcher :as watcher]
             [electron.git :as git]
+            [electron.handler-interface :refer [handle]]
             [electron.logger :as logger]
             [electron.plugin :as plugin]
-            [electron.db :as db]
             [electron.server :as server]
             [electron.shell :as shell]
             [electron.state :as state]
             [electron.utils :as utils]
             [electron.window :as win]
-            [electron.handler-interface :refer [handle]]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
             [goog.functions :refer [debounce]]
             [logseq.common.graph :as common-graph]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
 (defmethod handle :mkdir [_window [_ dir]]
@@ -465,7 +465,6 @@
 (defmethod handle :setGitAutoCommit []
   (debounced-configure-auto-commit!)
   nil)
-
 
 (defmethod handle :installMarketPlugin [_ [_ manifest]]
   (plugin/install-or-update! manifest))

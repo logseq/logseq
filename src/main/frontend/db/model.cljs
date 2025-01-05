@@ -6,19 +6,19 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [logseq.db.frontend.rules :as rules]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.graph-parser.db :as gp-db]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
-            [frontend.config :as config]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.rules :as rules]
+            [logseq.graph-parser.db :as gp-db]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
@@ -204,7 +204,7 @@ independent of format as format specific heading characters are stripped"
      (or
       (let [page (some->> page-name (ldb/get-page (conn/get-db)))]
         (or
-         (:block/format page)
+         (get page :block/format :markdown)
          (when-let [file (:block/file page)]
            (when-let [path (:file/path (db-utils/entity (:db/id file)))]
              (common-util/get-format path)))))

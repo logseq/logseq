@@ -12,13 +12,13 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
-            [frontend.handler.block :as block-handler]
             [frontend.mixins :as mixins]
             [frontend.search :refer [fuzzy-search]]
             [frontend.state :as state]
@@ -30,13 +30,13 @@
             [goog.string :as gstring]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.class :as db-class]
             [logseq.graph-parser.property :as gp-property]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [react-draggable]
-            [rum.core :as rum]
-            [logseq.db.frontend.class :as db-class]))
+            [rum.core :as rum]))
 
 (defn filter-commands
   [page? commands]

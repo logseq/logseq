@@ -57,7 +57,8 @@
                       block-with-title? (mldoc/block-with-title? first-elem-type)
                       content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") title)
                       parsed-block (block/parse-block (assoc block :block/title content'))
-                      block' (merge block parsed-block {:block/title title})]
+                      block' (-> (merge block parsed-block {:block/title title})
+                                 (dissoc :block/format))]
                   (update block' :block/refs
                           (fn [refs]
                             (-> refs

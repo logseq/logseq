@@ -12,10 +12,10 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
-            [logseq.shui.dialog.core :as shui-dialog]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.path :as path]
+            [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))

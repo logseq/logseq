@@ -173,6 +173,6 @@
                                    (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]
                                      (dev-common-handler/show-content-ast
                                       (get-in page [:block/file :file/content])
-                                      (:block/format page))))}})]
+                                      (get page :block/format :markdown))))}})]
          (flatten)
          (remove nil?))))))

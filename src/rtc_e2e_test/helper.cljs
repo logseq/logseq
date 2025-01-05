@@ -3,11 +3,11 @@
             [const]
             [datascript.core :as d]
             [datascript.transit :as dt]
+            [frontend.common.missionary :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.state :as worker-state]
-            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.batch-tx :as batch-tx]
@@ -124,14 +124,12 @@
                     :block/title "message-page"
                     :block/created-at 1725024677501
                     :block/updated-at 1725024677501
-                    :block/type "page"
-                    :block/format :markdown}
+                    :block/type "page"}
                    {:block/uuid (random-uuid)
                     :block/parent "page"
                     :block/order min-order
                     :block/title (dt/write-transit-str message)
                     :block/page "page"
-                    :block/format :markdown
                     :block/updated-at 1724836490810
                     :block/created-at 1724836490810}]]
       (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}

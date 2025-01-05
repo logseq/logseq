@@ -3,27 +3,27 @@
    [clojure.set :as set]
    [clojure.string :as string]
    [clojure.walk :as walk]
+   [datascript.impl.entity :as de]
+   [dommy.core :as dom]
+   [frontend.config :as config]
    [frontend.db :as db]
-   [logseq.db :as ldb]
    [frontend.db.model :as db-model]
+   [frontend.handler.file-based.property.util :as property-util]
+   [frontend.handler.property.util :as pu]
    [frontend.mobile.haptics :as haptics]
-   [logseq.outliner.core :as outliner-core]
-   [frontend.modules.outliner.ui :as ui-outliner-tx]
    [frontend.modules.outliner.op :as outliner-op]
-   [logseq.outliner.op]
+   [frontend.modules.outliner.ui :as ui-outliner-tx]
    [frontend.state :as state]
    [frontend.util :as util]
    [frontend.util.file-based.drawer :as drawer]
    [goog.dom :as gdom]
-   [logseq.graph-parser.block :as gp-block]
-   [logseq.db.sqlite.util :as sqlite-util]
-   [frontend.config :as config]
-   [frontend.handler.file-based.property.util :as property-util]
-   [frontend.handler.property.util :as pu]
-   [dommy.core :as dom]
    [goog.object :as gobj]
-   [promesa.core :as p]
-   [datascript.impl.entity :as de]))
+   [logseq.db :as ldb]
+   [logseq.db.sqlite.util :as sqlite-util]
+   [logseq.graph-parser.block :as gp-block]
+   [logseq.outliner.core :as outliner-core]
+   [logseq.outliner.op]
+   [promesa.core :as p]))
 
 ;;  Fns
 
@@ -242,7 +242,7 @@
 
                           :else
                           (subs content 0 pos))
-             content (sanity-block-content repo (:block/format block) content)]
+             content (sanity-block-content repo (get block :block/format :markdown) content)]
          (state/clear-selection!)
          (edit-block-aux repo block content text-range (assoc opts :pos pos)))))))
 

@@ -1,14 +1,14 @@
 (ns frontend.handler.dnd
   "Provides fns for drag and drop"
-  (:require [frontend.handler.editor :as editor-handler]
+  (:require [frontend.db :as db]
+            [frontend.handler.block :as block-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
-            [logseq.db :as ldb]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
-            [logseq.common.util.block-ref :as block-ref]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.handler.block :as block-handler]))
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.db :as ldb]))
 
 (defn move-blocks
   [^js event blocks target-block original-block move-to]
@@ -18,8 +18,8 @@
         top? (= move-to :top)
         nested? (= move-to :nested)
         alt-key? (and event (.-altKey event))
-        current-format (:block/format first-block)
-        target-format (:block/format target-block)
+        current-format (get first-block :block/format :markdown)
+        target-format (get target-block :block/format :markdown)
         target-block (if nested? target-block
                          (or original-block target-block))]
     (cond

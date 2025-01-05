@@ -5,7 +5,6 @@
             [frontend.config :as config]
             [promesa.core :as p]))
 
-
 ;; offline db
 
 ;; To maintain backward compatibility

@@ -84,7 +84,6 @@
       (cond->
        {:db/ident db-ident'
         :block/tags #{:logseq.class/Property}
-        :block/format :markdown
         :block/schema (merge {:type :default} (dissoc prop-schema :classes :cardinality))
         :block/name (common-util/page-name-sanity-lc (name prop-name))
         :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
@@ -107,8 +106,7 @@
   {:pre [(qualified-keyword? (:db/ident block))]}
   (block-with-timestamps
    (cond-> (merge block
-                  {:block/format :markdown
-                   :block/tags (set (conj (:block/tags block) :logseq.class/Tag))})
+                  {:block/tags (set (conj (:block/tags block) :logseq.class/Tag))})
      (and (not= (:db/ident block) :logseq.class/Root)
           (nil? (:logseq.property/parent block)))
      (assoc :logseq.property/parent :logseq.class/Root))))
@@ -120,7 +118,6 @@
    {:block/name (common-util/page-name-sanity-lc page-name)
     :block/title page-name
     :block/uuid (d/squuid)
-    :block/format :markdown
     :block/tags #{:logseq.class/Page}}))
 
 (defn kv

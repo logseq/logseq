@@ -5,13 +5,13 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.path :as path]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [shadow.resource :as rc]
-            [goog.crypt.Md5]
             [goog.crypt :as crypt]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [goog.crypt.Md5]
+            [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
+            [logseq.common.util :as common-util]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [shadow.resource :as rc]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -75,8 +75,8 @@
 ;; User level configuration for whether plugins are enabled
 (defonce lsp-enabled?
   (and util/plugin-platform?
-    (not (false? feature-plugin-system-on?))
-    (state/lsp-enabled?-or-theme)))
+       (not (false? feature-plugin-system-on?))
+       (state/lsp-enabled?-or-theme)))
 
 (defn plugin-config-enabled?
   []

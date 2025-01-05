@@ -5,15 +5,15 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.format.block :as block]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.file-based.clock :as clock]
-            [frontend.handler.file-based.property :as file-property-handler]
+            [logseq.graph-parser.text :as text]
             [medley.core :as medley]
-            [rum.core :as rum]
             [promesa.core :as p]
-            [logseq.graph-parser.text :as text]))
+            [rum.core :as rum]))
 
 ;; Util fns
 ;; ========
@@ -136,7 +136,7 @@
           uuid (:block/uuid row)
           {:block/keys [title]} (block/parse-title-and-body
                                  (:block/uuid row)
-                                 (:block/format row)
+                                 (get row :block/format :markdown)
                                  (:block/pre-block? row)
                                  content)]
       (if (seq title)
@@ -201,7 +201,7 @@
             (sortable-title title column sort-state (:block/uuid current-block))))]]
       [:tbody
        (for [row sort-result']
-         (let [format (:block/format row)]
+         (let [format (get row :block/format :markdown)]
            [:tr.cursor
             (for [column columns]
               (let [[cell-format value] (build-column-value row
@@ -220,9 +220,9 @@
                   :on-pointer-up (fn []
                                    (when (and @*mouse-down? (not @select?))
                                      (state/sidebar-add-block!
-                                       (state/get-current-repo)
-                                       (:db/id row)
-                                       :block-ref)
+                                      (state/get-current-repo)
+                                      (:db/id row)
+                                      :block-ref)
                                      (reset! *mouse-down? false)))}
                  (when (some? value)
                    (render-column-value {:row-block row

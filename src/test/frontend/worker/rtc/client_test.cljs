@@ -1,10 +1,10 @@
 (ns frontend.worker.rtc.client-test
   (:require
    [cljs.test :refer [deftest is testing]]
-   [frontend.worker.rtc.client :as subject]
-   [logseq.db.frontend.schema :as db-schema]
    [datascript.core :as d]
-   [logseq.db :as ldb]))
+   [frontend.worker.rtc.client :as subject]
+   [logseq.db :as ldb]
+   [logseq.db.frontend.schema :as db-schema]))
 
 (def empty-db (d/empty-db db-schema/schema-for-db-based-graph))
 
@@ -14,7 +14,6 @@
           db (d/db-with empty-db [{:block/uuid block-uuid,
                                    :block/updated-at 1720017595873,
                                    :block/created-at 1720017595872,
-                                   :block/format :markdown,
                                    :db/ident :user.class/yyy,
                                    :block/type "class",
                                    :block/name "yyy",
@@ -47,7 +46,6 @@
                                    :block/updated-at 1716880036491
                                    :block/created-at 1716880036491
                                    :block/schema {:type :number}
-                                   :block/format :markdown
                                    :db/cardinality :db.cardinality/one
                                    :db/ident :user.property/xxx,
                                    :block/type "property",

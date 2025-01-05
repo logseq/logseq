@@ -1,9 +1,11 @@
 (ns frontend.components.page
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
+            [dommy.core :as dom]
             [frontend.components.block :as component-block]
             [frontend.components.class :as class-component]
             [frontend.components.content :as content]
+            [frontend.components.db-based.page :as db-page]
             [frontend.components.editor :as editor]
             [frontend.components.file-based.hierarchy :as hierarchy]
             [frontend.components.objects :as objects]
@@ -11,7 +13,6 @@
             [frontend.components.query :as query]
             [frontend.components.reference :as reference]
             [frontend.components.scheduled-deadlines :as scheduled]
-            [frontend.components.db-based.page :as db-page]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -34,6 +35,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rum :as frontend-rum]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -46,9 +48,7 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [frontend.rum :as frontend-rum]
-            [dommy.core :as dom]))
+            [rum.core :as rum]))
 
 (defn- get-page-name
   [state]
@@ -421,7 +421,7 @@
                                   (string/includes? title page-ref/right-brackets))]
                  (cond untitled? [:span.opacity-50 (t :untitled)]
                        nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (mldoc/get-default-config
-                                                                                           (:block/format page))))
+                                                                                           (get page :block/format :markdown))))
                        :else title))])]])))))
 
 (rum/defc db-page-title-actions

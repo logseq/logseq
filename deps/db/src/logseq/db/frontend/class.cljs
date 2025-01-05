@@ -1,9 +1,9 @@
 (ns logseq.db.frontend.class
   "Class related fns for DB graphs and frontend/datascript usage"
-  (:require [logseq.db.sqlite.util :as sqlite-util]
+  (:require [clojure.set :as set]
+            [flatland.ordered.map :refer [ordered-map]]
             [logseq.db.frontend.db-ident :as db-ident]
-            [clojure.set :as set]
-            [flatland.ordered.map :refer [ordered-map]]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Main class vars
 ;; ===============

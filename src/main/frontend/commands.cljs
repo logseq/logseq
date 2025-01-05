@@ -5,28 +5,28 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.extensions.video.youtube :as youtube]
+            [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.draw :as draw]
+            [frontend.handler.file-based.property :as file-property-handler]
+            [frontend.handler.file-based.status :as file-based-status]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.property.file :as property-file]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.file-based.priority :as priority]
-            [frontend.handler.file-based.property :as file-property-handler]
-            [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.handler.property.file :as property-file]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
-            [logseq.graph-parser.property :as gp-property]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.macro :as macro-util]
             [logseq.common.util.page-ref :as page-ref]
-            [promesa.core :as p]
-            [frontend.handler.file-based.status :as file-based-status]
-            [frontend.handler.db-based.property :as db-property-handler]
-            [logseq.common.util.macro :as macro-util]))
+            [logseq.graph-parser.property :as gp-property]
+            [promesa.core :as p]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -830,7 +830,7 @@
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [current-block (state/get-edit-block)
-            format (:block/format current-block)]
+            format (get current-block :block/format :markdown)]
         (if (config/db-based-graph?)
           (state/pub-event! [:editor/set-heading current-block heading])
           (if (= format :markdown)
@@ -930,6 +930,6 @@
 
 (defn exec-plugin-simple-command!
   [pid {:keys [block-id] :as cmd} action]
-  (let [format (and block-id (:block/format (db/entity [:block/uuid block-id])))
+  (let [format (and block-id (get (db/entity [:block/uuid block-id]) :block/format :markdown))
         inputs (vector (conj action (assoc cmd :pid pid)))]
     (handle-steps inputs format)))

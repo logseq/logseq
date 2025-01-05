@@ -134,7 +134,7 @@
              :selection-end selection-end
              :selection (some-> selection
                                 string/trim)
-             :format (:block/format block)
+             :format (get block :block/format :markdown)
              :value value
              :block block
              :edit-id edit-id
@@ -173,7 +173,7 @@
 
 (defn highlight-format! []
   (when-let [block (state/get-edit-block)]
-    (let [format (:block/format block)]
+    (let [format (get block :block/format :markdown)]
       (format-text! #(config/get-highlight format)))))
 
 (defn strike-through-format! []
@@ -283,6 +283,7 @@
     {:keys [force?]
      :as opts}]
    (let [{:block/keys [uuid format repo title properties]} block
+         format (or format :markdown)
          repo (or repo (state/get-current-repo))
          format (or format (state/get-preferred-format))
          block-id (when (and (not (config/db-based-graph? repo)) (map? properties))
@@ -526,7 +527,7 @@
                  edit-block? true}}]
   (when (or page block-uuid)
     (let [repo (state/get-current-repo)
-          db-base? (config/db-based-graph? repo)
+          db-based? (config/db-based-graph? repo)
           before? (if page false before?)
           sibling? (boolean sibling?)
           sibling? (if before? true (if page false sibling?))
@@ -541,15 +542,17 @@
                              (when last-block-id
                                (db/entity last-block-id))))
               format (or
-                      (:block/format block)
+                      (get block :block/format :markdown)
                       (db/get-page-format (:block/name block))
                       (state/get-preferred-format))
-              content (if (and (not db-base?) (seq properties))
+              content (if (and (not db-based?) (seq properties))
                         (property-file/insert-properties-when-file-based repo format content properties)
                         content)
-              new-block (-> (select-keys block [:block/page])
-                            (assoc :block/title content
-                                   :block/format format))
+              new-block (cond->
+                         (-> (select-keys block [:block/page])
+                             (assoc :block/title content))
+                          (not db-based?)
+                          (assoc :block/format format))
               new-block (assoc new-block :block/page
                                (if page
                                  (:db/id block)
@@ -586,7 +589,7 @@
                                                             :keep-uuid? true
                                                             :ordered-list? ordered-list?
                                                             :replace-empty-target? replace-empty-target?})
-              (when (and db-base? (seq properties))
+              (when (and db-based? (seq properties))
                 (property-handler/set-block-properties! repo (:block/uuid new-block) properties)))
              (when edit-block?
                (if (and replace-empty-target?
@@ -602,7 +605,7 @@
       (when-let [page (db/get-page page-title)]
         (let [class-or-property? (or (ldb/class? page) (ldb/property? page))]
           (when (or class-or-property? (db/page-empty? (state/get-current-repo) (:db/id page)))
-            (let [format (or (:block/format page) (state/get-preferred-format))
+            (let [format (get page :block/format :markdown)
                   new-block {:block/title ""
                              :block/format format}]
               (ui-outliner-tx/transact!
@@ -857,7 +860,7 @@
         (outliner-op/delete-blocks! blocks' nil))
        (when sibling-block
          (let [{:keys [edit-block-f]} (move-to-prev-block repo sibling-block
-                                                          (:block/format block)
+                                                          (get block :block/format :markdown)
                                                           "")]
            (when edit-block-f (edit-block-f))))))))
 
@@ -963,7 +966,7 @@
                                                       [k v'])) b)
                                              (into {}))
                                         (assoc :db/id (:db/id b)))))))]
-          (common-handler/copy-to-clipboard-without-id-property! repo (:block/format block) content (when html? html) copied-blocks))
+          (common-handler/copy-to-clipboard-without-id-property! repo (get block :block/format :markdown) content (when html? html) copied-blocks))
         (state/set-block-op-type! :copy)
         (notification/show! "Copied!" :success)))))
 
@@ -997,7 +1000,7 @@
                             (map (fn [{:keys [id level]}]
                                    (if (config/db-based-graph? (state/get-current-repo))
                                      (str (string/join (repeat (dec level) "\t")) "- " (page-ref/->page-ref id))
-                                     (condp = (:block/format block)
+                                     (condp = (get block :block/format :markdown)
                                        :org
                                        (str (string/join (repeat level "*")) " " (block-ref/->block-ref id))
                                        :markdown
@@ -1193,7 +1196,7 @@
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
           html (export-html/export-blocks-as-html repo [block-id] nil)
           sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
-      (common-handler/copy-to-clipboard-without-id-property! repo (:block/format block) md-content html sorted-blocks)
+      (common-handler/copy-to-clipboard-without-id-property! repo (get block :block/format :markdown) md-content html sorted-blocks)
       (state/set-block-op-type! :cut)
       (delete-block-aux! block))))
 
@@ -1289,7 +1292,7 @@
      (save-block!
       {:block block :repo repo :opts (dissoc opts :properties)}
       (if (seq properties)
-        (property-file/insert-properties-when-file-based repo (:block/format block) content properties)
+        (property-file/insert-properties-when-file-based repo (get block :block/format :markdown) content properties)
         content))))
   ([{:keys [block repo opts] :as _state} value]
    (let [repo (or repo (state/get-current-repo))]
@@ -2057,14 +2060,14 @@
     (merge (apply dissoc block (conj (when-not keep-uuid? [:block/_refs]) :block/pre-block? :block/meta))
            (cond->
             {:block/page {:db/id (:db/id page)}
-             :block/format format
              :block/title new-content}
              (not db-based?)
              (assoc :block/properties (apply dissoc (:block/properties block)
                                              (concat
                                               (when-not keep-uuid? [:id])
                                               [:custom_id :custom-id]
-                                              exclude-properties)))
+                                              exclude-properties))
+                    :block/format format)
              (not db-based?)
              (assoc :block/properties-text-values (apply dissoc (:block/properties-text-values block)
                                                          (concat
@@ -2134,7 +2137,7 @@
                            {:outliner-op :insert-blocks
                             :additional-tx revert-cut-txs}
                            (when target-block'
-                             (let [format (or (:block/format target-block') (state/get-preferred-format))
+                             (let [format (get target-block' :block/format :markdown)
                                    repo (state/get-current-repo)
                                    blocks' (map (fn [block]
                                                   (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
@@ -2218,7 +2221,7 @@
          (when (:db/id block)
            (let [journal? (ldb/journal? target)
                  target (or target (state/get-edit-block))
-                 format (:block/format block)
+                 format (get block :block/format :markdown)
                  block-uuid (:block/uuid block)
                  template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
                  blocks (db/get-block-and-children repo block-uuid)
@@ -2363,7 +2366,7 @@
       (when block
         (let [input (state/get-input)
               content (gobj/get input "value")
-              format (:block/format (:block (get-state)))
+              format (get (:block (get-state)) :block/format :markdown)
               property-key (:raw-content (thingatpt/property-key-at-point input))
               org? (= format :org)
               move-to-pos (if org? 2 3)]
@@ -2643,7 +2646,8 @@
               :down util/get-next-block-non-collapsed)
           current-block (util/rec-get-node input "ls-block")
           sibling-block (f current-block {:up-down? true})
-          {:block/keys [uuid title format]} (state/get-edit-block)]
+          {:block/keys [uuid title format]} (state/get-edit-block)
+          format (or format :markdown)]
       (if sibling-block
         (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
           (let [container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
@@ -2693,6 +2697,7 @@
   (let [up? (= :left direction)
         pos (if up? :max 0)
         {:block/keys [format uuid] :as block} (or block (state/get-edit-block))
+        format (or format :markdown)
         repo (state/get-current-repo)
         editing-block (gdom/getElement (state/get-editing-block-dom-id))
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
@@ -3486,7 +3491,7 @@
                         (file-editor-handler/valid-custom-query-block? block)))
                (and
                 (:outliner/block-title-collapse-enabled? (state/get-config))
-                (block-with-title? (:block/format block)
+                (block-with-title? (get block :block/format :markdown)
                                    (:block/title block)
                                    semantic?))))
          false)))))
@@ -3844,7 +3849,7 @@
     (when-let [{:keys [start end link]} (thingatpt/block-ref-at-point)]
       (when-let [block (db/entity [:block/uuid link])]
         (let [block-content (:block/title block)
-              format (or (:block/format block) :markdown)
+              format (get block :block/format :markdown)
               block-content-without-prop (-> (property-file/remove-properties-when-file-based repo format block-content)
                                              (drawer/remove-logbook))]
           (when-let [input (state/get-input)]
@@ -3876,7 +3881,8 @@
           match (block-ref/->block-ref ref-id)
           ref-block (db/entity [:block/uuid ref-id])
           block-ref-content (->> (or (:block/title ref-block) "")
-                                 (property-file/remove-built-in-properties-when-file-based repo (:block/format ref-block))
+                                 (property-file/remove-built-in-properties-when-file-based repo
+                                                                                           (get ref-block :block/format :markdown))
                                  (drawer/remove-logbook))
           content (string/replace-first (:block/title block) match
                                         block-ref-content)]

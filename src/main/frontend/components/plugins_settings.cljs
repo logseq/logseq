@@ -1,13 +1,13 @@
 (ns frontend.components.plugins-settings
-  (:require [logseq.shui.ui :as shui]
-            [rum.core :as rum]
-            [frontend.util :as util]
-            [frontend.ui :as ui]
-            [frontend.handler.plugin :as plugin-handler]
+  (:require [cljs-bean.core :as bean]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.handler.notification :as notification]
-            [cljs-bean.core :as bean]
-            [goog.functions :refer [debounce]]))
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [goog.functions :refer [debounce]]
+            [logseq.shui.ui :as shui]
+            [rum.core :as rum]))
 
 (defn- dom-purify
   [html opts]
@@ -85,8 +85,7 @@
          :radio (ui/radio-list options #(update-setting! key %) nil)
          :checkbox (ui/checkbox-list options #(update-setting! key %) nil)
          ;; select
-         (ui/select options (fn [_ value ] (update-setting! key value))))
-       ]]]))
+         (ui/select options (fn [_ value] (update-setting! key value))))]]]))
 
 (rum/defc render-item-object
   [_val {:keys [key title description _default]} pid]
@@ -144,16 +143,16 @@
           [:div.code-mode-wrap.pl-3.pr-1.py-1.mb-8.-ml-1
            (let [content' (js/JSON.stringify (bean/->js settings) nil 2)]
              (lazy-editor/editor {:file? false}
-               (str "code-edit-lsp-settings")
-               {:data-lang "json"}
-               content' {}))
+                                 (str "code-edit-lsp-settings")
+                                 {:data-lang "json"}
+                                 content' {}))
            [:div.flex.justify-end.pt-2.gap-2
             (shui/button {:size :sm :variant :ghost
                           :on-click (fn [^js e]
                                       (let [^js cm (util/get-cm-instance (-> (.-target e) (.closest ".code-mode-wrap")))
                                             content' (some-> (.toJSON plugin-settings) (js/JSON.stringify nil 2))]
                                         (.setValue cm content')))}
-              "Reset")
+                         "Reset")
             (shui/button {:size :sm
                           :on-click (fn [^js e]
                                       (try
@@ -164,7 +163,7 @@
                                           (set-edit-mode! nil))
                                         (catch js/Error e
                                           (notification/show! (.-message e) :error))))}
-              "Save")]]
+                         "Save")]]
 
           ;; render with gui items
           (for [desc schema

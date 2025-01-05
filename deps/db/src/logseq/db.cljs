@@ -510,8 +510,7 @@
   "Builds tx for a favorite block in favorite page"
   [favorite-uuid]
   {:block/link [:block/uuid favorite-uuid]
-   :block/title ""
-   :block/format :markdown})
+   :block/title ""})
 
 (defn get-key-value
   [db key-ident]

@@ -17,7 +17,6 @@
   (let [block-id (or (:db/id block) (:db/ident block))]
     (-> (merge
          {:block/uuid (d/squuid)
-          :block/format :markdown
           :block/page (if (:block/page block)
                         (:db/id (:block/page block))
                         ;; page block
