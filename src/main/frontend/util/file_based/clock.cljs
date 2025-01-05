@@ -1,12 +1,12 @@
 (ns frontend.util.file-based.clock
   "Provides clock related functionality used by tasks"
-  (:require [frontend.state :as state]
-            [frontend.util.file-based.drawer :as drawer]
-            [frontend.util :as util]
-            [cljs-time.core :as t]
+  (:require [cljs-time.core :as t]
             [cljs-time.format :as tf]
+            [clojure.string :as string]
             [frontend.date :as date]
-            [clojure.string :as string]))
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.file-based.drawer :as drawer]))
 
 (defn minutes->hours:minutes
   [minutes]
@@ -22,7 +22,7 @@
     (util/format "%02d:%02d:%02d" hours minutes seconds)))
 
 (defn s->dhms-util
-  "A function that returns the values for easier testing. 
+  "A function that returns the values for easier testing.
    Always in the order [days, hours, minutes, seconds]"
   [seconds]
   (let [days (quot (quot seconds 3600) 24)
@@ -36,11 +36,20 @@
 (defn seconds->days:hours:minutes:seconds
   [seconds]
   (let [[days hours minutes seconds] (s->dhms-util seconds)]
-    (util/format "%s%s%s%s"
-                 (if (zero? days) "" (str days "d"))
-                 (if (zero? hours) "" (str hours "h"))
-                 (if (zero? minutes) "" (str minutes "m"))
-                 (if (zero? seconds) "" (str seconds "s")))))
+    (cond
+      (> days 0)
+      (util/format "%s%s"
+                   (if (zero? days) "" (str days "d"))
+                   (if (zero? hours) "" (str hours "h")))
+
+      (> minutes 0)
+      (util/format "%s%s"
+                   (if (zero? hours) "" (str hours "h"))
+                   (if (zero? minutes) "" (str minutes "m")))
+      :else
+      (if (> seconds 1)
+        (str seconds "s")
+        ""))))
 
 (def support-seconds?
   (get-in (state/get-config)
