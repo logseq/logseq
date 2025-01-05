@@ -1,24 +1,24 @@
 (ns frontend.components.export
-  (:require [cljs-time.core :as t]
-            ["/frontend/utils" :as utils]
+  (:require ["/frontend/utils" :as utils]
+            [cljs-time.core :as t]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [logseq.db :as ldb]
-            [frontend.handler.export.text :as export-text]
+            [frontend.handler.export :as export]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.opml :as export-opml]
-            [frontend.handler.export :as export]
+            [frontend.handler.export.text :as export-text]
+            [frontend.handler.notification :as notification]
+            [frontend.idb :as idb]
             [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]
+            [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [frontend.idb :as idb]
-            [frontend.handler.notification :as notification]))
+            [rum.core :as rum]))
 
 (rum/defcs auto-backup < rum/reactive
   {:init (fn [state]
@@ -62,10 +62,18 @@
        (shui/button
         {:variant :default
          :on-click (fn []
-                     (p/let [result (export/backup-db-graph repo)]
-                       (when result
-                         (notification/show! "Backup successful!" :success))
-                       (export/auto-db-backup! repo {:backup-now? false})))}
+                     (->
+                      (p/let [result (export/backup-db-graph repo)]
+                        (case result
+                          true
+                          (notification/show! "Backup successful!" :success)
+                          :graph-not-changed
+                          (notification/show! "Graph has not been updated since last export." :success)
+                          nil)
+                        (export/auto-db-backup! repo {:backup-now? false}))
+                      (p/catch (fn [error]
+                                 (println "Failed to backup.")
+                                 (js/console.error error)))))}
         "Backup now"))]))
 
 (rum/defc export

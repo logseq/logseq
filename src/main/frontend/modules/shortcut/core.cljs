@@ -1,11 +1,11 @@
 (ns frontend.modules.shortcut.core
-  (:require [clojure.string :as str]
+  (:require [clojure.string :as string]
             [frontend.handler.config :as config-handler]
             [frontend.handler.global-config :as global-config-handler]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
-            [frontend.modules.shortcut.data-helper :as dh]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.shortcut.config :as shortcut-config]
+            [frontend.modules.shortcut.data-helper :as dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -20,10 +20,10 @@
 (defonce *pending-shortcuts (atom []))
 
 (def global-keys #js
-        [KeyCodes/TAB
-         KeyCodes/ENTER
-         KeyCodes/BACKSPACE KeyCodes/DELETE
-         KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
+                  [KeyCodes/TAB
+                   KeyCodes/ENTER
+                   KeyCodes/BACKSPACE KeyCodes/DELETE
+                   KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
 
 (def key-names (js->clj KeyNames))
 
@@ -82,7 +82,7 @@
                (log/error :shortcut/register-shortcut {:id      id
                                                        :binding k
                                                        :error   e})
-               (notification/show! (str/join " " [id k (.-message e)]) :error false)))))))))
+               (notification/show! (string/join " " [id k (.-message e)]) :error false)))))))))
 
 (defn unregister-shortcut!
   "Unregister a shortcut.
@@ -114,9 +114,9 @@
 
   ;; force uninstall existed handler
   (some->>
-    (get-installed-ids-by-handler-id handler-id)
-    (map #(uninstall-shortcut-handler! % true))
-    (doall))
+   (get-installed-ids-by-handler-id handler-id)
+   (map #(uninstall-shortcut-handler! % true))
+   (doall))
 
   (let [shortcut-map (dh/shortcuts-map-by-handler-id handler-id state)
         handler (new KeyboardShortcutHandler js/window)]
@@ -167,25 +167,25 @@
   ([handler-id] (mixin handler-id true))
   ([handler-id remount-reinstall?]
    (cond->
-     {:did-mount
-      (fn [state]
-        (let [install-id (install-shortcut-handler! handler-id {:state state})]
-          (assoc state ::install-id install-id)))
+    {:did-mount
+     (fn [state]
+       (let [install-id (install-shortcut-handler! handler-id {:state state})]
+         (assoc state ::install-id install-id)))
 
-      :will-unmount
-      (fn [state]
-        (when-let [install-id (::install-id state)]
-          (uninstall-shortcut-handler! install-id))
-        state)}
+     :will-unmount
+     (fn [state]
+       (when-let [install-id (::install-id state)]
+         (uninstall-shortcut-handler! install-id))
+       state)}
 
      remount-reinstall?
      (assoc
-       :will-remount
-       (fn [old-state new-state]
-         (util/profile "[shortcuts] reinstalled:"
-                       (uninstall-shortcut-handler! (::install-id old-state))
-                       (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
-                         (assoc new-state ::install-id install-id))))))))
+      :will-remount
+      (fn [old-state new-state]
+        (util/profile "[shortcuts] reinstalled:"
+                      (uninstall-shortcut-handler! (::install-id old-state))
+                      (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
+                        (assoc new-state ::install-id install-id))))))))
 
 (defn mixin*
   "This is an optimized version compared to (mixin).
@@ -197,7 +197,7 @@
      (let [*state (volatile! state)
            install-id (install-shortcut-handler! handler-id {:state *state})]
        (assoc state ::install-id install-id
-                    ::*state *state)))
+              ::*state *state)))
 
    :will-remount
    (fn [old-state new-state]
@@ -260,10 +260,10 @@
         shift (.-shiftKey e)
         keyname (get key-names (str (.-keyCode e)))]
     (cond->> keyname
-             ctrl (str "ctrl+")
-             alt (str "alt+")
-             meta (str "meta+")
-             shift (str "shift+"))))
+      ctrl (str "ctrl+")
+      alt (str "alt+")
+      meta (str "meta+")
+      shift (str "shift+"))))
 
 (defn keyname [e]
   (let [name (get key-names (str (.-keyCode e)))]
@@ -279,15 +279,15 @@
         global? true]
     (letfn [(into-shortcuts [shortcuts]
               (cond-> shortcuts
-                      (nil? binding)
-                      (dissoc id)
+                (nil? binding)
+                (dissoc id)
 
-                      (and global?
-                           (or (string? binding)
-                               (vector? binding)
-                               (boolean? binding)))
-                      (assoc id binding)))]
+                (and global?
+                     (or (string? binding)
+                         (vector? binding)
+                         (boolean? binding)))
+                (assoc id binding)))]
       ;; TODO: exclude current graph config shortcuts
-      (when (nil? binding)
-        (config-handler/set-config! :shortcuts (into-shortcuts graph-shortcuts)))
-      (global-config-handler/set-global-config-kv! :shortcuts (into-shortcuts global-shortcuts)))))
+      (config-handler/set-config! :shortcuts (into-shortcuts graph-shortcuts))
+      (when (util/electron?)
+        (global-config-handler/set-global-config-kv! :shortcuts (into-shortcuts global-shortcuts))))))

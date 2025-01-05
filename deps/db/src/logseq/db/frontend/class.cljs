@@ -88,6 +88,11 @@
            (when (= (get-in m [:properties :logseq.property/parent]) :logseq.class/Page) class-ident))
          built-in-classes)))
 
+(def page-classes
+  "Built-in classes that behave like a page. Classes should match entity-util/page?"
+  (into #{:logseq.class/Page :logseq.class/Tag :logseq.class/Property}
+        page-children-classes))
+
 (def internal-tags
   "Built-in classes that are hidden on a node and all pages view"
   #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag :logseq.class/Root

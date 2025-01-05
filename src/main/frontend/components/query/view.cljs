@@ -56,7 +56,7 @@
                   :on-delete-rows (fn [table selected-rows]
                                     (let [pages (filter ldb/page? selected-rows)
                                           blocks (remove ldb/page? selected-rows)
-                                          selected (set (map :id selected-rows))
+                                          selected (set (map :id (remove :logseq.property/built-in? selected-rows)))
                                           data' (remove (fn [row] (contains? selected (:id row))) (:data table))]
                                       (p/do!
                                        (set-data! data')

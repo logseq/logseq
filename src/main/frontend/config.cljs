@@ -74,9 +74,9 @@
 
 ;; User level configuration for whether plugins are enabled
 (defonce lsp-enabled?
-  (and (util/electron?)
-       (not (false? feature-plugin-system-on?))
-       (state/lsp-enabled?-or-theme)))
+  (and util/plugin-platform?
+    (not (false? feature-plugin-system-on?))
+    (state/lsp-enabled?-or-theme)))
 
 (defn plugin-config-enabled?
   []
