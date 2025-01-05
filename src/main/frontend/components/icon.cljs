@@ -24,6 +24,8 @@
   [icon' & [opts]]
   (let [icon' (if (or (string? icon') (keyword? icon'))
                 {:type :tabler-icon :id (name icon')} icon')
+        color? (:color? opts)
+        opts (dissoc opts :color?)
         item (cond
                (and (= :emoji (:type icon')) (:id icon'))
                [:em-emoji (merge {:id (:id icon')
@@ -32,7 +34,7 @@
 
                (and (= :tabler-icon (:type icon')) (:id icon'))
                (ui/icon (:id icon') opts))]
-    (if (:color? opts)
+    (if color?
       [:span.inline-flex.items-center.ls-icon-color-wrap
        {:style {:color (or (some-> icon' :color) "inherit")}} item]
       item)))
