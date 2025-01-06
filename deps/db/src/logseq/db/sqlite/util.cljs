@@ -66,39 +66,54 @@
 
 (def block-with-timestamps common-util/block-with-timestamps)
 
+(defn schema->qualified-property-keyword
+  [prop-schema]
+  (reduce-kv
+   (fn [r k v]
+     (if (qualified-keyword? k)
+       (assoc r k v)
+       (if (= k :cardinality)
+         :db/cardinality
+         (assoc r (keyword "property" k) v))))
+   {}
+   prop-schema))
+
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts. Takes
    an optional map with following keys:
    * :title - Case sensitive property name. Defaults to deriving this from db-ident
    * :block-uuid - :block/uuid for property"
   ([db-ident prop-schema] (build-new-property db-ident prop-schema {}))
-  ([db-ident prop-schema {:keys [title block-uuid ref-type? properties]}]
+  ([db-ident prop-schema' {:keys [title block-uuid ref-type? properties]}]
    (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
                      (db-property/create-user-property-ident-from-name (name db-ident)))
          prop-name (or title (name db-ident'))
-         classes (:classes prop-schema)
-         prop-schema (assoc prop-schema :type (get prop-schema :type :default))]
-     (block-with-timestamps
-      (cond->
-       {:db/ident db-ident'
-        :block/tags #{:logseq.class/Property}
-        :property/type (:type prop-schema)
-        :block/name (common-util/page-name-sanity-lc (name prop-name))
-        :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
-        :block/title (name prop-name)
-        :db/index true
-        :db/cardinality (if (= :many (:cardinality prop-schema))
-                          :db.cardinality/many
-                          :db.cardinality/one)
-        :block/order (db-order/gen-key)}
-        (seq classes)
-        (assoc :property/schema.classes classes)
-        (or ref-type? (contains? db-property-type/all-ref-property-types (:type prop-schema)))
-        (assoc :db/valueType :db.type/ref)
-        (seq properties)
-        (merge properties))))))
+         classes (:classes prop-schema')
+         prop-schema (schema->qualified-property-keyword prop-schema')
+         prop-type (get prop-schema :property/type :default)]
+     (merge
+      (dissoc prop-schema :db/cardinality)
+      (block-with-timestamps
+       (cond->
+        {:db/ident db-ident'
+         :block/tags #{:logseq.class/Property}
+         :property/type prop-type
+         :block/name (common-util/page-name-sanity-lc (name prop-name))
+         :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
+         :block/title (name prop-name)
+         :db/index true
+         :db/cardinality (if (= :many (:cardinality prop-schema))
+                           :db.cardinality/many
+                           :db.cardinality/one)
+         :block/order (db-order/gen-key)}
+         (seq classes)
+         (assoc :property/schema.classes classes)
+         (or ref-type? (contains? db-property-type/all-ref-property-types prop-type))
+         (assoc :db/valueType :db.type/ref)
+         (seq properties)
+         (merge properties)))))))
 
 (defn build-new-class
   "Build a standard new class so that it is consistent across contexts"

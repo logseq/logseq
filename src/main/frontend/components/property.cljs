@@ -5,7 +5,6 @@
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.components.property.config :as property-config]
-            [frontend.components.property.util :as components-pu]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
             [frontend.components.svg :as svg]
@@ -102,7 +101,11 @@
                  (when *show-new-property-config?
                    (reset! *show-new-property-config? false))
                  (when (= (:type schema) :node) (reset! *show-class-select? true))
-                 (components-pu/update-property! property property-name schema)
+                 (db-property-handler/upsert-property!
+                  (:db/ident property)
+                  schema
+                  {})
+
                  (cond
                    (and *show-class-select? @*show-class-select?)
                    nil
