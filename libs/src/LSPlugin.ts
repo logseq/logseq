@@ -145,6 +145,7 @@ export interface AppUserInfo {
 
 export interface AppInfo {
   version: string
+  supportDb: boolean
 
   [key: string]: unknown
 }

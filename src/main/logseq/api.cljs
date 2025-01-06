@@ -128,9 +128,10 @@
 (defn ^:export get_app_info
   ;; get app base info
   []
-  (bean/->js
-   (sdk-utils/normalize-keyword-for-json
-    {:version fv/version})))
+  (-> (sdk-utils/normalize-keyword-for-json
+        {:version fv/version
+         :supportDb true})
+    (bean/->js)))
 
 (def ^:export get_user_configs
   (fn []

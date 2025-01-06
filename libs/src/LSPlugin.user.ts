@@ -734,7 +734,8 @@ export class LSPluginUser
 
         return function (this: any, ...args: any) {
           if (origMethod) {
-            const ret = origMethod.apply(that, args.concat(tag))
+            if (args?.length !== 0) args.concat(tag)
+            const ret = origMethod.apply(that, args)
             if (ret !== PROXY_CONTINUE) return ret
           }
 
@@ -817,11 +818,15 @@ export class LSPluginUser
     return this._execCallableAPIAsync(`_callMainWin`, ...args)
   }
 
+  // User Proxies
+  #appProxy: IAppProxy
+
   /**
    * The interface methods of {@link IAppProxy}
    */
   get App (): IAppProxy {
-    return this._makeUserProxy(app, 'app')
+    if (this.#appProxy) return this.#appProxy
+    return (this.#appProxy = this._makeUserProxy(app, 'app'))
   }
 
   get Editor (): IEditorProxy {
