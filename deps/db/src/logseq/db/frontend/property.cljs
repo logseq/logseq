@@ -311,7 +311,7 @@
     :schema
     {:type :default
      :public? true
-     :position :block-left}
+     :ui-position :block-left}
     :closed-values
     (mapv (fn [[db-ident value icon]]
             {:db-ident db-ident
@@ -329,7 +329,7 @@
     :schema
     {:type :default
      :public? true
-     :position :block-left}
+     :ui-position :block-left}
     :closed-values
     (mapv (fn [[db-ident value icon checkbox-state]]
             {:db-ident db-ident
@@ -352,14 +352,14 @@
    {:title "Deadline"
     :schema {:type :datetime
              :public? true
-             :position :block-below}
+             :ui-position :block-below}
     :properties {:logseq.property/hide-empty-value true}
     :queryable? true}
    :logseq.task/scheduled
    {:title "Scheduled"
     :schema {:type :datetime
              :public? true
-             :position :block-below}
+             :ui-position :block-below}
     :properties {:logseq.property/hide-empty-value true}
     :queryable? true}
    :logseq.task/recur-frequency
@@ -368,9 +368,9 @@
      {:title "Recur frequency"
       :schema schema
       :properties (let [block {:db/ident :logseq.task/recur-frequency
-                               :block/schema schema}
+                               :property/type :number}
                         property {:db/ident :logseq.property/default-value
-                                  :block/schema {:type :entity}}
+                                  :property/type :entity}
                         default-value (assoc (build-property-value-block block property 1) :db/id -1)]
                     {:logseq.property/hide-empty-value true
                      :logseq.property/default-value default-value})

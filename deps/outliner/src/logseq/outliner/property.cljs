@@ -83,8 +83,10 @@
       v-str)))
 
 (defn- update-datascript-schema
-  [property {type' :type :keys [cardinality]}]
-  (let [ident (:db/ident property)
+  [property schema]
+  (let [type' (:property/type schema)
+        cardinality (:db/cardinality schema)
+        ident (:db/ident property)
         cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
         old-type (:property/type property)
         old-ref-type? (db-property-type/user-ref-property-types old-type)
@@ -106,9 +108,10 @@
 
   (let [changed-property-attrs
         ;; Only update property if something has changed as we are updating a timestamp
-        (cond-> {}
-          (not= schema (:block/schema property))
-          (assoc :block/schema schema)
+        (cond-> (->> (keep (fn [[k v]]
+                             (when-not (= (get property k) v)
+                               [k v])) (dissoc schema :db/cardinality))
+                     (into {}))
           (and (some? property-name) (not= property-name (:block/title property)))
           (assoc :block/title property-name
                  :block/name (common-util/page-name-sanity-lc property-name)))
@@ -117,10 +120,10 @@
           (seq changed-property-attrs)
           (conj (outliner-core/block-with-updated-at
                  (merge {:db/ident db-ident}
-                        (common-util/dissoc-in changed-property-attrs [:block/schema :cardinality]))))
-          (or (not= (:type schema) (get-in property [:block/schema :type]))
-              (and (:cardinality schema) (not= (:cardinality schema) (keyword (name (:db/cardinality property)))))
-              (and (= :default (:type schema)) (not= :db.type/ref (:db/valueType property)))
+                        changed-property-attrs)))
+          (or (not= (:property/type schema) (:property/type property))
+              (and (:db/cardinality schema) (not= (:db/cardinality schema) (keyword (name (:db/cardinality property)))))
+              (and (= :default (:property/type schema)) (not= :db.type/ref (:db/valueType property)))
               (seq (:property/closed-values property)))
           (concat (update-datascript-schema property schema)))
         tx-data (concat property-tx-data
@@ -128,7 +131,7 @@
                           (mapcat
                            (fn [[property-id v]]
                              (build-property-value-tx-data conn property property-id v)) properties)))
-        many->one? (and (db-property/many? property) (= :one (:cardinality schema)))]
+        many->one? (and (db-property/many? property) (= :one (:db/cardinality schema)))]
     (when (and many->one? (seq (d/datoms @conn :avet db-ident)))
       (throw (ex-info "Disallowed many to one conversion"
                       {:type :notification
@@ -151,7 +154,8 @@
                             (throw (ex-info (str e)
                                             {:type :notification
                                              :payload {:message "Property failed to create. Please try a different property name."
-                                                       :type :error}})))))]
+                                                       :type :error}})))))
+        schema (sqlite-util/schema->qualified-property-keyword schema)]
     (assert (qualified-keyword? db-ident))
     (if-let [property (and (qualified-keyword? property-id) (d/entity db db-ident))]
       (update-property conn db-ident property schema opts)

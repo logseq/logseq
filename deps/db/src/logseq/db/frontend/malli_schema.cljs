@@ -84,14 +84,14 @@
   expected to be a coll if the property has a :many cardinality. validate-fn is
   a fn that is called directly on each value to return a truthy value.
   validate-fn varies by property type"
-  [db validate-fn [{:block/keys [schema] :as property} property-val] & {:keys [new-closed-value?]}]
+  [db validate-fn [property property-val] & {:keys [new-closed-value?]}]
   ;; For debugging
   ;; (when (not (internal-ident? (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
-  (let [validate-fn' (if (db-property-type/property-types-with-db (:type schema))
+  (let [validate-fn' (if (db-property-type/property-types-with-db (:property/type property))
                        (fn [value]
                          (validate-fn db value {:new-closed-value? new-closed-value?}))
                        validate-fn)
-        validate-fn'' (if (and (db-property-type/closed-value-property-types (:type schema))
+        validate-fn'' (if (and (db-property-type/closed-value-property-types (:property/type property))
                                ;; new closed values aren't associated with the property yet
                                (not new-closed-value?)
                                (seq (:property/closed-values property)))
