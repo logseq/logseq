@@ -476,7 +476,10 @@
        (cond->
         {:on-value-change
          (fn [value]
-           (db-property-handler/set-block-property! value :logseq.property/choice-checkbox-state false))}
+           (p/do!
+            (db-property-handler/set-block-property! value :logseq.property/choice-checkbox-state false)
+            (when unchecked-choice
+              (db-property-handler/remove-block-property! (:db/id unchecked-choice) :logseq.property/choice-checkbox-state))))}
          unchecked-choice
          (assoc :default-value (:db/id unchecked-choice))))
 
@@ -485,7 +488,10 @@
        (cond->
         {:on-value-change
          (fn [value]
-           (db-property-handler/set-block-property! value :logseq.property/choice-checkbox-state true))}
+           (p/do!
+            (db-property-handler/set-block-property! value :logseq.property/choice-checkbox-state true)
+            (when checked-choice
+              (db-property-handler/remove-block-property! (:db/id checked-choice) :logseq.property/choice-checkbox-state))))}
          checked-choice
          (assoc :default-value (:db/id checked-choice))))]]))
 
