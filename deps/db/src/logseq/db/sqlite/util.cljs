@@ -73,7 +73,7 @@
      (if (qualified-keyword? k)
        (assoc r k v)
        (if (= k :cardinality)
-         :db/cardinality
+         (assoc r :db/cardinality v)
          (assoc r (keyword "property" k) v))))
    {}
    prop-schema))
@@ -104,7 +104,7 @@
          :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
          :block/title (name prop-name)
          :db/index true
-         :db/cardinality (if (= :many (:cardinality prop-schema))
+         :db/cardinality (if (= :many (:db/cardinality prop-schema))
                            :db.cardinality/many
                            :db.cardinality/one)
          :block/order (db-order/gen-key)}

@@ -68,6 +68,17 @@
    :property/ui-position {:title "Property position"
                           :schema {:type :keyword
                                    :hide? true}}
+   :property/schema.classes
+   {:title "Property classes"
+    :schema {:type :entity
+             :cardinality :many
+             :public? false
+             :hide? true}}
+   :property.value/content
+   {:title "Property value"
+    :schema {:type :any
+             :public? false
+             :hide? true}}
    :block/alias           {:title "Alias"
                            :attribute :block/alias
                            :schema {:type :page
@@ -144,19 +155,6 @@
                           :schema {:type :datetime
                                    :public? false
                                    :hide? true}}
-   :logseq.property.attribute/property-schema-classes
-   {:title "Property classes"
-    :attribute :property/schema.classes
-    :schema {:type :entity
-             :cardinality :many
-             :public? false
-             :hide? true}}
-   :logseq.property.attribute/property-value-content
-   {:title "Property value"
-    :attribute :property.value/content
-    :schema {:type :any
-             :public? false
-             :hide? true}}
 
    :logseq.property.node/display-type {:title "Node Display Type"
                                        :schema {:type :keyword
@@ -567,7 +565,7 @@
     :block/refs :block/path-refs :block/link
     :block/title :block/closed-value-property
     :block/created-at :block/updated-at
-    :logseq.property.attribute/kv-value :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content})
+    :logseq.property.attribute/kv-value})
 
 (assert (= db-attribute-properties
            (set (keep (fn [[k {:keys [attribute]}]] (when attribute k))
