@@ -1,7 +1,6 @@
 (ns frontend.worker.db.validate
   "Validate db"
-  (:require [cljs.pprint :as pprint]
-            [frontend.worker.util :as worker-util]
+  (:require [frontend.worker.util :as worker-util]
             [logseq.db.frontend.validate :as db-validate]))
 
 (defn validate-db
@@ -12,7 +11,7 @@
         (worker-util/post-message :log [:db-invalid :error
                                         {:msg (str "Validation detected " (count errors) " invalid block(s):")
                                          :counts (assoc (db-validate/graph-counts db entities) :datoms datom-count)}])
-        (pprint/pprint errors)
+        (prn errors)
         (worker-util/post-message :notification
                                   [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
                                    :warning false]))
