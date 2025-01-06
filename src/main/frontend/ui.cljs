@@ -1008,6 +1008,8 @@
       :on-change #(let [value (util/evalue %)]
                     (reset! *value value))
       :on-mouse-up #(let [value (util/evalue %)]
+                      (on-change value))
+      :on-touch-end #(let [value (util/evalue %)]
                       (on-change value))}]))
 
 (rum/defcs tweet-embed < (rum/local true :loading?)
