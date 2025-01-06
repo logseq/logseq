@@ -42,6 +42,7 @@
             [frontend.version :as fv]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [goog.date :as gdate]
             [lambdaisland.glogi :as log]
             [logseq.api.block :as api-block]
             [logseq.common.util :as common-util]
@@ -54,6 +55,7 @@
             [logseq.sdk.git]
             [logseq.sdk.ui :as sdk-ui]
             [logseq.sdk.utils :as sdk-utils]
+            [logseq.common.util.date-time :as date-time-util]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
 
@@ -208,8 +210,7 @@
   (fn [path]
     (if (util/electron?)
       (fs/read-file nil (util/node-path.join path "package.json"))
-      (do (js/console.log "==>>> TODO: load plugin package.json from local???")
-          ""))))
+      (js/console.log "TODO: load plugin package.json from web plugin."))))
 
 (def ^:export load_plugin_readme
   (fn [path]
@@ -620,61 +621,69 @@
                              (some->> page (api-block/into-properties (state/get-current-repo))))]
           (bean/->js (sdk-utils/normalize-keyword-for-json page)))))))
 
-(def ^:export get_page
-  (fn [id-or-page-name]
-    (p/let [page (db-async/<pull (state/get-current-repo)
-                                 (cond
-                                   (number? id-or-page-name)
-                                   id-or-page-name
-                                   (util/uuid-string? id-or-page-name)
-                                   [:block/uuid (uuid id-or-page-name)]
-                                   :else
-                                   [:block/name (util/page-name-sanity-lc id-or-page-name)]))]
-      (when-let [page (and (:block/name page)
-                           (some->> page (api-block/into-properties (state/get-current-repo))))]
-        (bean/->js (sdk-utils/normalize-keyword-for-json page))))))
+(defn ^:export get_page
+  [id-or-page-name]
+  (p/let [page (db-async/<pull (state/get-current-repo)
+                 (cond
+                   (number? id-or-page-name)
+                   id-or-page-name
+                   (util/uuid-string? id-or-page-name)
+                   [:block/uuid (uuid id-or-page-name)]
+                   :else
+                   [:block/name (util/page-name-sanity-lc id-or-page-name)]))]
+    (when-let [page (and (:block/name page)
+                      (some->> page (api-block/into-properties (state/get-current-repo))))]
+      (bean/->js (sdk-utils/normalize-keyword-for-json page)))))
 
-(def ^:export get_all_pages
-  (fn []
-    (let [db (conn/get-db (state/get-current-repo))]
-      (some->
-       (->>
+(defn ^:export get_all_pages
+  []
+  (let [db (conn/get-db (state/get-current-repo))]
+    (some->
+      (->>
         (d/datoms db :avet :block/name)
         (map #(db-utils/pull (:e %)))
         (remove ldb/hidden?)
         (remove (fn [page]
                   (common-util/uuid-string? (:block/name page)))))
-       (sdk-utils/normalize-keyword-for-json)
-       (bean/->js)))))
+      (sdk-utils/normalize-keyword-for-json)
+      (bean/->js))))
 
-(def ^:export create_page
-  (fn [name ^js properties ^js opts]
-    (let [properties (bean/->clj properties)
-          db-base? (config/db-based-graph? (state/get-current-repo))
-          {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)]
-      (p/let [page (<pull-block name)
-              new-page (when-not page
-                         (page-handler/<create!
-                          name
-                          (cond->
+(defn ^:export create_page
+  [name ^js properties ^js opts]
+  (let [properties (bean/->clj properties)
+        db-base? (config/db-based-graph? (state/get-current-repo))
+        {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)]
+    (p/let [page (<pull-block name)
+            new-page (when-not page
+                       (page-handler/<create!
+                         name
+                         (cond->
                            {:redirect? (if (boolean? redirect) redirect true)
                             :journal? journal
                             :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
                             :format format}
 
-                            (not db-base?)
-                            (assoc :properties properties))))
-              _ (when (and db-base? (seq properties))
-                  (api-block/save-db-based-block-properties! new-page properties))]
-        (some-> (or page new-page)
-                :db/id
-                (db-utils/entity)
-                (sdk-utils/normalize-keyword-for-json)
-                (bean/->js))))))
+                           (not db-base?)
+                           (assoc :properties properties))))
+            _ (when (and db-base? (seq properties))
+                (api-block/save-db-based-block-properties! new-page properties))]
+      (some-> (or page new-page)
+        :db/id
+        (db-utils/pull)
+        (sdk-utils/normalize-keyword-for-json)
+        (bean/->js)))))
 
-(def ^:export delete_page
-  (fn [name]
-    (page-handler/<delete! name nil)))
+(defn ^:export create_journal_page
+  [^js date]
+  (let [date (js/Date. date)]
+    (when-let [datestr (and (not (js/isNaN (.getTime date)))
+                          (-> (gdate/Date. date)
+                            (date-time-util/format "yyyy-MM-dd")))]
+      (create_page datestr nil #js {:journal true :redirect false}))))
+
+(defn ^:export delete_page
+  [name]
+  (page-handler/<delete! name nil))
 
 (def ^:export rename_page
   page-handler/rename!)
