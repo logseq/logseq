@@ -252,7 +252,9 @@
                                                                                                (:db/id property))
                                                       (db-property-handler/remove-block-property! (:db/id block)
                                                                                                   :logseq.task/scheduled-on-property)))))]
-       [:div "Set as repeated task"]]]
+       (if (= :logseq.task/deadline (:db/ident property))
+         [:div "Set as repeated task"]
+         [:div "Repeat " (if (= :date (get-in property [:block/schema :type])) "date" "datetime")])]]
      [:div.flex.flex-row.gap-2
       [:div.flex.text-muted-foreground.mr-4
        "Every"]
@@ -279,7 +281,7 @@
                         (db/entity :logseq.task/status.done))]
        [:div.flex.flex-col.gap-2
         [:div.text-muted-foreground
-         "Reschedule when"]
+         "When"]
         (shui/select
          (cond->
           {:on-value-change (fn [v]
