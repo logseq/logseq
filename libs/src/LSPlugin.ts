@@ -761,6 +761,10 @@ export interface IEditorProxy extends Record<string, any> {
     }>
   ) => Promise<PageEntity | null>
 
+  createJournalPage: (
+    date: string | Date
+  ) => Promise<PageEntity | null>
+
   deletePage: (pageName: BlockPageName) => Promise<void>
 
   renamePage: (oldName: string, newName: string) => Promise<void>
