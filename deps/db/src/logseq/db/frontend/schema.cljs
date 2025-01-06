@@ -115,10 +115,7 @@
    {:block/name {:db/index true}        ; remove db/unique for :block/name
     ;; closed value
     :block/closed-value-property {:db/valueType :db.type/ref
-                                  :db/cardinality :db.cardinality/many}
-    :property/schema.classes {:db/valueType :db.type/ref
-                              :db/cardinality :db.cardinality/many}
-    :property.value/content {}}))
+                                  :db/cardinality :db.cardinality/many}}))
 
 (def retract-attributes
   #{:block/refs

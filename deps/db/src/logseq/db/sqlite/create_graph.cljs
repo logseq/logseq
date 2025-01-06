@@ -55,6 +55,17 @@
                                   (mark-block-as-built-in {:block/uuid (:block/uuid block)}))
         properties (build-initial-properties* db-property/built-in-properties)
         ;; Tx order matters. built-in-property must come first as all properties depend on it.
+        bootstrap-property-ids (map #(select-keys % [:db/ident :block/uuid :db/cardinality :db/valueType])
+                                    (keep
+                                     (fn [property]
+                                       (when (and (:db/ident property) (= "property" (namespace (:db/ident property))))
+                                         property))
+                                     properties))
+        properties (map (fn [block]
+                          (if (and (:db/ident block) (= "property" (namespace (:db/ident block))))
+                            (dissoc block :db/ident :db/cardinality :db/valueType)
+                            block))
+                        properties)
         tx (concat [built-in-property]
                    properties
                    ;; Adding built-ins must come after initial properties
@@ -68,6 +79,7 @@
         (assert (string/starts-with? (str block-uuid) "00000002") m)))
 
     {:tx tx
+     :bootstrap-property-ids bootstrap-property-ids
      :properties (filter entity-util/property? properties)}))
 
 (def built-in-pages-names
@@ -170,7 +182,7 @@
                         :file/content ""
                         :file/created-at (js/Date.)
                         :file/last-modified-at (js/Date.)}]
-        {properties-tx :tx :keys [properties]} (build-initial-properties)
+        {properties-tx :tx :keys [bootstrap-property-ids properties]} (build-initial-properties)
         db-ident->properties (zipmap (map :db/ident properties) properties)
         default-classes (build-initial-classes db-ident->properties)
         default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
@@ -184,7 +196,8 @@
         classes-tx (concat (map #(dissoc % :db/ident) bootstrap-classes)
                            (remove bootstrap-class? default-classes))
         ;; Order of tx is critical. bootstrap-class-ids bootstraps properties-tx and classes-tx
-        tx (vec (concat bootstrap-class-ids initial-data properties-tx classes-tx
+        tx (vec (concat bootstrap-property-ids bootstrap-class-ids
+                        initial-data properties-tx classes-tx
                         initial-files default-pages hidden-pages))]
     (validate-tx-for-duplicate-idents tx)
     tx))
