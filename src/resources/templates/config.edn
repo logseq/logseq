@@ -118,6 +118,25 @@
  ;; Default value: false
  ;; :publishing/all-pages-public? false
 
+ ;; Control published html content.
+ :publishing/html-options
+ {;;
+  ;; Favicon url. Default to the logseq icon.
+  ;; :icon ""
+  ;; Content of og:site_name
+  ;; :name ""
+  ;; Content of og:title
+  ;; :title ""
+  ;; Content of og:description
+  ;; :description ""
+  ;; Content of og:url
+  ;; :url ""
+  ;;
+  ;; Inject extra <scripts> tag to the generated index.html.
+  ;; Example 
+  ;; :scripts-before [{:src "script_url" :content: "script content"}]
+  :scripts-before []}
+
  ;; Define the default home page and sidebar status.
  ;; If unspecified, the journal page will be loaded on startup and the right sidebar will stay hidden.
  ;; The `:page` value represents the name of the page displayed at startup.
