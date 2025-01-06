@@ -87,18 +87,19 @@
                           ;; closed values are referenced by their :db/ident so no need to create values
                           (not (get-in db-property/built-in-properties [k :closed-values])))
                    (let [property-map {:db/ident k
-                                       :block/schema {:type built-in-type}}]
+                                       :property/type built-in-type}]
                      [property-map v])
                    (when-let [built-in-type' (get (:build/properties-ref-types new-block) built-in-type)]
                      (let [property-map {:db/ident k
-                                         :block/schema {:type built-in-type'}}]
+                                         :property/type built-in-type'}]
                        [property-map v])))
                  (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :block/schema :type]))
                             ;; TODO: Support translate-property-value without this hack
                             (not (vector? v)))
-                   (let [property-map {:db/ident (get-ident all-idents k)
+                   (let [prop-type (get-in properties-config [k :block/schema :type])
+                         property-map {:db/ident (get-ident all-idents k)
                                        :original-property-id k
-                                       :block/schema {:type (get-in properties-config [k :block/schema :type])}}]
+                                       :property/type prop-type}]
                      [property-map v])))))
        (db-property-build/build-property-values-tx-m new-block)))
 

@@ -1,20 +1,20 @@
 (ns frontend.extensions.slide
-  (:require [rum.core :as rum]
-            [cljs-bean.core :as bean]
-            [frontend.loader :as loader]
-            [frontend.ui :as ui]
-            [frontend.context.i18n :refer [t]]
-            [frontend.config :as config]
-            [frontend.components.block :as block]
+  (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.db-mixins :as db-mixins]
+            [frontend.components.block :as block]
+            [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
+            [frontend.db.conn :as conn]
+            [frontend.handler.db-based.property.util :as db-pu]
+            [frontend.loader :as loader]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
-            [frontend.handler.db-based.property.util :as db-pu]
+            [frontend.ui :as ui]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
-            [frontend.db.conn :as conn]))
+            [rum.core :as rum]))
 
 (defn loaded? []
   js/window.Reveal)
@@ -28,7 +28,7 @@
                        (->> properties
                             (keep (fn [[k v]]
                                     ;; Don't inject hidden props like created-from-property
-                                    (when-not (:hide? (:block/schema (db/entity repo k)))
+                                    (when-not (:property/hide? (db/entity repo k))
                                       [k
                                        (if (:db/id v)
                                          ;; Can't use db-property-util/lookup b/c vals aren't entities

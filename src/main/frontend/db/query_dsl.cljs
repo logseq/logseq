@@ -6,20 +6,20 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
+            [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.db.utils :as db-utils]
             [frontend.db.model :as model]
             [frontend.db.query-react :as query-react]
-            [logseq.db.frontend.rules :as rules]
+            [frontend.db.utils :as db-utils]
+            [frontend.state :as state]
             [frontend.template :as template]
-            [logseq.graph-parser.text :as text]
+            [frontend.util :as util]
+            [frontend.util.text :as text-util]
+            [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.common.util :as common-util]
-            [frontend.util.text :as text-util]
-            [frontend.util :as util]
-            [frontend.config :as config]
-            [frontend.state :as state]))
+            [logseq.db.frontend.rules :as rules]
+            [logseq.graph-parser.text :as text]))
 
 ;; Query fields:
 
@@ -303,7 +303,7 @@
             (subs v' 1)
             (or (page-ref/get-page-name v') v'))
           ;; Convert number pages to string
-          (and (double? v) (= :node (get-in (db-utils/entity k) [:block/schema :type])))
+          (and (double? v) (= :node (:property/type (db-utils/entity k))))
           (str v)
           :else
           v')))

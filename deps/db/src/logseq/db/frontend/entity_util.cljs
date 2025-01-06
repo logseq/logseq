@@ -78,7 +78,7 @@
     (if (string? page)
       (string/starts-with? page "$$$")
       (when (or (map? page) (de/entity? page))
-        (false? (get-in page [:block/schema :public?]))))))
+        (false? (:property/public? page))))))
 
 (defn object?
   [node]

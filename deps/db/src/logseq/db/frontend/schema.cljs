@@ -16,7 +16,6 @@
    ;; "property" for property blocks
    ;; "class" for structured page
    :block/type {:db/index true}
-   :block/schema {}
    :block/uuid {:db/unique :db.unique/identity}
    :block/parent {:db/valueType :db.type/ref
                   :db/index true}

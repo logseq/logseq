@@ -84,7 +84,7 @@
       (cond->
        {:db/ident db-ident'
         :block/tags #{:logseq.class/Property}
-        :block/schema (merge {:type :default} (dissoc prop-schema :classes :cardinality))
+        :property/type (:type prop-schema)
         :block/name (common-util/page-name-sanity-lc (name prop-name))
         :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
         :block/title (name prop-name)
