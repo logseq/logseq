@@ -6,28 +6,28 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
+            [dommy.core :as dom]
             [frontend.components.dnd :as dnd]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
-            [dommy.core :as dom]
+            [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.shui.ui :as shui]
-            [rum.core :as rum]
-            [frontend.mixins :as mixins]
             [logseq.shui.table.core :as table-core]
-            [logseq.db :as ldb]
-            [frontend.config :as config]
-            [frontend.db-mixins :as db-mixins]))
+            [logseq.shui.ui :as shui]
+            [rum.core :as rum]))
 
 (defn- get-latest-entity
   [e]
@@ -117,7 +117,7 @@
 
 (defn- get-property-value-for-search
   [block property]
-  (let [type (get-in property [:block/schema :type])
+  (let [type (:property/type property)
         many? (= :db.cardinality/many (get property :db/cardinality))
         number-type? (= :number type)
         v (get block (:db/ident property))
@@ -192,7 +192,7 @@
                                           :logseq.property/created-from-property}
                                         ident)
                              (and with-object-name? (= :block/title ident))
-                             (contains? #{:map :entity} (get-in property [:block/schema :type])))
+                             (contains? #{:map :entity} (:property/type property)))
                  (let [property (if (de/entity? property)
                                   property
                                   (or (merge (db/entity ident) property) property)) ; otherwise, :cell/:header/etc. will be removed
@@ -535,13 +535,6 @@
         :on-click #(set-show-input! true)}
        (ui/icon "search")))))
 
-(comment
-  (defn- property-ref-type?
-    [property]
-    (let [schema (:block/schema property)
-          type (:type schema)]
-      (db-property-type/all-ref-property-types type))))
-
 (defn- get-property-values
   [rows property]
   (let [property-ident (:db/ident property)
@@ -560,7 +553,7 @@
 (defn datetime-property?
   [property]
   (or
-   (= :datetime (get-in property [:block/schema :type]))
+   (= :datetime (:property/type property))
    (contains? #{:block/created-at :block/updated-at} (:db/ident property))))
 
 (def timestamp-options
@@ -613,7 +606,7 @@
                                    property (db/entity id)
                                    internal-property {:db/ident (:id column)
                                                       :block/title (:name column)
-                                                      :block/schema {:type (:type column)}}]
+                                                      :property/type (:type column)}]
                                (if (or property
                                        (= :db.cardinality/many (:db/cardinality (get schema id)))
                                        (not= (:type column) :string))
@@ -636,7 +629,7 @@
                                       (let [filters' (conj filters [(:db/ident property) :after value])]
                                         (set-filters! filters')))})
                  property
-                 (if (= :checkbox (get-in property [:block/schema :type]))
+                 (if (= :checkbox (:property/type property))
                    (let [items [{:value true :label "true"}
                                 {:value false :label "false"}]]
                      (merge option
@@ -699,7 +692,7 @@
     [:before :after]
     (concat
      [:is :is-not]
-     (case (get-in property [:block/schema :type])
+     (case (:property/type property)
        (:default :url :node)
        [:text-contains :text-not-contains]
        (:date)
@@ -792,7 +785,7 @@
 
 (rum/defc filter-value-select < rum/static
   [{:keys [data-fns] :as table} property value operator idx]
-  (let [type (get-in property [:block/schema :type])
+  (let [type (:property/type property)
         items (cond
                 (contains? #{:before :after} operator)
                 timestamp-options

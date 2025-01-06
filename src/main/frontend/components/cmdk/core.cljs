@@ -10,6 +10,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.command-palette :as cp-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.editor :as editor-handler]
@@ -17,7 +18,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.handler.block :as block-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -684,7 +684,7 @@
               page' (db/entity repo [:block/uuid (:block/uuid page)])
               link (if (config/db-based-graph? repo)
                      (some (fn [[k v]]
-                             (when (= :url (get-in (db/entity repo k) [:block/schema :type]))
+                             (when (= :url (:property/type (db/entity repo k)))
                                (:block/title v)))
                            (:block/properties page'))
                      (some #(re-find editor-handler/url-regex (val %)) (:block/properties page')))]

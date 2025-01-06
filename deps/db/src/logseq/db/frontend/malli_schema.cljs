@@ -120,9 +120,7 @@
   [property]
   ;; use explicit call to be nbb compatible
   (let [closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
-    (cond-> (assoc (select-keys property [:db/ident :db/valueType :db/cardinality])
-                   :block/schema
-                   (select-keys (:block/schema property) [:type]))
+    (cond-> (select-keys property [:db/ident :db/valueType :db/cardinality :property/type])
       (seq closed-values)
       (assoc :property/closed-values closed-values))))
 
@@ -198,7 +196,7 @@
 
 (assert (every? #(re-find #"^(block|logseq\.)" (namespace %)) db-property/db-attribute-properties)
         "All db-attribute idents start with an internal namespace")
-(assert (every? #(re-find #"^logseq\." %) logseq-ident-namespaces)
+(assert (every? #(or (re-find #"^logseq\." %) (= "property" %)) logseq-ident-namespaces)
         "All logseq idents start with an internal namespace")
 
 ;; Main malli schemas
@@ -212,7 +210,7 @@
 (def property-tuple
   "A tuple of a property map and a property value"
   (into
-   [:multi {:dispatch #(-> % first :block/schema :type)}]
+   [:multi {:dispatch #(-> % first :property/type)}]
    (map (fn [[prop-type value-schema]]
           [prop-type
            (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)]
@@ -289,41 +287,22 @@
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
-  [[:hide? {:optional true} :boolean]
-   [:position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
+  [[:property/hide? {:optional true} :boolean]
+   [:property/ui-position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
 
 (def internal-property
   (vec
    (concat
     [:map
      [:db/ident internal-property-ident]
-     [:block/schema
-      (vec
-       (concat
-        [:map
-         [:type (apply vector :enum (into db-property-type/internal-built-in-property-types
-                                          db-property-type/user-built-in-property-types))]
-         [:public? {:optional true} :boolean]
-         [:view-context {:optional true} [:enum :page :block :class :property :never]]
-         [:shortcut {:optional true} :string]]
-        property-common-schema-attrs))]]
+     [:property/type (apply vector :enum (into db-property-type/internal-built-in-property-types
+                                               db-property-type/user-built-in-property-types))]
+     [:property/public? {:optional true} :boolean]
+     [:property/view-context {:optional true} [:enum :page :block :class :property :never]]]
+    property-common-schema-attrs
     property-attrs
     page-attrs
     page-or-block-attrs)))
-
-(def user-property-schema
-  (into
-   [:multi {:dispatch :type}]
-   (map
-    (fn [prop-type]
-      [prop-type
-       (vec
-        (concat
-         [:map
-          ;; Once a schema is defined it must have :type as this is an irreversible decision
-          [:type :keyword]]
-         property-common-schema-attrs))])
-    db-property-type/user-built-in-property-types)))
 
 (def user-property
   (vec
@@ -331,7 +310,8 @@
     [:map
      ;; class-ident allows for a class to be used as a property
      [:db/ident [:or user-property-ident class-ident]]
-     [:block/schema user-property-schema]]
+     [:property/type (apply vector :enum db-property-type/user-built-in-property-types)]]
+    property-common-schema-attrs
     property-attrs
     page-attrs
     page-or-block-attrs)))
@@ -349,9 +329,7 @@
     [:map
      ;; pages from :default property uses this but closed-value pages don't
      [:block/order {:optional true} block-order]
-     [:block/schema
-      [:map
-       [:public? {:optional true} :boolean]]]]
+     [:property/public? {:optional true} :boolean]]
     page-attrs
     page-or-block-attrs)))
 

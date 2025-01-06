@@ -43,7 +43,7 @@
     (or
      (let [p (:logseq.task/recur-status-property entity)
            choices (:property/closed-values p)
-           checkbox? (= :checkbox (get-in p [:block/schema :type]))]
+           checkbox? (= :checkbox (:property/type p))]
        (if checkbox?
          true
          (some (fn [choice]
@@ -54,7 +54,7 @@
     (or
      (let [p (:logseq.task/recur-status-property entity)
            choices (:property/closed-values p)
-           checkbox? (= :checkbox (get-in p [:block/schema :type]))]
+           checkbox? (= :checkbox (:property/type p))]
        (if checkbox?
          false
          (some (fn [choice]
@@ -71,7 +71,7 @@
         value' (get-value entity property value)]
     (when-let [property-entity (d/entity db property')]
       (let [value-matches? (fn [datom-value]
-                             (let [ref? (contains? db-property-type/all-ref-property-types (:type (:block/schema property-entity)))
+                             (let [ref? (contains? db-property-type/all-ref-property-types (:property/type property-entity))
                                    db-value (cond
                                               ;; entity-conditions
                                               (nil? datom-value)

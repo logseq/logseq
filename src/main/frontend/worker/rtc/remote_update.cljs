@@ -365,7 +365,6 @@
     :block/updated-at
     :block/created-at
     :block/alias
-    :block/schema
     :block/tags
     :block/link
     :block/journal-day

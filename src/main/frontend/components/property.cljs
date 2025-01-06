@@ -182,7 +182,7 @@
 
 (rum/defc property-icon
   [property property-type]
-  (let [type (or (get-in property [:block/schema :type] property-type) :default)
+  (let [type (or (:property/type property) property-type :default)
         ident (:db/ident property)
         icon (cond
                (= ident :block/tags)
@@ -212,7 +212,7 @@
       (reset! *property property)
       (when property
         (let [add-class-property? (and (ldb/class? block) class-schema?)
-              type (get-in property [:block/schema :type])]
+              type (:property/type property)]
           (cond
             add-class-property?
             (p/do!
@@ -285,9 +285,8 @@
                            {:on-chosen
                             (fn [_e icon]
                               (if icon
-                                (db-property-handler/upsert-property! (:db/ident property)
-                                                                      (:block/schema property)
-                                                                      {:properties {:logseq.property/icon icon}})
+                                (db-property-handler/set-block-property! (:db/id property)
+                                                                         :logseq.property/icon icon)
                                 (db-property-handler/remove-block-property! (:db/id property)
                                                                             (pu/get-pid :logseq.property/icon)))
                               (shui/popup-hide! id))
@@ -359,7 +358,7 @@
                         (empty? types)
                         #{:block}))
         exclude-properties (fn [m]
-                             (let [view-context (get-in m [:block/schema :view-context] :all)]
+                             (let [view-context (get m :property/view-context :all)]
                                (or (contains? #{:logseq.property/query} (:db/ident m))
                                    (and (not page?) (contains? #{:block/alias} (:db/ident m)))
                                    ;; Filters out properties from being in wrong :view-context and :never view-contexts
@@ -445,7 +444,7 @@
   [block k v {:keys [inline-text page-cp sortable-opts] :as opts}]
   (when (keyword? k)
     (when-let [property (db/sub-block (:db/id (db/entity k)))]
-      (let [type (get-in property [:block/schema :type] :default)
+      (let [type (get property :property/type :default)
             closed-values? (seq (:property/closed-values property))
             block? (and v
                         (not closed-values?)
@@ -625,7 +624,7 @@
                                     state-hide-empty-properties?
                                     (nil? (get block property-id))
                                     :else
-                                    (boolean (:hide? (:block/schema property))))))
+                                    (boolean (:property/hide? property)))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
@@ -636,7 +635,7 @@
                           state-hide-empty-properties?
                           (fn [[property-id property-value]]
                             ;; User's selection takes precedence over config
-                            (if (contains? (:block/schema (db/entity property-id)) :hide?)
+                            (if (:property/hide? (db/entity property-id))
                               (hide-with-property-id property-id)
                               (nil? property-value)))
                           :else

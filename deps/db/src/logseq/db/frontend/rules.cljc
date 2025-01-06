@@ -241,8 +241,7 @@
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
       (has-property-or-default-value? ?b ?prop)
-      [?prop-e :block/schema ?prop-schema]
-      [(get ?prop-schema :public? true) ?public]
+      [?prop-e :property/public? ?public]
       [(= true ?public)]]
 
     ;; Same as has-simple-query-property except it returns public and private properties like :block/title
@@ -258,8 +257,7 @@
       [?b ?prop _]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
-      [?prop-e :block/schema ?prop-schema]
-      [(get ?prop-schema :public? true) ?public]
+      [?prop-e :property/public? ?public]
       [(= true ?public)]]
 
     ;; Checks if a property has a value for any features that are not simple queries
@@ -267,8 +265,7 @@
     '[(property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
-      [?prop-e :block/schema ?prop-schema]
-      [(get ?prop-schema :public? true) ?public]
+      [?prop-e :property/public? ?public]
       [(= true ?public)]
       [?b ?prop ?pv]
       (or
@@ -287,8 +284,7 @@
     '[(simple-query-property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
-      [?prop-e :block/schema ?prop-schema]
-      [(get ?prop-schema :public? true) ?public]
+      [?prop-e :property/public? ?public]
       [(get ?prop-schema :type) ?type]
       [(= true ?public)]
       (property-value ?b ?prop-e ?val)]

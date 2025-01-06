@@ -26,7 +26,7 @@
                                                    block-id
                                                    (or (:db/id property) {:db/ident (:db/ident property)}))
           :block/order (db-order/gen-key)}
-         (if (db-property-type/property-value-content? (get-in block [:block/schema :type]) property)
+         (if (db-property-type/property-value-content? (:property/type property) property)
            {:property.value/content value}
            {:block/title value}))
         common-util/block-with-timestamps)))
@@ -53,6 +53,21 @@
    * :closed-values - Vec of closed-value maps for properties with choices. Map
      has keys :value, :db-ident, :uuid and :icon"
   (ordered-map
+   :property/type {:title "Property type"
+                   :schema {:type :keyword
+                            :hide? true}}
+   :property/hide? {:title "Hide this property"
+                    :schema {:type :checkbox
+                             :hide? true}}
+   :property/public? {:title "Property public?"
+                      :schema {:type :checkbox
+                               :hide? true}}
+   :property/view-context {:title "Property view context"
+                           :schema {:type :keyword
+                                    :hide? true}}
+   :property/ui-position {:title "Property position"
+                          :schema {:type :keyword
+                                   :hide? true}}
    :block/alias           {:title "Alias"
                            :attribute :block/alias
                            :schema {:type :page
@@ -72,11 +87,6 @@
                                         :schema {:type :any
                                                  :public? false
                                                  :hide? true}}
-   :block/schema         {:title "Node schema"
-                          :attribute :block/schema
-                          :schema {:type :map
-                                   :public? false
-                                   :hide? true}}
    :block/parent         {:title "Node parent"
                           :attribute :block/parent
                           :schema {:type :entity
@@ -552,7 +562,7 @@
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"
-  #{:block/alias :block/tags :block/schema :block/parent
+  #{:block/alias :block/tags :block/parent
     :block/order :block/collapsed? :block/page
     :block/refs :block/path-refs :block/link
     :block/title :block/closed-value-property
@@ -585,7 +595,8 @@
     ;; attribute ns is for db attributes that don't start with :block
     "logseq.property.attribute"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
-    "logseq.property.user" "logseq.property.history"})
+    "logseq.property.user" "logseq.property.history"
+    "property"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
@@ -714,4 +725,4 @@
   "Indicates whether built-in property can be seen and edited by users"
   [entity]
   ;; No need to do :built-in? check yet since user properties can't set this
-  (get-in entity [:block/schema :public?]))
+  (:property/public? entity))

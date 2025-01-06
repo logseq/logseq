@@ -31,7 +31,7 @@
   "These db-ident entities are immutable,
   it means `(db/entity :block/title)` always return same result"
   #{:block/link :block/updated-at :block/refs :block/closed-value-property
-    :block/created-at :block/collapsed? :block/schema :block/tags :block/title
+    :block/created-at :block/collapsed? :block/tags :block/title
     :block/path-refs :block/parent :block/order :block/page
 
     :logseq.property/created-from-property
@@ -114,8 +114,8 @@
        ;; property default value
        (when (qualified-keyword? k)
          (when-let [property (entity-memoized db k)]
-           (let [schema (lookup-entity property :block/schema nil)]
-             (if (= :checkbox (:type schema))
+           (let [property-type (lookup-entity property :property/type nil)]
+             (if (= :checkbox property-type)
                (lookup-entity property :logseq.property/scalar-default-value nil)
                (lookup-entity property :logseq.property/default-value nil)))))))))
 
