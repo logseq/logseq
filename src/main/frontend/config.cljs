@@ -67,19 +67,37 @@
 (goog-define ENABLE-PLUGINS true)
 (defonce feature-plugin-system-on? ENABLE-PLUGINS)
 
+(goog-define ENABLE-PLUGINS-LOCAL false)
+(defonce feature-local-plugin-system-on? ENABLE-PLUGINS-LOCAL)
+
+(goog-define CONFIG-LOCAL-PATH "dot-logseq")
+(defn config-local-path
+  []
+  CONFIG-LOCAL-PATH)
+
+(goog-define PLUGINS-LOCAL-PATH "plugins")
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn plugins-local-path
+  []
+  PLUGINS-LOCAL-PATH)
+
 ;; Desktop only as other platforms requires better understanding of their
 ;; multi-graph workflows and optimal place for a "global" dir
-(def global-config-enabled? util/electron?)
+(def global-config-enabled? util/browser?)
 
 ;; User level configuration for whether plugins are enabled
 (defonce lsp-enabled?
-         (and (util/electron?)
-              (not (false? feature-plugin-system-on?))
-              (state/lsp-enabled?-or-theme)))
+  (and (util/browser?)
+       (not (false? feature-plugin-system-on?))
+       (state/lsp-enabled?-or-theme)))
 
 (defn plugin-config-enabled?
   []
   (and lsp-enabled? (global-config-enabled?)))
+
+(defn plugin-local-enabled?
+  []
+  (and plugin-config-enabled? feature-local-plugin-system-on?))
 
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
@@ -388,7 +406,7 @@
       (js/console.error "BUG: nil repo")
       nil)
 
-    (and (util/electron?) (local-db? repo-url))
+    (and (or util/electron? util/browser?) (local-db? repo-url))
     (get-local-dir repo-url)
 
     (and (mobile-util/native-platform?) (local-db? repo-url))

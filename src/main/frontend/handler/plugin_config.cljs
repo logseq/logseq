@@ -18,7 +18,11 @@ when a plugin is installed, updated or removed"
             [malli.error :as me]
             [frontend.schema.handler.plugin-config :as plugin-config-schema]
             [cljs-bean.core :as bean]
+            [electron.ipc :as ipc]
             [lambdaisland.glogi :as log]))
+
+(defonce root-dir
+  (atom nil))
 
 (defn plugin-config-path
   "Full path to plugins.edn"
@@ -127,4 +131,11 @@ returns map of plugins to install and uninstall"
   "This component has just one responsibility on start, to create a plugins.edn
   if none exists"
   []
-  (create-plugin-config-file-if-not-exists))
+  (-> (p/do!
+       (p/let [root-dir' (ipc/ipc "getLogseqDotDirRoot")]
+         (reset! root-dir root-dir'))
+       (create-plugin-config-file-if-not-exists)
+       )
+      (p/timeout 6000)
+      (p/catch (fn [e]
+                 (js/console.error "cannot start plugin-config" e)))))
