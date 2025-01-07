@@ -1,29 +1,29 @@
 (ns frontend.extensions.pdf.core
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.components.svg :as svg]
+            [datascript.impl.entity :as de]
+            [frontend.commands :as commands]
             [frontend.components.block :as block]
+            [frontend.components.svg :as svg]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.async :as db-async]
             [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.toolbar :refer [pdf-toolbar *area-dashed? *area-mode? *highlight-mode? *highlights-ctx*]]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.windows :as pdf-windows]
             [frontend.handler.notification :as notification]
-            [frontend.config :as config]
+            [frontend.handler.property :as property-handler]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.commands :as commands]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
+            [frontend.ui :as ui]
             [frontend.util :as util]
+            [goog.functions :refer [debounce]]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.ui :as ui]
-            [frontend.db.async :as db-async]
-            [goog.functions :refer [debounce]]
-            [frontend.handler.property :as property-handler]
-            [datascript.impl.entity :as de]))
+            [rum.core :as rum]))
 
 (declare pdf-container system-embed-playground)
 
@@ -76,10 +76,11 @@
   (let [el-ref   (rum/use-ref nil)
         adjust-main-size!
         (util/debounce
-         200 (fn [width]
-               (let [root-el js/document.documentElement]
-                 (.setProperty (.-style root-el) "--ph-view-container-width" width)
-                 (pdf-utils/adjust-viewer-size! viewer))))
+         (fn [width]
+           (let [root-el js/document.documentElement]
+             (.setProperty (.-style root-el) "--ph-view-container-width" width)
+             (pdf-utils/adjust-viewer-size! viewer)))
+         200)
         group-id (.-$groupIdentity viewer)]
 
     ;; draggable handler
@@ -941,9 +942,10 @@
       (let [persist-hls-data!
             (rum/use-callback
              (util/debounce
-              4000 (fn [latest-hls extra]
-                     (pdf-assets/file-based-persist-hls-data$
-                      pdf-current latest-hls extra))) [pdf-current])]
+              (fn [latest-hls extra]
+                (pdf-assets/file-based-persist-hls-data$
+                 pdf-current latest-hls extra))
+              4000) [pdf-current])]
 
         (rum/use-effect!
          (fn []
@@ -973,9 +975,9 @@
          (set-loader-state! {:status :loading})
 
          (-> (get-doc$ (clj->js opts))
-           (p/then (fn [doc]
-                     (set-loader-state! {:pdf-document doc :status :completed})))
-           (p/catch #(set-loader-state! {:error %})))
+             (p/then (fn [doc]
+                       (set-loader-state! {:pdf-document doc :status :completed})))
+             (p/catch #(set-loader-state! {:error %})))
          #()))
      [url doc-password])
 

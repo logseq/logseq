@@ -110,7 +110,8 @@
 
 (def adjust-viewer-size!
   (util/debounce
-   200 (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))))
+   (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))
+   200))
 
 (defn fix-nested-js
   [its]
