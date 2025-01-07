@@ -396,7 +396,7 @@
    [:logseq.property.history/block :int]
    [:logseq.property.history/property :int]
    [:logseq.property.history/ref-value {:optional true} :int]
-   [:logseq.property.history/scalar-value {:optional true} :int]
+   [:logseq.property.history/scalar-value {:optional true} :any]
    [:block/tx-id {:optional true} :int]])
 
 (def property-history-block
@@ -405,7 +405,8 @@
    [:fn {:error/message ":logseq.property.history/ref-value or :logseq.property.history/scalar-value required"
          :error/path [:logseq.property.history/ref-value]}
     (fn [m]
-      (or (:logseq.property.history/ref-value m) (:logseq.property.history/scalar-value m)))]])
+      (or (:logseq.property.history/ref-value m)
+          (some? (:logseq.property.history/scalar-value m))))]])
 
 (def closed-value-block*
   (vec
