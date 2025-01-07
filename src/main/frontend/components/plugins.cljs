@@ -404,14 +404,14 @@
    :intent "link"
    :target "_blank"))
 
-(rum/defc user-proxy-settings-panel
+(rum/defc user-proxy-settings-container
   [{:keys [protocol type] :as agent-opts}]
   (let [type        (or (not-empty type) (not-empty protocol) "system")
         [opts set-opts!] (rum/use-state agent-opts)
         [testing? set-testing?!] (rum/use-state false)
         *test-input (rum/create-ref)
         disabled?   (or (= (:type opts) "system") (= (:type opts) "direct"))]
-    [:div.cp__settings-network-proxy-panel
+    [:div.cp__settings-network-proxy-cnt
      [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
      [:div.p-2
       [:p [:label [:strong (t :type)]
@@ -477,6 +477,33 @@
                   :on-click (fn []
                               (p/let [_ (ipc/ipc :setProxy opts)]
                                 (state/set-state! [:electron/user-cfgs :settings/agent] opts))))]]]))
+
+(rum/defc load-from-web-url-container
+  []
+  (let [[url set-url!] (rum/use-state "")
+        [pending? set-pending?] (rum/use-state false)
+        handle-submit! (fn []
+                         (set-pending? true)
+                         (-> (p/delay 3000)
+                           (p/finally
+                             #(set-pending? false))))]
+
+    [:div.px-4.pt-4.pb-2.rounded-md.flex.flex-col.gap-2
+     [:div.flex.flex-col.gap-3
+      (shui/input {:placeholder "http://"
+                   :value url
+                   :on-change #(set-url! (-> (util/evalue %) (util/trim-safe)))
+                   :auto-focus true})
+      [:span.text-gray-10
+       (shui/tabler-icon "info-circle" {:size 13})
+       [:span "URLs support both GitHub repositories and local development servers.
+      (For examples: https://github.com/xyhp915/logseq-journals-calendar,
+      http://localhost:8080/<plugin-dir-root>)"]]
+      ]
+     [:div.flex.justify-end
+      (shui/button {:disabled (or pending? (string/blank? url))
+                    :on-click handle-submit!}
+        (if pending? (ui/loading) "Save"))]]))
 
 (rum/defc auto-check-for-updates-control
   []
@@ -614,17 +641,21 @@
 
                           [{:hr true}]
 
-                          (when (and (state/developer-mode?)
-                                     (util/electron?))
-                            [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
-                              :options {:on-click
-                                        #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                           (js/apis.openPath (str root "/preferences.json")))}}
-                             {:title [:span.flex.items-center.whitespace-nowrap.gap-1
-                                      (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
-                              :options {:on-click
-                                        #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                           (js/apis.openPath root))}}])
+                          (when (state/developer-mode?)
+                            (if (util/electron?)
+                              [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
+                                :options {:on-click
+                                          #(p/let [root (plugin-handler/get-ls-dotdir-root)]
+                                             (js/apis.openPath (str root "/preferences.json")))}}
+                               {:title [:span.flex.items-center.whitespace-nowrap.gap-1
+                                        (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
+                                :options {:on-click
+                                          #(p/let [root (plugin-handler/get-ls-dotdir-root)]
+                                             (js/apis.openPath root))}}]
+                              [{:title [:span.flex.items-center.whitespace-nowrap.gap-1
+                                        (ui/icon "plug") (t :plugin/load-from-web-url)]
+                                :options {:on-click
+                                          #(shui/dialog-open! load-from-web-url-container)}}]))
 
                           [{:title [:span.flex.items-center.gap-1 (ui/icon "alert-triangle") (t :plugin/report-security)]
                             :options {:on-click #(plugin-handler/open-report-modal!)}}]
