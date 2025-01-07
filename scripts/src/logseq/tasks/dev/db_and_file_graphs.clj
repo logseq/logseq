@@ -125,7 +125,8 @@
   []
   (let [db-concepts
         ;; from logseq.db.frontend.schema
-        ["closed-value" "class/properties" "schema.classes" "property/parent"]
+        ["closed-value" "class/properties" "schema.classes" "property/parent"
+         "logseq.property" "logseq.class"]
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" db-concepts) ")")
                    file-graph-paths)]
