@@ -69,7 +69,7 @@
         task (d/entity @conn :logseq.class/Task)]
     (is (ldb/class? task)
         "Task class has correct type")
-    (is (= 3 (count (:logseq.property.class/properties task)))
+    (is (= 4 (count (:logseq.property.class/properties task)))
         "Has correct number of task properties")
     (is (every? ldb/property? (:logseq.property.class/properties task))
         "Each task property has correct type")))
