@@ -1,6 +1,7 @@
 (ns logseq.common.util.date-time
   "cljs-time util fns for deps"
-  (:require [cljs-time.format :as tf]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.format :as tf]
             [clojure.string :as string]
             [logseq.common.util :as common-util]))
 
@@ -89,10 +90,8 @@
    (string/replace (ymd date) "/" "")))
 
 (defn journal-day->ms
-  "Convert :block/journal-day int to ms timestamp in current timezone"
-  [journal-day]
-  (let [journal-day' (str journal-day)
-        year (js/parseInt (subs journal-day' 0 4))
-        month (dec (js/parseInt (subs journal-day' 4 6)))
-        day (js/parseInt (subs journal-day' 6 8))]
-    (.getTime (new js/Date year month day))))
+  "journal-day format yyyyMMdd"
+  [day]
+  (when day
+    (-> (tf/parse (tf/formatter "yyyyMMdd") (str day))
+        (tc/to-long))))
