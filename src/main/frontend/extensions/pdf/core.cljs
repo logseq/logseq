@@ -14,6 +14,7 @@
             [frontend.extensions.pdf.windows :as pdf-windows]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
+            [frontend.hooks :as hooks]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
@@ -465,7 +466,7 @@
 
         disable-text-selection! #(js-invoke viewer-clt (if % "add" "remove") "disabled-text-selection")
 
-        fn-move                 (rum/use-callback
+        fn-move                 (hooks/use-callback
                                  (fn [^js/MouseEvent e]
                                    (set-end! (calc-coords! (.-pageX e) (.-pageY e))))
                                  [])]
@@ -549,7 +550,7 @@
         [highlights, set-highlights!] (rum/use-state initial-hls)
         [ctx-menu-state, set-ctx-menu-state!] (rum/use-state {:highlight nil :vw-pos nil :selection nil :point nil :reset-fn nil})
 
-        clear-ctx-menu! (rum/use-callback
+        clear-ctx-menu! (hooks/use-callback
                          #(let [reset-fn (:reset-fn ctx-menu-state)]
                             (set-ctx-menu-state! {})
                             (and (fn? reset-fn) (reset-fn)))
@@ -940,7 +941,7 @@
     ;; cache highlights
     (when-not db-based?
       (let [persist-hls-data!
-            (rum/use-callback
+            (hooks/use-callback
              (util/debounce
               (fn [latest-hls extra]
                 (pdf-assets/file-based-persist-hls-data$
