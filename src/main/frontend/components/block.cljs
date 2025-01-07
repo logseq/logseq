@@ -55,6 +55,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.mobile.intent :as mobile-intent]
             [frontend.mobile.util :as mobile-util]
@@ -2750,11 +2751,11 @@
     (let [[result set-result!] (rum/use-state nil)
           repo (state/get-current-repo)
           [status-history time-spent] result]
-      (rum/use-effect!
+      (hooks/use-effect!
        (fn []
          (p/let [result (db-async/<task-spent-time repo (:db/id block))]
            (set-result! result)))
-       [(:db/id (:logseq.task/status block))])
+       [(:logseq.task/status block)])
       (when (and time-spent (> time-spent 0))
         [:div.text-sm.time-spent.ml-1
          (shui/button

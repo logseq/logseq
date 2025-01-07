@@ -122,6 +122,7 @@
              frontend.handler.route route-handler
              frontend.handler.search search-handler
              frontend.handler.ui ui-handler
+             frontend.hooks hooks
              frontend.idb idb
              frontend.loader loader
              frontend.mixins mixins
