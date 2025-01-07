@@ -2,23 +2,24 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.async :as db-async]
+            [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
+            [frontend.db.utils :as db-utils]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.windows :refer [resolve-own-container] :as pdf-windows]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
-            [frontend.config :as config]
-            [frontend.db.conn :as conn]
-            [logseq.publishing.db :as publish-db]
-            [frontend.db.utils :as db-utils]
-            [frontend.db.async :as db-async]
+            [frontend.hooks :as hooks]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.publishing.db :as publish-db]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -331,7 +332,7 @@
   (when-let [^js pdf-doc (and viewer (.-pdfDocument viewer))]
     (let [*el-outline       (rum/use-ref nil)
           [outline-data, set-outline-data!] (rum/use-state [])
-          upt-outline-node! (rum/use-callback
+          upt-outline-node! (hooks/use-callback
                              (fn [path attrs]
                                (set-outline-data! (update-in outline-data path merge attrs)))
                              [outline-data])]
@@ -381,16 +382,16 @@
   [repo id]
   (let [[src set-src!] (rum/use-state nil)]
     (rum/use-effect!
-      (fn []
-        (p/let [_ (db-async/<get-block repo id {:children? false})
-                block (db-model/get-block-by-uuid id)]
-          (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
-                                              (conn/get-db (state/get-current-repo))
-                                              block
-                                              (db-utils/pull (:db/id (:block/page block)))))]
-            (-> asset-path' (assets-handler/<make-asset-url)
-              (p/then #(set-src! %))))))
-      [])
+     (fn []
+       (p/let [_ (db-async/<get-block repo id {:children? false})
+               block (db-model/get-block-by-uuid id)]
+         (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
+                                            (conn/get-db (state/get-current-repo))
+                                            block
+                                            (db-utils/pull (:db/id (:block/page block)))))]
+           (-> asset-path' (assets-handler/<make-asset-url)
+               (p/then #(set-src! %))))))
+     [])
 
     (when (string? src)
       [:p.area-wrap [:img {:src src}]])))
@@ -429,7 +430,7 @@
              (if db-graph?
                (area-image-for-db repo id)
                (let [fpath (pdf-assets/resolve-area-image-file
-                             img-stamp (state/get-current-pdf) hl)
+                            img-stamp (state/get-current-pdf) hl)
                      fpath (assets-handler/<make-asset-url fpath)]
                  [:p.area-wrap
                   [:img {:src fpath}]]))

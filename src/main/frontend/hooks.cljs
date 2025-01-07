@@ -7,7 +7,7 @@
 
 (defn- safe-dep
   "js/React uses `js/Object.is` to compare dep-value and its previous value.
-  Some cljs built-in types(keyword, symbol, uuid) would not be identical, even they are value-equal"
+  Some cljs built-in types(keyword, symbol, uuid) would not be identical, even they are value-equal."
   [dep]
   (if (contains? #{"string" "number" "boolean" "null"} (goog/typeOf dep))
     dep
@@ -22,8 +22,10 @@
       ;; so, same entity-id but different db will be "equal" here
       (:db/id dep)
 
+      (implements? IHash dep) (hash dep)
+
       :else
-      (throw (ex-info (str "Not supported dep type:" (type dep)) {:dep dep})))))
+      (throw (ex-info (str "Not supported dep type:" (print-str (type dep))) {:dep dep})))))
 
 (defn use-memo
   [f deps]
