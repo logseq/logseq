@@ -401,24 +401,26 @@
         datoms (d/datoms db :avet :block/title)]
     (keep
      (fn [{:keys [e v]}]
-       (when (string/includes? v ref-special-chars)
-         (let [entity (d/entity db e)]
-           (cond
-             (and (ldb/page? entity)
-                  (re-find db-content/id-ref-pattern v))
-             [:db/retractEntity e]
+       (if (string? v)
+         (when (string/includes? v ref-special-chars)
+           (let [entity (d/entity db e)]
+             (cond
+               (and (ldb/page? entity)
+                    (re-find db-content/id-ref-pattern v))
+               [:db/retractEntity e]
 
-             (string/includes? v (str page-ref/left-brackets ref-special-chars))
-             (let [title' (string/replace v (str page-ref/left-brackets ref-special-chars) page-ref/left-brackets)]
-               (prn :debug {:old-title v :new-title title'})
-               {:db/id e
-                :block/title title'})
+               (string/includes? v (str page-ref/left-brackets ref-special-chars))
+               (let [title' (string/replace v (str page-ref/left-brackets ref-special-chars) page-ref/left-brackets)]
+                 (prn :debug {:old-title v :new-title title'})
+                 {:db/id e
+                  :block/title title'})
 
-             (re-find id-ref-pattern v)
-             (let [title' (string/replace v id-ref-pattern "$1")]
-               (prn :debug {:old-title v :new-title title'})
-               {:db/id e
-                :block/title title'})))))
+               (re-find id-ref-pattern v)
+               (let [title' (string/replace v id-ref-pattern "$1")]
+                 (prn :debug {:old-title v :new-title title'})
+                 {:db/id e
+                  :block/title title'}))))
+         [:db/retractEntity e]))
      datoms)))
 
 (defn- replace-block-type-with-tags
