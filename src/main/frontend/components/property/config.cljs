@@ -469,7 +469,6 @@
         checked-choice (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) choices)
         unchecked-choice (some (fn [choice] (when (false? (:logseq.property/choice-checkbox-state choice)) choice)) choices)]
     [:div.flex.flex-col.gap-4.text-sm.p-2
-     [:div.text-muted-foreground "Checkbox state mapping"]
      [:div.flex.flex-col.gap-2
       [:div "Map unchecked to"]
       (select-cp
@@ -644,23 +643,11 @@
      (when enable-closed-values?
        (let [values (:property/closed-values property)]
          (when (>= (count values) 2)
-           (let [checked? (contains?
-                           (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
-                           (:db/id property))]
-             (dropdown-editor-menuitem
-              {:icon :checkbox :title "Show as checkbox"
-               :desc (when owner-block
-                       (shui/switch
-                        {:id "show as checkbox" :size "sm"
-                         :checked checked?
-                         :on-click util/stop-propagation
-                         :on-checked-change
-                         (fn [value]
-                           (if value
-                             (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
-                             (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))
-               :submenu-content (fn []
-                                  (checkbox-state-mapping values))})))))
+           (dropdown-editor-menuitem
+            {:icon :checkbox
+             :title "Checkbox state mapping"
+             :submenu-content (fn []
+                                (checkbox-state-mapping values))}))))
 
      (when (and (contains? db-property-type/cardinality-property-types property-type) (not disabled?))
        (let [many? (db-property/many? property)]
@@ -715,6 +702,24 @@
                        :on-select (fn []
                                     (shui/popup-hide-all!)
                                     (route-handler/redirect-to-page! (:block/uuid property)))}})])
+     (when enable-closed-values?
+       (let [values (:property/closed-values property)]
+         (when (>= (count values) 2)
+           (let [checked? (contains?
+                             (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
+                             (:db/id property))]
+               (dropdown-editor-menuitem
+                {:icon :checkbox :title "Show as checkbox on node"
+                 :desc (when owner-block
+                         (shui/switch
+                          {:id "show as checkbox" :size "sm"
+                           :checked checked?
+                           :on-click util/stop-propagation
+                           :on-checked-change
+                           (fn [value]
+                             (if value
+                               (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
+                               (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
 
      (when (and owner-block
                 ;; Any property should be removable from Tag Properties
