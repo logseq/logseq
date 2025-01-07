@@ -1,16 +1,14 @@
 (ns logseq.outliner.pipeline
   "Core fns for use with frontend worker and node"
-  (:require [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            [cljs-time.format :as tf]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
-            [logseq.outliner.datascript-report :as ds-report]))
+            [logseq.outliner.datascript-report :as ds-report]
+            [logseq.common.util.date-time :as date-time-util]))
 
 (defn filter-deleted-blocks
   [datoms]
@@ -147,8 +145,8 @@
 
 (defn ^:api get-journal-day-from-long
   [db v]
-  (when-let [date (t/to-default-time-zone (tc/from-long v))]
-    (let [day (js/parseInt (tf/unparse (tf/formatter "yyyyMMdd") date))]
+  (when v
+    (let [day (date-time-util/ms->journal-day v)]
       (:e (first (d/datoms db :avet :block/journal-day day))))))
 
 (defn db-rebuild-block-refs

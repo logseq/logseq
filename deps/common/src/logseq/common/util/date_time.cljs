@@ -2,6 +2,7 @@
   "cljs-time util fns for deps"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.format :as tf]
+            [cljs-time.core :as t]
             [clojure.string :as string]
             [logseq.common.util :as common-util]))
 
@@ -90,8 +91,17 @@
    (string/replace (ymd date) "/" "")))
 
 (defn journal-day->ms
-  "journal-day format yyyyMMdd"
+  "Converts a journal's :block/journal-day integer into milliseconds"
   [day]
   (when day
     (-> (tf/parse (tf/formatter "yyyyMMdd") (str day))
         (tc/to-long))))
+
+(defn ms->journal-day
+  "Converts a millseconds timestamp to the nearest :block/journal-day"
+  [ms]
+  (->> ms
+       tc/from-long
+       t/to-default-time-zone
+       (tf/unparse (tf/formatter "yyyyMMdd"))
+       parse-long))
