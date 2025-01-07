@@ -19,6 +19,7 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.search :refer [fuzzy-search]]
             [frontend.state :as state]
@@ -146,7 +147,8 @@
                                       (editor-handler/get-matched-classes q)
                                       (editor-handler/<get-matched-blocks q {:nlp-pages? true}))]
                        (set-matched-pages! result))))]
-    (rum/use-effect! search-f [(mixins/use-debounce 50 q)])
+    (rum/use-effect! search-f [(hooks/use-debounced-value q 50)])
+
     (let [matched-pages' (if (string/blank? q)
                            (if db-tag?
                              (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})

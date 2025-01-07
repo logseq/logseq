@@ -1,10 +1,9 @@
 (ns frontend.mixins
   "Rum mixins for use in components"
-  (:require [rum.core :as rum]
-            [goog.dom :as dom]
+  (:require [frontend.state :as state]
             [frontend.util :refer [profile] :as util]
-            [frontend.state :as state]
-            [goog.functions :as gfun])
+            [goog.dom :as dom]
+            [rum.core :as rum])
   (:import [goog.events EventHandler]))
 
 (defn detach
@@ -147,11 +146,3 @@
        (profile
         (str "Render " desc)
         (render-fn state))))})
-
-(defn use-debounce
-  "A rumext custom hook that debounces the value changes"
-  [ms value]
-  (let [[state update-fn] (rum/use-state value)
-        update-fn (rum/use-callback (gfun/debounce update-fn ms) [])]
-    (rum/use-effect! #(update-fn value) #js [value])
-    state))
