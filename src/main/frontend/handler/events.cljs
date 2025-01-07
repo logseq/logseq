@@ -39,6 +39,7 @@
             [frontend.fs.nfs :as nfs]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as fs-watcher]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -57,7 +58,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.shell :as shell-handler]
-            [frontend.handler.assets :as assets-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.core :as mobile]
@@ -247,8 +247,9 @@
                (p/catch (fn [^js e]
                           (notification/show! (str e) :error)
                           (js/console.error e)))))))))
-    (shui/dialog-open!
-     (file-sync/pick-dest-to-sync-panel graph))))
+    (when (:GraphName graph)
+      (shui/dialog-open!
+       (file-sync/pick-dest-to-sync-panel graph)))))
 
 (defmethod handle :graph/pick-page-histories [[_ graph-uuid page-name]]
   (shui/dialog-open!
