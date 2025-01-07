@@ -111,7 +111,8 @@
    of validate-property-value"
   (set/union
    (set (get-in db-class/built-in-classes [:logseq.class/Asset :schema :required-properties]))
-   #{:logseq.property/created-from-property}))
+   #{:logseq.property/created-from-property :logseq.property.history/scalar-value
+     :logseq.property.history/block :logseq.property.history/property :logseq.property.history/ref-value}))
 
 (defn- property-entity->map
   "Provide the minimal number of property attributes to validate the property
@@ -388,12 +389,23 @@
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
 
-(def property-history-block
+(def property-history-block*
   [:map
    [:block/uuid :uuid]
    [:block/created-at :int]
-   [:block/properties block-properties]
+   [:logseq.property.history/block :int]
+   [:logseq.property.history/property :int]
+   [:logseq.property.history/ref-value {:optional true} :int]
+   [:logseq.property.history/scalar-value {:optional true} :int]
    [:block/tx-id {:optional true} :int]])
+
+(def property-history-block
+  "A closed value for a property with closed/allowed values"
+  [:and property-history-block*
+   [:fn {:error/message ":logseq.property.history/ref-value or :logseq.property.history/scalar-value required"
+         :error/path [:logseq.property.history/ref-value]}
+    (fn [m]
+      (or (:logseq.property.history/ref-value m) (:logseq.property.history/scalar-value m)))]])
 
 (def closed-value-block*
   (vec
