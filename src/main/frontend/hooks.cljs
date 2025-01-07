@@ -2,6 +2,7 @@
   "React custom hooks."
   (:refer-clojure :exclude [ref deref])
   (:require [datascript.impl.entity :refer [Entity]]
+            [goog.functions :as gfun]
             [rum.core :as rum]))
 
 (defn- safe-dep
@@ -25,10 +26,11 @@
       (throw (ex-info (str "Not supported dep type:" (type dep)) {:dep dep})))))
 
 (defn use-memo
-  ([f] (rum/use-memo f))
-  ([f deps] (rum/use-memo f (map safe-dep deps))))
+  [f deps]
+  (rum/use-memo f (map safe-dep deps)))
 
 (defn use-effect!
+  "setup-fn will be invoked every render of component when no deps arg provided"
   ([setup-fn] (rum/use-effect! setup-fn))
   ([setup-fn deps] (rum/use-effect! setup-fn (map safe-dep deps))))
 
@@ -37,8 +39,8 @@
   ([setup-fn deps] (rum/use-layout-effect! setup-fn (map safe-dep deps))))
 
 (defn use-callback
-  ([callback] (rum/use-callback callback))
-  ([callback deps] (rum/use-callback callback (map safe-dep deps))))
+  [callback deps]
+  (rum/use-callback callback (map safe-dep deps)))
 
 ;;; unchanged hooks, link to rum/use-xxx directly
 (def use-ref rum/use-ref)
@@ -48,3 +50,13 @@
 
 (def use-state rum/use-state)
 (def use-reducer rum/use-reducer)
+
+;;; other custom hooks
+
+(defn use-debounced-value
+  "Return the debounced value"
+  [value msec]
+  (let [[debounced-value set-value!] (use-state value)
+        cb (use-callback (gfun/debounce set-value! msec) [])]
+    (use-effect! #(cb value) [value])
+    debounced-value))

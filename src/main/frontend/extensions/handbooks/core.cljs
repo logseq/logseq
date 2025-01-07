@@ -533,7 +533,9 @@
                        (set-active-pane-state! next-state))
 
         [scrolled?, set-scrolled!] (rum/use-state false)
-        on-scroll (hooks/use-memo #(util/debounce 100 (fn [^js e] (set-scrolled! (not (< (.. e -target -scrollTop) 10))))))]
+        on-scroll (hooks/use-memo
+                   #(util/debounce 100 (fn [^js e] (set-scrolled! (not (< (.. e -target -scrollTop) 10)))))
+                   [])]
 
     ;; load handbooks
     (rum/use-effect!
