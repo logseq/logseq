@@ -489,6 +489,33 @@
         (d/reset-schema! conn (dissoc (:schema db) :block/format))
         []))))
 
+(defn- remove-duplicated-contents-page
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [duplicated-contents-pages (->>
+                                       (d/q
+                                        '[:find ?b ?created-at
+                                          :where
+                                          [?b :block/title "Contents"]
+                                          [?b :block/tags ?t]
+                                          [?t :db/ident :logseq.class/Page]
+                                          [?b :logseq.property/built-in? true]
+                                          [?b :block/created-at ?created-at]]
+                                        db)
+                                       (sort-by second)
+                                       rest)]
+        (when (seq duplicated-contents-pages)
+          (let [tx-data (mapcat
+                         (fn [[e _]]
+                           (let [p (d/entity db e)
+                                 blocks (:block/_page p)]
+                             (conj (mapv (fn [b] [:db/retractEntity (:db/id b)]) blocks)
+                                   [:db/retractEntity e])))
+                         duplicated-contents-pages)]
+            (ldb/transact! conn tx-data {:db-migrate? true})))
+        []))))
+
 (defn- deprecate-logseq-user-ns
   [conn _search-db]
   (let [db @conn]
@@ -598,7 +625,8 @@
    [56 {:properties [:logseq.property/enable-history?
                      :logseq.property.history/block :logseq.property.history/property
                      :logseq.property.history/ref-value :logseq.property.history/scalar-value]}]
-   [57 {:fix remove-block-format-from-db}]])
+   [57 {:fix remove-block-format-from-db}]
+   [58 {:fix remove-duplicated-contents-page}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
