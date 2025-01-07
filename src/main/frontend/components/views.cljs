@@ -56,7 +56,8 @@
 (rum/defc header-index < rum/static
   []
   [:label.h-8.w-6.flex.items-center.justify-center
-   {:html-for "header-index"}
+   {:html-for "header-index"
+    :title "Row number"}
    "ID"])
 
 (rum/defc row-checkbox < rum/static
