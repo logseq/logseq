@@ -615,6 +615,9 @@
                               (= (:db/ident data) :logseq.kv/schema-version)
                               nil
 
+                              (= (:block/title data) "Contents")
+                              nil
+
                               (:file/path data)
                               (if-let [block (d/entity @conn [:file/path (:file/path data)])]
                                 (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
