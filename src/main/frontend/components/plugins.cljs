@@ -480,11 +480,14 @@
 
 (rum/defc load-from-web-url-container
   []
-  (let [[url set-url!] (rum/use-state "")
+  (let [[url set-url!] (rum/use-state "http://127.0.0.1:8080/")
         [pending? set-pending?] (rum/use-state false)
         handle-submit! (fn []
                          (set-pending? true)
-                         (-> (p/delay 3000)
+                         (-> (plugin-handler/load-plugin-from-web-url! url)
+                           (p/then #(do (notification/show! "New plugin registered!" :success)
+                                      (shui/dialog-close!)))
+                           (p/catch #(notification/show! (str %) :error))
                            (p/finally
                              #(set-pending? false))))]
 
@@ -503,7 +506,7 @@
      [:div.flex.justify-end
       (shui/button {:disabled (or pending? (string/blank? url))
                     :on-click handle-submit!}
-        (if pending? (ui/loading) "Save"))]]))
+        (if pending? (ui/loading) "Install"))]]))
 
 (rum/defc auto-check-for-updates-control
   []
