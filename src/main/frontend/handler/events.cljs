@@ -420,7 +420,7 @@
 
 (defmethod handle :go/proxy-settings [[_ agent-opts]]
   (shui/dialog-open!
-   (plugin/user-proxy-settings-panel agent-opts)
+   (plugin/user-proxy-settings-container agent-opts)
    {:id :https-proxy-panel :center? true :class "lg:max-w-2xl"}))
 
 (defmethod handle :redirect-to-home [_]
