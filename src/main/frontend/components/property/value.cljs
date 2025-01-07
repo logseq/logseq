@@ -301,14 +301,6 @@
          (when done-choice
            (db-property/property-value-content done-choice))]])]))
 
-(defn- get-local-journal-date-time
-  [year month day]
-  (let [[op h m] (:offset (t/default-time-zone))
-        f (if (= op :-) t/plus t/minus)]
-    (-> (t/date-time year month day)
-        (f (t/hours h))
-        (f (t/minutes m)))))
-
 (rum/defcs calendar-inner < rum/reactive db-mixins/query
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
   {:init (fn [state]
