@@ -293,12 +293,16 @@
                (and b (readable-properties @conn b)))
             ":template properties are ignored to not invalidate its property types"))
 
-      (is (= {:logseq.task/deadline (date-time-util/journal-day->ms 20221126)}
-             (readable-properties @conn (db-test/find-block-by-content @conn "only deadline")))
+      (is (= 20221126
+             (-> (readable-properties @conn (db-test/find-block-by-content @conn "only deadline"))
+                 :logseq.task/deadline
+                 date-time-util/ms->journal-day))
           "deadline block has correct journal as property value")
 
-      (is (= {:logseq.task/deadline (date-time-util/journal-day->ms 20221125)}
-             (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled")))
+      (is (= 20221125
+             (-> (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled"))
+                 :logseq.task/deadline
+                 date-time-util/ms->journal-day))
           "scheduled block converted to correct deadline")
 
       (is (= 1 (count (d/q '[:find [(pull ?b [*]) ...]
