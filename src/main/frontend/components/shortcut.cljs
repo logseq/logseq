@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
+            [frontend.hooks :as hooks]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
@@ -212,7 +213,7 @@
         [current-binding set-current-binding!] (rum/use-state (or user-binding binding))
         [key-conflicts set-key-conflicts!] (rum/use-state nil)
 
-        handler-id (rum/use-memo #(dh/get-group k))
+        handler-id (hooks/use-memo #(dh/get-group k))
         dirty? (not= (or user-binding binding) current-binding)
         keypressed? (not= "" keystroke)
         save-keystroke-fn!

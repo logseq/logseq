@@ -9,6 +9,7 @@
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.video.youtube :as youtube]
             [frontend.handler.notification :as notification]
+            [frontend.hooks :as hooks]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.rum :as r]
             [frontend.search :as search]
@@ -532,7 +533,7 @@
                        (set-active-pane-state! next-state))
 
         [scrolled?, set-scrolled!] (rum/use-state false)
-        on-scroll (rum/use-memo #(util/debounce (fn [^js e] (set-scrolled! (not (< (.. e -target -scrollTop) 10)))) 100) [])]
+        on-scroll (hooks/use-memo #(util/debounce 100 (fn [^js e] (set-scrolled! (not (< (.. e -target -scrollTop) 10))))))]
 
     ;; load handbooks
     (rum/use-effect!
