@@ -30,7 +30,7 @@
 
    :logseq.class/Task
    {:title "Task"
-    :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}
+    :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline :logseq.task/scheduled]}}
 
    :logseq.class/Query
    {:title "Query"
