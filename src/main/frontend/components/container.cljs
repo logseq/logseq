@@ -31,6 +31,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -424,7 +425,7 @@
        16)
      [])
 
-    (rum/use-layout-effect!
+    (hooks/use-layout-effect!
      (fn []
        (when (and (rum/deref ref-open?) local-closing?)
          (reset! *closing? true))
@@ -498,11 +499,10 @@
                        (storage/set :ls-left-sidebar-width width))]
 
     ;; restore size
-    (rum/use-layout-effect!
+    (hooks/use-layout-effect!
      (fn []
        (when-let [width (storage/get :ls-left-sidebar-width)]
-         (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width)))
-     [])
+         (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width))))
 
     ;; draggable handler
     (rum/use-effect!

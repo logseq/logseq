@@ -1,22 +1,23 @@
 (ns frontend.components.icon
   (:require ["@emoji-mart/data" :as emoji-data]
             ["emoji-mart" :refer [SearchIndex]]
-            [promesa.core :as p]
-            [cljs-bean.core :as bean]
             [camel-snake-kebab.core :as csk]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.search :as search]
-            [frontend.storage :as storage]
-            [medley.core :as medley]
-            [rum.core :as rum]
-            [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
-            [frontend.util :as util]
-            [goog.object :as gobj]
-            [goog.functions :refer [debounce]]
             [frontend.config :as config]
             [frontend.handler.property.util :as pu]
-            [logseq.db :as ldb]))
+            [frontend.hooks :as hooks]
+            [frontend.search :as search]
+            [frontend.storage :as storage]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [goog.functions :refer [debounce]]
+            [goog.object :as gobj]
+            [logseq.db :as ldb]
+            [logseq.shui.ui :as shui]
+            [medley.core :as medley]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce emojis (vals (bean/->clj (gobj/get emoji-data "emojis"))))
 
@@ -252,7 +253,7 @@
                          (set-current! idx node))
                      (do (.focus (rum/deref *input-ref)) (set-current! -1 nil)))))
         down-handler!
-        (rum/use-callback
+        (hooks/use-callback
          (fn [^js e]
            (let []
              (if (= 13 (.-keyCode e))

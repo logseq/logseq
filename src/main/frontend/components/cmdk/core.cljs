@@ -10,6 +10,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.command-palette :as cp-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.editor :as editor-handler]
@@ -17,7 +18,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.handler.block :as block-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -778,7 +779,7 @@
   (let [highlighted-item @(::highlighted-item state)
         input @(::input state)
         input-ref (::input-ref state)
-        debounced-on-change (rum/use-callback
+        debounced-on-change (hooks/use-callback
                              (gfun/debounce
                               (fn [e]
                                 (let [new-value (.-value (.-target e))]
