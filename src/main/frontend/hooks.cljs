@@ -49,9 +49,9 @@
 (def create-ref rum/create-ref)
 (def deref rum/deref)
 (def set-ref! rum/set-ref!)
-
 (def use-state rum/use-state)
-(def use-reducer rum/use-reducer)
+(comment
+  (def use-reducer rum/use-reducer))
 
 ;;; other custom hooks
 
