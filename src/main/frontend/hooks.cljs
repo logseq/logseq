@@ -5,7 +5,7 @@
             [rum.core :as rum]))
 
 (defn- safe-dep
-  "js/React use `js/Object.is` to compare dep-value and its previous value.
+  "js/React uses `js/Object.is` to compare dep-value and its previous value.
   Some cljs built-in types(keyword, symbol, uuid) would not be identical, even they are value-equal"
   [dep]
   (if (contains? #{"string" "number" "boolean" "null"} (goog/typeOf dep))
