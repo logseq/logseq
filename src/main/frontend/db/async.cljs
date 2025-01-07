@@ -234,7 +234,7 @@
           future-day (some->> future-date
                               (tf/unparse date-format)
                               (parse-long))
-          start-time (date/journal-day->ts date)
+          start-time (date/journal-day->utc-ms date)
           future-time (tc/to-long future-date)]
       (when-let [repo (and future-day (state/get-current-repo))]
         (p/let [result

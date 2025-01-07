@@ -332,9 +332,8 @@
         value (cond
                 (map? value)
                 (when-let [day (:block/journal-day value)]
-                  (let [t (tc/to-date-time (date/journal-day->ts day))]
-                    (js/Date.
-                     (get-local-journal-date-time (t/year t) (t/month t) (t/day t)))))
+                  (let [t (date/journal-day->utc-ms day)]
+                    (js/Date. t)))
 
                 (number? value)
                 (js/Date. value)
@@ -480,7 +479,7 @@
           (ui/icon "repeat" {:size 14 :class "opacity-40"}))
         (cond
           (map? value)
-          (let [date (tc/to-date-time (date/journal-day->ts (:block/journal-day value)))
+          (let [date (tc/to-date-time (date/journal-day->utc-ms (:block/journal-day value)))
                 compare-value (some-> date
                                       (t/plus (t/days 1))
                                       (t/minus (t/seconds 1)))

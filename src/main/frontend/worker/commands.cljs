@@ -154,17 +154,23 @@
                            :logseq.task/scheduled)
         frequency (db-property/property-value-content (:logseq.task/recur-frequency entity))
         unit (:logseq.task/recur-unit entity)
-        current-value (get entity property-ident)]
+        property (d/entity db property-ident)
+        date? (= :date (get-in property [:block/schema :type]))
+        current-value (cond->
+                       (get entity property-ident)
+                        date?
+                        (#(date-time-util/journal-day->ms (:block/journal-day %))))]
     (when (and frequency unit)
       (when-let [next-time-long (get-next-time current-value unit frequency)]
         (let [journal-day (outliner-pipeline/get-journal-day-from-long db next-time-long)
-              create-journal-page (when-not journal-day
-                                    (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
-                                          title (date-time-util/format (t/to-default-time-zone (tc/to-date-time next-time-long)) formatter)]
-                                      (worker-db-page/create db title {:create-first-block? false})))
-              value next-time-long]
+              {:keys [tx-data page-uuid]} (if journal-day
+                                            {:page-uuid (:block/uuid (d/entity db journal-day))}
+                                            (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
+                                                  title (date-time-util/format (t/to-default-time-zone (tc/to-date-time next-time-long)) formatter)]
+                                              (worker-db-page/create db title {:create-first-block? false})))
+              value (if date? [:block/uuid page-uuid] next-time-long)]
           (concat
-           (:tx-data create-journal-page)
+           tx-data
            (when value
              [[:db/add (:db/id entity) property-ident value]])))))))
 
