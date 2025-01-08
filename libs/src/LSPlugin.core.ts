@@ -1112,6 +1112,7 @@ class PluginLocal extends EventEmitter<
     json.err = this.loadErr
     json.usf = this.dotSettingsFile
     json.iir = this.isInstalledInLocalDotRoot
+    json.webMode = this.isWebPlugin ? (this.installedFromUserWebUrl ? 'user' : 'github') : false
     json.lsr = this._resolveResourceFullUrl('/')
 
     if (settings === false) {

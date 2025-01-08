@@ -785,7 +785,7 @@
                           (some-> github-repo
                              (plugin-common-handler/get-web-plugin-checker-url!))
                           (str url "/package.json"))
-            ^js res (js/window.fetch package-url)
+            ^js res (js/window.fetch (str package-url "?v=" (js/Date.now)))
             package (if (and (.-ok res)
                           (= (.-status res) 200))
                       (-> (.json res)
