@@ -777,8 +777,7 @@
   [url]
   (if (not (and (string? url) (string/starts-with? url "http")))
     (p/rejected (js/Error. "Invalid web url"))
-    (p/let [_ (p/delay 1000)
-            url (string/replace url #"/+$" "")
+    (p/let [url (string/replace url #"/+$" "")
             github? (string/includes? url "github.com")
             github-repo (when github?
                           (some-> (re-find #"github.com/([^/]+/[^/]+)" url) (last)))
