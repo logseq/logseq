@@ -1,8 +1,8 @@
 (ns frontend.worker.rtc.ws-util
   "Add RTC related logic to the function based on ws."
   (:require [cljs-http-missionary.client :as http]
-            [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
+            [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.state :as worker-state]
             [goog.string :as gstring]
@@ -24,8 +24,8 @@
   [ws message]
   {:pre [(= "apply-ops" (:action message))]}
   (m/sp
-    (let [decoded-message (rtc-const/data-to-ws-coercer (assoc message :req-id "temp-id"))
-          message-str (js/JSON.stringify (clj->js (select-keys (rtc-const/data-to-ws-encoder decoded-message)
+    (let [decoded-message (rtc-schema/data-to-ws-coercer (assoc message :req-id "temp-id"))
+          message-str (js/JSON.stringify (clj->js (select-keys (rtc-schema/data-to-ws-encoder decoded-message)
                                                                ["graph-uuid" "ops" "t-before"])))
           len (.-length (utf8/encode message-str))]
       (when (< 100000 len)

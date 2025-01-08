@@ -10,6 +10,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
+            [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.clj-fractional-indexing :as index]
@@ -557,7 +558,7 @@
   "Apply remote-update(`remote-update-event`)"
   [graph-uuid repo conn date-formatter remote-update-event add-log-fn]
   (let [remote-update-data (:value remote-update-event)]
-    (assert (rtc-const/data-from-ws-validator remote-update-data) remote-update-data)
+    (assert (rtc-schema/data-from-ws-validator remote-update-data) remote-update-data)
     (let [remote-t (:t remote-update-data)
           remote-t-before (:t-before remote-update-data)
           local-tx (client-op/get-local-tx repo)]

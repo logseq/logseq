@@ -4,7 +4,7 @@
             [frontend.db.conn :as conn]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
-            [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.rtc.remote-update :as r.remote]
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
@@ -193,7 +193,7 @@
                       (:move-ops-map
                        (#'r.remote/affected-blocks->diff-type-ops
                         repo (:affected-blocks data-from-ws))))]
-        (is (rtc-const/data-from-ws-validator data-from-ws) data-from-ws)
+        (is (rtc-schema/data-from-ws-validator data-from-ws) data-from-ws)
         (#'r.remote/apply-remote-move-ops repo conn move-ops)
         (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1-remote uuid1-client uuid2-client} (set (map :block/uuid page-blocks)))
@@ -217,7 +217,7 @@
                       (:move-ops-map
                        (#'r.remote/affected-blocks->diff-type-ops
                         repo (:affected-blocks data-from-ws))))]
-        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (is (rtc-schema/data-from-ws-validator data-from-ws))
         (#'r.remote/apply-remote-move-ops repo conn move-ops)
         (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1-remote uuid2-remote uuid1-client uuid2-client} (set (map :block/uuid page-blocks))))
@@ -259,7 +259,7 @@
             (vals
              (:remove-ops-map
               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
-        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (is (rtc-schema/data-from-ws-validator data-from-ws))
         (#'r.remote/apply-remote-remove-ops repo conn date-formatter remove-ops)
         (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1-client uuid2-client} (set (map :block/uuid page-blocks)))))))
@@ -271,7 +271,7 @@
             remove-ops (vals
                         (:remove-ops-map
                          (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
-        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (is (rtc-schema/data-from-ws-validator data-from-ws))
         (#'r.remote/apply-remote-remove-ops repo conn date-formatter remove-ops)
         (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid2-client} (set (map :block/uuid page-blocks)))))))))
@@ -328,7 +328,7 @@ result:
             (vals
              (:remove-ops-map
               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
-        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (is (rtc-schema/data-from-ws-validator data-from-ws))
         (#'r.remote/apply-remote-remove-ops repo conn date-formatter remove-ops)
         (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)))]
           (is (= [uuid3 uuid1] (map :block/uuid (sort-by :block/order page-blocks)))))))))
@@ -348,7 +348,7 @@ result:
             update-page-ops (vals
                              (:update-page-ops-map
                               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
-        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (is (rtc-schema/data-from-ws-validator data-from-ws))
         (#'r.remote/apply-remote-update-page-ops repo conn update-page-ops)
         (is (= page1-uuid (:block/uuid (d/entity @conn [:block/uuid page1-uuid]))))))
 
@@ -362,7 +362,7 @@ result:
             update-page-ops (vals
                              (:update-page-ops-map
                               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
-        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (is (rtc-schema/data-from-ws-validator data-from-ws))
         (#'r.remote/apply-remote-update-page-ops repo conn update-page-ops)
         (is (= (str page1-uuid "-rename") (:block/name (d/entity @conn [:block/uuid page1-uuid]))))))
 
@@ -374,7 +374,7 @@ result:
             remove-page-ops (vals
                              (:remove-page-ops-map
                               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
-        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (is (rtc-schema/data-from-ws-validator data-from-ws))
         (#'r.remote/apply-remote-remove-page-ops repo conn remove-page-ops)
         (is (nil? (d/entity @conn [:block/uuid page1-uuid])))))))
 
@@ -426,7 +426,7 @@ result:
             all-ops (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))
             update-page-ops (vals (:update-page-ops-map all-ops))
             move-ops (#'r.remote/move-ops-map->sorted-move-ops (:move-ops-map all-ops))]
-        (is (rtc-const/data-from-ws-validator data-from-ws))
+        (is (rtc-schema/data-from-ws-validator data-from-ws))
         (#'r.remote/apply-remote-update-page-ops repo conn date-formatter update-page-ops)
         (#'r.remote/apply-remote-move-ops repo conn date-formatter move-ops)
         (let [page (ldb/get-page @conn page-name)]
