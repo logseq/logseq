@@ -2,7 +2,7 @@
   "Macro 'defkeywords' to def keyword with docstring"
   #?(:cljs (:require-macros [logseq.common.defkeywords])))
 
-#?(:clj (def ^:private *defined-kws (volatile! {})))
+(def ^:private *defined-kws (volatile! {}))
 
 #_:clj-kondo/ignore
 (defmacro defkeyword
