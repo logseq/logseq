@@ -4,7 +4,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.common.schema-register :as sr]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client-op :as client-op]
@@ -23,9 +23,10 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]))
 
-(sr/defkeyword ::need-pull-remote-data
-  "remote-update's :remote-t-before > :local-tx,
-   so need to pull earlier remote-data from websocket.")
+(defkeywords
+  ::need-pull-remote-data {:doc "
+remote-update's :remote-t-before > :local-tx,
+so need to pull earlier remote-data from websocket."})
 
 (defmulti ^:private transact-db! (fn [action & _args] action))
 
@@ -593,7 +594,7 @@
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
                                              :persist-op? false
                                              :gen-undo-ops? false
-                                             :skip-store-conn rtc-const/RTC-E2E-TEST}
+                                             :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST}
             (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo conn refed-blocks))
             (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
             (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))

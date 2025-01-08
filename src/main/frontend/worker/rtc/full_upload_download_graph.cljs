@@ -209,7 +209,7 @@
                           :block/refs refs})))
                    datoms)]
       (ldb/transact! conn refs-tx (cond-> {:outliner-op :rtc-download-rebuild-block-refs}
-                                    rtc-const/RTC-E2E-TEST (assoc :skip-store-conn true))))))
+                                    rtc-const/RTC-E2E-TEST (assoc :frontend.worker.pipeline/skip-store-conn true))))))
 
 (defn- block->schema-map
   [block]
@@ -239,17 +239,18 @@
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
         db-initial-data (sqlite-create-graph/build-db-initial-data "")]
     (swap! worker-state/*datascript-conns assoc repo conn)
-    (d/transact! conn db-initial-data {:initial-db? true :skip-store-conn rtc-const/RTC-E2E-TEST})
+    (d/transact! conn db-initial-data {:initial-db? true
+                                       :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST})
     (db-listener/listen-db-changes! repo conn)
     (d/transact! conn init-tx-data {:rtc-download-graph? true
                                     :gen-undo-ops? false
                                     ;; only transact db schema, skip validation to avoid warning
-                                    :skip-validate-db? true
-                                    :skip-store-conn rtc-const/RTC-E2E-TEST
+                                    :frontend.worker.pipeline/skip-validate-db? true
+                                    :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST
                                     :persist-op? false})
     (d/transact! conn other-tx-data {:rtc-download-graph? true
                                      :gen-undo-ops? false
-                                     :skip-store-conn rtc-const/RTC-E2E-TEST
+                                     :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST
                                      :persist-op? false})
     (transact-block-refs! repo)))
 
@@ -314,7 +315,7 @@
           (.transact worker-obj repo init-tx-data {:rtc-download-graph? true
                                                    :gen-undo-ops? false
                                                      ;; only transact db schema, skip validation to avoid warning
-                                                   :skip-validate-db? true
+                                                   :frontend.worker.pipeline/skip-validate-db? true
                                                    :persist-op? false} (worker-state/get-context))
           (.transact worker-obj repo tx-data {:rtc-download-graph? true
                                               :gen-undo-ops? false
