@@ -2,7 +2,6 @@
   "listen datascript changes, infer operations from the db tx-report"
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.common.schema-register :include-macros true :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.client-op :as client-op]
             [logseq.db :as ldb]
@@ -120,8 +119,10 @@
     (when (seq ops)
       (client-op/add-ops repo ops))))
 
-(sr/defkeyword :persist-op?
-  "tx-meta option, generate rtc ops when not nil (default true)")
+(comment
+  ;; TODO: make it a qualified-keyword
+  (defkeywords
+    :persist-op? {:doc "tx-meta option, generate rtc ops when not nil (default true)"}))
 
 (defn- entity-datoms=>a->add?->v->t
   [entity-datoms]
