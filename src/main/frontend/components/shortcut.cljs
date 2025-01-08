@@ -47,7 +47,7 @@
 
   (let [keypressed? (not= "" keystroke)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [key-handler (KeyHandler. js/document)]
           ;; setup
@@ -236,7 +236,7 @@
                 (set-key-conflicts! conflicts-map)))))]
 
     ;; TODO: back interaction for the shui dialog
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [mid (shui-dialog/get-first-modal-id)
              mid' (shui-dialog/get-last-modal-id)
@@ -249,7 +249,7 @@
                      (.click)) 200))))
      [modal-life])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [^js el (rum/deref *ref-el)
              key-handler (KeyHandler. el)
@@ -385,7 +385,7 @@
                               (set-folded-categories! #{})
                               (set-folded-categories! all-categories))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (js/setTimeout #(set-ready! true) 100))
      [])

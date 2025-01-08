@@ -11,7 +11,8 @@
             [frontend.util.file-based.drawer :as drawer]
             [frontend.state :as state]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 (defn marker-switch
   [{:block/keys [marker] :as block}]
@@ -115,7 +116,7 @@
 (rum/defc timestamp-editor
   [ast *show-datapicker?]
   (let [*trigger-ref (rum/use-ref nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [pid (shui/popup-show!
                   (.closest (rum/deref *trigger-ref) "a")

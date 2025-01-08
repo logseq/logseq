@@ -36,7 +36,8 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -1174,7 +1175,7 @@
   < rum/static
   [active]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [active (and (sequential? active) (name (first active)))
            ^js ds (.-dataset js/document.body)]

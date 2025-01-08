@@ -56,7 +56,7 @@
   (let [ref (hooks/create-ref)
         highlight-query (partial highlight-query* app-config query)
         [hover? set-hover?] (rum/use-state false)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (and highlighted on-highlight)
          (on-highlight ref)))

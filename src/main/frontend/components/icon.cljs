@@ -228,7 +228,7 @@
 
 (rum/defc tab-observer
   [tab {:keys [reset-q!]}]
-  (rum/use-effect!
+  (hooks/use-effect!
    #(reset-q!)
    [tab])
   nil)
@@ -271,7 +271,7 @@
                    40 (do (focus! (+ idx 9) :next) (util/stop e))
                    :dune))))) [])]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
         ;; calculate items
        (let [^js sections (.querySelectorAll (get-cnt) ".pane-section")
@@ -306,7 +306,7 @@
                             :size :sm :variant :outline
                             :class "it" :style {:background-color c}}
                            (if c "" (shui/tabler-icon "minus" {:class "scale-75 opacity-70"}))))]))]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js picker (some-> (rum/deref *el) (.closest ".cp__emoji-icon-picker"))]
          (let [color (if (string/blank? color) "inherit" color)]
@@ -454,7 +454,7 @@
                            (when-not (true? keep-popup?) (shui/popup-hide! id)))
               :icon-value icon-value
               :del-btn? del-btn?})))]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when initial-open?
          (js/setTimeout #(some-> (rum/deref *trigger-ref) (.click)) 32)))

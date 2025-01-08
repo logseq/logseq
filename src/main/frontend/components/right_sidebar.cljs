@@ -23,7 +23,8 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 (rum/defc toggle
   []
@@ -305,7 +306,7 @@
                              width (str value "%")]
                          (.setAttribute (rum/deref el-ref) "aria-valuenow" value)
                          (ui-handler/persist-right-sidebar-width! width))))]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
          (-> (js/interact el)
@@ -357,7 +358,7 @@
        #())
      [])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
         ;; sidebar animation duration
        (js/setTimeout

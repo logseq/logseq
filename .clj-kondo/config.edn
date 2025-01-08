@@ -34,7 +34,11 @@
   :discouraged-namespace
   {logseq.db.sqlite.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
    logseq.outliner.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}}
-
+  :discouraged-var
+  {rum.core/use-effect! {:message "Use frontend.hooks/use-effect! instead" :level :info}
+   rum.core/use-memo {:message "Use frontend.hooks/use-memo instead" :level :info}
+   rum.core/use-layout-effect! {:message "Use frontend.hooks/use-layout-effect! instead" :level :info}
+   rum.core/use-callback {:message "Use frontend.hooks/use-callback instead" :level :info}}
   :unused-namespace {:level :warning
                      :exclude [logseq.db.frontend.entity-plus]}
 

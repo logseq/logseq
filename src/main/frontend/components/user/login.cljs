@@ -10,7 +10,8 @@
             [cljs-bean.core :as bean]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.hooks :as hooks]))
 
 (declare setupAuthConfigure! LSAuthenticator)
 
@@ -40,7 +41,7 @@
   (let [session  (:signInUserSession user)
         username (:username user)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
       (fn []
         (when session
           (user/login-callback session)
@@ -58,7 +59,7 @@
         [tab, set-tab!] (rum/use-state :login)
         *ref-el (rum/use-ref nil)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
       (fn [] (setup-configure!)
         (set-ready? true)
         (js/setTimeout
@@ -72,7 +73,7 @@
                       (set-tab! :create-account)))))))))
       [])
 
-    (rum/use-effect!
+    (hooks/use-effect!
       (fn []
         (when-let [^js el (rum/deref *ref-el)]
           (js/setTimeout

@@ -9,7 +9,8 @@
    [frontend.state :as state]
    [frontend.util :as util]
    [frontend.handler.notification :as notification]
-   [frontend.ui :as ui]))
+   [frontend.ui :as ui]
+   [frontend.hooks :as hooks]))
 
 (rum/defcs panel-of-tokens
   < rum/reactive
@@ -124,7 +125,7 @@
 (rum/defc server-indicator
   [server-state]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (p/let [_ (p/delay 1000)
              _ (ipc/ipc :server/load-state)]
@@ -138,7 +139,7 @@
         running? (= :running status)
         href     (and running? (str "http://" (:host server-state) ":" (:port server-state)))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(when error
         (notification/show! (str "[Server] " error) :error))
      [error])

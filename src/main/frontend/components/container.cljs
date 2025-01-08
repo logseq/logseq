@@ -199,7 +199,7 @@
   [{:keys [_id navs checked-navs set-checked-navs!]}]
   (let [[local-navs set-local-navs!] (rum/use-state checked-navs)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (set-checked-navs! local-navs))
      [local-navs])
@@ -226,7 +226,7 @@
         [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:whiteboards :flashcards :graph-view :all-pages]))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (vector? checked-navs)
          (storage/set :ls-sidebar-navigations checked-navs)))
@@ -415,7 +415,7 @@
                           (some->> (:width el-rect)
                                    (/ touching-x-offset)))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(js/setTimeout
        (fn [] (some-> (rum/deref ref-el)
                       (.getBoundingClientRect)
@@ -433,7 +433,7 @@
        #())
      [local-closing? left-sidebar-open?])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-not (neg? close-signal)
          (close-fn)))
@@ -505,7 +505,7 @@
          (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width))))
 
     ;; draggable handler
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [el (and (fn? js/window.interact) (rum/deref *el-ref))]
          (let [^js sidebar-el (.querySelector el-doc "#left-sidebar")]
@@ -759,7 +759,7 @@
 (rum/defc render-custom-context-menu
   [links position]
   (let [ref (rum/use-ref nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      #(let [el (rum/deref ref)
             {:keys [x y]} (util/calc-delta-rect-offset el js/document.documentElement)]
         (set! (.. el -style -transform)
@@ -814,12 +814,12 @@
 (rum/defc help-menu-popup
   []
 
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (state/set-state! :ui/handbooks-open? false))
    [])
 
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [h #(state/set-state! :ui/help-open? false)]
        (.addEventListener js/document.body "click" h)

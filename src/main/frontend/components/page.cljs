@@ -48,7 +48,8 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 (defn- get-page-name
   [state]
@@ -140,8 +141,8 @@
           focus! (fn [] (js/setTimeout #(some-> (rum/deref *el-ref) (.focus)) 16))]
 
       ;; mounted
-      ;(rum/use-effect! #(focus!) [])
-      (rum/use-effect! #(if selected? (focus!)
+      ;(hooks/use-effect! #(focus!) [])
+      (hooks/use-effect! #(if selected? (focus!)
                             (some-> (rum/deref *el-ref) (.blur))) [selected?])
 
       (shui/trigger-as
@@ -273,7 +274,7 @@
 (rum/defc tagged-pages
   [repo tag tag-title]
   (let [[pages set-pages!] (rum/use-state nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (p/let [result (db-async/<get-tag-pages repo (:db/id tag))]
          (set-pages! result)))
@@ -453,7 +454,7 @@
   (let [[with-actions? set-with-actions!] (rum/use-state false)
         *el (rum/use-ref nil)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (and (not config/publishing?)
                   (some-> (rum/deref *el) (.closest "#main-content-container")))

@@ -31,7 +31,8 @@
             [logseq.shui.form.core :as form-core]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -429,7 +430,7 @@
 
 (rum/defc import-indicator
   [importing?]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (when (and importing? (not (shui-dialog/get-modal :import-indicator)))
        (shui/dialog-open! indicator-progress

@@ -5,7 +5,8 @@
             [clojure.string :as string]
             [clojure.walk :as w]
             [daiquiri.interpreter :as interpreter]
-            [rum.core :refer [use-state use-effect!] :as rum]))
+            [rum.core :refer [use-state] :as rum]
+            [frontend.hooks :as hooks]))
 
 ;; copy from https://github.com/priornix/antizer/blob/35ba264cf48b84e6597743e28b3570d8aa473e74/src/antizer/core.cljs
 
@@ -68,7 +69,7 @@
 (defn use-atom-fn
   [a getter-fn setter-fn]
   (let [[val set-val] (use-state (getter-fn @a))]
-    (use-effect!
+    (hooks/use-effect!
      (fn []
        (let [id (str (random-uuid))]
          (add-watch a id (fn [_ _ prev-state next-state]
@@ -93,7 +94,7 @@
 (defn use-mounted
   []
   (let [*mounted (rum/use-ref false)]
-    (use-effect!
+    (hooks/use-effect!
      (fn []
        (rum/set-ref! *mounted true)
        #(rum/set-ref! *mounted false))
@@ -107,7 +108,7 @@
   ([tick]
    (let [[ref set-ref] (rum/use-state nil)
          [rect set-rect] (rum/use-state nil)]
-     (rum/use-effect!
+     (hooks/use-effect!
       (if ref
         (fn []
           (let [update-rect #(set-rect (. ref getBoundingClientRect))

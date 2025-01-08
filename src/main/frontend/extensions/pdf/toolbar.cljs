@@ -40,7 +40,7 @@
         [hl-block-colored? set-hl-block-colored?] (rum/use-state (state/sub :pdf/block-highlight-colored?))
         [auto-open-ctx-menu? set-auto-open-ctx-menu!] (rum/use-state (state/sub :pdf/auto-open-ctx-menu?))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [el-popup (rum/deref *el-popup)
              cb       (fn [^js e]
@@ -51,26 +51,26 @@
          #(.removeEventListener el-popup "keyup" cb)))
      [])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (storage/set "ls-pdf-area-is-dashed" (boolean area-dashed?)))
      [area-dashed?])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [b (boolean hl-block-colored?)]
          (state/set-state! :pdf/block-highlight-colored? b)
          (storage/set "ls-pdf-hl-block-is-colored" b)))
      [hl-block-colored?])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [b (boolean auto-open-ctx-menu?)]
          (state/set-state! :pdf/auto-open-ctx-menu? b)
          (storage/set "ls-pdf-auto-open-ctx-menu" b)))
      [auto-open-ctx-menu?])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [cb  #(let [^js target (.-target %)]
                     (when (and (not (some-> (rum/deref *el-popup) (.contains target)))
@@ -182,7 +182,7 @@
                                           :findPrevious    prev?
                                           :matchDiacritics false})))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js doc (resolve-own-container viewer)]
          (let [handler (fn [^js e]
@@ -195,7 +195,7 @@
            #(.removeEventListener doc "click" handler))))
      [viewer])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js bus (.-eventBus viewer)]
          (.on bus "updatefindmatchescount" (fn [^js e]
@@ -210,7 +210,7 @@
                                                (bean/->clj (.-matchesCount e))))))))
      [viewer])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-not (nil? case-sensitive?)
          (do-find! :casesensitivitychange)))
@@ -337,7 +337,7 @@
                                (set-outline-data! (update-in outline-data path merge attrs)))
                              [outline-data])]
 
-      (rum/use-effect!
+      (hooks/use-effect!
        (fn []
          (p/catch
           (p/let [^js data (.getOutline pdf-doc)]
@@ -352,7 +352,7 @@
             (js/console.error "[Load outline Error]" e))))
        [pdf-doc])
 
-      (rum/use-effect!
+      (hooks/use-effect!
        (fn []
          (let [el-outline (rum/deref *el-outline)
                cb         (fn [^js e]
@@ -381,7 +381,7 @@
 (rum/defc area-image-for-db
   [repo id]
   (let [[src set-src!] (rum/use-state nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (p/let [_ (db-async/<get-block repo id {:children? false})
                block (db-model/get-block-by-uuid id)]
@@ -443,7 +443,7 @@
         set-outline-visible! #(set-active-tab! "contents")
         contents?            (= active-tab "contents")]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js doc (resolve-own-container viewer)]
          (let [cb (fn [^js e]
@@ -492,7 +492,7 @@
         doc               (pdf-windows/resolve-own-document viewer)]
 
     ;; themes hooks
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js el (some-> doc (.getElementById (str "pdf-layout-container_" group-id)))]
          (set! (. (. el -dataset) -theme) viewer-theme)
@@ -501,7 +501,7 @@
      [viewer-theme])
 
     ;; export page state
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when viewer
          (.dispatch (.-eventBus viewer) (name :ls-update-extra-state)
@@ -509,7 +509,7 @@
      [viewer current-page-num])
 
     ;; pager hooks
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [total (and viewer (.-numPages (.-pdfDocument viewer)))]
          (let [^js bus (.-eventBus viewer)
@@ -523,7 +523,7 @@
            #(.off bus "pagechanging" page-fn))))
      [viewer])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [^js input (rum/deref *page-ref)]
          (set! (. input -value) current-page-num)))

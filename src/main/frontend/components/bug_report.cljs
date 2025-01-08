@@ -6,7 +6,8 @@
             [reitit.frontend.easy :as rfe]
             [clojure.string :as string]
             [frontend.handler.notification :as notification]
-            [frontend.context.i18n :refer [t]]))
+            [frontend.context.i18n :refer [t]]
+            [frontend.hooks :as hooks]))
 
 (defn parse-clipboard-data-transfer
   "parse dataTransfer
@@ -49,7 +50,7 @@
                       (set-step! 0)
                       (set-result! {}))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (cond (= step 0) (js/addEventListener "paste" paste-handler!))
        (fn [] (cond (= step 0) (js/removeEventListener "paste" paste-handler!))))

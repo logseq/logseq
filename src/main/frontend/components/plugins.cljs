@@ -21,7 +21,8 @@
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 (declare open-waiting-updates-modal!)
 (defonce PER-PAGE-SIZE 15)
@@ -134,7 +135,7 @@
 
 (rum/defc unpacked-plugin-loader
   [unpacked-pkg-path]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [err-handle
            (fn [^js e]
@@ -698,7 +699,7 @@
   (let [^js inViewState (ui/useInView #js {:threshold 0})
         in-view?        (.-inView inViewState)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (load-more!))
      [in-view?])
@@ -1043,13 +1044,13 @@
          id      (str "slot__" rs)
          *el-ref (rum/use-ref nil)]
 
-     (rum/use-effect!
+     (hooks/use-effect!
       (fn []
         (let [timer (js/setTimeout #(callback {:type type :slot id :payload payload}) 50)]
           #(js/clearTimeout timer)))
       [id])
 
-     (rum/use-effect!
+     (hooks/use-effect!
       (fn []
         (let [el (rum/deref *el-ref)]
           #(when-let [uis (seq (.querySelectorAll el "[data-injected-ui]"))]
@@ -1073,7 +1074,7 @@
         uni    #(str prefix "injected-ui-item-" %)
         ^js pl (js/LSPluginCore.registeredPlugins.get (name pid))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js el (rum/deref *el)]
          (js/LSPlugin.pluginHelpers.setupInjectedUI.call
@@ -1155,7 +1156,7 @@
   (let [*wrap-el (rum/use-ref nil)
         [right-sidebar-resized] (rum-utils/use-atom ui-handler/*right-sidebar-resized-at)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js wrap-el (rum/deref *wrap-el)]
          (when-let [^js header-el (.closest wrap-el ".cp__header")]
@@ -1224,11 +1225,11 @@
         *cm (rum/use-ref nil)
         *el (rum/use-ref nil)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(set-content1! content)
      [content])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (some-> (rum/deref *el)
                (.closest ".ui-fenced-code-wrap")
@@ -1242,7 +1243,7 @@
          (.setCursor cm (.lineCount cm) (count (.getLine cm (.lastLine cm))))))
      [editor-active?])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [t (js/setTimeout
                 #(when-let [^js cm (some-> (rum/deref *el)
@@ -1279,13 +1280,13 @@
         market? (= active :marketplace)
         *el-ref (rum/create-ref)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (state/load-app-user-cfgs)
        #(clear-dirties-states!))
      [])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(clear-dirties-states!)
      [market?])
 
@@ -1346,7 +1347,7 @@
                         (catch js/Error _
                           (set-uid (notification/show! content status false nil nil cb)))))))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (if check-pending?
          (notify!
@@ -1357,7 +1358,7 @@
          (when uid (notification/clear! uid))))
      [check-pending? sub-content])
 
-    (rum/use-effect!
+    (hooks/use-effect!
       ;; scheduler for auto updates
      (fn []
        (when online?
@@ -1427,7 +1428,7 @@
 
 (rum/defc custom-js-installer
   [{:keys [t current-repo db-restoring? nfs-granted?]}]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (when (and (not db-restoring?)
                 (or (not util/nfs?) nfs-granted?))

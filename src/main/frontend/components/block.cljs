@@ -277,7 +277,7 @@
         *handle-left (hooks/use-ref nil)
         *handle-right (hooks/use-ref nil)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (doseq [el [(hooks/deref *handle-left)
                    (hooks/deref *handle-right)]]
@@ -769,7 +769,7 @@
 (rum/defc popup-preview-impl
   [children {:keys [*timer *timer1 visible? set-visible! render *el-popup]}]
   (let [*el-trigger (hooks/use-ref nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (true? visible?)
          (shui/popup-show!
@@ -833,7 +833,7 @@
         _  #_:clj-kondo/ignore (rum/defc preview-render []
                                  (let [[ready? set-ready!] (rum/use-state false)]
 
-                                   (rum/use-effect!
+                                   (hooks/use-effect!
                                     (fn []
                                       (let [el-popup (hooks/deref *el-popup)
                                             focus! #(js/setTimeout (fn [] (.focus el-popup)))]
@@ -866,7 +866,7 @@
                                                   :scroll-container (some-> (hooks/deref *el-popup) (.closest ".ls-preview-popup"))
                                                   :preview? true}))])))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (if (some-> (hooks/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
          (set-in-popup! true)
@@ -4145,7 +4145,7 @@
                                                       {:top? top?
                                                        :bottom? bottom?})))})
         *wrap-ref (hooks/use-ref nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when virtualized?
          (when (:current-page? config)

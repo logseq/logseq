@@ -3,7 +3,8 @@
             [frontend.state :as state]
             [frontend.modules.layout.core :as layout]
             ;[shadow.lazy :as lazy]
-            [frontend.extensions.handbooks.core :as handbooks]))
+            [frontend.extensions.handbooks.core :as handbooks]
+            [frontend.hooks :as hooks]))
 
 #_:clj-kondo/ignore
 ;(def lazy-handbooks (lazy/loadable frontend.extensions.handbooks.core/content))
@@ -12,7 +13,7 @@
 ;  []
 ;  (let [[content set-content] (rum/use-state nil)]
 ;
-;    (rum/use-effect!
+;    (hooks/use-effect!
 ;     (fn []
 ;       (lazy/load lazy-handbooks #(set-content %))) [])
 ;
@@ -22,7 +23,7 @@
 (rum/defc handbooks-popup
   []
   (let [popup-ref (rum/use-ref nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js popup-el (rum/deref popup-ref)]
          (comp

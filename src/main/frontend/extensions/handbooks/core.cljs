@@ -123,7 +123,7 @@
 (rum/defc chapter-select
   [topic children on-select]
   (let [[open?, set-open?] (rum/use-state false)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js el (js/document.querySelector "[data-identity=logseq-handbooks]")]
          (let [h #(when-not (some->> (.-target %)
@@ -158,7 +158,7 @@
         *id-ref (rum/use-ref (str "glide--" (js/Date.now)))]
 
     ;; load deps assets
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (set-deps-pending? true)
        (-> (load-glide-assets!)
@@ -168,7 +168,7 @@
            (p/finally #(set-deps-pending? false))))
      [])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (js/setTimeout #(some-> (js/document.querySelector ".cp__handbooks-content")
                                (.scrollTo 0 0))))
@@ -332,11 +332,11 @@
         reset-q! #(->> "" (set! (.-value (rum/deref *input-ref))) (set-q!))
         focus-q! #(some-> (rum/deref *input-ref) (.focus))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(focus-q!)
      [pane-state])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [pane-nodes (:children (second pane-state))
              pane-nodes (and (seq pane-nodes)
@@ -437,7 +437,7 @@
   (let [[config _] (r/use-atom *config)
         discord-count (:discord-online config)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (or (nil? discord-count)
                  (> (- (js/Date.now) (:discord-online-created config)) (* 10 60 1000)))
@@ -538,12 +538,12 @@
                    [])]
 
     ;; load handbooks
-    (rum/use-effect!
+    (hooks/use-effect!
      #(load-handbooks!)
      [])
 
     ;; navigation sentry
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (seq handbooks-nodes)
          (let [c (:handbook/route-chan @state/state)]
@@ -556,7 +556,7 @@
            #(async/go (>! c :return)))))
      [handbooks-nodes])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [*cnt-len (atom 0)
              check! (fn []
@@ -572,7 +572,7 @@
          #(js/clearInterval timer0)))
      [dev-watch?])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when handbooks-data
          (let [nodes (->> (tree-seq map? :children handbooks-data)

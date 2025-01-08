@@ -34,7 +34,8 @@
             [logseq.shui.util :as shui-util]
             [missionary.core :as m]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
@@ -234,7 +235,7 @@
 (rum/defc updater-tips-new-version
   [t]
   (let [[downloaded, set-downloaded] (rum/use-state nil)
-        _ (rum/use-effect!
+        _ (hooks/use-effect!
            (fn []
              (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
                (let [callback (fn [_ args]
@@ -265,12 +266,12 @@
   []
   (let [[recent-days set-recent-days!] (rum/use-state (state/get-highlight-recent-days))
         [thumb-ref set-thumb-ref!] (rum/use-state nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when thumb-ref
          (.focus ^js thumb-ref)))
      [thumb-ref])
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [all-nodes (d/by-class "ls-block")
              recent-node (fn [node]
