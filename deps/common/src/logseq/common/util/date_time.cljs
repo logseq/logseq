@@ -98,7 +98,7 @@
         (tc/to-long))))
 
 (defn ms->journal-day
-  "Converts a millseconds timestamp to the nearest :block/journal-day"
+  "Converts a milliseconds timestamp to the nearest :block/journal-day"
   [ms]
   (->> ms
        tc/from-long
