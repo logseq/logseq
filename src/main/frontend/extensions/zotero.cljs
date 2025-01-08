@@ -15,7 +15,8 @@
             [goog.dom :as gdom]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 (def term-chan (chan))
 (def debounce-chan-mult (a/mult (api/debounce term-chan 500)))
@@ -67,7 +68,7 @@
 
                         (set-is-searching! false))))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [d-chan (chan)]
          (a/tap debounce-chan-mult d-chan)

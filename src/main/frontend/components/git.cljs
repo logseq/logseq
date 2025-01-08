@@ -6,7 +6,8 @@
             [clojure.string :as string]
             [frontend.handler.shell :as shell]
             [frontend.handler.file :as file]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.hooks :as hooks]))
 
 (rum/defcs set-git-username-and-email <
   (rum/local "" ::username)
@@ -50,7 +51,7 @@
   (let
    [[content set-content!] (rum/use-state  nil)
     [hash  set-hash!] (rum/use-state   "HEAD")]
-    (rum/use-effect! (fn [] (p/let [c (get-content hash path)] (set-content! c)) [hash path]))
+    (hooks/use-effect! (fn [] (p/let [c (get-content hash path)] (set-content! c)) [hash path]))
     [:div.flex
      [:div.overflow-y-auto {:class "w-48 max-h-[calc(85vh_-_4rem)] "}
       [:div.font-bold "File history - " path]

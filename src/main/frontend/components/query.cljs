@@ -15,7 +15,8 @@
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
             [frontend.config :as config]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.hooks :as hooks]))
 
 (defn- built-in-custom-query?
   [title]
@@ -184,7 +185,7 @@
 (rum/defc trigger-custom-query
   [config q]
   (let [[result set-result!] (rum/use-state nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (query-result/trigger-custom-query! config q (:*query-error config) set-result!))
      [q])

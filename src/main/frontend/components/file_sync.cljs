@@ -31,7 +31,8 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [goog.functions :refer [debounce]]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [frontend.hooks :as hooks]))
 
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
@@ -39,7 +40,7 @@
 (rum/defc clone-local-icloud-graph-panel
   [repo graph-name close-fn]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    #(some->> (state/sub :file-sync/jstour-inst)
              (.complete))
    [])
@@ -120,7 +121,7 @@
 (rum/defc create-remote-graph-panel
   [repo graph-name close-fn]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    #(some->> (state/sub :file-sync/jstour-inst)
              (.complete))
    [])
@@ -194,7 +195,7 @@
   [sync-state sync-progress
    {:keys [idle? syncing? no-active-files? online? history-files? queuing?]}]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      #(reset! *last-calculated-time nil))
    [])
@@ -241,7 +242,7 @@
                                           (-> (storage/get :ui/file-sync-active-file-list?)
                                               (#(if (nil? %) true %))))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js outer-class-list
                   (some-> (rum/deref *el-ref)
@@ -575,7 +576,7 @@
         get-version-key #(or (:VersionUUID %) (:relative-path %))]
 
     ;; fetch version files
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-not loading?
          (async/go
@@ -623,7 +624,7 @@
         *ref-contents      (rum/use-ref (atom {}))
         original-page-name (or (:block/title page-entity) page-name)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(when selected-page
         (set-content-ready? false)
         (let [k               (get-version-key selected-page)
@@ -653,7 +654,7 @@
                   (load-file' repo-url relative-path)))))))
      [selected-page])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (state/update-state! :editor/hidden-editors #(conj % page-name))
 

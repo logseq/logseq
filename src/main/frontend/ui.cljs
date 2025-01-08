@@ -36,7 +36,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.shui.ui :as shui]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [frontend.hooks :as hooks]))
 
 (declare icon)
 
@@ -368,7 +369,7 @@
                       input)))
         [time set-time] (rum/use-state (time-fn))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [timer (js/setInterval
                     #(set-time (time-fn)) (* 1000 30))]
@@ -1160,7 +1161,7 @@
 (rum/defc indicator-progress-pie
   [percentage]
   (let [*el (rum/use-ref nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      #(when-let [^js el (rum/deref *el)]
         (set! (.. el -style -backgroundImage)
               (util/format "conic-gradient(var(--ls-pie-fg-color) %s%, var(--ls-pie-bg-color) %s%)" percentage percentage)))

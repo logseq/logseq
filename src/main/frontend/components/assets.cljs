@@ -14,7 +14,8 @@
    [frontend.config :as config]
    [frontend.components.select :as cp-select]
    [frontend.handler.notification :as notification]
-   [frontend.handler.assets :as assets-handler]))
+   [frontend.handler.assets :as assets-handler]
+   [frontend.hooks :as hooks]))
 
 (defn -get-all-formats
   []
@@ -32,7 +33,7 @@
   (let [[*input-val, set-*input-val] (rum/use-state (atom nil))
         [input-empty?, set-input-empty?] (rum/use-state true)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(set-input-empty? (string/blank? @*input-val))
      [@*input-val])
 

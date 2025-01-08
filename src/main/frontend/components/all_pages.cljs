@@ -12,7 +12,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.ui :as ui]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.hooks :as hooks]))
 
 (defn- columns
   []
@@ -57,7 +58,7 @@
                                       {:with-object-name? false
                                        :with-id? false})
         view-entity (first (ldb/get-all-pages-views db))]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js worker @state/*db-worker]
          (p/let [result-str (.get-page-refs-count worker (state/get-current-repo))

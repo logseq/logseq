@@ -14,7 +14,8 @@
    [frontend.fs :as fs]
    [frontend.components.svg :as svg]
    [promesa.core :as p]
-   [logseq.common.path :as path]))
+   [logseq.common.path :as path]
+   [frontend.hooks :as hooks]))
 
 (defn validate-graph-dirname
   [root dirname]
@@ -76,7 +77,7 @@
                                                   (notification/show! (str e) :error)
                                                   (js/console.error e)))))))))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js input (and onboarding-and-home?
                                  (rum/deref *input-ref))]

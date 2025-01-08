@@ -29,7 +29,8 @@
             [frontend.db.async :as db-async]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
-            [frontend.util.text :as text-util]))
+            [frontend.util.text :as text-util]
+            [frontend.hooks :as hooks]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
@@ -258,7 +259,7 @@
   [page-uuid block-id]
   (let [page-uuid (str page-uuid)
         [loaded-app set-loaded-app] (rum/use-state nil)]
-    (rum/use-effect! (fn []
+    (hooks/use-effect! (fn []
                        (when (and loaded-app block-id)
                          (state/focus-whiteboard-shape loaded-app block-id))
                        #())

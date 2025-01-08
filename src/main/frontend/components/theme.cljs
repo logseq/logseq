@@ -14,12 +14,13 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 (rum/defc scrollbar-measure
   []
   (let [*el (rum/use-ref nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [el (rum/deref *el)]
          (let [w (- (.-offsetWidth el) (.-clientWidth el))
@@ -40,7 +41,7 @@
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(let [^js doc js/document.documentElement
             ^js cls (.-classList doc)
             ^js cls-body (.-classList js/document.body)]
@@ -54,36 +55,36 @@
      [theme])
 
     ;; theme color
-    (rum/use-effect!
+    (hooks/use-effect!
      #(some-> js/document.documentElement
               (.setAttribute "data-color"
                              (or accent-color "logseq")))
      [accent-color])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(some-> js/document.documentElement
               (.setAttribute "data-font" (or editor-font "default")))
      [editor-font])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(let [doc js/document.documentElement]
         (.setAttribute doc "lang" preferred-language)))
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(js/setTimeout
        (fn [] (when-not @*once-theme-loaded?
                 (ipc/ipc :theme-loaded)
                 (vreset! *once-theme-loaded? true))) 100) ; Wait for the theme to be applied
      [])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(when (and restored-sidebar?
                  (mounted-fn))
         (plugin-handler/hook-plugin-app :sidebar-visible-changed {:visible sidebar-open?})
         (ui-handler/persist-right-sidebar-state!))
      [sidebar-open? restored-sidebar? sidebar-blocks-len])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(when config/lsp-enabled?
         (plugin-handler/load-plugin-preferences)
         (comp
@@ -91,14 +92,14 @@
          (plugin-config-handler/setup-install-listener!)))
      [])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (ui-handler/reset-custom-css!)
        (pdf/reset-current-pdf!)
        (plugin-handler/hook-plugin-app :current-graph-changed {}))
      [current-repo])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(let [db-restored? (false? db-restoring?)]
         (if db-restoring?
           (util/set-title! (t :loading))
@@ -106,7 +107,7 @@
             (route-handler/update-page-title! route))))
      [nfs-granted? db-restoring? route])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-not db-restoring?
          (let [repos (state/get-repos)]
@@ -121,12 +122,12 @@
                (set-restored-sidebar? true))))))
      [db-restoring?])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(when system-theme?
         (ui/setup-system-theme-effect!))
      [system-theme?])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (if settings-open?
          (shui/dialog-open!
@@ -138,7 +139,7 @@
          (shui/dialog-close! :app-settings)))
      [settings-open?])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(storage/set :file-sync/onboarding-state onboarding-state)
      [onboarding-state])
 

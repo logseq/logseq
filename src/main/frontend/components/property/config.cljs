@@ -27,7 +27,8 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 (defn- re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
@@ -83,7 +84,7 @@
   [property {:keys [multiple-choices? disabled? default-open? no-class? on-hide]
              :or {multiple-choices? true}}]
   (let [*ref (rum/use-ref nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when default-open?
          (some-> (rum/deref *ref)
@@ -160,7 +161,7 @@
         title (util/trim-safe (:title form-data))
         description (util/trim-safe (:description form-data))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (js/setTimeout #(some-> (rum/deref *el) (.focus)) 32))
      [])
@@ -211,7 +212,7 @@
         [form-data, set-form-data!] (rum/use-state (rum/deref *form-data))
         *input-ref (rum/use-ref nil)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when create?
          (js/setTimeout #(some-> (rum/deref *input-ref) (.focus)) 60)))

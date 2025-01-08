@@ -550,7 +550,7 @@
 
 (rum/defc mouse-active-effect!
   [*mouse-active? deps]
-  (rum/use-effect!
+  (hooks/use-effect!
    #(reset! *mouse-active? false)
    deps)
   nil)
@@ -791,11 +791,11 @@
     ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
     ;; if not then clear that puppy out!
     ;; This was moved to a functional component
-    (rum/use-effect! (fn []
+    (hooks/use-effect! (fn []
                        (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
                          (reset! (::highlighted-item state) nil)))
                      [all-items])
-    (rum/use-effect! (fn [] (load-results :default state)) [])
+    (hooks/use-effect! (fn [] (load-results :default state)) [])
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input.cp__cmdk-search-input
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"

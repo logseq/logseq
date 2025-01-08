@@ -37,7 +37,8 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 (rum/defc property-empty-btn-value
   [property & opts]
@@ -79,7 +80,7 @@
                         :logseq.property/icon))
                      (clear-overlay!))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when editing?
          (clear-overlay!)
@@ -373,7 +374,7 @@
 (rum/defc overdue
   [date content]
   (let [[current-time set-current-time!] (rum/use-state (t/now))]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [timer (js/setInterval (fn [] (set-current-time! (t/now))) (* 1000 60 3))]
          #(js/clearInterval timer)))
@@ -444,7 +445,7 @@
                           (shui/popup-show! (.-target e) content-fn
                                             {:align "start" :auto-focus? true}))))
         repeated-task? (:logseq.task/repeated? block)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when editing?
          (js/setTimeout
@@ -785,7 +786,7 @@
         parent-property? (= (:db/ident property) :logseq.property/parent)]
     (when (and (not parent-property?) (seq non-root-classes))
       ;; effect runs once
-      (rum/use-effect!
+      (hooks/use-effect!
        (fn []
          (p/let [result (p/all (map (fn [class] (db-async/<get-tag-objects repo (:db/id class))) non-root-classes))
                  result' (distinct (apply concat result))]
@@ -1025,7 +1026,7 @@
   [block property value value-f select-opts opts]
   (let [*el (rum/use-ref nil)]
     ;; Open popover initially when editing a property
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (:editing? opts)
          (.click (rum/deref *el))))
@@ -1169,7 +1170,7 @@
         items (cond->> (if (de/entity? v) #{v} v)
                 (= (:db/ident property) :block/tags)
                 (remove (fn [v] (contains? ldb/hidden-tags (:db/ident v)))))]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when editing?
          (.click (rum/deref *el))))

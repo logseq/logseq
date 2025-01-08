@@ -20,7 +20,8 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.hooks :as hooks]))
 
 (defn- get-class-objects
   [class]
@@ -134,7 +135,7 @@
                     (concat before-cols [(build-asset-file-column config)] after-cols))
                   columns)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (nil? loading?)
          (set-loading? true)
@@ -230,7 +231,7 @@
         [data set-data!] (rum/use-state objects)
         columns (views/build-columns config properties)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (set-loading? true)
        (p/let [_result (db-async/<get-views (state/get-current-repo) (:db/id property))
