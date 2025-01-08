@@ -37,30 +37,31 @@
 
 (defn async-install-or-update-for-web!
   [{:keys [version repo only-check] :as manifest}]
-  (js/console.log "[plugin]" (if only-check "Checking" "Installing") " #" repo)
-  (-> (fetch-web-plugin-entry-info repo (if only-check "" version))
+  (js/console.log "debug:plugin:" (if only-check "Checking" "Installing") " #" repo)
+  (let [version (if (not only-check) (:latest-version manifest) version)]
+    (-> (fetch-web-plugin-entry-info repo (if only-check "" version))
       (p/then (fn [web-pkg]
-                (let [web-pkg (merge web-pkg (dissoc manifest :stat))
+                (let [web-pkg (merge web-pkg (dissoc manifest :stat :version :only-check))
                       latest-version (:version web-pkg)
                       valid-latest-version (when only-check
                                              (let [coerced-current-version (.coerce util/sem-ver version)
                                                    coerced-latest-version (.coerce util/sem-ver latest-version)]
                                                (if (and coerced-current-version
-                                                        coerced-latest-version
-                                                        (util/sem-ver.lt coerced-current-version coerced-latest-version))
+                                                     coerced-latest-version
+                                                     (util/sem-ver.lt coerced-current-version coerced-latest-version))
                                                  latest-version
                                                  (throw (js/Error. :no-new-version)))))]
                   (emit-lsp-updates!
-                   {:status :completed
-                    :only-check only-check
-                    :payload (if only-check
-                               (assoc manifest :latest-version valid-latest-version  :latest-notes "TODO: update notes")
-                               (assoc manifest :dst repo :version latest-version :web-pkg web-pkg))}))))
+                    {:status :completed
+                     :only-check only-check
+                     :payload (if only-check
+                                (assoc manifest :latest-version valid-latest-version :latest-notes (some-> web-pkg :_objectExtra :releaseNotes))
+                                (assoc manifest :dst repo :version latest-version :web-pkg web-pkg))}))))
       (p/catch (fn [^js e]
                  (emit-lsp-updates!
-                  {:status :error
-                   :only-check only-check
-                   :payload (assoc manifest :error-code (.-message e))})))))
+                   {:status :error
+                    :only-check only-check
+                    :payload (assoc manifest :error-code (.-message e))}))))))
 
 (defn install-marketplace-plugin!
   "Installs plugin given plugin map with id"

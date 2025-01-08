@@ -1367,10 +1367,12 @@
                           (not (number? last-updates))
                            ;; interval 12 hours
                           (> (- (js/Date.now) last-updates) (* 60 60 12 1000))))
-             (js/setTimeout
-              (fn []
-                (plugin-handler/auto-check-enabled-for-updates!)
-                (storage/set :lsp-last-auto-updates (js/Date.now))))))))
+             (let [update-timer (js/setTimeout
+                                  (fn []
+                                    (plugin-handler/auto-check-enabled-for-updates!)
+                                    (storage/set :lsp-last-auto-updates (js/Date.now)))
+                                  (if (util/electron?) 3000 (* 60 1000) ))]
+               #(js/clearTimeout update-timer))))))
      [online?])
 
     [:<>]))
