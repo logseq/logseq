@@ -24,8 +24,7 @@
 
 (defn class?
   [entity]
-  (or (has-tag? entity :logseq.class/Tag)
-      (keyword-identical? (:db/ident entity) :logseq.class/Tag)))
+  (has-tag? entity :logseq.class/Tag))
 
 (defn property?
   [entity]
