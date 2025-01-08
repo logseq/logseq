@@ -605,9 +605,9 @@
       (when-let [page (db/get-page page-title)]
         (let [class-or-property? (or (ldb/class? page) (ldb/property? page))]
           (when (or class-or-property? (db/page-empty? (state/get-current-repo) (:db/id page)))
-            (let [format (get page :block/format :markdown)
-                  new-block {:block/title ""
-                             :block/format format}]
+            (let [new-block (cond-> {:block/title ""}
+                              (not (config/db-based-graph? (state/get-current-repo)))
+                              (assoc :block/format (get page :block/format :markdown)))]
               (ui-outliner-tx/transact!
                {:outliner-op :insert-blocks}
                (outliner-op/insert-blocks! [new-block] page {:sibling? false})))))))))
