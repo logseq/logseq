@@ -30,13 +30,16 @@
                                 (let [v (if (uuid? tag)
                                           (d/entity db [:block/uuid tag])
                                           tag)]
-                                  (cond
-                                    (de/entity? v)
-                                    (:db/id v)
-                                    (map? v)
-                                    (:db/id v)
-                                    :else
-                                    v)))
+                                  (cond (de/entity? v)
+                                        (:db/id v)
+                                        ;; tx map
+                                        (map? v)
+                                        ;; Handle adding :db/ident if a new tag
+                                        (if (d/entity db [:block/uuid (:block/uuid v)])
+                                          v
+                                          (db-class/build-new-class db v))
+                                        :else
+                                        v)))
                               tags'))
           property-vals-tx-m
           ;; Builds property values for built-in properties like logseq.property.pdf/file
@@ -49,9 +52,12 @@
                         (when (db-property-util/built-in-has-ref-value? k)
                           [k v])))
                 (into {})))]
-      (cond-> (if class? [(db-class/build-new-class db page')
-                          [:db/retract [:block/uuid (:block/uuid page)] :block/tags :logseq.class/Page]]
-                  [page'])
+      (cond-> (if class?
+                [(merge (db-class/build-new-class db page')
+                        ;; FIXME: new pages shouldn't have db/ident but converting property to tag still relies on this
+                        (select-keys page' [:db/ident]))
+                 [:db/retract [:block/uuid (:block/uuid page)] :block/tags :logseq.class/Page]]
+                [page'])
         (seq property-vals-tx-m)
         (into (vals property-vals-tx-m))
         true
@@ -187,7 +193,8 @@
                    (not (ldb/class? existing-page))
                    (or (ldb/property? existing-page) (ldb/internal-page? existing-page)))
           ;; Convert existing user property or page to class
-          (let [tx-data [(db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :db/ident :block/created-at]))
+          (let [tx-data [(merge (db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :block/created-at]))
+                                (select-keys existing-page [:db/ident]))
                          [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
             {:tx-meta tx-meta
              :tx-data tx-data})))
