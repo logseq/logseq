@@ -3,7 +3,7 @@
   based on
   https://github.com/ReilySiegel/missionary-websocket/blob/master/src/com/reilysiegel/missionary/websocket.cljs"
   (:require [cljs-http-missionary.client :as http]
-            [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.common.missionary :as c.m]
             [missionary.core :as m]))
@@ -133,8 +133,8 @@
   "Returns a task: send message"
   [mws message]
   (m/sp
-    (let [decoded-message (rtc-const/data-to-ws-coercer message)
-          message-str (js/JSON.stringify (clj->js (rtc-const/data-to-ws-encoder decoded-message)))]
+    (let [decoded-message (rtc-schema/data-to-ws-coercer message)
+          message-str (js/JSON.stringify (clj->js (rtc-schema/data-to-ws-encoder decoded-message)))]
       (m/? ((:send mws) message-str)))))
 
 (defn- recv-flow*
@@ -147,7 +147,7 @@
           (if (= "Internal server error" (:message m))
             (throw r.ex/ex-unknown-server-error)
             m)))
-   (map rtc-const/data-from-ws-coercer)
+   (map rtc-schema/data-from-ws-coercer)
    (:recv-flow m-ws)))
 
 (defn recv-flow
@@ -160,7 +160,7 @@
         (if-let [s3-presign-url (:s3-presign-url resp)]
           (let [{:keys [status body]} (m/? (http/get s3-presign-url {:with-credentials? false}))]
             (if (http/unexceptional-status? status)
-              (rtc-const/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
+              (rtc-schema/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
               {:req-id (:req-id resp)
                :ex-message "get s3 object failed"
                :ex-data {:type :rtc.exception/get-s3-object-failed :status status :body body}}))
