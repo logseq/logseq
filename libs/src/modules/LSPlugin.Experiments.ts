@@ -25,6 +25,18 @@ export class LSPluginExperiments {
     }
   }
 
+  get Utils() {
+    const utils = this.ensureHostScope().logseq.sdk.utils
+    const withCall = (name: string): (input: any) => any => utils[safeSnakeCase(name)]
+    return {
+      toClj: withCall('toClj'),
+      jsxToClj: withCall('jsxToClj'),
+      toJs: withCall('toJs'),
+      toKeyword: withCall('toKeyword'),
+      toSymbol: withCall('toSymbol')
+    }
+  }
+
   get pluginLocal(): PluginLocal {
     return this.ensureHostScope().LSPluginCore.ensurePlugin(
       this.ctx.baseInfo.id
@@ -124,11 +136,12 @@ export class LSPluginExperiments {
   }
 
   ensureHostScope(): any {
-    if (window === top) {
+    try {
+      const _ = window.top?.document
+    } catch (_e) {
       console.error('Can not access host scope!')
-      return {}
     }
 
-    return top
+    return window.top
   }
 }
