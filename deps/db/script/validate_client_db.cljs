@@ -20,7 +20,7 @@
   (let [ent-maps (db-malli-schema/update-properties-in-ents db ent-maps*)
         explainer (db-validate/get-schema-explainer closed-maps)]
     (if-let [explanation (binding [db-malli-schema/*db-for-validate-fns* db]
-                           (->> ent-maps explainer not-empty))]
+                           (->> (map (fn [e] (dissoc e :db/id)) ent-maps) explainer not-empty))]
       (do
         (if group-errors
           (let [ent-errors (db-validate/group-errors-by-entity db ent-maps (:errors explanation))]
