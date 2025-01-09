@@ -660,7 +660,8 @@
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"
-                                                          "pages/Whiteboard___Tool.md" "pages/Whiteboard___Arrow_head_toggle.md"])
+                                                          "pages/Whiteboard___Tool.md" "pages/Whiteboard___Arrow_head_toggle.md"
+                                                          "pages/Property.md" "pages/url.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:property-parent-classes ["parent"]
                                             ;; Also add this option to trigger some edge cases with namespace pages
@@ -670,7 +671,7 @@
         "Created graph has no validation errors")
 
     (is (= #{:user.class/Movie :user.class/CreativeWork :user.class/Thing
-             :user.class/Class :user.class/Tool :user.class/Whiteboard___Tool}
+             :user.class/Class :user.class/Tool :user.class/Whiteboard___Tool :user.class/Property}
            (->> @conn
                 (d/q '[:find [?ident ...]
                        :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
