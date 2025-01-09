@@ -52,7 +52,9 @@
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
    * :queryable? - Boolean for whether property can be queried in the query builder
    * :closed-values - Vec of closed-value maps for properties with choices. Map
-     has keys :value, :db-ident, :uuid and :icon"
+     has keys :value, :db-ident, :uuid and :icon
+   * :rtc - submap for RTC configs. view docs by jumping to keyword definitions.
+  "
   (apply
    ordered-map
    (defkeywords
@@ -435,38 +437,56 @@
              [:logseq.property.view/type.list "List View"]
              [:logseq.property.view/type.gallery "Gallery View"]])
       :properties {:logseq.property/default-value :logseq.property.view/type.table}
-      :queryable? true}
+      :queryable? true
+      :rtc {:rtc/ignore-attr-when-init-upload true
+            :rtc/ignore-attr-when-init-download true
+            :rtc/ignore-attr-when-syncing true}}
 
      :logseq.property.table/sorting {:title "View sorting"
                                      :schema
                                      {:type :coll
                                       :hide? true
-                                      :public? false}}
+                                      :public? false}
+                                     :rtc {:rtc/ignore-attr-when-init-upload true
+                                           :rtc/ignore-attr-when-init-download true
+                                           :rtc/ignore-attr-when-syncing true}}
 
      :logseq.property.table/filters {:title "View filters"
                                      :schema
                                      {:type :coll
                                       :hide? true
-                                      :public? false}}
+                                      :public? false}
+                                     :rtc {:rtc/ignore-attr-when-init-upload true
+                                           :rtc/ignore-attr-when-init-download true
+                                           :rtc/ignore-attr-when-syncing true}}
 
      :logseq.property.table/hidden-columns {:title "View hidden columns"
                                             :schema
                                             {:type :keyword
                                              :cardinality :many
                                              :hide? true
-                                             :public? false}}
+                                             :public? false}
+                                            :rtc {:rtc/ignore-attr-when-init-upload true
+                                                  :rtc/ignore-attr-when-init-download true
+                                                  :rtc/ignore-attr-when-syncing true}}
 
      :logseq.property.table/ordered-columns {:title "View ordered columns"
                                              :schema
                                              {:type :coll
                                               :hide? true
-                                              :public? false}}
+                                              :public? false}
+                                             :rtc {:rtc/ignore-attr-when-init-upload true
+                                                   :rtc/ignore-attr-when-init-download true
+                                                   :rtc/ignore-attr-when-syncing true}}
 
      :logseq.property.table/sized-columns {:title "View columns settings"
                                            :schema
                                            {:type :map
                                             :hide? true
-                                            :public? false}}
+                                            :public? false}
+                                           :rtc {:rtc/ignore-attr-when-init-upload true
+                                                 :rtc/ignore-attr-when-init-download true
+                                                 :rtc/ignore-attr-when-syncing true}}
 
      :logseq.property/view-for {:title "This view belongs to"
                                 :schema
@@ -490,12 +510,18 @@
      :logseq.property.asset/last-visit-page {:title "Last visit page"
                                              :schema {:type :raw-number
                                                       :hide? true
-                                                      :public? false}}
+                                                      :public? false}
+                                             :rtc {:rtc/ignore-attr-when-init-upload true
+                                                   :rtc/ignore-attr-when-init-download true
+                                                   :rtc/ignore-attr-when-syncing true}}
      :logseq.property.asset/remote-metadata {:title "File remote metadata"
                                              :schema
                                              {:type :map
                                               :hide? true
-                                              :public? false}}
+                                              :public? false}
+                                             :rtc {:rtc/ignore-attr-when-init-upload true
+                                                   :rtc/ignore-attr-when-init-download true
+                                                   :rtc/ignore-attr-when-syncing true}}
      :logseq.property.asset/resize-metadata {:title "Asset resize metadata"
                                              :schema {:type :map
                                                       :hide? true

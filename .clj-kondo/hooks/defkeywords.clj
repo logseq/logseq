@@ -19,11 +19,9 @@
               :type :defkeywords/invalid-arg))
       :else
       (let [new-node (api/list-node
-                      (map (fn [k]
+                      (map (fn [[kw v]]
                              (api/list-node
-                              [(api/token-node 'logseq.common.defkeywords/defkeyword)
-                               k
-                               (api/token-node "")]))
-                           kws))]
+                              [(api/token-node 'logseq.common.defkeywords/defkeyword) kw v]))
+                           kw->v))]
         {:node (with-meta new-node
                  (meta node))}))))

@@ -1,8 +1,9 @@
 (ns logseq.common.defkeywords
-  "Macro 'defkeywords' to def keyword with docstring"
+  "Macro 'defkeywords' to def keyword with config"
   #?(:cljs (:require-macros [logseq.common.defkeywords])))
 
 (def ^:private *defined-kws (volatile! {}))
+(def *defined-kw->config (volatile! {}))
 
 #_:clj-kondo/ignore
 (defmacro defkeyword
@@ -24,4 +25,8 @@
           (vswap! *defined-kws assoc kw current-meta)
           (throw (ex-info "keyword already defined somewhere else" {:kw kw :info info}))))
       (vswap! *defined-kws assoc kw current-meta)))
-  `(vector ~@keyvals))
+  (let [kw->v (partition 2 keyvals)]
+    `(do
+       (doseq [[kw# config#] '~kw->v]
+         (vswap! *defined-kw->config assoc kw# config#))
+       (vector ~@keyvals))))

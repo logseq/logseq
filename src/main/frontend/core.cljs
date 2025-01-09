@@ -14,6 +14,7 @@
             [frontend.routes :as routes]
             [frontend.spec]
             [logseq.api]
+            [logseq.db.frontend.kv-entity]
             [malli.dev.cljs :as md]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
