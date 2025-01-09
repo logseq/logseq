@@ -538,8 +538,9 @@
           page? (= k :page)
           params (bean/->clj params)
           query (bean/->clj query)]
-      (if-let [page-name (and page? (:name params))]
-        (route-handler/redirect-to-page! page-name {:anchor (:anchor query) :push true})
+      (if page?
+        (-> (:name params)
+          (route-handler/redirect-to-page! {:anchor (:anchor query) :push true}))
         (rfe/push-state k params query)))))
 
 (def ^:export replace_state
