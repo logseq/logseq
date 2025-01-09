@@ -687,6 +687,8 @@ export interface IEditorProxy extends Record<string, any> {
    */
   newBlockUUID: () => Promise<string>
 
+  isPageBlock: (block: BlockEntity | PageEntity) => Boolean
+
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
    *
