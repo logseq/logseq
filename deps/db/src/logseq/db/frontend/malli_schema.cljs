@@ -194,7 +194,7 @@
 (defn datoms->entities
   "Returns a vec of entity maps given :eavt datoms"
   [datoms]
-  (mapv (fn [[db-id m]] (with-meta m {:db/id db-id}))
+  (mapv (fn [[db-id m]] (assoc m :db/id db-id))
         (datoms->entity-maps datoms)))
 
 (assert (every? #(re-find #"^(block|logseq\.)" (namespace %)) db-property/db-attribute-properties)
@@ -393,6 +393,7 @@
   [:map
    [:block/uuid :uuid]
    [:block/created-at :int]
+   [:block/updated-at {:optional true} :int]
    [:logseq.property.history/block :int]
    [:logseq.property.history/property :int]
    [:logseq.property.history/ref-value {:optional true} :int]
@@ -441,10 +442,7 @@
   "A block has content and a page"
   [:or
    normal-block
-   closed-value-block
-   whiteboard-block
-   property-value-block
-   property-history-block])
+   whiteboard-block])
 
 (def asset-block
   "A block tagged with #Asset"
@@ -504,6 +502,16 @@
                                              :asset-block
                                              (:file/path d)
                                              :file-block
+                                             (:logseq.property.history/block d)
+                                             :property-history-block
+
+                                             (:block/closed-value-property d)
+                                             :closed-value-block
+
+                                             (and (:logseq.property/created-from-property d)
+                                                  (:property.value/content d))
+                                             :property-value-block
+
                                              (:block/uuid d)
                                              :block
                                              (= (:db/ident d) :logseq.property/empty-placeholder)
@@ -515,6 +523,9 @@
     :class class-page
     :hidden hidden-page
     :normal-page normal-page
+    :property-history-block property-history-block
+    :closed-value-block closed-value-block
+    :property-value-block property-value-block
     :block block
     :asset-block asset-block
     :file-block file-block

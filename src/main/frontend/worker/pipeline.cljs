@@ -144,21 +144,22 @@
                        (rebuild-block-refs repo tx-report* blocks'))
           refs-tx-report (when (seq block-refs)
                            (ldb/transact! conn block-refs {:pipeline-replace? true}))
-          replace-tx (concat
+          replace-tx (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))]
+                       (concat
                       ;; block path refs
-                      (when (seq blocks')
-                        (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))
-                              blocks' (keep (fn [b] (d/entity db-after (:db/id b))) blocks')]
-                          (compute-block-path-refs-tx tx-report* blocks')))
+                        (when (seq blocks')
+                          (let [blocks' (keep (fn [b] (d/entity db-after (:db/id b))) blocks')]
+                            (compute-block-path-refs-tx tx-report* blocks')))
 
                        ;; update block/tx-id
-                      (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
-                                                   (concat pages blocks))
-                            tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
-                        (keep (fn [b]
-                                (when-let [db-id (:db/id b)]
-                                  {:db/id db-id
-                                   :block/tx-id tx-id})) updated-blocks)))
+                        (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
+                                                     (concat pages blocks))
+                              tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
+                          (keep (fn [b]
+                                  (when-let [db-id (:db/id b)]
+                                    (when (:block/uuid (d/entity db-after db-id))
+                                      {:db/id db-id
+                                       :block/tx-id tx-id}))) updated-blocks))))
           tx-report' (if (seq replace-tx)
                        (ldb/transact! conn replace-tx {:pipeline-replace? true})
                        (do
