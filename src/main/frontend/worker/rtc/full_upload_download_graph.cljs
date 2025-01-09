@@ -93,7 +93,8 @@
                                  (not (pos-int? (:v datom))))
                         (throw (ex-info "invalid block data" {:datom datom})))
                       (let [a (:a datom)]
-                        (when-not (contains? ignore-attr-set a)
+                        (if (contains? ignore-attr-set a)
+                          r
                           (let [card-many? (contains? card-many-attrs a)
                                 ref? (contains? ref-type-attrs a)]
                             (case [ref? card-many?]
