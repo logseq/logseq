@@ -375,7 +375,7 @@ so need to pull earlier remote-data from websocket."})
     :property.value/content})
 
 (def ^:private watched-attr-ns
-  (conj db-property/logseq-property-namespaces "logseq.class" "logseq.kv"))
+  (conj db-property/logseq-property-namespaces "logseq.class"))
 
 (defn- update-op-watched-attr?
   [attr]
