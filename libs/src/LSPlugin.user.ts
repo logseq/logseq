@@ -37,7 +37,7 @@ import {
   IAssetsProxy,
   AppInfo,
   IPluginSearchServiceHooks,
-  PageEntity,
+  PageEntity, IUtilsProxy,
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -454,6 +454,8 @@ const git: Partial<IGitProxy> = {}
 
 const ui: Partial<IUIProxy> = {}
 
+const utils: Partial<IUtilsProxy> = {}
+
 const assets: Partial<IAssetsProxy> = {
   makeSandboxStorage(this: LSPluginUser): IAsyncStorage {
     return new LSPluginFileStorage(this, { assets: true })
@@ -793,7 +795,8 @@ export class LSPluginUser
 
           let method = propKey as string
 
-          if ((['git', 'ui', 'assets'] as UserProxyTags[]).includes(tag)) {
+          // TODO: refactor api call with the explicit tag
+          if ((['git', 'ui', 'assets', 'utils'] as UserProxyTags[]).includes(tag)) {
             method = tag + '_' + method
           }
 
@@ -831,10 +834,8 @@ export class LSPluginUser
   #editorProxy: IEditorProxy
   #dbProxy: IDBProxy
   #uiProxy: IUIProxy
+  #utilsProxy: IUtilsProxy
 
-  /**
-   * The interface methods of {@link IAppProxy}
-   */
   get App(): IAppProxy {
     if (this.#appProxy) return this.#appProxy
     return (this.#appProxy = this._makeUserProxy(app, 'app'))
@@ -853,6 +854,11 @@ export class LSPluginUser
   get UI(): IUIProxy {
     if (this.#uiProxy) return this.#uiProxy
     return (this.#uiProxy = this._makeUserProxy(ui, 'ui'))
+  }
+
+  get Utils(): IUtilsProxy {
+    if (this.#utilsProxy) return this.#utilsProxy
+    return (this.#utilsProxy = this._makeUserProxy(utils, 'utils'))
   }
 
   get Git(): IGitProxy {
