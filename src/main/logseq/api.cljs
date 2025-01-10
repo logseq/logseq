@@ -244,12 +244,12 @@
           _              (fs/write-file! repo nil user-path content {:skip-compare? true})]
     user-path))
 
-(defn ^:private write_dotdir_file
+(defn ^:export write_dotdir_file
   [file content sub-root]
   (some-> (plugin-handler/get-ls-dotdir-root)
           (p/then #(write_rootdir_file file content sub-root %))))
 
-(defn ^:private write_assetsdir_file
+(defn ^:export write_assetsdir_file
   [file content sub-root]
   (if-let [assets-dir (config/get-current-repo-assets-root)]
     (write_rootdir_file file content sub-root assets-dir)
