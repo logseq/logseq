@@ -22,18 +22,27 @@
   ;; {:doc "keyword option for RTC. ignore this *entity* when syncing graph. Default false"}
   )
 
+(def ignore-attrs-when-init-upload
+  (into #{}
+        (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-attr-when-init-upload]) kw)))
+        (common-def/get-all-defined-kw->config)))
 
-(def *ignore-attrs-when-init-upload
-  (delay (into #{}
-               (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-attr-when-init-upload]) kw)))
-               @common-def/*defined-kw->config)))
+(def ignore-attrs-when-init-download
+  (into #{}
+        (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-attr-when-init-download]) kw)))
+        (common-def/get-all-defined-kw->config)))
 
-(def *ignore-attrs-when-init-download
-  (delay (into #{}
-               (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-attr-when-init-download]) kw)))
-               @common-def/*defined-kw->config)))
+(def ignore-attrs-when-syncing
+  (into #{}
+        (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-attr-when-syncing]) kw)))
+        (common-def/get-all-defined-kw->config)))
 
-(def *ignore-attrs-when-syncing
-  (delay (into #{}
-               (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-attr-when-syncing]) kw)))
-               @common-def/*defined-kw->config)))
+(def ignore-entities-when-init-upload
+  (into #{}
+        (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-entity-when-init-upload]) kw)))
+        (common-def/get-all-defined-kw->config)))
+
+(def ignore-entities-when-init-download
+  (into #{}
+        (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-entity-when-init-download]) kw)))
+        (common-def/get-all-defined-kw->config)))

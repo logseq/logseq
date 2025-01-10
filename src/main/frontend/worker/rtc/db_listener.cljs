@@ -125,7 +125,7 @@
   [repo db-before db-after same-entity-datoms-coll e->a->v->add?->t]
   (let [ops (mapcat
              (partial entity-datoms=>ops
-                      db-before db-after e->a->v->add?->t @rtc-const/*ignore-attrs-when-syncing)
+                      db-before db-after e->a->v->add?->t rtc-const/ignore-attrs-when-syncing)
              same-entity-datoms-coll)]
     (when (seq ops)
       (client-op/add-ops repo ops))))

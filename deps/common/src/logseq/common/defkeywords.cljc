@@ -3,7 +3,7 @@
   #?(:cljs (:require-macros [logseq.common.defkeywords])))
 
 (def ^:private *defined-kws (volatile! {}))
-(def *defined-kw->config (volatile! {}))
+(def ^:private *defined-kw->config (volatile! {}))
 
 #_:clj-kondo/ignore
 (defmacro defkeyword
@@ -24,9 +24,12 @@
         (when (not= (:file current-meta) (:file info))
           (vswap! *defined-kws assoc kw current-meta)
           (throw (ex-info "keyword already defined somewhere else" {:kw kw :info info}))))
-      (vswap! *defined-kws assoc kw current-meta)))
-  (let [kw->v (partition 2 keyvals)]
-    `(do
-       (doseq [[kw# config#] '~kw->v]
-         (vswap! *defined-kw->config assoc kw# config#))
-       (vector ~@keyvals))))
+      (vswap! *defined-kws assoc kw current-meta))
+    (let [kw->config (partition 2 keyvals)]
+      (doseq [[kw config] kw->config]
+        (vswap! *defined-kw->config assoc kw config))))
+  `(vector ~@keyvals))
+
+(defmacro get-all-defined-kw->config
+  []
+  `'~(deref *defined-kw->config))
