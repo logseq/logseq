@@ -64,6 +64,10 @@
       add?->v->t))
    a->add?->v->t))
 
+(defn- redundant-update-op-av-coll?
+  [av-coll]
+  (every? (fn [av] (keyword-identical? :block/updated-at (first av))) av-coll))
+
 (defn- max-t
   [a->add?->v->t]
   (apply max (mapcat vals (mapcat vals (vals a->add?->v->t)))))
@@ -112,8 +116,9 @@
                       (and (ldb/page? entity) add-block-title))
                   (conj [:update-page (or t2 t3) {:block-uuid block-uuid}]))
             update-op (when-let [av-coll (not-empty (update-op-av-coll db-before db-after a->add?->v->t*))]
-                        (let [t (max-t a->add?->v->t*)]
-                          [:update t {:block-uuid block-uuid :av-coll av-coll}]))]
+                        (when-not (redundant-update-op-av-coll? av-coll)
+                          (let [t (max-t a->add?->v->t*)]
+                            [:update t {:block-uuid block-uuid :av-coll av-coll}])))]
         (cond-> ops update-op (conj update-op))))))
 
 (defn- generate-rtc-ops
