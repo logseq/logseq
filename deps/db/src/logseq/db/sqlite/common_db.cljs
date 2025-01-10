@@ -29,7 +29,7 @@
   (->> (d/datoms db :avet :block/title page-name)
        (filter (fn [d]
                  (let [e (d/entity db (:e d))]
-                   (or (entity-util/page? e) (:block/tags e)))))
+                   (entity-util/page? e))))
        (map :e)
        sort
        first))
