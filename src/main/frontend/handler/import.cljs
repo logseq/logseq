@@ -234,7 +234,7 @@
      (p/do!
       (persist-db/<import-db graph buffer)
       (state/add-repo! {:url graph})
-      (repo-handler/restore-and-setup-repo! graph {:import-type "sqlite"})
+      (repo-handler/restore-and-setup-repo! graph {:import-type :sqlite-db})
       (state/set-current-repo! graph)
       (persist-db/<export-db graph {})
       (db/transact! graph (sqlite-util/import-tx :sqlite-db))
@@ -298,9 +298,10 @@
   (let [graph (str config/db-version-prefix bare-graph-name)
         datoms (ldb/read-transit-str raw)]
     (p/do!
-     (persist-db/<new graph {:import-type "debug-transit"
+     (persist-db/<new graph {:import-type :debug-transit
                              :datoms datoms})
      (state/add-repo! {:url graph})
-     (repo-handler/restore-and-setup-repo! graph {:import-type "debug-transit"})
+     (repo-handler/restore-and-setup-repo! graph {:import-type :debug-transit})
+     (db/transact! graph (sqlite-util/import-tx :debug-transit))
      (state/set-current-repo! graph)
      (finished-ok-handler nil))))
