@@ -489,7 +489,7 @@
                        :property
                        (entity-util/class? d)
                        :class
-                       (entity-util/hidden? (:block/title d))
+                       (entity-util/hidden? d)
                        :hidden
                        (entity-util/whiteboard? d)
                        :normal-page
