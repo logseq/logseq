@@ -481,44 +481,45 @@
    [:db/ident [:= :logseq.property/empty-placeholder]]
    [:block/tx-id {:optional true} :int]])
 
+(defn entity-dispatch-key [db ent]
+  (let [d (if (:block/uuid ent) (d/entity db [:block/uuid (:block/uuid ent)]) ent)
+        ;; order matters as some block types are a subset of others e.g. :whiteboard
+        dispatch-key (cond
+                       (entity-util/property? d)
+                       :property
+                       (entity-util/class? d)
+                       :class
+                       (entity-util/hidden? (:block/title d))
+                       :hidden
+                       (entity-util/whiteboard? d)
+                       :normal-page
+                       (entity-util/page? d)
+                       :normal-page
+                       (entity-util/asset? d)
+                       :asset-block
+                       (:file/path d)
+                       :file-block
+                       (:logseq.property.history/block d)
+                       :property-history-block
+
+                       (:block/closed-value-property d)
+                       :closed-value-block
+
+                       (and (:logseq.property/created-from-property d)
+                            (:property.value/content d))
+                       :property-value-block
+
+                       (:block/uuid d)
+                       :block
+                       (= (:db/ident d) :logseq.property/empty-placeholder)
+                       :property-value-placeholder
+                       (:db/ident d)
+                       :db-ident-key-value)]
+    dispatch-key))
+
 (def Data
   (into
-   [:multi {:dispatch (fn [d]
-                        ;; order matters as some block types are a subset of others e.g. :whiteboard
-                        (let [db *db-for-validate-fns*
-                              d (if (:block/uuid d) (d/entity db [:block/uuid (:block/uuid d)]) d)
-                              dispatch-key (cond
-                                             (entity-util/property? d)
-                                             :property
-                                             (entity-util/class? d)
-                                             :class
-                                             (entity-util/hidden? (:block/title d))
-                                             :hidden
-                                             (entity-util/whiteboard? d)
-                                             :normal-page
-                                             (entity-util/page? d)
-                                             :normal-page
-                                             (entity-util/asset? d)
-                                             :asset-block
-                                             (:file/path d)
-                                             :file-block
-                                             (:logseq.property.history/block d)
-                                             :property-history-block
-
-                                             (:block/closed-value-property d)
-                                             :closed-value-block
-
-                                             (and (:logseq.property/created-from-property d)
-                                                  (:property.value/content d))
-                                             :property-value-block
-
-                                             (:block/uuid d)
-                                             :block
-                                             (= (:db/ident d) :logseq.property/empty-placeholder)
-                                             :property-value-placeholder
-                                             (:db/ident d)
-                                             :db-ident-key-value)]
-                          dispatch-key))}]
+   [:multi {:dispatch (fn [d] (entity-dispatch-key *db-for-validate-fns* d))}]
    {:property property-page
     :class class-page
     :hidden hidden-page
