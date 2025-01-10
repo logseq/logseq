@@ -195,7 +195,7 @@
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 11 (->> @conn
+      (is (= 12 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
@@ -659,7 +659,8 @@
 
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"
+          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_11_26.md"
+                                                          "pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"
                                                           "pages/Whiteboard___Tool.md" "pages/Whiteboard___Arrow_head_toggle.md"
                                                           "pages/Property.md" "pages/url.md"])
           conn (db-test/create-conn)
@@ -670,7 +671,7 @@
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
 
-    (is (= #{:user.class/Movie :user.class/CreativeWork :user.class/Thing
+    (is (= #{:user.class/Movie :user.class/CreativeWork :user.class/Thing :user.class/Feature
              :user.class/Class :user.class/Tool :user.class/Whiteboard___Tool :user.class/Property}
            (->> @conn
                 (d/q '[:find [?ident ...]
