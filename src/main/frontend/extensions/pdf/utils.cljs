@@ -105,8 +105,9 @@
           (js/console.error e)))))))
 
 (defn clear-all-selection
-  []
-  (.removeAllRanges (js/window.getSelection)))
+  ([] (clear-all-selection js/window))
+  ([^js win]
+   (some-> win (.getSelection) (.removeAllRanges))))
 
 (def adjust-viewer-size!
   (util/debounce

@@ -146,7 +146,8 @@
         action-fn! (fn [action clear?]
                      (when-let [action (and action (name action))]
                        (let [highlight (if (fn? highlight) (highlight) highlight)
-                             content (:content highlight)]
+                             content (:content highlight)
+                             ^js owner-win (pdf-windows/resolve-own-window viewer)]
                          (case action
                            "ref"
                            (pdf-assets/copy-hl-ref! highlight viewer)
@@ -155,7 +156,7 @@
                            (do
                              (util/copy-to-clipboard!
                               (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection)))
-                              :owner-window (pdf-windows/resolve-own-window viewer))
+                              :owner-window owner-win)
                              (pdf-utils/clear-all-selection))
 
                            "link"
@@ -178,7 +179,7 @@
                                                       {:id         (pdf-utils/gen-uuid)
                                                        :properties properties})]
                                  (p/let [highlight' (add-hl! highlight)]
-                                   (pdf-utils/clear-all-selection)
+                                   (pdf-utils/clear-all-selection owner-win)
                                    (pdf-assets/copy-hl-ref! highlight' viewer)))
 
 ;; update highlight
