@@ -58,6 +58,35 @@
   (apply
    ordered-map
    (defkeywords
+     :property/type {:title "Property type"
+                     :schema {:type :keyword
+                              :hide? true}}
+     :property/hide? {:title "Hide this property"
+                      :schema {:type :checkbox
+                               :hide? true}}
+     :property/public? {:title "Property public?"
+                        :schema {:type :checkbox
+                                 :hide? true}}
+     :property/view-context {:title "Property view context"
+                             :schema {:type :keyword
+                                      :hide? true}}
+     :property/ui-position {:title "Property position"
+                            :schema {:type :keyword
+                                     :hide? true}}
+     :logseq.property.attribute/property-schema-classes
+     {:title "Property classes"
+      :attribute :property/schema.classes
+      :schema {:type :entity
+               :cardinality :many
+               :public? false
+               :hide? true}}
+     :logseq.property.attribute/property-value-content
+     {:title "Property value"
+      :attribute :property.value/content
+      :schema {:type :any
+               :public? false
+               :hide? true}}
+
      :block/alias           {:title "Alias"
                              :attribute :block/alias
                              :schema {:type :page
@@ -587,7 +616,9 @@
     :block/refs :block/path-refs :block/link
     :block/title :block/closed-value-property
     :block/created-at :block/updated-at
-    :logseq.property.attribute/kv-value})
+    :logseq.property.attribute/kv-value
+    :logseq.property.attribute/property-schema-classes
+    :logseq.property.attribute/property-value-content})
 
 (assert (= db-attribute-properties
            (set (keep (fn [[k {:keys [attribute]}]] (when attribute k))

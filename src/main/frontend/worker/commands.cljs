@@ -155,7 +155,7 @@
         frequency (db-property/property-value-content (:logseq.task/recur-frequency entity))
         unit (:logseq.task/recur-unit entity)
         property (d/entity db property-ident)
-        date? (= :date (get-in property [:block/schema :type]))
+        date? (= :date (:property/type property))
         current-value (cond->
                        (get entity property-ident)
                         date?

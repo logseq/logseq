@@ -254,7 +254,7 @@
                                                                                                   :logseq.task/scheduled-on-property)))))]
        (if (= :logseq.task/deadline (:db/ident property))
          [:div "Set as repeated task"]
-         [:div "Repeat " (if (= :date (get-in property [:block/schema :type])) "date" "datetime")])]]
+         [:div "Repeat " (if (= :date (:property/type property)) "date" "datetime")])]]
      [:div.flex.flex-row.gap-2
       [:div.flex.text-muted-foreground.mr-4
        "Every"]
