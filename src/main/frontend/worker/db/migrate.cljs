@@ -624,7 +624,8 @@
    [56 {:properties [:logseq.property/enable-history?
                      :logseq.property.history/block :logseq.property.history/property
                      :logseq.property.history/ref-value :logseq.property.history/scalar-value]}]
-   [58 {:fix remove-duplicated-contents-page}]])
+   [58 {:fix remove-duplicated-contents-page}]
+   [59 {:properties [:logseq.property/created-by]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

@@ -566,7 +566,13 @@
                                                   :hide? true}}
      :logseq.property.history/scalar-value {:title "History scalar value"
                                             :schema {:type :any
-                                                     :hide? true}})))
+                                                     :hide? true}}
+     :logseq.property/created-by {:title "Node created by"
+                                  :schema {;; user-uuid, why not ref?
+                                           ;; - avoid losing this attr when the user-block is deleted
+                                           ;; - related user-block maybe not exists yet in graph
+                                           :type :string
+                                           :hide? true}})))
 
 (def built-in-properties
   (->> built-in-properties*
