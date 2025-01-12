@@ -19,6 +19,7 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.search :refer [fuzzy-search]]
             [frontend.state :as state]
@@ -146,7 +147,8 @@
                                       (editor-handler/get-matched-classes q)
                                       (editor-handler/<get-matched-blocks q {:nlp-pages? true}))]
                        (set-matched-pages! result))))]
-    (rum/use-effect! search-f [(mixins/use-debounce 50 q)])
+    (hooks/use-effect! search-f [(hooks/use-debounced-value q 50)])
+
     (let [matched-pages' (if (string/blank? q)
                            (if db-tag?
                              (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
@@ -341,10 +343,10 @@
 (rum/defc template-search-aux
   [id q]
   (let [[matched-templates set-matched-templates!] (rum/use-state nil)]
-    (rum/use-effect! (fn []
-                       (p/let [result (editor-handler/<get-matched-templates q)]
-                         (set-matched-templates! result)))
-                     [q])
+    (hooks/use-effect! (fn []
+                         (p/let [result (editor-handler/<get-matched-templates q)]
+                           (set-matched-templates! result)))
+                       [q])
     (ui/auto-complete
      matched-templates
      {:on-chosen   (editor-handler/template-on-chosen-handler id)
@@ -374,7 +376,7 @@
     (when input
       (let [q (or (:searching-property (editor-handler/get-searching-property input))
                   "")]
-        (rum/use-effect!
+        (hooks/use-effect!
          (fn []
            (p/let [matched-properties (editor-handler/<get-matched-properties q)]
              (set-matched-properties! matched-properties)))
@@ -394,7 +396,7 @@
 (rum/defc property-value-search-aux
   [id property q]
   (let [[values set-values!] (rum/use-state nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (p/let [result (editor-handler/get-matched-property-values property q)]
          (set-values! result)))
@@ -428,7 +430,7 @@
 
 (rum/defc code-block-mode-keyup-listener
   [_q _edit-content last-pos current-pos]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (when (< current-pos last-pos)
        (state/clear-editor-action!)))
@@ -648,7 +650,7 @@
 
 (rum/defc shui-editor-popups
   [id format action _data]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [pid (case action
                  :commands

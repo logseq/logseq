@@ -9,6 +9,7 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
@@ -134,7 +135,7 @@
                     (concat before-cols [(build-asset-file-column config)] after-cols))
                   columns)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (nil? loading?)
          (set-loading? true)
@@ -230,7 +231,7 @@
         [data set-data!] (rum/use-state objects)
         columns (views/build-columns config properties)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (set-loading? true)
        (p/let [_result (db-async/<get-views (state/get-current-repo) (:db/id property))

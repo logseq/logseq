@@ -55,6 +55,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.mobile.intent :as mobile-intent]
             [frontend.mobile.util :as mobile-util]
@@ -273,13 +274,13 @@
   (let [handle-props {}
         add-resizing-class! #(dom/add-class! js/document.documentElement "is-resizing-buf")
         remove-resizing-class! #(dom/remove-class! js/document.documentElement "is-resizing-buf")
-        *handle-left (rum/use-ref nil)
-        *handle-right (rum/use-ref nil)]
+        *handle-left (hooks/use-ref nil)
+        *handle-right (hooks/use-ref nil)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
-       (doseq [el [(rum/deref *handle-left)
-                   (rum/deref *handle-right)]]
+       (doseq [el [(hooks/deref *handle-left)
+                   (hooks/deref *handle-right)]]
          (-> (js/interact el)
              (.draggable
               (bean/->js
@@ -767,12 +768,12 @@
 
 (rum/defc popup-preview-impl
   [children {:keys [*timer *timer1 visible? set-visible! render *el-popup]}]
-  (let [*el-trigger (rum/use-ref nil)]
-    (rum/use-effect!
+  (let [*el-trigger (hooks/use-ref nil)]
+    (hooks/use-effect!
      (fn []
        (when (true? visible?)
          (shui/popup-show!
-          (rum/deref *el-trigger) render
+          (hooks/deref *el-trigger) render
           {:root-props {:onOpenChange (fn [v] (set-visible! v))
                         :modal false}
            :content-props {:class "ls-preview-popup"
@@ -780,15 +781,15 @@
                            :onEscapeKeyDown (fn [^js e]
                                               (when (state/editing?)
                                                 (.preventDefault e)
-                                                (some-> (rum/deref *el-popup) (.focus))))}
+                                                (some-> (hooks/deref *el-popup) (.focus))))}
            :as-dropdown? false}))
 
        (when (false? visible?)
          (shui/popup-hide!)
          (when (state/get-edit-block)
            (state/clear-edit!)))
-       (rum/set-ref! *timer nil)
-       (rum/set-ref! *timer1 nil)
+       (hooks/set-ref! *timer nil)
+       (hooks/set-ref! *timer1 nil)
         ;; teardown
        (fn []
          (when visible?
@@ -799,42 +800,42 @@
      {:ref *el-trigger
       :on-mouse-enter (fn [^js e]
                         (when (= (some-> (.-target e) (.closest ".preview-ref-link"))
-                                 (rum/deref *el-trigger))
-                          (let [timer (rum/deref *timer)
-                                timer1 (rum/deref *timer1)]
+                                 (hooks/deref *el-trigger))
+                          (let [timer (hooks/deref *timer)
+                                timer1 (hooks/deref *timer1)]
                             (when-not timer
-                              (rum/set-ref! *timer
-                                            (js/setTimeout #(set-visible! true) 1000)))
+                              (hooks/set-ref! *timer
+                                              (js/setTimeout #(set-visible! true) 1000)))
                             (when timer1
                               (js/clearTimeout timer1)
-                              (rum/set-ref! *timer1 nil)))))
+                              (hooks/set-ref! *timer1 nil)))))
       :on-mouse-leave (fn []
-                        (let [timer (rum/deref *timer)
-                              timer1 (rum/deref *timer1)]
+                        (let [timer (hooks/deref *timer)
+                              timer1 (hooks/deref *timer1)]
                           (when (or (number? timer) (number? timer1))
                             (when timer
                               (js/clearTimeout timer)
-                              (rum/set-ref! *timer nil))
+                              (hooks/set-ref! *timer nil))
                             (when-not timer1
-                              (rum/set-ref! *timer1
-                                            (js/setTimeout #(set-visible! false) 300))))))}
+                              (hooks/set-ref! *timer1
+                                              (js/setTimeout #(set-visible! false) 300))))))}
      children]))
 
 (rum/defc page-preview-trigger
   [{:keys [children sidebar? open? manual?] :as config} page-entity]
-  (let [*timer (rum/use-ref nil)                            ;; show
-        *timer1 (rum/use-ref nil)                           ;; hide
-        *el-popup (rum/use-ref nil)
-        *el-wrap (rum/use-ref nil)
+  (let [*timer (hooks/use-ref nil)                            ;; show
+        *timer1 (hooks/use-ref nil)                           ;; hide
+        *el-popup (hooks/use-ref nil)
+        *el-wrap (hooks/use-ref nil)
         [in-popup? set-in-popup!] (rum/use-state nil)
         [visible? set-visible!] (rum/use-state nil)
         ;; set-visible! (fn debug-visible [v] (js/console.warn "debug: visible" v) (set-visible! v))
         _  #_:clj-kondo/ignore (rum/defc preview-render []
                                  (let [[ready? set-ready!] (rum/use-state false)]
 
-                                   (rum/use-effect!
+                                   (hooks/use-effect!
                                     (fn []
-                                      (let [el-popup (rum/deref *el-popup)
+                                      (let [el-popup (hooks/deref *el-popup)
                                             focus! #(js/setTimeout (fn [] (.focus el-popup)))]
                                         (set-ready! true)
                                         (focus!)
@@ -851,23 +852,23 @@
                                                :font-weight 500
                                                :padding-bottom 64}
                                        :on-mouse-enter (fn []
-                                                         (when-let [timer1 (rum/deref *timer1)]
+                                                         (when-let [timer1 (hooks/deref *timer1)]
                                                            (js/clearTimeout timer1)))
                                        :on-mouse-leave (fn []
                                                          ;; check the top popup whether is the preview popup
                                                          (when (ui/last-shui-preview-popup?)
-                                                           (rum/set-ref! *timer1
-                                                                         (js/setTimeout #(set-visible! false) 500))))}
+                                                           (hooks/set-ref! *timer1
+                                                                           (js/setTimeout #(set-visible! false) 500))))}
                                       (when-let [page-cp (and ready? (state/get-page-blocks-cp))]
                                         (page-cp {:repo (state/get-current-repo)
                                                   :page-name (str (:block/uuid source))
                                                   :sidebar? sidebar?
-                                                  :scroll-container (some-> (rum/deref *el-popup) (.closest ".ls-preview-popup"))
+                                                  :scroll-container (some-> (hooks/deref *el-popup) (.closest ".ls-preview-popup"))
                                                   :preview? true}))])))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
-       (if (some-> (rum/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
+       (if (some-> (hooks/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
          (set-in-popup! true)
          (set-in-popup! false)))
      [])
@@ -1193,8 +1194,8 @@
 
 (rum/defc block-reference-preview
   [children {:keys [repo config id]}]
-  (let [*timer (rum/use-ref nil)                            ;; show
-        *timer1 (rum/use-ref nil)                           ;; hide
+  (let [*timer (hooks/use-ref nil)                            ;; show
+        *timer1 (hooks/use-ref nil)                           ;; hide
         [visible? set-visible!] (rum/use-state nil)
         _ #_:clj-kondo/ignore (rum/defc render []
                                 [:div.tippy-wrapper.as-block
@@ -1202,13 +1203,13 @@
                                           :font-weight 500
                                           :text-align "left"}
                                   :on-mouse-enter (fn []
-                                                    (when-let [timer1 (rum/deref *timer1)]
+                                                    (when-let [timer1 (hooks/deref *timer1)]
                                                       (js/clearTimeout timer1)))
 
                                   :on-mouse-leave (fn []
                                                     (when (ui/last-shui-preview-popup?)
-                                                      (rum/set-ref! *timer1
-                                                                    (js/setTimeout #(set-visible! false) 500))))}
+                                                      (hooks/set-ref! *timer1
+                                                                      (js/setTimeout #(set-visible! false) 500))))}
                                  [(breadcrumb config repo id {:indent? true})
                                   (blocks-container
                                    (assoc config :id (str id) :preview? true)
@@ -2750,7 +2751,7 @@
     (let [[result set-result!] (rum/use-state nil)
           repo (state/get-current-repo)
           [status-history time-spent] result]
-      (rum/use-effect!
+      (hooks/use-effect!
        (fn []
          (p/let [result (db-async/<task-spent-time repo (:db/id block))]
            (set-result! result)))
@@ -3820,8 +3821,8 @@
   [config options]
   (let [block (or (:code-block config) (:block config))
         container-id (:container-id config)
-        *mode-ref (rum/use-ref nil)
-        *actions-ref (rum/use-ref nil)]
+        *mode-ref (hooks/use-ref nil)
+        *actions-ref (hooks/use-ref nil)]
 
     (when options
       (let [html-export? (:html-export? config)
@@ -3839,10 +3840,10 @@
             [:div.ui-fenced-code-editor.flex.w-full
              {:ref (fn [el]
                      (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))
-              :on-mouse-over #(dom/add-class! (rum/deref *actions-ref) "opacity-100")
+              :on-mouse-over #(dom/add-class! (hooks/deref *actions-ref) "opacity-100")
               :on-mouse-leave (fn [e]
                                 (when (dom/has-class? (.-target e) "code-editor")
-                                  (dom/remove-class! (rum/deref *actions-ref) "opacity-100")))}
+                                  (dom/remove-class! (hooks/deref *actions-ref) "opacity-100")))}
              (cond
                (nil? inside-portal?) nil
 
@@ -4123,7 +4124,7 @@
                                     {:top? top?
                                      :bottom? bottom?})))
         virtualized? (and virtualized? (seq blocks))
-        *virtualized-ref (rum/use-ref nil)
+        *virtualized-ref (hooks/use-ref nil)
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
                         :custom-scroll-parent (or (:scroll-container config)
@@ -4143,8 +4144,8 @@
                                                       block
                                                       {:top? top?
                                                        :bottom? bottom?})))})
-        *wrap-ref (rum/use-ref nil)]
-    (rum/use-effect!
+        *wrap-ref (hooks/use-ref nil)]
+    (hooks/use-effect!
      (fn []
        (when virtualized?
          (when (:current-page? config)
@@ -4156,13 +4157,13 @@
          (let [^js *ob (volatile! nil)]
            (js/setTimeout
             (fn []
-              (when-let [_inst (rum/deref *virtualized-ref)]
-                (when-let [^js target (.-firstElementChild (rum/deref *wrap-ref))]
-                  (let [set-wrap-h! #(when-let [ref (rum/deref *wrap-ref)] (set! (.-height (.-style ref)) %))
+              (when-let [_inst (hooks/deref *virtualized-ref)]
+                (when-let [^js target (.-firstElementChild (hooks/deref *wrap-ref))]
+                  (let [set-wrap-h! #(when-let [ref (hooks/deref *wrap-ref)] (set! (.-height (.-style ref)) %))
                         set-wrap-h! (debounce set-wrap-h! 16)
                         ob (js/ResizeObserver.
                             (fn []
-                              (when-let [h (and (rum/deref *wrap-ref)
+                              (when-let [h (and (hooks/deref *wrap-ref)
                                                 (.-height (.-style target)))]
                                    ;(prn "==>> debug: " h)
                                 (set-wrap-h! h))))]

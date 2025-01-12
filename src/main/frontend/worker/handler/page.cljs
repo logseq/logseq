@@ -86,8 +86,11 @@
                 delete-file-tx (when file
                                  [[:db.fn/retractEntity [:file/path file-path]]])
                 delete-property-tx (when (ldb/property? page)
-                                     (let [datoms (d/datoms @conn :avet (:db/ident page))]
-                                       (map (fn [d] [:db/retract (:e d) (:a d)]) datoms)))
+                                     (concat
+                                      (let [datoms (d/datoms @conn :avet (:db/ident page))]
+                                        (map (fn [d] [:db/retract (:e d) (:a d)]) datoms))
+                                      (map (fn [d] [:db/retractEntity (:e d)])
+                                           (d/datoms @conn :avet :logseq.property.history/property (:db/ident page)))))
                 delete-page-tx (concat (db-refs->page repo page)
                                        delete-property-tx
                                        [[:db.fn/retractEntity (:db/id page)]])

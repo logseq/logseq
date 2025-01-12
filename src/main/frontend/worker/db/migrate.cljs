@@ -401,24 +401,26 @@
         datoms (d/datoms db :avet :block/title)]
     (keep
      (fn [{:keys [e v]}]
-       (when (string/includes? v ref-special-chars)
-         (let [entity (d/entity db e)]
-           (cond
-             (and (ldb/page? entity)
-                  (re-find db-content/id-ref-pattern v))
-             [:db/retractEntity e]
+       (if (string? v)
+         (when (string/includes? v ref-special-chars)
+           (let [entity (d/entity db e)]
+             (cond
+               (and (ldb/page? entity)
+                    (re-find db-content/id-ref-pattern v))
+               [:db/retractEntity e]
 
-             (string/includes? v (str page-ref/left-brackets ref-special-chars))
-             (let [title' (string/replace v (str page-ref/left-brackets ref-special-chars) page-ref/left-brackets)]
-               (prn :debug {:old-title v :new-title title'})
-               {:db/id e
-                :block/title title'})
+               (string/includes? v (str page-ref/left-brackets ref-special-chars))
+               (let [title' (string/replace v (str page-ref/left-brackets ref-special-chars) page-ref/left-brackets)]
+                 (prn :debug {:old-title v :new-title title'})
+                 {:db/id e
+                  :block/title title'})
 
-             (re-find id-ref-pattern v)
-             (let [title' (string/replace v id-ref-pattern "$1")]
-               (prn :debug {:old-title v :new-title title'})
-               {:db/id e
-                :block/title title'})))))
+               (re-find id-ref-pattern v)
+               (let [title' (string/replace v id-ref-pattern "$1")]
+                 (prn :debug {:old-title v :new-title title'})
+                 {:db/id e
+                  :block/title title'}))))
+         [:db/retractEntity e]))
      datoms)))
 
 (defn- replace-block-type-with-tags
@@ -474,8 +476,8 @@
               [:db/retract (:e d) :logseq.task/deadline]))
           datoms))))))
 
-(defn- remove-block-format-from-db
-  [conn _search-db]
+(defn- remove-block-format-from-db!
+  [conn]
   (let [db @conn]
     (when (ldb/db-based-graph? db)
       (let [datoms (d/datoms db :avet :block/uuid)
@@ -484,7 +486,33 @@
                        [:db/retract (:e d) :block/format])
                      datoms)]
         (ldb/transact! conn tx-data {:db-migrate? true})
-        (d/reset-schema! conn (dissoc (:schema db) :block/format))
+        (d/reset-schema! conn (dissoc (:schema db) :block/format))))))
+
+(defn- remove-duplicated-contents-page
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [duplicated-contents-pages (->>
+                                       (d/q
+                                        '[:find ?b ?created-at
+                                          :where
+                                          [?b :block/title "Contents"]
+                                          [?b :block/tags ?t]
+                                          [?t :db/ident :logseq.class/Page]
+                                          [?b :logseq.property/built-in? true]
+                                          [?b :block/created-at ?created-at]]
+                                        db)
+                                       (sort-by second)
+                                       rest)]
+        (when (seq duplicated-contents-pages)
+          (let [tx-data (mapcat
+                         (fn [[e _]]
+                           (let [p (d/entity db e)
+                                 blocks (:block/_page p)]
+                             (conj (mapv (fn [b] [:db/retractEntity (:db/id b)]) blocks)
+                                   [:db/retractEntity e])))
+                         duplicated-contents-pages)]
+            (ldb/transact! conn tx-data {:db-migrate? true})))
         []))))
 
 (defn- deprecate-logseq-user-ns
@@ -596,7 +624,8 @@
    [56 {:properties [:logseq.property/enable-history?
                      :logseq.property.history/block :logseq.property.history/property
                      :logseq.property.history/ref-value :logseq.property.history/scalar-value]}]
-   [57 {:fix remove-block-format-from-db}]])
+   [58 {:fix remove-duplicated-contents-page}]
+   [59 {:properties [:logseq.property/created-by]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
@@ -611,6 +640,9 @@
                           (if (map? data)
                             (cond
                               (= (:db/ident data) :logseq.kv/schema-version)
+                              nil
+
+                              (= (:block/title data) "Contents")
                               nil
 
                               (:file/path data)
@@ -703,9 +735,7 @@
                    [(when-not (:block/title entity)
                       [:db/add (:e d) :block/title (:v d)])
                     (when-not (:block/uuid entity)
-                      [:db/add (:e d) :block/uuid (d/squuid)])
-                    (when-not (:block/format entity)
-                      [:db/add (:e d) :block/format :markdown])]))
+                      [:db/add (:e d) :block/uuid (d/squuid)])]))
                (d/datoms @conn :avet :block/name))
               (remove nil?))]
     (when (seq data)
@@ -774,6 +804,7 @@
                               schema-version->updates)]
             (fix-path-refs! conn)
             (fix-missing-title! conn)
+            (remove-block-format-from-db! conn)
             (fix-properties! conn)
             (fix-block-timestamps! conn)
             (println "DB schema migrated from" version-in-db)
@@ -786,14 +817,112 @@
             (js/console.error e)
             (throw e)))))))
 
+(defn fix-invalid-data!
+  [conn invalid-entity-ids]
+  (let [db @conn
+        tx-data (->>
+                 (mapcat
+                  (fn [id]
+                    (let [entity (d/entity db id)
+                         ;; choice not included in closed values
+                          wrong-choice (keep
+                                        (fn [[k v]]
+                                          (if (= "block.temp" (namespace k))
+                                            [:db/retract (:db/id entity) k]
+                                            (when-let [property (d/entity db k)]
+                                              (let [closed-values (:property/closed-values property)]
+                                                (when (seq closed-values)
+                                                  (if (and (de/entity? v)
+                                                           (not (contains? (set (map :db/id closed-values)) (:db/id v))))
+                                                    [:db/retractEntity (:db/id v)]
+                                                    [:db/retract (:db/id entity) k]))))))
+                                        (into {} entity))
+                          eid (:db/id entity)
+                          fix (cond
+                                (= #{:block/tx-id} (set (keys entity)))
+                                [[:db/retractEntity (:db/id entity)]]
+
+                                (and (seq (:block/refs entity))
+                                     (not (or (:block/title entity) (:block/content entity) (:property.value/content entity))))
+                                [[:db/retractEntity (:db/id entity)]]
+
+                                (:logseq.property.node/type entity)
+                                [[:db/retract eid :logseq.property.node/type]
+                                 [:db/retractEntity :logseq.property.node/type]
+                                 [:db/add eid :logseq.property.node/display-type (:logseq.property.node/type entity)]]
+
+                                (and (:db/cardinality entity) (not (ldb/property? entity)))
+                                [[:db/add eid :block/tags :logseq.class/Property]
+                                 [:db/retract eid :block/tags :logseq.class/Page]]
+
+                                (when-let [schema (:block/schema entity)]
+                                  (or (:cardinality schema) (:classes schema)))
+                                (let [schema (:block/schema entity)]
+                                  [[:db/add eid :block/schema (dissoc schema :cardinality :classes)]])
+
+                                (and (:logseq.property.asset/type entity)
+                                     (or (nil? (:logseq.property.asset/checksum entity))
+                                         (nil? (:logseq.property.asset/size entity))))
+                                [[:db/retractEntity eid]]
+
+                                ;; add missing :db/ident for classes && properties
+                                (and (ldb/class? entity) (nil? (:db/ident entity)))
+                                [[:db/add (:db/id entity) :db/ident (db-class/create-user-class-ident-from-name (:block/title entity))]]
+
+                                (and (ldb/property? entity) (nil? (:db/ident entity)))
+                                [[:db/add (:db/id entity) :db/ident (db-property/create-user-property-ident-from-name (:block/title entity))]]
+
+                                ;; remove #Page for classes/properties/journals
+                                (and (ldb/internal-page? entity) (or (ldb/class? entity) (ldb/property? entity) (ldb/journal? entity)))
+                                [[:db/retract (:db/id entity) :block/tags :logseq.class/Page]]
+
+                                ;; remove file entities
+                                (and (:file/path entity)
+                                     (not (contains? #{"logseq/custom.css" "logseq/config.js"  "logseq/config.edn"} (:file/path entity))))
+                                [[:db/retractEntity (:db/id entity)]]
+
+                                (:block/properties-order entity)
+                                [[:db/retract (:db/id entity) :block/properties-order]]
+
+                                (:block/macros entity)
+                                [[:db/retract (:db/id entity) :block/macros]]
+
+                                (and (seq (:block/tags entity)) (not (every? ldb/class? (:block/tags entity))))
+                                (let [tags (remove ldb/class? (:block/tags entity))]
+                                  (map
+                                   (fn [tag]
+                                     {:db/id (:db/id tag)
+                                      :db/ident (or (:db/ident tag) (db-class/create-user-class-ident-from-name (:block/title entity)))
+                                      :block/tags :logseq.class/Tag})
+                                   tags))
+                                :else
+                                nil)]
+                      (into fix wrong-choice)))
+                  invalid-entity-ids)
+                 distinct)]
+    (when (seq tx-data)
+      (d/transact! conn tx-data {:fix-db? true}))))
+
 (defn fix-db!
-  [conn]
-  (ensure-built-in-data-exists! conn)
-  (fix-path-refs! conn)
-  (fix-missing-title! conn)
-  (fix-properties! conn)
-  (fix-block-timestamps! conn)
-  (fix-missing-page-tag! conn))
+  [conn & {:keys [invalid-entity-ids]}]
+  (when (ldb/db-based-graph? @conn)
+    (try
+      (ensure-built-in-data-exists! conn)
+      (remove-block-format-from-db! conn)
+      (fix-path-refs! conn)
+      (fix-missing-title! conn)
+      (fix-properties! conn)
+      (fix-block-timestamps! conn)
+      (fix-missing-page-tag! conn)
+      (when (seq invalid-entity-ids)
+        (fix-invalid-data! conn invalid-entity-ids))
+
+      ;; TODO: remove this after RTC db fixed
+      (let [data (deprecate-logseq-user-ns conn nil)]
+        (when (seq data)
+          (d/transact! conn data {:fix-db? true})))
+      (catch :default e
+        (js/console.error e)))))
 
 ;; Backend migrations
 ;; ==================

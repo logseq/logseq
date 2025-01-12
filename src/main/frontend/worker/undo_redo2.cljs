@@ -1,26 +1,24 @@
 (ns frontend.worker.undo-redo2
   "Undo redo new implementation"
-  (:require [datascript.core :as d]
+  (:require [clojure.set :as set]
+            [datascript.core :as d]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.state :as worker-state]
-            [clojure.set :as set]
-            [frontend.common.schema-register :include-macros true :as sr]
+            [logseq.common.defkeywords :refer [defkeywords]]
+            [logseq.db :as ldb]
             [malli.core :as m]
-            [malli.util :as mu]
-            [logseq.db :as ldb]))
+            [malli.util :as mu]))
+
+(defkeywords
+  ::record-editor-info {:doc "record current editor and cursor"}
+  ::db-transact {:doc "db tx"}
+  ::ui-state {:doc "ui state such as route && sidebar blocks"})
 
 ;; TODO: add other UI states such as `::ui-updates`.
-(sr/defkeyword :gen-undo-ops?
-  "tx-meta option, generate undo ops from tx-data when true (default true)")
-
-(sr/defkeyword ::record-editor-info
-  "record current editor and cursor")
-
-(sr/defkeyword ::db-transact
-  "db tx")
-
-(sr/defkeyword ::ui-state
-  "ui state such as route && sidebar blocks")
+(comment
+  ;; TODO: convert it to a qualified-keyword
+  (sr/defkeyword :gen-undo-ops?
+    "tx-meta option, generate undo ops from tx-data when true (default true)"))
 
 (def ^:private undo-op-item-schema
   (mu/closed-schema

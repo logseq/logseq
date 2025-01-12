@@ -2,9 +2,9 @@
   "listen datascript changes, infer operations from the db tx-report"
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.common.schema-register :include-macros true :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.const :as rtc-const]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]))
 
@@ -27,7 +27,7 @@
     :db/index :db/valueType :db/cardinality})
 
 (def ^:private watched-attr-ns
-  (conj db-property/logseq-property-namespaces "logseq.class" "logseq.kv"))
+  (conj db-property/logseq-property-namespaces "logseq.class"))
 
 (defn- watched-attr?
   [attr]
@@ -64,6 +64,10 @@
       add?->v->t))
    a->add?->v->t))
 
+(defn- redundant-update-op-av-coll?
+  [av-coll]
+  (every? (fn [av] (keyword-identical? :block/updated-at (first av))) av-coll))
+
 (defn- max-t
   [a->add?->v->t]
   (apply max (mapcat vals (mapcat vals (vals a->add?->v->t)))))
@@ -73,7 +77,7 @@
   (some-> add?->v->t (get k) first))
 
 (defn- entity-datoms=>ops
-  [db-before db-after e->a->add?->v->t entity-datoms]
+  [db-before db-after e->a->add?->v->t ignore-attr-set entity-datoms]
   (let [e                        (ffirst entity-datoms)
         entity                   (d/entity db-after e)
         {block-uuid :block/uuid} entity
@@ -87,12 +91,15 @@
         [retract-block-uuid t1]  (some-> add?->block-uuid->t (get false) first)
         [retract-block-name _]   (some-> add?->block-name->t (get false) first)
         [add-block-name t2]      (some-> add?->block-name->t latest-add?->v->t (get-first-vt true))
-        [add-block-title t3]     (some-> add?->block-title->t
-                                         latest-add?->v->t
-                                         (get-first-vt true))
+        [add-block-title t3]     (some-> add?->block-title->t latest-add?->v->t (get-first-vt true))
         [add-block-parent t4]    (some-> add?->block-parent->t latest-add?->v->t (get-first-vt true))
         [add-block-order t5]     (some-> add?->block-order->t latest-add?->v->t (get-first-vt true))
-        a->add?->v->t*           (into {} (filter (fn [[a _]] (watched-attr? a)) a->add?->v->t))]
+        a->add?->v->t*           (into {}
+                                       (filter
+                                        (fn [[a _]]
+                                          (and (watched-attr? a)
+                                               (not (contains? ignore-attr-set a)))))
+                                       a->add?->v->t)]
     (cond
       (and retract-block-uuid retract-block-name)
       [[:remove-page t1 {:block-uuid retract-block-uuid}]]
@@ -109,19 +116,24 @@
                       (and (ldb/page? entity) add-block-title))
                   (conj [:update-page (or t2 t3) {:block-uuid block-uuid}]))
             update-op (when-let [av-coll (not-empty (update-op-av-coll db-before db-after a->add?->v->t*))]
-                        (let [t (max-t a->add?->v->t*)]
-                          [:update t {:block-uuid block-uuid :av-coll av-coll}]))]
+                        (when-not (redundant-update-op-av-coll? av-coll)
+                          (let [t (max-t a->add?->v->t*)]
+                            [:update t {:block-uuid block-uuid :av-coll av-coll}])))]
         (cond-> ops update-op (conj update-op))))))
 
 (defn- generate-rtc-ops
   [repo db-before db-after same-entity-datoms-coll e->a->v->add?->t]
-  (let [ops (mapcat (partial entity-datoms=>ops db-before db-after e->a->v->add?->t)
-                    same-entity-datoms-coll)]
+  (let [ops (mapcat
+             (partial entity-datoms=>ops
+                      db-before db-after e->a->v->add?->t rtc-const/ignore-attrs-when-syncing)
+             same-entity-datoms-coll)]
     (when (seq ops)
       (client-op/add-ops repo ops))))
 
-(sr/defkeyword :persist-op?
-  "tx-meta option, generate rtc ops when not nil (default true)")
+(comment
+  ;; TODO: make it a qualified-keyword
+  (defkeywords
+    :persist-op? {:doc "tx-meta option, generate rtc ops when not nil (default true)"}))
 
 (defn- entity-datoms=>a->add?->v->t
   [entity-datoms]

@@ -1,14 +1,12 @@
 (ns frontend.worker.state
   "State hub for worker"
-  (:require [logseq.common.util :as common-util]
-            [logseq.common.config :as common-config]
-            [frontend.common.schema-register :include-macros true :as sr]))
+  (:require [logseq.common.config :as common-config]
+            [logseq.common.defkeywords :refer [defkeywords]]
+            [logseq.common.util :as common-util]))
 
-(sr/defkeyword :undo/repo->page-block-uuid->undo-ops
-  "{repo {<page-block-uuid> [op1 op2 ...]}}")
-
-(sr/defkeyword :undo/repo->page-block-uuid->redo-ops
-  "{repo {<page-block-uuid> [op1 op2 ...]}}")
+(defkeywords
+  :undo/repo->page-block-uuid->undo-ops {:doc "{repo {<page-block-uuid> [op1 op2 ...]}}"}
+  :undo/repo->page-block-uuid->redo-ops {:doc "{repo {<page-block-uuid> [op1 op2 ...]}}"})
 
 (defonce *main-thread (atom nil))
 

@@ -2,15 +2,15 @@
   "Fns about push local updates"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.common.missionary :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
-            [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
+            [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton :as r.skeleton]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util]
-            [frontend.common.missionary :as c.m]
             [missionary.core :as m]))
 
 (defn- register-graph-updates
@@ -330,7 +330,7 @@
   (m/sp
     (let [block-ops-map-coll (client-op/get&remove-all-block-ops repo)]
       (when-let [block-uuid->remote-ops (not-empty (gen-block-uuid->remote-ops @conn block-ops-map-coll))]
-        (when-let [ops-for-remote (rtc-const/to-ws-ops-decoder
+        (when-let [ops-for-remote (rtc-schema/to-ws-ops-decoder
                                    (sort-remote-ops
                                     block-uuid->remote-ops))]
           (let [local-tx (client-op/get-local-tx repo)

@@ -145,6 +145,7 @@ export interface AppUserInfo {
 
 export interface AppInfo {
   version: string
+  supportDb: boolean
 
   [key: string]: unknown
 }
@@ -314,7 +315,7 @@ export type ExternalCommandType =
   | 'logseq.ui/toggle-theme'
   | 'logseq.ui/toggle-wide-mode'
 
-export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
+export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets' | 'utils'
 
 export type SearchIndiceInitStatus = boolean
 export type SearchBlockItem = {
@@ -686,6 +687,8 @@ export interface IEditorProxy extends Record<string, any> {
    */
   newBlockUUID: () => Promise<string>
 
+  isPageBlock: (block: BlockEntity | PageEntity) => Boolean
+
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
    *
@@ -759,6 +762,10 @@ export interface IEditorProxy extends Record<string, any> {
       format: BlockEntity['format']
       journal: boolean
     }>
+  ) => Promise<PageEntity | null>
+
+  createJournalPage: (
+    date: string | Date
   ) => Promise<PageEntity | null>
 
   deletePage: (pageName: BlockPageName) => Promise<void>
@@ -928,6 +935,10 @@ export interface IUIProxy {
   queryElementById: (id: string) => Promise<string | boolean>
   checkSlotValid: (slot: UISlotIdentity['slot']) => Promise<boolean>
   resolveThemeCssPropsVals: (props: string | Array<string>) => Promise<Record<string, string | undefined> | null>
+}
+
+export interface IUtilsProxy {
+  toJs: <R = unknown>(obj: {}) => Promise<R>
 }
 
 /**

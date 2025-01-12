@@ -48,7 +48,7 @@
                                                             [(:db/ident p) v])
                                                           properties)))
                     data {:entity-map m'
-                          :errors (me/humanize (explainer [m]))}]
+                          :errors (me/humanize (explainer [(dissoc m :db/id)]))}]
                 (try
                   (pprint/pprint data)
                   (catch :default _e
@@ -63,11 +63,8 @@
   (->> errors
        (group-by #(-> % :in first))
        (map (fn [[idx errors']]
-              {:entity (let [ent (get ent-maps idx)
-                             db-id (:db/id (meta ent))]
+              {:entity (let [ent (get ent-maps idx)]
                          (cond-> ent
-                           db-id
-                           (assoc :db/id db-id)
                            ;; Provide additional page info for debugging
                            (:block/page ent)
                            (update :block/page
@@ -102,7 +99,9 @@
                   #(dissoc % :block.temp/fully-loaded?)
                   (db-malli-schema/update-properties-in-ents db ent-maps*))
         errors (binding [db-malli-schema/*db-for-validate-fns* db]
-                 (-> ent-maps closed-db-schema-explainer :errors))]
+                 (-> (map (fn [e]
+                            (dissoc e :db/id))
+                          ent-maps) closed-db-schema-explainer :errors))]
     (cond-> {:datom-count (count datoms)
              :entities ent-maps*}
       (some? errors)

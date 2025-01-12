@@ -9,6 +9,7 @@
             [frontend.extensions.zotero.setting :as setting]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
+            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -67,7 +68,7 @@
 
                         (set-is-searching! false))))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [d-chan (chan)]
          (a/tap debounce-chan-mult d-chan)

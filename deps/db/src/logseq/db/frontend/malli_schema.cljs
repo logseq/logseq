@@ -111,7 +111,8 @@
    of validate-property-value"
   (set/union
    (set (get-in db-class/built-in-classes [:logseq.class/Asset :schema :required-properties]))
-   #{:logseq.property/created-from-property}))
+   #{:logseq.property/created-from-property :logseq.property.history/scalar-value
+     :logseq.property.history/block :logseq.property.history/property :logseq.property.history/ref-value}))
 
 (defn- property-entity->map
   "Provide the minimal number of property attributes to validate the property
@@ -191,7 +192,7 @@
 (defn datoms->entities
   "Returns a vec of entity maps given :eavt datoms"
   [datoms]
-  (mapv (fn [[db-id m]] (with-meta m {:db/id db-id}))
+  (mapv (fn [[db-id m]] (assoc m :db/id db-id))
         (datoms->entity-maps datoms)))
 
 (assert (every? #(re-find #"^(block|logseq\.)" (namespace %)) db-property/db-attribute-properties)
@@ -366,12 +367,25 @@
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
 
-(def property-history-block
+(def property-history-block*
   [:map
    [:block/uuid :uuid]
    [:block/created-at :int]
-   [:block/properties block-properties]
+   [:block/updated-at {:optional true} :int]
+   [:logseq.property.history/block :int]
+   [:logseq.property.history/property :int]
+   [:logseq.property.history/ref-value {:optional true} :int]
+   [:logseq.property.history/scalar-value {:optional true} :any]
    [:block/tx-id {:optional true} :int]])
+
+(def property-history-block
+  "A closed value for a property with closed/allowed values"
+  [:and property-history-block*
+   [:fn {:error/message ":logseq.property.history/ref-value or :logseq.property.history/scalar-value required"
+         :error/path [:logseq.property.history/ref-value]}
+    (fn [m]
+      (or (:logseq.property.history/ref-value m)
+          (some? (:logseq.property.history/scalar-value m))))]])
 
 (def closed-value-block*
   (vec
@@ -406,10 +420,7 @@
   "A block has content and a page"
   [:or
    normal-block
-   closed-value-block
-   whiteboard-block
-   property-value-block
-   property-history-block])
+   whiteboard-block])
 
 (def asset-block
   "A block tagged with #Asset"
@@ -448,38 +459,52 @@
    [:db/ident [:= :logseq.property/empty-placeholder]]
    [:block/tx-id {:optional true} :int]])
 
+(defn entity-dispatch-key [db ent]
+  (let [d (if (:block/uuid ent) (d/entity db [:block/uuid (:block/uuid ent)]) ent)
+        ;; order matters as some block types are a subset of others e.g. :whiteboard
+        dispatch-key (cond
+                       (entity-util/property? d)
+                       :property
+                       (entity-util/class? d)
+                       :class
+                       (entity-util/hidden? d)
+                       :hidden
+                       (entity-util/whiteboard? d)
+                       :normal-page
+                       (entity-util/page? d)
+                       :normal-page
+                       (entity-util/asset? d)
+                       :asset-block
+                       (:file/path d)
+                       :file-block
+                       (:logseq.property.history/block d)
+                       :property-history-block
+
+                       (:block/closed-value-property d)
+                       :closed-value-block
+
+                       (and (:logseq.property/created-from-property d)
+                            (:property.value/content d))
+                       :property-value-block
+
+                       (:block/uuid d)
+                       :block
+                       (= (:db/ident d) :logseq.property/empty-placeholder)
+                       :property-value-placeholder
+                       (:db/ident d)
+                       :db-ident-key-value)]
+    dispatch-key))
+
 (def Data
   (into
-   [:multi {:dispatch (fn [d]
-                        ;; order matters as some block types are a subset of others e.g. :whiteboard
-                        (let [db *db-for-validate-fns*
-                              d (if (:block/uuid d) (d/entity db [:block/uuid (:block/uuid d)]) d)
-                              dispatch-key (cond
-                                             (entity-util/property? d)
-                                             :property
-                                             (entity-util/class? d)
-                                             :class
-                                             (entity-util/hidden? (:block/title d))
-                                             :hidden
-                                             (entity-util/whiteboard? d)
-                                             :normal-page
-                                             (entity-util/page? d)
-                                             :normal-page
-                                             (entity-util/asset? d)
-                                             :asset-block
-                                             (:file/path d)
-                                             :file-block
-                                             (:block/uuid d)
-                                             :block
-                                             (= (:db/ident d) :logseq.property/empty-placeholder)
-                                             :property-value-placeholder
-                                             (:db/ident d)
-                                             :db-ident-key-value)]
-                          dispatch-key))}]
+   [:multi {:dispatch (fn [d] (entity-dispatch-key *db-for-validate-fns* d))}]
    {:property property-page
     :class class-page
     :hidden hidden-page
     :normal-page normal-page
+    :property-history-block property-history-block
+    :closed-value-block closed-value-block
+    :property-value-block property-value-block
     :block block
     :asset-block asset-block
     :file-block file-block

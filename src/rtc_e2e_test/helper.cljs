@@ -132,7 +132,7 @@
                     :block/page "page"
                     :block/updated-at 1724836490810
                     :block/created-at 1724836490810}]]
-      (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
+      (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :frontend.worker.pipeline/skip-store-conn true}
         (d/transact! conn tx-data))
       (m/? (new-task--wait-all-client-ops-sent))
       (log :sent-message message))))
@@ -184,7 +184,7 @@
 (defn transact!
   [conn tx-data]
   {:pre [(seq tx-data)]}
-  (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :skip-store-conn true}
+  (batch-tx/with-batch-tx-mode conn {:e2e-test const/downloaded-test-repo :frontend.worker.pipeline/skip-store-conn true}
     (d/transact! conn tx-data)))
 
 (def new-task--stop-rtc

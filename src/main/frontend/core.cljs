@@ -3,7 +3,6 @@
   {:dev/always true}
   (:require [frontend.background-tasks]
             [frontend.common-keywords]
-            [frontend.common.schema-register :as sr]
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.fs.sync :as sync]
@@ -15,6 +14,7 @@
             [frontend.routes :as routes]
             [frontend.spec]
             [logseq.api]
+            [logseq.db.frontend.kv-entity]
             [malli.dev.cljs :as md]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
@@ -50,7 +50,6 @@
 (defn ^:export start []
   (when config/dev?
     (md/start!))
-  (frontend.common.schema-register/init)
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
     (rum/mount (page/current-page) node)

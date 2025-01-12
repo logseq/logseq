@@ -1,8 +1,8 @@
 (ns frontend.worker.rtc.log-and-state
   "Fns to generate rtc related logs"
-  (:require [frontend.common.schema-register :as sr]
+  (:require [frontend.common.missionary :as c.m]
             [frontend.worker.util :as worker-util]
-            [frontend.common.missionary :as c.m]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [malli.core :as ma]
             [missionary.core :as m]))
 
@@ -12,11 +12,9 @@
   "used by rtc-e2e-test"
   (m/watch *rtc-log))
 
-(sr/defkeyword :rtc.log/upload
-  "rtc log type for upload-graph.")
-
-(sr/defkeyword :rtc.log/download
-  "rtc log type for upload-graph.")
+(defkeywords
+  :rtc.log/upload {:doc "rtc log type for upload-graph."}
+  :rtc.log/download {:doc "rtc log type for upload-graph."})
 
 (def ^:private rtc-log-type-schema
   [:enum

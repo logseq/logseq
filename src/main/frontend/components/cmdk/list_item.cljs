@@ -1,10 +1,11 @@
 (ns frontend.components.cmdk.list-item
   (:require
    ["remove-accents" :as remove-accents]
-   [rum.core :as rum]
    [clojure.string :as string]
+   [frontend.hooks :as hooks]
    [goog.string :as gstring]
-   [logseq.shui.ui :as shui]))
+   [logseq.shui.ui :as shui]
+   [rum.core :as rum]))
 
 (defn- to-string [input]
   (cond
@@ -40,11 +41,11 @@
             segs (string/split highlighted-text #"<:hlmarker>")]
         (if (seq segs)
           (into [:span]
-            (map-indexed (fn [i seg]
-                           (if (even? i)
-                             [:span seg]
-                             [:span {:class "ui__list-item-highlighted-span"} seg]))
-              segs))
+                (map-indexed (fn [i seg]
+                               (if (even? i)
+                                 [:span seg]
+                                 [:span {:class "ui__list-item-highlighted-span"} seg]))
+                             segs))
           [:span normal-text])))))
 
 (rum/defc root [{:keys [group icon icon-theme query text info shortcut value-label value
@@ -52,29 +53,29 @@
                         hoverable compact rounded on-mouse-enter component-opts source-page] :as _props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
-  (let [ref (rum/create-ref)
+  (let [ref (hooks/create-ref)
         highlight-query (partial highlight-query* app-config query)
         [hover? set-hover?] (rum/use-state false)]
-    (rum/use-effect!
-      (fn []
-        (when (and highlighted on-highlight)
-          (on-highlight ref)))
-      [highlighted on-highlight-dep])
+    (hooks/use-effect!
+     (fn []
+       (when (and highlighted on-highlight)
+         (on-highlight ref)))
+     [highlighted on-highlight-dep])
     [:div (merge
-            {:style {:opacity (if highlighted 1 0.8)}
-             :class (cond-> "flex flex-col transition-opacity"
-                      highlighted (str " !opacity-100 bg-gray-03-alpha dark:bg-gray-04-alpha")
-                      hoverable (str " transition-all duration-50 ease-in !opacity-75 hover:!opacity-100 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha from-0% to-100%")
-                      (and hoverable rounded) (str " !rounded-lg")
-                      (not compact) (str " py-4 px-6 gap-1")
-                      compact (str " py-1.5 px-3 gap-0.5")
-                      (not highlighted) (str " "))
-             :ref ref
-             :on-click (when on-click on-click)
-             :on-mouse-over #(set-hover? true)
-             :on-mouse-out #(set-hover? false)
-             :on-mouse-enter (when on-mouse-enter on-mouse-enter)}
-            component-opts)
+           {:style {:opacity (if highlighted 1 0.8)}
+            :class (cond-> "flex flex-col transition-opacity"
+                     highlighted (str " !opacity-100 bg-gray-03-alpha dark:bg-gray-04-alpha")
+                     hoverable (str " transition-all duration-50 ease-in !opacity-75 hover:!opacity-100 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha from-0% to-100%")
+                     (and hoverable rounded) (str " !rounded-lg")
+                     (not compact) (str " py-4 px-6 gap-1")
+                     compact (str " py-1.5 px-3 gap-0.5")
+                     (not highlighted) (str " "))
+            :ref ref
+            :on-click (when on-click on-click)
+            :on-mouse-over #(set-hover? true)
+            :on-mouse-out #(set-hover? false)
+            :on-mouse-enter (when on-mouse-enter on-mouse-enter)}
+           component-opts)
      ;; header
      (when header
        [:div.text-xs.pl-8.font-light {:class "-mt-1"
@@ -87,9 +88,9 @@
                 :box-shadow (when (#{:gradient} icon-theme) "inset 0 0 0 1px rgba(255,255,255,0.3) ")}
         :class (cond-> "w-5 h-5 rounded flex items-center justify-center"
                  (= icon-theme :color) (str
-                                         " "
-                                         (if highlighted "bg-accent-07-alpha" "bg-gray-05")
-                                         " dark:text-white")
+                                        " "
+                                        (if highlighted "bg-accent-07-alpha" "bg-gray-05")
+                                        " dark:text-white")
                  (= icon-theme :gray) (str " bg-gray-05 dark:text-white"))}
        (shui/tabler-icon icon {:size "14" :class ""})]
       [:div.flex.flex-1.flex-col

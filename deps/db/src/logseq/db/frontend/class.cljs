@@ -2,6 +2,7 @@
   "Class related fns for DB graphs and frontend/datascript usage"
   (:require [clojure.set :as set]
             [flatland.ordered.map :refer [ordered-map]]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.sqlite.util :as sqlite-util]))
 
@@ -10,76 +11,77 @@
 
 (def ^:large-vars/data-var built-in-classes
   "Map of built-in classes for db graphs with their :db/ident as keys"
-  (ordered-map
-   :logseq.class/Root {:title "Root Tag"}
+  (apply
+   ordered-map
+   (defkeywords
+     :logseq.class/Root {:title "Root Tag"}
 
-   :logseq.class/Tag {:title "Tag"}
+     :logseq.class/Tag {:title "Tag"}
 
-   :logseq.class/Property {:title "Property"}
+     :logseq.class/Property {:title "Property"}
 
-   :logseq.class/Page {:title "Page"}
+     :logseq.class/Page {:title "Page"}
 
-   :logseq.class/Journal
-   {:title "Journal"
-    :properties {:logseq.property/parent :logseq.class/Page
-                 :logseq.property.journal/title-format "MMM do, yyyy"}}
+     :logseq.class/Journal
+     {:title "Journal"
+      :properties {:logseq.property/parent :logseq.class/Page
+                   :logseq.property.journal/title-format "MMM do, yyyy"}}
 
-   :logseq.class/Whiteboard
-   {:title "Whiteboard"
-    :properties {:logseq.property/parent :logseq.class/Page}}
+     :logseq.class/Whiteboard
+     {:title "Whiteboard"
+      :properties {:logseq.property/parent :logseq.class/Page}}
 
-   :logseq.class/Task
-   {:title "Task"
-    :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}
+     :logseq.class/Task
+     {:title "Task"
+      :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline :logseq.task/scheduled]}}
 
-   :logseq.class/Query
-   {:title "Query"
-    :properties {:logseq.property/icon {:type :tabler-icon :id "search"}}
-    :schema {:properties [:logseq.property/query]}}
+     :logseq.class/Query
+     {:title "Query"
+      :properties {:logseq.property/icon {:type :tabler-icon :id "search"}}
+      :schema {:properties [:logseq.property/query]}}
 
-   :logseq.class/Card
-   {:title "Card"
-    :schema {:properties [:logseq.property.fsrs/state :logseq.property.fsrs/due]}}
+     :logseq.class/Card
+     {:title "Card"
+      :schema {:properties [:logseq.property.fsrs/state :logseq.property.fsrs/due]}}
 
-   :logseq.class/Cards
-   {:title "Cards"
-    :properties {:logseq.property/icon {:type :tabler-icon :id "search"}
-                 :logseq.property/parent :logseq.class/Query}}
+     :logseq.class/Cards
+     {:title "Cards"
+      :properties {:logseq.property/icon {:type :tabler-icon :id "search"}
+                   :logseq.property/parent :logseq.class/Query}}
 
-   :logseq.class/Asset
-   {:title "Asset"
-    :properties {;; :logseq.property/icon {:type :tabler-icon :id "file"}
-                 :logseq.property.class/hide-from-node true
-                 :logseq.property.view/type :logseq.property.view/type.gallery}
-    :schema {:properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]
-             :required-properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]}}
+     :logseq.class/Asset
+     {:title "Asset"
+      :properties {;; :logseq.property/icon {:type :tabler-icon :id "file"}
+                   :logseq.property.class/hide-from-node true
+                   :logseq.property.view/type :logseq.property.view/type.gallery}
+      :schema {:properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]
+               :required-properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]}}
 
-   :logseq.class/Code-block
-   {:title "Code"
-    :properties {:logseq.property.class/hide-from-node true}
-    :schema {:properties [:logseq.property.node/display-type :logseq.property.code/lang]}}
+     :logseq.class/Code-block
+     {:title "Code"
+      :properties {:logseq.property.class/hide-from-node true}
+      :schema {:properties [:logseq.property.node/display-type :logseq.property.code/lang]}}
 
-   :logseq.class/Quote-block
-   {:title "Quote"
-    :properties {:logseq.property.class/hide-from-node true}
-    :schema {:properties [:logseq.property.node/display-type]}}
+     :logseq.class/Quote-block
+     {:title "Quote"
+      :properties {:logseq.property.class/hide-from-node true}
+      :schema {:properties [:logseq.property.node/display-type]}}
 
-   :logseq.class/Math-block
-   {:title "Math"
-    :properties {:logseq.property.class/hide-from-node true}
-    :schema {:properties [:logseq.property.node/display-type]}}
+     :logseq.class/Math-block
+     {:title "Math"
+      :properties {:logseq.property.class/hide-from-node true}
+      :schema {:properties [:logseq.property.node/display-type]}}
 
-   :logseq.class/Pdf-annotation
-   {:title "PDF Annotation"
-    :properties {:logseq.property.class/hide-from-node true}
-    :schema {:properties [:logseq.property/ls-type :logseq.property.pdf/hl-color :logseq.property/asset
-                          :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value
-                          :logseq.property.pdf/hl-type :logseq.property.pdf/hl-image]
-             :required-properties [:logseq.property/ls-type :logseq.property.pdf/hl-color :logseq.property/asset
-                                   :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value]}}
-
-;; TODO: Add more classes such as :book, :paper, :movie, :music, :project)
-   ))
+     :logseq.class/Pdf-annotation
+     {:title "PDF Annotation"
+      :properties {:logseq.property.class/hide-from-node true}
+      :schema {:properties [:logseq.property/ls-type :logseq.property.pdf/hl-color :logseq.property/asset
+                            :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value
+                            :logseq.property.pdf/hl-type :logseq.property.pdf/hl-image]
+               :required-properties [:logseq.property/ls-type :logseq.property.pdf/hl-color :logseq.property/asset
+                                     :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value]}}
+     ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project)
+     )))
 
 (def page-children-classes
   "Children of :logseq.class/Page"
@@ -123,6 +125,5 @@
   [db page-m]
   {:pre [(string? (:block/title page-m))]}
   (let [db-ident (create-user-class-ident-from-name (:block/title page-m))
-        db-ident' (or (:db/ident page-m)
-                      (db-ident/ensure-unique-db-ident db db-ident))]
+        db-ident' (db-ident/ensure-unique-db-ident db db-ident)]
     (sqlite-util/build-new-class (assoc page-m :db/ident db-ident'))))

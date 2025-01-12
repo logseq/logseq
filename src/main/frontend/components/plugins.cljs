@@ -12,6 +12,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.rum :as rum-utils]
             [frontend.search :as search]
@@ -134,7 +135,7 @@
 
 (rum/defc unpacked-plugin-loader
   [unpacked-pkg-path]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [err-handle
            (fn [^js e]
@@ -404,14 +405,14 @@
    :intent "link"
    :target "_blank"))
 
-(rum/defc user-proxy-settings-panel
+(rum/defc user-proxy-settings-container
   [{:keys [protocol type] :as agent-opts}]
   (let [type        (or (not-empty type) (not-empty protocol) "system")
         [opts set-opts!] (rum/use-state agent-opts)
         [testing? set-testing?!] (rum/use-state false)
         *test-input (rum/create-ref)
         disabled?   (or (= (:type opts) "system") (= (:type opts) "direct"))]
-    [:div.cp__settings-network-proxy-panel
+    [:div.cp__settings-network-proxy-cnt
      [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
      [:div.p-2
       [:p [:label [:strong (t :type)]
@@ -477,6 +478,35 @@
                   :on-click (fn []
                               (p/let [_ (ipc/ipc :setProxy opts)]
                                 (state/set-state! [:electron/user-cfgs :settings/agent] opts))))]]]))
+
+(rum/defc load-from-web-url-container
+  []
+  (let [[url set-url!] (rum/use-state "http://127.0.0.1:8080/")
+        [pending? set-pending?] (rum/use-state false)
+        handle-submit! (fn []
+                         (set-pending? true)
+                         (-> (plugin-handler/load-plugin-from-web-url! url)
+                             (p/then #(do (notification/show! "New plugin registered!" :success)
+                                          (shui/dialog-close!)))
+                             (p/catch #(notification/show! (str %) :error))
+                             (p/finally
+                               #(set-pending? false))))]
+
+    [:div.px-4.pt-4.pb-2.rounded-md.flex.flex-col.gap-2
+     [:div.flex.flex-col.gap-3
+      (shui/input {:placeholder "http://"
+                   :value url
+                   :on-change #(set-url! (-> (util/evalue %) (util/trim-safe)))
+                   :auto-focus true})
+      [:span.text-gray-10
+       (shui/tabler-icon "info-circle" {:size 13})
+       [:span "URLs support both GitHub repositories and local development servers.
+      (For examples: https://github.com/xyhp915/logseq-journals-calendar,
+      http://localhost:8080/<plugin-dir-root>)"]]]
+     [:div.flex.justify-end
+      (shui/button {:disabled (or pending? (string/blank? url))
+                    :on-click handle-submit!}
+                   (if pending? (ui/loading) "Install"))]]))
 
 (rum/defc auto-check-for-updates-control
   []
@@ -614,17 +644,21 @@
 
                           [{:hr true}]
 
-                          (when (and (state/developer-mode?)
-                                     (util/electron?))
-                            [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
-                              :options {:on-click
-                                        #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                           (js/apis.openPath (str root "/preferences.json")))}}
-                             {:title [:span.flex.items-center.whitespace-nowrap.gap-1
-                                      (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
-                              :options {:on-click
-                                        #(p/let [root (plugin-handler/get-ls-dotdir-root)]
-                                           (js/apis.openPath root))}}])
+                          (when (state/developer-mode?)
+                            (if (util/electron?)
+                              [{:title [:span.flex.items-center.gap-1 (ui/icon "file-code") (t :plugin/open-preferences)]
+                                :options {:on-click
+                                          #(p/let [root (plugin-handler/get-ls-dotdir-root)]
+                                             (js/apis.openPath (str root "/preferences.json")))}}
+                               {:title [:span.flex.items-center.whitespace-nowrap.gap-1
+                                        (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
+                                :options {:on-click
+                                          #(p/let [root (plugin-handler/get-ls-dotdir-root)]
+                                             (js/apis.openPath root))}}]
+                              [{:title [:span.flex.items-center.whitespace-nowrap.gap-1
+                                        (ui/icon "plug") (t :plugin/load-from-web-url)]
+                                :options {:on-click
+                                          #(shui/dialog-open! load-from-web-url-container)}}]))
 
                           [{:title [:span.flex.items-center.gap-1 (ui/icon "alert-triangle") (t :plugin/report-security)]
                             :options {:on-click #(plugin-handler/open-report-modal!)}}]
@@ -664,7 +698,7 @@
   (let [^js inViewState (ui/useInView #js {:threshold 0})
         in-view?        (.-inView inViewState)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (load-more!))
      [in-view?])
@@ -1009,13 +1043,13 @@
          id      (str "slot__" rs)
          *el-ref (rum/use-ref nil)]
 
-     (rum/use-effect!
+     (hooks/use-effect!
       (fn []
         (let [timer (js/setTimeout #(callback {:type type :slot id :payload payload}) 50)]
           #(js/clearTimeout timer)))
       [id])
 
-     (rum/use-effect!
+     (hooks/use-effect!
       (fn []
         (let [el (rum/deref *el-ref)]
           #(when-let [uis (seq (.querySelectorAll el "[data-injected-ui]"))]
@@ -1039,7 +1073,7 @@
         uni    #(str prefix "injected-ui-item-" %)
         ^js pl (js/LSPluginCore.registeredPlugins.get (name pid))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js el (rum/deref *el)]
          (js/LSPlugin.pluginHelpers.setupInjectedUI.call
@@ -1121,7 +1155,7 @@
   (let [*wrap-el (rum/use-ref nil)
         [right-sidebar-resized] (rum-utils/use-atom ui-handler/*right-sidebar-resized-at)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js wrap-el (rum/deref *wrap-el)]
          (when-let [^js header-el (.closest wrap-el ".cp__header")]
@@ -1190,11 +1224,11 @@
         *cm (rum/use-ref nil)
         *el (rum/use-ref nil)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(set-content1! content)
      [content])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (some-> (rum/deref *el)
                (.closest ".ui-fenced-code-wrap")
@@ -1208,7 +1242,7 @@
          (.setCursor cm (.lineCount cm) (count (.getLine cm (.lastLine cm))))))
      [editor-active?])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [t (js/setTimeout
                 #(when-let [^js cm (some-> (rum/deref *el)
@@ -1245,13 +1279,13 @@
         market? (= active :marketplace)
         *el-ref (rum/create-ref)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (state/load-app-user-cfgs)
        #(clear-dirties-states!))
      [])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(clear-dirties-states!)
      [market?])
 
@@ -1312,7 +1346,7 @@
                         (catch js/Error _
                           (set-uid (notification/show! content status false nil nil cb)))))))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (if check-pending?
          (notify!
@@ -1323,7 +1357,7 @@
          (when uid (notification/clear! uid))))
      [check-pending? sub-content])
 
-    (rum/use-effect!
+    (hooks/use-effect!
       ;; scheduler for auto updates
      (fn []
        (when online?
@@ -1333,10 +1367,12 @@
                           (not (number? last-updates))
                            ;; interval 12 hours
                           (> (- (js/Date.now) last-updates) (* 60 60 12 1000))))
-             (js/setTimeout
-              (fn []
-                (plugin-handler/auto-check-enabled-for-updates!)
-                (storage/set :lsp-last-auto-updates (js/Date.now))))))))
+             (let [update-timer (js/setTimeout
+                                 (fn []
+                                   (plugin-handler/auto-check-enabled-for-updates!)
+                                   (storage/set :lsp-last-auto-updates (js/Date.now)))
+                                 (if (util/electron?) 3000 (* 60 1000)))]
+               #(js/clearTimeout update-timer))))))
      [online?])
 
     [:<>]))
@@ -1391,7 +1427,7 @@
 
 (rum/defc custom-js-installer
   [{:keys [t current-repo db-restoring? nfs-granted?]}]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (when (and (not db-restoring?)
                 (or (not util/nfs?) nfs-granted?))

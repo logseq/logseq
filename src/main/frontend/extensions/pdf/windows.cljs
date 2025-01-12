@@ -1,8 +1,8 @@
 (ns frontend.extensions.pdf.windows
-  (:require [frontend.state :as state]
-            [rum.core :as rum]
-            [cljs-bean.core :as bean]
-            [frontend.storage :as storage]))
+  (:require [cljs-bean.core :as bean]
+            [frontend.state :as state]
+            [frontend.storage :as storage]
+            [rum.core :as rum]))
 
 (def *active-win (atom nil))
 (def *exit-pending? (atom false))
@@ -93,6 +93,7 @@
                   (.appendChild (.-head doc) base)
                   (set! (.-title doc) (or (:filename pdf-current) "Logseq"))
                   (set! (.-dataset doc-el) -theme (str theme-mode))
+                  (set! (.-dataset doc-el) -color (or (some-> (state/sub :ui/radix-color) (name)) "logseq"))
                   (resolve-classes! doc)
                   (resolve-styles! doc)
                   (.appendChild (.-body doc) main)

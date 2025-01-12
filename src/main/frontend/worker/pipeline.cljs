@@ -1,19 +1,19 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
   (:require [datascript.core :as d]
-            [frontend.common.schema-register :as sr]
+            [frontend.worker.commands :as commands]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]
-            [frontend.worker.commands :as commands]))
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (defn- refs-need-recalculated?
   [tx-meta]
@@ -45,13 +45,14 @@
                            :block/refs refs})))))
             blocks)))
 
-(sr/defkeyword :skip-validate-db?
-  "tx-meta option, default = false")
+(defkeywords
+  ::skip-validate-db? {:doc "tx-meta option, default = false"}
+  ::skip-store-conn {:doc "tx-meta option, skip `d/store` on conn. default = false"})
 
 (defn validate-db!
   "Validate db is slow, we probably don't want to enable it for production."
   [repo conn tx-report tx-meta context]
-  (when (and (not (:skip-validate-db? tx-meta false))
+  (when (and (not (::skip-validate-db? tx-meta false))
              (:dev? context)
              (not (:importing? context)) (sqlite-util/db-based-graph? repo))
     (let [valid? (if (get-in tx-report [:tx-meta :reset-conn!])
@@ -71,10 +72,6 @@
             (let [children (:block/_parent parent)]
               (assert (= (count (distinct (map :block/order children))) (count children))
                       (str ":block/order is not unique for children blocks, parent id: " (:db/id parent))))))))))
-
-(sr/defkeyword :skip-store-conn
-  "tx-meta option, skip `d/store` on conn.
-default = false")
 
 (defn- add-missing-properties-to-typed-display-blocks
   "Add missing properties for these cases:
@@ -147,26 +144,27 @@ default = false")
                        (rebuild-block-refs repo tx-report* blocks'))
           refs-tx-report (when (seq block-refs)
                            (ldb/transact! conn block-refs {:pipeline-replace? true}))
-          replace-tx (concat
+          replace-tx (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))]
+                       (concat
                       ;; block path refs
-                      (when (seq blocks')
-                        (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))
-                              blocks' (keep (fn [b] (d/entity db-after (:db/id b))) blocks')]
-                          (compute-block-path-refs-tx tx-report* blocks')))
+                        (when (seq blocks')
+                          (let [blocks' (keep (fn [b] (d/entity db-after (:db/id b))) blocks')]
+                            (compute-block-path-refs-tx tx-report* blocks')))
 
                        ;; update block/tx-id
-                      (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
-                                                   (concat pages blocks))
-                            tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
-                        (keep (fn [b]
-                                (when-let [db-id (:db/id b)]
-                                  {:db/id db-id
-                                   :block/tx-id tx-id})) updated-blocks)))
+                        (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
+                                                     (concat pages blocks))
+                              tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
+                          (keep (fn [b]
+                                  (when-let [db-id (:db/id b)]
+                                    (when (:block/uuid (d/entity db-after db-id))
+                                      {:db/id db-id
+                                       :block/tx-id tx-id}))) updated-blocks))))
           tx-report' (if (seq replace-tx)
                        (ldb/transact! conn replace-tx {:pipeline-replace? true})
                        (do
                          (when-not (or (exists? js/process)
-                                       (:skip-store-conn tx-meta false))
+                                       (::skip-store-conn tx-meta false))
                            (d/store @conn))
                          tx-report*))
           _ (validate-db! repo conn tx-report* tx-meta context)
@@ -201,7 +199,7 @@ default = false")
                             (ldb/transact! conn path-refs {:pipeline-replace? true}))
                           (do
                             (when-not (or (exists? js/process)
-                                          (:skip-store-conn tx-meta false))
+                                          (::skip-store-conn tx-meta false))
                               (d/store @conn))
                             tx-report))
               full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))

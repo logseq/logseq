@@ -177,7 +177,7 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 24 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 25 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
@@ -195,7 +195,7 @@
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 11 (->> @conn
+      (is (= 12 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
@@ -293,12 +293,16 @@
                (and b (readable-properties @conn b)))
             ":template properties are ignored to not invalidate its property types"))
 
-      (is (= {:logseq.task/deadline (date-time-util/journal-day->ms 20221126)}
-             (readable-properties @conn (db-test/find-block-by-content @conn "only deadline")))
+      (is (= 20221126
+             (-> (readable-properties @conn (db-test/find-block-by-content @conn "only deadline"))
+                 :logseq.task/deadline
+                 date-time-util/ms->journal-day))
           "deadline block has correct journal as property value")
 
-      (is (= {:logseq.task/deadline (date-time-util/journal-day->ms 20221125)}
-             (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled")))
+      (is (= 20221125
+             (-> (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled"))
+                 :logseq.task/deadline
+                 date-time-util/ms->journal-day))
           "scheduled block converted to correct deadline")
 
       (is (= 1 (count (d/q '[:find [(pull ?b [*]) ...]
@@ -655,8 +659,10 @@
 
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"
-                                                          "pages/Whiteboard___Tool.md" "pages/Whiteboard___Arrow_head_toggle.md"])
+          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_11_26.md"
+                                                          "pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"
+                                                          "pages/Whiteboard___Tool.md" "pages/Whiteboard___Arrow_head_toggle.md"
+                                                          "pages/Property.md" "pages/url.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:property-parent-classes ["parent"]
                                             ;; Also add this option to trigger some edge cases with namespace pages
@@ -665,8 +671,8 @@
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
 
-    (is (= #{:user.class/Movie :user.class/CreativeWork :user.class/Thing
-             :user.class/Class :user.class/Tool :user.class/Whiteboard___Tool}
+    (is (= #{:user.class/Movie :user.class/CreativeWork :user.class/Thing :user.class/Feature
+             :user.class/Class :user.class/Tool :user.class/Whiteboard___Tool :user.class/Property}
            (->> @conn
                 (d/q '[:find [?ident ...]
                        :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])

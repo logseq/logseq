@@ -18,6 +18,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -549,7 +550,7 @@
 
 (rum/defc mouse-active-effect!
   [*mouse-active? deps]
-  (rum/use-effect!
+  (hooks/use-effect!
    #(reset! *mouse-active? false)
    deps)
   nil)
@@ -778,7 +779,7 @@
   (let [highlighted-item @(::highlighted-item state)
         input @(::input state)
         input-ref (::input-ref state)
-        debounced-on-change (rum/use-callback
+        debounced-on-change (hooks/use-callback
                              (gfun/debounce
                               (fn [e]
                                 (let [new-value (.-value (.-target e))]
@@ -790,11 +791,11 @@
     ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
     ;; if not then clear that puppy out!
     ;; This was moved to a functional component
-    (rum/use-effect! (fn []
-                       (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
-                         (reset! (::highlighted-item state) nil)))
-                     [all-items])
-    (rum/use-effect! (fn [] (load-results :default state)) [])
+    (hooks/use-effect! (fn []
+                         (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
+                           (reset! (::highlighted-item state) nil)))
+                       [all-items])
+    (hooks/use-effect! (fn [] (load-results :default state)) [])
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input.cp__cmdk-search-input
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"

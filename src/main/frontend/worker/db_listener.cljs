@@ -2,7 +2,6 @@
   "Db listeners for worker-db."
   (:require [cljs-bean.core :as bean]
             [datascript.core :as d]
-            [frontend.common.schema-register :as sr]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state]
@@ -13,21 +12,6 @@
 
 (defmulti listen-db-changes
   (fn [listen-key & _] listen-key))
-
-(sr/defkeyword :gen-rtc-ops
-  "DB-listener key.
-generate rtc ops.")
-
-(sr/defkeyword :gen-undo-ops
-  "DB-listener key.
-generate undo ops.")
-
-(sr/defkeyword :gen-asset-change-events
-  "DB-listener key.
-generate asset-change events.")
-
-(sr/defkeyword :sync-db-to-main-thread
-  "")
 
 (defn- sync-db-to-main-thread
   "Return tx-report"

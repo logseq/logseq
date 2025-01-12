@@ -33,6 +33,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frontend-rum]
@@ -140,9 +141,9 @@
           focus! (fn [] (js/setTimeout #(some-> (rum/deref *el-ref) (.focus)) 16))]
 
       ;; mounted
-      ;(rum/use-effect! #(focus!) [])
-      (rum/use-effect! #(if selected? (focus!)
-                            (some-> (rum/deref *el-ref) (.blur))) [selected?])
+      ;(hooks/use-effect! #(focus!) [])
+      (hooks/use-effect! #(if selected? (focus!)
+                              (some-> (rum/deref *el-ref) (.blur))) [selected?])
 
       (shui/trigger-as
        :div.ls-dummy-block.ls-block
@@ -273,7 +274,7 @@
 (rum/defc tagged-pages
   [repo tag tag-title]
   (let [[pages set-pages!] (rum/use-state nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (p/let [result (db-async/<get-tag-pages repo (:db/id tag))]
          (set-pages! result)))
@@ -453,7 +454,7 @@
   (let [[with-actions? set-with-actions!] (rum/use-state false)
         *el (rum/use-ref nil)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (and (not config/publishing?)
                   (some-> (rum/deref *el) (.closest "#main-content-container")))

@@ -1,16 +1,16 @@
 (ns logseq.db.sqlite.create-graph-test
   (:require [cljs.test :refer [deftest is testing]]
-            [clojure.string :as string]
             [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.test.helper :as db-test]))
 
 (deftest new-graph-db-idents
   (testing "a new graph follows :db/ident conventions for"
@@ -69,7 +69,7 @@
         task (d/entity @conn :logseq.class/Task)]
     (is (ldb/class? task)
         "Task class has correct type")
-    (is (= 3 (count (:logseq.property.class/properties task)))
+    (is (= 4 (count (:logseq.property.class/properties task)))
         "Has correct number of task properties")
     (is (every? ldb/property? (:logseq.property.class/properties task))
         "Each task property has correct type")))

@@ -136,12 +136,7 @@
    journal-title
    (date-time-util/safe-journal-title-formatters (state/get-date-formatter))))
 
-(defn journal-day->ts
-  "journal-day format yyyyMMdd"
-  [day]
-  (when day
-    (-> (tf/parse (tf/formatter "yyyyMMdd") (str day))
-        (tc/to-long))))
+(def journal-day->utc-ms date-time-util/journal-day->ms)
 
 (defn journal-title->long
   [journal-title]
