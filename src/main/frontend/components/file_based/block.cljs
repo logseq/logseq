@@ -4,12 +4,13 @@
             [frontend.components.file-based.datetime :as datetime-comp]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.repeated :as repeated]
+            [frontend.hooks :as hooks]
+            [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.util.file-based.clock :as clock]
             [frontend.util.file-based.drawer :as drawer]
-            [frontend.state :as state]
+            [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
@@ -115,7 +116,7 @@
 (rum/defc timestamp-editor
   [ast *show-datapicker?]
   (let [*trigger-ref (rum/use-ref nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [pid (shui/popup-show!
                   (.closest (rum/deref *trigger-ref) "a")

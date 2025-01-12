@@ -9,5 +9,6 @@
                   logseq.common.date
                   logseq.common.util.macro
                   logseq.common.marker
-                  logseq.common.config]
+                  logseq.common.config
+                  logseq.common.defkeywords]
  :report {:format :ignore}}

@@ -23,6 +23,7 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [goog.string :as gstring]
+            [goog.functions :as gfun]
             [goog.userAgent]
             [promesa.core :as p]
             [rum.core :as rum]
@@ -307,20 +308,8 @@
        x)))
 
 #?(:cljs
-   (defn debounce
-     "Returns a function that will call f only after threshold has passed without new calls
-      to the function. Calls prep-fn on the args in a sync way, which can be used for things like
-      calling .persist on the event object to be able to access the event attributes in f"
-     ([threshold f] (debounce threshold f (constantly nil)))
-     ([threshold f prep-fn]
-      (let [t (atom nil)]
-        (fn [& args]
-          (when @t (js/clearTimeout @t))
-          (apply prep-fn args)
-          (reset! t (js/setTimeout #(do
-                                      (reset! t nil)
-                                      (apply f args))
-                                   threshold)))))))
+   (def debounce gfun/debounce))
+
 #?(:cljs
    (defn cancelable-debounce
      "Create a stateful debounce function with specified interval

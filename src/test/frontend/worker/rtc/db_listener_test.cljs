@@ -37,6 +37,7 @@
           r (#'subject/entity-datoms=>ops (:db-before remove-whiteboard-page-block)
                                           (:db-after remove-whiteboard-page-block)
                                           (tx-data=>e->a->add?->v->t (:tx-data remove-whiteboard-page-block))
+                                          nil
                                           (map vec (:tx-data remove-whiteboard-page-block)))]
       (is (= [[:remove-page {:block-uuid block-uuid}]]
              (map (fn [[op-type _t op-value]] [op-type op-value]) r)))))
@@ -54,10 +55,12 @@
                    [:db/add 1000000 :block/tags :logseq.class/Property]
                    [:db/add 1000000 :block/order "b0T"]
                    [:db/add 1000000 :block/name "qqq"]
-                   [:db/add 1000000 :block/title "qqq"]]
+                   [:db/add 1000000 :block/title "qqq"]
+                   [:db/add 1000000 :logseq.property/ignored-attr-x "111"]]
           {:keys [db-before db-after tx-data]} (d/transact! conn tx-data)
           ops (#'subject/entity-datoms=>ops db-before db-after
                                             (tx-data=>e->a->add?->v->t tx-data)
+                                            #{:logseq.property/ignored-attr-x}
                                             (map vec tx-data))]
       (is (=
            [[:move {:block-uuid #uuid "66558abf-6512-469d-9e83-8f1ba0be9305"}]
@@ -93,6 +96,7 @@
           {:keys [db-before db-after tx-data]} (d/transact! conn tx-data)
           ops (#'subject/entity-datoms=>ops db-before db-after
                                             (tx-data=>e->a->add?->v->t tx-data)
+                                            nil
                                             (map vec tx-data))]
       (is (=
            [[:update-page {:block-uuid #uuid "66856a29-6eb3-4122-af97-8580a853c6a6"}]

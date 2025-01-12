@@ -912,7 +912,9 @@
   (validate-db
    [_this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (worker-db-validate/validate-db @conn)))
+     (let [result (worker-db-validate/validate-db @conn)]
+       (db-migrate/fix-db! conn {:invalid-entity-ids (:invalid-entity-ids result)})
+       result)))
 
   (dangerousRemoveAllDbs
    [this repo]

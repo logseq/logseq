@@ -773,6 +773,45 @@
     (when config/lsp-enabled?
       (hook-plugin-app (str :after-command-invoked type) nil))))
 
+(defn load-plugin-from-web-url!
+  [url]
+  (if (not (and (string? url) (string/starts-with? url "http")))
+    (p/rejected (js/Error. "Invalid web url"))
+    (p/let [url (string/replace url #"/+$" "")
+            github? (string/includes? url "github.com")
+            github-repo (when github?
+                          (some-> (re-find #"github.com/([^/]+/[^/]+)" url) (last)))
+            package-url (if github?
+                          (some-> github-repo
+                                  (plugin-common-handler/get-web-plugin-checker-url!))
+                          (str url "/package.json"))
+            ^js res (js/window.fetch (str package-url "?v=" (js/Date.now)))
+            package (if (and (.-ok res)
+                             (= (.-status res) 200))
+                      (-> (.json res)
+                          (p/then bean/->clj))
+                      (throw (js/Error. (.text res))))
+            logseq (or (:logseq package)
+                       (throw (js/Error. "Illegal logseq package")))]
+      (let [id (if github?
+                 (some-> github-repo (string/replace "/" "_"))
+                 (or (:id logseq) (:name package)))
+            repo (or github-repo id)
+            theme? (some? (or (:theme logseq) (:themes logseq)))]
+
+        (plugin-common-handler/emit-lsp-updates!
+         {:status :completed
+          :only-check false
+          :payload {:id id
+                    :repo repo
+                    :dst repo
+                    :theme theme?
+                    :web-pkg (cond-> package
+
+                               (not github?)
+                               (assoc :installedFromUserWebUrl url))}}))
+      url)))
+
 ;; components
 (rum/defc lsp-indicator < rum/reactive
   []

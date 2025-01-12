@@ -1,11 +1,12 @@
 (ns frontend.components.dnd
-  (:require [rum.core :as rum]
-            [cljs-bean.core :as bean]
+  (:require ["@dnd-kit/core" :refer [DndContext closestCenter MouseSensor useSensor useSensors]]
             ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy horizontalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
-            ["@dnd-kit/core" :refer [DndContext closestCenter MouseSensor useSensor useSensors]]
+            [cljs-bean.core :as bean]
+            [frontend.hooks :as hooks]
             [frontend.rum :as r]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [rum.core :as rum]))
 
 (def dnd-context (r/adapt-class DndContext))
 (def sortable-context (r/adapt-class SortableContext))
@@ -40,7 +41,7 @@
         items' (bean/->js ids)
         id->item (zipmap ids col)
         [items-state set-items] (rum/use-state items')
-        _ (rum/use-effect! (fn [] (set-items items')) [col])
+        _ (hooks/use-effect! (fn [] (set-items items')) [col])
         [_active-id set-active-id] (rum/use-state nil)
         sensors (useSensors (useSensor MouseSensor (bean/->js {:activationConstraint {:distance 8}})))
         dnd-opts {:sensors sensors

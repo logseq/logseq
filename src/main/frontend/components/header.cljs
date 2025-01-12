@@ -4,6 +4,7 @@
             [cljs-time.core :as t]
             [clojure.string :as string]
             [dommy.core :as d]
+            [frontend.common.missionary :as c.m]
             [frontend.components.export :as export]
             [frontend.components.file-sync :as fs-sync]
             [frontend.components.page-menu :as page-menu]
@@ -22,13 +23,13 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.hooks :as hooks]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :refer [version]]
-            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [logseq.shui.util :as shui-util]
@@ -234,7 +235,7 @@
 (rum/defc updater-tips-new-version
   [t]
   (let [[downloaded, set-downloaded] (rum/use-state nil)
-        _ (rum/use-effect!
+        _ (hooks/use-effect!
            (fn []
              (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
                (let [callback (fn [_ args]
@@ -265,12 +266,12 @@
   []
   (let [[recent-days set-recent-days!] (rum/use-state (state/get-highlight-recent-days))
         [thumb-ref set-thumb-ref!] (rum/use-state nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when thumb-ref
          (.focus ^js thumb-ref)))
      [thumb-ref])
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [all-nodes (d/by-class "ls-block")
              recent-node (fn [node]

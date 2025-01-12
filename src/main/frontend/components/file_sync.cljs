@@ -1,7 +1,8 @@
 (ns frontend.components.file-sync
-  (:require [cljs.core.async :as async]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs.core.async :as async]
             [cljs.core.async.interop :refer [p->c]]
-            [frontend.util.persist-var :as persist-var]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -12,26 +13,26 @@
             [frontend.db.model :as db-model]
             [frontend.fs :as fs]
             [frontend.fs.sync :as fs-sync]
+            [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.file-sync :refer [*beta-unavailable?] :as file-sync-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.hooks :as hooks]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
-            [frontend.storage :as storage]
+            [frontend.util.persist-var :as persist-var]
+            [goog.functions :refer [debounce]]
+            [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
-            [goog.functions :refer [debounce]]
-            [logseq.common.util :as common-util]))
+            [rum.core :as rum]))
 
 (declare maybe-onboarding-show)
 (declare open-icloud-graph-clone-picker)
@@ -39,7 +40,7 @@
 (rum/defc clone-local-icloud-graph-panel
   [repo graph-name close-fn]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    #(some->> (state/sub :file-sync/jstour-inst)
              (.complete))
    [])
@@ -120,7 +121,7 @@
 (rum/defc create-remote-graph-panel
   [repo graph-name close-fn]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    #(some->> (state/sub :file-sync/jstour-inst)
              (.complete))
    [])
@@ -194,7 +195,7 @@
   [sync-state sync-progress
    {:keys [idle? syncing? no-active-files? online? history-files? queuing?]}]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      #(reset! *last-calculated-time nil))
    [])
@@ -241,7 +242,7 @@
                                           (-> (storage/get :ui/file-sync-active-file-list?)
                                               (#(if (nil? %) true %))))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js outer-class-list
                   (some-> (rum/deref *el-ref)
@@ -575,7 +576,7 @@
         get-version-key #(or (:VersionUUID %) (:relative-path %))]
 
     ;; fetch version files
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-not loading?
          (async/go
@@ -623,7 +624,7 @@
         *ref-contents      (rum/use-ref (atom {}))
         original-page-name (or (:block/title page-entity) page-name)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(when selected-page
         (set-content-ready? false)
         (let [k               (get-version-key selected-page)
@@ -653,7 +654,7 @@
                   (load-file' repo-url relative-path)))))))
      [selected-page])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (state/update-state! :editor/hidden-editors #(conj % page-name))
 

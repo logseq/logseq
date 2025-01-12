@@ -22,6 +22,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
+            [frontend.hooks :as hooks]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -79,7 +80,7 @@
                         :logseq.property/icon))
                      (clear-overlay!))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when editing?
          (clear-overlay!)
@@ -251,7 +252,9 @@
                                                                                                (:db/id property))
                                                       (db-property-handler/remove-block-property! (:db/id block)
                                                                                                   :logseq.task/scheduled-on-property)))))]
-       [:div "Set as repeated task"]]]
+       (if (= :logseq.task/deadline (:db/ident property))
+         [:div "Set as repeated task"]
+         [:div "Repeat " (if (= :date (get-in property [:block/schema :type])) "date" "datetime")])]]
      [:div.flex.flex-row.gap-2
       [:div.flex.text-muted-foreground.mr-4
        "Every"]
@@ -278,7 +281,7 @@
                         (db/entity :logseq.task/status.done))]
        [:div.flex.flex-col.gap-2
         [:div.text-muted-foreground
-         "Reschedule when"]
+         "When"]
         (shui/select
          (cond->
           {:on-value-change (fn [v]
@@ -297,14 +300,6 @@
           "is:"]
          (when done-choice
            (db-property/property-value-content done-choice))]])]))
-
-(defn- get-local-journal-date-time
-  [year month day]
-  (let [[op h m] (:offset (t/default-time-zone))
-        f (if (= op :-) t/plus t/minus)]
-    (-> (t/date-time year month day)
-        (f (t/hours h))
-        (f (t/minutes m)))))
 
 (rum/defcs calendar-inner < rum/reactive db-mixins/query
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
@@ -329,9 +324,8 @@
         value (cond
                 (map? value)
                 (when-let [day (:block/journal-day value)]
-                  (let [t (tc/to-date-time (date/journal-day->ts day))]
-                    (js/Date.
-                     (get-local-journal-date-time (t/year t) (t/month t) (t/day t)))))
+                  (let [t (date/journal-day->utc-ms day)]
+                    (js/Date. t)))
 
                 (number? value)
                 (js/Date. value)
@@ -379,7 +373,7 @@
 (rum/defc overdue
   [date content]
   (let [[current-time set-current-time!] (rum/use-state (t/now))]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [timer (js/setInterval (fn [] (set-current-time! (t/now))) (* 1000 60 3))]
          #(js/clearInterval timer)))
@@ -450,7 +444,7 @@
                           (shui/popup-show! (.-target e) content-fn
                                             {:align "start" :auto-focus? true}))))
         repeated-task? (:logseq.task/repeated? block)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when editing?
          (js/setTimeout
@@ -477,7 +471,7 @@
           (ui/icon "repeat" {:size 14 :class "opacity-40"}))
         (cond
           (map? value)
-          (let [date (tc/to-date-time (date/journal-day->ts (:block/journal-day value)))
+          (let [date (tc/to-date-time (date/journal-day->utc-ms (:block/journal-day value)))
                 compare-value (some-> date
                                       (t/plus (t/days 1))
                                       (t/minus (t/seconds 1)))
@@ -791,7 +785,7 @@
         parent-property? (= (:db/ident property) :logseq.property/parent)]
     (when (and (not parent-property?) (seq non-root-classes))
       ;; effect runs once
-      (rum/use-effect!
+      (hooks/use-effect!
        (fn []
          (p/let [result (p/all (map (fn [class] (db-async/<get-tag-objects repo (:db/id class))) non-root-classes))
                  result' (distinct (apply concat result))]
@@ -1030,7 +1024,7 @@
   [block property value value-f select-opts opts]
   (let [*el (rum/use-ref nil)]
     ;; Open popover initially when editing a property
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (:editing? opts)
          (.click (rum/deref *el))))
@@ -1171,7 +1165,7 @@
         items (cond->> (if (de/entity? v) #{v} v)
                 (= (:db/ident property) :block/tags)
                 (remove (fn [v] (contains? ldb/hidden-tags (:db/ident v)))))]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when editing?
          (.click (rum/deref *el))))

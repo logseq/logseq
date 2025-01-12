@@ -3,16 +3,17 @@
   (:require [frontend.components.block :as component-block]
             [frontend.components.page :as component-page]
             [frontend.components.views :as views]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.page :as page-handler]
+            [frontend.hooks :as hooks]
             [frontend.state :as state]
+            [frontend.ui :as ui]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.ui :as ui]
-            [frontend.config :as config]))
+            [rum.core :as rum]))
 
 (defn- columns
   []
@@ -57,7 +58,7 @@
                                       {:with-object-name? false
                                        :with-id? false})
         view-entity (first (ldb/get-all-pages-views db))]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js worker @state/*db-worker]
          (p/let [result-str (.get-page-refs-count worker (state/get-current-repo))

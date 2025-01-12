@@ -512,6 +512,10 @@ class PluginLocal extends EventEmitter<
 
     if (this.isWebPlugin) {
       // TODO: strategy for Logseq plugins center
+      if (this.installedFromUserWebUrl) {
+        return `${this.installedFromUserWebUrl}/${filePath}`
+      }
+
       return `https://pub-80f42b85b62c40219354a834fcf2bbfa.r2.dev/${path.join(localRoot, filePath)}`
     }
 
@@ -565,7 +569,7 @@ class PluginLocal extends EventEmitter<
       })
 
     const { repo, version } = this._options
-    const localRoot = (this._localRoot = this.isWebPlugin ? `${repo}/${version}` : safetyPathNormalize(url))
+    const localRoot = (this._localRoot = this.isWebPlugin ? `${repo || url}/${version}` : safetyPathNormalize(url))
     const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
     const validateEntry = (main) => main && /\.(js|html)$/.test(main)
 
@@ -994,6 +998,10 @@ class PluginLocal extends EventEmitter<
     return this._ctx.isWebPlatform || !!this.options.webPkg
   }
 
+  get installedFromUserWebUrl() {
+    return this.isWebPlugin && this.options.webPkg?.installedFromUserWebUrl
+  }
+
   get layoutCore(): any {
     // @ts-expect-error
     return window.frontend.modules.layout.core
@@ -1104,6 +1112,7 @@ class PluginLocal extends EventEmitter<
     json.err = this.loadErr
     json.usf = this.dotSettingsFile
     json.iir = this.isInstalledInLocalDotRoot
+    json.webMode = this.isWebPlugin ? (this.installedFromUserWebUrl ? 'user' : 'github') : false
     json.lsr = this._resolveResourceFullUrl('/')
 
     if (settings === false) {

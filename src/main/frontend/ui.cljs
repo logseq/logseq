@@ -1,22 +1,24 @@
 (ns frontend.ui
   "Main ns for reusable components"
-  (:require ["@logseq/react-tweet-embed" :as react-tweet-embed]
+  (:require ["@emoji-mart/data" :as emoji-data]
+            ["@logseq/react-tweet-embed" :as react-tweet-embed]
+            ["emoji-mart" :as emoji-mart]
             ["react-intersection-observer" :as react-intersection-observer]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["react-virtuoso" :refer [Virtuoso VirtuosoGrid]]
-            ["@emoji-mart/data" :as emoji-data]
-            ["emoji-mart" :as emoji-mart]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.date :as date]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.config :as shortcut-config]
@@ -32,11 +34,10 @@
             [lambdaisland.glogi :as log]
             [logseq.shui.icon.v2 :as shui.icon.v2]
             [logseq.shui.popup.core :as shui-popup]
+            [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.shui.ui :as shui]
-            [frontend.date :as date]))
+            [rum.core :as rum]))
 
 (declare icon)
 
@@ -368,7 +369,7 @@
                       input)))
         [time set-time] (rum/use-state (time-fn))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [timer (js/setInterval
                     #(set-time (time-fn)) (* 1000 30))]
@@ -1160,7 +1161,7 @@
 (rum/defc indicator-progress-pie
   [percentage]
   (let [*el (rum/use-ref nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      #(when-let [^js el (rum/deref *el)]
         (set! (.. el -style -backgroundImage)
               (util/format "conic-gradient(var(--ls-pie-fg-color) %s%, var(--ls-pie-bg-color) %s%)" percentage percentage)))

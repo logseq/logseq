@@ -16,6 +16,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -305,7 +306,7 @@
                              width (str value "%")]
                          (.setAttribute (rum/deref el-ref) "aria-valuenow" value)
                          (ui-handler/persist-right-sidebar-width! width))))]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
          (-> (js/interact el)
@@ -357,7 +358,7 @@
        #())
      [])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
         ;; sidebar animation duration
        (js/setTimeout

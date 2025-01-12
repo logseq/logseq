@@ -1,9 +1,9 @@
 (ns frontend.worker.rtc.client-op
   "Store client-ops in a persisted datascript"
   (:require [datascript.core :as d]
-            [frontend.worker.rtc.const :as rtc-const]
-            [frontend.worker.state :as worker-state]
             [frontend.common.missionary :as c.m]
+            [frontend.worker.rtc.malli-schema :as rtc-schema]
+            [frontend.worker.state :as worker-state]
             [logseq.db.sqlite.util :as sqlite-util]
             [malli.core :as ma]
             [malli.transform :as mt]
@@ -41,7 +41,7 @@
      [:t :int]
      [:value [:map
               [:block-uuid :uuid]
-              [:av-coll [:sequential rtc-const/av-schema]]]]]]
+              [:av-coll [:sequential rtc-schema/av-schema]]]]]]
 
    [:update-asset
     [:catn

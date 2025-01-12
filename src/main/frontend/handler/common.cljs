@@ -1,16 +1,16 @@
 (ns frontend.handler.common
   "Common fns for handlers"
-  (:require [cljs-bean.core :as bean]
+  (:require ["ignore" :as Ignore]
+            [cljs-bean.core :as bean]
             [cljs.reader :as reader]
             [frontend.date :as date]
+            [frontend.db :as db]
+            [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.handler.property :as property-handler]
-            [goog.object :as gobj]
             [goog.dom :as gdom]
-            ["ignore" :as Ignore]
             [goog.functions :refer [debounce]]
-            [frontend.db :as db]))
+            [goog.object :as gobj]))
 
 (defn copy-to-clipboard-without-id-property!
   [repo format raw-text html blocks]
@@ -47,21 +47,21 @@
   [pages]
   (map (fn [{:block/keys [created-at updated-at journal-day] :as p}]
          (cond->
-           p
+          p
 
            (nil? created-at)
            (assoc :block/created-at
                   (if journal-day
-                    (date/journal-day->ts journal-day)
+                    (date/journal-day->utc-ms journal-day)
                     (util/time-ms)))
 
            (nil? updated-at)
            (assoc :block/updated-at
                   ;; Not exact true
                   (if journal-day
-                    (date/journal-day->ts journal-day)
+                    (date/journal-day->utc-ms journal-day)
                     (util/time-ms)))))
-    pages))
+       pages))
 
 (defn listen-to-scroll!
   [element]

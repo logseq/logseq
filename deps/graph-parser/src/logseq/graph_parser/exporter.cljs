@@ -731,28 +731,29 @@
 
 (defn- handle-page-properties
   "Adds page properties including special handling for :logseq.property/parent"
-  [{:block/keys [properties] :as block*} db {:keys [page-names-to-uuids]} refs
+  [{:block/keys [properties] :as block*} db {:keys [page-names-to-uuids classes-tx]} refs
    {:keys [user-options log-fn import-state] :as options}]
   (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
         block'
-        (if (seq properties)
-          (let [parent-classes-from-properties (->> (select-keys properties (:property-parent-classes user-options))
-                                                    (mapcat (fn [[_k v]] (if (coll? v) v [v])))
-                                                    distinct)]
-            ;; TODO: Mv new classes from these find-or-create-class to :classes-tx as they are the only ones
-            ;; that aren't conrolled by :classes-tx
-            (cond-> block
-              (seq parent-classes-from-properties)
-              (merge (find-or-create-class db ((some-fn ::original-title :block/title) block) (:all-idents import-state) block))
-              (seq parent-classes-from-properties)
-              (assoc :logseq.property/parent
-                     (let [new-class (first parent-classes-from-properties)
-                           class-m (find-or-create-class db new-class (:all-idents import-state))]
-                       (when (> (count parent-classes-from-properties) 1)
-                         (log-fn :skipped-parent-classes "Only one parent class is allowed so skipped ones after the first one" :classes parent-classes-from-properties))
-                       (merge class-m
-                              {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m))})))))
-          (dissoc block* :block/properties))
+        (if-let [parent-classes-from-properties (->> (select-keys properties (:property-parent-classes user-options))
+                                                     (mapcat (fn [[_k v]] (if (coll? v) v [v])))
+                                                     distinct
+                                                     seq)]
+          (let [_ (swap! (:classes-from-property-parents import-state) conj (:block/title block*))
+                class-m (find-or-create-class db ((some-fn ::original-title :block/title) block) (:all-idents import-state) block)
+                class-m' (-> block
+                             (merge class-m)
+                             (assoc :logseq.property/parent
+                                    (let [new-class (first parent-classes-from-properties)
+                                          class-m (find-or-create-class db new-class (:all-idents import-state))
+                                          class-m' (merge class-m
+                                                          {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m))})]
+                                      (when (> (count parent-classes-from-properties) 1)
+                                        (log-fn :skipped-parent-classes "Only one parent class is allowed so skipped ones after the first one" :classes parent-classes-from-properties))
+                                      (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
+                                      [:block/uuid (:block/uuid class-m')])))]
+            class-m')
+          block)
         block'' (replace-namespace-with-parent block' page-names-to-uuids)]
     {:block block'' :properties-tx properties-tx}))
 
@@ -915,7 +916,7 @@
   "Returns a map of unique page names mapped to their uuids. The page names
    are in a format that is compatible with extract/extract e.g. namespace pages have
    their full hierarchy in the name"
-  [db]
+  [db classes-from-property-parents]
   (->> db
        ;; don't fetch built-in as that would give the wrong entity if a user used
        ;; a db-only built-in property name e.g. description
@@ -924,6 +925,8 @@
        (map #(d/entity db %))
        (map #(vector
               (if-let [parents (and (or (ldb/internal-page? %) (ldb/class? %))
+                                    ;; These classes have parents now but don't in file graphs (and in extract)
+                                    (not (contains? classes-from-property-parents (:block/title %)))
                                     (->> (ldb/get-page-parents %)
                                          (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
                                          seq))]
@@ -1000,7 +1003,7 @@
                         ;; remove file path relative
                         (map #(dissoc % :block/file)))
         ;; Fetch all named ents once per import file to speed up named lookups
-        all-existing-page-uuids (get-all-existing-page-uuids @conn)
+        all-existing-page-uuids (get-all-existing-page-uuids @conn @(:classes-from-property-parents import-state))
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
         all-new-page-uuids (->> all-pages
                                 (remove #(all-existing-page-uuids (or (::original-name %) (:block/name %))))
@@ -1110,6 +1113,8 @@
    :property-schemas (atom {})
    ;; Map of property or class names (keyword) to db-ident keywords
    :all-idents (atom {})
+   ;; Set of children pages turned into classes by :property-parent-classes option
+   :classes-from-property-parents (atom #{})
    ;; Map of block uuids to their :block/properties-text-values value.
    ;; Used if a property value changes to :default
    :block-properties-text-values (atom {})})
@@ -1262,7 +1267,7 @@
 (defn- clean-extra-invalid-tags
   "If a page/class tx is an existing property or a new or existing class, ensure that
   it only has one tag by removing :logseq.class/Page from its tx"
-  [db pages-tx' classes-tx]
+  [db pages-tx' classes-tx existing-pages]
   ;; TODO: Improve perf if we tracked all created classes in atom
   (let [existing-classes (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
                               (map #(d/entity db (:e %)))
@@ -1273,7 +1278,13 @@
         existing-properties (->> (d/datoms db :avet :block/tags :logseq.class/Property)
                                  (map #(d/entity db (:e %)))
                                  (map :block/uuid)
-                                 set)]
+                                 set)
+        existing-pages' (set/map-invert existing-pages)
+        retract-page-tag-from-existing-pages
+        (->> pages-tx'
+             ;; Existing pages that have converted to property or class
+             (filter #(and (:db/ident %) (get existing-pages' (:block/uuid %))))
+             (mapv #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)))]
     {:pages-tx
      (mapv (fn [page]
              (if (or (contains? classes (:block/uuid page))
@@ -1281,9 +1292,10 @@
                (update page :block/tags (fn [tags] (vec (remove #(= % :logseq.class/Page) tags))))
                page))
            pages-tx')
-     :retract-page-tag-from-classes-tx
-     (mapv #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)
-           classes-tx)}))
+     :retract-page-tags-tx
+     (into (mapv #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)
+                 classes-tx)
+           retract-page-tag-from-existing-pages)}))
 
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
@@ -1326,8 +1338,8 @@
         main-props-tx-report (d/transact! conn property-pages-tx {::new-graph? true})
 
         classes-tx @(:classes-tx tx-options)
-        {:keys [retract-page-tag-from-classes-tx] pages-tx'' :pages-tx} (clean-extra-invalid-tags @conn pages-tx' classes-tx)
-        classes-tx' (concat classes-tx retract-page-tag-from-classes-tx)
+        {:keys [retract-page-tags-tx] pages-tx'' :pages-tx} (clean-extra-invalid-tags @conn pages-tx' classes-tx existing-pages)
+        classes-tx' (concat classes-tx retract-page-tags-tx)
         ;; Build indices
         pages-index (->> (map #(select-keys % [:block/uuid]) pages-tx'')
                          (concat (map #(select-keys % [:block/uuid]) classes-tx))

@@ -1,15 +1,16 @@
 (ns frontend.components.server
   (:require
    [clojure.string :as string]
-   [logseq.shui.ui :as shui]
-   [rum.core :as rum]
    [electron.ipc :as ipc]
+   [frontend.handler.notification :as notification]
+   [frontend.hooks :as hooks]
+   [frontend.state :as state]
+   [frontend.ui :as ui]
+   [frontend.util :as util]
+   [logseq.shui.ui :as shui]
    [medley.core :as medley]
    [promesa.core :as p]
-   [frontend.state :as state]
-   [frontend.util :as util]
-   [frontend.handler.notification :as notification]
-   [frontend.ui :as ui]))
+   [rum.core :as rum]))
 
 (rum/defcs panel-of-tokens
   < rum/reactive
@@ -124,7 +125,7 @@
 (rum/defc server-indicator
   [server-state]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (p/let [_ (p/delay 1000)
              _ (ipc/ipc :server/load-state)]
@@ -138,7 +139,7 @@
         running? (= :running status)
         href     (and running? (str "http://" (:host server-state) ":" (:port server-state)))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      #(when error
         (notification/show! (str "[Server] " error) :error))
      [error])

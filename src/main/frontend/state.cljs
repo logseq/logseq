@@ -2035,7 +2035,7 @@ Similar to re-frame subscriptions"
   ([theme?] (get-enabled?-installed-plugins theme? true false false))
   ([theme? enabled? include-unpacked? include-all?]
    (filterv
-    #(and (if include-unpacked? true (:iir %))
+    #(and (if include-unpacked? true (or (:webMode %) (:iir %)))
           (if-not (boolean? enabled?) true (= (not enabled?) (boolean (get-in % [:settings :disabled]))))
           (or include-all? (if (boolean? theme?) (= (boolean theme?) (:theme %)) true)))
     (vals (:plugin/installed-plugins @state)))))

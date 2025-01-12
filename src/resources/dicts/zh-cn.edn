@@ -289,6 +289,7 @@
  :plugin/checking-for-updates "正在检查插件更新 ..."
  :plugin/list-of-updates "可用的插件更新: "
  :plugin/auto-check-for-updates "是否自动检查更新"
+ :plugin/load-from-web-url "通过URL载入插件"
  :plugin.install-from-file/menu-title "从 plugins.edn 安装"
  :plugin.install-from-file/title "从 plugins.edn 配置中安装插件"
  :plugin.install-from-file/notice "以下插件会替换已安装的插件:"

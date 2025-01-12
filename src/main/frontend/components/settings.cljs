@@ -21,6 +21,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.hooks :as hooks]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
@@ -1174,7 +1175,7 @@
   < rum/static
   [active]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [active (and (sequential? active) (name (first active)))
            ^js ds (.-dataset js/document.body)]

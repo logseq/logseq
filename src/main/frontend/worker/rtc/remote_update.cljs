@@ -4,15 +4,16 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.common.schema-register :as sr]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
+            [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.clj-fractional-indexing :as index]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
@@ -22,9 +23,10 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]))
 
-(sr/defkeyword ::need-pull-remote-data
-  "remote-update's :remote-t-before > :local-tx,
-   so need to pull earlier remote-data from websocket.")
+(defkeywords
+  ::need-pull-remote-data {:doc "
+remote-update's :remote-t-before > :local-tx,
+so need to pull earlier remote-data from websocket."})
 
 (defmulti ^:private transact-db! (fn [action & _args] action))
 
@@ -372,7 +374,7 @@
     :property.value/content})
 
 (def ^:private watched-attr-ns
-  (conj db-property/logseq-property-namespaces "logseq.class" "logseq.kv"))
+  (conj db-property/logseq-property-namespaces "logseq.class"))
 
 (defn- update-op-watched-attr?
   [attr]
@@ -556,7 +558,7 @@
   "Apply remote-update(`remote-update-event`)"
   [graph-uuid repo conn date-formatter remote-update-event add-log-fn]
   (let [remote-update-data (:value remote-update-event)]
-    (assert (rtc-const/data-from-ws-validator remote-update-data) remote-update-data)
+    (assert (rtc-schema/data-from-ws-validator remote-update-data) remote-update-data)
     (let [remote-t (:t remote-update-data)
           remote-t-before (:t-before remote-update-data)
           local-tx (client-op/get-local-tx repo)]
@@ -591,7 +593,7 @@
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
                                              :persist-op? false
                                              :gen-undo-ops? false
-                                             :skip-store-conn rtc-const/RTC-E2E-TEST}
+                                             :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST}
             (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo conn refed-blocks))
             (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
             (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))

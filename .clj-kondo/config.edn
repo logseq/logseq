@@ -12,6 +12,7 @@
 
  :linters
  {:path-invalid-construct/string-join {:level :info}
+  :defkeywords/invalid-arg {:level :warning}
   :regex-checks/double-escaped-regex {:level :warning}
   :aliased-namespace-symbol {:level :warning}
   :shadowed-var {:level :warning
@@ -34,7 +35,11 @@
   :discouraged-namespace
   {logseq.db.sqlite.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
    logseq.outliner.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}}
-
+  :discouraged-var
+  {rum.core/use-effect! {:message "Use frontend.hooks/use-effect! instead" :level :info}
+   rum.core/use-memo {:message "Use frontend.hooks/use-memo instead" :level :info}
+   rum.core/use-layout-effect! {:message "Use frontend.hooks/use-layout-effect! instead" :level :info}
+   rum.core/use-callback {:message "Use frontend.hooks/use-callback instead" :level :info}}
   :unused-namespace {:level :warning
                      :exclude [logseq.db.frontend.entity-plus]}
 
@@ -122,6 +127,7 @@
              frontend.handler.route route-handler
              frontend.handler.search search-handler
              frontend.handler.ui ui-handler
+             frontend.hooks hooks
              frontend.idb idb
              frontend.loader loader
              frontend.mixins mixins
@@ -199,7 +205,8 @@
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
                         rum.core/defcs hooks.rum/defcs
                         clojure.string/join hooks.path-invalid-construct/string-join
-                        clojure.string/replace hooks.regex-checks/double-escaped-regex}}
+                        clojure.string/replace hooks.regex-checks/double-escaped-regex
+                        logseq.common.defkeywords/defkeywords hooks.defkeywords/defkeywords}}
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur
@@ -215,7 +222,7 @@
            frontend.test.helper/deftest-async clojure.test/deftest
            frontend.worker.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
            frontend.react/defc clojure.core/defn
-           frontend.common.schema-register/defkeyword cljs.spec.alpha/def}
+           logseq.common.defkeywords/defkeyword cljs.spec.alpha/def}
  :skip-comments true
  :output {:progress true
           :exclude-files ["src/test/docs-0.10.9/"]}}

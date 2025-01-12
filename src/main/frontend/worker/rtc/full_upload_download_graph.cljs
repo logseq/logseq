@@ -78,7 +78,7 @@
     db-schema)))
 
 (defn- export-as-blocks
-  [db]
+  [db & {:keys [ignore-attr-set ignore-entity-set]}]
   (let [datoms (d/datoms db :eavt)
         db-schema (d/schema db)
         card-many-attrs (schema->card-many-attrs db-schema)
@@ -92,18 +92,24 @@
                       (when (and (contains? #{:block/parent} (:a datom))
                                  (not (pos-int? (:v datom))))
                         (throw (ex-info "invalid block data" {:datom datom})))
-                      (let [a (:a datom)
-                            card-many? (contains? card-many-attrs a)
-                            ref? (contains? ref-type-attrs a)]
-                        (case [ref? card-many?]
-                          [true true]
-                          (update r a conj (str (:v datom)))
-                          [true false]
-                          (assoc r a (str (:v datom)))
-                          [false true]
-                          (update r a conj (ldb/write-transit-str (:v datom)))
-                          [false false]
-                          (assoc r a (ldb/write-transit-str (:v datom))))))
+                      (let [a (:a datom)]
+                        (cond
+                          (contains? ignore-attr-set a) r
+                          (and (keyword-identical? :db/ident a)
+                               (contains? ignore-entity-set (:v datom)))
+                          (reduced nil)
+                          :else
+                          (let [card-many? (contains? card-many-attrs a)
+                                ref? (contains? ref-type-attrs a)]
+                            (case [ref? card-many?]
+                              [true true]
+                              (update r a conj (str (:v datom)))
+                              [true false]
+                              (assoc r a (str (:v datom)))
+                              [false true]
+                              (update r a conj (ldb/write-transit-str (:v datom)))
+                              [false false]
+                              (assoc r a (ldb/write-transit-str (:v datom))))))))
                     {:db/id (str (:e (first datoms)))}
                     datoms))))
          (map (fn [block]
@@ -122,7 +128,10 @@
             vector
             (ws-util/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
             (m/sp
-              (let [all-blocks (export-as-blocks @conn)]
+              (let [all-blocks (export-as-blocks
+                                @conn
+                                :ignore-attr-set rtc-const/ignore-attrs-when-init-upload
+                                :ignore-entity-set rtc-const/ignore-entities-when-init-upload)]
                 (ldb/write-transit-str all-blocks)))))]
       (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-data
                                                   :message "uploading data"})
@@ -209,7 +218,7 @@
                           :block/refs refs})))
                    datoms)]
       (ldb/transact! conn refs-tx (cond-> {:outliner-op :rtc-download-rebuild-block-refs}
-                                    rtc-const/RTC-E2E-TEST (assoc :skip-store-conn true))))))
+                                    rtc-const/RTC-E2E-TEST (assoc :frontend.worker.pipeline/skip-store-conn true))))))
 
 (defn- block->schema-map
   [block]
@@ -239,17 +248,18 @@
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
         db-initial-data (sqlite-create-graph/build-db-initial-data "")]
     (swap! worker-state/*datascript-conns assoc repo conn)
-    (d/transact! conn db-initial-data {:initial-db? true :skip-store-conn rtc-const/RTC-E2E-TEST})
+    (d/transact! conn db-initial-data {:initial-db? true
+                                       :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST})
     (db-listener/listen-db-changes! repo conn)
     (d/transact! conn init-tx-data {:rtc-download-graph? true
                                     :gen-undo-ops? false
                                     ;; only transact db schema, skip validation to avoid warning
-                                    :skip-validate-db? true
-                                    :skip-store-conn rtc-const/RTC-E2E-TEST
+                                    :frontend.worker.pipeline/skip-validate-db? true
+                                    :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST
                                     :persist-op? false})
     (d/transact! conn other-tx-data {:rtc-download-graph? true
                                      :gen-undo-ops? false
-                                     :skip-store-conn rtc-const/RTC-E2E-TEST
+                                     :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST
                                      :persist-op? false})
     (transact-block-refs! repo)))
 
@@ -268,32 +278,49 @@
                               (assoc :db/ident ident)))) ids)
         id-ref-exists? (fn [v] (and (string? v) (or (get id->ident v) (get id->uuid v))))
         blocks-tx-data (map (fn [block]
-                              (->> (map (fn [[k v]]
-                                          (let [v (cond
-                                                    (id-ref-exists? v)
-                                                    (or (get id->ident v) [:block/uuid (get id->uuid v)])
+                              (->> (map
+                                    (fn [[k v]]
+                                      (let [v (cond
+                                                (id-ref-exists? v)
+                                                (or (get id->ident v) [:block/uuid (get id->uuid v)])
 
-                                                    (and (sequential? v) (every? id-ref-exists? v))
-                                                    (map (fn [id] (or (get id->ident id) [:block/uuid (get id->uuid id)])) v)
+                                                (and (sequential? v) (every? id-ref-exists? v))
+                                                (map (fn [id] (or (get id->ident id) [:block/uuid (get id->uuid id)])) v)
 
-                                                    :else
-                                                    v)]
-                                            [k v])) (dissoc block :db/id))
+                                                :else
+                                                v)]
+                                        [k v]))
+                                    (dissoc block :db/id))
                                    (into {}))) blocks)]
     (concat id-tx-data blocks-tx-data)))
 
-(defn- new-task--transact-remote-all-blocks
-  [all-blocks repo graph-uuid]
+(defn- remote-all-blocks=>client-blocks+t
+  [all-blocks ignore-attr-set ignore-entity-set]
   (let [{:keys [t blocks]} all-blocks
         card-one-attrs (blocks->card-one-attrs blocks)
         blocks1 (worker-util/profile :convert-card-one-value-from-value-coll
                                      (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
         blocks2 (worker-util/profile :normalize-remote-blocks
                                      (normalized-remote-blocks-coercer blocks1))
-        ;;TODO: remove this, client/schema already converted to :db/cardinality, :db/valueType by remote,
-        ;; and :client/schema should be removed by remote too
-        blocks (map #(dissoc % :client/schema) blocks2)
-        blocks (fill-block-fields blocks)
+        blocks (sequence
+                (comp
+                 ;;TODO: remove this
+                 ;;client/schema already converted to :db/cardinality, :db/valueType by remote,
+                 ;;and :client/schema should be removed by remote too
+                 (map #(dissoc % :client/schema))
+                 (remove (fn [block] (contains? ignore-entity-set (:db/ident block))))
+                 (map (fn [block]
+                        (into {} (remove (comp (partial contains? ignore-attr-set) first)) block))))
+                blocks2)
+        blocks (fill-block-fields blocks)]
+    {:blocks blocks :t t}))
+
+(defn- new-task--transact-remote-all-blocks
+  [all-blocks repo graph-uuid]
+  (let [{:keys [t blocks]} (remote-all-blocks=>client-blocks+t
+                            all-blocks
+                            rtc-const/ignore-attrs-when-init-download
+                            rtc-const/ignore-entities-when-init-download)
         [schema-blocks normal-blocks] (blocks->schema-blocks+normal-blocks blocks)
         tx-data (concat
                  (blocks-resolve-temp-id normal-blocks)
@@ -313,8 +340,8 @@
           (.exportDB worker-obj repo)
           (.transact worker-obj repo init-tx-data {:rtc-download-graph? true
                                                    :gen-undo-ops? false
-                                                     ;; only transact db schema, skip validation to avoid warning
-                                                   :skip-validate-db? true
+                                                    ;; only transact db schema, skip validation to avoid warning
+                                                   :frontend.worker.pipeline/skip-validate-db? true
                                                    :persist-op? false} (worker-state/get-context))
           (.transact worker-obj repo tx-data {:rtc-download-graph? true
                                               :gen-undo-ops? false

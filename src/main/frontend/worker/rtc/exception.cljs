@@ -1,43 +1,26 @@
 (ns frontend.worker.rtc.exception
   "Exception list"
-  (:require [frontend.common.schema-register :include-macros true :as sr]))
+  (:require [logseq.common.defkeywords :refer [defkeywords]]))
 
-(sr/defkeyword :rtc.exception/remote-graph-not-exist
-  "Remote exception. e.g. push client-updates to a deleted graph.")
-
-(sr/defkeyword :rtc.exception/remote-graph-not-ready
-  "Remote exception. Remote graph is still creating.")
-
-(sr/defkeyword :rtc.exception/remote-graph-lock-missing
-  "Remote exception. Failed to remote graph lock isn't exist.
-It's a server internal error, shouldn't happen.")
-
-(sr/defkeyword :rtc.exception/not-rtc-graph
-  "Local exception. Trying to start rtc loop on a local-graph.")
-
-(sr/defkeyword :rtc.exception/lock-failed
-  "Local exception.
-Trying to start rtc loop but there's already one running, need to cancel that one first.")
-
-(sr/defkeyword :rtc.exception/not-found-db-conn
-  "Local exception. Cannot find db-conn by repo")
-
-(sr/defkeyword :rtc.exception/get-s3-object-failed
-  "Failed to fetch response from s3.
+(defkeywords
+  :rtc.exception/remote-graph-not-exist {:doc "Remote exception. e.g. push client-updates to a deleted graph."}
+  :rtc.exception/remote-graph-not-ready {:doc "Remote exception. Remote graph is still creating."}
+  :rtc.exception/remote-graph-lock-missing {:doc "
+Remote exception. Failed to remote graph lock isn't exist.
+It's a server internal error, shouldn't happen."}
+  :rtc.exception/not-rtc-graph {:doc "Local exception. Trying to start rtc loop on a local-graph."}
+  :rtc.exception/lock-failed {:doc "
+Local exception.
+Trying to start rtc loop but there's already one running, need to cancel that one first."}
+  :rtc.exception/not-found-db-conn {:doc "Local exception. Cannot find db-conn by repo"}
+  :rtc.exception/get-s3-object-failed {:doc "
+Failed to fetch response from s3.
 When response from remote is too huge(> 32KB),
-the server will put it to s3 and return its presigned-url to clients.")
-
-(sr/defkeyword :rtc.exception/different-graph-skeleton
-  "remote graph skeleton data is different from local's.")
-
-(sr/defkeyword :rtc.exception/bad-request-body
-  "bad request body, rejected by server-schema")
-
-(sr/defkeyword :rtc.exception/not-allowed
-  "this api-call is not allowed")
-
-(sr/defkeyword :rtc.exception/ws-timeout
-  "websocket timeout")
+the server will put it to s3 and return its presigned-url to clients."}
+  :rtc.exception/different-graph-skeleton {:doc "remote graph skeleton data is different from local's."}
+  :rtc.exception/bad-request-body {:doc "bad request body, rejected by server-schema"}
+  :rtc.exception/not-allowed {:doc "this api-call is not allowed"}
+  :rtc.exception/ws-timeout {:doc "websocket timeout"})
 
 (def ex-remote-graph-not-exist
   (ex-info "remote graph not exist" {:type :rtc.exception/remote-graph-not-exist}))

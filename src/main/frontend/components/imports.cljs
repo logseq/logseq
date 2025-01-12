@@ -16,6 +16,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.hooks :as hooks]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -429,7 +430,7 @@
 
 (rum/defc import-indicator
   [importing?]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (when (and importing? (not (shui-dialog/get-modal :import-indicator)))
        (shui/dialog-open! indicator-progress

@@ -17,6 +17,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -56,7 +57,8 @@
 (rum/defc header-index < rum/static
   []
   [:label.h-8.w-6.flex.items-center.justify-center
-   {:html-for "header-index"}
+   {:html-for "header-index"
+    :title "Row number"}
    "ID"])
 
 (rum/defc row-checkbox < rum/static
@@ -334,14 +336,14 @@
         add-resizing-class #(dom/add-class! js/document.documentElement "is-resizing-buf")
         remove-resizing-class #(dom/remove-class! js/document.documentElement "is-resizing-buf")]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (number? dx)
          (some-> (rum/deref *el)
                  (dom/set-style! :transform (str "translate3D(" dx "px , 0, 0)")))))
      [dx])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [el (and (fn? js/window.interact) (rum/deref *el))]
          (let [*field-rect (atom nil)
@@ -398,7 +400,7 @@
                (.on "mousedown" util/stop-propagation)))))
      [])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (number? width)
          (on-sized! width)))
@@ -455,7 +457,7 @@
   [table row column render cell-opts idx first-col-rendered? set-first-col-rendered!]
   (let [primary-key? (or (= idx 1) (= (:id column) :block/title))]
     (when primary-key?
-      (rum/use-effect!
+      (hooks/use-effect!
        (fn []
          (let [timeout (js/setTimeout #(set-first-col-rendered! true) 0)]
            #(js/clearTimeout timeout)))
@@ -1084,7 +1086,7 @@
         [ready? set-ready?] (rum/use-state false)
         *rows-wrap (rum/use-ref nil)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn [] (set-ready? true))
      [])
 
@@ -1157,7 +1159,7 @@
   [option {:keys [data columns state data-fns]} input input-filters set-input-filters! *scroller-ref gallery?]
   (let [{:keys [filters sorting]} state
         {:keys [set-row-filter! set-data!]} data-fns]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [new-input-filters [input filters]]
          (when-not (= input-filters new-input-filters)
@@ -1168,7 +1170,7 @@
                 (row-matched? row input filters)))))))
      [input filters])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        ;; Entities might be outdated
        (let [;; TODO: should avoid this for better performance, 300ms for 40k pages

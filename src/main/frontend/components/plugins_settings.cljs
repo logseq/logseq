@@ -3,6 +3,7 @@
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.hooks :as hooks]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
@@ -119,7 +120,7 @@
         [edit-mode, set-edit-mode!] (rum/use-state nil) ;; code
         update-setting! (fn [k v] (.set plugin-settings (name k) (bean/->js v)))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [on-change (fn [^js s]
                          (when-let [s (bean/->clj s)]

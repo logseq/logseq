@@ -11,6 +11,7 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.query.builder :as query-builder]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -145,7 +146,7 @@
         properties (cond->> properties
                      (not @*private-property?)
                      (remove ldb/built-in?))]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (p/let [properties (db-async/<get-all-properties {:remove-built-in-property? false
                                                          :remove-non-queryable-built-in-property? true})]
@@ -206,7 +207,7 @@
         property-type (when db-graph? (:property/type (db/entity repo @*property)))
         ref-property? (and db-graph? (contains? db-property-type/all-ref-property-types property-type))
         [values set-values!] (rum/use-state nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (p/let [result (if db-graph?
                         (db-async/<get-block-property-values repo @*property)
@@ -225,7 +226,7 @@
   [repo *tree opts loc]
   (let [[values set-values!] (rum/use-state nil)
         db-based? (config/db-based-graph? repo)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [result (db-model/get-all-readable-classes repo {:except-root-class? true})]
          (set-values! result)))

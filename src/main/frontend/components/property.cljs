@@ -18,6 +18,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -148,7 +149,7 @@
   (let [[properties set-properties!] (rum/use-state nil)
         [classes set-classes!] (rum/use-state nil)
         [excluded-properties set-excluded-properties!] (rum/use-state nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (p/let [repo (state/get-current-repo)
                properties (db-async/<db-based-get-all-properties repo)
@@ -689,6 +690,10 @@
            (let [properties (->> (:logseq.property.class/properties block)
                                  (map (fn [e] [(:db/ident e)])))
                  opts' (assoc opts :class-schema? true)]
-             [:div
-              (properties-section block properties opts')
-              (rum/with-key (new-property block opts') (str id "-class-add-property"))]))]))))
+             [:<>
+              [:div.mt-2
+               [:div.text-sm.text-muted-foreground.mb-2 {:style {:margin-left 10}}
+                "Tag Properties:"]
+               [:div
+                (properties-section block properties opts')
+                (rum/with-key (new-property block opts') (str id "-class-add-property"))]]]))]))))
