@@ -152,7 +152,7 @@
 (defn db-rebuild-block-refs
   "Rebuild block refs for DB graphs"
   [db block]
-  (let [private-built-in-props (set (keep (fn [[k v]] (when-not (:property/public? v) k))
+  (let [private-built-in-props (set (keep (fn [[k v]] (when-not (get-in v [:schema :public?]) k))
                                           db-property/built-in-properties))
         ;; explicit lookup in order to be nbb compatible
         properties (->
