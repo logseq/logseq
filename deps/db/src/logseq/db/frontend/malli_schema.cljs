@@ -138,6 +138,7 @@
        (reduce (fn [m [k v]]
                  (if-let [property (and (db-property/property? k)
                                         (not (contains? exceptions-to-block-properties k))
+                                        (not= (namespace k) "property")
                                         (d/entity db k))]
                    (update m :block/properties (fnil conj [])
                            [(property-entity->map property) v])
@@ -197,7 +198,7 @@
 
 (assert (every? #(re-find #"^(block|logseq\.)" (namespace %)) db-property/db-attribute-properties)
         "All db-attribute idents start with an internal namespace")
-(assert (every? #(or (re-find #"^logseq\." %) (= "property" %)) logseq-ident-namespaces)
+(assert (every? #(or (re-find #"^logseq\." %) (contains? #{"property"} %)) logseq-ident-namespaces)
         "All logseq idents start with an internal namespace")
 
 ;; Main malli schemas
@@ -267,7 +268,7 @@
    [:db/valueType {:optional true} [:enum :db.type/ref]]
    [:db/cardinality {:optional true} [:enum :db.cardinality/many :db.cardinality/one]]
    [:block/order {:optional true} block-order]
-   [:property/schema.classes {:optional true} [:set :int]]])
+   [:property/classes {:optional true} [:set :int]]])
 
 (def normal-page
   (vec
@@ -289,6 +290,7 @@
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
   [[:property/hide? {:optional true} :boolean]
+   [:property/public? {:optional true} :boolean]
    [:property/ui-position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
 
 (def internal-property
@@ -298,7 +300,6 @@
      [:db/ident internal-property-ident]
      [:property/type (apply vector :enum (into db-property-type/internal-built-in-property-types
                                                db-property-type/user-built-in-property-types))]
-     [:property/public? {:optional true} :boolean]
      [:property/view-context {:optional true} [:enum :page :block :class :property :never]]]
     property-common-schema-attrs
     property-attrs
@@ -362,7 +363,7 @@
   (vec
    (concat
     [:map]
-    [[:property.value/content [:or :string :double :boolean]]
+    [[:property/value [:or :string :double :boolean]]
      [:logseq.property/created-from-property :int]]
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
@@ -394,7 +395,7 @@
     [;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
      [:block/title {:optional true} :string]
-     [:property.value/content {:optional true} [:or :string :double]]
+     [:property/value {:optional true} [:or :string :double]]
      [:logseq.property/created-from-property :int]
      [:block/closed-value-property {:optional true} [:set :int]]]
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
@@ -403,10 +404,10 @@
 (def closed-value-block
   "A closed value for a property with closed/allowed values"
   [:and closed-value-block*
-   [:fn {:error/message ":block/title or :property.value/content required"
-         :error/path [:property.value/content]}
+   [:fn {:error/message ":block/title or :property/value required"
+         :error/path [:property/value]}
     (fn [m]
-      (or (:block/title m) (:property.value/content m)))]])
+      (or (:block/title m) (:property/value m)))]])
 
 (def normal-block
   "A block with content and no special type or tag behavior"
@@ -484,7 +485,7 @@
                        :closed-value-block
 
                        (and (:logseq.property/created-from-property d)
-                            (:property.value/content d))
+                            (:property/value d))
                        :property-value-block
 
                        (:block/uuid d)

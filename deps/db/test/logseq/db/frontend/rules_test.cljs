@@ -44,7 +44,7 @@
                               @conn)
                 (map (comp :block/title first))))
         "has-property returns no result when block doesn't have property")
-    (is (= [:user.property/foo :block/tags]
+    (is (= [:block/tags :user.property/foo]
            (q-with-rules '[:find [?p ...]
                            :where (has-property ?b ?p) [?b :block/title "Page1"]]
                          @conn))

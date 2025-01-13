@@ -228,13 +228,13 @@
 
     (testing "Add choice successfully"
       (let [_ (outliner-property/upsert-closed-value! conn :user.property/num {:value 3})
-            b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :property.value/content 3]] @conn))]
+            b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :property/value 3]] @conn))]
         (is (ldb/closed-value? (d/entity @conn (:db/id b))))
         (is (= [2 3]
                (map db-property/closed-value-content (:block/_closed-value-property (d/entity @conn :user.property/num)))))))
 
     (testing "Update choice successfully"
-      (let [b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :property.value/content 2]] @conn))
+      (let [b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :property/value 2]] @conn))
             _ (outliner-property/upsert-closed-value! conn :user.property/num {:id (:block/uuid b)
                                                                                :value 4
                                                                                :description "choice 4"})

@@ -370,8 +370,8 @@ so need to pull earlier remote-data from websocket."})
     :block/tags
     :block/link
     :block/journal-day
-    :property/schema.classes
-    :property.value/content})
+    :property/classes
+    :property/value})
 
 (def ^:private watched-attr-ns
   (conj db-property/logseq-property-namespaces "logseq.class"))

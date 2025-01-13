@@ -236,7 +236,7 @@
           :where
           [?b ?property-id ?v]
           (or [?v :block/title ?raw-value]
-              [?v :property.value/content ?raw-value])]
+              [?v :property/value ?raw-value])]
         db
         property-id
         raw-value)))
@@ -504,7 +504,7 @@
                       {:block/uuid id
                        :block/closed-value-property (:db/id property)}
                       (if (db-property-type/property-value-content? (:property/type block) property)
-                        {:property.value/content resolved-value}
+                        {:property/value resolved-value}
                         {:block/title resolved-value})))
                      icon
                      (assoc :logseq.property/icon icon))]

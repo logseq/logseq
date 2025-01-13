@@ -8,7 +8,6 @@
 (def ^:large-vars/data-var schema
   {:db/ident        {:db/unique :db.unique/identity}
    :kv/value       {}
-
    :recent/pages {}
 
    ;; :block/type is a string type of the current block

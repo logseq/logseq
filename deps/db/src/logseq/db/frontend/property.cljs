@@ -28,7 +28,7 @@
                                                    (or (:db/id property) {:db/ident (:db/ident property)}))
           :block/order (db-order/gen-key)}
          (if (db-property-type/property-value-content? (:property/type property) property)
-           {:property.value/content value}
+           {:property/value value}
            {:block/title value}))
         common-util/block-with-timestamps)))
 
@@ -73,16 +73,14 @@
      :property/ui-position {:title "Property position"
                             :schema {:type :keyword
                                      :hide? true}}
-     :logseq.property.attribute/property-schema-classes
+     :property/classes
      {:title "Property classes"
-      :attribute :property/schema.classes
       :schema {:type :entity
                :cardinality :many
                :public? false
                :hide? true}}
-     :logseq.property.attribute/property-value-content
+     :property/value
      {:title "Property value"
-      :attribute :property.value/content
       :schema {:type :any
                :public? false
                :hide? true}}
@@ -101,11 +99,6 @@
                                      :public? true
                                      :classes #{:logseq.class/Root}}
                             :queryable? true}
-     :logseq.property.attribute/kv-value {:title "KV value"
-                                          :attribute :kv/value
-                                          :schema {:type :any
-                                                   :public? false
-                                                   :hide? true}}
      :block/parent         {:title "Node parent"
                             :attribute :block/parent
                             :schema {:type :entity
@@ -601,13 +594,10 @@
     :block/order :block/collapsed? :block/page
     :block/refs :block/path-refs :block/link
     :block/title :block/closed-value-property
-    :block/created-at :block/updated-at
-    :logseq.property.attribute/kv-value
-    :logseq.property.attribute/property-schema-classes
-    :logseq.property.attribute/property-value-content})
+    :block/created-at :block/updated-at})
 
 (assert (= db-attribute-properties
-           (set (keep (fn [[k {:keys [attribute]}]] (when attribute k))
+           (set (keep (fn [[_k {:keys [attribute]}]] (when attribute attribute))
                       built-in-properties)))
         "All db attribute properties are configured in built-in-properties")
 
@@ -688,14 +678,14 @@
   "Gets content/value of a given closed value ent/map. Works for all closed value types"
   [ent]
   (or (:block/title ent)
-      (:property.value/content ent)))
+      (:property/value ent)))
 
 (defn property-value-content
   "Given an entity, gets the content for the property value of a ref type
   property i.e. what the user sees. For page types the content is the page name"
   [ent]
   (or (:block/title ent)
-      (:property.value/content ent)))
+      (:property/value ent)))
 
 (defn ref->property-value-content
   "Given a ref from a pulled query e.g. `{:db/id X}`, gets a readable name for

@@ -364,7 +364,7 @@
   (let [ents (remove #(db-malli-schema/internal-ident? (:db/ident %))
                      (d/q '[:find [(pull ?b [*
                                              {:logseq.property.class/properties [:block/title]}
-                                             {:property/schema.classes [:block/title]}
+                                             {:property/classes [:block/title]}
                                              {:logseq.property/parent [:block/title]}
                                              {:block/tags [:block/title]}
                                              {:block/refs [:block/title]}]) ...]
@@ -379,7 +379,7 @@
                                                     (into {}))]
                                      (cond-> (select-keys m [:block/name :block/tags :block/title :property/type :db/cardinality :db/ident
                                                              :logseq.property.class/properties :logseq.property/parent
-                                                             :db/cardinality :property/schema.classes :block/refs])
+                                                             :db/cardinality :property/classes :block/refs])
                                        (seq props)
                                        (assoc :block/properties (-> (update-keys props name)
                                                                     (dissoc "tags")
@@ -391,8 +391,8 @@
                                        (update :logseq.property.class/properties #(set (map :block/title %)))
                                        (some? (:logseq.property/parent m))
                                        (update :logseq.property/parent :block/title)
-                                       (seq (:property/schema.classes m))
-                                       (update :property/schema.classes #(set (map :block/title %)))
+                                       (seq (:property/classes m))
+                                       (update :property/classes #(set (map :block/title %)))
                                        (seq (:block/tags m))
                                        (update :block/tags #(set (map :block/title %)))
                                        (seq (:block/refs m))

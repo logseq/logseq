@@ -90,7 +90,7 @@
          (some-> (rum/deref *ref)
                  (.click))))
      [default-open?])
-    (let [schema-classes (:property/schema.classes property)]
+    (let [schema-classes (:property/classes property)]
       [:div.flex.flex-1.col-span-3
        (let [content-fn
              (fn [{:keys [id]}]
@@ -129,7 +129,7 @@
                                           (toggle-fn)
                                           (p/let [result (<create-class-if-not-exists! value)
                                                   value' (or result value)
-                                                  tx-data [[(if select? :db/add :db/retract) (:db/id property) :property/schema.classes [:block/uuid value']]]
+                                                  tx-data [[(if select? :db/add :db/retract) (:db/id property) :property/classes [:block/uuid value']]]
                                                   _ (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})]
                                             (when-not multiple-choices? (toggle-fn)))))}]
 
