@@ -777,3 +777,8 @@
   [entity]
   ;; No need to do :built-in? check yet since user properties can't set this
   (:property/public? entity))
+
+(defn get-property-schema
+  [property-m]
+  (select-keys property-m [:db/cardinality :property/type :property/hide?
+                           :property/public? :property/view-context :property/ui-position]))

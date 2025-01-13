@@ -54,7 +54,7 @@
   "Builds all the tx needed for property with closed values including
    the hidden page and closed value blocks as needed"
   [db-ident prop-name property {:keys [property-attributes properties]}]
-  (let [property-schema (:block/schema property)
+  (let [property-schema (:schema property)
         property-tx (merge (sqlite-util/build-new-property db-ident property-schema {:title prop-name
                                                                                      :ref-type? true
                                                                                      :properties properties})

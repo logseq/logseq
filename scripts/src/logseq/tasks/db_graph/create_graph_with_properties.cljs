@@ -2,18 +2,18 @@
   "Script that generates all the permutations of property types and cardinality.
    Also creates a page of queries that exercises most properties
    NOTE: This script is also used in CI to confirm graph creation works"
-  (:require [logseq.outliner.cli :as outliner-cli]
-            [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [clojure.string :as string]
+  (:require ["os" :as os]
+            ["path" :as node-path]
+            [babashka.cli :as cli]
             [clojure.edn :as edn]
             [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
-            ["path" :as node-path]
-            ["os" :as os]
-            [babashka.cli :as cli]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]))
 
@@ -168,16 +168,17 @@
      :properties
      (->> db-property-type/user-built-in-property-types
           (mapcat #(cond-> (if (= :node %)
-                             [[% {:block/schema {:type %} :build/schema-classes [:TestClass]}]
-                              [:node-without-classes {:block/schema {:type %}}]]
-                             [[% {:block/schema {:type %}}]])
+                             [[% {:property/type % :build/schema-classes [:TestClass]}]
+                              [:node-without-classes {:property/type %}]]
+                             [[% {:property/type %}]])
                      (contains? db-property-type/cardinality-property-types %)
                      (conj [(keyword (str (name %) "-many"))
-                            (cond-> {:block/schema {:type % :cardinality :many}}
+                            (cond-> {:property/type %
+                                     :db/cardinality :many}
                               (= :node %)
                               (assoc :build/schema-classes [:TestClass]))])))
           (into (mapv #(vector (keyword (str (name %) "-closed"))
-                               {:block/schema {:type %}
+                               {:property/type %
                                 :build/closed-values (closed-values-config (keyword (str (name %) "-closed")))})
                       [:default :url :number]))
           (into {}))}))

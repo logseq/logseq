@@ -227,24 +227,24 @@
                   (remove #(db-malli-schema/internal-ident? (:db/ident %)))
                   count))
           "Correct number of user properties")
-      (is (= #{{:db/ident :user.property/prop-bool :block/schema {:type :checkbox}}
-               {:db/ident :user.property/prop-string :block/schema {:type :default}}
-               {:db/ident :user.property/prop-num :block/schema {:type :number}}
-               {:db/ident :user.property/sameas :block/schema {:type :url}}
-               {:db/ident :user.property/rangeincludes :block/schema {:type :node}}
-               {:db/ident :user.property/startedat :block/schema {:type :date}}}
+      (is (= #{{:db/ident :user.property/prop-bool :property/type :checkbox}
+               {:db/ident :user.property/prop-string :property/type :default}
+               {:db/ident :user.property/prop-num :property/type :number}
+               {:db/ident :user.property/sameas :property/type :url}
+               {:db/ident :user.property/rangeincludes :property/type :node}
+               {:db/ident :user.property/startedat :property/type :date}}
              (->> @conn
-                  (d/q '[:find [(pull ?b [:db/ident :block/schema]) ...]
+                  (d/q '[:find [(pull ?b [:db/ident :property/type]) ...]
                          :where [?b :block/tags :logseq.class/Property]])
                   (filter #(contains? #{:prop-bool :prop-string :prop-num :rangeincludes :sameas :startedat}
                                       (keyword (name (:db/ident %)))))
                   set))
           "Main property types have correct inferred :type")
       (is (= :default
-             (get-in (d/entity @conn :user.property/description) [:block/schema :type]))
+             (:property/type (d/entity @conn :user.property/description)))
           "Property value consisting of text and refs is inferred as :default")
       (is (= :url
-             (get-in (d/entity @conn :user.property/url) [:block/schema :type]))
+             (:property/type (d/entity @conn :user.property/url)))
           "Property value with a macro correctly inferred as :url")
 
       (is (= {:user.property/prop-bool true
@@ -426,14 +426,14 @@
 
     (testing "property :type changes"
       (is (= :node
-             (get-in (d/entity @conn :user.property/finishedat) [:block/schema :type]))
+             (:property/type (d/entity @conn :user.property/finishedat)))
           ":date property to :node value changes to :node")
       (is (= :node
-             (get-in (d/entity @conn :user.property/participants) [:block/schema :type]))
+             (:property/type (d/entity @conn :user.property/participants)))
           ":node property to :date value remains :node")
 
       (is (= :default
-             (get-in (d/entity @conn :user.property/description) [:block/schema :type]))
+             (:property/type (d/entity @conn :user.property/description)))
           ":default property to :node (or any non :default value) remains :default")
       (is (= "[[Jakob]]"
              (:user.property/description (readable-properties @conn (db-test/find-block-by-content @conn #":default to :node"))))
@@ -441,14 +441,14 @@
 
       (testing "with changes to upstream/existing property value"
         (is (= :default
-               (get-in (d/entity @conn :user.property/duration) [:block/schema :type]))
+               (:property/type (d/entity @conn :user.property/duration)))
             ":number property to :default value changes to :default")
         (is (= "20"
                (:user.property/duration (readable-properties @conn (db-test/find-block-by-content @conn "existing :number to :default"))))
             "existing :number property value correctly saved as :default")
 
-        (is (= {:block/schema {:type :default} :db/cardinality :db.cardinality/many}
-               (select-keys (d/entity @conn :user.property/people) [:block/schema :db/cardinality]))
+        (is (= {:property/type :default :db/cardinality :db.cardinality/many}
+               (select-keys (d/entity @conn :user.property/people) [:property/type :db/cardinality]))
             ":node property to :default value changes to :default and keeps existing cardinality")
         (is (= #{"[[Jakob]] [[Gabriel]]"}
                (:user.property/people (readable-properties @conn (db-test/find-block-by-content @conn ":node people"))))
