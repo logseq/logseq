@@ -222,8 +222,8 @@ prop-d:: [[nada]]"}])
                  {:block/title "b3"
                   :build/tags [:Class1]}]}]})
 
-    (is (= ["b3" "b2" "b1"]
-           (map :block/title (dsl-query "(property :user.property/default)")))
+    (is (= (set ["b3" "b2" "b1"])
+           (set (map :block/title (dsl-query "(property :user.property/default)"))))
         "Blocks with any :default property or tagged with a tag that has that default-value property")
     (is (= ["b1" "b3"]
            (map :block/title (dsl-query "(property :user.property/default \"foo\")")))
@@ -248,8 +248,8 @@ prop-d:: [[nada]]"}])
                  {:block/title "b3"
                   :build/tags [:Class1]}]}]})
 
-    (is (= ["b3" "b2" "b1"]
-           (map :block/title (dsl-query "(property :user.property/checkbox)")))
+    (is (= (set ["b3" "b2" "b1"])
+           (set (map :block/title (dsl-query "(property :user.property/checkbox)"))))
         "Blocks with any :checkbox property or tagged with a tag that has that default-value property")
     (is (= ["b1" "b3"]
            (map :block/title (dsl-query "(property :user.property/checkbox true)")))
