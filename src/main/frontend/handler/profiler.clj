@@ -1,4 +1,4 @@
-(ns frontend.handler.profiler)
+(ns ^:no-doc frontend.handler.profiler)
 
 (defmacro arity-n-fn
   [n f-sym]
