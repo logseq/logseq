@@ -1,7 +1,31 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import {loadLocalE2eTestsPlugin } from './logseq-api.spec'
 import { callPageAPI } from './utils'
+
+/**
+ * load local tests plugin
+ */
+export async function loadLocalE2eTestsPlugin(page) {
+  const pid = 'a-logseq-plugin-for-e2e-tests'
+  const hasLoaded = await page.evaluate(async ([pid]) => {
+    // @ts-ignore
+    const p = window.LSPluginCore.registeredPlugins.get(pid)
+    // @ts-ignore
+    await window.LSPluginCore.enable(pid)
+    return p != null
+  }, [pid])
+
+  if (hasLoaded) return true
+
+  await callPageAPI(page, 'set_state_from_store',
+    'ui/developer-mode?', true)
+  await page.keyboard.press('t+p')
+  await page.locator('text=Load unpacked plugin')
+  await callPageAPI(page, 'set_state_from_store',
+    'plugin/selected-unpacked-pkg', `${__dirname}/plugin`)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+}
 
 test.skip('enabled plugin system default', async ({ page }) => {
   const callAPI = callPageAPI.bind(null, page)
