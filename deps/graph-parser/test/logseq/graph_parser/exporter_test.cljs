@@ -66,7 +66,9 @@
 (defn- notify-user [m]
   (println (:msg m))
   (when (:ex-data m)
-    (println "Ex-data:" (pr-str (dissoc (:ex-data m) :error)))
+    (println "Ex-data:" (pr-str (merge (dissoc (:ex-data m) :error)
+                                       (when-let [err (get-in m [:ex-data :error])]
+                                         {:original-error (ex-data (.-cause err))}))))
     (println "Stacktrace:")
     (if-let [stack (some-> (get-in m [:ex-data :error]) ex-data :sci.impl/callstack deref)]
       (println (string/join
