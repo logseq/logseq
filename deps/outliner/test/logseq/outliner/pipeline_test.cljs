@@ -51,7 +51,7 @@
                               ;; Only keep enough of content to uniquely identify block
                               (map #(hash-map :block/title (re-find #"\w+" (:block/title %))
                                               :path-ref-names (set (map :block/name (:block/path-refs %))))))
-          page-tag-refs #{"page"}]
+          page-tag-refs #{"page" "tags"}]
       (is (= [{:block/title "parent"
                :path-ref-names (set/union page-tag-refs #{"page1" "bar"})}
               {:block/title "child"
