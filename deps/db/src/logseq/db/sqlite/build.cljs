@@ -93,10 +93,10 @@
                      (let [property-map {:db/ident k
                                          :property/type built-in-type'}]
                        [property-map v])))
-                 (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :block/schema :type]))
+                 (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :property/type]))
                             ;; TODO: Support translate-property-value without this hack
                             (not (vector? v)))
-                   (let [prop-type (get-in properties-config [k :block/schema :type])
+                   (let [prop-type (get-in properties-config [k :property/type])
                          property-map {:db/ident (get-ident all-idents k)
                                        :original-property-id k
                                        :property/type prop-type}]
@@ -156,7 +156,7 @@
                                  (throw (ex-info "No :db/id for property" {:property prop-name})))}
                      (select-keys prop-m [:build/properties-ref-types]))}))
           [(merge (sqlite-util/build-new-property (get-ident all-idents prop-name)
-                                                  (:block/schema prop-m)
+                                                  (db-property/get-property-schema prop-m)
                                                   {:block-uuid (:block/uuid prop-m)
                                                    :title (:block/title prop-m)})
                   {:db/id (or (property-db-ids prop-name)
@@ -257,8 +257,6 @@
   [:map-of
    Property
    [:map
-    [:block/schema [:map
-                    [:type :keyword]]]
     [:build/properties {:optional true} User-properties]
     [:build/properties-ref-types {:optional true}
      [:map-of :keyword :keyword]]
@@ -502,9 +500,9 @@
                       :node
                       (db-property-type/infer-property-type-from-value prop-value'))
                     :default)]
-    (cond-> {:block/schema {:type prop-type}}
+    (cond-> {:property/type prop-type}
       (coll? prop-value)
-      (assoc-in [:block/schema :cardinality] :many))))
+      (assoc :db/cardinality :many))))
 
 (defn- auto-create-ontology
   "Auto creates properties and classes from uses of options.  Creates properties
@@ -580,7 +578,7 @@
           Allows for outlines to be expressed to whatever depth
        * :build/properties - Defines properties on a block
    * :properties - This is a map to configure properties where the keys are property name keywords
-     and the values are maps of datascript attributes e.g. `{:block/schema {:type :checkbox}}`.
+     and the values are maps of datascript attributes e.g. `{:property/type :checkbox}`.
      Additional keys available:
      * :build/properties - Define properties on a property page.
      * :build/closed-values - Define closed values with a vec of maps. A map contains keys :uuid, :value and :icon.

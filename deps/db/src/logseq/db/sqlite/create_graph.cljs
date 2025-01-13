@@ -25,7 +25,7 @@
                                  (db-property-build/build-closed-values
                                   db-ident
                                   prop-name
-                                  {:db/ident db-ident :block/schema schema :closed-values closed-values}
+                                  {:db/ident db-ident :schema schema :closed-values closed-values}
                                   {:properties properties})
                                  [(sqlite-util/build-new-property
                                    db-ident

@@ -10,9 +10,11 @@
  :classes {:Movie {:build/schema-properties [:actor :comment]}
            :Meeting {:build/schema-properties [:attendee :duration]}}
  :properties
- {:actor {:block/schema {:type :node :cardinality :many}
+ {:actor {:property/type :node
+          :db/cardinality :many
           :build/schema-classes [:Person]}
-  :attendee {:block/schema {:type :node :cardinality :many}
+  :attendee {:property/type :node
+             :db/cardinality :many
              :build/schema-classes [:Person]}}
  :pages-and-blocks
  [{:page {:block/title "Matt-Damon" :build/tags [:Person]}}

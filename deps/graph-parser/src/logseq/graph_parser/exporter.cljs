@@ -604,12 +604,14 @@
                             ;; closed values are referenced by their :db/ident so no need to create values
                             (not (get-in db-property/built-in-properties [k :closed-values])))
                    (let [property-map {:db/ident k
-                                       :block/schema {:type built-in-type}}]
+                                       :property/type built-in-type}]
                      [property-map v]))
                  (when (db-property-type/value-ref-property-types (:type (get-schema-fn k)))
-                   (let [property-map {:db/ident (get-ident all-idents k)
-                                       :original-property-id k
-                                       :block/schema (get-schema-fn k)}]
+                   (let [schema (get-schema-fn k)
+                         property-map (merge
+                                       {:db/ident (get-ident all-idents k)
+                                        :original-property-id k}
+                                       (sqlite-util/schema->qualified-property-keyword schema))]
                      [property-map v])))))
        (db-property-build/build-property-values-tx-m new-block)))
 
@@ -1092,7 +1094,9 @@
                    upstream-tx
                    (when (= :default (:type schema))
                      (build-upstream-properties-tx-for-default db prop prop-ident from-type block-properties-text-values))
-                   property-pages-tx [{:db/ident prop-ident :block/schema schema}]]
+                   property-pages-tx [(merge
+                                       {:db/ident prop-ident}
+                                       (sqlite-util/schema->qualified-property-keyword schema))]]
                ;; If we handle cardinality changes we would need to return these separately
                ;; as property-pages would need to be transacted separately
                (concat property-pages-tx upstream-tx)))
@@ -1160,9 +1164,10 @@
                      db-ident (get-ident @(:all-idents import-state) kw-name)
                      new-prop (sqlite-util/build-new-property db-ident
                                                               (get-property-schema @(:property-schemas import-state) kw-name)
-                                                              {:title (name kw-name)})]
+                                                              {:title (name kw-name)})
+                     property-keys (filter (fn [k] (= "property" (namespace k))) (keys new-prop))]
                  (assert existing-page-uuid)
-                 (merge (select-keys new-prop [:block/tags :block/schema :db/ident :db/index :db/cardinality :db/valueType])
+                 (merge (select-keys new-prop (into [:block/tags :db/ident :property/type :db/index :db/cardinality :db/valueType] property-keys))
                         {:block/uuid existing-page-uuid})))
              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
         ;; Could do this only for existing pages but the added complexity isn't worth reducing the tx noise

@@ -102,7 +102,7 @@
     (testing ":url property"
       (sqlite-build/create-blocks
        conn
-       {:properties {:url {:block/schema {:type :url}}}
+       {:properties {:url {:property/type :url}}
         :pages-and-blocks
         [{:page {:block/title "page1"}
           :blocks [{:block/title "b1" :build/properties {:url "https://logseq.com"}}

@@ -72,7 +72,8 @@
                           default-open? class-schema?]
                    :as opts}]
   (let [property-name (or (and *property-name @*property-name) (:block/title property))
-        property-schema (or (and *property-schema @*property-schema) (:block/schema property))
+        property-schema (or (and *property-schema @*property-schema)
+                            (select-keys property [:property/type]))
         schema-types (->> (concat db-property-type/user-built-in-property-types
                                   (when built-in?
                                     db-property-type/internal-built-in-property-types))
@@ -87,7 +88,7 @@
         :on-value-change
         (fn [v]
           (let [type (keyword (string/lower-case v))
-                update-schema-fn #(assoc % :type type)]
+                update-schema-fn #(assoc % :property/type type)]
             (when *property-schema
               (swap! *property-schema update-schema-fn))
             (let [schema (or (and *property-schema @*property-schema)
@@ -101,7 +102,7 @@
                 (p/do!
                  (when *show-new-property-config?
                    (reset! *show-new-property-config? false))
-                 (when (= (:type schema) :node) (reset! *show-class-select? true))
+                 (when (= (:property/type schema) :node) (reset! *show-class-select? true))
                  (db-property-handler/upsert-property!
                   (:db/ident property)
                   schema
@@ -127,8 +128,8 @@
                    (pv/<create-new-block! block property "")))))))}
 
         ;; only set when in property configure modal
-        (and *property-name (:type property-schema))
-        (assoc :default-value (name (:type property-schema))))
+        (and *property-name (:property/type property-schema))
+        (assoc :default-value (name (:property/type property-schema))))
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
        (shui/select-value
@@ -375,7 +376,7 @@
      (if property-key
        [:div.ls-property-add.gap-1.flex.flex-1.flex-row.items-center
         [:div.flex.flex-row.items-center.property-key.gap-1
-         (when-not (:db/id property) (property-icon property (:type @*property-schema)))
+         (when-not (:db/id property) (property-icon property (:property/type @*property-schema)))
          (if (:db/id property)                              ; property exists already
            (property-key-cp block property opts)
            [:div property-key])]

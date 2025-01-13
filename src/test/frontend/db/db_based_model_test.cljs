@@ -1,13 +1,13 @@
 (ns frontend.db.db-based-model-test
   (:require [cljs.test :refer [use-fixtures deftest is testing]]
-            [frontend.db.model :as model]
-            [frontend.db :as db]
-            [frontend.test.helper :as test-helper]
             [datascript.core :as d]
-            [logseq.db.frontend.class :as db-class]
+            [frontend.db :as db]
+            [frontend.db.conn :as conn]
+            [frontend.db.model :as model]
+            [frontend.test.helper :as test-helper]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
-            [frontend.db.conn :as conn]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.test.helper :as db-test]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -56,7 +56,7 @@
 
 (deftest get-classes-with-property-test
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:prop1 {:block/schema {:type :default}}}
+              {:properties {:prop1 {:property/type :default}}
                :classes
                {:Class1 {:build/schema-properties [:prop1]}
                 :Class2 {:build/schema-properties [:prop1]}}})
