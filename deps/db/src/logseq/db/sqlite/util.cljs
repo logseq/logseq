@@ -72,8 +72,12 @@
    (fn [r k v]
      (if (qualified-keyword? k)
        (assoc r k v)
-       (if (= k :cardinality)
+       (cond
+         (= k :cardinality)
          (assoc r :db/cardinality v)
+         (= k :classes)
+         (assoc r :property/schema.classes v)
+         :else
          (assoc r (keyword "property" k) v))))
    {}
    prop-schema))
@@ -90,7 +94,6 @@
                      db-ident
                      (db-property/create-user-property-ident-from-name (name db-ident)))
          prop-name (or title (name db-ident'))
-         classes (:classes prop-schema')
          prop-schema (schema->qualified-property-keyword prop-schema')
          prop-type (get prop-schema :property/type :default)]
      (merge
@@ -108,8 +111,6 @@
                            :db.cardinality/many
                            :db.cardinality/one)
          :block/order (db-order/gen-key)}
-         (seq classes)
-         (assoc :property/schema.classes classes)
          (or ref-type? (contains? db-property-type/all-ref-property-types prop-type))
          (assoc :db/valueType :db.type/ref)
          (seq properties)

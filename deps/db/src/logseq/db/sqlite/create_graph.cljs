@@ -19,8 +19,9 @@
 (defn build-initial-properties*
   [built-in-properties]
   (mapcat
-   (fn [[db-ident {:keys [schema title closed-values properties] :as m}]]
-     (let [prop-name (or title (name (:name m)))
+   (fn [[db-ident {:keys [attribute schema title closed-values properties] :as m}]]
+     (let [db-ident (or attribute db-ident)
+           prop-name (or title (name (:name m)))
            [property & others] (if closed-values
                                  (db-property-build/build-closed-values
                                   db-ident

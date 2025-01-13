@@ -163,20 +163,6 @@
                             :schema {:type :datetime
                                      :public? false
                                      :hide? true}}
-     :logseq.property.attribute/property-schema-classes
-     {:title "Property classes"
-      :attribute :property/schema.classes
-      :schema {:type :entity
-               :cardinality :many
-               :public? false
-               :hide? true}}
-     :logseq.property.attribute/property-value-content
-     {:title "Property value"
-      :attribute :property.value/content
-      :schema {:type :any
-               :public? false
-               :hide? true}}
-
      :logseq.property.node/display-type {:title "Node Display Type"
                                          :schema {:type :keyword
                                                   :public? false
