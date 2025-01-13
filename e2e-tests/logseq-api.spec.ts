@@ -86,8 +86,12 @@ test('(File graph): block related apis',
     expect(mb.uuid).toBe(b.uuid)
 
     // properties
+    // FIXME: redundant api call
+    await callAPI('upsert_block_property', b1.uuid, 'a')
     await callAPI('upsert_block_property', b1.uuid, 'a', 1)
     let prop1 = await callAPI('get_block_property', b1.uuid, 'a')
+
+    expect(prop1).toBe(1)
 
     await callAPI('upsert_block_property', b1.uuid, 'a', 2)
     prop1 = await callAPI('get_block_property', b1.uuid, 'a')
@@ -198,6 +202,13 @@ test('(DB graph): block related apis',
     prop1 = await callAPI('get_block_properties', b1.uuid)
 
     expect(prop1).toEqual({ ':plugin.property/a': 'a', ':plugin.property/b': 'b' })
+
+    // properties schema
+    await callAPI('upsert_property', 'p1')
+    prop1 = await callAPI('get_property', 'p1')
+
+    expect(prop1.title).toBe('p1')
+    expect(prop1.ident).toBe(':plugin.property/p1')
 
     // await page.pause()
   })
