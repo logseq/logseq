@@ -76,7 +76,7 @@
          (= k :cardinality)
          (assoc r :db/cardinality v)
          (= k :classes)
-         (assoc r :property/schema.classes v)
+         (assoc r :property/classes v)
          :else
          (assoc r (keyword "property" k) v))))
    {}
@@ -138,7 +138,7 @@
 
 (defn kv
   "Creates a key-value pair tx with the key and value respectively stored under
-  :db/ident and :kv/value.  The key must be under the namespace :logseq.kv"
+  :db/ident and :kv/value. The key must be under the namespace :logseq.kv"
   [k value]
   {:pre [(= "logseq.kv" (namespace k))]}
   {:db/ident k

@@ -120,7 +120,7 @@
                          [?b ?property-id ?vid]
                          [(not= ?vid :logseq.property/empty-placeholder)]
                          (or
-                          [?vid :property.value/content ?value]
+                          [?vid :property/value ?value]
                           [?vid :block/title ?value])]
                        property-id
                        value)]

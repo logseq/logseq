@@ -608,7 +608,7 @@
                      :block/refs :block/path-refs :block/link
                      :block/title :block/closed-value-property
                      :block/created-at :block/updated-at
-                     :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content]}]
+                     :logseq.property.attribute/property-classes :logseq.property.attribute/property-value-content]}]
    [47 {:fix replace-hidden-type-with-schema}]
    [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]
    [49 {:fix replace-special-id-ref-with-id-ref}]

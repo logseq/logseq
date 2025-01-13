@@ -170,7 +170,7 @@
                   :db/index true
                   :block/tags :logseq.class/Property
                   :property/type :node
-                  :property/schema.classes (:db/id property)}]
+                  :property/classes (:db/id property)}]
                 {:outliner-op :save-block}))
 
 (defn <add-property!
@@ -614,7 +614,7 @@
    result]
   (let [[refresh-count set-refresh-count!] (rum/use-state 0)
         repo (state/get-current-repo)
-        classes (:property/schema.classes property)
+        classes (:property/classes property)
         tags? (= :block/tags (:db/ident property))
         alias? (= :block/alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
@@ -674,7 +674,7 @@
         options (map (fn [node]
                        (let [id (or (:value node) (:db/id node))
                              [header label] (if (integer? id)
-                                              (let [node-title (if (seq (:property/schema.classes property))
+                                              (let [node-title (if (seq (:property/classes property))
                                                                  (:block/title node)
                                                                  (block-handler/block-unique-title node))
                                                     title (subs node-title 0 256)
@@ -685,7 +685,7 @@
                                                                [:div.text-xs.opacity-70
                                                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
                                                     label [:div.flex.flex-row.items-center.gap-1
-                                                           (when-not (:property/schema.classes property)
+                                                           (when-not (:property/classes property)
                                                              (ui/icon icon {:size 14}))
                                                            [:div title]]]
                                                 [header label])
@@ -780,7 +780,7 @@
                                                                                                    :built-in? false})]
                                      (set-result! result)))))
         repo (state/get-current-repo)
-        classes (:property/schema.classes property)
+        classes (:property/classes property)
         non-root-classes (remove (fn [c] (= (:db/ident c) :logseq.class/Root)) classes)
         parent-property? (= (:db/ident property) :logseq.property/parent)]
     (when (and (not parent-property?) (seq non-root-classes))

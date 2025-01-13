@@ -174,7 +174,7 @@
         (when-let [props (not-empty (:build/properties prop-m))]
           (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) page-uuids all-idents))
         (when (seq schema-classes)
-          {:property/schema.classes
+          {:property/classes
            (mapv #(hash-map :db/ident (get-ident all-idents %))
                  schema-classes)})))
       true
@@ -539,8 +539,8 @@
         class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
         ;; Replace idents with db-ids to avoid any upsert issues
         properties-tx' (mapv (fn [m]
-                               (if (:property/schema.classes m)
-                                 (update m :property/schema.classes
+                               (if (:property/classes m)
+                                 (update m :property/classes
                                          (fn [cs]
                                            (mapv #(or (some->> (:db/ident %) class-ident->id (hash-map :db/id))
                                                       (throw (ex-info (str "No :db/id found for :db/ident " (pr-str (:db/ident %))) {})))

@@ -16,7 +16,7 @@
                                                      property-id)
             :block/parent property-id}
            (if (db-property-type/property-value-content? block-type property)
-             {:property.value/content value}
+             {:property/value value}
              {:block/title value}))))
 
 (defn build-closed-value-block

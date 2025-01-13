@@ -178,7 +178,7 @@
        [?prop-e :db/valueType :db.type/ref]
        [?b ?prop ?pv]
        (or [?pv :block/title ?val]
-           [?pv :property.value/content ?val])]]
+           [?pv :property/value ?val])]]
 
     :property-missing-value
     '[(property-missing-value ?b ?prop-e ?default-p ?default-v)
@@ -202,7 +202,7 @@
       (property-missing-value ?b ?prop-e ?default-p ?default-v)
       (or
        [?default-v :block/title ?val]
-       [?default-v :property.value/content ?val])]
+       [?default-v :property/value ?val])]
 
     :property-value
     '[[(property-value ?b ?prop-e ?val)
@@ -280,7 +280,7 @@
        (and
         [?prop-e :db/valueType :db.type/ref]
         (or [?pv :block/title ?val]
-            [?pv :property.value/content ?val])))]
+            [?pv :property/value ?val])))]
 
     ;; Checks if a property has a value for simple queries. Supports default values
     :simple-query-property
