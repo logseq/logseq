@@ -156,6 +156,7 @@
  :page/page-already-exists "Page “{1}” already exists!"
  :page/whiteboard-to-journal-error "Whiteboard pages cannot be renamed to journal titles!"
  :page/convert-to-tag "Convert to Tag"
+ :page/convert-tag-to-page "Convert Tag to Page"
  :file/name "File name"
  :file/last-modified-at "Last modified at"
  :file/no-data "No data"
