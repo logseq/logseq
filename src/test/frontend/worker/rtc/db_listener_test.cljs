@@ -71,6 +71,7 @@
                        [:db/valueType "[\"~#'\",\"~:db.type/ref\"]"]
                        [:block/updated-at "[\"~#'\",1716882111476]"]
                        [:block/created-at "[\"~#'\",1716882111476]"]
+                       [:property/type "[\"~#'\",\"~:number\"]"]
                        [:block/tags #uuid "00000002-1038-7670-4800-000000000000"]
                        [:block/title "[\"~#'\",\"qqq\"]"]
                        [:db/cardinality "[\"~#'\",\"~:db.cardinality/one\"]"]
