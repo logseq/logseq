@@ -130,8 +130,8 @@
     item))
 
 (defn replace-tags-with-id-refs
-  "Replace tags in content with page-ref ids. Ignore case because tags in
-  content can have any case and still have a valid ref"
+  "Replace tag names in content with page-ref ids e.g. #TAG -> [[UUID]].
+   Ignore case because tags in content can have any case and still have a valid ref"
   [content tags]
   (->>
    (reduce
@@ -144,6 +144,24 @@
              id-ref)
             ;; #book
             (common-util/replace-ignore-case (str "#" (:block/title tag)) id-ref))))
+    content
+    (sort-refs tags))
+   (string/trim)))
+
+(defn replace-tag-refs-with-page-refs
+  "Replace tag refs in content with page refs e.g. #[[UUID]] -> [[UUID]]"
+  [content tags]
+  (->>
+   (reduce
+    (fn [content tag]
+      (let [id-ref (page-ref/->page-ref (:block/uuid tag))]
+        (-> content
+            ;; #[[favorite book]]
+            (common-util/replace-ignore-case
+             (str "#" id-ref)
+             id-ref)
+            ;; #book
+            (common-util/replace-ignore-case (str "#" id-ref) id-ref))))
     content
     (sort-refs tags))
    (string/trim)))
