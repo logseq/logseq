@@ -284,6 +284,13 @@
     (log/info :org-files (mapv :path org-files))
     (notification/show! (str "Imported " (count org-files) " org file(s) as markdown. Support for org files will be added later.")
                         :info false))
+  (when-let [ignored-files (seq @(:ignored-files import-state))]
+    (notification/show! (str "Import ignored " (count ignored-files) " "
+                             (if (= 1 (count ignored-files)) "file" "files")
+                             ". See the javascript console for more details.")
+                        :info false)
+    (log/error :import-ignored-files {:msg (str "Import ignored " (count ignored-files) " file(s)")})
+    (pprint/pprint ignored-files))
   (when-let [ignored-props (seq @(:ignored-properties import-state))]
     (notification/show!
      [:.mb-2
