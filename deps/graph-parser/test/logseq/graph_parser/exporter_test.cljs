@@ -201,7 +201,8 @@
                      count))
           "Correct number of user classes")
       (is (= 4 (count (d/datoms @conn :avet :block/tags :logseq.class/Whiteboard))))
-      (is (= 0 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
+      (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
+      (is (= 1 (count @(:ignored-files import-state))) "Ignore .edn for now")
       (is (= 1 (count @assets))))
 
     (testing "logseq files"

@@ -172,6 +172,8 @@
 
       (when-let [ignored-props (seq @(:ignored-properties import-state))]
         (println "Ignored properties:" (pr-str ignored-props)))
+      (when-let [ignored-files (seq @(:ignored-files import-state))]
+        (println (count ignored-files) "ignored file(s):" (pr-str (vec ignored-files))))
       (when (:verbose options') (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
       (println "Created graph" (str db-name "!")))))
 
