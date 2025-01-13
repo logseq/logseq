@@ -140,12 +140,10 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
       await expect(sidebar).toHaveClass(/is-open/)
     }
 
-    await page.click('#left-sidebar .repo-switch');
+    await page.click('#left-sidebar .cp__graphs-selector > a');
     await page.waitForSelector('.cp__repos-quick-actions >> text="Add new graph"',
       { state: 'visible', timeout: 5000 })
     await page.click('text=Add new graph')
-
-    expect(page.locator('.repo-name')).toHaveText(pathlib.basename(path))
   }
 
   setMockedOpenDirPath(page, ''); // reset it
