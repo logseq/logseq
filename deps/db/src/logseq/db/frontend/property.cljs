@@ -375,7 +375,7 @@
         :properties (let [block {:db/ident :logseq.task/recur-frequency
                                  :property/type :number}
                           property {:db/ident :logseq.property/default-value
-                                    :property/type :entity}
+                                    :property/type :number}
                           default-value (assoc (build-property-value-block block property 1) :db/id -1)]
                       {:logseq.property/hide-empty-value true
                        :logseq.property/default-value default-value})
