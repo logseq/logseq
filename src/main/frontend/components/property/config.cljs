@@ -500,7 +500,7 @@
    :block-below {:icon :layout-align-top :title "Below the block"}})
 
 (rum/defc ui-position-sub-pane
-  [property {:keys [id set-sub-open! _position]}]
+  [property {:keys [id set-sub-open! _ui-position]}]
   (let [handle-select! (fn [^js e]
                          (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
                            (db-property-handler/set-block-property!
@@ -675,7 +675,7 @@
                               (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
                                                          :item-props {:class "ui__position-trigger-item"}
                                                          :disabled? config/publishing?
-                                                         :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :position position)))})))
+                                                         :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :ui-position position)))})))
 
                           (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
                             (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:property/hide? property))
