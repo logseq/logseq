@@ -331,7 +331,7 @@
     [:map
      ;; pages from :default property uses this but closed-value pages don't
      [:block/order {:optional true} block-order]
-     [:property/public? {:optional true} :boolean]]
+     [:property/hide? [:enum true]]]
     page-attrs
     page-or-block-attrs)))
 
