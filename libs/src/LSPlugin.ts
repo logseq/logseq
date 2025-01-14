@@ -819,7 +819,7 @@ export interface IEditorProxy extends Record<string, any> {
     }>,
     opts?: { name?: string }) => Promise<IEntityID>
 
-  // remove property definition
+  // remove property entity
   removeProperty: (key: string) => Promise<void>
 
   // block property related APIs
