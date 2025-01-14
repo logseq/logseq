@@ -322,10 +322,11 @@
                                       :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
                                       :block/journal-day date-int)))
                          (assoc :block/tags #{:logseq.class/Journal}))
-          time-long (tc/to-long (date-time-util/int->local-date date-int))]
+          time-long (tc/to-long (date-time-util/int->local-date date-int))
+          datetime-property (if (:block/deadline block) :logseq.task/deadline :logseq.task/scheduled)]
       {:block
        (-> block
-           (assoc :logseq.task/deadline time-long)
+           (assoc datetime-property time-long)
            (dissoc :block/deadline :block/scheduled :block/repeated?))
        :properties-tx (when-not existing-journal-page [deadline-page])})
     {:block block :properties-tx []}))
