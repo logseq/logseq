@@ -534,6 +534,26 @@
                           [:db/retract e :logseq.user/avatar]])
                  db-ids))))))
 
+(defn- remove-block-schema
+  [conn _search-db]
+  (let [db @conn
+        schema (:schema db)]
+    (when (ldb/db-based-graph? db)
+      (let [db-ids (d/q '[:find [?b ...]
+                          :where
+                          [?b :block/schema]]
+                        db)
+            tx-data (mapcat (fn [eid]
+                              (let [entity (d/entity db eid)
+                                    schema (:block/schema entity)
+                                    schema-properties (sqlite-util/schema->qualified-property-keyword schema)]
+                                [(assoc schema-properties :db/id eid)
+                                 [:db/retract eid :block/schema]]))
+                            db-ids)]
+        (d/transact! conn tx-data {:db-migrate? true})))
+    (d/reset-schema! conn (dissoc schema :block/schema))
+    []))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -625,7 +645,11 @@
                      :logseq.property.history/block :logseq.property.history/property
                      :logseq.property.history/ref-value :logseq.property.history/scalar-value]}]
    [58 {:fix remove-duplicated-contents-page}]
-   [59 {:properties [:logseq.property/created-by]}]])
+   [59 {:properties [:logseq.property/created-by]}]
+   [60 {:properties [:property/type :property/hide? :property/public? :property/view-context :property/ui-position]
+        :fix (rename-properties {:property/schema.classes :property/classes
+                                 :property.value/content :property/value})}]
+   [61 {:fix remove-block-schema}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
