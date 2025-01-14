@@ -3,25 +3,26 @@
   and favorite fns. This ns should be agnostic of file or db concerns but there
   is still some file-specific tech debt to remove from create!"
   (:require [clojure.string :as string]
-            [frontend.db :as db]
-            [frontend.handler.config :as config-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.state :as state]
-            [logseq.common.util :as common-util]
-            [logseq.common.config :as common-config]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.config :as config]
-            [frontend.fs :as fs]
-            [promesa.core :as p]
-            [frontend.handler.block :as block-handler]
-            [logseq.db :as ldb]
-            [frontend.db.conn :as conn]
             [datascript.core :as d]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.conn :as conn]
+            [frontend.fs :as fs]
+            [frontend.handler.block :as block-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.state :as state]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
-            [frontend.handler.notification :as notification]))
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defn- wrap-tags
   "Tags might have multiple words"
@@ -59,11 +60,13 @@
        (if (and has-tags? (nil? title'))
          (notification/show! "Page name can't include \"#\"." :warning)
          (when-not (string/blank? title')
-           (p/let [options' (if db-based?
-                              (cond->
-                               (update options :tags concat (:block/tags parsed-result))
+           (p/let [current-user-id (user/user-uuid)
+                   options' (if db-based?
+                              (cond-> (update options :tags concat (:block/tags parsed-result))
                                 (nil? (:split-namespace? options))
-                                (assoc :split-namespace? true))
+                                (assoc :split-namespace? true)
+                                current-user-id
+                                (assoc :created-by current-user-id))
                               options)
                    result (ui-outliner-tx/transact!
                            {:outliner-op :create-page}
