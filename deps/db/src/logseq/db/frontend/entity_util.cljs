@@ -73,11 +73,12 @@
 
 (defn hidden?
   [page]
-  (when page
-    (if (string? page)
-      (string/starts-with? page "$$$")
-      (when (or (map? page) (de/entity? page))
-        (:property/hide? page)))))
+  (boolean
+   (when page
+     (if (string? page)
+       (string/starts-with? page "$$$")
+       (when (or (map? page) (de/entity? page))
+         (:property/hide? page))))))
 
 (defn object?
   [node]
