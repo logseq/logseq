@@ -15,7 +15,10 @@ if (typeof window === 'undefined') {
   console.error = (...args) => {
     if (args[0]?.startsWith(
       `Warning: Each child in a list should have a unique "key" prop`)) {
-      return console.warn(...args)
+      console.groupCollapsed('[React] ⚠️ key warning!')
+      console.warn(...args)
+      console.groupEnd()
+      return
     }
     originalError(...args)
   }
