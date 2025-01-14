@@ -77,6 +77,8 @@
          (assoc r :db/cardinality v)
          (= k :classes)
          (assoc r :property/classes v)
+         (= k :position)
+         (assoc r :property/ui-position v)
          :else
          (assoc r (keyword "property" k) v))))
    {}
