@@ -51,7 +51,9 @@
 (defn- notify-user [{:keys [continue debug]} m]
   (println (:msg m))
   (when (:ex-data m)
-    (println "Ex-data:" (pr-str (dissoc (:ex-data m) :error)))
+    (println "Ex-data:" (pr-str (merge (dissoc (:ex-data m) :error)
+                                       (when-let [err (get-in m [:ex-data :error])]
+                                         {:original-error (ex-data (.-cause err))}))))
     (println "Stacktrace:")
     (if-let [stack (some-> (get-in m [:ex-data :error]) ex-data :sci.impl/callstack deref)]
       (println (string/join
@@ -172,6 +174,8 @@
 
       (when-let [ignored-props (seq @(:ignored-properties import-state))]
         (println "Ignored properties:" (pr-str ignored-props)))
+      (when-let [ignored-files (seq @(:ignored-files import-state))]
+        (println (count ignored-files) "ignored file(s):" (pr-str (vec ignored-files))))
       (when (:verbose options') (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
       (println "Created graph" (str db-name "!")))))
 

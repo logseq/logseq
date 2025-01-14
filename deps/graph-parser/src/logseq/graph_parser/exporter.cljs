@@ -1112,6 +1112,8 @@
    ;; Properties are ignored to keep graph valid and notify users of ignored properties.
    ;; Properties with :schema are ignored due to property schema changes
    :ignored-properties (atom [])
+   ;; Vec of maps with keys :path and :reason
+   :ignored-files (atom [])
    ;; Map of property names (keyword) and their current schemas (map).
    ;; Used for adding schemas to properties and detecting changes across a property's usage
    :property-schemas (atom {})
@@ -1232,8 +1234,10 @@
 
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
-  [db file content {:keys [extract-options notify-user]}]
+  [db file content {:keys [extract-options import-state]}]
   (let [format (common-util/get-format file)
+        ;; TODO: Remove once pdf highlights are supported
+        ignored-highlight-file? (string/starts-with? (str (path/basename file)) "hls__")
         extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
                                  :date-formatter "MMM do, yyyy"
                                  :uri-encoded? false
@@ -1241,7 +1245,7 @@
                                  :filename-format :legacy}
                                 extract-options
                                 {:db db})]
-    (cond (contains? common-config/mldoc-support-formats format)
+    (cond (and (contains? common-config/mldoc-support-formats format) (not ignored-highlight-file?))
           (-> (extract/extract file content extract-options')
               (update :pages (fn [pages]
                                (map #(dissoc % :block.temp/original-page-name) pages)))
@@ -1259,7 +1263,11 @@
               (update :blocks update-whiteboard-blocks format))
 
           :else
-          (notify-user {:msg (str "Skipped file since its format is not supported: " file)}))))
+          (if ignored-highlight-file?
+            (swap! (:ignored-files import-state) conj
+                   {:path file :reason :pdf-highlight})
+            (swap! (:ignored-files import-state) conj
+                   {:path file :reason :unsupported-file-format})))))
 
 (defn- build-journal-created-ats
   "Calculate created-at timestamps for journals"
