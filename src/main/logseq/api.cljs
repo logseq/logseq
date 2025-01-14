@@ -18,6 +18,7 @@
             [frontend.handler.code :as code-handler]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
+            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.dnd :as editor-dnd-handler]
@@ -885,16 +886,20 @@
           nil)))))
 
 ;; properties (db only)
+(defn -get-property
+  [^js plugin k]
+  (when-let [k' (and (string? k) (some-> k (sanitize-user-property-name) (keyword)))]
+    (let [prefix (when (some-> js/window.LSPlugin (.-PluginLocal) (instance? plugin))
+                   (str (.-id plugin) "."))]
+      (p/let [k (if (qualified-keyword? k') k'
+                  (api-block/get-db-ident-for-user-property-name (str prefix k)))
+              p (db-utils/pull k)] p))))
+
 (defn ^:export get_property
   [k]
   (this-as this
-    (when-let [k' (and (string? k) (some-> k (sanitize-user-property-name) (keyword)))]
-      (let [prefix (when (some-> js/window.LSPlugin (.-PluginLocal) (instance? this))
-                     (str (.-id this) "."))]
-        (p/let [k (if (qualified-keyword? k') k'
-                    (api-block/get-db-ident-for-user-property-name (str prefix k)))
-                p (db-utils/pull k)]
-          (bean/->js (sdk-utils/normalize-keyword-for-json p)))))))
+    (p/let [prop (-get-property this k)]
+      (bean/->js (sdk-utils/normalize-keyword-for-json prop)))))
 
 (defn ^:export upsert_property
   "schema:
@@ -926,6 +931,13 @@
                       name
                       (assoc :property-name name)))]
           (bean/->js (sdk-utils/normalize-keyword-for-json p)))))))
+
+(defn ^:export remove_property
+  [k]
+  (this-as this
+    (p/let [prop (-get-property this k)]
+      (when-let [uuid (:block/uuid prop)]
+        (page-common-handler/<delete! uuid nil nil)))))
 
 ;; block properties
 (def ^:export upsert_block_property
