@@ -49,6 +49,12 @@
   (let [updated-at (common-util/time-ms)]
     (assoc block :block/updated-at updated-at)))
 
+(defn- update-property-created-by
+  [block created-by]
+  (cond-> block
+    (and created-by (nil? (:logseq.property/created-by block)))
+    (assoc :logseq.property/created-by created-by)))
+
 (defn- filter-top-level-blocks
   [db blocks]
   (let [parent-ids (set/intersection (set (map (comp :db/id :block/parent) blocks))
@@ -622,8 +628,12 @@
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
       `update-timestamps?`: whether to update `blocks` timestamps.
+      `created-by`: user-uuid, update `:logseq.property/created-by` if exists
     ``"
-  [repo conn blocks target-block {:keys [_sibling? keep-uuid? keep-block-order? outliner-op replace-empty-target? update-timestamps?] :as opts
+  [repo conn blocks target-block {:keys [_sibling? keep-uuid? keep-block-order?
+                                         outliner-op replace-empty-target? update-timestamps?
+                                         created-by]
+                                  :as opts
                                   :or {update-timestamps? true}}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
@@ -642,11 +652,13 @@
         blocks' (let [blocks' (blocks-with-level blocks)]
                   (cond->> (blocks-with-ordered-list-props repo blocks' target-block sibling?)
                     update-timestamps?
-                    (mapv (fn [b] (block-with-timestamps (dissoc b :block/created-at :block/updated-at))))
+                    (mapv #(dissoc % :block/created-at :block/updated-at))
                     true
                     (mapv block-with-timestamps)
                     db-based?
-                    (mapv (fn [b] (dissoc b :block/properties)))))
+                    (mapv #(-> %
+                               (dissoc :block/properties)
+                               (update-property-created-by created-by)))))
         insert-opts {:sibling? sibling?
                      :replace-empty-target? replace-empty-target?
                      :keep-uuid? keep-uuid?
