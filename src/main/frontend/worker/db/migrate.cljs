@@ -546,9 +546,16 @@
             tx-data (mapcat (fn [eid]
                               (let [entity (d/entity db eid)
                                     schema (:block/schema entity)
-                                    schema-properties (sqlite-util/schema->qualified-property-keyword schema)]
-                                [(assoc schema-properties :db/id eid)
-                                 [:db/retract eid :block/schema]]))
+                                    schema-properties (sqlite-util/schema->qualified-property-keyword schema)
+                                    hidden-page? (contains? #{common-config/favorites-page-name common-config/views-page-name}
+                                                            (:block/title entity))
+                                    m (assoc schema-properties :db/id eid)
+                                    m' (if hidden-page?
+                                         (-> m (assoc :property/hide? true) (dissoc :property/public?))
+                                         m)]
+                                (concat
+                                 [m'
+                                  [:db/retract eid :block/schema]])))
                             db-ids)]
         (d/transact! conn tx-data {:db-migrate? true})))
     (d/reset-schema! conn (dissoc schema :block/schema))
