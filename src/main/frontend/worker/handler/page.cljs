@@ -34,6 +34,7 @@
    * :tags                     - tag uuids that are added to :block/tags
    * :persist-op?              - when true, add an update-page op
    * :properties               - properties to add to the page
+   * :created-by               - when set, set :logseq.property/created-by, only for db-based-graphs
   TODO: Add other options"
   [repo conn config title & {:as options}]
   (if (ldb/db-based-graph? @conn)
