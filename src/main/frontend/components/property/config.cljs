@@ -464,7 +464,8 @@
                       (shui/select-value {:placeholder "Select a choice"}))
                      (shui/select-content
                       (map (fn [choice]
-                             (shui/select-item {:value (:db/id choice)} (:block/title choice))) choices))))
+                             (shui/select-item {:key (str (:db/id choice))
+                                                :value (:db/id choice)} (:block/title choice))) choices))))
         checked-choice (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) choices)
         unchecked-choice (some (fn [choice] (when (false? (:logseq.property/choice-checkbox-state choice)) choice)) choices)]
     [:div.flex.flex-col.gap-4.text-sm.p-2

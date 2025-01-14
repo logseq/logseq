@@ -294,7 +294,8 @@
           (shui/select-value {:placeholder "Select a property"}))
          (shui/select-content
           (map (fn [choice]
-                 (shui/select-item {:value (:db/id choice)} (:block/title choice))) properties)))
+                 (shui/select-item {:key (str (:db/id choice))
+                                    :value (:db/id choice)} (:block/title choice))) properties)))
         [:div.flex.flex-row.gap-1
          [:div.text-muted-foreground
           "is:"]
