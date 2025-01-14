@@ -100,8 +100,8 @@
 (defn ms->journal-day
   "Converts a milliseconds timestamp to the nearest :block/journal-day"
   [ms]
-  (->> ms
-       tc/from-long
-       t/to-default-time-zone
-       (tf/unparse (tf/formatter "yyyyMMdd"))
-       parse-long))
+  (some->> ms
+           tc/from-long
+           t/to-default-time-zone
+           (tf/unparse (tf/formatter "yyyyMMdd"))
+           parse-long))
