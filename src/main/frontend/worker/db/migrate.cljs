@@ -879,10 +879,10 @@
                                 [[:db/add eid :block/tags :logseq.class/Property]
                                  [:db/retract eid :block/tags :logseq.class/Page]]
 
-                                (when-let [schema (:block/schema entity)]
-                                  (or (:cardinality schema) (:classes schema)))
-                                (let [schema (:block/schema entity)]
-                                  [[:db/add eid :block/schema (dissoc schema :cardinality :classes)]])
+                                ;; (when-let [schema (:block/schema entity)]
+                                ;;   (or (:cardinality schema) (:classes schema)))
+                                ;; (let [schema (:block/schema entity)]
+                                ;;   [[:db/add eid :block/schema (dissoc schema :cardinality :classes)]])
 
                                 (and (:logseq.property.asset/type entity)
                                      (or (nil? (:logseq.property.asset/checksum entity))
