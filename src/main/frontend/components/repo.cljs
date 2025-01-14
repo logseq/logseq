@@ -411,7 +411,8 @@
                           "Select a Graph")]
     [:div.cp__graphs-selector.flex.items-center.justify-between
      [:a.item.flex.items-center.gap-1.select-none
-      {:on-click (fn [^js e]
+      {:title current-repo
+       :on-click (fn [^js e]
                    (shui/popup-show! (.closest (.-target e) "a")
                                      (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
                                      {:as-dropdown? true

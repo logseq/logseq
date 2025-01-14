@@ -187,6 +187,10 @@
   .select-item {
     @apply flex items-center shrink;
   }
+
+  &[data-type="datetime"] {
+    @apply whitespace-nowrap;
+  }
 }
 
 .block-main-container .ls-properties-area {

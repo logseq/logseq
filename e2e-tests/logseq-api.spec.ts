@@ -4,7 +4,7 @@ import { callPageAPI } from './utils'
 import { Page } from 'playwright'
 
 async function createDBGraph(page: Page) {
-  await page.locator(`a.cp__repos-select-trigger`).click()
+  await page.locator(`#left-sidebar .cp__graphs-selector > a`).click()
   await page.click('text="Create db graph"')
   await page.waitForSelector('.new-graph')
   const name = `e2e-db-${Date.now()}`
@@ -86,6 +86,8 @@ test('(File graph): block related apis',
     expect(mb.uuid).toBe(b.uuid)
 
     // properties
+    // FIXME: redundant api call
+    await callAPI('upsert_block_property', b1.uuid, 'a')
     await callAPI('upsert_block_property', b1.uuid, 'a', 1)
     let prop1 = await callAPI('get_block_property', b1.uuid, 'a')
 
@@ -201,30 +203,12 @@ test('(DB graph): block related apis',
 
     expect(prop1).toEqual({ ':plugin.property/a': 'a', ':plugin.property/b': 'b' })
 
+    // properties schema
+    await callAPI('upsert_property', 'p1')
+    prop1 = await callAPI('get_property', 'p1')
+
+    expect(prop1.title).toBe('p1')
+    expect(prop1.ident).toBe(':plugin.property/p1')
+
     // await page.pause()
   })
-
-/**
- * load local tests plugin
- */
-export async function loadLocalE2eTestsPlugin(page) {
-  const pid = 'a-logseq-plugin-for-e2e-tests'
-  const hasLoaded = await page.evaluate(async ([pid]) => {
-    // @ts-ignore
-    const p = window.LSPluginCore.registeredPlugins.get(pid)
-    // @ts-ignore
-    await window.LSPluginCore.enable(pid)
-    return p != null
-  }, [pid])
-
-  if (hasLoaded) return true
-
-  await callPageAPI(page, 'set_state_from_store',
-    'ui/developer-mode?', true)
-  await page.keyboard.press('t+p')
-  await page.locator('text=Load unpacked plugin')
-  await callPageAPI(page, 'set_state_from_store',
-    'plugin/selected-unpacked-pkg', `${__dirname}/plugin`)
-  await page.keyboard.press('Escape')
-  await page.keyboard.press('Escape')
-}
