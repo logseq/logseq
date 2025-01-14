@@ -286,14 +286,18 @@
 
 (defn- convert-page-if-journal-impl
   "Convert journal file name to user' custom date format"
-  [original-page-name date-formatter]
+  [original-page-name date-formatter & {:keys [export-to-db-graph?]}]
   (when original-page-name
     (let [page-name (common-util/page-name-sanity-lc original-page-name)
           day (when date-formatter
-                (date-time-util/journal-title->int page-name (date-time-util/safe-journal-title-formatters date-formatter)))]
+                (date-time-util/journal-title->int
+                 page-name
+                 ;; When exporting, only use the configured date-formatter. Allowing for other date formatters allows
+                 ;; for page names to change which breaks looking up journal refs for unconfigured journal pages
+                 (if export-to-db-graph? [date-formatter] (date-time-util/safe-journal-title-formatters date-formatter))))]
       (if day
-        (let [original-page-name (date-time-util/int->journal-title day date-formatter)]
-          [original-page-name (common-util/page-name-sanity-lc original-page-name) day])
+        (let [original-page-name' (date-time-util/int->journal-title day date-formatter)]
+          [original-page-name' (common-util/page-name-sanity-lc original-page-name') day])
         [original-page-name page-name day]))))
 
 (def convert-page-if-journal (memoize convert-page-if-journal-impl))
@@ -306,7 +310,7 @@
    {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check?]}]
   (let [db-based? (ldb/db-based-graph? db)
         original-page-name (common-util/remove-boundary-slashes original-page-name)
-        [original-page-name' page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
+        [original-page-name' page-name journal-day] (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?})
         namespace? (and (or (not db-based?) @*export-to-db-graph?)
                         (not (boolean (text/get-nested-page-name original-page-name')))
                         (text/namespace-page? original-page-name'))
