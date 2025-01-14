@@ -8,6 +8,19 @@ if (typeof window === 'undefined') {
   global.window = {}
 }
 
+// js patches
+;(function () {
+  if (!window?.console) return
+  const originalError = console.error
+  console.error = (...args) => {
+    if (args[0]?.startsWith(
+      `Warning: Each child in a list should have a unique "key" prop`)) {
+      return console.warn(...args)
+    }
+    originalError(...args)
+  }
+})();
+
 // Copy from https://github.com/primetwig/react-nestable/blob/dacea9dc191399a3520f5dc7623f5edebc83e7b7/dist/utils.js
 export const closest = (target, selector) => {
   // closest(e.target, '.field')
