@@ -223,7 +223,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 18
+      (is (= 19
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/tags :logseq.class/Property]])
