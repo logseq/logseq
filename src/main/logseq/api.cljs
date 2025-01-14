@@ -887,10 +887,14 @@
 ;; properties (db only)
 (defn ^:export get_property
   [k]
-  (when-let [k' (and (string? k) (some-> k (sanitize-user-property-name) (keyword)))]
-    (p/let [k (if (qualified-keyword? k') k' (api-block/get-db-ident-for-user-property-name k))
-            p (db-utils/pull k)]
-      (bean/->js (sdk-utils/normalize-keyword-for-json p)))))
+  (this-as this
+    (when-let [k' (and (string? k) (some-> k (sanitize-user-property-name) (keyword)))]
+      (let [prefix (when (some-> js/window.LSPlugin (.-PluginLocal) (instance? this))
+                     (str (.-id this) "."))]
+        (p/let [k (if (qualified-keyword? k') k'
+                    (api-block/get-db-ident-for-user-property-name (str prefix k)))
+                p (db-utils/pull k)]
+          (bean/->js (sdk-utils/normalize-keyword-for-json p)))))))
 
 (defn ^:export upsert_property
   "schema:
@@ -901,24 +905,27 @@
      :public? false}
   "
   [k ^js schema ^js opts]
-  (when-let [k' (and (string? k) (keyword k))]
-    (p/let [opts (or (some-> opts (bean/->clj)) {})
-            name (or (:name opts) (some-> (str k) (string/trim)))
-            k (if (qualified-keyword? k') k'
-                  (api-block/get-db-ident-for-user-property-name k))
-            schema (or (some-> schema (bean/->clj)
-                               (update-keys #(if (contains? #{:hide :public} %)
-                                               (keyword (str (name %) "?")) %))) {})
-            schema (cond-> schema
-                     (string? (:cardinality schema))
-                     (update :cardinality keyword)
-                     (string? (:type schema))
-                     (update :type keyword))
-            p (db-property-handler/upsert-property! k schema
-                                                    (cond-> opts
-                                                      name
-                                                      (assoc :property-name name)))]
-      (bean/->js (sdk-utils/normalize-keyword-for-json p)))))
+  (this-as this
+    (when-let [k' (and (string? k) (keyword k))]
+      (let [prefix (when (some-> js/window.LSPlugin (.-PluginLocal) (instance? this))
+                     (str (.-id this) "."))]
+        (p/let [opts (or (some-> opts (bean/->clj)) {})
+                name (or (:name opts) (some-> (str k) (string/trim)))
+                k (if (qualified-keyword? k') k'
+                    (api-block/get-db-ident-for-user-property-name (str prefix k)))
+                schema (or (some-> schema (bean/->clj)
+                             (update-keys #(if (contains? #{:hide :public} %)
+                                             (keyword (str (name %) "?")) %))) {})
+                schema (cond-> schema
+                         (string? (:cardinality schema))
+                         (update :cardinality keyword)
+                         (string? (:type schema))
+                         (update :type keyword))
+                p (db-property-handler/upsert-property! k schema
+                    (cond-> opts
+                      name
+                      (assoc :property-name name)))]
+          (bean/->js (sdk-utils/normalize-keyword-for-json p)))))))
 
 ;; block properties
 (def ^:export upsert_block_property
