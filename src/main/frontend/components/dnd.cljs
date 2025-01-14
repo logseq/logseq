@@ -88,7 +88,7 @@
                                {:key id :id id})]
                      (cond
                        sort-by-inner-element?
-                       [:div (:content item)]
+                       [:div {:key id} (:content item)]
 
                        (:disabled? item)
                        (rum/with-key (non-sortable-item prop (:content item)) id)
