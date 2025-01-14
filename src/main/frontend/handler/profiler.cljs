@@ -48,7 +48,6 @@
       (throw (ex-info (str "fn-sym not found: " fn-sym) {})))))
 
 (defn unregister-fn!
-  "TODO: not working on multi-arity fns"
   [fn-sym]
   (let [ns (namespace fn-sym)
         s (munge (name fn-sym))]

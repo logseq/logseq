@@ -30,6 +30,7 @@
             [frontend.handler.property.file :as property-file]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.user :as user]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as tree]
@@ -334,14 +335,16 @@
                    true
 
                    :else
-                   (not has-children?))]
+                   (not has-children?))
+        current-user-id (user/user-uuid)]
     (ui-outliner-tx/transact!
      {:outliner-op :insert-blocks}
      (save-current-block! {:current-block current-block})
      (outliner-op/insert-blocks! [new-block] current-block {:sibling? sibling?
                                                             :keep-uuid? keep-uuid?
                                                             :ordered-list? ordered-list?
-                                                            :replace-empty-target? replace-empty-target?}))))
+                                                            :replace-empty-target? replace-empty-target?
+                                                            :created-by current-user-id}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
