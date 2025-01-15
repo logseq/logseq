@@ -80,7 +80,7 @@
          (= k :position)
          (assoc r :logseq.property/ui-position v)
          :else
-         (assoc r (keyword "property" k) v))))
+         (assoc r (keyword "logseq.property" k) v))))
    {}
    prop-schema))
 
