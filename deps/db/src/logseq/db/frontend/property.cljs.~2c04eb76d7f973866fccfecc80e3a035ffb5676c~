@@ -27,8 +27,8 @@
                                                    block-id
                                                    (or (:db/id property) {:db/ident (:db/ident property)}))
           :block/order (db-order/gen-key)}
-         (if (db-property-type/property-value-content? (:logseq.property/type property) property)
-           {:logseq.property/value value}
+         (if (db-property-type/property-value-content? (:property/type property) property)
+           {:property/value value}
            {:block/title value}))
         common-util/block-with-timestamps)))
 
@@ -58,40 +58,40 @@
   (apply
    ordered-map
    (defkeywords
-     :logseq.property/type {:title "Property type"
+     :property/type {:title "Property type"
+                     :schema {:type :keyword
+                              :hide? true}}
+     :property/hide? {:title "Hide this property"
+                      :schema {:type :checkbox
+                               :hide? true}}
+     :property/public? {:title "Property public?"
+                        :schema {:type :checkbox
+                                 :hide? true}}
+     :property/view-context {:title "Property view context"
+                             :schema {:type :keyword
+                                      :hide? true}}
+     :property/ui-position {:title "Property position"
                             :schema {:type :keyword
                                      :hide? true}}
-     :logseq.property/hide? {:title "Hide this property"
-                             :schema {:type :checkbox
-                                      :hide? true}}
-     :logseq.property/public? {:title "Property public?"
-                               :schema {:type :checkbox
-                                        :hide? true}}
-     :logseq.property/view-context {:title "Property view context"
-                                    :schema {:type :keyword
-                                             :hide? true}}
-     :logseq.property/ui-position {:title "Property position"
-                                   :schema {:type :keyword
-                                            :hide? true}}
-     :logseq.property/classes
+     :property/classes
      {:title "Property classes"
       :schema {:type :entity
                :cardinality :many
                :public? false
                :hide? true}}
-     :logseq.property/value
+     :property/value
      {:title "Property value"
       :schema {:type :any
                :public? false
                :hide? true}}
 
-     :block/alias          {:title "Alias"
-                            :attribute :block/alias
-                            :schema {:type :page
-                                     :cardinality :many
-                                     :view-context :page
-                                     :public? true}
-                            :queryable? true}
+     :block/alias           {:title "Alias"
+                             :attribute :block/alias
+                             :schema {:type :page
+                                      :cardinality :many
+                                      :view-context :page
+                                      :public? true}
+                             :queryable? true}
      :block/tags           {:title "Tags"
                             :attribute :block/tags
                             :schema {:type :class
@@ -278,6 +278,20 @@
                                             {:type :string
                                              :public? false}}
 
+   ;; TODO: should we replace block/journal-day with those separate props?
+   ;; :logseq.property.journal/year {:title "Journal year"
+   ;;                                :schema
+   ;;                                {:type :raw-number
+   ;;                                 :public? false}}
+   ;; :logseq.property.journal/month {:title "Journal month"
+   ;;                                 :schema
+   ;;                                 {:type :raw-number
+   ;;                                  :public? false}}
+   ;; :logseq.property.journal/day {:title "Journal day"
+   ;;                               :schema
+   ;;                               {:type :raw-number
+   ;;                                :public? false}}
+
      :logseq.property/choice-checkbox-state
      {:title "Choice checkbox state"
       :schema {:type :checkbox
@@ -352,9 +366,9 @@
        {:title "Recur frequency"
         :schema schema
         :properties (let [block {:db/ident :logseq.task/recur-frequency
-                                 :logseq.property/type :number}
+                                 :property/type :number}
                           property {:db/ident :logseq.property/default-value
-                                    :logseq.property/type :number}
+                                    :property/type :number}
                           default-value (assoc (build-property-value-block block property 1) :db/id -1)]
                       {:logseq.property/hide-empty-value true
                        :logseq.property/default-value default-value})
@@ -608,7 +622,8 @@
     ;; attribute ns is for db attributes that don't start with :block
     "logseq.property.attribute"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
-    "logseq.property.user" "logseq.property.history"})
+    "logseq.property.user" "logseq.property.history"
+    "property"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
@@ -663,14 +678,14 @@
   "Gets content/value of a given closed value ent/map. Works for all closed value types"
   [ent]
   (or (:block/title ent)
-      (:logseq.property/value ent)))
+      (:property/value ent)))
 
 (defn property-value-content
   "Given an entity, gets the content for the property value of a ref type
   property i.e. what the user sees. For page types the content is the page name"
   [ent]
   (or (:block/title ent)
-      (:logseq.property/value ent)))
+      (:property/value ent)))
 
 (defn ref->property-value-content
   "Given a ref from a pulled query e.g. `{:db/id X}`, gets a readable name for
@@ -737,9 +752,9 @@
   "Indicates whether built-in property can be seen and edited by users"
   [entity]
   ;; No need to do :built-in? check yet since user properties can't set this
-  (:logseq.property/public? entity))
+  (:property/public? entity))
 
 (defn get-property-schema
   [property-m]
-  (select-keys property-m [:db/cardinality :logseq.property/type :logseq.property/hide?
-                           :logseq.property/public? :logseq.property/view-context :logseq.property/ui-position]))
+  (select-keys property-m [:db/cardinality :property/type :property/hide?
+                           :property/public? :property/view-context :property/ui-position]))
