@@ -685,7 +685,7 @@
               page' (db/entity repo [:block/uuid (:block/uuid page)])
               link (if (config/db-based-graph? repo)
                      (some (fn [[k v]]
-                             (when (= :url (:property/type (db/entity repo k)))
+                             (when (= :url (:logseq.property/type (db/entity repo k)))
                                (:block/title v)))
                            (:block/properties page'))
                      (some #(re-find editor-handler/url-regex (val %)) (:block/properties page')))]

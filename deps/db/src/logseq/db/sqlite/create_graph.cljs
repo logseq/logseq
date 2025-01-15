@@ -133,7 +133,7 @@
        :block/name common-config/views-page-name
        :block/title common-config/views-page-name
        :block/tags [:logseq.class/Page]
-       :property/hide? true
+       :logseq.property/hide? true
        :logseq.property/built-in? true})
      (sqlite-util/block-with-timestamps
       {:block/uuid (common-uuid/gen-uuid)
@@ -151,7 +151,7 @@
      :block/name common-config/favorites-page-name
      :block/title common-config/favorites-page-name
      :block/tags [:logseq.class/Page]
-     :property/hide? true
+     :logseq.property/hide? true
      :logseq.property/built-in? true})])
 
 (defn build-db-initial-data

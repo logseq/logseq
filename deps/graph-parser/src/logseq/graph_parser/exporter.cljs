@@ -604,7 +604,7 @@
                             ;; closed values are referenced by their :db/ident so no need to create values
                             (not (get-in db-property/built-in-properties [k :closed-values])))
                    (let [property-map {:db/ident k
-                                       :property/type built-in-type}]
+                                       :logseq.property/type built-in-type}]
                      [property-map v]))
                  (when (db-property-type/value-ref-property-types (:type (get-schema-fn k)))
                    (let [schema (get-schema-fn k)
@@ -1169,7 +1169,7 @@
                                                               {:title (name kw-name)})
                      property-keys (filter (fn [k] (= "property" (namespace k))) (keys new-prop))]
                  (assert existing-page-uuid)
-                 (merge (select-keys new-prop (into [:block/tags :db/ident :property/type :db/index :db/cardinality :db/valueType] property-keys))
+                 (merge (select-keys new-prop (into [:block/tags :db/ident :logseq.property/type :db/index :db/cardinality :db/valueType] property-keys))
                         {:block/uuid existing-page-uuid})))
              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
         ;; Could do this only for existing pages but the added complexity isn't worth reducing the tx noise

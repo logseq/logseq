@@ -11,11 +11,11 @@
     (let [conn (db-test/create-conn-with-blocks [])
           _ (outliner-property/upsert-property! conn nil {:type :number} {:property-name "num"})]
       (is (= :number
-             (:property/type (d/entity @conn :user.property/num)))
+             (:logseq.property/type (d/entity @conn :user.property/num)))
           "Creates property with property-name")))
 
   (testing "Updates a property"
-    (let [conn (db-test/create-conn-with-blocks {:properties {:num {:property/type :number}}})
+    (let [conn (db-test/create-conn-with-blocks {:properties {:num {:logseq.property/type :number}}})
           _ (outliner-property/upsert-property! conn :user.property/num {:type :default :cardinality :many} {})]
       (is (db-property/many? (d/entity @conn :user.property/num)))))
 
@@ -25,8 +25,8 @@
       (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
       (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
 
-      (is (= {:block/name "p1" :block/title "p1" :property/type :default}
-             (select-keys (d/entity @conn :user.property/p1) [:block/name :block/title :property/type]))
+      (is (= {:block/name "p1" :block/title "p1" :logseq.property/type :default}
+             (select-keys (d/entity @conn :user.property/p1) [:block/name :block/title :logseq.property/type]))
           "Existing db/ident does not get modified")
       (is (= "p1"
              (:block/title (d/entity @conn :user.property/p1-1)))
@@ -40,7 +40,7 @@
     (let [test-uuid (random-uuid)]
       (are [x y]
            (= (let [[schema-type value] x]
-                (outliner-property/convert-property-input-string nil {:property/type schema-type} value)) y)
+                (outliner-property/convert-property-input-string nil {:logseq.property/type schema-type} value)) y)
         [:number "1"] 1
         [:number "1.2"] 1.2
         [:url test-uuid] test-uuid
@@ -210,7 +210,7 @@
 (deftest upsert-closed-value!
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:num {:build/closed-values [{:uuid (random-uuid) :value 2}]
-                                  :property/type :number}}})]
+                                  :logseq.property/type :number}}})]
 
     (testing "Add non-number choice shouldn't work"
       (is
@@ -228,13 +228,13 @@
 
     (testing "Add choice successfully"
       (let [_ (outliner-property/upsert-closed-value! conn :user.property/num {:value 3})
-            b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :property/value 3]] @conn))]
+            b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :logseq.property/value 3]] @conn))]
         (is (ldb/closed-value? (d/entity @conn (:db/id b))))
         (is (= [2 3]
                (map db-property/closed-value-content (:block/_closed-value-property (d/entity @conn :user.property/num)))))))
 
     (testing "Update choice successfully"
-      (let [b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :property/value 2]] @conn))
+      (let [b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :logseq.property/value 2]] @conn))
             _ (outliner-property/upsert-closed-value! conn :user.property/num {:id (:block/uuid b)
                                                                                :value 4
                                                                                :description "choice 4"})
@@ -248,7 +248,7 @@
         conn (db-test/create-conn-with-blocks
               {:properties {:default {:build/closed-values [{:uuid closed-value-uuid :value "foo"}
                                                             {:uuid used-closed-value-uuid :value "bar"}]
-                                      :property/type :default}}
+                                      :logseq.property/type :default}}
                :pages-and-blocks
                [{:page {:block/title "page1"}
                  :blocks [{:block/title "b1" :user.property/default [:block/uuid used-closed-value-uuid]}]}]})
@@ -260,8 +260,8 @@
 (deftest class-add-property!
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:c1 {}}
-               :properties {:p1 {:property/type :default}
-                            :p2 {:property/type :default}}})
+               :properties {:p1 {:logseq.property/type :default}
+                            :p2 {:logseq.property/type :default}}})
         _ (outliner-property/class-add-property! conn :user.class/c1 :user.property/p1)
         _ (outliner-property/class-add-property! conn :user.class/c1 :user.property/p2)]
     (is (= [:user.property/p1 :user.property/p2]

@@ -204,7 +204,7 @@
 (rum/defc property-value-select
   [repo *property *private-property? *find *tree opts loc]
   (let [db-graph? (sqlite-util/db-based-graph? repo)
-        property-type (when db-graph? (:property/type (db/entity repo @*property)))
+        property-type (when db-graph? (:logseq.property/type (db/entity repo @*property)))
         ref-property? (and db-graph? (contains? db-property-type/all-ref-property-types property-type))
         [values set-values!] (rum/use-state nil)]
     (hooks/use-effect!

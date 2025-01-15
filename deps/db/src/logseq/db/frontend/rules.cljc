@@ -178,7 +178,7 @@
        [?prop-e :db/valueType :db.type/ref]
        [?b ?prop ?pv]
        (or [?pv :block/title ?val]
-           [?pv :property/value ?val])]]
+           [?pv :logseq.property/value ?val])]]
 
     :property-missing-value
     '[(property-missing-value ?b ?prop-e ?default-p ?default-v)
@@ -202,7 +202,7 @@
       (property-missing-value ?b ?prop-e ?default-p ?default-v)
       (or
        [?default-v :block/title ?val]
-       [?default-v :property/value ?val])]
+       [?default-v :logseq.property/value ?val])]
 
     :property-value
     '[[(property-value ?b ?prop-e ?val)
@@ -242,8 +242,8 @@
       [?prop-e :block/tags :logseq.class/Property]
       (has-property-or-default-value? ?b ?prop)
       (or
-       [(missing? $ ?prop-e :property/public?)]
-       [?prop-e :property/public? true])]
+       [(missing? $ ?prop-e :logseq.property/public?)]
+       [?prop-e :logseq.property/public? true])]
 
     ;; Same as has-simple-query-property except it returns public and private properties like :block/title
     :has-private-simple-query-property
@@ -259,8 +259,8 @@
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
       (or
-       [(missing? $ ?prop-e :property/public?)]
-       [?prop-e :property/public? true])]
+       [(missing? $ ?prop-e :logseq.property/public?)]
+       [?prop-e :logseq.property/public? true])]
 
     ;; Checks if a property has a value for any features that are not simple queries
     :property
@@ -268,8 +268,8 @@
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
       (or
-       [(missing? $ ?prop-e :property/public?)]
-       [?prop-e :property/public? true])
+       [(missing? $ ?prop-e :logseq.property/public?)]
+       [?prop-e :logseq.property/public? true])
       [?b ?prop ?pv]
       (or
        ;; non-ref value
@@ -280,7 +280,7 @@
        (and
         [?prop-e :db/valueType :db.type/ref]
         (or [?pv :block/title ?val]
-            [?pv :property/value ?val])))]
+            [?pv :logseq.property/value ?val])))]
 
     ;; Checks if a property has a value for simple queries. Supports default values
     :simple-query-property
@@ -288,8 +288,8 @@
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
       (or
-       [(missing? $ ?prop-e :property/public?)]
-       [?prop-e :property/public? true])
+       [(missing? $ ?prop-e :logseq.property/public?)]
+       [?prop-e :logseq.property/public? true])
       (property-value ?b ?prop-e ?val)]
 
     ;; Same as property except it returns public and private properties like :block/title

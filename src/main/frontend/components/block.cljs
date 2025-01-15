@@ -2349,7 +2349,7 @@
       [:span.w-full
        (text-block-title config block)
        (when-let [property (:logseq.property/created-from-property block)]
-         (when-let [message (when (= :url (:property/type property))
+         (when-let [message (when (= :url (:logseq.property/type property))
                               (first (outliner-property/validate-property-value (db/get-db) property (:db/id block))))]
            (ui/tooltip
             (shui/button

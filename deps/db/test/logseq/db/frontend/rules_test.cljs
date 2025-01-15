@@ -28,8 +28,8 @@
 
 (deftest has-property-rule
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:foo {:property/type :default}
-                            :foo2 {:property/type :default}}
+              {:properties {:foo {:logseq.property/type :default}
+                            :foo2 {:logseq.property/type :default}}
                :pages-and-blocks
                [{:page {:block/title "Page1"
                         :build/properties {:foo "bar"}}}]})]
@@ -52,11 +52,11 @@
 
 (deftest property-rule
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:foo {:property/type :default}
-                            :foo2 {:property/type :default}
-                            :number-many {:property/type :number
+              {:properties {:foo {:logseq.property/type :default}
+                            :foo2 {:logseq.property/type :default}
+                            :number-many {:logseq.property/type :number
                                           :db/cardinality :many}
-                            :page-many {:property/type :node
+                            :page-many {:logseq.property/type :node
                                         :db/cardinality :many}}
                :pages-and-blocks
                [{:page {:block/title "Page1"

@@ -25,7 +25,7 @@
                             (keep (fn [id]
                                     (when-let [entity (d/entity db-after [:block/uuid id])]
                                       (let [from-property (:logseq.property/created-from-property entity)
-                                            default? (= :default (:property/type from-property))
+                                            default? (= :default (:logseq.property/type from-property))
                                             page? (ldb/page? entity)]
                                         (when-not (or page? (and from-property (not default?)))
                                           [(:db/id entity)
@@ -68,7 +68,7 @@
   (let [*computed-ids (atom #{})
         blocks (remove (fn [block]
                          (let [from-property (:logseq.property/created-from-property block)
-                               default? (= :default (:property/type from-property))]
+                               default? (= :default (:logseq.property/type from-property))]
                            (and from-property (not default?))))
                        blocks*)]
     (->>
@@ -181,7 +181,7 @@
                                              (map :db/id v)
 
                                              :else
-                                             (let [datetime? (= :datetime (:property/type (d/entity db property)))]
+                                             (let [datetime? (= :datetime (:logseq.property/type (d/entity db property)))]
                                                (cond
                                                  (and datetime? (coll? v))
                                                  (keep #(get-journal-day-from-long db %) v)

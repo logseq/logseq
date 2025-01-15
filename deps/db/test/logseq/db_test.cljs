@@ -55,8 +55,8 @@
 (deftest get-case-page
   (let [conn (db-test/create-conn-with-blocks
               {:properties
-               {:foo {:property/type :default}
-                :Foo {:property/type :default}}
+               {:foo {:logseq.property/type :default}
+                :Foo {:logseq.property/type :default}}
                :classes {:movie {} :Movie {}}})]
     ;; Case sensitive properties
     (is (= "foo" (:block/title (ldb/get-case-page @conn "foo"))))
@@ -68,8 +68,8 @@
 (deftest page-exists
   (let [conn (db-test/create-conn-with-blocks
               {:properties
-               {:foo {:property/type :default}
-                :Foo {:property/type :default}}
+               {:foo {:logseq.property/type :default}
+                :Foo {:logseq.property/type :default}}
                :classes {:movie {} :Movie {}}})]
     (is (= ["foo"]
            (map #(:block/title (d/entity @conn %)) (ldb/page-exists? @conn "foo" #{:logseq.class/Property})))
