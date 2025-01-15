@@ -117,8 +117,7 @@
 (defn get-idx-of-order-list-block
   [block order-list-type]
   (let [order-block-fn? (fn [block]
-                          (let [properties (:block/properties block)
-                                type (pu/lookup properties :logseq.property/order-list-type)]
+                          (let [type (pu/lookup block :logseq.property/order-list-type)]
                             (= type order-list-type)))
         prev-block-fn   #(some-> (db/entity (:db/id %)) ldb/get-left-sibling)
         prev-block      (prev-block-fn block)]
@@ -146,8 +145,7 @@
 
 (defn attach-order-list-state
   [config block]
-  (let [properties (:block/properties block)
-        type (pu/lookup properties :logseq.property/order-list-type)
+  (let [type (pu/lookup block :logseq.property/order-list-type)
         own-order-list-type  (some-> type str string/lower-case)
         own-order-list-index (some->> own-order-list-type (get-idx-of-order-list-block block))]
     (assoc config :own-order-list-type own-order-list-type

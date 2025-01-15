@@ -18,6 +18,7 @@
             [frontend.handler.code :as code-handler]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
+            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.dnd :as editor-dnd-handler]
@@ -85,7 +86,7 @@
   [k]
   (if (string? k)
     (-> k (string/trim)
-        (string/replace #"^\:+" "")
+        (string/replace #"^[:_]+" "")
         (string/lower-case))
     k))
 
@@ -885,16 +886,24 @@
           nil)))))
 
 ;; properties (db only)
+(defn -resolve-property-prefix-for-db
+  [^js plugin]
+  (when (some-> js/window.LSPlugin (.-PluginLocal) (instance? plugin))
+    (some-> (.-id plugin) (sanitize-user-property-name) (str "."))))
+
+(defn -get-property
+  [^js plugin k]
+  (when-let [k' (and (string? k) (some-> k (sanitize-user-property-name) (keyword)))]
+    (let [prefix (-resolve-property-prefix-for-db plugin)]
+      (p/let [k (if (qualified-keyword? k') k'
+                  (api-block/get-db-ident-for-user-property-name (str prefix k)))
+              p (db-utils/pull k)] p))))
+
 (defn ^:export get_property
   [k]
   (this-as this
-    (when-let [k' (and (string? k) (some-> k (sanitize-user-property-name) (keyword)))]
-      (let [prefix (when (some-> js/window.LSPlugin (.-PluginLocal) (instance? this))
-                     (str (.-id this) "."))]
-        (p/let [k (if (qualified-keyword? k') k'
-                    (api-block/get-db-ident-for-user-property-name (str prefix k)))
-                p (db-utils/pull k)]
-          (bean/->js (sdk-utils/normalize-keyword-for-json p)))))))
+    (p/let [prop (-get-property this k)]
+      (bean/->js (sdk-utils/normalize-keyword-for-json prop)))))
 
 (defn ^:export upsert_property
   "schema:
@@ -927,34 +936,51 @@
                       (assoc :property-name name)))]
           (bean/->js (sdk-utils/normalize-keyword-for-json p)))))))
 
+(defn ^:export remove_property
+  [k]
+  (this-as this
+    (p/let [prop (-get-property this k)]
+      (when-let [uuid (:block/uuid prop)]
+        (page-common-handler/<delete! uuid nil nil)))))
+
 ;; block properties
-(def ^:export upsert_block_property
-  (fn [block-uuid keyname value]
-    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+(defn ^:export upsert_block_property
+  [block-uuid keyname value]
+  (this-as this
+    (p/let [keyname (sanitize-user-property-name keyname)
+            block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             repo (state/get-current-repo)
             _ (db-async/<get-block repo block-uuid :children? false)
             db? (config/db-based-graph? repo)
             key (-> (if (keyword? key) (name keyname) keyname) (util/safe-lower-case))
-            key (if db? (api-block/get-db-ident-for-user-property-name key) key)
+            key (if db?
+                  (api-block/get-db-ident-for-user-property-name
+                    (str (-resolve-property-prefix-for-db this) key))
+                  key)
             _ (when (and db? (not (db-utils/entity key)))
                 (db-property-handler/upsert-property! key {} {:property-name keyname}))]
       (property-handler/set-block-property! repo block-uuid key value))))
 
-(def ^:export remove_block_property
-  (fn [block-uuid key]
+(defn ^:export remove_block_property
+  [block-uuid key]
+  (this-as this
     (p/let [key (sanitize-user-property-name key)
             block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)
             db? (config/db-based-graph? (state/get-current-repo))
             key-ns? (and (keyword? key) (namespace key))
             key (if key-ns? key (-> (if (keyword? key) (name key) key) (util/safe-lower-case)))
-            key (if (and db? (not key-ns?)) (api-block/get-db-ident-for-user-property-name key) key)]
+            key (if (and db? (not key-ns?))
+                  (api-block/get-db-ident-for-user-property-name
+                    (str (-resolve-property-prefix-for-db this) key))
+                  key)]
       (property-handler/remove-block-property!
-       (state/get-current-repo)
-       block-uuid key))))
+        (state/get-current-repo)
+        block-uuid key))))
 
-(def ^:export get_block_property
-  (fn [block-uuid key]
+(defn ^:export get_block_property
+  [block-uuid key]
+  (this-as this
     (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
       (when-let [properties (some-> block-uuid (db-model/get-block-by-uuid) (:block/properties))]
@@ -962,8 +988,10 @@
           (let [key (sanitize-user-property-name key)
                 property-name (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
                 property-value (or (get properties key)
-                                   (get properties (keyword property-name))
-                                   (get properties (api-block/get-db-ident-for-user-property-name property-name)))
+                                 (get properties (keyword property-name))
+                                 (get properties
+                                   (api-block/get-db-ident-for-user-property-name
+                                     (str (-resolve-property-prefix-for-db this) property-name))))
                 property-value (if-let [property-id (:db/id property-value)]
                                  (db/pull property-id) property-value)
                 ret (sdk-utils/normalize-keyword-for-json property-value)]

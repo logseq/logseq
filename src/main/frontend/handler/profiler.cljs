@@ -79,4 +79,8 @@
   ;; test multi-arity, variadic fn
   (defn test-fn-to-profile
     ([a b] 1)
-    ([b c d] 2)))
+    ([b c d] 2))
+
+  (register-fn! 'frontend.handler.profiler/test-fn-to-profile
+                :custom-key-fn (fn [args result] {:a args :r result}))
+  )
