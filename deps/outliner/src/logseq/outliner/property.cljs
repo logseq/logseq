@@ -464,16 +464,16 @@
 
 (defn- property-with-position?
   [db property-id block position]
-  (when-let [property (entity-plus/entity-memoized db property-id)
-        property-position (:logseq.property/ui-position property)]
-    (and
-     (= property-position position)
-     (not (and (:logseq.property/hide-empty-value property)
-               (nil? (get block property-id))))
-     (not (:logseq.property/hide? property))
-     (not (and
-           (= property-position :block-below)
-           (nil? (get block property-id)))))))
+  (when-let [property (entity-plus/entity-memoized db property-id)]
+    (let [property-position (:logseq.property/ui-position property)]
+      (and
+       (= property-position position)
+       (not (and (:logseq.property/hide-empty-value property)
+                 (nil? (get block property-id))))
+       (not (:logseq.property/hide? property))
+       (not (and
+             (= property-position :block-below)
+             (nil? (get block property-id))))))))
 
 (defn property-with-other-position?
   [property]
