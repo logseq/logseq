@@ -86,7 +86,7 @@
   [k]
   (if (string? k)
     (-> k (string/trim)
-        (string/replace #"^\:+" "")
+        (string/replace #"^[:_]+" "")
         (string/lower-case))
     k))
 
@@ -889,7 +889,7 @@
 (defn -resolve-property-prefix-for-db
   [^js plugin]
   (when (some-> js/window.LSPlugin (.-PluginLocal) (instance? plugin))
-    (str (.-id plugin) ".")))
+    (some-> (.-id plugin) (sanitize-user-property-name) (str "."))))
 
 (defn -get-property
   [^js plugin k]
@@ -947,7 +947,8 @@
 (defn ^:export upsert_block_property
   [block-uuid keyname value]
   (this-as this
-    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+    (p/let [keyname (sanitize-user-property-name keyname)
+            block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             repo (state/get-current-repo)
             _ (db-async/<get-block repo block-uuid :children? false)
             db? (config/db-based-graph? repo)

@@ -203,7 +203,7 @@ test('(DB graph): block related apis',
 
     expect(prop1).toEqual({ ':plugin.property/a': 'a', ':plugin.property/b': 'b' })
 
-    // properties schema
+    // properties entity & schema
     await callAPI('upsert_property', 'p1')
     prop1 = await callAPI('get_property', 'p1')
 
