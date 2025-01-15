@@ -19,6 +19,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -32,8 +33,7 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
@@ -584,8 +584,7 @@
         _ (doseq [class (::classes state)]
             (db/sub-block (:db/id class)))
         class? (ldb/class? block)
-        block-properties (:block/properties block)
-        properties block-properties
+        properties (:block/properties block)
         remove-built-in-or-other-position-properties
         (fn [properties]
           (remove (fn [property]

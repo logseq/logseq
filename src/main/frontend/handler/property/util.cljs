@@ -2,15 +2,15 @@
   "Utility fns for properties that are for both file and db graphs.
   Some fns like lookup and get-property were written to easily be backwards
   compatible with file graphs"
-  (:require [frontend.state :as state]
-            [frontend.db.conn :as conn]
+  (:require [frontend.db.conn :as conn]
+            [frontend.state :as state]
             [logseq.db.frontend.property.util :as db-property-util]))
 
 (defn lookup
-  "Get the property value by a built-in property's db-ident from coll. For file and db graphs"
-  [coll key]
+  "Get the property value by a built-in property's db-ident from block. For file and db graphs"
+  [block key]
   (let [repo (state/get-current-repo)]
-    (db-property-util/lookup repo coll key)))
+    (db-property-util/lookup repo block key)))
 
 (defn get-block-property-value
   "Get the value of a built-in block's property by its db-ident"

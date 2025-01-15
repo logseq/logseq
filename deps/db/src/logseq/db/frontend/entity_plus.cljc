@@ -119,11 +119,13 @@
                (lookup-entity property :logseq.property/scalar-default-value nil)
                (lookup-entity property :logseq.property/default-value nil)))))))))
 
+;; (defonce *id->k-frequency (atom {}))
 (defn lookup-kv-then-entity
   ([e k] (lookup-kv-then-entity e k nil))
   ([^Entity e k default-value]
    (try
      (when k
+       ;; (swap! *id->k-frequency update-in [(.-eid e) k] inc)
        (let [db (.-db e)]
          (case k
            :block/raw-title
@@ -138,6 +140,13 @@
                                  (filter (fn [[k _]] (db-property/property? k)))
                                  (into {})))
              (lookup-entity e :block/properties nil))
+
+           :block.temp/property-keys
+           (if (db-based-graph? db)
+             (->> (map :a (d/datoms db :eavt (.-eid e)))
+                  distinct
+                  (filter db-property/property?))
+             (keys (lookup-entity e :block/properties nil)))
 
            ;; cache :block/title
            :block/title
