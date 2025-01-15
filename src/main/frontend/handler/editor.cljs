@@ -2,7 +2,6 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
-            [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.config :as config]
