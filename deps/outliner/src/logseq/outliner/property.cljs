@@ -464,7 +464,7 @@
 
 (defn- property-with-position?
   [db property-id block position]
-  (let [property (entity-plus/entity-memoized db property-id)
+  (when-let [property (entity-plus/entity-memoized db property-id)
         property-position (:logseq.property/ui-position property)]
     (and
      (= property-position position)
@@ -482,7 +482,7 @@
 (defn get-block-positioned-properties
   [db eid position]
   (let [block (d/entity db eid)
-        own-properties (keys (:block/properties block))]
+        own-properties (:block.temp/property-keys block)]
     (->> (:classes-properties (get-block-classes-properties db eid))
          (map :db/ident)
          (concat own-properties)

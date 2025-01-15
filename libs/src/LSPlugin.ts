@@ -808,12 +808,7 @@ export interface IEditorProxy extends Record<string, any> {
   // property entity related APIs (DB only)
   getProperty: (key: string) => Promise<BlockEntity | null>
 
-  /**
-   * insert or update property entity
-   * @param key
-   * @param schema
-   * @param opts
-   */
+  // insert or update property entity
   upsertProperty: (
     key: string,
     schema?: Partial<{
@@ -823,6 +818,9 @@ export interface IEditorProxy extends Record<string, any> {
       public: boolean
     }>,
     opts?: { name?: string }) => Promise<IEntityID>
+
+  // remove property entity
+  removeProperty: (key: string) => Promise<void>
 
   // block property related APIs
   upsertBlockProperty: (

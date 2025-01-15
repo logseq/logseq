@@ -223,7 +223,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 18
+      (is (= 19
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/tags :logseq.class/Property]])
@@ -304,7 +304,7 @@
 
       (is (= 20221125
              (-> (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled"))
-                 :logseq.task/deadline
+                 :logseq.task/scheduled
                  date-time-util/ms->journal-day))
           "scheduled block converted to correct deadline")
 

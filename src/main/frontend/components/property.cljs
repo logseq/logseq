@@ -587,8 +587,7 @@
         _ (doseq [class (::classes state)]
             (db/sub-block (:db/id class)))
         class? (ldb/class? block)
-        block-properties (:block/properties block)
-        properties block-properties
+        properties (:block/properties block)
         remove-built-in-or-other-position-properties
         (fn [properties]
           (remove (fn [property]
