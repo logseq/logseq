@@ -460,16 +460,16 @@
 
 (defn- property-with-position?
   [db property-id block position]
-  (let [property (entity-plus/entity-memoized db property-id)
-        schema (:block/schema property)]
-    (and
-     (= (:position schema) position)
-     (not (and (:logseq.property/hide-empty-value property)
-               (nil? (get block property-id))))
-     (not (get-in property [:block/schema :hide?]))
-     (not (and
-           (= (:position schema) :block-below)
-           (nil? (get block property-id)))))))
+  (when-let [property (entity-plus/entity-memoized db property-id)]
+    (let [schema (:block/schema property)]
+      (and
+       (= (:position schema) position)
+       (not (and (:logseq.property/hide-empty-value property)
+                 (nil? (get block property-id))))
+       (not (get-in property [:block/schema :hide?]))
+       (not (and
+             (= (:position schema) :block-below)
+             (nil? (get block property-id))))))))
 
 (defn property-with-other-position?
   [property]
@@ -479,7 +479,7 @@
 (defn get-block-positioned-properties
   [db eid position]
   (let [block (d/entity db eid)
-        own-properties (keys (:block/properties block))]
+        own-properties (:block.temp/property-keys block)]
     (->> (:classes-properties (get-block-classes-properties db eid))
          (map :db/ident)
          (concat own-properties)

@@ -83,8 +83,7 @@
 
 (defn get-block-own-order-list-type
   [block]
-  (let [properties (:block/properties block)]
-    (pu/lookup properties :logseq.property/order-list-type)))
+  (pu/lookup block :logseq.property/order-list-type))
 
 (defn set-block-own-order-list-type!
   [block type]
@@ -283,12 +282,13 @@
   ([block value
     {:keys [force?]
      :as opts}]
-   (let [{:block/keys [uuid format repo title properties]} block
+   (let [{:block/keys [uuid format repo title]} block
          format (or format :markdown)
          repo (or repo (state/get-current-repo))
          format (or format (state/get-preferred-format))
-         block-id (when (and (not (config/db-based-graph? repo)) (map? properties))
-                    (get properties :id))
+         block-id (let [properties (:block/properties block)]
+                    (when (and (not (config/db-based-graph? repo)) (map? properties))
+                      (get properties :id)))
          content (if (config/db-based-graph? repo)
                    (:block/title (db/entity (:db/id block)))
                    (-> (property-file/remove-built-in-properties-when-file-based repo format title)
@@ -3467,7 +3467,7 @@
   [block]
   (let [class-properties (:classes-properties (outliner-property/get-block-classes-properties (db/get-db) (:db/id block)))
         db (db/get-db)
-        properties (->> (map :a (d/datoms db :eavt (:db/id block)))
+        properties (->> (:block.temp/property-keys block)
                         (map (partial entity-plus/entity-memoized db))
                         (concat class-properties)
                         (remove (fn [e] (db-property/db-attribute-properties (:db/ident e))))

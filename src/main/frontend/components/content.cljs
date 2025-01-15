@@ -204,8 +204,7 @@
   (let [repo (state/get-current-repo)
         db? (config/db-based-graph? repo)]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [properties (:block/properties block)
-            heading (or (pu/lookup properties :logseq.property/heading)
+      (let [heading (or (pu/lookup block :logseq.property/heading)
                         false)]
         [:<>
          (ui/menu-background-color #(property-handler/set-block-property! repo block-id

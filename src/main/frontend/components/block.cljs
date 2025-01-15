@@ -1233,9 +1233,8 @@
         (let [block (db/entity [:block/uuid block-id])
               db-id (:db/id block)
               block (when db-id (db/sub-block db-id))
-              properties (:block/properties block)
-              block-type (keyword (pu/lookup properties :logseq.property/ls-type))
-              hl-type (pu/lookup properties :logseq.property.pdf/hl-type)
+              block-type (keyword (pu/lookup block :logseq.property/ls-type))
+              hl-type (pu/lookup block :logseq.property.pdf/hl-type)
               repo (state/get-current-repo)
               stop-inner-events? (= block-type :whiteboard-shape)]
           (if (and block (:block/title block))
@@ -2062,14 +2061,13 @@
           (block-list config' children))]])))
 
 (defn- block-content-empty?
-  [{:block/keys [properties] :as block}]
+  [block]
   (let [ast-title (:block.temp/ast-title block)
-        ast-body (:block.temp/ast-body block)]
+        ast-body (:block.temp/ast-body block)
+        db-based? (config/db-based-graph? (state/get-current-repo))]
     (and
-     (or
-      (empty? properties)
-      (and (not (config/db-based-graph? (state/get-current-repo)))
-           (property-file/properties-hidden? properties)))
+     (or db-based?
+         (property-file/properties-hidden? (:block/properties block)))
 
      (empty? ast-title)
 
@@ -2196,8 +2194,11 @@
 (declare src-cp)
 
 (rum/defc ^:large-vars/cleanup-todo text-block-title
-  [config {:block/keys [format marker pre-block? properties] :as block}]
-  (let [format (or format :markdown)
+  [config block]
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))
+        format (if db-based? :markdown (or (:block/format block) :markdown))
+        pre-block? (if db-based? false (:block/pre-block? block))
+        marker (when-not db-based? (:block/marker block))
         block (if-not (:block.temp/ast-title block)
                 (merge block (block/parse-title-and-body uuid format pre-block?
                                                          (:block/title block)))
@@ -2207,16 +2208,16 @@
         level (:level config)
         slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
-        block-type (or (keyword (pu/lookup properties :logseq.property/ls-type)) :default)
+        block-type (or (keyword (pu/lookup block :logseq.property/ls-type)) :default)
         html-export? (:html-export? config)
-        bg-color (pu/lookup properties :logseq.property/background-color)
+        bg-color (pu/lookup block :logseq.property/background-color)
         ;; `heading-level` is for backward compatibility, will remove it in later releases
         heading-level (:block/heading-level block)
         heading (or
                  (and heading-level
                       (<= heading-level 6)
                       heading-level)
-                 (pu/lookup properties :logseq.property/heading))
+                 (pu/lookup block :logseq.property/heading))
         heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading ".block-title-wrap.as-heading"
@@ -2225,7 +2226,7 @@
     (->elem
      elem
      (merge
-      {:data-hl-type (pu/lookup properties :logseq.property.pdf/hl-type)}
+      {:data-hl-type (pu/lookup block :logseq.property.pdf/hl-type)}
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
@@ -2239,7 +2240,7 @@
            :class "px-1 with-bg-color"})))
 
      ;; children
-     (let [area?  (= :area (keyword (pu/lookup properties :logseq.property.pdf/hl-type)))
+     (let [area?  (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
            hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
                      [:div.prefix-link
                       {:on-pointer-down
@@ -2259,12 +2260,15 @@
                       [:span.hl-page
                        [:strong.forbid-edit
                         (str "P"
-                             (or (pu/lookup properties :logseq.property.pdf/hl-page)
+                             (or (pu/lookup block :logseq.property.pdf/hl-page)
                                  "?"))]]
 
                       (when (and area?
-                                 (or (:hl-stamp properties)
-                                     (:logseq.property.pdf/hl-image properties)))
+                                 (or
+                                  ;; db graphs
+                                  (:logseq.property.pdf/hl-image block)
+                                  ;; file graphs
+                                  (get-in block [:block/properties :hl-stamp])))
                         (pdf-assets/area-display block))])]
        (remove-nils
         (concat
@@ -2769,11 +2773,14 @@
           (clock/seconds->days:hours:minutes:seconds time-spent))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
-  [config {:block/keys [uuid properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
-  (let [format (or format :markdown)
-        collapsed? (:collapsed? config)
-        repo (state/get-current-repo)
+  [config {:block/keys [uuid] :as block} edit-input-id block-id slide?]
+  (let [repo (state/get-current-repo)
         db-based? (config/db-based-graph? (state/get-current-repo))
+        scheduled (when-not db-based? (:block/scheduled block))
+        deadline (when-not db-based? (:block/deadline block))
+        format (if db-based? :markdown (or (:block/format block) :markdown))
+        pre-block? (when-not db-based? (:block/pre-block? block))
+        collapsed? (:collapsed? config)
         content (if db-based?
                   (:block/raw-title block)
                   (property-util/remove-built-in-properties format (:block/raw-title block)))
@@ -2786,7 +2793,7 @@
         stop-events? (:stop-events? config)
         block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq ast-title))
         block-type (or
-                    (pu/lookup properties :logseq.property/ls-type)
+                    (pu/lookup block :logseq.property/ls-type)
                     :default)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
@@ -2802,9 +2809,9 @@
                         :pointer-events (when stop-events? "none")}}
 
                 (not (string/blank?
-                      (pu/lookup properties :logseq.property.pdf/hl-color)))
+                      (pu/lookup block :logseq.property.pdf/hl-color)))
                 (assoc :data-hl-color
-                       (pu/lookup properties :logseq.property.pdf/hl-color))
+                       (pu/lookup block :logseq.property.pdf/hl-color))
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
@@ -2862,13 +2869,13 @@
         (when-let [invalid-properties (:block/invalid-properties block)]
           (invalid-properties-cp invalid-properties)))
 
-      (when (and (seq properties)
-                 (let [hidden? (property-file/properties-hidden? properties)]
+      (when (and (not (config/db-based-graph? repo))
+                 (seq (:block/properties block))
+                 (let [hidden? (property-file/properties-hidden? (:block/properties block))]
                    (not hidden?))
                  (not (and block-ref? (or (seq ast-title) (seq ast-body))))
                  (not (:slide? config))
-                 (not= block-type :whiteboard-shape)
-                 (not (config/db-based-graph? repo)))
+                 (not= block-type :whiteboard-shape))
         (properties-cp config block))
 
       (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)
@@ -2928,8 +2935,10 @@
              (assoc state
                     ::hide-block-refs? (atom default-hide?)
                     ::refs-count *refs-count)))}
-  [state config {:block/keys [uuid format] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count?]}]
-  (let [format (or format :markdown)
+  [state config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count?]}]
+  (let [format (if (config/db-based-graph? (state/get-current-repo))
+                 :markdown
+                 (or (:block/format block) :markdown))
         *hide-block-refs? (get state ::hide-block-refs?)
         *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
@@ -3470,7 +3479,7 @@
        [:div.block-main-container.flex.flex-row.gap-1
         {:style (when (and db-based? (:page-title? config))
                   {:margin-left -30})
-         :data-has-heading (some-> block :block/properties (pu/lookup :logseq.property/heading))
+         :data-has-heading (some-> block (pu/lookup :logseq.property/heading))
          :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
          :on-touch-move (fn [event]
                           (block-handler/on-touch-move event block uuid editing? *show-left-menu? *show-right-menu?))
