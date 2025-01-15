@@ -87,11 +87,11 @@
   [db validate-fn [property property-val] & {:keys [new-closed-value?]}]
   ;; For debugging
   ;; (when (not (internal-ident? (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
-  (let [validate-fn' (if (db-property-type/property-types-with-db (:property/type property))
+  (let [validate-fn' (if (db-property-type/property-types-with-db (:logseq.property/type property))
                        (fn [value]
                          (validate-fn db value {:new-closed-value? new-closed-value?}))
                        validate-fn)
-        validate-fn'' (if (and (db-property-type/closed-value-property-types (:property/type property))
+        validate-fn'' (if (and (db-property-type/closed-value-property-types (:logseq.property/type property))
                                ;; new closed values aren't associated with the property yet
                                (not new-closed-value?)
                                (seq (:property/closed-values property)))
@@ -121,7 +121,7 @@
   [property]
   ;; use explicit call to be nbb compatible
   (let [closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
-    (cond-> (select-keys property [:db/ident :db/valueType :db/cardinality :property/type])
+    (cond-> (select-keys property [:db/ident :db/valueType :db/cardinality :logseq.property/type])
       (seq closed-values)
       (assoc :property/closed-values closed-values))))
 
@@ -198,7 +198,7 @@
 
 (assert (every? #(re-find #"^(block|logseq\.)" (namespace %)) db-property/db-attribute-properties)
         "All db-attribute idents start with an internal namespace")
-(assert (every? #(or (re-find #"^logseq\." %) (contains? #{"property"} %)) logseq-ident-namespaces)
+(assert (every? #(re-find #"^logseq\." %) logseq-ident-namespaces)
         "All logseq idents start with an internal namespace")
 
 ;; Main malli schemas
@@ -212,7 +212,7 @@
 (def property-tuple
   "A tuple of a property map and a property value"
   (into
-   [:multi {:dispatch #(-> % first :property/type)}]
+   [:multi {:dispatch #(-> % first :logseq.property/type)}]
    (map (fn [[prop-type value-schema]]
           [prop-type
            (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)]
@@ -268,7 +268,7 @@
    [:db/valueType {:optional true} [:enum :db.type/ref]]
    [:db/cardinality {:optional true} [:enum :db.cardinality/many :db.cardinality/one]]
    [:block/order {:optional true} block-order]
-   [:property/classes {:optional true} [:set :int]]])
+   [:logseq.property/classes {:optional true} [:set :int]]])
 
 (def normal-page
   (vec
@@ -289,18 +289,18 @@
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
-  [[:property/hide? {:optional true} :boolean]
-   [:property/public? {:optional true} :boolean]
-   [:property/ui-position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
+  [[:logseq.property/hide? {:optional true} :boolean]
+   [:logseq.property/public? {:optional true} :boolean]
+   [:logseq.property/ui-position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
 
 (def internal-property
   (vec
    (concat
     [:map
      [:db/ident internal-property-ident]
-     [:property/type (apply vector :enum (into db-property-type/internal-built-in-property-types
-                                               db-property-type/user-built-in-property-types))]
-     [:property/view-context {:optional true} [:enum :page :block :class :property :never]]]
+     [:logseq.property/type (apply vector :enum (into db-property-type/internal-built-in-property-types
+                                                      db-property-type/user-built-in-property-types))]
+     [:logseq.property/view-context {:optional true} [:enum :page :block :class :property :never]]]
     property-common-schema-attrs
     property-attrs
     page-attrs
@@ -312,7 +312,7 @@
     [:map
      ;; class-ident allows for a class to be used as a property
      [:db/ident [:or user-property-ident class-ident]]
-     [:property/type (apply vector :enum db-property-type/user-built-in-property-types)]]
+     [:logseq.property/type (apply vector :enum db-property-type/user-built-in-property-types)]]
     property-common-schema-attrs
     property-attrs
     page-attrs
@@ -331,7 +331,7 @@
     [:map
      ;; pages from :default property uses this but closed-value pages don't
      [:block/order {:optional true} block-order]
-     [:property/hide? [:enum true]]]
+     [:logseq.property/hide? [:enum true]]]
     page-attrs
     page-or-block-attrs)))
 
@@ -363,7 +363,7 @@
   (vec
    (concat
     [:map]
-    [[:property/value [:or :string :double :boolean]]
+    [[:logseq.property/value [:or :string :double :boolean]]
      [:logseq.property/created-from-property :int]]
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
@@ -395,7 +395,7 @@
     [;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
      [:block/title {:optional true} :string]
-     [:property/value {:optional true} [:or :string :double]]
+     [:logseq.property/value {:optional true} [:or :string :double]]
      [:logseq.property/created-from-property :int]
      [:block/closed-value-property {:optional true} [:set :int]]]
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
@@ -404,10 +404,10 @@
 (def closed-value-block
   "A closed value for a property with closed/allowed values"
   [:and closed-value-block*
-   [:fn {:error/message ":block/title or :property/value required"
-         :error/path [:property/value]}
+   [:fn {:error/message ":block/title or :logseq.property/value required"
+         :error/path [:logseq.property/value]}
     (fn [m]
-      (or (:block/title m) (:property/value m)))]])
+      (or (:block/title m) (:logseq.property/value m)))]])
 
 (def normal-block
   "A block with content and no special type or tag behavior"
@@ -485,7 +485,7 @@
                        :closed-value-block
 
                        (and (:logseq.property/created-from-property d)
-                            (:property/value d))
+                            (:logseq.property/value d))
                        :property-value-block
 
                        (:block/uuid d)

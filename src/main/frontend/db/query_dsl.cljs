@@ -303,7 +303,7 @@
             (subs v' 1)
             (or (page-ref/get-page-name v') v'))
           ;; Convert number pages to string
-          (and (double? v) (= :node (:property/type (db-utils/entity k))))
+          (and (double? v) (= :node (:logseq.property/type (db-utils/entity k))))
           (str v)
           :else
           v')))

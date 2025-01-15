@@ -76,9 +76,9 @@
          (= k :cardinality)
          (assoc r :db/cardinality v)
          (= k :classes)
-         (assoc r :property/classes v)
+         (assoc r :logseq.property/classes v)
          (= k :position)
-         (assoc r :property/ui-position v)
+         (assoc r :logseq.property/ui-position v)
          :else
          (assoc r (keyword "property" k) v))))
    {}
@@ -97,14 +97,14 @@
                      (db-property/create-user-property-ident-from-name (name db-ident)))
          prop-name (or title (name db-ident'))
          prop-schema (schema->qualified-property-keyword prop-schema')
-         prop-type (get prop-schema :property/type :default)]
+         prop-type (get prop-schema :logseq.property/type :default)]
      (merge
       (dissoc prop-schema :db/cardinality)
       (block-with-timestamps
        (cond->
         {:db/ident db-ident'
          :block/tags #{:logseq.class/Property}
-         :property/type prop-type
+         :logseq.property/type prop-type
          :block/name (common-util/page-name-sanity-lc (name prop-name))
          :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
          :block/title (name prop-name)

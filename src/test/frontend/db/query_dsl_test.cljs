@@ -183,7 +183,7 @@ prop-d:: [[nada]]"}])
   (deftest db-only-block-property-queries
     (load-test-files-for-db-graph
      {:properties
-      {:zzz {:property/type :default
+      {:zzz {:logseq.property/type :default
              :block/title "zzz name!"}}
       :pages-and-blocks
       [{:page {:block/title "page1"}
@@ -208,7 +208,7 @@ prop-d:: [[nada]]"}])
   (deftest property-default-type-default-value-queries
     (load-test-files-for-db-graph
      {:properties
-      {:default {:property/type :default
+      {:default {:logseq.property/type :default
                  :build/properties
                  {:logseq.property/default-value "foo"}
                  :build/properties-ref-types {:entity :number}}}
@@ -235,7 +235,7 @@ prop-d:: [[nada]]"}])
   (deftest property-checkbox-type-default-value-queries
     (load-test-files-for-db-graph
      {:properties
-      {:checkbox {:property/type :checkbox
+      {:checkbox {:logseq.property/type :checkbox
                   :build/properties
                   {:logseq.property/scalar-default-value true}}}
       :classes {:Class1 {:build/schema-properties [:checkbox]}}
@@ -261,7 +261,7 @@ prop-d:: [[nada]]"}])
   (deftest closed-property-default-value-queries
     (load-test-files-for-db-graph
      {:properties
-      {:status {:property/type :default
+      {:status {:logseq.property/type :default
                 :build/closed-values
                 [{:value "Todo" :uuid (random-uuid)}
                  {:value "Doing" :uuid (random-uuid)}]

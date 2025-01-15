@@ -112,17 +112,17 @@
       ;; closed values
       (seq (:property/closed-values property))
       (and (= (:db/ident property) :logseq.property/default-value)
-           (= (:property/type block) :number))))
+           (= (:logseq.property/type block) :number))))
 
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
-  (when-not (or (:property/hide? property)
+  (when-not (or (:logseq.property/hide? property)
                 (= (:db/ident property) :logseq.property/default-value))
     (ui/hide-popups-until-preview-popup!)
     (shui/dialog-close!))
   (p/let [block
-          (if (and (contains? #{:default :url} (:property/type property))
+          (if (and (contains? #{:default :url} (:logseq.property/type property))
                    (not (db-property/many? property)))
             (p/let [existing-value (get block (:db/ident property))
                     default-value (:logseq.property/default-value property)
@@ -169,8 +169,8 @@
                   :db/valueType :db.type/ref
                   :db/index true
                   :block/tags :logseq.class/Property
-                  :property/type :node
-                  :property/classes (:db/id property)}]
+                  :logseq.property/type :node
+                  :logseq.property/classes (:db/id property)}]
                 {:outliner-op :save-block}))
 
 (defn <add-property!
@@ -183,7 +183,7 @@
          class? (ldb/class? block)
          property (db/entity property-id)
          many? (db-property/many? property)
-         checkbox? (= :checkbox (:property/type property))
+         checkbox? (= :checkbox (:logseq.property/type property))
          blocks (get-operating-blocks block)]
      (assert (qualified-keyword? property-id) "property to add must be a keyword")
      (p/do!
@@ -193,7 +193,7 @@
            (<set-class-as-property! repo property))
          (db-property-handler/class-add-property! (:db/id block) property-id))
         (let [block-ids (map :block/uuid blocks)]
-          (if (and (db-property-type/all-ref-property-types (:property/type property))
+          (if (and (db-property-type/all-ref-property-types (:logseq.property/type property))
                    (string? property-value))
             (p/let [new-block (<create-new-block! block (db/entity property-id) property-value {:edit-block? false})]
               (when (seq (remove #{(:db/id block)} (map :db/id block)))
@@ -254,7 +254,7 @@
                                                                                                   :logseq.task/scheduled-on-property)))))]
        (if (= :logseq.task/deadline (:db/ident property))
          [:div "Set as repeated task"]
-         [:div "Repeat " (if (= :date (:property/type property)) "date" "datetime")])]]
+         [:div "Repeat " (if (= :date (:logseq.property/type property)) "date" "datetime")])]]
      [:div.flex.flex-row.gap-2
       [:div.flex.text-muted-foreground.mr-4
        "Every"]
@@ -496,7 +496,7 @@
   [block property value opts]
   (let [multiple-values? (db-property/many? property)
         repo (state/get-current-repo)
-        datetime? (= :datetime (:property/type property))]
+        datetime? (= :datetime (:logseq.property/type property))]
     (date-picker value
                  (merge opts
                         {:block block
@@ -615,7 +615,7 @@
    result]
   (let [[refresh-count set-refresh-count!] (rum/use-state 0)
         repo (state/get-current-repo)
-        classes (:property/classes property)
+        classes (:logseq.property/classes property)
         tags? (= :block/tags (:db/ident property))
         alias? (= :block/alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
@@ -655,7 +655,7 @@
             distinct)
 
            :else
-           (let [property-type (:property/type property)]
+           (let [property-type (:logseq.property/type property)]
              (if (empty? result)
                (let [v (get block (:db/ident property))]
                  (remove #(= :logseq.property/empty-placeholder (:db/ident %))
@@ -675,7 +675,7 @@
         options (map (fn [node]
                        (let [id (or (:value node) (:db/id node))
                              [header label] (if (integer? id)
-                                              (let [node-title (if (seq (:property/classes property))
+                                              (let [node-title (if (seq (:logseq.property/classes property))
                                                                  (:block/title node)
                                                                  (block-handler/block-unique-title node))
                                                     title (subs node-title 0 256)
@@ -686,7 +686,7 @@
                                                                [:div.text-xs.opacity-70
                                                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
                                                     label [:div.flex.flex-row.items-center.gap-1
-                                                           (when-not (:property/classes property)
+                                                           (when-not (:logseq.property/classes property)
                                                              (ui/icon icon {:size 14}))
                                                            [:div title]]]
                                                 [header label])
@@ -781,7 +781,7 @@
                                                                                                    :built-in? false})]
                                      (set-result! result)))))
         repo (state/get-current-repo)
-        classes (:property/classes property)
+        classes (:logseq.property/classes property)
         non-root-classes (remove (fn [c] (= (:db/ident c) :logseq.class/Root)) classes)
         parent-property? (= (:db/ident property) :logseq.property/parent)]
     (when (and (not parent-property?) (seq non-root-classes))
@@ -817,13 +817,13 @@
         values (rum/react *values)
         block (db/sub-block (:db/id block))]
     (when-not (= :loading values)
-      (let [type (:property/type property)
+      (let [type (:logseq.property/type property)
             closed-values? (seq (:property/closed-values property))
             ref-type? (db-property-type/all-ref-property-types type)
             items (if closed-values?
                     (let [date? (and
                                  (= (:db/ident property) :logseq.task/recur-unit)
-                                 (= :date (:property/type (:property opts))))
+                                 (= :date (:logseq.property/type (:property opts))))
                           values (cond->> (:property/closed-values property)
                                    date?
                                    (remove (fn [b] (contains? #{:logseq.task/recur-unit.minute :logseq.task/recur-unit.hour} (:db/ident b)))))]
@@ -1030,7 +1030,7 @@
        (when (:editing? opts)
          (.click (rum/deref *el))))
      [(:editing? opts)])
-    (let [type (:property/type property)
+    (let [type (:logseq.property/type property)
           select-opts' (assoc select-opts :multiple-choices? false)
           popup-content (fn content-fn [_]
                           [:div.property-select
@@ -1072,7 +1072,7 @@
   (let [multiple-values? (db-property/many? property)
         class (str (when-not row? "flex flex-1 ")
                    (when multiple-values? "property-value-content"))
-        type (:property/type property)
+        type (:logseq.property/type property)
         text-ref-type? (db-property-type/text-ref-property-types type)]
     [:div.cursor-text
      {:id (or dom-id (random-uuid))
@@ -1099,7 +1099,7 @@
   [state block property value* {:keys [container-id editing? on-chosen]
                                 :as opts}]
   (let [property (model/sub-block (:db/id property))
-        type (:property/type property)
+        type (:logseq.property/type property)
         editing? (or editing?
                      (and (state/sub-editing? [container-id (:block/uuid block)])
                           (= (:db/id property) (:db/id (:property (state/get-editor-action-data))))))
@@ -1160,7 +1160,7 @@
 
 (rum/defc multiple-values-inner
   [block property v {:keys [on-chosen editing?] :as opts}]
-  (let [type (:property/type property)
+  (let [type (:logseq.property/type property)
         date? (= type :date)
         *el (rum/use-ref nil)
         items (cond->> (if (de/entity? v) #{v} v)
@@ -1238,7 +1238,7 @@
                       :properties-cp :properties-cp})
          dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
          editor-id (str dom-id "-editor")
-         type (:property/type property)
+         type (:logseq.property/type property)
          multiple-values? (db-property/many? property)
          v (get block (:db/ident property))
          v (cond

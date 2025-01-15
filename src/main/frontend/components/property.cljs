@@ -73,7 +73,7 @@
                    :as opts}]
   (let [property-name (or (and *property-name @*property-name) (:block/title property))
         property-schema (or (and *property-schema @*property-schema)
-                            (select-keys property [:property/type]))
+                            (select-keys property [:logseq.property/type]))
         schema-types (->> (concat db-property-type/user-built-in-property-types
                                   (when built-in?
                                     db-property-type/internal-built-in-property-types))
@@ -88,7 +88,7 @@
         :on-value-change
         (fn [v]
           (let [type (keyword (string/lower-case v))
-                update-schema-fn #(assoc % :property/type type)]
+                update-schema-fn #(assoc % :logseq.property/type type)]
             (when *property-schema
               (swap! *property-schema update-schema-fn))
             (let [schema (or (and *property-schema @*property-schema)
@@ -102,7 +102,7 @@
                 (p/do!
                  (when *show-new-property-config?
                    (reset! *show-new-property-config? false))
-                 (when (= (:property/type schema) :node) (reset! *show-class-select? true))
+                 (when (= (:logseq.property/type schema) :node) (reset! *show-class-select? true))
                  (db-property-handler/upsert-property!
                   (:db/ident property)
                   schema
@@ -128,8 +128,8 @@
                    (pv/<create-new-block! block property "")))))))}
 
         ;; only set when in property configure modal
-        (and *property-name (:property/type property-schema))
-        (assoc :default-value (name (:property/type property-schema))))
+        (and *property-name (:logseq.property/type property-schema))
+        (assoc :default-value (name (:logseq.property/type property-schema))))
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
        (shui/select-value
@@ -187,7 +187,7 @@
 
 (rum/defc property-icon
   [property property-type]
-  (let [type (or (:property/type property) property-type :default)
+  (let [type (or (:logseq.property/type property) property-type :default)
         ident (:db/ident property)
         icon (cond
                (= ident :block/tags)
@@ -217,7 +217,7 @@
       (reset! *property property)
       (when property
         (let [add-class-property? (and (ldb/class? block) class-schema?)
-              type (:property/type property)]
+              type (:logseq.property/type property)]
           (cond
             add-class-property?
             (p/do!
@@ -363,7 +363,7 @@
                         (empty? types)
                         #{:block}))
         exclude-properties (fn [m]
-                             (let [view-context (get m :property/view-context :all)]
+                             (let [view-context (get m :logseq.property/view-context :all)]
                                (or (contains? #{:logseq.property/query} (:db/ident m))
                                    (and (not page?) (contains? #{:block/alias} (:db/ident m)))
                                    ;; Filters out properties from being in wrong :view-context and :never view-contexts
@@ -376,7 +376,7 @@
      (if property-key
        [:div.ls-property-add.gap-1.flex.flex-1.flex-row.items-center
         [:div.flex.flex-row.items-center.property-key.gap-1
-         (when-not (:db/id property) (property-icon property (:property/type @*property-schema)))
+         (when-not (:db/id property) (property-icon property (:logseq.property/type @*property-schema)))
          (if (:db/id property)                              ; property exists already
            (property-key-cp block property opts)
            [:div property-key])]
@@ -449,7 +449,7 @@
   [block k v {:keys [inline-text page-cp sortable-opts] :as opts}]
   (when (keyword? k)
     (when-let [property (db/sub-block (:db/id (db/entity k)))]
-      (let [type (get property :property/type :default)
+      (let [type (get property :logseq.property/type :default)
             closed-values? (seq (:property/closed-values property))
             block? (and v
                         (not closed-values?)
@@ -629,7 +629,7 @@
                                     state-hide-empty-properties?
                                     (nil? (get block property-id))
                                     :else
-                                    (boolean (:property/hide? property)))))
+                                    (boolean (:logseq.property/hide? property)))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
@@ -640,7 +640,7 @@
                           state-hide-empty-properties?
                           (fn [[property-id property-value]]
                             ;; User's selection takes precedence over config
-                            (if (:property/hide? (db/entity property-id))
+                            (if (:logseq.property/hide? (db/entity property-id))
                               (hide-with-property-id property-id)
                               (nil? property-value)))
                           :else

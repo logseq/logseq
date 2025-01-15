@@ -115,7 +115,7 @@
         class-name (strip-schema-prefix (property-m "@id"))
         url (str "https://schema.org/" (get inverted-renamed-properties class-name class-name))]
     {(keyword (strip-schema-prefix (property-m "@id")))
-     (cond-> {:property/type schema-type
+     (cond-> {:logseq.property/type schema-type
               :build/properties (cond-> {:url url}
                                   (property-m "rdfs:comment")
                                   (assoc :logseq.property/description (get-comment-string (property-m "rdfs:comment") renamed-pages)))}
@@ -259,8 +259,8 @@
    (apply merge
           (mapv #(->property-page % class-map options) select-properties))
    ;; Have to update schema for now as validation doesn't take into account existing properties
-   :logseq.property/description {:property/public? true
-                                 :property/type :default
+   :logseq.property/description {:logseq.property/public? true
+                                 :logseq.property/type :default
                                  :build/properties {:url "https://schema.org/description"
                                                     :logseq.property/description "A description of the item."}}))
 
@@ -364,7 +364,7 @@
   (let [ents (remove #(db-malli-schema/internal-ident? (:db/ident %))
                      (d/q '[:find [(pull ?b [*
                                              {:logseq.property.class/properties [:block/title]}
-                                             {:property/classes [:block/title]}
+                                             {:logseq.property/classes [:block/title]}
                                              {:logseq.property/parent [:block/title]}
                                              {:block/tags [:block/title]}
                                              {:block/refs [:block/title]}]) ...]
@@ -377,9 +377,9 @@
                             (map (fn [m]
                                    (let [props (->> (db-property/properties m)
                                                     (into {}))]
-                                     (cond-> (select-keys m [:block/name :block/tags :block/title :property/type :db/cardinality :db/ident
+                                     (cond-> (select-keys m [:block/name :block/tags :block/title :logseq.property/type :db/cardinality :db/ident
                                                              :logseq.property.class/properties :logseq.property/parent
-                                                             :db/cardinality :property/classes :block/refs])
+                                                             :db/cardinality :logseq.property/classes :block/refs])
                                        (seq props)
                                        (assoc :block/properties (-> (update-keys props name)
                                                                     (dissoc "tags")
@@ -391,8 +391,8 @@
                                        (update :logseq.property.class/properties #(set (map :block/title %)))
                                        (some? (:logseq.property/parent m))
                                        (update :logseq.property/parent :block/title)
-                                       (seq (:property/classes m))
-                                       (update :property/classes #(set (map :block/title %)))
+                                       (seq (:logseq.property/classes m))
+                                       (update :logseq.property/classes #(set (map :block/title %)))
                                        (seq (:block/tags m))
                                        (update :block/tags #(set (map :block/title %)))
                                        (seq (:block/refs m))

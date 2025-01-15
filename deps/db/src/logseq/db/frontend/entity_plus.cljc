@@ -114,7 +114,7 @@
        ;; property default value
        (when (qualified-keyword? k)
          (when-let [property (entity-memoized db k)]
-           (let [property-type (lookup-entity property :property/type nil)]
+           (let [property-type (lookup-entity property :logseq.property/type nil)]
              (if (= :checkbox property-type)
                (lookup-entity property :logseq.property/scalar-default-value nil)
                (lookup-entity property :logseq.property/default-value nil)))))))))

@@ -551,7 +551,7 @@
                                                             (:block/title entity))
                                     m (assoc schema-properties :db/id eid)
                                     m' (if hidden-page?
-                                         (-> m (assoc :property/hide? true) (dissoc :property/public?))
+                                         (-> m (assoc :logseq.property/hide? true) (dissoc :logseq.property/public?))
                                          m)]
                                 (concat
                                  [m'
@@ -653,9 +653,9 @@
                      :logseq.property.history/ref-value :logseq.property.history/scalar-value]}]
    [58 {:fix remove-duplicated-contents-page}]
    [59 {:properties [:logseq.property/created-by]}]
-   [60 {:properties [:property/type :property/hide? :property/public? :property/view-context :property/ui-position]
-        :fix (rename-properties {:property/schema.classes :property/classes
-                                 :property.value/content :property/value})}]
+   [60 {:properties [:logseq.property/type :logseq.property/hide? :logseq.property/public? :logseq.property/view-context :logseq.property/ui-position]
+        :fix (rename-properties {:property/schema.classes :logseq.property/classes
+                                 :property.value/content :logseq.property/value})}]
    [61 {:fix remove-block-schema}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]

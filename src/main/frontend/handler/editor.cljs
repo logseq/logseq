@@ -2738,7 +2738,7 @@
         (cursor/move-cursor-to-start input)
 
         (and property? right? (cursor/end? input)
-             (or (not= (:property/type block) :default)
+             (or (not= (:logseq.property/type block) :default)
                  (seq (:property/closed-values block))))
         (let [pair (util/rec-get-node input "property-pair")
               jtrigger (when pair (dom/sel1 pair ".property-value-container .jtrigger"))]
@@ -3472,7 +3472,7 @@
                         (concat class-properties)
                         (remove (fn [e] (db-property/db-attribute-properties (:db/ident e))))
                         (remove outliner-property/property-with-other-position?)
-                        (remove (fn [e] (:property/hide? e)))
+                        (remove (fn [e] (:logseq.property/hide? e)))
                         (remove nil?))]
     (or (seq properties)
         (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block))))

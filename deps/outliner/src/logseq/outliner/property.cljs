@@ -74,7 +74,7 @@
 
 (defn ^:api convert-property-input-string
   [block-type property v-str]
-  (let [schema-type (:property/type property)]
+  (let [schema-type (:logseq.property/type property)]
     (if (and (or (= :number schema-type)
                  (and (= (:db/ident property) :logseq.property/default-value)
                       (= :number block-type)))
@@ -84,11 +84,11 @@
 
 (defn- update-datascript-schema
   [property schema]
-  (let [type' (:property/type schema)
+  (let [type' (:logseq.property/type schema)
         cardinality (:db/cardinality schema)
         ident (:db/ident property)
         cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
-        old-type (:property/type property)
+        old-type (:logseq.property/type property)
         old-ref-type? (db-property-type/user-ref-property-types old-type)
         ref-type? (db-property-type/user-ref-property-types type')]
     [(cond->
@@ -121,9 +121,9 @@
           (conj (outliner-core/block-with-updated-at
                  (merge {:db/ident db-ident}
                         changed-property-attrs)))
-          (or (not= (:property/type schema) (:property/type property))
+          (or (not= (:logseq.property/type schema) (:logseq.property/type property))
               (and (:db/cardinality schema) (not= (:db/cardinality schema) (keyword (name (:db/cardinality property)))))
-              (and (= :default (:property/type schema)) (not= :db.type/ref (:db/valueType property)))
+              (and (= :default (:logseq.property/type schema)) (not= :db.type/ref (:db/valueType property)))
               (seq (:property/closed-values property)))
           (concat (update-datascript-schema property schema)))
         tx-data (concat property-tx-data
@@ -181,7 +181,7 @@
 
 (defn validate-property-value
   [db property value]
-  (let [property-type (:property/type property)
+  (let [property-type (:logseq.property/type property)
         many? (= :db.cardinality/many (:db/cardinality property))
         schema (get-property-value-schema db property-type property)]
     (validate-property-value-aux schema value {:many? many?})))
@@ -216,7 +216,7 @@
   (let [property (d/entity @conn property-id)
         block (when block-id (d/entity @conn block-id))
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-        value' (convert-property-input-string (:property/type block)
+        value' (convert-property-input-string (:logseq.property/type block)
                                               property value)
         new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value')
                           new-block-id
@@ -225,7 +225,7 @@
     (let [property-id (:db/ident property)]
       (when (and property-id block)
         (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
-          (raw-set-block-property! conn block property (:property/type property) block-id)))
+          (raw-set-block-property! conn block property (:logseq.property/type property) block-id)))
       (:block/uuid new-value-block))))
 
 (defn- get-property-value-eid
@@ -236,7 +236,7 @@
           :where
           [?b ?property-id ?v]
           (or [?v :block/title ?raw-value]
-              [?v :property/value ?raw-value])]
+              [?v :logseq.property/value ?raw-value])]
         db
         property-id
         raw-value)))
@@ -246,7 +246,7 @@
   [conn property-id v]
   (let [property (d/entity @conn property-id)
         closed-values? (seq (:property/closed-values property))
-        default-type? (= :default (:property/type property))]
+        default-type? (= :default (:logseq.property/type property))]
     (cond
       closed-values?
       (get-property-value-eid @conn property-id v)
@@ -299,7 +299,7 @@
       :else
       (let [property (d/entity @conn property-id)
             _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-            property-type (get property :property/type :default)
+            property-type (get property :logseq.property/type :default)
             new-value (if (db-property-type/all-ref-property-types property-type)
                         (convert-ref-property-value conn property-id v property-type)
                         v)
@@ -322,7 +322,7 @@
              (if (number? v) (d/entity @conn v) v)
              (map #(d/entity @conn %) block-eids)))
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-        property-type (get property :property/type :default)
+        property-type (get property :logseq.property/type :default)
         _ (assert (some? v) "Can't set a nil property value must be not nil")
         v' (if (db-property-type/value-ref-property-types property-type)
              (convert-ref-property-value conn property-id v property-type)
@@ -465,19 +465,19 @@
 (defn- property-with-position?
   [db property-id block position]
   (let [property (entity-plus/entity-memoized db property-id)
-        property-position (:property/ui-position property)]
+        property-position (:logseq.property/ui-position property)]
     (and
      (= property-position position)
      (not (and (:logseq.property/hide-empty-value property)
                (nil? (get block property-id))))
-     (not (:property/hide? property))
+     (not (:logseq.property/hide? property))
      (not (and
            (= property-position :block-below)
            (nil? (get block property-id)))))))
 
 (defn property-with-other-position?
   [property]
-  (not (contains? #{:properties nil} (:property/ui-position property))))
+  (not (contains? #{:properties nil} (:logseq.property/ui-position property))))
 
 (defn get-block-positioned-properties
   [db eid position]
@@ -503,8 +503,8 @@
                      (merge
                       {:block/uuid id
                        :block/closed-value-property (:db/id property)}
-                      (if (db-property-type/property-value-content? (:property/type block) property)
-                        {:property/value resolved-value}
+                      (if (db-property-type/property-value-content? (:logseq.property/type block) property)
+                        {:logseq.property/value resolved-value}
                         {:block/title resolved-value})))
                      icon
                      (assoc :logseq.property/icon icon))]
@@ -526,7 +526,7 @@
   (assert (or (nil? id) (uuid? id)))
   (let [db @conn
         property (d/entity db property-id)
-        property-type (:property/type property)]
+        property-type (:logseq.property/type property)]
     (when (contains? db-property-type/closed-value-property-types property-type)
       (let [value' (if (string? value) (string/trim value) value)
             resolved-value (convert-property-input-string nil property value')

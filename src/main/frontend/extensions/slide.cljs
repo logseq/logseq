@@ -28,7 +28,7 @@
                        (->> properties
                             (keep (fn [[k v]]
                                     ;; Don't inject hidden props like created-from-property
-                                    (when-not (:property/hide? (db/entity repo k))
+                                    (when-not (:logseq.property/hide? (db/entity repo k))
                                       [k
                                        (if (:db/id v)
                                          ;; Can't use db-property-util/lookup b/c vals aren't entities

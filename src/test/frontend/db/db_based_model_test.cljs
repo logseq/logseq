@@ -56,7 +56,7 @@
 
 (deftest get-classes-with-property-test
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:prop1 {:property/type :default}}
+              {:properties {:prop1 {:logseq.property/type :default}}
                :classes
                {:Class1 {:build/schema-properties [:prop1]}
                 :Class2 {:build/schema-properties [:prop1]}}})

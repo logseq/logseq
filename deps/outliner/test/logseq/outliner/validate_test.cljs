@@ -7,8 +7,8 @@
 
 (deftest validate-block-title-unique-for-properties
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:color {:property/type :default}
-                            :color2 {:property/type :default}}})]
+              {:properties {:color {:logseq.property/type :default}
+                            :color2 {:logseq.property/type :default}}})]
 
     (is (nil?
          (outliner-validate/validate-unique-by-name-tag-and-block-type
@@ -67,7 +67,7 @@
 
 (deftest validate-parent-property
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:prop1 {:property/type :default}}
+              {:properties {:prop1 {:logseq.property/type :default}}
                :classes {:Class1 {} :Class2 {}}
                :pages-and-blocks
                [{:page {:block/title "page1"}}

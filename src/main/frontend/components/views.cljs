@@ -119,7 +119,7 @@
 
 (defn- get-property-value-for-search
   [block property]
-  (let [type (:property/type property)
+  (let [type (:logseq.property/type property)
         many? (= :db.cardinality/many (get property :db/cardinality))
         number-type? (= :number type)
         v (get block (:db/ident property))
@@ -194,7 +194,7 @@
                                           :logseq.property/created-from-property}
                                         ident)
                              (and with-object-name? (= :block/title ident))
-                             (contains? #{:map :entity} (:property/type property)))
+                             (contains? #{:map :entity} (:logseq.property/type property)))
                  (let [property (if (de/entity? property)
                                   property
                                   (or (merge (db/entity ident) property) property)) ; otherwise, :cell/:header/etc. will be removed
@@ -555,7 +555,7 @@
 (defn datetime-property?
   [property]
   (or
-   (= :datetime (:property/type property))
+   (= :datetime (:logseq.property/type property))
    (contains? #{:block/created-at :block/updated-at} (:db/ident property))))
 
 (def timestamp-options
@@ -608,7 +608,7 @@
                                    property (db/entity id)
                                    internal-property {:db/ident (:id column)
                                                       :block/title (:name column)
-                                                      :property/type (:type column)}]
+                                                      :logseq.property/type (:type column)}]
                                (if (or property
                                        (= :db.cardinality/many (:db/cardinality (get schema id)))
                                        (not= (:type column) :string))
@@ -631,7 +631,7 @@
                                       (let [filters' (conj filters [(:db/ident property) :after value])]
                                         (set-filters! filters')))})
                  property
-                 (if (= :checkbox (:property/type property))
+                 (if (= :checkbox (:logseq.property/type property))
                    (let [items [{:value true :label "true"}
                                 {:value false :label "false"}]]
                      (merge option
@@ -694,7 +694,7 @@
     [:before :after]
     (concat
      [:is :is-not]
-     (case (:property/type property)
+     (case (:logseq.property/type property)
        (:default :url :node)
        [:text-contains :text-not-contains]
        (:date)
@@ -787,7 +787,7 @@
 
 (rum/defc filter-value-select < rum/static
   [{:keys [data-fns] :as table} property value operator idx]
-  (let [type (:property/type property)
+  (let [type (:logseq.property/type property)
         items (cond
                 (contains? #{:before :after} operator)
                 timestamp-options
