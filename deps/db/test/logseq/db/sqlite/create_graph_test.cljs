@@ -119,6 +119,7 @@
         validation (db-validate/validate-db! @conn)]
     ;; For debugging
     ;; (println (count (:errors validation)) "errors of" (count (:entities validation)))
+    ;; (cljs.pprint/pprint (:errors validation))
     (is (empty? (map :entity (:errors validation)))
         "New graph has no validation errors")))
 
