@@ -133,7 +133,7 @@
 
                :output-dir       "./static/js/publishing"
                :asset-path       "static/js"
-               :closure-defines  {frontend.config/PUBLISHING true
+               :closure-defines  {logseq.common.config/PUBLISHING true
                                   goog.debug.LOGGING_ENABLED true}
                :compiler-options {:infer-externs      :auto
                                   :output-feature-set :es-next
