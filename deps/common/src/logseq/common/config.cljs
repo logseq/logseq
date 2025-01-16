@@ -3,6 +3,8 @@
   (:require [clojure.string :as string]
             [goog.object :as gobj]))
 
+(goog-define PUBLISHING false)
+
 (defn hidden?
   [path patterns]
   (let [path (if (and (string? path)

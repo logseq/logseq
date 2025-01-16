@@ -77,7 +77,7 @@
 (deftest new-graph-initializes-default-classes-correctly
   (let [conn (db-test/create-conn)]
     (is (= (count db-class/built-in-classes) (count (d/datoms @conn :avet :block/tags :logseq.class/Tag)))
-        "All built-in classes have a :logseq.class/Tag")
+        "Number of built-in classes equals number of ents with :logseq.class/Tag")
 
     (is (= (count (dissoc db-class/built-in-classes :logseq.class/Root))
            (count (->> (d/datoms @conn :avet :block/tags :logseq.class/Tag)
@@ -86,11 +86,40 @@
                        set)))
         "Reverse lookup of :logseq.property/parent correctly fetches number of child classes")))
 
+(deftest new-graph-initializes-default-properties-correctly
+  (let [conn (db-test/create-conn)]
+    (is (= (count db-property/built-in-properties) (count (d/datoms @conn :avet :block/tags :logseq.class/Property)))
+        "Number of built-in properties equals number of ents with :logseq.class/Property")
+
+    ;; testing :properties config
+    (testing "A built-in property that has"
+      (is (= :logseq.task/status.todo
+             (-> (d/entity @conn :logseq.task/status)
+                 :logseq.property/default-value
+                 :db/ident))
+          "A property with a :db/ident property value is created correctly")
+      (is (-> (d/entity @conn :logseq.task/deadline)
+              :logseq.property/description
+              db-property/property-value-content
+              str
+              (string/includes? "finish something"))
+          "A :default property is created correctly")
+      (is (= true
+             (-> (d/entity @conn :logseq.task/status)
+                 :logseq.property/enable-history?))
+          "A :checkbox property is created correctly")
+      (is (= 1
+             (-> (d/entity @conn :logseq.task/recur-frequency)
+                 :logseq.property/default-value
+                 db-property/property-value-content))
+          "A numeric property is created correctly"))))
+
 (deftest new-graph-is-valid
   (let [conn (db-test/create-conn)
         validation (db-validate/validate-db! @conn)]
     ;; For debugging
     ;; (println (count (:errors validation)) "errors of" (count (:entities validation)))
+    ;; (cljs.pprint/pprint (:errors validation))
     (is (empty? (map :entity (:errors validation)))
         "New graph has no validation errors")))
 

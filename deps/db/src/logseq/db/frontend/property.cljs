@@ -162,6 +162,10 @@
                                                   :hide? true
                                                   :view-context :block}
                                          :queryable? true}
+     :logseq.property/description {:title "Description"
+                                   :schema
+                                   {:type :default
+                                    :public? true}}
      :logseq.property.code/lang {:title "Code Mode"
                                  :schema {:type :string
                                           :public? false
@@ -337,27 +341,24 @@
       :schema {:type :datetime
                :public? true
                :ui-position :block-below}
-      :properties {:logseq.property/hide-empty-value true}
+      :properties {:logseq.property/hide-empty-value true
+                   :logseq.property/description "Use it to finish something at a specific date(time)."}
       :queryable? true}
      :logseq.task/scheduled
      {:title "Scheduled"
       :schema {:type :datetime
                :public? true
                :ui-position :block-below}
-      :properties {:logseq.property/hide-empty-value true}
+      :properties {:logseq.property/hide-empty-value true
+                   :logseq.property/description "Use it to plan something to start at a specific date(time)."}
       :queryable? true}
      :logseq.task/recur-frequency
      (let [schema {:type :number
                    :public? false}]
        {:title "Recur frequency"
         :schema schema
-        :properties (let [block {:db/ident :logseq.task/recur-frequency
-                                 :logseq.property/type :number}
-                          property {:db/ident :logseq.property/default-value
-                                    :logseq.property/type :number}
-                          default-value (assoc (build-property-value-block block property 1) :db/id -1)]
-                      {:logseq.property/hide-empty-value true
-                       :logseq.property/default-value default-value})
+        :properties {:logseq.property/hide-empty-value true
+                     :logseq.property/default-value 1}
         :queryable? true})
      :logseq.task/recur-unit
      {:title "Recur unit"
@@ -406,10 +407,6 @@
                                                 :hide? true
                                                 :view-context :page
                                                 :public? true}}
-     :logseq.property/description {:title "Description"
-                                   :schema
-                                   {:type :default
-                                    :public? true}}
 
      :logseq.property.view/type
      {:title "View Type"

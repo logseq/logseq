@@ -78,7 +78,8 @@
 
 (defn- ->property-value-tx-m
   "Given a new block and its properties, creates a map of properties which have values of property value tx.
-   This map is used for both creating the new property values and then adding them to a block"
+   This map is used for both creating the new property values and then adding them to a block.
+   This fn is similar to sqlite-create-graph/->property-value-tx-m and we may want to reuse it from here later."
   [new-block properties properties-config all-idents]
   (->> properties
        (keep (fn [[k v]]

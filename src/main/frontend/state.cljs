@@ -472,15 +472,13 @@ should be done through this fn in order to get global config and config defaults
     (get-global-config)
     (get-graph-config repo-url))))
 
-(defonce publishing? (atom nil))
-
 (defn publishing-enable-editing?
   []
-  (and @publishing? (:publishing/enable-editing? (get-config))))
+  (and common-config/PUBLISHING (:publishing/enable-editing? (get-config))))
 
 (defn enable-editing?
   []
-  (or (not @publishing?) (:publishing/enable-editing? (get-config))))
+  (or (not common-config/PUBLISHING) (:publishing/enable-editing? (get-config))))
 
 (defonce built-in-macros
   {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
@@ -1950,7 +1948,7 @@ Similar to re-frame subscriptions"
       (when (and edit-input-id block
                  (or
                   (publishing-enable-editing?)
-                  (not @publishing?)))
+                  (not common-config/PUBLISHING)))
         (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
               container (util/get-block-container block-element)
               block (if container

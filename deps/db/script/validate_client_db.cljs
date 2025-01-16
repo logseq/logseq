@@ -23,10 +23,7 @@
                            (->> (map (fn [e] (dissoc e :db/id)) ent-maps) explainer not-empty))]
       (do
         (if group-errors
-          (let [ent-errors (->> (db-validate/group-errors-by-entity db ent-maps (:errors explanation))
-                                (map #(assoc %
-                                             :dispatch-key
-                                             (->> (dissoc (:entity %) :db/id) (db-malli-schema/entity-dispatch-key db)))))]
+          (let [ent-errors (db-validate/group-errors-by-entity db ent-maps (:errors explanation))]
             (println "Found" (count ent-errors) "entities in errors:")
             (cond
               verbose
