@@ -29,11 +29,11 @@
                           ;; closed values are referenced by their :db/ident so no need to create values
                           (not (get-in db-property/built-in-properties [k :closed-values])))
                    (let [property-map {:db/ident k
-                                       :block/schema {:type built-in-type}}]
+                                       :logseq.property/type built-in-type}]
                      [property-map v])
                    (when-let [built-in-type' (get (:build/properties-ref-types new-block) built-in-type)]
                      (let [property-map {:db/ident k
-                                         :block/schema {:type built-in-type'}}]
+                                         :logseq.property/type built-in-type'}]
                        [property-map v]))))))
        (db-property-build/build-property-values-tx-m new-block)))
 
