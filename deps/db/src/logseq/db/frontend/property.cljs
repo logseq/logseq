@@ -601,6 +601,11 @@
   "Property values that shouldn't be updated"
   #{:logseq.property/built-in?})
 
+(def property-only-properties
+  "Properties only used by properties. Used to be block/schema"
+  #{:logseq.property/type :logseq.property/hide? :logseq.property/public? :logseq.property/view-context
+    :logseq.property/ui-position :logseq.property/classes :logseq.property/value})
+
 (def logseq-property-namespaces
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs" "logseq.task"
     "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table" "logseq.property.node"

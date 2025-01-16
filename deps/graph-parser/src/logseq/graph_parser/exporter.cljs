@@ -1168,7 +1168,7 @@
                      new-prop (sqlite-util/build-new-property db-ident
                                                               (get-property-schema @(:property-schemas import-state) kw-name)
                                                               {:title (name kw-name)})
-                     property-keys (filter (fn [k] (= "property" (namespace k))) (keys new-prop))]
+                     property-keys (filter db-property/property-only-properties (keys new-prop))]
                  (assert existing-page-uuid)
                  (merge (select-keys new-prop (into [:block/tags :db/ident :logseq.property/type :db/index :db/cardinality :db/valueType] property-keys))
                         {:block/uuid existing-page-uuid})))

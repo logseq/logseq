@@ -29,8 +29,7 @@
         (is (= []
                (->> (remove db-property/db-attribute-properties default-idents)
                     (keep namespace)
-                    (remove #(string/starts-with? % "logseq"))
-                    (remove #(string/starts-with? % "property"))))
+                    (remove #(string/starts-with? % "logseq"))))
             "All default :db/ident namespaces start with logseq."))
 
       (testing "closed values"
