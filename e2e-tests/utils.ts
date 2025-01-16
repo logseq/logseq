@@ -128,25 +128,20 @@ export async function openLeftSidebar(page: Page): Promise<void> {
 export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   await setMockedOpenDirPath(page, path);
 
-  const onboardingOpenButton = page.locator('strong:has-text("Choose a folder")')
+  const sidebar = page.locator('#left-sidebar')
 
-  if (await onboardingOpenButton.isVisible()) {
-    await onboardingOpenButton.click()
-  } else {
-    console.log("No onboarding button, loading file manually")
-    let sidebar = page.locator('#left-sidebar')
-    if (!/is-open/.test(await sidebar.getAttribute('class') || '')) {
-      await page.click('#left-menu.button')
-      await expect(sidebar).toHaveClass(/is-open/)
-    }
-
-    await page.click('#left-sidebar .cp__graphs-selector > a');
-    await page.waitForSelector('.cp__repos-quick-actions >> text="Add new graph"',
-      { state: 'visible', timeout: 5000 })
-    await page.click('text=Add new graph')
+  if (!/is-open/.test(await sidebar.getAttribute('class') || '')) {
+    await page.click('#left-menu.button')
+    await expect(sidebar).toHaveClass(/is-open/)
   }
 
-  setMockedOpenDirPath(page, ''); // reset it
+  await page.click('#left-sidebar .cp__graphs-selector > a')
+  await page.waitForTimeout(300)
+  await page.waitForSelector('.cp__repos-quick-actions >> text="Add new graph"',
+    { state: 'attached', timeout: 5000 })
+  await page.click('text=Add new graph')
+
+  await setMockedOpenDirPath(page, ''); // reset it
 
   await page.waitForSelector(':has-text("Parsing files")', {
     state: 'hidden',
