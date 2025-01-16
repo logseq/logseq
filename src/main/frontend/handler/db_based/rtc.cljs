@@ -125,14 +125,15 @@
 
 ;;; background task: try to restart rtc-loop when possible,
 ;;; triggered by `rtc-flows/rtc-try-restart-flow`
-(c.m/run-background-task
- ::restart-rtc-task
- (m/reduce
-  (constantly nil)
-  (m/ap
+(when-not config/publishing?
+ (c.m/run-background-task
+  ::restart-rtc-task
+  (m/reduce
+   (constantly nil)
+   (m/ap
     (let [{:keys [graph-uuid t]} (m/?> rtc-flows/rtc-try-restart-flow)]
       (when (and graph-uuid t
                  (= graph-uuid (ldb/get-graph-rtc-uuid (db/get-db)))
                  (> 5000 (- (common-util/time-ms) t)))
         (prn :trying-to-restart-rtc graph-uuid (t/now))
-        (c.m/<? (<rtc-start! (state/get-current-repo) :stop-before-start? false)))))))
+        (c.m/<? (<rtc-start! (state/get-current-repo) :stop-before-start? false))))))))

@@ -17,13 +17,10 @@
 (defonce dev-release? DEV-RELEASE)
 (defonce dev? ^boolean (or dev-release? goog.DEBUG))
 
-(goog-define PUBLISHING false)
-(defonce publishing? PUBLISHING)
+(defonce publishing? common-config/PUBLISHING)
 
 (goog-define REVISION "unknown")
 (defonce revision REVISION)
-
-(reset! state/publishing? publishing?)
 
 (def ENABLE-FILE-SYNC-PRODUCTION false)
 

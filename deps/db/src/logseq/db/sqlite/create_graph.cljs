@@ -9,12 +9,33 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]))
 
 (defn- mark-block-as-built-in [block]
   (assoc block :logseq.property/built-in? true))
+
+(defn- ->property-value-tx-m
+  "Given a new block and its properties, creates a map of properties which have values of property value tx.
+   This map is used for both creating the new property values and then adding them to a block"
+  [new-block properties]
+  (->> properties
+       (keep (fn [[k v]]
+               (when-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
+                 (if (and (db-property-type/value-ref-property-types built-in-type)
+                          ;; closed values are referenced by their :db/ident so no need to create values
+                          (not (get-in db-property/built-in-properties [k :closed-values])))
+                   (let [property-map {:db/ident k
+                                       :block/schema {:type built-in-type}}]
+                     [property-map v])
+                   (when-let [built-in-type' (get (:build/properties-ref-types new-block) built-in-type)]
+                     (let [property-map {:db/ident k
+                                         :block/schema {:type built-in-type'}}]
+                       [property-map v]))))))
+       (db-property-build/build-property-values-tx-m new-block)))
 
 (defn build-initial-properties*
   [built-in-properties]
@@ -27,20 +48,37 @@
                                   db-ident
                                   prop-name
                                   {:db/ident db-ident :schema schema :closed-values closed-values}
-                                  {:properties properties})
+                                  {})
                                  [(sqlite-util/build-new-property
                                    db-ident
                                    schema
-                                   {:title prop-name
-                                    :properties properties})])]
-       (->> (concat
-             [(dissoc property :logseq.property/default-value)]
-             others
-             (when-let [default-value (:logseq.property/default-value property)]
-               (when-let [id (:block/uuid property)]
-                 [{:block/uuid id
-                   :logseq.property/default-value default-value}])))
-            (remove nil?))))
+                                   {:title prop-name})])
+           pvalue-tx-m (->property-value-tx-m
+                        (merge property
+                               ;; This config is for :logseq.property/default-value and may need to
+                               ;; move to built-in-properties
+                               {:build/properties-ref-types {:entity :number}})
+                        (->> properties
+                             ;; No need to create property value if it's an internal ident
+                             (remove (fn [[_k v]]
+                                       (and (keyword? v) (db-malli-schema/internal-ident? v))))
+                             (into {})))
+           ;; _ (when (seq pvalue-tx-m) (prn :pvalue-tx-m db-ident pvalue-tx-m))
+
+           ;; The order of tx matters. property and others must come first as
+           ;; they may contain idents and uuids that are referenced by properties
+           tx
+           (cond-> [property]
+             (seq others)
+             (into others)
+             (seq pvalue-tx-m)
+             (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+             (seq properties)
+             (conj
+              (merge {:block/uuid (:block/uuid property)}
+                     properties
+                     (db-property-build/build-properties-with-ref-values pvalue-tx-m))))]
+       tx))
    (dissoc built-in-properties :logseq.property/built-in?)))
 
 (defn- build-initial-properties

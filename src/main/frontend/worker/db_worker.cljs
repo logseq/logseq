@@ -296,7 +296,7 @@
     (p/let [^object DB (.-DB ^object (.-oo1 ^object @*sqlite))
             db (new DB "/db.sqlite" "c")
             search-db (new DB "/search-db.sqlite" "c")]
-      [db search-db nil])
+      [db search-db])
     (p/let [^js pool (<get-opfs-pool repo)
             capacity (.getCapacity pool)
             _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
