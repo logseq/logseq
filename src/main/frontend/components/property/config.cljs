@@ -305,7 +305,7 @@
          (when disabled? (shui/tabler-icon "forbid-2" {:size 15}))])])))
 
 (rum/defc choice-item-content < rum/reactive db-mixins/query
-  [property block]
+  [property block {:keys [disabled?]}]
   (let [delete-choice! (fn []
                          (p/do!
                           (db-property-handler/delete-closed-value! (:db/id property) (:db/id block))
@@ -332,7 +332,8 @@
       value]
      (shui/dropdown-menu
       (shui/dropdown-menu-trigger
-       {:as-child true}
+       {:as-child true
+        :disabled disabled?}
        (shui/button
         {:size :sm :variant :ghost
          :title "More settings"}
@@ -389,7 +390,7 @@
       "Add choices")]))
 
 (rum/defc choices-sub-pane < rum/reactive db-mixins/query
-  [property {:keys [disabled?]}]
+  [property {:keys [disabled?] :as opts}]
   (let [values (:property/closed-values property)
         choices (doall
                  (keep (fn [value]
@@ -400,7 +401,7 @@
                         (let [id (:block/uuid block)]
                           {:id (str id)
                            :value id
-                           :content (choice-item-content property block)}))
+                           :content (choice-item-content property block opts)}))
                       choices)]
     [:div.ls-property-dropdown-editor.ls-property-choices-sub-pane
      (when (seq choices)
@@ -585,7 +586,7 @@
                    {:icon :settings-2 :title "Default value"
                     :desc (if default-value (db-property/property-value-content default-value) "Set value")
                     :submenu-content (fn [] (pdv/default-value-config property))}))]
-    (dropdown-editor-menuitem option)))
+    (dropdown-editor-menuitem (assoc option :disabled? config/publishing?))))
 
 (rum/defc ^:large-vars/cleanup-todo dropdown-editor-impl
   "property: block entity"
@@ -622,6 +623,7 @@
      (when (and (= property-type :node)
                 (not (contains? #{:logseq.property/parent} (:db/ident property))))
        (dropdown-editor-menuitem {:icon :hash
+                                  :disabled? disabled?
                                   :title "Specify node tags"
                                   :desc ""
                                   :submenu-content (fn [_ops]
@@ -647,6 +649,7 @@
            (dropdown-editor-menuitem
             {:icon :checkbox
              :title "Checkbox state mapping"
+             :disabled? config/publishing?
              :submenu-content (fn []
                                 (checkbox-state-mapping values))}))))
 
@@ -711,6 +714,7 @@
                              (:db/id property))]
                (dropdown-editor-menuitem
                 {:icon :checkbox :title "Show as checkbox on node"
+                 :disabled? config/publishing?
                  :desc (when owner-block
                          (shui/switch
                           {:id "show as checkbox" :size "sm"
