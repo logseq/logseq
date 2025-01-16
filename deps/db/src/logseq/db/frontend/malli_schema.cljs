@@ -130,7 +130,9 @@
   [db ents]
   ;; required-properties allows schemas like property-value-block to require
   ;; properties in their schema that they depend on
-  (let [exceptions-to-block-properties (conj required-properties :block/tags)
+  (let [exceptions-to-block-properties (-> required-properties
+                                           (into db-property/property-only-properties)
+                                           (conj :block/tags))
         page-class-id (:db/id (d/entity db :logseq.class/Page))
         all-page-class-ids (set (map #(:db/id (d/entity db %)) db-class/page-classes))]
     (mapv
@@ -138,7 +140,6 @@
        (reduce (fn [m [k v]]
                  (if-let [property (and (db-property/property? k)
                                         (not (contains? exceptions-to-block-properties k))
-                                        (not= (namespace k) "property")
                                         (d/entity db k))]
                    (update m :block/properties (fnil conj [])
                            [(property-entity->map property) v])
