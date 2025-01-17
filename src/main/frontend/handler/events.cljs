@@ -412,6 +412,10 @@
 (defmethod handle :go/plugins-from-file [[_ plugins]]
   (plugin/open-plugins-from-file-modal! plugins))
 
+(defmethod handle :go/install-plugin-from-github [[_]]
+  (shui/dialog-open!
+    (plugin/install-from-github-release-container)))
+
 (defmethod handle :go/plugins-settings [[_ pid nav? title]]
   (when pid
     (state/set-state! :plugin/focused-settings pid)

@@ -406,10 +406,12 @@
 (def built-in-property-name-to-idents
   "Map of all built-in keyword property names to their idents. Using in-memory property
   names because these are legacy names already in a user's file graph"
-  (->> db-property/built-in-properties
-       (map (fn [[k v]]
-              [(:name v) k]))
-       (into {})))
+  (merge (->> (dissoc db-property/built-in-properties :logseq.property/publishing-public?)
+              (map (fn [[k v]]
+                     [(:name v) k]))
+              (into {}))
+         ;; TODO: Move 3 remaining :name config from built-in-properties to here
+         {:public :logseq.property/publishing-public?}))
 
 (def all-built-in-property-names
   "All built-in property names as a set of keywords"

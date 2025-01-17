@@ -10,7 +10,6 @@
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.shell :as shell]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
@@ -55,7 +54,9 @@
           whiteboard? (ldb/whiteboard? page)
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
-          public? (pu/get-block-property-value page :logseq.property/public)
+          public? (if db-based?
+                    (:logseq.property/publishing-public? page)
+                    (get-in page [:block/properties :public]))
           _favorites-updated? (state/sub :favorites/updated?)
           favorited? (page-handler/favorited? page-title)
           developer-mode? (state/sub [:ui/developer-mode?])
@@ -139,6 +140,7 @@
              :options {:on-click
                        (fn []
                          (page-handler/update-public-attribute!
+                          repo
                           page
                           (if public? false true)))}})
 

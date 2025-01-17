@@ -50,7 +50,7 @@
   (let [pages (->> (d/q
                     '[:find ?p
                       :in $ %
-                      :where (property ?p :logseq.property/public true) [?p :block/name]]
+                      :where (property ?p :logseq.property/publishing-public? true) [?p :block/name]]
                     db
                     (rules/extract-rules rules/db-query-dsl-rules [:property]))
                    (map first)
@@ -72,7 +72,7 @@
   (->> (d/q
         '[:find ?p
           :in $ %
-          :where (property ?p :logseq.property/public false) [?p :block/name]]
+          :where (property ?p :logseq.property/publishing-public? false) [?p :block/name]]
         db
         (rules/extract-rules rules/db-query-dsl-rules [:property]))
        (map first)
@@ -201,11 +201,66 @@
             (contains? public-pages (:db/id (:block/page (d/entity db (:e datom)))))))))))
 
 (defn- db-filter-only-public
-  [public-pages internal-ents db datom]
-  (or
-   (contains? internal-ents (:e datom))
-   (contains? public-pages (:e datom))
-   (contains? public-pages (:db/id (:block/page (d/entity db (:e datom)))))))
+  [public-ents _db datom]
+  (contains? public-ents (:e datom)))
+
+(defn- get-properties-on-nodes
+  [db nodes]
+  (->> (d/q '[:find ?p
+              :in $ [?node ...]
+              :where
+              [?p :db/ident ?a]
+              [?node ?a ?v]
+              [(missing? $ ?a :logseq.property/built-in?)]]
+            db
+            nodes)
+       (map first)
+       set))
+
+(defn- get-property-values-on-nodes
+  [db nodes]
+  (->> (d/q '[:find ?pv
+              :in $ [?node ...]
+              :where
+              [?p :db/ident ?a]
+              [?p :db/valueType :db.type/ref]
+              [?node ?a ?pv]
+              [(missing? $ ?p :logseq.property/built-in?)]]
+            db
+            nodes)
+       (map first)
+       set))
+
+(defn- get-db-public-ents
+  [db public-pages]
+  (let [page-blocks (->> (d/datoms db :avet :block/page)
+                         (keep #(when (contains? public-pages (:v %)) (:e %)))
+                         set)
+        public-nodes (into public-pages page-blocks)
+        eavt-datoms (d/datoms db :eavt)
+        tags (->> eavt-datoms
+                  (keep #(when (and (contains? public-nodes (:e %)) (= :block/tags (:a %)))
+                           (:v %)))
+                  set)
+        properties (get-properties-on-nodes db public-nodes)
+        ;; This makes nodes from other pages visible on a current public page.
+        ;; BUT clicking on a node will not display the node's page
+        property-values (get-property-values-on-nodes db public-nodes)
+        internal-ents (set/union
+                       (->> eavt-datoms
+                            (keep #(when (and (= :db/ident (:a %)) (db-malli-schema/internal-ident? (:v %)))
+                                     (:e %)))
+                            set)
+                       (->> (d/datoms db :avet :logseq.property/built-in? true)
+                            (map :e)
+                            set))
+        ents (set/union internal-ents public-pages page-blocks properties property-values tags)]
+    #_(prn :public :pages (count public-pages) :page-blocks (count page-blocks)
+           :properties (count properties) :property-values (count property-values)
+           :tags (count tags) :internal (count internal-ents))
+    (when-let [invalid-ents (seq (remove integer? ents))]
+      (throw (ex-info (str "The following ents are invalid: " (pr-str (vec invalid-ents))) {})))
+    ents))
 
 (defn filter-only-public-pages-and-blocks
   "Prepares a database assuming all pages are private unless a page has a 'public:: true'"
@@ -214,17 +269,8 @@
   (let [public-pages* (seq (if db-graph? (get-db-public-pages db) (get-public-pages db)))
         public-pages (set/union (set public-pages*)
                                 (get-aliases-for-page-ids db public-pages*))
-        internal-ents (when db-graph?
-                        (set/union
-                         (->> (d/datoms db :eavt)
-                              (keep #(when (and (= :db/ident (:a %)) (db-malli-schema/internal-ident? (:v %)))
-                                       (:e %)))
-                              set)
-                         (->> (d/datoms db :avet :logseq.property/built-in? true)
-                              (map :e)
-                              set)))
         filter-fn (if db-graph?
-                    (partial db-filter-only-public public-pages internal-ents)
+                    (partial db-filter-only-public (get-db-public-ents db public-pages))
                     (partial file-filter-only-public public-pages))
         filtered-db (d/filter db filter-fn)
         datoms (d/datoms filtered-db :eavt)

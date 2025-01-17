@@ -653,10 +653,11 @@
                      :logseq.property.history/ref-value :logseq.property.history/scalar-value]}]
    [58 {:fix remove-duplicated-contents-page}]
    [59 {:properties [:logseq.property/created-by]}]
-   [60 {:properties [:logseq.property/type :logseq.property/hide? :logseq.property/public? :logseq.property/view-context :logseq.property/ui-position]
+   [60 {:fix (rename-properties {:logseq.property/public :logseq.property/publishing-public?})}]
+   [61 {:properties [:logseq.property/type :logseq.property/hide? :logseq.property/public? :logseq.property/view-context :logseq.property/ui-position]
         :fix (rename-properties {:property/schema.classes :logseq.property/classes
                                  :property.value/content :logseq.property/value})}]
-   [61 {:fix remove-block-schema}]])
+   [62 {:fix remove-block-schema}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
@@ -691,8 +692,12 @@
                                      (fn [data [k existing-value]]
                                        (update data k
                                                (fn [v]
-                                                 (if (and (coll? v) (not (map? v)))
+                                                 (cond
+                                                   (and (vector? v) (= :block/uuid (first v)))
+                                                   v
+                                                   (and (coll? v) (not (map? v)))
                                                    (concat v (if (coll? existing-value) existing-value [existing-value]))
+                                                   :else
                                                    (if (some? existing-value) existing-value v)))))
                                      data
                                      existing-data)))
