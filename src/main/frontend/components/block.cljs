@@ -3604,7 +3604,7 @@
                  linked-block? (or (:block/link block)
                                    (:original-block config))]
              (cond
-               (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)))
+               (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
                (let [collapsed? (state/get-block-collapsed block-id)]
                  (state/set-collapsed-block! block-id (if (some? collapsed?) collapsed? true)))
 
