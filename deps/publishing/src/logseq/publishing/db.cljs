@@ -50,7 +50,7 @@
   (let [pages (->> (d/q
                     '[:find ?p
                       :in $ %
-                      :where (property ?p :logseq.property/public true) [?p :block/name]]
+                      :where (property ?p :logseq.property/publishing-public? true) [?p :block/name]]
                     db
                     (rules/extract-rules rules/db-query-dsl-rules [:property]))
                    (map first)
@@ -72,7 +72,7 @@
   (->> (d/q
         '[:find ?p
           :in $ %
-          :where (property ?p :logseq.property/public false) [?p :block/name]]
+          :where (property ?p :logseq.property/publishing-public? false) [?p :block/name]]
         db
         (rules/extract-rules rules/db-query-dsl-rules [:property]))
        (map first)

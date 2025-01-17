@@ -48,7 +48,8 @@
        seen in when :public? is set. Valid values are :page, :block and :never. Property can
        be viewed in any context if not set
    * :title - Property's :block/title
-   * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident
+   * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident.
+      TODO: This is barely used for old properties. Deprecate this and move to gp-exporter
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
    * :queryable? - Boolean for whether property can be queried in the query builder
    * :closed-values - Vec of closed-value maps for properties with choices. Map
@@ -406,12 +407,12 @@
 
      :logseq.property/icon {:title "Icon"
                             :schema {:type :map}}
-     :logseq.property/public {:title "Publishing Public?"
-                              :schema
-                              {:type :checkbox
-                               :hide? true
-                               :view-context :page
-                               :public? true}}
+     :logseq.property/publishing-public? {:title "Publishing Public?"
+                                          :schema
+                                          {:type :checkbox
+                                           :hide? true
+                                           :view-context :page
+                                           :public? true}}
      :logseq.property/exclude-from-graph-view {:title "Excluded from Graph view?"
                                                :schema
                                                {:type :checkbox
