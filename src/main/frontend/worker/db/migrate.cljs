@@ -660,8 +660,12 @@
                                      (fn [data [k existing-value]]
                                        (update data k
                                                (fn [v]
-                                                 (if (and (coll? v) (not (map? v)))
+                                                 (cond
+                                                   (and (vector? v) (= :block/uuid (first v)))
+                                                   v
+                                                   (and (coll? v) (not (map? v)))
                                                    (concat v (if (coll? existing-value) existing-value [existing-value]))
+                                                   :else
                                                    (if (some? existing-value) existing-value v)))))
                                      data
                                      existing-data)))
