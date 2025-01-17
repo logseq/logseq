@@ -75,6 +75,10 @@ returns map of plugins to install and uninstall"
                       (set/difference edn-plugins-set installed-plugins-set))
        :uninstall (vec (set/difference installed-plugins-set edn-plugins-set))})))
 
+(defn open-install-plugin-from-github-modal
+  []
+  (state/pub-event! [:go/install-plugin-from-github]))
+
 (defn open-replace-plugins-modal
   []
   (p/catch

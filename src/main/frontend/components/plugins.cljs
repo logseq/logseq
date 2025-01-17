@@ -508,6 +508,28 @@
                     :on-click handle-submit!}
                    (if pending? (ui/loading) "Install"))]]))
 
+(rum/defc install-from-github-release-container
+  []
+  (let [[url set-url!] (rum/use-state "")
+        *input (rum/use-ref nil)]
+    [:div.p-4.flex.flex-col.pb-0
+     (shui/input {:placeholder "GitHub repo url"
+                  :value url
+                  :ref *input
+                  :on-change #(set-url! (util/evalue %))
+                  :auto-focus true})
+     [:div.flex.gap-6.pt-3.items-center.select-none
+      [:label.flex.items-center.gap-2 (shui/checkbox) [:span.opacity-60 "theme?"]]
+      [:label.flex.items-center.gap-2 (shui/checkbox) [:span.opacity-60 "effect?"]]]
+     [:div.flex.justify-end.pt-3
+      (shui/button
+        {:on-click (fn []
+                     (if (or (string/blank? (util/trim-safe url))
+                           (not (string/starts-with? url "https://")))
+                       (.focus (rum/deref *input))
+                       (shui/toast! url)))}
+        "Install")]]))
+
 (rum/defc auto-check-for-updates-control
   []
   (let [[enabled, set-enabled!] (rum/use-state (plugin-handler/get-enabled-auto-check-for-updates?))

@@ -568,9 +568,13 @@
                                              :inactive (not config/lsp-enabled?)
                                              :fn       plugin-handler/goto-plugins-dashboard!}
 
-   :ui/install-plugins-from-file            {:binding  false
+   :ui/install-plugins-from-file            {:binding  []
                                              :inactive (not (config/plugin-config-enabled?))
                                              :fn       plugin-config-handler/open-replace-plugins-modal}
+
+   :ui/install-plugin-from-github           {:binding  []
+                                             :inactive (or (not config/lsp-enabled?) (not (util/electron?)))
+                                             :fn       plugin-config-handler/open-install-plugin-from-github-modal}
 
    :ui/clear-all-notifications              {:binding []
                                              :fn      :frontend.handler.notification/clear-all!}
@@ -804,6 +808,7 @@
           :ui/select-theme-color
           :ui/goto-plugins
           :ui/install-plugins-from-file
+          :ui/install-plugin-from-github
           :editor/toggle-open-blocks
           :ui/clear-all-notifications
           :git/commit
