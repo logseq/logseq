@@ -176,6 +176,7 @@
              api-schema)))
        api-schema-seq)))))
 
+;;; TODO: :graph-uuid's schema :uuid instead of :string
 (def ^:large-vars/data-var data-to-ws-schema
   (mu/closed-schema
    (with-shared-schema-attrs
@@ -184,7 +185,8 @@
        [:map]]
       ["register-graph-updates"
        [:map
-        [:graph-uuid :string]]]
+        [:graph-uuid :string]
+        [:schema-version :string]]]
       ["apply-ops"
        [:or
         [:map
@@ -192,6 +194,7 @@
          [:action :string]
          [:profile {:optional true} :boolean]
          [:graph-uuid :string]
+         [:schema-version :string]
          [:ops [:sequential to-ws-op-schema]]
          [:t-before :int]]
         [:map
@@ -204,19 +207,16 @@
       ["upload-graph"
        [:map
         [:s3-key :string]
-        [:graph-name :string]]]
+        [:graph-name :string]
+        [:schema-version :string]]]
       ["download-graph"
        [:map
-        [:graph-uuid :string]]]
+        [:graph-uuid :string]
+        [:schema-version :string]]]
       ["download-info-list"
        [:map
-        [:graph-uuid :string]]]
-      ["snapshot-list"
-       [:map
-        [:graph-uuid :string]]]
-      ["snapshot-graph"
-       [:map
-        [:graph-uuid :string]]]
+        [:graph-uuid :string]
+        [:schema-version :string]]]
       ["grant-access"
        [:map
         [:graph-uuid :uuid]
@@ -227,10 +227,12 @@
         [:graph-uuid :uuid]]]
       ["inject-users-info"
        [:map
-        [:graph-uuid :uuid]]]
+        [:graph-uuid :uuid]
+        [:schema-version :string]]]
       ["delete-graph"
        [:map
-        [:graph-uuid :uuid]]]
+        [:graph-uuid :uuid]
+        [:schema-version :string]]]
       ["query-block-content-versions"
        [:map
         [:graph-uuid :string]
@@ -246,7 +248,8 @@
                             [::m/default extra-attr-map-schema]]]]]]
       ["get-graph-skeleton"
        [:map
-        [:graph-uuid :string]]]
+        [:graph-uuid :string]
+        [:schema-version :string]]]
       ["get-assets-upload-urls"
        [:map
         [:graph-uuid :string]

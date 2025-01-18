@@ -4,11 +4,8 @@
             [datascript.core :as d]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.util :as worker-util]
+            [logseq.db :as ldb]
             [missionary.core :as m]))
-
-(defn- get-schema-version
-  [db]
-  (:kv/value (d/entity db :logseq.kv/schema-version)))
 
 (defn- get-builtin-db-idents
   [db]
@@ -35,7 +32,7 @@
               (throw (ex-info "Unavailable2" {:remote-ex remote-ex}))))
         (let [{:keys [server-schema-version server-builtin-db-idents]} r
               client-builtin-db-idents (set (get-builtin-db-idents db))
-              client-schema-version (get-schema-version db)]
+              client-schema-version (ldb/get-graph-schema-version db)]
           (when (not= client-schema-version server-schema-version)
             (worker-util/post-message :notification
                                       [[:div

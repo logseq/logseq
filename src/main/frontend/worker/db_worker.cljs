@@ -857,16 +857,6 @@
    (with-write-transit-str
      (js/Promise. (rtc-core/new-task--download-info-list token graph-uuid))))
 
-  (rtc-snapshot-graph
-   [this token graph-uuid]
-   (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--snapshot-graph token graph-uuid))))
-
-  (rtc-snapshot-list
-   [this token graph-uuid]
-   (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--snapshot-list token graph-uuid))))
-
   (rtc-get-graph-keys
    [this repo]
    (with-write-transit-str
