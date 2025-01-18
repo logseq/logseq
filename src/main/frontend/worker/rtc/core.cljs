@@ -403,19 +403,6 @@
   []
   (m/reduce {} nil (m/eduction (take 1) create-get-state-flow)))
 
-(defn new-task--snapshot-graph
-  [token graph-uuid]
-  (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-    (m/join #(select-keys % [:snapshot-uuid :graph-uuid])
-            (ws-util/send&recv get-ws-create-task {:action "snapshot-graph"
-                                                   :graph-uuid graph-uuid}))))
-(defn new-task--snapshot-list
-  [token graph-uuid]
-  (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-    (m/join :snapshot-list
-            (ws-util/send&recv get-ws-create-task {:action "snapshot-list"
-                                                   :graph-uuid graph-uuid}))))
-
 (defn new-task--upload-graph
   [token repo remote-graph-name]
   (m/sp
