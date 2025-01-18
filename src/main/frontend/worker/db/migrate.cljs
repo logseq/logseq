@@ -363,7 +363,7 @@
                              (true? (:db/index property)))
                 (let [fix-tx-data (->>
                                    (select-keys db-property/built-in-properties [:logseq.property.node/display-type])
-                                   (sqlite-create-graph/build-initial-properties*)
+                                   (sqlite-create-graph/build-properties)
                                    (map (fn [m]
                                           (assoc m :db/id (:db/id property)))))]
                   (d/transact! conn fix-tx-data)))
@@ -729,7 +729,7 @@
                                       (when (d/entity db k)
                                         (assert (str "DB migration: property already exists " k)))))
                             (into {})
-                            sqlite-create-graph/build-initial-properties*
+                            sqlite-create-graph/build-properties
                             (map (fn [b] (assoc b :logseq.property/built-in? true))))
         classes' (->> (concat [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Journal :logseq.class/Whiteboard] classes)
                       distinct)
