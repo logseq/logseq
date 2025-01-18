@@ -67,14 +67,11 @@
   "Installs plugin given plugin map with id"
   [{:keys [id] :as manifest}]
   (when-not (and (:plugin/installing @state/state)
-                 (installed? id))
-    (p/create
-     (fn [resolve]
-       (state/set-state! :plugin/installing manifest)
-       (if (util/electron?)
-         (ipc/ipc :installMarketPlugin manifest)
-         (async-install-or-update-for-web! manifest))
-       (resolve id)))))
+              (installed? id))
+    (state/set-state! :plugin/installing manifest)
+    (if (util/electron?)
+      (ipc/ipc :installMarketPlugin manifest)
+      (async-install-or-update-for-web! manifest))))
 
 (defn unregister-plugin
   "Unregister and uninstall plugin given plugin id"
