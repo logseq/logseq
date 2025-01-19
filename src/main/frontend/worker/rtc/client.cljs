@@ -17,7 +17,7 @@
   [get-ws-create-task graph-uuid repo]
   (m/sp
     (try
-      (let [{remote-t :t}
+      (let [{remote-t :t :keys [max-remote-schema-version]}
             (m/? (ws-util/send&recv get-ws-create-task {:action "register-graph-updates"
                                                         :graph-uuid graph-uuid}))]
         (rtc-log-and-state/update-remote-t graph-uuid remote-t)

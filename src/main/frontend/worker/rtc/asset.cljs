@@ -270,7 +270,7 @@
                  (not-empty
                   (map (fn [asset-uuid] {:op :update-asset :block/uuid asset-uuid})
                        (set/difference local-all-asset-uuids local-all-asset-file-uuids)))]
-        (add-log-fn :rtc.asset.log/initial-download-missing-assets-count {:count (count asset-update-ops)})
+        (add-log-fn :rtc.asset.log/initial-download-missing-assets {:count (count asset-update-ops)})
         (m/? (new-task--pull-remote-asset-updates
               repo get-ws-create-task conn graph-uuid add-log-fn asset-update-ops))))))
 
