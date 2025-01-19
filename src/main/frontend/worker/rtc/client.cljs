@@ -13,16 +13,18 @@
             [frontend.worker.rtc.ws-util :as ws-util]
             [missionary.core :as m]))
 
-(defn- register-graph-updates
-  [get-ws-create-task graph-uuid repo]
+(defn- new-task--register-graph-updates
+  [get-ws-create-task graph-uuid major-schema-version repo]
   (m/sp
     (try
-      (let [{remote-t :t :keys [max-remote-schema-version]}
+      (let [{remote-t :t :as resp}
             (m/? (ws-util/send&recv get-ws-create-task {:action "register-graph-updates"
-                                                        :graph-uuid graph-uuid}))]
+                                                        :graph-uuid graph-uuid
+                                                        :schema-version major-schema-version}))]
         (rtc-log-and-state/update-remote-t graph-uuid remote-t)
         (when-not (client-op/get-local-tx repo)
-          (client-op/update-local-tx repo remote-t)))
+          (client-op/update-local-tx repo remote-t))
+        resp)
       (catch :default e
         (if (= :rtc.exception/remote-graph-not-ready (:type (ex-data e)))
           (throw (ex-info "remote graph is still creating" {:missionary/retry true} e))
@@ -32,7 +34,7 @@
   "Return a task: get or create a mws(missionary wrapped websocket).
   see also `ws/get-mws-create`.
   But ensure `register-graph-updates` and `calibrate-graph-skeleton` has been sent"
-  [get-ws-create-task graph-uuid repo conn *last-calibrate-t *online-users]
+  [get-ws-create-task graph-uuid major-schema-version repo conn *last-calibrate-t *online-users add-log-fn]
   (assert (some? graph-uuid))
   (let [*sent (atom {}) ;; ws->bool
         ]
@@ -56,9 +58,14 @@
                  (reset! *online-users online-users)))
              :update-online-user-when-register-graph-updates
              :succ (constantly nil)))
-          (m/? (c.m/backoff
-                (take 5 (drop 2 c.m/delays)) ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
-                (register-graph-updates get-ws-create-task graph-uuid repo)))
+          (let [{:keys [max-remote-schema-version]}
+                (m/?
+                 (c.m/backoff
+                  (take 5 (drop 2 c.m/delays)) ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
+                  (new-task--register-graph-updates get-ws-create-task graph-uuid major-schema-version repo)))]
+            (when max-remote-schema-version
+              (add-log-fn :rtc.log/larger-remote-schema-version-exists
+                          {:remote-schema-version max-remote-schema-version})))
           (let [t (client-op/get-local-tx repo)]
             (when (or (nil? @*last-calibrate-t)
                       (< 500 (- t @*last-calibrate-t)))
