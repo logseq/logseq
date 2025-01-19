@@ -180,7 +180,8 @@
   TODO: auto refresh token if needed"
   [graph-uuid schema-version repo conn date-formatter token
    & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
-  (let [ws-url                     (or debug-ws-url (ws-util/get-ws-url token))
+  (let [major-schema-version       (r.branch-graph/major-version schema-version)
+        ws-url                     (or debug-ws-url (ws-util/get-ws-url token))
         *auto-push?                (atom auto-push?)
         *remote-profile?           (atom false)
         *last-calibrate-t          (atom nil)
@@ -193,7 +194,8 @@
         {:keys [*current-ws get-ws-create-task]}
         (gen-get-ws-create-map--memoized ws-url)
         get-ws-create-task         (r.client/ensure-register-graph-updates
-                                    get-ws-create-task graph-uuid repo conn *last-calibrate-t *online-users)
+                                    get-ws-create-task graph-uuid major-schema-version
+                                    repo conn *last-calibrate-t *online-users add-log-fn)
         {:keys [assets-sync-loop-task]}
         (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid conn *auto-push?)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push? *online-users)]
@@ -313,7 +315,7 @@
       (if (instance? ExceptionInfo r)
         (r.ex/->map r)
         (let [{:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
-              (create-rtc-loop schema-version graph-uuid repo conn date-formatter token)
+              (create-rtc-loop graph-uuid schema-version repo conn date-formatter token)
               *last-stop-exception (atom nil)
               canceler (c.m/run-task rtc-loop-task :rtc-loop-task
                                      :fail (fn [e]
