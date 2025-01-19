@@ -485,7 +485,14 @@
                                            :rtc {:rtc/ignore-attr-when-init-upload true
                                                  :rtc/ignore-attr-when-init-download true
                                                  :rtc/ignore-attr-when-syncing true}}
-
+     :logseq.property.table/pinned-columns {:title "Table view pinned columns"
+                                            :schema
+                                            {:type :property
+                                             :hide? true
+                                             :public? false}
+                                            :rtc {:rtc/ignore-attr-when-init-upload true
+                                                  :rtc/ignore-attr-when-init-download true
+                                                  :rtc/ignore-attr-when-syncing true}}
      :logseq.property/view-for {:title "This view belongs to"
                                 :schema
                                 {:type :node

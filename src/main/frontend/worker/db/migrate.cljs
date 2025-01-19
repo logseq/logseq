@@ -626,7 +626,8 @@
                      :logseq.property.history/ref-value :logseq.property.history/scalar-value]}]
    [58 {:fix remove-duplicated-contents-page}]
    [59 {:properties [:logseq.property/created-by]}]
-   [60 {:fix (rename-properties {:logseq.property/public :logseq.property/publishing-public?})}]])
+   [60 {:fix (rename-properties {:logseq.property/public :logseq.property/publishing-public?})}]
+   [61 {:properties [:logseq.property.table/pinned-columns]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
