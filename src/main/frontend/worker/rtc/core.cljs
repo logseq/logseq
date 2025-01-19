@@ -2,8 +2,10 @@
   "Main(use missionary) ns for rtc related fns"
   (:require [clojure.data :as data]
             [datascript.core :as d]
+            [frontend.common.missionary :as c.m]
             [frontend.worker.device :as worker-device]
             [frontend.worker.rtc.asset :as r.asset]
+            [frontend.worker.rtc.branch-graph :as r.branch-graph]
             [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.exception :as r.ex]
@@ -16,8 +18,8 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.config :as common-config]
-            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]
             [malli.core :as ma]
             [missionary.core :as m])
   (:import [missionary Cancelled]))
@@ -264,18 +266,52 @@
                                             (fn [v] (= (set (keys empty-rtc-loop-metadata))
                                                        (set (keys v))))))
 
+(defn- validate-rtc-start-conditions
+  [repo token]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
+    (let [user-uuid (:sub (worker-util/parse-jwt token))
+          graph-uuid (ldb/get-graph-rtc-uuid @conn)
+          schema-version (ldb/get-graph-schema-version @conn)
+          remote-schema-version (ldb/get-graph-remote-schema-version @conn)
+          app-schema-version db-schema/version]
+      (cond
+        (not user-uuid)
+        (ex-info "Invalid token" {:type :rtc.exception/invalid-token})
+
+        (not graph-uuid)
+        r.ex/ex-local-not-rtc-graph
+
+        (not schema-version)
+        (ex-info "Not found schema-version" {:type :rtc.exception/not-found-schema-version})
+
+        (not remote-schema-version)
+        (ex-info "Not found remote-schema-version" {:type :rtc.exception/not-found-remote-schema-version})
+
+        (apply not= (map r.branch-graph/major-version [app-schema-version remote-schema-version schema-version]))
+        (ex-info "major schema version mismatch" {:type :rtc.exception/major-schema-version-mismatched
+                                                  :local schema-version
+                                                  :remote remote-schema-version})
+        :else
+        {:conn conn
+         :user-uuid user-uuid
+         :graph-uuid graph-uuid
+         :schema-version schema-version
+         :remote-schema-version remote-schema-version
+         :date-formatter (common-config/get-date-formatter (worker-state/get-config repo))}))
+    (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
+                                  :repo repo})))
+
 ;;; ================ API ================
 (defn new-task--rtc-start
   [repo token]
   (m/sp
-   ;; ensure device metadata existing first
+    ;; ensure device metadata existing first
     (m/? (worker-device/new-task--ensure-device-metadata! token))
-    (if-let [conn (worker-state/get-datascript-conn repo)]
-      (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
-        (let [user-uuid (:sub (worker-util/parse-jwt token))
-              config (worker-state/get-config repo)
-              date-formatter (common-config/get-date-formatter config)
-              {:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
+    (let [{:keys [conn user-uuid graph-uuid _schema-version _remote-schema-version date-formatter] :as r}
+          (validate-rtc-start-conditions repo token)]
+      (if (instance? ExceptionInfo r)
+        (r.ex/->map r)
+        (let [{:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
               (create-rtc-loop graph-uuid repo conn date-formatter token)
               *last-stop-exception (atom nil)
               canceler (c.m/run-task rtc-loop-task :rtc-loop-task
@@ -295,10 +331,7 @@
                                             :*rtc-lock *rtc-lock
                                             :canceler canceler
                                             :*last-stop-exception *last-stop-exception})
-                nil)))
-        (r.ex/->map r.ex/ex-local-not-rtc-graph))
-      (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
-                                                :repo repo})))))
+                nil)))))))
 
 (defn rtc-stop
   []
@@ -434,11 +467,11 @@
 
 ;;; subscribe state ;;;
 (when-not common-config/PUBLISHING
- (c.m/run-background-task
-  ::subscribe-state
-  (m/reduce
-   (fn [_ v] (worker-util/post-message :rtc-sync-state v))
-   create-get-state-flow)))
+  (c.m/run-background-task
+   ::subscribe-state
+   (m/reduce
+    (fn [_ v] (worker-util/post-message :rtc-sync-state v))
+    create-get-state-flow)))
 
 (comment
   (do
