@@ -178,7 +178,7 @@
 (defn- create-rtc-loop
   "Return a map with [:rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
   TODO: auto refresh token if needed"
-  [graph-uuid repo conn date-formatter token
+  [graph-uuid schema-version repo conn date-formatter token
    & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
   (let [ws-url                     (or debug-ws-url (ws-util/get-ws-url token))
         *auto-push?                (atom auto-push?)
@@ -267,6 +267,7 @@
                                                        (set (keys v))))))
 
 (defn- validate-rtc-start-conditions
+  "Return exception if validation failed"
   [repo token]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (let [user-uuid (:sub (worker-util/parse-jwt token))
@@ -307,12 +308,12 @@
   (m/sp
     ;; ensure device metadata existing first
     (m/? (worker-device/new-task--ensure-device-metadata! token))
-    (let [{:keys [conn user-uuid graph-uuid _schema-version _remote-schema-version date-formatter] :as r}
+    (let [{:keys [conn user-uuid graph-uuid schema-version _remote-schema-version date-formatter] :as r}
           (validate-rtc-start-conditions repo token)]
       (if (instance? ExceptionInfo r)
         (r.ex/->map r)
         (let [{:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
-              (create-rtc-loop graph-uuid repo conn date-formatter token)
+              (create-rtc-loop schema-version graph-uuid repo conn date-formatter token)
               *last-stop-exception (atom nil)
               canceler (c.m/run-task rtc-loop-task :rtc-loop-task
                                      :fail (fn [e]
