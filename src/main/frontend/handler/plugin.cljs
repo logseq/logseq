@@ -628,9 +628,7 @@
             dotroot (get-ls-dotdir-root)
             filepath (util/node-path.join dotroot dirname (str key ".json"))]
         (if (util/electron?)
-          (p/let [exist? (fs/file-exists? filepath)
-                  _ (when-not exist? (fs/mkdir! filepath))
-                  _ (fs/create-if-not-exists repo nil filepath (js/JSON.stringify default))
+          (p/let [_ (fs/create-if-not-exists repo nil filepath (js/JSON.stringify default))
                   json (fs/read-file nil filepath)]
             [filepath (js/JSON.parse json)])
           (p/let [data (idb/get-item filepath)]
