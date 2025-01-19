@@ -26,7 +26,7 @@
 (defn compare-schemas
   "Return one of [:create-branch :download nil].
   when nil, nothing need to do"
-  [server-graph-state server-graph-schema app-schema client-graph-schema]
+  [server-graph-schema app-schema client-graph-schema]
   (let [[server-graph-schema app-schema client-graph-schema]
         (map major-version [server-graph-schema app-schema client-graph-schema])]
     (cond
@@ -47,6 +47,5 @@
       (cond
         ;; this remote-graph branch is creating now,
         ;; disallow upload a new schema-version graph for now
-        (= "creating" server-graph-state) nil
         (>= server-graph-schema app-schema) nil
         (< server-graph-schema app-schema) :create-branch))))
