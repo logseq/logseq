@@ -15,6 +15,7 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -27,8 +28,7 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (defn- re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
@@ -287,7 +287,7 @@
     (wrap-menuitem
      [:div.inner-wrap.cursor-pointer
       {:class (util/classnames [{:disabled disabled?}])}
-      [:strong
+      [:div.property-setting-title
        (some-> icon (name) (shui/tabler-icon {:size 14
                                               :style {:margin-top "-1"}}))
        [:span title]]
@@ -710,21 +710,21 @@
        (let [values (:property/closed-values property)]
          (when (>= (count values) 2)
            (let [checked? (contains?
-                             (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
-                             (:db/id property))]
-               (dropdown-editor-menuitem
-                {:icon :checkbox :title "Show as checkbox on node"
-                 :disabled? config/publishing?
-                 :desc (when owner-block
-                         (shui/switch
-                          {:id "show as checkbox" :size "sm"
-                           :checked checked?
-                           :on-click util/stop-propagation
-                           :on-checked-change
-                           (fn [value]
-                             (if value
-                               (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
-                               (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
+                           (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
+                           (:db/id property))]
+             (dropdown-editor-menuitem
+              {:icon :checkbox :title "Show as checkbox on node"
+               :disabled? config/publishing?
+               :desc (when owner-block
+                       (shui/switch
+                        {:id "show as checkbox" :size "sm"
+                         :checked checked?
+                         :on-click util/stop-propagation
+                         :on-checked-change
+                         (fn [value]
+                           (if value
+                             (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
+                             (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
 
      (when (and owner-block
                 ;; Any property should be removable from Tag Properties

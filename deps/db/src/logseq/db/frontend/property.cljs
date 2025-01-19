@@ -488,6 +488,7 @@
      :logseq.property.table/pinned-columns {:title "Table view pinned columns"
                                             :schema
                                             {:type :property
+                                             :cardinality :many
                                              :hide? true
                                              :public? false}
                                             :rtc {:rtc/ignore-attr-when-init-upload true

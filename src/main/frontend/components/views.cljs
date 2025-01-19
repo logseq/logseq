@@ -6,29 +6,31 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
+            [dommy.core :as dom]
             [frontend.components.dnd :as dnd]
+            [frontend.components.property.config :as property-config]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.hooks :as hooks]
+            [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
-            [dommy.core :as dom]
+            [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.shui.ui :as shui]
-            [rum.core :as rum]
-            [frontend.mixins :as mixins]
             [logseq.shui.table.core :as table-core]
-            [logseq.db :as ldb]
-            [frontend.config :as config]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.hooks :as hooks]))
+            [logseq.shui.ui :as shui]
+            [rum.core :as rum]))
 
 (defn- get-latest-entity
   [e]
@@ -79,25 +81,61 @@
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
 (defn header-cp
-  [{:keys [column-toggle-sorting! state]} column]
+  [{:keys [view-entity column-toggle-sorting! state]} column]
   (let [sorting (:sorting state)
         [asc?] (some (fn [item] (when (= (:id item) (:id column))
                                   (when-some [asc? (:asc? item)]
-                                    [asc?]))) sorting)]
-    (shui/button
-     {:variant "text"
-      :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
-      :on-click #(column-toggle-sorting! column)}
-     (let [title (str (:name column))]
-       [:span {:title title
-               :class "max-w-full overflow-hidden text-ellipsis"}
-        title])
-     (case asc?
-       true
-       (ui/icon "arrow-up")
-       false
-       (ui/icon "arrow-down")
-       nil))))
+                                    [asc?]))) sorting)
+        property (db/entity (:id column))
+        _ (assert (some? (:db/id property)))
+        pinned? (contains? (set (map :db/id (:logseq.property.table/pinned-columns view-entity)))
+                           (:db/id property))]
+    (shui/dropdown-menu
+     (shui/dropdown-menu-trigger
+      {:asChild true}
+      (shui/button
+       {:variant "text"
+        :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"}
+       (let [title (str (:name column))]
+         [:span {:title title
+                 :class "max-w-full overflow-hidden text-ellipsis"}
+          title])
+       (case asc?
+         true
+         (ui/icon "arrow-up")
+         false
+         (ui/icon "arrow-down")
+         nil)))
+     (shui/dropdown-menu-content
+      {:align "start"}
+      (shui/dropdown-menu-sub
+       (shui/dropdown-menu-sub-trigger
+        [:div.flex.flex-row.items-center.gap-1
+         (ui/icon "settings" {:size 15})
+         [:div "Configure"]])
+       (shui/dropdown-menu-sub-content
+        (property-config/dropdown-editor property nil {})))
+      (shui/dropdown-menu-item
+       {:on-click #(column-toggle-sorting! column)}
+       [:div.flex.flex-row.items-center.gap-1
+        (ui/icon "arrows-down-up" {:size 15})
+        [:div "Set order"]
+        (cond asc? [:span.opacity-50 "Asc"]
+              (false? asc?) [:span.opacity-50 "Desc"]
+              :else nil)])
+      (shui/dropdown-menu-item
+       {:on-click (fn [_e]
+                    (if pinned?
+                      (db-property-handler/delete-property-value! (:block/uuid view-entity)
+                                                                  :logseq.property.table/pinned-columns
+                                                                  (:db/id property))
+                      (property-handler/set-block-property! (state/get-current-repo)
+                                                            (:block/uuid view-entity)
+                                                            :logseq.property.table/pinned-columns
+                                                            (:db/id property))))}
+       [:div.flex.flex-row.items-center.gap-1
+        (ui/icon "pin" {:size 15})
+        [:div (if pinned? "Unpin" "Pin")]])))))
 
 (defn- timestamp-cell-cp
   [_table row column]
@@ -410,29 +448,33 @@
      {:data-no-dnd true
       :ref *el}]))
 
+(defn- table-header-cell
+  [table column]
+  (let [header-fn (:header column)
+        sized-columns (get-in table [:state :sized-columns])
+        set-sized-columns! (get-in table [:data-fns :set-sized-columns!])
+        width (get-column-size column sized-columns)
+        select? (= :select (:id column))]
+    [:div.ls-table-header-cell
+     {:style {:width width
+              :min-width width}
+      :class (when select? "!border-0")}
+     (if (fn? header-fn)
+       (header-fn table column)
+       header-fn)
+                                   ;; resize handle
+     (when-not (false? (:resizable? column))
+       (column-resizer column
+                       (fn [size]
+                         (set-sized-columns! (assoc sized-columns (:id column) size)))))]))
+
 (defn- table-header
   [table columns {:keys [show-add-property? add-property!] :as option} selected-rows]
   (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
-        set-sized-columns! (get-in table [:data-fns :set-sized-columns!])
-        sized-columns (get-in table [:state :sized-columns])
         items (mapv (fn [column]
                       {:id (:name column)
                        :value (:id column)
-                       :content (let [header-fn (:header column)
-                                      width (get-column-size column sized-columns)
-                                      select? (= :select (:id column))]
-                                  [:div.ls-table-header-cell
-                                   {:style {:width width
-                                            :min-width width}
-                                    :class (when select? "!border-0")}
-                                   (if (fn? header-fn)
-                                     (header-fn table column)
-                                     header-fn)
-                                   ;; resize handle
-                                   (when-not (false? (:resizable? column))
-                                     (column-resizer column
-                                                     (fn [size]
-                                                       (set-sized-columns! (assoc sized-columns (:id column) size)))))])
+                       :content (table-header-cell table column)
                        :disabled? (= (:id column) :select)}) columns)
         items (if show-add-property?
                 (conj items
@@ -1227,7 +1269,8 @@
         [input-filters set-input-filters!] (rum/use-state [input filters])
         [row-selection set-row-selection!] (rum/use-state {})
         columns (sort-columns columns ordered-columns)
-        table-map {:data data
+        table-map {:view-entity view-entity
+                   :data data
                    :columns columns
                    :state {:sorting sorting
                            :filters filters
