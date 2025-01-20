@@ -135,3 +135,7 @@ html.is-resizing-buf {
     z-index: 99;
     background-color: var(--lx-gray-01, var(--ls-primary-background-color, hsl(var(--background))));
 }
+
+.table-action-bar {
+    z-index: 100;
+}

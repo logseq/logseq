@@ -493,20 +493,19 @@
                          unpinned)
         selection-rows-count (count selected-rows)]
     (shui/table-header
-     [:<>
-      (when (seq pinned-items)
-        [:div.sticky-columns.flex.flex-row
-         (dnd/items pinned-items {:vertical? false
-                                  :on-drag-end (fn [ordered-columns _m]
-                                                 (set-ordered-columns! ordered-columns))})])
-      (when (seq unpinned-items)
-        [:div.flex.flex-row
-         (dnd/items unpinned-items
-                    {:vertical? false
-                     :on-drag-end (fn [ordered-columns _m]
-                                    (set-ordered-columns! ordered-columns))})])]
+     (when (seq pinned-items)
+       [:div.sticky-columns.flex.flex-row
+        (dnd/items pinned-items {:vertical? false
+                                 :on-drag-end (fn [ordered-columns _m]
+                                                (set-ordered-columns! ordered-columns))})])
+     (when (seq unpinned-items)
+       [:div.flex.flex-row
+        (dnd/items unpinned-items
+                   {:vertical? false
+                    :on-drag-end (fn [ordered-columns _m]
+                                   (set-ordered-columns! ordered-columns))})])
      (when (pos? selection-rows-count)
-       [:div.absolute.top-0.left-8
+       [:div.table-action-bar.absolute.top-0.left-8
         (action-bar table selected-rows option)]))))
 
 (rum/defc row-cell < rum/static
