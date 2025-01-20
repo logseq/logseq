@@ -16,11 +16,18 @@
 
   (testing "Updates a property"
     (let [conn (db-test/create-conn-with-blocks {:properties {:num {:logseq.property/type :number}}})
-          old-updated-at (:block/updated-at (d/entity @conn :user.property/num))
-          _ (outliner-property/upsert-property! conn :user.property/num {:cardinality :many} {})]
-      (is (db-property/many? (d/entity @conn :user.property/num)))
-      (is (> (:block/updated-at (d/entity @conn :user.property/num))
-             old-updated-at))))
+          old-updated-at (:block/updated-at (d/entity @conn :user.property/num))]
+
+      (testing "and change its cardinality"
+        (outliner-property/upsert-property! conn :user.property/num {:cardinality :many} {})
+        (is (db-property/many? (d/entity @conn :user.property/num)))
+        (is (> (:block/updated-at (d/entity @conn :user.property/num))
+               old-updated-at)))
+
+      (testing "and change its type from a ref to a non-ref type"
+        (outliner-property/upsert-property! conn :user.property/num {:type :checkbox} {})
+        (is (= :checkbox (:logseq.property/type (d/entity @conn :user.property/num))))
+        (is (= nil (:db/valueType (d/entity @conn :user.property/num)))))))
 
   (testing "Multiple properties that generate the same initial :db/ident"
     (let [conn (db-test/create-conn-with-blocks [])]
