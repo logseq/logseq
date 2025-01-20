@@ -83,21 +83,22 @@
       v-str)))
 
 (defn- update-datascript-schema
+  "Updates property type and cardinality"
   [property schema]
-  (let [type' (:logseq.property/type schema)
+  (let [new-type (:logseq.property/type schema)
         cardinality (:db/cardinality schema)
         ident (:db/ident property)
         cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
         old-type (:logseq.property/type property)
         old-ref-type? (db-property-type/user-ref-property-types old-type)
-        ref-type? (db-property-type/user-ref-property-types type')]
-    [(cond->
-      {:db/ident ident
-       :db/cardinality cardinality}
-       ref-type?
-       (assoc :db/valueType :db.type/ref))
-     (when (and old-ref-type? (not ref-type?))
-       [:db/retract (:db/id property) :db/valueType])]))
+        ref-type? (db-property-type/user-ref-property-types new-type)]
+    (cond-> [(cond->
+              {:db/ident ident
+               :db/cardinality cardinality}
+               ref-type?
+               (assoc :db/valueType :db.type/ref))]
+      (and new-type old-ref-type? (not ref-type?))
+      (conj [:db/retract (:db/id property) :db/valueType]))))
 
 (defn- update-property
   [conn db-ident property schema {:keys [property-name properties]}]
@@ -108,9 +109,10 @@
 
   (let [changed-property-attrs
         ;; Only update property if something has changed as we are updating a timestamp
-        (cond-> (->> (keep (fn [[k v]]
+        (cond-> (->> (dissoc schema :db/cardinality)
+                     (keep (fn [[k v]]
                              (when-not (= (get property k) v)
-                               [k v])) (dissoc schema :db/cardinality))
+                               [k v])))
                      (into {}))
           (and (some? property-name) (not= property-name (:block/title property)))
           (assoc :block/title property-name
