@@ -93,8 +93,9 @@
         old-ref-type? (db-property-type/user-ref-property-types old-type)
         ref-type? (db-property-type/user-ref-property-types new-type)]
     (cond-> [(cond->
-              {:db/ident ident
-               :db/cardinality cardinality}
+              (outliner-core/block-with-updated-at
+               {:db/ident ident
+                :db/cardinality cardinality})
                ref-type?
                (assoc :db/valueType :db.type/ref))]
       (and new-type old-ref-type? (not ref-type?))
