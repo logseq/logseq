@@ -116,14 +116,21 @@
            [:div "Configure"]])
          (shui/dropdown-menu-sub-content
           (property-config/dropdown-editor property nil {}))))
-      (shui/dropdown-menu-item
-       {:on-click #(column-toggle-sorting! column)}
-       [:div.flex.flex-row.items-center.gap-1
-        (ui/icon "arrows-down-up" {:size 15})
-        [:div "Set order"]
-        (cond asc? [:span.opacity-50 "Asc"]
-              (false? asc?) [:span.opacity-50 "Desc"]
-              :else nil)])
+      (shui/dropdown-menu-sub
+       (shui/dropdown-menu-sub-trigger
+        [:div.flex.flex-row.items-center.gap-1
+         (ui/icon "arrows-down-up" {:size 15})
+         [:div.mr-4 "Set order"]
+         (cond asc? [:span.opacity-50.text-sm "ASC"]
+               (false? asc?) [:span.opacity-50.text-sm "DESC"]
+               :else nil)]
+        (shui/dropdown-menu-sub-content
+         (shui/dropdown-menu-item
+          {:on-click #(column-toggle-sorting! column)}
+          "ASC")
+         (shui/dropdown-menu-item
+          {:on-click #(column-toggle-sorting! column)}
+          "DESC"))))
       (when property
         (shui/dropdown-menu-item
          {:on-click (fn [_e]
@@ -363,7 +370,7 @@
    (when (fn? on-delete-rows)
      (shui/button
       {:variant "ghost"
-       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
+       :class "h-8 !pl-0 !px-2 !py-0 text-muted-foreground hover:text-foreground w-full justify-start"
        :on-click (fn []
                    (on-delete-rows table selected-rows))}
       (ui/icon "trash")))))
