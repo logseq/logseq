@@ -188,9 +188,11 @@
                       :variant (if dirty? :default :secondary)
                       :on-click (fn []
                                   (set-saving! true)
-                                  (-> [(db-property-handler/set-block-property!
-                                        (:db/id property)
-                                        :logseq.property/icon (:icon form-data))
+                                  (-> [(db-property-handler/upsert-property!
+                                        (:db/ident property)
+                                        {}
+                                        {:property-name title
+                                         :properties {:logseq.property/icon (:icon form-data)}})
                                        (when (not= description (:description (rum/deref *form-data)))
                                          (set-property-description! property description))]
                                       (p/all)

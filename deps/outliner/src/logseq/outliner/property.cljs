@@ -121,10 +121,11 @@
           (conj (outliner-core/block-with-updated-at
                  (merge {:db/ident db-ident}
                         changed-property-attrs)))
-          (or (not= (:logseq.property/type schema) (:logseq.property/type property))
-              (and (:db/cardinality schema) (not= (:db/cardinality schema) (keyword (name (:db/cardinality property)))))
-              (and (= :default (:logseq.property/type schema)) (not= :db.type/ref (:db/valueType property)))
-              (seq (:property/closed-values property)))
+          (and (seq schema)
+               (or (not= (:logseq.property/type schema) (:logseq.property/type property))
+                   (and (:db/cardinality schema) (not= (:db/cardinality schema) (keyword (name (:db/cardinality property)))))
+                   (and (= :default (:logseq.property/type schema)) (not= :db.type/ref (:db/valueType property)))
+                   (seq (:property/closed-values property))))
           (concat (update-datascript-schema property schema)))
         tx-data (concat property-tx-data
                         (when (seq properties)
