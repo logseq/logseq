@@ -1255,6 +1255,54 @@
            (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data' gallery?)))))
      [sorting data])))
 
+(rum/defc view-sorting
+  [table columns sorting]
+  (shui/button
+   {:variant "ghost"
+    :class "text-muted-foreground !px-1"
+    :size :sm
+    :on-click (fn [e]
+                (shui/popup-show! (.-target e)
+                                  (fn []
+                                    [:div.ls-view-order-setting.flex.flex-col.gap-2.py-2.text-sm
+                                     (for [{:keys [id asc?]} sorting]
+                                       (when-let [name (some (fn [column] (when (= id (:id column))
+                                                                            (:name column))) columns)]
+                                         [:div.flex.flex-row.gap-2.items-center.justify-between.px-2
+                                          [:div.text-muted-foreground.whitespace-nowrap (str name ":")]
+                                          [:div.flex.flex-row.gap-2.items-center
+                                           (shui/select
+                                            {:default-value (if asc? "asc" "desc")
+                                             :on-value-change (fn [v]
+                                                                (let [asc? (= v "asc")
+                                                                      f (:column-set-sorting! table)]
+                                                                  (f {:id id} asc?)))}
+                                            (shui/select-trigger
+                                             {:class "order-button !px-2 !py-0 !h-8"}
+                                             (shui/select-value
+                                              {:placeholder "Select order"}))
+                                            (shui/select-content
+                                             (shui/select-group
+                                              (shui/select-item {:value "asc"} "Ascending")
+                                              (shui/select-item {:value "desc"} "Descending"))))
+                                           (shui/button
+                                            {:variant "ghost"
+                                             :class "text-muted-foreground !px-1"
+                                             :size :sm
+                                             :on-click (fn []
+                                                         (let [f (:column-set-sorting! table)]
+                                                           (f {:id id} nil)))}
+                                            (ui/icon "x"))]]))
+                                     (shui/dropdown-menu-item
+                                      {:class "text-muted-foreground"
+                                       :on-click (fn []
+                                                   (let [f (get-in table [:data-fns :set-sorting!])]
+                                                     (f nil)))}
+                                      (ui/icon "trash" {:size 15})
+                                      [:span.ml-1 "Delete sort"])])
+                                  {:align :end}))}
+   (ui/icon "arrows-up-down")))
+
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
                 :or {render-empty-title? false}}
@@ -1339,6 +1387,9 @@
             (t (or title-key :views.table/default-title)
                (count (:rows table)))])])
        [:div.view-actions.flex.items-center.gap-1
+
+        (when (seq sorting)
+          (view-sorting table columns sorting))
 
         (filter-properties columns table)
 

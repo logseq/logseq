@@ -56,8 +56,11 @@
   (let [id (:id column)
         existing-column (some (fn [item] (when (= (:id item) id) item)) sorting)
         value (->> (if existing-column
-                     (mapv (fn [item] (when (= (:id item) id) (assoc item :asc? asc?))) sorting)
-                     (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? asc?}))
+                     (if (nil? asc?)
+                       (remove (fn [item] (= (:id item) id)) sorting)
+                       (map (fn [item] (when (= (:id item) id) (assoc item :asc? asc?))) sorting))
+                     (when-not (nil? asc?)
+                       (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? asc?})))
                    (remove nil?)
                    vec)]
     (set-sorting! value)))
