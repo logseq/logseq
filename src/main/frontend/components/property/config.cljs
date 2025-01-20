@@ -553,10 +553,10 @@
   (let [handle-select! (fn [^js e]
                          (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
                            (p/do!
-                            (db-property-handler/set-block-property!
-                             (:db/id property)
-                             :logseq.property/type
-                             (keyword v))
+                            (db-property-handler/upsert-property!
+                             (:db/ident property)
+                             {:type (keyword v)}
+                             {})
                             (set-sub-open! false)
                             (restore-root-highlight-item! id))))
         item-props {:on-select handle-select!}
