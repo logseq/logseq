@@ -51,13 +51,13 @@
                         (update row-selection :selected-ids (if value set-conj disj) id))]
     (set-row-selection! new-selection)))
 
-(defn- column-toggle-sorting!
-  [column set-sorting! sorting]
+(defn- column-set-sorting!
+  [column set-sorting! sorting asc?]
   (let [id (:id column)
         existing-column (some (fn [item] (when (= (:id item) id) item)) sorting)
         value (->> (if existing-column
-                     (mapv (fn [item] (when (= (:id item) id) (update item :asc? not))) sorting)
-                     (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? true}))
+                     (mapv (fn [item] (when (= (:id item) id) (assoc item :asc? asc?))) sorting)
+                     (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? asc?}))
                    (remove nil?)
                    vec)]
     (set-sorting! value)))
@@ -97,7 +97,7 @@
            :row-selected? (fn [row] (row-selected? row row-selection))
            :row-toggle-selected! (fn [row value] (row-toggle-selected! row value set-row-selection! row-selection))
            :toggle-selected-all! (fn [value] (toggle-selected-all! value set-row-selection!))
-           :column-toggle-sorting! (fn [column] (column-toggle-sorting! column set-sorting! sorting)))))
+           :column-set-sorting! (fn [column asc?] (column-set-sorting! column set-sorting! sorting asc?)))))
 
 (defn- get-prop-and-children
   [prop-and-children]

@@ -81,7 +81,7 @@
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
 (defn header-cp
-  [{:keys [view-entity column-toggle-sorting! state]} column]
+  [{:keys [view-entity column-set-sorting! state]} column]
   (let [sorting (:sorting state)
         [asc?] (some (fn [item] (when (= (:id item) (:id column))
                                   (when-some [asc? (:asc? item)]
@@ -117,23 +117,18 @@
          (shui/dropdown-menu-sub-content
           [:div.ls-property-dropdown-editor
            (property-config/dropdown-editor property nil {})])))
-      (shui/dropdown-menu-sub
-       (shui/dropdown-menu-sub-trigger
-        [:div.flex.flex-row.items-center.gap-1
-         (ui/icon "arrows-down-up" {:size 15})
-         [:div.mr-4 "Set order"]
-         (cond asc? [:span.opacity-50.text-sm "ASC"]
-               (false? asc?) [:span.opacity-50.text-sm "DESC"]
-               :else nil)]
-        (shui/dropdown-menu-sub-content
-         (shui/dropdown-menu-item
-          {:key "asc"
-           :on-click #(column-toggle-sorting! column)}
-          "ASC")
-         (shui/dropdown-menu-item
-          {:key "desc"
-           :on-click #(column-toggle-sorting! column)}
-          "DESC"))))
+      (shui/dropdown-menu-item
+       {:key "asc"
+        :on-click #(column-set-sorting! column true)}
+       [:div.flex.flex-row.items-center.gap-1
+        (ui/icon "arrow-up" {:size 15})
+        [:div "Sort ascending"]])
+      (shui/dropdown-menu-item
+       {:key "desc"
+        :on-click #(column-set-sorting! column false)}
+       [:div.flex.flex-row.items-center.gap-1
+        (ui/icon "arrow-down" {:size 15})
+        [:div "Sort desending"]])
       (when property
         (shui/dropdown-menu-item
          {:on-click (fn [_e]
