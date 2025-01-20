@@ -128,11 +128,11 @@
         (shui/dropdown-menu-item
          {:on-click (fn [_e]
                       (if pinned?
-                        (db-property-handler/delete-property-value! (:block/uuid view-entity)
+                        (db-property-handler/delete-property-value! (:db/id view-entity)
                                                                     :logseq.property.table/pinned-columns
                                                                     (:db/id property))
                         (property-handler/set-block-property! (state/get-current-repo)
-                                                              (:block/uuid view-entity)
+                                                              (:db/id view-entity)
                                                               :logseq.property.table/pinned-columns
                                                               (:db/id property))))}
          [:div.flex.flex-row.items-center.gap-1
@@ -1251,7 +1251,7 @@
            (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data' gallery?)))))
      [sorting data])))
 
-(rum/defc view-inner < rum/static
+(rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
                 :or {render-empty-title? false}}
    *scroller-ref]
