@@ -119,13 +119,13 @@
            (property-config/dropdown-editor property nil {})])))
       (shui/dropdown-menu-item
        {:key "asc"
-        :on-click #(column-set-sorting! column true)}
+        :on-click #(column-set-sorting! sorting column true)}
        [:div.flex.flex-row.items-center.gap-1
         (ui/icon "arrow-up" {:size 15})
         [:div "Sort ascending"]])
       (shui/dropdown-menu-item
        {:key "desc"
-        :on-click #(column-set-sorting! column false)}
+        :on-click #(column-set-sorting! sorting column false)}
        [:div.flex.flex-row.items-center.gap-1
         (ui/icon "arrow-down" {:size 15})
         [:div "Sort desending"]])
@@ -1256,7 +1256,7 @@
      [sorting data])))
 
 (rum/defc view-sorting-item
-  [table id name asc? set-sorting!]
+  [table sorting id name asc? set-sorting!]
   [:div.flex.flex-row.gap-2.items-center.justify-between.px-2
    [:div:div.flex.flex-row.gap-1.items-center
     (shui/button
@@ -1272,8 +1272,8 @@
      {:default-value (if asc? "asc" "desc")
       :on-value-change (fn [v]
                          (let [asc? (= v "asc")
-                               f (:column-set-sorting! table)]
-                           (f {:id id} asc?)))}
+                               f (:column-set-sorting! sorting table)]
+                           (f sorting {:id id} asc?)))}
      (shui/select-trigger
       {:class "order-button !px-2 !py-0 !h-8"}
       (shui/select-value
@@ -1288,8 +1288,10 @@
       :size :sm
       :on-click (fn []
                   (let [f (:column-set-sorting! table)
-                        new-sorting (f {:id id} nil)]
+                        new-sorting (f sorting {:id id} nil)
+                        f (get-in table [:data-fns :set-sorting!])]
                     (set-sorting! new-sorting)
+                    (f new-sorting)
                     (when (empty? new-sorting)
                       (shui/popup-hide!))))}
      (ui/icon "x"))]])
@@ -1303,7 +1305,7 @@
                                                         (:name column))) columns)]
                      {:id (str id)
                       :value id
-                      :content (view-sorting-item table id name asc? set-sorting!)}))]
+                      :content (view-sorting-item table sorting id name asc? set-sorting!)}))]
        (dnd/items items
                   {:on-drag-end (fn [ordered-columns]
                                   (let [f (get-in table [:data-fns :set-sorting!])

@@ -101,7 +101,7 @@
            :row-selected? (fn [row] (row-selected? row row-selection))
            :row-toggle-selected! (fn [row value] (row-toggle-selected! row value set-row-selection! row-selection))
            :toggle-selected-all! (fn [value] (toggle-selected-all! value set-row-selection!))
-           :column-set-sorting! (fn [column asc?] (column-set-sorting! column set-sorting! sorting asc?)))))
+           :column-set-sorting! (fn [sorting column asc?] (column-set-sorting! column set-sorting! sorting asc?)))))
 
 (defn- get-prop-and-children
   [prop-and-children]
