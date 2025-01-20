@@ -127,10 +127,12 @@
                :else nil)]
         (shui/dropdown-menu-sub-content
          (shui/dropdown-menu-item
-          {:on-click #(column-toggle-sorting! column)}
+          {:key "asc"
+           :on-click #(column-toggle-sorting! column)}
           "ASC")
          (shui/dropdown-menu-item
-          {:on-click #(column-toggle-sorting! column)}
+          {:key "desc"
+           :on-click #(column-toggle-sorting! column)}
           "DESC"))))
       (when property
         (shui/dropdown-menu-item
