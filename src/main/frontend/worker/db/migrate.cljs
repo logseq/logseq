@@ -556,8 +556,9 @@
                                 (concat
                                  [m'
                                   [:db/retract eid :block/schema]])))
-                            db-ids)]
-        (d/transact! conn tx-data {:db-migrate? true})))
+                            db-ids)
+            tx-data' (concat tx-data [[:db/retractEntity :block/schema]])]
+        (d/transact! conn tx-data' {:db-migrate? true})))
     (d/reset-schema! conn (dissoc schema :block/schema))
     []))
 
