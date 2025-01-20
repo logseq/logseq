@@ -58,7 +58,7 @@
         value (->> (if existing-column
                      (if (nil? asc?)
                        (remove (fn [item] (= (:id item) id)) sorting)
-                       (map (fn [item] (when (= (:id item) id) (assoc item :asc? asc?))) sorting))
+                       (map (fn [item] (if (= (:id item) id) (assoc item :asc? asc?) item)) sorting))
                      (when-not (nil? asc?)
                        (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? asc?})))
                    (remove nil?)

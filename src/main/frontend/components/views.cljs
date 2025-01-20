@@ -1339,7 +1339,8 @@
                 :or {render-empty-title? false}}
    *scroller-ref]
   (let [[input set-input!] (rum/use-state "")
-        sorting (:logseq.property.table/sorting view-entity)
+        sorting* (:logseq.property.table/sorting view-entity)
+        sorting (if (= sorting* :logseq.property/empty-placeholder) nil sorting*)
         [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
         filters (:logseq.property.table/filters view-entity)
         [filters set-filters!] (rum/use-state (or filters []))
