@@ -974,7 +974,7 @@
         {:keys [set-filters!]} data-fns]
     (when (seq (:filters filters))
       [:div.filters-row.flex.flex-row.items-center.gap-4.justify-between.flex-wrap.py-2
-       [:div.flex.flex-row.items-center
+       [:div.flex.flex-row.items-center.gap-2
         (map-indexed
          (fn [idx filter']
            (let [[property-ident operator value] filter'
@@ -995,7 +995,7 @@
               (filter-operator property operator filters set-filters! idx)
               (filter-value table property operator value filters set-filters! idx)
               (shui/button
-               {:class "!px-1 rounded-none"
+               {:class "!px-1 rounded-none text-muted-foreground"
                 :variant "ghost"
                 :size :sm
                 :on-click (fn [_e]
@@ -1010,7 +1010,7 @@
             :on-value-change (fn [v]
                                (set-filters! (assoc filters :or? (= v "or"))))}
            (shui/select-trigger
-            {:class "order-button !px-2 !py-0 !h-8"}
+            {:class "opacity-75 hover:opacity-100 !px-2 !py-0 !h-6"}
             (shui/select-value
              {:placeholder "Match"}))
            (shui/select-content
