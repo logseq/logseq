@@ -666,7 +666,8 @@
         timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
         filters (get-in table [:state :filters])
-        columns (remove #(false? (:column-list? %)) columns)
+        columns (remove #(or (false? (:column-list? %))
+                             (= :id (:id %))) columns)
         items (map (fn [column]
                      {:label (:name column)
                       :value column}) columns)
