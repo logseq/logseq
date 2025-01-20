@@ -115,7 +115,8 @@
            (ui/icon "settings" {:size 15})
            [:div "Configure"]])
          (shui/dropdown-menu-sub-content
-          (property-config/dropdown-editor property nil {}))))
+          [:div.ls-property-dropdown-editor
+           (property-config/dropdown-editor property nil {})])))
       (shui/dropdown-menu-sub
        (shui/dropdown-menu-sub-trigger
         [:div.flex.flex-row.items-center.gap-1
