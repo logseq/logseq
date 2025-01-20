@@ -498,7 +498,7 @@
                                 :value :add-new-property
                                 :content (add-property-button)
                                 :disabled? true})
-                         unpinned)
+                         (mapv build-item unpinned))
         selection-rows-count (count selected-rows)]
     (shui/table-header
      (when (seq pinned-items)
