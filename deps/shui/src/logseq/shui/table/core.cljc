@@ -63,7 +63,8 @@
                        (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? asc?})))
                    (remove nil?)
                    vec)]
-    (set-sorting! value)))
+    (set-sorting! value)
+    value))
 
 (defn get-selection-rows
   [row-selection rows]
