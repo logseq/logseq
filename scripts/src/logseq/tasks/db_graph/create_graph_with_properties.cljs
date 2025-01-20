@@ -2,7 +2,8 @@
   "Script that generates all the permutations of property types and cardinality.
    Also creates a page of queries that exercises most properties
    NOTE: This script is also used in CI to confirm graph creation works"
-  (:require ["fs-extra" :as fse]
+  (:require ["fs-extra$default" :as fse]
+            ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
             [babashka.cli :as cli]
@@ -10,7 +11,6 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [goog.object :as gobj]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -203,12 +203,9 @@
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        f (.-default ^js fse)
-        exists-sync? (gobj/get f "existsSync")
-        remove-sync (gobj/get f "removeSync")
-        db-path (node-path/join graph-dir "db.sqlite")
-        _ (when (exists-sync? db-path)
-            (remove-sync db-path))
+        db-path (node-path/join dir db-name "db.sqlite")
+        _ (when (fs/existsSync db-path)
+            (fse/removeSync db-path))
         conn (outliner-cli/init-conn dir db-name {:additional-config (:config options)
                                                   :classpath (cp/get-classpath)})
         {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx (create-init-data))
