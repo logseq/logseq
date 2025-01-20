@@ -1,7 +1,7 @@
 (ns logseq.shui.table.core
   "Table"
-  (:require [logseq.shui.table.impl :as impl]
-            [dommy.core :refer-macros [sel1]]
+  (:require [dommy.core :refer-macros [sel1]]
+            [logseq.shui.table.impl :as impl]
             [rum.core :as rum]))
 
 (defn- get-head-container
@@ -52,17 +52,15 @@
     (set-row-selection! new-selection)))
 
 (defn- column-toggle-sorting!
-  [column set-sorting! sorting {:keys [sort-by-one-column?]
-                                :or {sort-by-one-column? true}}]
+  [column set-sorting! sorting]
   (let [id (:id column)
         existing-column (some (fn [item] (when (= (:id item) id) item)) sorting)
-        value (if existing-column
-                (mapv (fn [item] (when (= (:id item) id) (update item :asc? not))) sorting)
-                (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? true}))
-        value' (if sort-by-one-column?
-                 (filterv (fn [item] (when (= (:id item) id) item)) value)
-                 value)]
-    (set-sorting! value')))
+        value (->> (if existing-column
+                     (mapv (fn [item] (when (= (:id item) id) (update item :asc? not))) sorting)
+                     (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? true}))
+                   (remove nil?)
+                   vec)]
+    (set-sorting! value)))
 
 (defn get-selection-rows
   [row-selection rows]
@@ -99,7 +97,7 @@
            :row-selected? (fn [row] (row-selected? row row-selection))
            :row-toggle-selected! (fn [row value] (row-toggle-selected! row value set-row-selection! row-selection))
            :toggle-selected-all! (fn [value] (toggle-selected-all! value set-row-selection!))
-           :column-toggle-sorting! (fn [column & {:as option}] (column-toggle-sorting! column set-sorting! sorting option)))))
+           :column-toggle-sorting! (fn [column] (column-toggle-sorting! column set-sorting! sorting)))))
 
 (defn- get-prop-and-children
   [prop-and-children]
