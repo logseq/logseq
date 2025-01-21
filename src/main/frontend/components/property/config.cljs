@@ -555,7 +555,7 @@
                            (p/do!
                             (db-property-handler/upsert-property!
                              (:db/ident property)
-                             {:type (keyword v)}
+                             {:logseq.property/type (keyword v)}
                              {})
                             (set-sub-open! false)
                             (restore-root-highlight-item! id))))
@@ -660,7 +660,7 @@
                                     :on-toggle-checked-change
                                     (fn []
                                       (let [update-cardinality-fn #(db-property-handler/upsert-property! (:db/ident property)
-                                                                                                         {:cardinality (if many? :one :many)}
+                                                                                                         {:db/cardinality (if many? :one :many)}
                                                                                                          {})]
                                       ;; Only show dialog for existing values as it can be reversed for unused properties
                                         (if (and (seq values) (not many?))

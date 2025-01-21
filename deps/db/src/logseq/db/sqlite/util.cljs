@@ -70,17 +70,9 @@
   [prop-schema]
   (reduce-kv
    (fn [r k v]
-     (if (qualified-keyword? k)
-       (assoc r k v)
-       (cond
-         (= k :cardinality)
-         (assoc r :db/cardinality v)
-         (= k :classes)
-         (assoc r :logseq.property/classes v)
-         (= k :position)
-         (assoc r :logseq.property/ui-position v)
-         :else
-         (assoc r (keyword "logseq.property" k) v))))
+     (if-let [new-k (and (simple-keyword? k) (db-property/schema-properties-map k))]
+       (assoc r new-k v)
+       (assoc r k v)))
    {}
    prop-schema))
 
@@ -90,13 +82,12 @@
    * :title - Case sensitive property name. Defaults to deriving this from db-ident
    * :block-uuid - :block/uuid for property"
   ([db-ident prop-schema] (build-new-property db-ident prop-schema {}))
-  ([db-ident prop-schema' {:keys [title block-uuid ref-type? properties]}]
+  ([db-ident prop-schema {:keys [title block-uuid ref-type? properties]}]
    (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
                      (db-property/create-user-property-ident-from-name (name db-ident)))
          prop-name (or title (name db-ident'))
-         prop-schema (schema->qualified-property-keyword prop-schema')
          prop-type (get prop-schema :logseq.property/type :default)]
      (merge
       (dissoc prop-schema :db/cardinality)

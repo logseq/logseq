@@ -534,6 +534,24 @@
                           [:db/retract e :logseq.user/avatar]])
                  db-ids))))))
 
+(defn- schema->qualified-property-keyword
+  [prop-schema]
+  (reduce-kv
+   (fn [r k v]
+     (if (qualified-keyword? k)
+       (assoc r k v)
+       (cond
+         (= k :cardinality)
+         (assoc r :db/cardinality v)
+         (= k :classes)
+         (assoc r :logseq.property/classes v)
+         (= k :position)
+         (assoc r :logseq.property/ui-position v)
+         :else
+         (assoc r (keyword "logseq.property" k) v))))
+   {}
+   prop-schema))
+
 (defn- remove-block-schema
   [conn _search-db]
   (let [db @conn
@@ -546,7 +564,7 @@
             tx-data (mapcat (fn [eid]
                               (let [entity (d/entity db eid)
                                     schema (:block/schema entity)
-                                    schema-properties (sqlite-util/schema->qualified-property-keyword schema)
+                                    schema-properties (schema->qualified-property-keyword schema)
                                     hidden-page? (contains? #{common-config/favorites-page-name common-config/views-page-name}
                                                             (:block/title entity))
                                     m (assoc schema-properties :db/id eid)
