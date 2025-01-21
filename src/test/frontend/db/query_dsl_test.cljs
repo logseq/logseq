@@ -212,7 +212,7 @@ prop-d:: [[nada]]"}])
                  :build/properties
                  {:logseq.property/default-value "foo"}
                  :build/properties-ref-types {:entity :number}}}
-      :classes {:Class1 {:build/schema-properties [:default]}}
+      :classes {:Class1 {:build/class-properties [:default]}}
       :pages-and-blocks
       [{:page {:block/title "page1"}
         :blocks [{:block/title "b1"
@@ -238,7 +238,7 @@ prop-d:: [[nada]]"}])
       {:checkbox {:logseq.property/type :checkbox
                   :build/properties
                   {:logseq.property/scalar-default-value true}}}
-      :classes {:Class1 {:build/schema-properties [:checkbox]}}
+      :classes {:Class1 {:build/class-properties [:checkbox]}}
       :pages-and-blocks
       [{:page {:block/title "page1"}
         :blocks [{:block/title "b1"
@@ -268,7 +268,7 @@ prop-d:: [[nada]]"}])
                 :build/properties
                 {:logseq.property/default-value "Todo"}
                 :build/properties-ref-types {:entity :number}}}
-      :classes {:Mytask {:build/schema-properties [:status]}
+      :classes {:Mytask {:build/class-properties [:status]}
                 :Bug {:build/class-parent :Mytask}}
       :pages-and-blocks
       [{:page {:block/title "page1"}

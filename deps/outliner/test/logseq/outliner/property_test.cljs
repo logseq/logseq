@@ -279,15 +279,15 @@
 
 (deftest class-remove-property!
   (let [conn (db-test/create-conn-with-blocks
-              {:classes {:c1 {:build/schema-properties [:p1 :p2]}}})
+              {:classes {:c1 {:build/class-properties [:p1 :p2]}}})
         _ (outliner-property/class-remove-property! conn :user.class/c1 :user.property/p1)]
     (is (= [:user.property/p2]
            (map :db/ident (:logseq.property.class/properties (d/entity @conn :user.class/c1)))))))
 
 (deftest get-block-classes-properties
   (let [conn (db-test/create-conn-with-blocks
-              {:classes {:c1 {:build/schema-properties [:p1]}
-                         :c2 {:build/schema-properties [:p2 :p3]}}
+              {:classes {:c1 {:build/class-properties [:p1]}
+                         :c2 {:build/class-properties [:p2 :p3]}}
                :pages-and-blocks
                [{:page {:block/title "p1"}
                  :blocks [{:block/title "o1"

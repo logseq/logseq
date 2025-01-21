@@ -146,7 +146,7 @@
      (let [title' (or title (name db-ident))]
        (mark-block-as-built-in
         (sqlite-util/build-new-class
-         (let [schema-properties (mapv
+         (let [class-properties (mapv
                                   (fn [db-ident]
                                     (let [property (get db-ident->properties db-ident)]
                                       (assert property (str "Built-in property " db-ident " is not defined yet"))
@@ -157,8 +157,8 @@
              :block/name (common-util/page-name-sanity-lc title')
              :db/ident db-ident
              :block/uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)}
-             (seq schema-properties)
-             (assoc :logseq.property.class/properties schema-properties)
+             (seq class-properties)
+             (assoc :logseq.property.class/properties class-properties)
              (seq properties)
              (merge properties)))))))
    built-in-classes))

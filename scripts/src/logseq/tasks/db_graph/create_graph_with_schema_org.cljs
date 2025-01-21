@@ -69,7 +69,7 @@
       parent-class'
       (assoc :build/class-parent (keyword (strip-schema-prefix parent-class')))
       (seq properties)
-      (assoc :build/schema-properties (mapv (comp keyword strip-schema-prefix) properties)))))
+      (assoc :build/class-properties (mapv (comp keyword strip-schema-prefix) properties)))))
 
 (def schema->logseq-data-types
   "Schema datatypes, https://schema.org/DataType, mapped to their Logseq equivalents"
@@ -123,7 +123,7 @@
        (= schema-type :node)
        (assoc :db/cardinality :many)
        (= schema-type :node)
-       (assoc :build/schema-classes (mapv (comp keyword strip-schema-prefix) range-includes)))}))
+       (assoc :build/property-classes (mapv (comp keyword strip-schema-prefix) range-includes)))}))
 
 (defn- get-class-to-properties
   "Given a vec of class ids and a vec of properties map to process, return a map of
@@ -334,8 +334,8 @@
           (let [select-class-ids' (->> select-class-ids (map (comp keyword strip-schema-prefix)) set)]
             (-> properties
                 (update-vals (fn [m]
-                               (if (:build/schema-classes m)
-                                 (update m :build/schema-classes
+                               (if (:build/property-classes m)
+                                 (update m :build/property-classes
                                          (fn [cs] (vec (set (filter #(contains? select-class-ids' %) cs)))))
                                  m)))))
           properties)
