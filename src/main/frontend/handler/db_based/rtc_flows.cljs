@@ -1,7 +1,7 @@
 (ns frontend.handler.db-based.rtc-flows
   "Flows related to RTC"
-  (:require [frontend.state :as state]
-            [frontend.common.missionary :as c.m]
+  (:require [frontend.common.missionary :as c.m]
+            [frontend.state :as state]
             [logseq.common.util :as common-util]
             [missionary.core :as m]))
 
@@ -10,12 +10,12 @@
 
 (def rtc-download-log-flow
   (m/eduction
-   (filter #(= :rtc.log/download (:type %)))
+   (filter #(keyword-identical? :rtc.log/download (:type %)))
    rtc-log-flow))
 
 (def rtc-upload-log-flow
   (m/eduction
-   (filter #(= :rtc.log/upload (:type %)))
+   (filter #(keyword-identical? :rtc.log/upload (:type %)))
    rtc-log-flow))
 
 (def rtc-misc-log-flow

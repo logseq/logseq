@@ -24,7 +24,7 @@
        :rtc.log/cancelled {:doc "rtc has been cancelled"}
        :rtc.log/apply-remote-update {:doc "apply remote updates to local graph"}
        :rtc.log/push-local-update {:doc "push local updates to remote graph"}
-       :rtc.log/larger-remote-schema-version-exists {:doc "remote-graph with larger schema-version exists"}
+       :rtc.log/higher-remote-schema-version-exists {:doc "remote-graph with larger schema-version exists"}
 
        :rtc.asset.log/cancelled {:doc "rtc asset sync has been cancelled"}
        :rtc.asset.log/upload-assets {:doc "upload local assets to remote"}
