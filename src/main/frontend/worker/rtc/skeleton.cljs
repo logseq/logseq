@@ -18,11 +18,12 @@
        db))
 
 (defn new-task--calibrate-graph-skeleton
-  [get-ws-create-task graph-uuid db]
+  [get-ws-create-task graph-uuid major-schema-version db]
   (m/sp
     (let [r (m/? (ws-util/send&recv get-ws-create-task
                                     {:action "get-graph-skeleton"
-                                     :graph-uuid graph-uuid}))]
+                                     :graph-uuid graph-uuid
+                                     :schema-version (str major-schema-version)}))]
       (if-let [remote-ex (:ex-data r)]
         (case (:type remote-ex)
           :graph-lock-failed

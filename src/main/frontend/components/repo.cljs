@@ -63,7 +63,7 @@
 (rum/defc repos-inner
   "Graph list in `All graphs` page"
   [repos]
-  (for [{:keys [root url remote? GraphUUID GraphName created-at last-seen-at] :as repo}
+  (for [{:keys [root url remote? GraphUUID GraphSchemaVersion GraphName created-at last-seen-at] :as repo}
         (sort-repos-with-metadata-local repos)
         :let [only-cloud? (and remote? (nil? root))
               db-based? (config/db-based-graph? url)]]
@@ -122,10 +122,10 @@
                                                       (when (or manager? (not db-graph?))
                                                         (let [<delete-graph (if db-graph?
                                                                               rtc-handler/<rtc-delete-graph!
-                                                                              (fn [graph-uuid]
+                                                                              (fn [graph-uuid _graph-schema-version]
                                                                                 (async-util/c->p (file-sync/<delete-graph graph-uuid))))]
                                                           (state/set-state! [:file-sync/remote-graphs :loading] true)
-                                                          (p/do! (<delete-graph GraphUUID)
+                                                          (p/do! (<delete-graph GraphUUID GraphSchemaVersion)
                                                                  (state/delete-repo! repo)
                                                                  (state/delete-remote-graph! repo)
                                                                  (state/set-state! [:file-sync/remote-graphs :loading] false)))))
