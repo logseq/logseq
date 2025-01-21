@@ -18,6 +18,16 @@
 (defn- mark-block-as-built-in [block]
   (assoc block :logseq.property/built-in? true))
 
+(defn- schema->qualified-property-keyword
+  [prop-schema]
+  (reduce-kv
+   (fn [r k v]
+     (if-let [new-k (and (simple-keyword? k) (db-property/schema-properties-map k))]
+       (assoc r new-k v)
+       (assoc r k v)))
+   {}
+   prop-schema))
+
 (defn- ->property-value-tx-m
   "Given a new block and its properties, creates a map of properties which have values of property value tx.
    This map is used for both creating the new property values and then adding them to a block"
@@ -44,7 +54,7 @@
    (fn [[db-ident {:keys [attribute schema title closed-values properties] :as m}]]
      (let [db-ident (or attribute db-ident)
            prop-name (or title (name (:name m)))
-           schema' (sqlite-util/schema->qualified-property-keyword schema)
+           schema' (schema->qualified-property-keyword schema)
            [property & others] (if closed-values
                                  (db-property-build/build-closed-values
                                   db-ident
@@ -87,7 +97,7 @@
   [db-ident]
   (sqlite-util/build-new-property
    db-ident
-   (sqlite-util/schema->qualified-property-keyword (get-in db-property/built-in-properties [db-ident :schema]))
+   (schema->qualified-property-keyword (get-in db-property/built-in-properties [db-ident :schema]))
    {:title (get-in db-property/built-in-properties [db-ident :title])}))
 
 (defn- build-initial-properties

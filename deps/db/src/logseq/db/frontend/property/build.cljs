@@ -1,6 +1,8 @@
 (ns logseq.db.frontend.property.build
   "Builds core property concepts"
-  (:require [logseq.db.frontend.order :as db-order]
+  (:require [datascript.core :as d]
+            [logseq.common.util :as common-util]
+            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]))
@@ -63,7 +65,27 @@
     (into [property-tx]
           (closed-values->blocks property))))
 
-(def build-property-value-block db-property/build-property-value-block)
+(defn- build-property-value-block
+  "Builds a property value entity given a block map/entity, a property entity or
+  ident and its property value"
+  [block property value]
+  (let [block-id (or (:db/id block) (:db/ident block))]
+    (-> (merge
+         {:block/uuid (d/squuid)
+          :block/page (if (:block/page block)
+                        (:db/id (:block/page block))
+                        ;; page block
+                        block-id)
+          :block/parent block-id
+          :logseq.property/created-from-property (if (= (:db/ident property) :logseq.property/default-value)
+                                                   block-id
+                                                   (or (:db/id property) {:db/ident (:db/ident property)}))
+          :block/order (db-order/gen-key)}
+         (if (db-property-type/property-value-content? (:logseq.property/type property) property)
+           {:logseq.property/value value}
+           {:block/title value}))
+        common-util/block-with-timestamps)))
+
 
 (defn build-property-values-tx-m
   "Builds a map of property names to their property value blocks to be
