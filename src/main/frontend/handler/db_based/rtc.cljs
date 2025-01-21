@@ -1,13 +1,13 @@
 (ns frontend.handler.db-based.rtc
   "RTC handler"
   (:require [cljs-time.core :as t]
+            [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
-            [frontend.common.missionary :as c.m]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
@@ -127,14 +127,28 @@
 ;;; background task: try to restart rtc-loop when possible,
 ;;; triggered by `rtc-flows/rtc-try-restart-flow`
 (when-not config/publishing?
- (c.m/run-background-task
-  ::restart-rtc-task
-  (m/reduce
-   (constantly nil)
-   (m/ap
-    (let [{:keys [graph-uuid t]} (m/?> rtc-flows/rtc-try-restart-flow)]
-      (when (and graph-uuid t
-                 (= graph-uuid (ldb/get-graph-rtc-uuid (db/get-db)))
-                 (> 5000 (- (common-util/time-ms) t)))
-        (prn :trying-to-restart-rtc graph-uuid (t/now))
-        (c.m/<? (<rtc-start! (state/get-current-repo) :stop-before-start? false))))))))
+  (c.m/run-background-task
+   ::restart-rtc-task
+   (m/reduce
+    (constantly nil)
+    (m/ap
+      (let [{:keys [graph-uuid t]} (m/?> rtc-flows/rtc-try-restart-flow)]
+        (when (and graph-uuid t
+                   (= graph-uuid (ldb/get-graph-rtc-uuid (db/get-db)))
+                   (> 5000 (- (common-util/time-ms) t)))
+          (prn :trying-to-restart-rtc graph-uuid (t/now))
+          (c.m/<? (<rtc-start! (state/get-current-repo) :stop-before-start? false)))))))
+
+  (c.m/run-background-task
+   ::notify-client-need-upgrade-when-larger-remote-schema-version-exists
+   (m/reduce
+    (constantly nil)
+    (m/ap
+      (let [{:keys [_remote-schema-version]}
+            (m/?>
+             (m/eduction
+              (filter #(keyword-identical? :rtc.log/higher-remote-schema-version-exists (:type %)))
+              rtc-flows/rtc-log-flow))]
+        (notification/show!
+         "The server has a graph with a higher schema version, the client may need to upgrade."
+         :warning))))))
