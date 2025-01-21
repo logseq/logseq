@@ -111,8 +111,9 @@
    of validate-property-value"
   (set/union
    (set (get-in db-class/built-in-classes [:logseq.class/Asset :schema :required-properties]))
-   #{:logseq.property/created-from-property :logseq.property.history/scalar-value
-     :logseq.property.history/block :logseq.property.history/property :logseq.property.history/ref-value}))
+   #{:logseq.property/created-from-property :logseq.property/value
+     :logseq.property.history/scalar-value :logseq.property.history/block
+     :logseq.property.history/property :logseq.property.history/ref-value}))
 
 (defn- property-entity->map
   "Provide the minimal number of property attributes to validate the property
@@ -131,7 +132,7 @@
   ;; required-properties allows schemas like property-value-block to require
   ;; properties in their schema that they depend on
   (let [exceptions-to-block-properties (-> required-properties
-                                           (into db-property/property-only-properties)
+                                           (into db-property/schema-properties)
                                            (conj :block/tags))
         page-class-id (:db/id (d/entity db :logseq.class/Page))
         all-page-class-ids (set (map #(:db/id (d/entity db %)) db-class/page-classes))]
