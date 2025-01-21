@@ -9,7 +9,7 @@
 (deftest upsert-property!
   (testing "Creates a property"
     (let [conn (db-test/create-conn-with-blocks [])
-          _ (outliner-property/upsert-property! conn nil {:type :number} {:property-name "num"})]
+          _ (outliner-property/upsert-property! conn nil {:logseq.property/type :number} {:property-name "num"})]
       (is (= :number
              (:logseq.property/type (d/entity @conn :user.property/num)))
           "Creates property with property-name")))
@@ -19,19 +19,19 @@
           old-updated-at (:block/updated-at (d/entity @conn :user.property/num))]
 
       (testing "and change its cardinality"
-        (outliner-property/upsert-property! conn :user.property/num {:cardinality :many} {})
+        (outliner-property/upsert-property! conn :user.property/num {:db/cardinality :many} {})
         (is (db-property/many? (d/entity @conn :user.property/num)))
         (is (> (:block/updated-at (d/entity @conn :user.property/num))
                old-updated-at)))
 
       (testing "and change its type from a ref to a non-ref type"
-        (outliner-property/upsert-property! conn :user.property/num {:type :checkbox} {})
+        (outliner-property/upsert-property! conn :user.property/num {:logseq.property/type :checkbox} {})
         (is (= :checkbox (:logseq.property/type (d/entity @conn :user.property/num))))
         (is (= nil (:db/valueType (d/entity @conn :user.property/num)))))))
 
   (testing "Multiple properties that generate the same initial :db/ident"
     (let [conn (db-test/create-conn-with-blocks [])]
-      (outliner-property/upsert-property! conn nil {:type :default} {:property-name "p1"})
+      (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "p1"})
       (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
       (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
 

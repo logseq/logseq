@@ -44,15 +44,16 @@
    (fn [[db-ident {:keys [attribute schema title closed-values properties] :as m}]]
      (let [db-ident (or attribute db-ident)
            prop-name (or title (name (:name m)))
+           schema' (sqlite-util/schema->qualified-property-keyword schema)
            [property & others] (if closed-values
                                  (db-property-build/build-closed-values
                                   db-ident
                                   prop-name
-                                  {:db/ident db-ident :schema schema :closed-values closed-values}
+                                  {:db/ident db-ident :schema schema' :closed-values closed-values}
                                   {})
                                  [(sqlite-util/build-new-property
                                    db-ident
-                                   schema
+                                   schema'
                                    {:title prop-name})])
            pvalue-tx-m (->property-value-tx-m
                         (merge property
@@ -86,7 +87,7 @@
   [db-ident]
   (sqlite-util/build-new-property
    db-ident
-   (get-in db-property/built-in-properties [db-ident :schema])
+   (sqlite-util/schema->qualified-property-keyword (get-in db-property/built-in-properties [db-ident :schema]))
    {:title (get-in db-property/built-in-properties [db-ident :title])}))
 
 (defn- build-initial-properties

@@ -158,8 +158,7 @@
                             (throw (ex-info (str e)
                                             {:type :notification
                                              :payload {:message "Property failed to create. Please try a different property name."
-                                                       :type :error}})))))
-        schema (sqlite-util/schema->qualified-property-keyword schema)]
+                                                       :type :error}})))))]
     (assert (qualified-keyword? db-ident))
     (if-let [property (and (qualified-keyword? property-id) (d/entity db db-ident))]
       (update-property conn db-ident property schema opts)
