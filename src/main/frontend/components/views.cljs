@@ -690,8 +690,8 @@
                                    (shui/popup-hide!)
                                    (let [property internal-property
                                          new-filter [(:db/ident property) :text-contains]
-                                         filters' (if (seq filters)
-                                                    (conj filters new-filter)
+                                         filters' (if (seq (:filters filters))
+                                                    (conj (:filters filters) new-filter)
                                                     [new-filter])]
                                      (set-filters! {:or? (:or? filters)
                                                     :filters filters'}))))))}
@@ -702,7 +702,7 @@
                          :input-default-placeholder (if property (:block/title property) "Select")
                          :on-chosen (fn [value]
                                       (shui/popup-hide!)
-                                      (let [filters' (conj filters [(:db/ident property) :after value])]
+                                      (let [filters' (conj (:filters filters) [(:db/ident property) :after value])]
                                         (set-filters! {:or? (:or? filters)
                                                        :filters filters'})))})
                  property
@@ -713,7 +713,7 @@
                             {:items items
                              :input-default-placeholder (if property (:block/title property) "Select")
                              :on-chosen (fn [value]
-                                          (let [filters' (conj filters [(:db/ident property) :is value])]
+                                          (let [filters' (conj (:filters filters) [(:db/ident property) :is value])]
                                             (set-filters! {:or? (:or? filters)
                                                            :filters filters'})))}))
                    (let [items (get-property-values (:data table) property)]
