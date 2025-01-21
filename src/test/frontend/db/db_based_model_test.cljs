@@ -58,8 +58,8 @@
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:prop1 {:logseq.property/type :default}}
                :classes
-               {:Class1 {:build/schema-properties [:prop1]}
-                :Class2 {:build/schema-properties [:prop1]}}})
+               {:Class1 {:build/class-properties [:prop1]}
+                :Class2 {:build/class-properties [:prop1]}}})
         property (d/entity @conn :user.property/prop1)
         classes (with-redefs [conn/get-db (constantly @conn)]
                   (model/get-classes-with-property (:db/ident property)))]

@@ -170,7 +170,7 @@
      :properties
      (->> db-property-type/user-built-in-property-types
           (mapcat #(cond-> (if (= :node %)
-                             [[% {:logseq.property/type % :build/schema-classes [:TestClass]}]
+                             [[% {:logseq.property/type % :build/property-classes [:TestClass]}]
                               [:node-without-classes {:logseq.property/type %}]]
                              [[% {:logseq.property/type %}]])
                      (contains? db-property-type/cardinality-property-types %)
@@ -178,7 +178,7 @@
                             (cond-> {:logseq.property/type %
                                      :db/cardinality :many}
                               (= :node %)
-                              (assoc :build/schema-classes [:TestClass]))])))
+                              (assoc :build/property-classes [:TestClass]))])))
           (into (mapv #(vector (keyword (str (name %) "-closed"))
                                {:logseq.property/type %
                                 :build/closed-values (closed-values-config (keyword (str (name %) "-closed")))})
