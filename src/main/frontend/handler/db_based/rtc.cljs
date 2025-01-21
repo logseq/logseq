@@ -24,12 +24,12 @@
        (.rtc-async-upload-graph worker repo token repo-name)))))
 
 (defn <rtc-delete-graph!
-  [graph-uuid]
+  [graph-uuid schema-version]
   (when-let [^js worker @state/*db-worker]
     (p/do!
      (js/Promise. user-handler/task--ensure-id&access-token)
      (let [token (state/get-auth-id-token)]
-       (.rtc-delete-graph worker token graph-uuid)))))
+       (.rtc-delete-graph worker token graph-uuid schema-version)))))
 
 (defn <rtc-download-graph!
   [graph-name graph-uuid timeout-ms]
@@ -94,6 +94,7 @@
                                  (let [url (str config/db-version-prefix (:graph-name graph))]
                                    {:url url
                                     :GraphName (:graph-name graph)
+                                    :GraphSchemaVersion (:graph-schema-version graph)
                                     :GraphUUID (:graph-uuid graph)
                                     :rtc-graph? true})
                                  (dissoc graph :graph-uuid :graph-name)))))]

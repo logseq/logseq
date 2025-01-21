@@ -118,7 +118,7 @@
                   (:block/order block) (update :block/order ldb/read-transit-str)))))))
 
 (defn new-task--upload-graph
-  [get-ws-create-task repo conn remote-graph-name]
+  [get-ws-create-task repo conn remote-graph-name major-schema-version]
   (m/sp
     (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetch-presigned-put-url
                                                 :message "fetching presigned put-url"})
@@ -143,6 +143,7 @@
             upload-resp
             (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
                                                         :s3-key key
+                                                        :schema-version (str major-schema-version)
                                                         :graph-name remote-graph-name}))]
         (if-let [graph-uuid (:graph-uuid upload-resp)]
           (do
@@ -354,22 +355,25 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn new-task--request-download-graph
-  [get-ws-create-task graph-uuid]
+  [get-ws-create-task graph-uuid schema-version]
   (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :request-download-graph
                                                 :message "requesting download graph"
-                                                :graph-uuid graph-uuid})
+                                                :graph-uuid graph-uuid
+                                                :schema-version schema-version})
   (m/join :download-info-uuid
           (ws-util/send&recv get-ws-create-task {:action "download-graph"
-                                                 :graph-uuid graph-uuid})))
+                                                 :graph-uuid graph-uuid
+                                                 :schema-version (str schema-version)})))
 
 (defn new-task--download-info-list
-  [get-ws-create-task graph-uuid]
+  [get-ws-create-task graph-uuid schema-version]
   (m/join :download-info-list
           (ws-util/send&recv get-ws-create-task {:action "download-info-list"
-                                                 :graph-uuid graph-uuid})))
+                                                 :graph-uuid graph-uuid
+                                                 :schema-version (str schema-version)})))
 
 (defn new-task--wait-download-info-ready
-  [get-ws-create-task download-info-uuid graph-uuid timeout-ms]
+  [get-ws-create-task download-info-uuid graph-uuid schema-version timeout-ms]
   (->
    (m/sp
      (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :wait-remote-graph-data-ready
@@ -379,7 +383,8 @@
        (m/? (m/sleep 3000))
        (let [{:keys [download-info-list]}
              (m/? (ws-util/send&recv get-ws-create-task {:action "download-info-list"
-                                                         :graph-uuid graph-uuid}))]
+                                                         :graph-uuid graph-uuid
+                                                         :schema-version (str schema-version)}))]
          (if-let [found-download-info
                   (some
                    (fn [download-info]

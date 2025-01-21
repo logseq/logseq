@@ -23,29 +23,30 @@
       (assert (some? major) schema-version)
       major)))
 
-(defn compare-schemas
-  "Return one of [:create-branch :download nil].
+(comment
+  (defn compare-schemas
+    "Return one of [:create-branch :download nil].
   when nil, nothing need to do"
-  [server-graph-schema app-schema client-graph-schema]
-  (let [[server-graph-schema app-schema client-graph-schema]
-        (map major-version [server-graph-schema app-schema client-graph-schema])]
-    (cond
-      (= server-graph-schema client-graph-schema)
-      nil
-
-      (> server-graph-schema client-graph-schema)
+    [server-graph-schema app-schema client-graph-schema]
+    (let [[server-graph-schema app-schema client-graph-schema]
+          (map major-version [server-graph-schema app-schema client-graph-schema])]
       (cond
-        ;; client will do some migrations on local-graph,
-        ;; so do nothing for now
-        (< server-graph-schema app-schema) nil
-        ;; client-app-schema < server-graph-schema,
-        ;; so app need to be upgraded, do nothing for now
-        (> server-graph-schema app-schema) nil
-        (= server-graph-schema app-schema) :download)
+        (= server-graph-schema client-graph-schema)
+        nil
 
-      (< server-graph-schema client-graph-schema)
-      (cond
-        ;; this remote-graph branch is creating now,
-        ;; disallow upload a new schema-version graph for now
-        (>= server-graph-schema app-schema) nil
-        (< server-graph-schema app-schema) :create-branch))))
+        (> server-graph-schema client-graph-schema)
+        (cond
+          ;; client will do some migrations on local-graph,
+          ;; so do nothing for now
+          (< server-graph-schema app-schema) nil
+          ;; client-app-schema < server-graph-schema,
+          ;; so app need to be upgraded, do nothing for now
+          (> server-graph-schema app-schema) nil
+          (= server-graph-schema app-schema) :download)
+
+        (< server-graph-schema client-graph-schema)
+        (cond
+          ;; this remote-graph branch is creating now,
+          ;; disallow upload a new schema-version graph for now
+          (>= server-graph-schema app-schema) nil
+          (< server-graph-schema app-schema) :create-branch)))))

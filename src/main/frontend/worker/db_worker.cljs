@@ -811,9 +811,9 @@
      (js/Promise. (rtc-core/new-task--get-graphs token))))
 
   (rtc-delete-graph
-   [this token graph-uuid]
+   [this token graph-uuid schema-version]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--delete-graph token graph-uuid))))
+     (js/Promise. (rtc-core/new-task--delete-graph token graph-uuid schema-version))))
 
   (rtc-get-users-info
    [this token graph-uuid]
@@ -837,15 +837,15 @@
 
   ;; ================================================================
   (rtc-request-download-graph
-   [this token graph-uuid]
+   [this token graph-uuid schema-version]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--request-download-graph token graph-uuid))))
+     (js/Promise. (rtc-core/new-task--request-download-graph token graph-uuid schema-version))))
 
   (rtc-wait-download-graph-info-ready
-   [this token download-info-uuid graph-uuid timeout-ms]
+   [this token download-info-uuid graph-uuid schema-version timeout-ms]
    (with-write-transit-str
      (js/Promise.
-      (rtc-core/new-task--wait-download-info-ready token download-info-uuid graph-uuid timeout-ms))))
+      (rtc-core/new-task--wait-download-info-ready token download-info-uuid graph-uuid schema-version timeout-ms))))
 
   (rtc-download-graph-from-s3
    [this graph-uuid graph-name s3-url]
@@ -853,9 +853,9 @@
      (js/Promise. (rtc-core/new-task--download-graph-from-s3 graph-uuid graph-name s3-url))))
 
   (rtc-download-info-list
-   [this token graph-uuid]
+   [this token graph-uuid schema-version]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--download-info-list token graph-uuid))))
+     (js/Promise. (rtc-core/new-task--download-info-list token graph-uuid schema-version))))
 
   (rtc-get-graph-keys
    [this repo]

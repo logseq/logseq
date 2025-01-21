@@ -223,14 +223,14 @@
                     (catch :default e
                       (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
                         (m/? (r.client/new-task--pull-remote-data
-                              repo conn graph-uuid date-formatter get-ws-create-task add-log-fn)))))
+                              repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn)))))
                :remote-asset-update
                (m/? (r.asset/new-task--emit-remote-asset-updates-from-push-asset-upload-updates
                      repo @conn (:value event)))
 
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
-                     repo conn graph-uuid date-formatter
+                     repo conn graph-uuid major-schema-version date-formatter
                      get-ws-create-task *remote-profile? add-log-fn))
 
                :online-users-updated
@@ -238,10 +238,10 @@
 
                :pull-remote-updates
                (m/? (r.client/new-task--pull-remote-data
-                     repo conn graph-uuid date-formatter get-ws-create-task add-log-fn))
+                     repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn))
 
                :inject-users-info
-               (m/? (new-task--inject-users-info token graph-uuid))))
+               (m/? (new-task--inject-users-info token graph-uuid major-schema-version))))
            (m/ap)
            (m/reduce {} nil)
            (m/?))
@@ -360,12 +360,14 @@
 
 (defn new-task--delete-graph
   "Return a task that return true if succeed"
-  [token graph-uuid]
+  [token graph-uuid schema-version]
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
     (m/sp
       (let [{:keys [ex-data]}
             (m/? (ws-util/send&recv get-ws-create-task
-                                    {:action "delete-graph" :graph-uuid graph-uuid}))]
+                                    {:action "delete-graph"
+                                     :graph-uuid graph-uuid
+                                     :schema-version (str schema-version)}))]
         (when ex-data (prn ::delete-graph-failed graph-uuid ex-data))
         (boolean (nil? ex-data))))))
 
@@ -378,10 +380,12 @@
                                {:action "get-users-info" :graph-uuid graph-uuid}))))
 
 (defn new-task--inject-users-info
-  [token graph-uuid]
+  [token graph-uuid major-schema-version]
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
     (ws-util/send&recv get-ws-create-task
-                       {:action "inject-users-info" :graph-uuid graph-uuid})))
+                       {:action "inject-users-info"
+                        :graph-uuid graph-uuid
+                        :schema-version (str major-schema-version)})))
 
 (defn new-task--grant-access-to-others
   [token graph-uuid & {:keys [target-user-uuids target-user-emails]}]
@@ -443,26 +447,29 @@
   [token repo remote-graph-name]
   (m/sp
     (if-let [conn (worker-state/get-datascript-conn repo)]
-      (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-        (m/? (r.upload-download/new-task--upload-graph get-ws-create-task repo conn remote-graph-name)))
+      (let [schema-version (ldb/get-graph-schema-version @conn)
+            major-schema-version (r.branch-graph/major-version schema-version)
+            {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
+        (m/? (r.upload-download/new-task--upload-graph
+              get-ws-create-task repo conn remote-graph-name major-schema-version)))
       (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
                                                 :repo repo})))))
 
 (defn new-task--request-download-graph
-  [token graph-uuid]
+  [token graph-uuid schema-version]
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-    (r.upload-download/new-task--request-download-graph get-ws-create-task graph-uuid)))
+    (r.upload-download/new-task--request-download-graph get-ws-create-task graph-uuid schema-version)))
 
 (defn new-task--download-info-list
-  [token graph-uuid]
+  [token graph-uuid schema-version]
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-    (r.upload-download/new-task--download-info-list get-ws-create-task graph-uuid)))
+    (r.upload-download/new-task--download-info-list get-ws-create-task graph-uuid schema-version)))
 
 (defn new-task--wait-download-info-ready
-  [token download-info-uuid graph-uuid timeout-ms]
+  [token download-info-uuid graph-uuid schema-version timeout-ms]
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
     (r.upload-download/new-task--wait-download-info-ready
-     get-ws-create-task download-info-uuid graph-uuid timeout-ms)))
+     get-ws-create-task download-info-uuid graph-uuid schema-version timeout-ms)))
 
 (def new-task--download-graph-from-s3 r.upload-download/new-task--download-graph-from-s3)
 
