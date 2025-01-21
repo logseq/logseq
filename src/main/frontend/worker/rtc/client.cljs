@@ -64,7 +64,7 @@
                   (take 5 (drop 2 c.m/delays)) ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
                   (new-task--register-graph-updates get-ws-create-task graph-uuid major-schema-version repo)))]
             (when max-remote-schema-version
-              (add-log-fn :rtc.log/larger-remote-schema-version-exists
+              (add-log-fn :rtc.log/higher-remote-schema-version-exists
                           {:remote-schema-version max-remote-schema-version})))
           (let [t (client-op/get-local-tx repo)]
             (when (or (nil? @*last-calibrate-t)
