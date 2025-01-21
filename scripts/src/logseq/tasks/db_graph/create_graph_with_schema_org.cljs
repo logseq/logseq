@@ -370,19 +370,19 @@
                                              {:block/refs [:block/title]}]) ...]
                             :in $
                             :where [?b :db/ident ?ident]]
-                          db))]
+                          db))
+        top-level-properties [:logseq.property/type :logseq.property.class/properties :logseq.property/classes
+                              :logseq.property/parent :block/tags]
+        debug-attributes (into [:block/name :block/title :db/cardinality :db/ident :block/refs]
+                               top-level-properties)]
     (fs/writeFileSync "schema-org.edn"
                       (pr-str
                        (->> ents
                             (map (fn [m]
-                                   (let [props (->> (db-property/properties m)
-                                                    (into {}))]
-                                     (cond-> (select-keys m [:block/name :block/tags :block/title :logseq.property/type :db/cardinality :db/ident
-                                                             :logseq.property.class/properties :logseq.property/parent
-                                                             :db/cardinality :logseq.property/classes :block/refs])
+                                   (let [props (apply dissoc (db-property/properties m) top-level-properties)]
+                                     (cond-> (select-keys m debug-attributes)
                                        (seq props)
                                        (assoc :block/properties (-> (update-keys props name)
-                                                                    (dissoc "tags")
                                                                     (update-vals (fn [v]
                                                                                    (if (:db/id v)
                                                                                      (db-property/property-value-content (d/entity db (:db/id v)))
