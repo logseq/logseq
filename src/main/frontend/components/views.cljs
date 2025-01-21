@@ -1149,7 +1149,7 @@
 
                       :else
                       matches)]
-       (if matches'
+       (if (some? matches')
          [property operator matches']
          [property operator])))
    filters))
