@@ -1169,10 +1169,9 @@
                      db-ident (get-ident @(:all-idents import-state) kw-name)
                      new-prop (sqlite-util/build-new-property db-ident
                                                               (get-property-schema @(:property-schemas import-state) kw-name)
-                                                              {:title (name kw-name)})
-                     property-keys (filter db-property/property-only-properties (keys new-prop))]
+                                                              {:title (name kw-name)})]
                  (assert existing-page-uuid)
-                 (merge (select-keys new-prop (into [:block/tags :db/ident :logseq.property/type :db/index :db/cardinality :db/valueType] property-keys))
+                 (merge (select-keys new-prop [:block/tags :db/ident :logseq.property/type :db/index :db/cardinality :db/valueType])
                         {:block/uuid existing-page-uuid})))
              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
         ;; Could do this only for existing pages but the added complexity isn't worth reducing the tx noise

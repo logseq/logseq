@@ -599,10 +599,12 @@
   "Property values that shouldn't be updated"
   #{:logseq.property/built-in?})
 
-(def property-only-properties
-  "Properties only used by properties. Used to be block/schema"
-  #{:logseq.property/type :logseq.property/hide? :logseq.property/public? :logseq.property/view-context
-    :logseq.property/ui-position :logseq.property/classes :logseq.property/value})
+(def schema-properties
+  "Properties that used to be in block/schema. Schema originally referred to just type and cardinality
+   but expanded to include a property's core configuration because it was easy to add to the schema map.
+   We should move some of these out since they are just like any other properties e.g. view-context"
+  #{:db/cardinality :logseq.property/type :logseq.property/hide? :logseq.property/public?
+    :logseq.property/view-context :logseq.property/ui-position :logseq.property/classes})
 
 (def logseq-property-namespaces
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs" "logseq.task"
@@ -744,5 +746,4 @@
 
 (defn get-property-schema
   [property-m]
-  (select-keys property-m [:db/cardinality :logseq.property/type :logseq.property/hide?
-                           :logseq.property/public? :logseq.property/view-context :logseq.property/ui-position]))
+  (select-keys property-m schema-properties))
