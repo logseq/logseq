@@ -1,5 +1,9 @@
 [
 	{
+		"pkg": "@aparajita/capacitor-dark-mode",
+		"classpath": "com.aparajita.capacitor.darkmode.DarkModeNative"
+	},
+	{
 		"pkg": "@capacitor/action-sheet",
 		"classpath": "com.capacitorjs.plugins.actionsheet.ActionSheetPlugin"
 	},

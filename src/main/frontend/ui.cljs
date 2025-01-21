@@ -1,6 +1,7 @@
 (ns frontend.ui
   "Main ns for reusable components"
   (:require ["@logseq/react-tweet-embed" :as react-tweet-embed]
+            ["@aparajita/capacitor-dark-mode" :refer [DarkMode]]
             ["react-intersection-observer" :as react-intersection-observer]
             ["react-resize-context" :as Resize]
             ["react-textarea-autosize" :as TextareaAutosize]
@@ -417,14 +418,10 @@
 
 (defn setup-system-theme-effect!
   []
-  (let [^js schemaMedia (js/window.matchMedia "(prefers-color-scheme: dark)")]
-    (try (.addEventListener schemaMedia "change" state/sync-system-theme!)
-         (catch :default _error
-           (.addListener schemaMedia state/sync-system-theme!)))
-    (state/sync-system-theme!)
-    #(try (.removeEventListener schemaMedia "change" state/sync-system-theme!)
-          (catch :default _error
-            (.removeListener schemaMedia state/sync-system-theme!)))))
+  (let [handle (atom nil)]
+    (-> (.addAppearanceListener DarkMode #(state/sync-system-theme!))
+        (p/then #(reset! handle %)))
+    #(.remove @handle)))
 
 (defn set-global-active-keystroke [val]
   (.setAttribute js/document.body "data-active-keystroke" val))

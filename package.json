@@ -78,6 +78,7 @@
         "postinstall": "yarn tldraw:build && yarn amplify:build "
     },
     "dependencies": {
+        "@aparajita/capacitor-dark-mode": "^4.0.1",
         "@capacitor/action-sheet": "^5.0.7",
         "@capacitor/android": "^5.0.0",
         "@capacitor/app": "^5.0.0",

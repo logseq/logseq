@@ -14,7 +14,9 @@
             [logseq.api]
             [frontend.fs.sync :as sync]
             [frontend.config :as config]
-            [malli.dev.cljs :as md]))
+            [malli.dev.cljs :as md]
+            [promesa.core :as p]
+            ["@aparajita/capacitor-dark-mode" :refer [DarkMode]]))
 
 (defn set-router!
   []
@@ -59,8 +61,11 @@
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
 
-  (plugin-handler/setup!
-   #(handler/start! start)))
+  (p/do!
+   (.init DarkMode #js {:cssClass "dark"})
+   (plugin-handler/setup!
+    #(handler/start! start)))
+)
 
 (defn stop []
   ;; stop is called before any code is reloaded
