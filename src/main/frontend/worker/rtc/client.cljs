@@ -20,7 +20,7 @@
       (let [{remote-t :t :as resp}
             (m/? (ws-util/send&recv get-ws-create-task {:action "register-graph-updates"
                                                         :graph-uuid graph-uuid
-                                                        :schema-version major-schema-version}))]
+                                                        :schema-version (str major-schema-version)}))]
         (rtc-log-and-state/update-remote-t graph-uuid remote-t)
         (when-not (client-op/get-local-tx repo)
           (client-op/update-local-tx repo remote-t))
@@ -70,7 +70,7 @@
             (when (or (nil? @*last-calibrate-t)
                       (< 500 (- t @*last-calibrate-t)))
               ;; (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid conn t))
-              (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid @conn))
+              (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid major-schema-version @conn))
               (reset! *last-calibrate-t t)))
           (swap! *sent assoc ws true))
         ws))))
@@ -333,7 +333,7 @@
 
 (defn new-task--push-local-ops
   "Return a task: push local updates"
-  [repo conn graph-uuid date-formatter get-ws-create-task *remote-profile? add-log-fn]
+  [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task *remote-profile? add-log-fn]
   (m/sp
     (let [block-ops-map-coll (client-op/get&remove-all-block-ops repo)]
       (when-let [block-uuid->remote-ops (not-empty (gen-block-uuid->remote-ops @conn block-ops-map-coll))]
@@ -343,7 +343,8 @@
           (let [local-tx (client-op/get-local-tx repo)
                 r (try
                     (m/? (ws-util/send&recv get-ws-create-task
-                                            (cond-> {:action "apply-ops" :graph-uuid graph-uuid
+                                            (cond-> {:action "apply-ops"
+                                                     :graph-uuid graph-uuid :schema-version (str major-schema-version)
                                                      :ops ops-for-remote :t-before (or local-tx 1)}
                                               (true? @*remote-profile?) (assoc :profile true))))
                     (catch :default e
@@ -376,10 +377,11 @@
                   (add-log-fn :rtc.log/push-local-update {:remote-t (:t r)})))))))))
 
 (defn new-task--pull-remote-data
-  [repo conn graph-uuid date-formatter get-ws-create-task add-log-fn]
+  [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn]
   (m/sp
     (let [local-tx (client-op/get-local-tx repo)
-          r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
+          r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops"
+                                                        :graph-uuid graph-uuid :schema-version (str major-schema-version)
                                                         :ops [] :t-before (or local-tx 1)}))]
       (if-let [remote-ex (:ex-data r)]
         (do (add-log-fn :rtc.log/push-local-update (assoc remote-ex :sub-type :pull-remote-data))
