@@ -66,16 +66,6 @@
 
 (def block-with-timestamps common-util/block-with-timestamps)
 
-(defn schema->qualified-property-keyword
-  [prop-schema]
-  (reduce-kv
-   (fn [r k v]
-     (if-let [new-k (and (simple-keyword? k) (db-property/schema-properties-map k))]
-       (assoc r new-k v)
-       (assoc r k v)))
-   {}
-   prop-schema))
-
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts. Takes
    an optional map with following keys:

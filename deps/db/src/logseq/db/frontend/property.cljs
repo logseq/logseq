@@ -5,32 +5,8 @@
             [datascript.core :as d]
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.defkeywords :refer [defkeywords]]
-            [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
-            [logseq.db.frontend.db-ident :as db-ident]
-            [logseq.db.frontend.order :as db-order]
-            [logseq.db.frontend.property.type :as db-property-type]))
-
-(defn build-property-value-block
-  "Builds a property value entity given a block map/entity, a property entity or
-  ident and its property value"
-  [block property value]
-  (let [block-id (or (:db/id block) (:db/ident block))]
-    (-> (merge
-         {:block/uuid (d/squuid)
-          :block/page (if (:block/page block)
-                        (:db/id (:block/page block))
-                        ;; page block
-                        block-id)
-          :block/parent block-id
-          :logseq.property/created-from-property (if (= (:db/ident property) :logseq.property/default-value)
-                                                   block-id
-                                                   (or (:db/id property) {:db/ident (:db/ident property)}))
-          :block/order (db-order/gen-key)}
-         (if (db-property-type/property-value-content? (:logseq.property/type property) property)
-           {:logseq.property/value value}
-           {:block/title value}))
-        common-util/block-with-timestamps)))
+            [logseq.db.frontend.db-ident :as db-ident]))
 
 ;; Main property vars
 ;; ==================
