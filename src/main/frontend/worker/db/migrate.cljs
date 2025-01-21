@@ -534,6 +534,28 @@
                           [:db/retract e :logseq.user/avatar]])
                  db-ids))))))
 
+(defn- update-view-filter
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [ident :logseq.property.table/filters
+            property (d/entity db ident)
+            property-tx {:db/id (:db/id property)
+                         :block/schema (assoc (:block/schema property) :type :map)}
+            data-tx (mapcat
+                     (fn [d]
+                       (let [v (:v d)]
+                         (cond
+                           (= v :logseq.property/empty-placeholder)
+                           [[:db/retract (:e d) ident]]
+                           (map? v)
+                           nil
+                           :else
+                           [[:db/retract (:e d) ident]
+                            [:db/add (:e d) ident {:or? false :filters (:v d)}]])))
+                     (d/datoms db :avet ident))]
+        (cons property-tx data-tx)))))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -627,7 +649,8 @@
    [58 {:fix remove-duplicated-contents-page}]
    [59 {:properties [:logseq.property/created-by]}]
    [60 {:fix (rename-properties {:logseq.property/public :logseq.property/publishing-public?})}]
-   [61 {:properties [:logseq.property.table/pinned-columns]}]])
+   [61 {:properties [:logseq.property.table/pinned-columns]}]
+   [62 {:fix update-view-filter}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
