@@ -17,7 +17,7 @@ Trying to start rtc loop but there's already one running, need to cancel that on
   :rtc.exception/not-found-remote-schema-version{:doc "Local exception.
 graph doesn't have :logseq.kv/remote-schema-version value"}
   :rtc.exception/major-schema-version-mismatched {:doc "Local exception.
-local-schema-version not equal to remote-schema-version, cannot start rtc"}
+local-schema-version, remote-schema-version, app-schema-version are not equal, cannot start rtc"}
   :rtc.exception/get-s3-object-failed {:doc "Failed to fetch response from s3.
 When response from remote is too huge(> 32KB),
 the server will put it to s3 and return its presigned-url to clients."}
