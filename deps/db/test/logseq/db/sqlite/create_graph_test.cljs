@@ -1,16 +1,16 @@
 (ns logseq.db.sqlite.create-graph-test
   (:require [cljs.test :refer [deftest is testing]]
-            [clojure.string :as string]
             [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.test.helper :as db-test]))
 
 (deftest new-graph-db-idents
   (testing "a new graph follows :db/ident conventions for"
@@ -29,7 +29,7 @@
         (is (= []
                (->> (remove db-property/db-attribute-properties default-idents)
                     (keep namespace)
-                    (remove #(string/starts-with? % "logseq."))))
+                    (remove #(string/starts-with? % "logseq"))))
             "All default :db/ident namespaces start with logseq."))
 
       (testing "closed values"
@@ -76,8 +76,9 @@
 
 (deftest new-graph-initializes-default-classes-correctly
   (let [conn (db-test/create-conn)]
-    (is (= (count db-class/built-in-classes) (count (d/datoms @conn :avet :block/tags :logseq.class/Tag)))
-        "Number of built-in classes equals number of ents with :logseq.class/Tag")
+    (is (= (set (keys db-class/built-in-classes))
+           (set (map #(:db/ident (d/entity @conn (:e %))) (d/datoms @conn :avet :block/tags :logseq.class/Tag))))
+        "All built-in classes are indexed by :block/tags with :logseq.class/Tag")
 
     (is (= (count (dissoc db-class/built-in-classes :logseq.class/Root))
            (count (->> (d/datoms @conn :avet :block/tags :logseq.class/Tag)
@@ -88,8 +89,17 @@
 
 (deftest new-graph-initializes-default-properties-correctly
   (let [conn (db-test/create-conn)]
-    (is (= (count db-property/built-in-properties) (count (d/datoms @conn :avet :block/tags :logseq.class/Property)))
-        "Number of built-in properties equals number of ents with :logseq.class/Property")
+    (is (= (set (keys db-property/built-in-properties))
+           (set (map #(:db/ident (d/entity @conn (:e %))) (d/datoms @conn :avet :block/tags :logseq.class/Property))))
+        "All built-in properties are indexed by :block/tags with :logseq.class/Property")
+    (is (= (set (keys db-property/built-in-properties))
+           (set (map #(:db/ident (d/entity @conn (:e %))) (d/datoms @conn :avet :logseq.property/type))))
+        "All built-in properties have and are indexed by :logseq.property/type")
+    (is (= #{}
+           (set/difference
+            (set (keys db-property/built-in-properties))
+            (set (map #(:db/ident (d/entity @conn (:e %))) (d/datoms @conn :avet :logseq.property/built-in?)))))
+        "All built-in properties have and are indexed by :logseq.property/built-in?")
 
     ;; testing :properties config
     (testing "A built-in property that has"
@@ -131,7 +141,7 @@
     (testing ":url property"
       (sqlite-build/create-blocks
        conn
-       {:properties {:url {:block/schema {:type :url}}}
+       {:properties {:url {:logseq.property/type :url}}
         :pages-and-blocks
         [{:page {:block/title "page1"}
           :blocks [{:block/title "b1" :build/properties {:url "https://logseq.com"}}

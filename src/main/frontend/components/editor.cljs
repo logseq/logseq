@@ -344,9 +344,9 @@
   [id q]
   (let [[matched-templates set-matched-templates!] (rum/use-state nil)]
     (hooks/use-effect! (fn []
-                       (p/let [result (editor-handler/<get-matched-templates q)]
-                         (set-matched-templates! result)))
-                     [q])
+                         (p/let [result (editor-handler/<get-matched-templates q)]
+                           (set-matched-templates! result)))
+                       [q])
     (ui/auto-complete
      matched-templates
      {:on-chosen   (editor-handler/template-on-chosen-handler id)

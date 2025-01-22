@@ -363,7 +363,7 @@
                              (true? (:db/index property)))
                 (let [fix-tx-data (->>
                                    (select-keys db-property/built-in-properties [:logseq.property.node/display-type])
-                                   (sqlite-create-graph/build-initial-properties*)
+                                   (sqlite-create-graph/build-properties)
                                    (map (fn [m]
                                           (assoc m :db/id (:db/id property)))))]
                   (d/transact! conn fix-tx-data)))
@@ -534,6 +534,52 @@
                           [:db/retract e :logseq.user/avatar]])
                  db-ids))))))
 
+(defn- schema->qualified-property-keyword
+  [prop-schema]
+  (reduce-kv
+   (fn [r k v]
+     (if (qualified-keyword? k)
+       (assoc r k v)
+       (cond
+         (= k :cardinality)
+         (assoc r :db/cardinality v)
+         (= k :classes)
+         (assoc r :logseq.property/classes v)
+         (= k :position)
+         (assoc r :logseq.property/ui-position v)
+         :else
+         (assoc r (keyword "logseq.property" k) v))))
+   {}
+   prop-schema))
+
+(defn- remove-block-schema
+  [conn _search-db]
+  (let [db @conn
+        schema (:schema db)]
+    (when (ldb/db-based-graph? db)
+      (let [db-ids (d/q '[:find [?b ...]
+                          :where
+                          [?b :block/schema]]
+                        db)
+            tx-data (mapcat (fn [eid]
+                              (let [entity (d/entity db eid)
+                                    schema (:block/schema entity)
+                                    schema-properties (schema->qualified-property-keyword schema)
+                                    hidden-page? (contains? #{common-config/favorites-page-name common-config/views-page-name}
+                                                            (:block/title entity))
+                                    m (assoc schema-properties :db/id eid)
+                                    m' (if hidden-page?
+                                         (-> m (assoc :logseq.property/hide? true) (dissoc :logseq.property/public?))
+                                         m)]
+                                (concat
+                                 [m'
+                                  [:db/retract eid :block/schema]])))
+                            db-ids)
+            tx-data' (concat tx-data [[:db/retractEntity :block/schema]])]
+        (d/transact! conn tx-data' {:db-migrate? true})))
+    (d/reset-schema! conn (dissoc schema :block/schema))
+    []))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -608,7 +654,7 @@
                      :block/refs :block/path-refs :block/link
                      :block/title :block/closed-value-property
                      :block/created-at :block/updated-at
-                     :logseq.property.attribute/property-schema-classes :logseq.property.attribute/property-value-content]}]
+                     :logseq.property.attribute/property-classes :logseq.property.attribute/property-value-content]}]
    [47 {:fix replace-hidden-type-with-schema}]
    [48 {:properties [:logseq.property/default-value :logseq.property/scalar-default-value]}]
    [49 {:fix replace-special-id-ref-with-id-ref}]
@@ -626,7 +672,11 @@
                      :logseq.property.history/ref-value :logseq.property.history/scalar-value]}]
    [58 {:fix remove-duplicated-contents-page}]
    [59 {:properties [:logseq.property/created-by]}]
-   [60 {:fix (rename-properties {:logseq.property/public :logseq.property/publishing-public?})}]])
+   [60 {:fix (rename-properties {:logseq.property/public :logseq.property/publishing-public?})}]
+   [61 {:properties [:logseq.property/type :logseq.property/hide? :logseq.property/public? :logseq.property/view-context :logseq.property/ui-position]
+        :fix (rename-properties {:property/schema.classes :logseq.property/classes
+                                 :property.value/content :logseq.property/value})}]
+   [62 {:fix remove-block-schema}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
@@ -698,7 +748,7 @@
                                       (when (d/entity db k)
                                         (assert (str "DB migration: property already exists " k)))))
                             (into {})
-                            sqlite-create-graph/build-initial-properties*
+                            sqlite-create-graph/build-properties
                             (map (fn [b] (assoc b :logseq.property/built-in? true))))
         classes' (->> (concat [:logseq.class/Property :logseq.class/Tag :logseq.class/Page :logseq.class/Journal :logseq.class/Whiteboard] classes)
                       distinct)
@@ -860,10 +910,10 @@
                                 [[:db/add eid :block/tags :logseq.class/Property]
                                  [:db/retract eid :block/tags :logseq.class/Page]]
 
-                                (when-let [schema (:block/schema entity)]
-                                  (or (:cardinality schema) (:classes schema)))
-                                (let [schema (:block/schema entity)]
-                                  [[:db/add eid :block/schema (dissoc schema :cardinality :classes)]])
+                                ;; (when-let [schema (:block/schema entity)]
+                                ;;   (or (:cardinality schema) (:classes schema)))
+                                ;; (let [schema (:block/schema entity)]
+                                ;;   [[:db/add eid :block/schema (dissoc schema :cardinality :classes)]])
 
                                 (and (:logseq.property.asset/type entity)
                                      (or (nil? (:logseq.property.asset/checksum entity))

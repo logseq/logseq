@@ -1,36 +1,36 @@
 (ns frontend.extensions.tldraw
   "Adapters related to tldraw"
   (:require ["/frontend/tldraw-logseq" :as TldrawLogseq]
+            [cljs-bean.core :as bean]
             [frontend.components.block :as block]
             [frontend.components.export :as export]
             [frontend.components.page :as page]
+            [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db.model :as model]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
+            [frontend.db.model :as model]
             [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.assets :as assets-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.history :as history]
             [frontend.handler.notification :as notification]
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.hooks :as hooks]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [goog.object :as gobj]
-            [promesa.core :as p]
-            [rum.core :as rum]
             [frontend.ui :as ui]
-            [frontend.components.whiteboard :as whiteboard]
-            [cljs-bean.core :as bean]
-            [frontend.db.async :as db-async]
+            [frontend.util :as util]
+            [frontend.util.text :as text-util]
+            [goog.object :as gobj]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
-            [frontend.util.text :as text-util]
-            [frontend.hooks :as hooks]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
@@ -260,8 +260,8 @@
   (let [page-uuid (str page-uuid)
         [loaded-app set-loaded-app] (rum/use-state nil)]
     (hooks/use-effect! (fn []
-                       (when (and loaded-app block-id)
-                         (state/focus-whiteboard-shape loaded-app block-id))
-                       #())
-                     [block-id loaded-app])
+                         (when (and loaded-app block-id)
+                           (state/focus-whiteboard-shape loaded-app block-id))
+                         #())
+                       [block-id loaded-app])
     (tldraw-app-inner page-uuid block-id loaded-app set-loaded-app)))

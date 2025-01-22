@@ -781,16 +781,16 @@
                           (some-> (re-find #"github.com/([^/]+/[^/]+)" url) (last)))
             package-url (if github?
                           (some-> github-repo
-                             (plugin-common-handler/get-web-plugin-checker-url!))
+                                  (plugin-common-handler/get-web-plugin-checker-url!))
                           (str url "/package.json"))
             ^js res (js/window.fetch (str package-url "?v=" (js/Date.now)))
             package (if (and (.-ok res)
-                          (= (.-status res) 200))
+                             (= (.-status res) 200))
                       (-> (.json res)
-                        (p/then bean/->clj))
+                          (p/then bean/->clj))
                       (throw (js/Error. (.text res))))
             logseq (or (:logseq package)
-                     (throw (js/Error. "Illegal logseq package")))]
+                       (throw (js/Error. "Illegal logseq package")))]
       (let [id (if github?
                  (some-> github-repo (string/replace "/" "_"))
                  (or (:id logseq) (:name package)))
@@ -798,16 +798,16 @@
             theme? (some? (or (:theme logseq) (:themes logseq)))]
 
         (plugin-common-handler/emit-lsp-updates!
-          {:status :completed
-           :only-check false
-           :payload {:id id
-                     :repo repo
-                     :dst repo
-                     :theme theme?
-                     :web-pkg (cond-> package
+         {:status :completed
+          :only-check false
+          :payload {:id id
+                    :repo repo
+                    :dst repo
+                    :theme theme?
+                    :web-pkg (cond-> package
 
-                                (not github?)
-                                (assoc :installedFromUserWebUrl url))}}))
+                               (not github?)
+                               (assoc :installedFromUserWebUrl url))}}))
       url)))
 
 ;; components

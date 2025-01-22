@@ -1,31 +1,31 @@
 (ns frontend.components.query.builder
   "DSL query builder."
-  (:require [frontend.date :as date]
-            [frontend.ui :as ui]
+  (:require [clojure.string :as string]
+            [frontend.components.select :as component-select]
+            [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.query.builder :as query-builder]
-            [frontend.components.select :as component-select]
-            [frontend.state :as state]
-            [frontend.util :as util]
-            [logseq.shui.ui :as shui]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
-            [logseq.graph-parser.db :as gp-db]
-            [rum.core :as rum]
-            [clojure.string :as string]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
-            [promesa.core :as p]
-            [frontend.config :as config]
+            [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.db-mixins :as db-mixins]
-            [logseq.db :as ldb]
-            [frontend.hooks :as hooks]))
+            [logseq.graph-parser.db :as gp-db]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (rum/defc page-block-selector
   [*find]
@@ -204,7 +204,7 @@
 (rum/defc property-value-select
   [repo *property *private-property? *find *tree opts loc]
   (let [db-graph? (sqlite-util/db-based-graph? repo)
-        property-type (when db-graph? (get-in (db/entity repo @*property) [:block/schema :type]))
+        property-type (when db-graph? (:logseq.property/type (db/entity repo @*property)))
         ref-property? (and db-graph? (contains? db-property-type/all-ref-property-types property-type))
         [values set-values!] (rum/use-state nil)]
     (hooks/use-effect!

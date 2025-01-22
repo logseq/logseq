@@ -78,27 +78,26 @@
                      db-ident
                      (db-property/create-user-property-ident-from-name (name db-ident)))
          prop-name (or title (name db-ident'))
-         classes (:classes prop-schema)
-         prop-schema (assoc prop-schema :type (get prop-schema :type :default))]
-     (block-with-timestamps
-      (cond->
-       {:db/ident db-ident'
-        :block/tags #{:logseq.class/Property}
-        :block/schema (merge {:type :default} (dissoc prop-schema :classes :cardinality))
-        :block/name (common-util/page-name-sanity-lc (name prop-name))
-        :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
-        :block/title (name prop-name)
-        :db/index true
-        :db/cardinality (if (= :many (:cardinality prop-schema))
-                          :db.cardinality/many
-                          :db.cardinality/one)
-        :block/order (db-order/gen-key)}
-        (seq classes)
-        (assoc :property/schema.classes classes)
-        (or ref-type? (contains? db-property-type/all-ref-property-types (:type prop-schema)))
-        (assoc :db/valueType :db.type/ref)
-        (seq properties)
-        (merge properties))))))
+         prop-type (get prop-schema :logseq.property/type :default)]
+     (merge
+      (dissoc prop-schema :db/cardinality)
+      (block-with-timestamps
+       (cond->
+        {:db/ident db-ident'
+         :block/tags #{:logseq.class/Property}
+         :logseq.property/type prop-type
+         :block/name (common-util/page-name-sanity-lc (name prop-name))
+         :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
+         :block/title (name prop-name)
+         :db/index true
+         :db/cardinality (if (= :many (:db/cardinality prop-schema))
+                           :db.cardinality/many
+                           :db.cardinality/one)
+         :block/order (db-order/gen-key)}
+         (or ref-type? (contains? db-property-type/all-ref-property-types prop-type))
+         (assoc :db/valueType :db.type/ref)
+         (seq properties)
+         (merge properties)))))))
 
 (defn build-new-class
   "Build a standard new class so that it is consistent across contexts"
@@ -122,7 +121,7 @@
 
 (defn kv
   "Creates a key-value pair tx with the key and value respectively stored under
-  :db/ident and :kv/value.  The key must be under the namespace :logseq.kv"
+  :db/ident and :kv/value. The key must be under the namespace :logseq.kv"
   [k value]
   {:pre [(= "logseq.kv" (namespace k))]}
   {:db/ident k

@@ -6,6 +6,7 @@
             ["fs/promises" :as fsp]
             ["os" :as os]
             ["path" :as node-path]
+            #_:clj-kondo/ignore
             [babashka.cli :as cli]
             [cljs.pprint :as pprint]
             [clojure.set :as set]
@@ -13,7 +14,6 @@
             [datascript.core :as d]
             [logseq.common.graph :as common-graph]
             [logseq.graph-parser.exporter :as gp-exporter]
-            #_:clj-kondo/ignore
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
@@ -112,8 +112,8 @@
         files' (mapv #(hash-map :path %)
                      (into [file] (map resolve-path files)))]
     (p/with-redefs [d/transact! dev-transact!]
-     (p/let [_ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
-       {:import-state (:import-state doc-options)}))))
+      (p/let [_ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
+        {:import-state (:import-state doc-options)}))))
 
 (def spec
   "Options spec"

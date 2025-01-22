@@ -1,21 +1,21 @@
 (ns frontend.mobile.graph-picker
   (:require
    [clojure.string :as string]
-   [logseq.shui.ui :as shui]
-   [rum.core :as rum]
-   [frontend.ui :as ui]
-   [frontend.handler.notification :as notification]
+   [frontend.components.svg :as svg]
+   [frontend.fs :as fs]
    [frontend.handler.file-based.nfs :as nfs-handler]
+   [frontend.handler.notification :as notification]
    [frontend.handler.page :as page-handler]
-   [frontend.util :as util]
+   [frontend.hooks :as hooks]
+   [frontend.mobile.util :as mobile-util]
    [frontend.modules.shortcut.core :as shortcut]
    [frontend.state :as state]
-   [frontend.mobile.util :as mobile-util]
-   [frontend.fs :as fs]
-   [frontend.components.svg :as svg]
-   [promesa.core :as p]
+   [frontend.ui :as ui]
+   [frontend.util :as util]
    [logseq.common.path :as path]
-   [frontend.hooks :as hooks]))
+   [logseq.shui.ui :as shui]
+   [promesa.core :as p]
+   [rum.core :as rum]))
 
 (defn validate-graph-dirname
   [root dirname]
@@ -24,14 +24,14 @@
 (rum/defc toggle-item
   [{:keys [on? title on-toggle]}]
   (ui/button
-    [:span.flex.items-center.justify-between.w-full.py-1
-     [:strong title]
-     (ui/toggle on? (fn []) true)]
-    :class (str "toggle-item " (when on? "is-on"))
-    :intent "logseq"
-    :on-pointer-down #(util/stop %)
-    :on-click #(when (fn? on-toggle)
-                 (on-toggle (not on?)))))
+   [:span.flex.items-center.justify-between.w-full.py-1
+    [:strong title]
+    (ui/toggle on? (fn []) true)]
+   :class (str "toggle-item " (when on? "is-on"))
+   :intent "logseq"
+   :on-pointer-down #(util/stop %)
+   :on-click #(when (fn? on-toggle)
+                (on-toggle (not on?)))))
 
 (rum/defc ^:large-vars/cleanup-todo graph-picker-cp
   [{:keys [onboarding-and-home? logged? native-icloud?] :as opts}]
@@ -120,10 +120,10 @@
          :on-click (fn []
                      (shui/dialog-close!)
                      (page-handler/ls-dir-files! shortcut/refresh!
-                       {:dir (when native-ios?
-                               (or
-                                 (state/get-icloud-container-root-url)
-                                 (state/get-local-container-root-url)))})))]
+                                                 {:dir (when native-ios?
+                                                         (or
+                                                          (state/get-icloud-container-root-url)
+                                                          (state/get-local-container-root-url)))})))]
 
        ;; step 1
        :new-graph

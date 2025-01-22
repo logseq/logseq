@@ -1,16 +1,16 @@
 (ns frontend.components.server
   (:require
    [clojure.string :as string]
-   [logseq.shui.ui :as shui]
-   [rum.core :as rum]
    [electron.ipc :as ipc]
+   [frontend.handler.notification :as notification]
+   [frontend.hooks :as hooks]
+   [frontend.state :as state]
+   [frontend.ui :as ui]
+   [frontend.util :as util]
+   [logseq.shui.ui :as shui]
    [medley.core :as medley]
    [promesa.core :as p]
-   [frontend.state :as state]
-   [frontend.util :as util]
-   [frontend.handler.notification :as notification]
-   [frontend.ui :as ui]
-   [frontend.hooks :as hooks]))
+   [rum.core :as rum]))
 
 (rum/defcs panel-of-tokens
   < rum/reactive

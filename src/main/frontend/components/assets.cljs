@@ -2,20 +2,20 @@
   (:require
    [clojure.set :refer [difference]]
    [clojure.string :as string]
-   [logseq.shui.ui :as shui]
-   [rum.core :as rum]
-   [frontend.state :as state]
-   [frontend.context.i18n :refer [t]]
-   [frontend.util :as util]
    [electron.ipc :as ipc]
-   [promesa.core :as p]
-   [medley.core :as medley]
-   [frontend.ui :as ui]
-   [frontend.config :as config]
    [frontend.components.select :as cp-select]
-   [frontend.handler.notification :as notification]
+   [frontend.config :as config]
+   [frontend.context.i18n :refer [t]]
    [frontend.handler.assets :as assets-handler]
-   [frontend.hooks :as hooks]))
+   [frontend.handler.notification :as notification]
+   [frontend.hooks :as hooks]
+   [frontend.state :as state]
+   [frontend.ui :as ui]
+   [frontend.util :as util]
+   [logseq.shui.ui :as shui]
+   [medley.core :as medley]
+   [promesa.core :as p]
+   [rum.core :as rum]))
 
 (defn -get-all-formats
   []
@@ -81,7 +81,7 @@
                        (set-val! (util/trim-safe (.. e -target -value))))
         :on-key-up   (fn [^js e]
                        (when (and (= 13 (.-which e))
-                                (not (string/blank? val)))
+                                  (not (string/blank? val)))
                          (on-submit)))}]]
 
      [:div.pt-6.flex.justify-end
@@ -98,7 +98,7 @@
 
 (rum/defcs ^:large-vars/data-var alias-directories
   < rum/reactive
-    (rum/local nil ::ext-editing-dir)
+  (rum/local nil ::ext-editing-dir)
   [_state]
   (let [*ext-editing-dir (::ext-editing-dir _state)
         directories      (into [] (state/sub :assets/alias-dirs))
@@ -186,9 +186,7 @@
               (ui/icon "plus") "Acceptable file extensions"])]
 
           [:span.ctrls.flex.space-x-3.text-xs.opacity-30.hover:opacity-100.whitespace-nowrap.hidden.mt-1
-           [:a {:on-click #(rm-dir dir)} (ui/icon "trash-x")]]]
-
-         ])]
+           [:a {:on-click #(rm-dir dir)} (ui/icon "trash-x")]]]])]
 
      [:p.pt-2
       (ui/button
@@ -201,7 +199,7 @@
 
 (rum/defcs settings-content
   < rum/reactive
-    (rum/local (state/sub :assets/alias-enabled?) ::alias-enabled?)
+  (rum/local (state/sub :assets/alias-enabled?) ::alias-enabled?)
   [_state]
 
   (let [*pre-alias-enabled?    (::alias-enabled? _state)

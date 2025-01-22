@@ -1,9 +1,9 @@
 (ns frontend.worker.handler.page.db-based.page-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.db.test.helper :as db-test]
+            [frontend.worker.handler.page.db-based.page :as worker-db-page]
             [logseq.db :as ldb]
-            [frontend.worker.handler.page.db-based.page :as worker-db-page]))
+            [logseq.db.test.helper :as db-test]))
 
 (deftest create-class
   (let [conn (db-test/create-conn)
@@ -18,7 +18,7 @@
 
 (deftest create-namespace-pages
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:property1 {:block/schema {:type :default}}}
+              {:properties {:property1 {:logseq.property/type :default}}
                :classes {:class1 {}}
                :pages-and-blocks [{:page {:block/title "page1"}}]})]
 

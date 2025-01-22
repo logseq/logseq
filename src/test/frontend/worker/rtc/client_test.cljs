@@ -45,7 +45,7 @@
                                    :db/valueType :db.type/ref
                                    :block/updated-at 1716880036491
                                    :block/created-at 1716880036491
-                                   :block/schema {:type :number}
+                                   :logseq.property/type :number
                                    :db/cardinality :db.cardinality/one
                                    :db/ident :user.property/xxx,
                                    :block/type "property",

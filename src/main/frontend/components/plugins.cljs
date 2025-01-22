@@ -12,6 +12,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.rum :as rum-utils]
             [frontend.search :as search]
@@ -21,8 +22,7 @@
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (declare open-waiting-updates-modal!)
 (defonce PER-PAGE-SIZE 15)
@@ -486,11 +486,11 @@
         handle-submit! (fn []
                          (set-pending? true)
                          (-> (plugin-handler/load-plugin-from-web-url! url)
-                           (p/then #(do (notification/show! "New plugin registered!" :success)
-                                      (shui/dialog-close!)))
-                           (p/catch #(notification/show! (str %) :error))
-                           (p/finally
-                             #(set-pending? false))))]
+                             (p/then #(do (notification/show! "New plugin registered!" :success)
+                                          (shui/dialog-close!)))
+                             (p/catch #(notification/show! (str %) :error))
+                             (p/finally
+                               #(set-pending? false))))]
 
     [:div.px-4.pt-4.pb-2.rounded-md.flex.flex-col.gap-2
      [:div.flex.flex-col.gap-3
@@ -502,12 +502,11 @@
        (shui/tabler-icon "info-circle" {:size 13})
        [:span "URLs support both GitHub repositories and local development servers.
       (For examples: https://github.com/xyhp915/logseq-journals-calendar,
-      http://localhost:8080/<plugin-dir-root>)"]]
-      ]
+      http://localhost:8080/<plugin-dir-root>)"]]]
      [:div.flex.justify-end
       (shui/button {:disabled (or pending? (string/blank? url))
                     :on-click handle-submit!}
-        (if pending? (ui/loading) "Install"))]]))
+                   (if pending? (ui/loading) "Install"))]]))
 
 (rum/defc install-from-github-release-container
   []
@@ -1412,10 +1411,10 @@
                            ;; interval 12 hours
                           (> (- (js/Date.now) last-updates) (* 60 60 12 1000))))
              (let [update-timer (js/setTimeout
-                                  (fn []
-                                    (plugin-handler/auto-check-enabled-for-updates!)
-                                    (storage/set :lsp-last-auto-updates (js/Date.now)))
-                                  (if (util/electron?) 3000 (* 60 1000) ))]
+                                 (fn []
+                                   (plugin-handler/auto-check-enabled-for-updates!)
+                                   (storage/set :lsp-last-auto-updates (js/Date.now)))
+                                 (if (util/electron?) 3000 (* 60 1000)))]
                #(js/clearTimeout update-timer))))))
      [online?])
 

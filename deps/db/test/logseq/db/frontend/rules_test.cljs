@@ -28,8 +28,8 @@
 
 (deftest has-property-rule
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:foo {:block/schema {:type :default}}
-                            :foo2 {:block/schema {:type :default}}}
+              {:properties {:foo {:logseq.property/type :default}
+                            :foo2 {:logseq.property/type :default}}
                :pages-and-blocks
                [{:page {:block/title "Page1"
                         :build/properties {:foo "bar"}}}]})]
@@ -44,7 +44,7 @@
                               @conn)
                 (map (comp :block/title first))))
         "has-property returns no result when block doesn't have property")
-    (is (= [:user.property/foo :block/tags]
+    (is (= [:block/tags :user.property/foo]
            (q-with-rules '[:find [?p ...]
                            :where (has-property ?b ?p) [?b :block/title "Page1"]]
                          @conn))
@@ -52,10 +52,12 @@
 
 (deftest property-rule
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:foo {:block/schema {:type :default}}
-                            :foo2 {:block/schema {:type :default}}
-                            :number-many {:block/schema {:type :number :cardinality :many}}
-                            :page-many {:block/schema {:type :node :cardinality :many}}}
+              {:properties {:foo {:logseq.property/type :default}
+                            :foo2 {:logseq.property/type :default}
+                            :number-many {:logseq.property/type :number
+                                          :db/cardinality :many}
+                            :page-many {:logseq.property/type :node
+                                        :db/cardinality :many}}
                :pages-and-blocks
                [{:page {:block/title "Page1"
                         :build/properties {:foo "bar" :number-many #{5 10} :page-many #{[:page "Page A"]}}}}

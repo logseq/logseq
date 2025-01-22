@@ -1,10 +1,10 @@
 (ns frontend.components.handbooks
-  (:require [rum.core :as rum]
-            [frontend.state :as state]
-            [frontend.modules.layout.core :as layout]
-            ;[shadow.lazy :as lazy]
-            [frontend.extensions.handbooks.core :as handbooks]
-            [frontend.hooks :as hooks]))
+  (:require ;[shadow.lazy :as lazy]
+   [frontend.extensions.handbooks.core :as handbooks]
+   [frontend.hooks :as hooks]
+   [frontend.modules.layout.core :as layout]
+   [frontend.state :as state]
+   [rum.core :as rum]))
 
 #_:clj-kondo/ignore
 ;(def lazy-handbooks (lazy/loadable frontend.extensions.handbooks.core/content))

@@ -1,11 +1,11 @@
 (ns logseq.db.frontend.property.type
   "Provides property types and related helper fns e.g. property value validation
   fns and their allowed schema attributes"
-  (:require [datascript.core :as d]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.common.util.macro :as macro-util]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [clojure.string :as string]))
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 ;; Config vars
 ;; ===========
@@ -44,18 +44,18 @@
 
 (def original-value-ref-property-types
   "Property value ref types where the refed entity stores its value in
-  :property.value/content e.g. :number is stored as a number. new value-ref-property-types
+  :logseq.property/value e.g. :number is stored as a number. new value-ref-property-types
   should default to this as it allows for more querying power"
   #{:number})
 
 (def value-ref-property-types
   "Property value ref types where the refed entities either store their value in
-  :property.value/content or :block/title (for :default)"
+  :logseq.property/value or :block/title (for :default)"
   (into #{:default :url} original-value-ref-property-types))
 
 (def user-ref-property-types
   "User ref types. Property values that users see are stored in either
-  :property.value/content or :block/title. :block/title is for all the page related types"
+  :logseq.property/value or :block/title. :block/title is for all the page related types"
   (into #{:date :node} value-ref-property-types))
 
 (assert (set/subset? user-ref-property-types
@@ -120,7 +120,7 @@
   (if new-closed-value?
     (number? id-or-value)
     (when-let [entity (d/entity db id-or-value)]
-      (number? (:property.value/content entity)))))
+      (number? (:logseq.property/value entity)))))
 
 (defn- text-entity?
   [db s {:keys [new-closed-value?]}]
@@ -206,9 +206,9 @@
     :else :default))
 
 (defn property-value-content?
-  "Whether property value should be stored in :property.value/content"
+  "Whether property value should be stored in :logseq.property/value"
   [block-type property]
   (or
-   (original-value-ref-property-types (get-in property [:block/schema :type]))
+   (original-value-ref-property-types (:logseq.property/type property))
    (and (= (:db/ident property) :logseq.property/default-value)
         (original-value-ref-property-types block-type))))

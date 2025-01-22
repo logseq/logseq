@@ -88,18 +88,19 @@
                           ;; closed values are referenced by their :db/ident so no need to create values
                           (not (get-in db-property/built-in-properties [k :closed-values])))
                    (let [property-map {:db/ident k
-                                       :block/schema {:type built-in-type}}]
+                                       :logseq.property/type built-in-type}]
                      [property-map v])
                    (when-let [built-in-type' (get (:build/properties-ref-types new-block) built-in-type)]
                      (let [property-map {:db/ident k
-                                         :block/schema {:type built-in-type'}}]
+                                         :logseq.property/type built-in-type'}]
                        [property-map v])))
-                 (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :block/schema :type]))
+                 (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :logseq.property/type]))
                             ;; TODO: Support translate-property-value without this hack
                             (not (vector? v)))
-                   (let [property-map {:db/ident (get-ident all-idents k)
+                   (let [prop-type (get-in properties-config [k :logseq.property/type])
+                         property-map {:db/ident (get-ident all-idents k)
                                        :original-property-id k
-                                       :block/schema {:type (get-in properties-config [k :block/schema :type])}}]
+                                       :logseq.property/type prop-type}]
                      [property-map v])))))
        (db-property-build/build-property-values-tx-m new-block)))
 
@@ -143,7 +144,7 @@
 
 (defn- build-property-tx
   [properties page-uuids all-idents property-db-ids
-   [prop-name {:build/keys [schema-classes] :as prop-m}]]
+   [prop-name {:build/keys [property-classes] :as prop-m}]]
   (let [[new-block & additional-tx]
         (if-let [closed-values (seq (map #(merge {:uuid (random-uuid)} %) (:build/closed-values prop-m)))]
           (let [db-ident (get-ident all-idents prop-name)]
@@ -156,7 +157,7 @@
                                  (throw (ex-info "No :db/id for property" {:property prop-name})))}
                      (select-keys prop-m [:build/properties-ref-types]))}))
           [(merge (sqlite-util/build-new-property (get-ident all-idents prop-name)
-                                                  (:block/schema prop-m)
+                                                  (db-property/get-property-schema prop-m)
                                                   {:block-uuid (:block/uuid prop-m)
                                                    :title (:block/title prop-m)})
                   {:db/id (or (property-db-ids prop-name)
@@ -173,10 +174,10 @@
         new-block
         (when-let [props (not-empty (:build/properties prop-m))]
           (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) page-uuids all-idents))
-        (when (seq schema-classes)
-          {:property/schema.classes
+        (when (seq property-classes)
+          {:logseq.property/classes
            (mapv #(hash-map :db/ident (get-ident all-idents %))
-                 schema-classes)})))
+                 property-classes)})))
       true
       (into additional-tx))))
 
@@ -195,7 +196,7 @@
                           (into {}))
         classes-tx (vec
                     (mapcat
-                     (fn [[class-name {:build/keys [class-parent schema-properties] :as class-m}]]
+                     (fn [[class-name {:build/keys [class-parent class-properties] :as class-m}]]
                        (let [db-ident (get-ident all-idents class-name)
                              new-block
                              (sqlite-util/build-new-class
@@ -214,17 +215,17 @@
                            (conj
                             (merge
                              new-block
-                             (dissoc class-m :build/properties :build/class-parent :build/schema-properties)
+                             (dissoc class-m :build/properties :build/class-parent :build/class-properties)
                              (when-let [props (not-empty (:build/properties class-m))]
                                (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) uuid-maps all-idents))
                              (when class-parent
                                {:logseq.property/parent
                                 (or (class-db-ids class-parent)
                                     (throw (ex-info (str "No :db/id for " class-parent) {})))})
-                             (when schema-properties
+                             (when class-properties
                                {:logseq.property.class/properties
                                 (mapv #(hash-map :db/ident (get-ident all-idents %))
-                                      schema-properties)}))))))
+                                      class-properties)}))))))
                      classes))]
     classes-tx))
 
@@ -257,8 +258,6 @@
   [:map-of
    Property
    [:map
-    [:block/schema [:map
-                    [:type :keyword]]]
     [:build/properties {:optional true} User-properties]
     [:build/properties-ref-types {:optional true}
      [:map-of :keyword :keyword]]
@@ -268,7 +267,7 @@
                [:value [:or :string :double]]
                [:uuid {:optional true} :uuid]
                [:icon {:optional true} :map]]]]
-    [:build/schema-classes {:optional true} [:vector Class]]]])
+    [:build/property-classes {:optional true} [:vector Class]]]])
 
 (def Classes
   [:map-of
@@ -276,7 +275,7 @@
    [:map
     [:build/properties {:optional true} User-properties]
     [:build/class-parent {:optional true} Class]
-    [:build/schema-properties {:optional true} [:vector Property]]]])
+    [:build/class-properties {:optional true} [:vector Property]]]])
 
 (def Options
   [:map
@@ -290,7 +289,7 @@
 
 (defn- get-used-properties-from-options
   "Extracts all used properties as a map of properties to their property values. Looks at properties
-   from :build/properties and :build/schema-properties. Properties from :block/schema-properties have
+   from :build/properties and :build/class-properties. Properties from :build/class-properties have
    a ::no-value value"
   [{:keys [pages-and-blocks properties classes]}]
   (let [page-block-properties (->> pages-and-blocks
@@ -300,7 +299,7 @@
         property-properties (->> (vals properties)
                                  (mapcat #(into [] (:build/properties %))))
         class-properties (->> (vals classes)
-                              (mapcat #(concat (map (fn [p] [p ::no-value]) (:build/schema-properties %))
+                              (mapcat #(concat (map (fn [p] [p ::no-value]) (:build/class-properties %))
                                                (into [] (:build/properties %))))
                               set)
         props-to-values (->> (set/union class-properties page-block-properties property-properties)
@@ -502,9 +501,9 @@
                       :node
                       (db-property-type/infer-property-type-from-value prop-value'))
                     :default)]
-    (cond-> {:block/schema {:type prop-type}}
+    (cond-> {:logseq.property/type prop-type}
       (coll? prop-value)
-      (assoc-in [:block/schema :cardinality] :many))))
+      (assoc :db/cardinality :many))))
 
 (defn- auto-create-ontology
   "Auto creates properties and classes from uses of options.  Creates properties
@@ -541,8 +540,8 @@
         class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
         ;; Replace idents with db-ids to avoid any upsert issues
         properties-tx' (mapv (fn [m]
-                               (if (:property/schema.classes m)
-                                 (update m :property/schema.classes
+                               (if (:logseq.property/classes m)
+                                 (update m :logseq.property/classes
                                          (fn [cs]
                                            (mapv #(or (some->> (:db/ident %) class-ident->id (hash-map :db/id))
                                                       (throw (ex-info (str "No :db/id found for :db/ident " (pr-str (:db/ident %))) {})))
@@ -580,11 +579,11 @@
           Allows for outlines to be expressed to whatever depth
        * :build/properties - Defines properties on a block
    * :properties - This is a map to configure properties where the keys are property name keywords
-     and the values are maps of datascript attributes e.g. `{:block/schema {:type :checkbox}}`.
+     and the values are maps of datascript attributes e.g. `{:logseq.property/type :checkbox}`.
      Additional keys available:
      * :build/properties - Define properties on a property page.
      * :build/closed-values - Define closed values with a vec of maps. A map contains keys :uuid, :value and :icon.
-     * :build/schema-classes - Vec of class name keywords. Defines a property's range classes
+     * :build/property-classes - Vec of class name keywords. Defines a property's range classes
      * :build/properties-ref-types - Map of internal ref types to public ref types that are valid only for this property.
        Useful when remapping value ref types e.g. for :logseq.property/default-value
    * :classes - This is a map to configure classes where the keys are class name keywords
@@ -592,7 +591,7 @@
      Additional keys available:
      * :build/properties - Define properties on a class page
      * :build/class-parent - Add a class parent by its keyword name
-     * :build/schema-properties - Vec of property name keywords. Defines properties that a class gives to its objects
+     * :build/class-properties - Vec of property name keywords. Defines properties that a class gives to its objects
   * :graph-namespace - namespace to use for db-ident creation. Useful when importing an ontology
   * :auto-create-ontology? - When set to true, creates properties and classes from their use.
     See auto-create-ontology for more details

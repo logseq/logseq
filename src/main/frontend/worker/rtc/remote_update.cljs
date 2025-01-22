@@ -4,7 +4,6 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.defkeywords :refer [defkeywords]]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client-op :as client-op]
@@ -14,6 +13,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.clj-fractional-indexing :as index]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
@@ -367,12 +367,11 @@ so need to pull earlier remote-data from websocket."})
     :block/updated-at
     :block/created-at
     :block/alias
-    :block/schema
     :block/tags
     :block/link
     :block/journal-day
-    :property/schema.classes
-    :property.value/content})
+    :logseq.property/classes
+    :logseq.property/value})
 
 (def ^:private watched-attr-ns
   (conj db-property/logseq-property-namespaces "logseq.class"))

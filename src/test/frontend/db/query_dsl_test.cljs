@@ -183,7 +183,7 @@ prop-d:: [[nada]]"}])
   (deftest db-only-block-property-queries
     (load-test-files-for-db-graph
      {:properties
-      {:zzz {:block/schema {:type :default}
+      {:zzz {:logseq.property/type :default
              :block/title "zzz name!"}}
       :pages-and-blocks
       [{:page {:block/title "page1"}
@@ -208,11 +208,11 @@ prop-d:: [[nada]]"}])
   (deftest property-default-type-default-value-queries
     (load-test-files-for-db-graph
      {:properties
-      {:default {:block/schema {:type :default}
+      {:default {:logseq.property/type :default
                  :build/properties
                  {:logseq.property/default-value "foo"}
                  :build/properties-ref-types {:entity :number}}}
-      :classes {:Class1 {:build/schema-properties [:default]}}
+      :classes {:Class1 {:build/class-properties [:default]}}
       :pages-and-blocks
       [{:page {:block/title "page1"}
         :blocks [{:block/title "b1"
@@ -222,8 +222,8 @@ prop-d:: [[nada]]"}])
                  {:block/title "b3"
                   :build/tags [:Class1]}]}]})
 
-    (is (= ["b3" "b2" "b1"]
-           (map :block/title (dsl-query "(property :user.property/default)")))
+    (is (= (set ["b3" "b2" "b1"])
+           (set (map :block/title (dsl-query "(property :user.property/default)"))))
         "Blocks with any :default property or tagged with a tag that has that default-value property")
     (is (= ["b1" "b3"]
            (map :block/title (dsl-query "(property :user.property/default \"foo\")")))
@@ -235,10 +235,10 @@ prop-d:: [[nada]]"}])
   (deftest property-checkbox-type-default-value-queries
     (load-test-files-for-db-graph
      {:properties
-      {:checkbox {:block/schema {:type :checkbox}
+      {:checkbox {:logseq.property/type :checkbox
                   :build/properties
                   {:logseq.property/scalar-default-value true}}}
-      :classes {:Class1 {:build/schema-properties [:checkbox]}}
+      :classes {:Class1 {:build/class-properties [:checkbox]}}
       :pages-and-blocks
       [{:page {:block/title "page1"}
         :blocks [{:block/title "b1"
@@ -248,8 +248,8 @@ prop-d:: [[nada]]"}])
                  {:block/title "b3"
                   :build/tags [:Class1]}]}]})
 
-    (is (= ["b3" "b2" "b1"]
-           (map :block/title (dsl-query "(property :user.property/checkbox)")))
+    (is (= (set ["b3" "b2" "b1"])
+           (set (map :block/title (dsl-query "(property :user.property/checkbox)"))))
         "Blocks with any :checkbox property or tagged with a tag that has that default-value property")
     (is (= ["b1" "b3"]
            (map :block/title (dsl-query "(property :user.property/checkbox true)")))
@@ -261,14 +261,14 @@ prop-d:: [[nada]]"}])
   (deftest closed-property-default-value-queries
     (load-test-files-for-db-graph
      {:properties
-      {:status {:block/schema {:type :default}
+      {:status {:logseq.property/type :default
                 :build/closed-values
                 [{:value "Todo" :uuid (random-uuid)}
                  {:value "Doing" :uuid (random-uuid)}]
                 :build/properties
                 {:logseq.property/default-value "Todo"}
                 :build/properties-ref-types {:entity :number}}}
-      :classes {:Mytask {:build/schema-properties [:status]}
+      :classes {:Mytask {:build/class-properties [:status]}
                 :Bug {:build/class-parent :Mytask}}
       :pages-and-blocks
       [{:page {:block/title "page1"}
