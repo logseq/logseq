@@ -33,6 +33,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frontend-rum]
@@ -48,8 +49,7 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (defn- get-page-name
   [state]
@@ -143,7 +143,7 @@
       ;; mounted
       ;(hooks/use-effect! #(focus!) [])
       (hooks/use-effect! #(if selected? (focus!)
-                            (some-> (rum/deref *el-ref) (.blur))) [selected?])
+                              (some-> (rum/deref *el-ref) (.blur))) [selected?])
 
       (shui/trigger-as
        :div.ls-dummy-block.ls-block

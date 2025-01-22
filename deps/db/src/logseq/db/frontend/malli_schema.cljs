@@ -84,14 +84,14 @@
   expected to be a coll if the property has a :many cardinality. validate-fn is
   a fn that is called directly on each value to return a truthy value.
   validate-fn varies by property type"
-  [db validate-fn [{:block/keys [schema] :as property} property-val] & {:keys [new-closed-value?]}]
+  [db validate-fn [property property-val] & {:keys [new-closed-value?]}]
   ;; For debugging
   ;; (when (not (internal-ident? (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
-  (let [validate-fn' (if (db-property-type/property-types-with-db (:type schema))
+  (let [validate-fn' (if (db-property-type/property-types-with-db (:logseq.property/type property))
                        (fn [value]
                          (validate-fn db value {:new-closed-value? new-closed-value?}))
                        validate-fn)
-        validate-fn'' (if (and (db-property-type/closed-value-property-types (:type schema))
+        validate-fn'' (if (and (db-property-type/closed-value-property-types (:logseq.property/type property))
                                ;; new closed values aren't associated with the property yet
                                (not new-closed-value?)
                                (seq (:property/closed-values property)))
@@ -111,8 +111,9 @@
    of validate-property-value"
   (set/union
    (set (get-in db-class/built-in-classes [:logseq.class/Asset :schema :required-properties]))
-   #{:logseq.property/created-from-property :logseq.property.history/scalar-value
-     :logseq.property.history/block :logseq.property.history/property :logseq.property.history/ref-value}))
+   #{:logseq.property/created-from-property :logseq.property/value
+     :logseq.property.history/scalar-value :logseq.property.history/block
+     :logseq.property.history/property :logseq.property.history/ref-value}))
 
 (defn- property-entity->map
   "Provide the minimal number of property attributes to validate the property
@@ -121,9 +122,7 @@
   [property]
   ;; use explicit call to be nbb compatible
   (let [closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
-    (cond-> (assoc (select-keys property [:db/ident :db/valueType :db/cardinality])
-                   :block/schema
-                   (select-keys (:block/schema property) [:type]))
+    (cond-> (select-keys property [:db/ident :db/valueType :db/cardinality :logseq.property/type])
       (seq closed-values)
       (assoc :property/closed-values closed-values))))
 
@@ -132,7 +131,9 @@
   [db ents]
   ;; required-properties allows schemas like property-value-block to require
   ;; properties in their schema that they depend on
-  (let [exceptions-to-block-properties (conj required-properties :block/tags)
+  (let [exceptions-to-block-properties (-> required-properties
+                                           (into db-property/schema-properties)
+                                           (conj :block/tags))
         page-class-id (:db/id (d/entity db :logseq.class/Page))
         all-page-class-ids (set (map #(:db/id (d/entity db %)) db-class/page-classes))]
     (mapv
@@ -213,7 +214,7 @@
 (def property-tuple
   "A tuple of a property map and a property value"
   (into
-   [:multi {:dispatch #(-> % first :block/schema :type)}]
+   [:multi {:dispatch #(-> % first :logseq.property/type)}]
    (map (fn [[prop-type value-schema]]
           [prop-type
            (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)]
@@ -269,7 +270,7 @@
    [:db/valueType {:optional true} [:enum :db.type/ref]]
    [:db/cardinality {:optional true} [:enum :db.cardinality/many :db.cardinality/one]]
    [:block/order {:optional true} block-order]
-   [:property/schema.classes {:optional true} [:set :int]]])
+   [:logseq.property/classes {:optional true} [:set :int]]])
 
 (def normal-page
   (vec
@@ -290,41 +291,22 @@
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
-  [[:hide? {:optional true} :boolean]
-   [:position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
+  [[:logseq.property/hide? {:optional true} :boolean]
+   [:logseq.property/public? {:optional true} :boolean]
+   [:logseq.property/ui-position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
 
 (def internal-property
   (vec
    (concat
     [:map
      [:db/ident internal-property-ident]
-     [:block/schema
-      (vec
-       (concat
-        [:map
-         [:type (apply vector :enum (into db-property-type/internal-built-in-property-types
-                                          db-property-type/user-built-in-property-types))]
-         [:public? {:optional true} :boolean]
-         [:view-context {:optional true} [:enum :page :block :class :property :never]]
-         [:shortcut {:optional true} :string]]
-        property-common-schema-attrs))]]
+     [:logseq.property/type (apply vector :enum (into db-property-type/internal-built-in-property-types
+                                                      db-property-type/user-built-in-property-types))]
+     [:logseq.property/view-context {:optional true} [:enum :page :block :class :property :never]]]
+    property-common-schema-attrs
     property-attrs
     page-attrs
     page-or-block-attrs)))
-
-(def user-property-schema
-  (into
-   [:multi {:dispatch :type}]
-   (map
-    (fn [prop-type]
-      [prop-type
-       (vec
-        (concat
-         [:map
-          ;; Once a schema is defined it must have :type as this is an irreversible decision
-          [:type :keyword]]
-         property-common-schema-attrs))])
-    db-property-type/user-built-in-property-types)))
 
 (def user-property
   (vec
@@ -332,7 +314,8 @@
     [:map
      ;; class-ident allows for a class to be used as a property
      [:db/ident [:or user-property-ident class-ident]]
-     [:block/schema user-property-schema]]
+     [:logseq.property/type (apply vector :enum db-property-type/user-built-in-property-types)]]
+    property-common-schema-attrs
     property-attrs
     page-attrs
     page-or-block-attrs)))
@@ -350,9 +333,7 @@
     [:map
      ;; pages from :default property uses this but closed-value pages don't
      [:block/order {:optional true} block-order]
-     [:block/schema
-      [:map
-       [:public? {:optional true} :boolean]]]]
+     [:logseq.property/hide? [:enum true]]]
     page-attrs
     page-or-block-attrs)))
 
@@ -384,7 +365,7 @@
   (vec
    (concat
     [:map]
-    [[:property.value/content [:or :string :double :boolean]]
+    [[:logseq.property/value [:or :string :double :boolean]]
      [:logseq.property/created-from-property :int]]
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
@@ -416,7 +397,7 @@
     [;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
      [:block/title {:optional true} :string]
-     [:property.value/content {:optional true} [:or :string :double]]
+     [:logseq.property/value {:optional true} [:or :string :double]]
      [:logseq.property/created-from-property :int]
      [:block/closed-value-property {:optional true} [:set :int]]]
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
@@ -425,10 +406,10 @@
 (def closed-value-block
   "A closed value for a property with closed/allowed values"
   [:and closed-value-block*
-   [:fn {:error/message ":block/title or :property.value/content required"
-         :error/path [:property.value/content]}
+   [:fn {:error/message ":block/title or :logseq.property/value required"
+         :error/path [:logseq.property/value]}
     (fn [m]
-      (or (:block/title m) (:property.value/content m)))]])
+      (or (:block/title m) (:logseq.property/value m)))]])
 
 (def normal-block
   "A block with content and no special type or tag behavior"
@@ -506,7 +487,7 @@
                        :closed-value-block
 
                        (and (:logseq.property/created-from-property d)
-                            (:property.value/content d))
+                            (:logseq.property/value d))
                        :property-value-block
 
                        (:block/uuid d)

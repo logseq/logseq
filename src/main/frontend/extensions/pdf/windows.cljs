@@ -1,8 +1,8 @@
 (ns frontend.extensions.pdf.windows
-  (:require [frontend.state :as state]
-            [rum.core :as rum]
-            [cljs-bean.core :as bean]
-            [frontend.storage :as storage]))
+  (:require [cljs-bean.core :as bean]
+            [frontend.state :as state]
+            [frontend.storage :as storage]
+            [rum.core :as rum]))
 
 (def *active-win (atom nil))
 (def *exit-pending? (atom false))

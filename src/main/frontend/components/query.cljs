@@ -1,22 +1,22 @@
 (ns frontend.components.query
   (:require [clojure.string :as string]
-            [frontend.components.file-based.query-table :as query-table]
             [frontend.components.file-based.query :as file-query]
+            [frontend.components.file-based.query-table :as query-table]
             [frontend.components.query.result :as query-result]
             [frontend.components.query.view :as query-view]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
+            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [rum.core :as rum]
-            [frontend.config :as config]
             [logseq.db :as ldb]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (defn- built-in-custom-query?
   [title]

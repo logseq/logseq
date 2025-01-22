@@ -16,6 +16,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -23,8 +24,7 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (rum/defc toggle
   []

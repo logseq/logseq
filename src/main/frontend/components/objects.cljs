@@ -9,6 +9,7 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
+            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
@@ -20,8 +21,7 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (defn- get-class-objects
   [class]

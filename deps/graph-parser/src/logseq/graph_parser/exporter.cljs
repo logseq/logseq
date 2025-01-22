@@ -370,7 +370,7 @@
 
 (defn- infer-property-schema-and-get-property-change
   "Infers a property's schema from the given _user_ property value and adds new ones to
-  the property-schemas atom. If a property's :type changes, returns a map of
+  the property-schemas atom. If a property's :logseq.property/type changes, returns a map of
   the schema attribute changed and how it changed e.g. `{:type {:from :default :to :url}}`"
   [db prop-val prop prop-val-text refs {:keys [property-schemas all-idents]} macros]
   ;; Explicitly fail an unexpected case rather than cause silent downstream failures
@@ -390,15 +390,15 @@
                         :else
                         (db-property-type/infer-property-type-from-value
                          (macro-util/expand-value-if-macro prop-val macros)))
-        prev-type (get-in @property-schemas [prop :type])]
+        prev-type (get-in @property-schemas [prop :logseq.property/type])]
     ;; Create new property
     (when-not (get @property-schemas prop)
       (create-property-ident db all-idents prop)
-      (let [schema (cond-> {:type prop-type}
+      (let [schema (cond-> {:logseq.property/type prop-type}
                      (#{:node :date} prop-type)
                      ;; Assume :many for now as detecting that detecting property values across files are consistent
                      ;; isn't possible yet
-                     (assoc :cardinality :many))]
+                     (assoc :db/cardinality :many))]
         (swap! property-schemas assoc prop schema)))
     (when (and prev-type (not= prev-type prop-type))
       {:type {:from prev-type :to prop-type}})))
@@ -555,7 +555,7 @@
       ;; Change to :node as dates can be pages but pages can't be dates
       (= {:from :date :to :node} type-change)
       (do
-        (swap! property-schemas assoc-in [prop :type] :node)
+        (swap! property-schemas assoc-in [prop :logseq.property/type] :node)
         (update-page-or-date-values page-names-to-uuids val))
 
       ;; Unlike the other property changes, this one changes all the previous values of a property
@@ -568,9 +568,9 @@
           (swap! ignored-properties conj {:property prop :value val :schema (get property-changes prop)})
           nil)
         (do
-          (swap! upstream-properties assoc prop {:schema {:type :default}
+          (swap! upstream-properties assoc prop {:schema {:logseq.property/type :default}
                                                  :from-type (:from type-change)})
-          (swap! property-schemas assoc prop {:type :default})
+          (swap! property-schemas assoc prop {:logseq.property/type :default})
           (get properties-text-values prop)))
 
       :else
@@ -590,7 +590,7 @@
                    [prop val'])
                  [prop
                   (if (set? val)
-                    (if (= :default (:type (get @property-schemas prop)))
+                    (if (= :default (:logseq.property/type (get @property-schemas prop)))
                       (get properties-text-values prop)
                       (update-page-or-date-values page-names-to-uuids val))
                     val)])))
@@ -607,12 +607,13 @@
                             ;; closed values are referenced by their :db/ident so no need to create values
                             (not (get-in db-property/built-in-properties [k :closed-values])))
                    (let [property-map {:db/ident k
-                                       :block/schema {:type built-in-type}}]
+                                       :logseq.property/type built-in-type}]
                      [property-map v]))
-                 (when (db-property-type/value-ref-property-types (:type (get-schema-fn k)))
-                   (let [property-map {:db/ident (get-ident all-idents k)
-                                       :original-property-id k
-                                       :block/schema (get-schema-fn k)}]
+                 (when (db-property-type/value-ref-property-types (:logseq.property/type (get-schema-fn k)))
+                   (let [property-map (merge
+                                       {:db/ident (get-ident all-idents k)
+                                        :original-property-id k}
+                                       (get-schema-fn k))]
                      [property-map v])))))
        (db-property-build/build-property-values-tx-m new-block)))
 
@@ -1093,9 +1094,9 @@
            (fn [[prop {:keys [schema from-type]}]]
              (let [prop-ident (get-ident all-idents prop)
                    upstream-tx
-                   (when (= :default (:type schema))
+                   (when (= :default (:logseq.property/type schema))
                      (build-upstream-properties-tx-for-default db prop prop-ident from-type block-properties-text-values))
-                   property-pages-tx [{:db/ident prop-ident :block/schema schema}]]
+                   property-pages-tx [(merge {:db/ident prop-ident} schema)]]
                ;; If we handle cardinality changes we would need to return these separately
                ;; as property-pages would need to be transacted separately
                (concat property-pages-tx upstream-tx)))
@@ -1113,7 +1114,7 @@
    :ignored-properties (atom [])
    ;; Vec of maps with keys :path and :reason
    :ignored-files (atom [])
-   ;; Map of property names (keyword) and their current schemas (map).
+   ;; Map of property names (keyword) and their current schemas (map of qualified properties).
    ;; Used for adding schemas to properties and detecting changes across a property's usage
    :property-schemas (atom {})
    ;; Map of property or class names (keyword) to db-ident keywords
@@ -1167,7 +1168,7 @@
                                                               (get-property-schema @(:property-schemas import-state) kw-name)
                                                               {:title (name kw-name)})]
                  (assert existing-page-uuid)
-                 (merge (select-keys new-prop [:block/tags :block/schema :db/ident :db/index :db/cardinality :db/valueType])
+                 (merge (select-keys new-prop [:block/tags :db/ident :logseq.property/type :db/index :db/cardinality :db/valueType])
                         {:block/uuid existing-page-uuid})))
              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
         ;; Could do this only for existing pages but the added complexity isn't worth reducing the tx noise
