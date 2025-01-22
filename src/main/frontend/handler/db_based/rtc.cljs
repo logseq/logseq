@@ -124,10 +124,10 @@
                   (notification/show! (str "Something wrong, please try again.") :error)
                   (js/console.error e)))))))
 
-;;; background task: try to restart rtc-loop when possible,
-;;; triggered by `rtc-flows/rtc-try-restart-flow`
 (when-not config/publishing?
   (c.m/run-background-task
+   ;;; background task: try to restart rtc-loop when possible,
+   ;;; triggered by `rtc-flows/rtc-try-restart-flow`
    ::restart-rtc-task
    (m/reduce
     (constantly nil)

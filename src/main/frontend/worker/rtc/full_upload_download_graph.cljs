@@ -146,10 +146,11 @@
                                                         :schema-version (str major-schema-version)
                                                         :graph-name remote-graph-name}))]
         (if-let [graph-uuid (:graph-uuid upload-resp)]
-          (do
+          (let [schema-version (ldb/get-graph-schema-version @conn)]
             (ldb/transact! conn
-                           [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
-                            {:db/ident :logseq.kv/graph-local-tx :kv/value "0"}])
+                           [(ldb/kv :logseq.kv/graph-uuid graph-uuid)
+                            (ldb/kv :logseq.kv/graph-local-tx "0")
+                            (ldb/kv :logseq.kv/remote-schema-version schema-version)])
             (client-op/update-graph-uuid repo graph-uuid)
             (client-op/remove-local-tx repo)
             (client-op/add-all-exists-asset-as-ops repo)
@@ -203,6 +204,17 @@
                                   (set? v))
                             (first v)
                             v))))))
+
+(defn- transact-remote-schema-version!
+  [repo]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (when-let [schema-version (:kv/value (d/entity db :logseq.kv/schema-version))]
+        (d/transact! conn
+                     [(ldb/kv :logseq.kv/remote-schema-version schema-version)]
+                     {:rtc-download-graph? true
+                      :gen-undo-ops? false
+                      :persist-op? false})))))
 
 (defn- transact-block-refs!
   [repo]
@@ -262,6 +274,7 @@
                                      :gen-undo-ops? false
                                      :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST
                                      :persist-op? false})
+    (transact-remote-schema-version! repo)
     (transact-block-refs! repo)))
 
 (defn- blocks-resolve-temp-id
@@ -325,9 +338,8 @@
         [schema-blocks normal-blocks] (blocks->schema-blocks+normal-blocks blocks)
         tx-data (concat
                  (blocks-resolve-temp-id normal-blocks)
-                 [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}])
-        init-tx-data (concat [{:db/ident :logseq.kv/db-type :kv/value "db"}]
-                             schema-blocks)
+                 [(ldb/kv :logseq.kv/graph-uuid graph-uuid)])
+        init-tx-data (cons (ldb/kv :logseq.kv/db-type "db") schema-blocks)
         ^js worker-obj (:worker/object @worker-state/*state)]
     (m/sp
       (client-op/update-local-tx repo t)
@@ -347,6 +359,7 @@
           (.transact worker-obj repo tx-data {:rtc-download-graph? true
                                               :gen-undo-ops? false
                                               :persist-op? false} (worker-state/get-context))
+          (transact-remote-schema-version! repo)
           (transact-block-refs! repo))))
       (worker-util/post-message :add-repo {:repo repo}))))
 
