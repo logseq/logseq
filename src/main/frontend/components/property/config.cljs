@@ -706,25 +706,25 @@
                        :on-select (fn []
                                     (shui/popup-hide-all!)
                                     (route-handler/redirect-to-page! (:block/uuid property)))}})])
-     (when enable-closed-values?
+     (when (and enable-closed-values? owner-block)
        (let [values (:property/closed-values property)]
          (when (>= (count values) 2)
            (let [checked? (contains?
-                             (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
-                             (:db/id property))]
-               (dropdown-editor-menuitem
-                {:icon :checkbox :title "Show as checkbox on node"
-                 :disabled? config/publishing?
-                 :desc (when owner-block
-                         (shui/switch
-                          {:id "show as checkbox" :size "sm"
-                           :checked checked?
-                           :on-click util/stop-propagation
-                           :on-checked-change
-                           (fn [value]
-                             (if value
-                               (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
-                               (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
+                           (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
+                           (:db/id property))]
+             (dropdown-editor-menuitem
+              {:icon :checkbox
+               :title (if class-schema? "Show as checkbox on tagged nodes" "Show as checkbox on node")
+               :disabled? config/publishing?
+               :desc (shui/switch
+                      {:id "show as checkbox" :size "sm"
+                       :checked checked?
+                       :on-click util/stop-propagation
+                       :on-checked-change
+                       (fn [value]
+                         (if value
+                           (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
+                           (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))})})))))
 
      (when (and owner-block
                 ;; Any property should be removable from Tag Properties
