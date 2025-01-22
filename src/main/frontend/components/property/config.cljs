@@ -259,7 +259,7 @@
                       item-props)
         [sub-open? set-sub-open!] (rum/use-state false)
         toggle? (boolean? toggle-checked?)
-        id1 (str (or id icon (random-uuid)))
+        id1 (str (or id (random-uuid)))
         id2 (str "d2-" id1)
         or-close-menu-sub! (fn []
                              (when (and (not (shui-popup/get-popup :ls-icon-picker))
@@ -683,17 +683,22 @@
                                                          :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :position position)))})))
 
                           (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
-                            (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:hide? property-schema))
-                                                       :disabled? config/publishing?
-                                                       :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
-                                                                                                                        (assoc property-schema :hide? %) {})}))
+                            (dropdown-editor-menuitem
+                              {:icon :eye-off :title "Hide by default"
+                               :toggle-checked? (boolean (:hide? property-schema))
+                               :disabled? config/publishing?
+                               :on-toggle-checked-change #(db-property-handler/upsert-property! (:db/ident property)
+                                                            (assoc property-schema :hide? %) {})}))
                           (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
-                            (dropdown-editor-menuitem {:icon :eye-off :title "Hide empty value" :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
-                                                       :disabled? config/publishing?
-                                                       :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
-                                                                                                                           :logseq.property/hide-empty-value
-                                                                                                                           (not (:logseq.property/hide-empty-value property)))}))]
-                         (remove nil?))]
+                            (dropdown-editor-menuitem
+                              {:icon :eye-off :title "Hide empty value"
+                               :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
+                               :disabled? config/publishing?
+                               :on-toggle-checked-change (fn []
+                                                           (db-property-handler/set-block-property! (:db/id property)
+                                                             :logseq.property/hide-empty-value
+                                                             (not (:logseq.property/hide-empty-value property))))}))]
+                      (remove nil?))]
          (when (> (count group') 0)
            (cons (shui/dropdown-menu-separator) group'))))
 
@@ -701,7 +706,7 @@
        [:<>
         (shui/dropdown-menu-separator)
         (dropdown-editor-menuitem
-         {:icon :share-3 :title "Go to this property" :desc ""
+          {:icon :share-3 :title "Go to this property" :desc ""
           :item-props {:class "opacity-90 focus:opacity-100"
                        :on-select (fn []
                                     (shui/popup-hide-all!)
