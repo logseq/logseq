@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.missionary :as c.m]
+            [frontend.worker.rtc.branch-graph :as r.branch-graph]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
@@ -11,6 +12,7 @@
             [frontend.worker.rtc.skeleton :as r.skeleton]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util]
+            [logseq.db.frontend.schema :as db-schema]
             [missionary.core :as m]))
 
 (defn- new-task--register-graph-updates
@@ -65,7 +67,11 @@
                   (new-task--register-graph-updates get-ws-create-task graph-uuid major-schema-version repo)))]
             (when max-remote-schema-version
               (add-log-fn :rtc.log/higher-remote-schema-version-exists
-                          {:remote-schema-version max-remote-schema-version})))
+                          {:sub-type (r.branch-graph/compare-schemas
+                                      max-remote-schema-version db-schema/version major-schema-version)
+                           :repo repo
+                           :graph-uuid graph-uuid
+                           :remote-schema-version max-remote-schema-version})))
           (let [t (client-op/get-local-tx repo)]
             (when (or (nil? @*last-calibrate-t)
                       (< 500 (- t @*last-calibrate-t)))

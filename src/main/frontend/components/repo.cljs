@@ -78,7 +78,7 @@
                                      (state/pub-event! [:graph/switch url])
 
                                      (and db-based? remote?)
-                                     (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
+                                     (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion])
 
                                      :else
                                      (state/pub-event! [:graph/pull-down-remote-graph repo])))))]
@@ -209,7 +209,7 @@
   (let [switch-repos (if-not (nil? current-repo)
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
-                    (fn [{:keys [url remote? rtc-graph? GraphName GraphUUID] :as graph}]
+                    (fn [{:keys [url remote? rtc-graph? GraphName GraphSchemaVersion GraphUUID] :as graph}]
                       (let [local? (config/local-file-based-graph? url)
                             db-only? (config/db-based-graph? url)
                             repo-url (cond
@@ -228,22 +228,24 @@
                                                          (when downloading?
                                                            [:span.opacity.text-sm.pl-1 "downloading"])])]
                            :hover-detail repo-url ;; show full path on hover
-                           :options      {:on-click (fn [e]
-                                                      (when-not downloading?
-                                                        (when-let [on-click (:on-click opts)]
-                                                          (on-click e))
-                                                        (if (and (gobj/get e "shiftKey")
-                                                                 (not (and rtc-graph? remote?)))
-                                                          (state/pub-event! [:graph/open-new-window url])
-                                                          (cond
-                                                            (:root graph) ; exists locally
-                                                            (state/pub-event! [:graph/switch url])
+                           :options      {:on-click
+                                          (fn [e]
+                                            (when-not downloading?
+                                              (when-let [on-click (:on-click opts)]
+                                                (on-click e))
+                                              (if (and (gobj/get e "shiftKey")
+                                                       (not (and rtc-graph? remote?)))
+                                                (state/pub-event! [:graph/open-new-window url])
+                                                (cond
+                                                  (:root graph) ; exists locally
+                                                  (state/pub-event! [:graph/switch url])
 
-                                                            (and rtc-graph? remote?)
-                                                            (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
+                                                  (and rtc-graph? remote?)
+                                                  (state/pub-event!
+                                                   [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion])
 
-                                                            :else
-                                                            (state/pub-event! [:graph/pull-down-remote-graph graph])))))}})))
+                                                  :else
+                                                  (state/pub-event! [:graph/pull-down-remote-graph graph])))))}})))
                     switch-repos)]
     (->> repo-links (remove nil?))))
 

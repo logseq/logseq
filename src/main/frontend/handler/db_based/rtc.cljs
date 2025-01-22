@@ -8,19 +8,21 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [promesa.core :as p]))
 
 (defn <rtc-create-graph!
-  [repo]
+  [repo & {:keys [remote-repo-name]}]
   (when-let [^js worker @state/*db-worker]
     (p/do!
      (js/Promise. user-handler/task--ensure-id&access-token)
      (let [token (state/get-auth-id-token)
-           repo-name (sqlite-common-db/sanitize-db-name repo)]
+           repo-name (sqlite-common-db/sanitize-db-name (or remote-repo-name repo))]
        (.rtc-async-upload-graph worker repo token repo-name)))))
 
 (defn <rtc-delete-graph!
@@ -32,14 +34,16 @@
        (.rtc-delete-graph worker token graph-uuid schema-version)))))
 
 (defn <rtc-download-graph!
-  [graph-name graph-uuid timeout-ms]
+  [graph-name graph-uuid graph-schema-version timeout-ms]
+  (assert (some? graph-schema-version))
   (when-let [^js worker @state/*db-worker]
     (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
     (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
             token (state/get-auth-id-token)
-            download-info-uuid* (.rtc-request-download-graph worker token graph-uuid)
+            download-info-uuid* (.rtc-request-download-graph worker token graph-uuid graph-schema-version)
             download-info-uuid (ldb/read-transit-str download-info-uuid*)
-            result (.rtc-wait-download-graph-info-ready worker token download-info-uuid graph-uuid timeout-ms)
+            result (.rtc-wait-download-graph-info-ready
+                    worker token download-info-uuid graph-uuid graph-schema-version timeout-ms)
             {:keys [_download-info-uuid
                     download-info-s3-url
                     _download-info-tx-instant
@@ -58,20 +62,55 @@
   (when-let [^js worker @state/*db-worker]
     (.rtc-stop worker)))
 
+(defn- notification-download-higher-schema-graph!
+  [graph-name graph-uuid schema-version]
+  (let [graph-name* (str graph-name "-" schema-version)]
+    (notification/show!
+     [:div "There's a higher schema-version graph on the server."
+      (shui/button
+       {:on-click
+        (fn [e]
+          (util/stop e)
+          (<rtc-download-graph! graph-name* graph-uuid schema-version 60000))}
+       "Download")]
+     :warning)))
+
+(defn- notification-upload-higher-schema-graph!
+  [repo schema-version]
+  (notification/show!
+   [:div "The local graph has a higher schema version than the graph on the server."
+    (shui/button
+     {:on-click
+      (fn [e]
+        (util/stop e)
+        (<rtc-create-graph! repo :remote-repo-name (str repo "-" schema-version)))}
+     "Upload to server")]
+   :warning))
+
 (defn <rtc-start!
   [repo & {:keys [stop-before-start?] :or {stop-before-start? true}}]
   (when-let [^js worker @state/*db-worker]
-    (when (ldb/get-graph-rtc-uuid (db/get-db repo))
+    (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db repo))]
       (p/do!
        (js/Promise. user-handler/task--ensure-id&access-token)
        (when stop-before-start? (<rtc-stop!))
        (let [token (state/get-auth-id-token)]
          (p/let [result (.rtc-start worker repo token)
                  start-ex (ldb/read-transit-str result)
-                 _ (case (:type (:ex-data start-ex))
+                 ex-data* (:ex-data start-ex)
+                 _ (case (:type ex-data*)
                      (:rtc.exception/not-rtc-graph
                       :rtc.exception/not-found-db-conn)
                      (notification/show! (:ex-message start-ex) :error)
+
+                     :rtc.exception/major-schema-version-mismatched
+                     (case (:sub-type ex-data*)
+                       :download
+                       (notification-download-higher-schema-graph! repo graph-uuid (:remote ex-data*))
+                       :create-branch
+                       (notification-upload-higher-schema-graph! repo (:local ex-data*))
+                       ;; else
+                       (notification/show! (:ex-message start-ex) :error))
 
                      :rtc.exception/lock-failed
                      (js/setTimeout #(<rtc-start! repo) 1000)
@@ -144,11 +183,15 @@
    (m/reduce
     (constantly nil)
     (m/ap
-      (let [{:keys [_remote-schema-version]}
+      (let [{:keys [repo graph-uuid remote-schema-version sub-type]}
             (m/?>
              (m/eduction
               (filter #(keyword-identical? :rtc.log/higher-remote-schema-version-exists (:type %)))
               rtc-flows/rtc-log-flow))]
-        (notification/show!
-         "The server has a graph with a higher schema version, the client may need to upgrade."
-         :warning))))))
+        (case sub-type
+          :download
+          (notification-download-higher-schema-graph! repo graph-uuid remote-schema-version)
+          ;; else
+          (notification/show!
+           "The server has a graph with a higher schema version, the client may need to upgrade."
+           :warning)))))))
