@@ -511,6 +511,8 @@
 (rum/defc install-from-github-release-container
   []
   (let [[url set-url!] (rum/use-state "")
+        [opts set-opts!] (rum/use-state {:theme? false :effect? false})
+        [pending set-pending!] (rum/use-state false)
         *input (rum/use-ref nil)]
     [:div.p-4.flex.flex-col.pb-0
      (shui/input {:placeholder "GitHub repo url"
@@ -519,16 +521,35 @@
                   :on-change #(set-url! (util/evalue %))
                   :auto-focus true})
      [:div.flex.gap-6.pt-3.items-center.select-none
-      [:label.flex.items-center.gap-2 (shui/checkbox) [:span.opacity-60 "theme?"]]
-      [:label.flex.items-center.gap-2 (shui/checkbox) [:span.opacity-60 "effect?"]]]
+      [:label.flex.items-center.gap-2
+       (shui/checkbox {:checked (:theme? opts)
+                       :on-checked-change #(set-opts! (assoc opts :theme? %))})
+       [:span.opacity-60 "theme?"]]
+      [:label.flex.items-center.gap-2
+       (shui/checkbox {:checked (:effect? opts)
+                       :on-checked-change #(set-opts! (assoc opts :effect? %))})
+       [:span.opacity-60 "effect?"]]]
      [:div.flex.justify-end.pt-3
       (shui/button
         {:on-click (fn []
                      (if (or (string/blank? (util/trim-safe url))
                            (not (string/starts-with? url "https://")))
                        (.focus (rum/deref *input))
-                       (shui/toast! url)))}
-        "Install")]]))
+                       (let [url (string/replace-first url "https://github.com/" "")
+                             matched (re-find #"([^\/]+)/([^\/]+)" url)]
+                         (if-let [id (some-> matched (nth 2))]
+                           (do
+                             (set-pending! true)
+                             (-> #js {:id id :repo (first matched)
+                                      :theme (:theme? opts)
+                                      :effect (:effect? opts)}
+                               (js/window.logseq.api.__install_plugin)
+                               (p/then #(shui/dialog-close!))
+                               (p/catch #(notification/show! (str %) :error))
+                               (p/finally #(set-pending! false))))
+                           (notification/show! "Invalid GitHub repo url" :error)))))
+         :disabled pending}
+        (if pending (ui/loading "Installing") "Install"))]]))
 
 (rum/defc auto-check-for-updates-control
   []

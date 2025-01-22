@@ -162,7 +162,7 @@
              :options {:on-click (fn []
                                    (db-page-handler/convert-to-tag! page))}})
 
-          (when (and db-based? (ldb/class? page))
+          (when (and db-based? (ldb/class? page) (not (:logseq.property/built-in? page)))
             {:title (t :page/convert-tag-to-page)
              :options {:on-click (fn []
                                    (db-page-handler/convert-tag-to-page! page))}})

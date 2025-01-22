@@ -59,25 +59,26 @@
   [page-entity]
   (if (db/page-exists? (:block/title page-entity) #{:logseq.class/Page})
     (notification/show! (str "A page with the name \"" (:block/title page-entity) "\" already exists.") :warning false)
-    (p/let [objects (db-async/<get-tag-objects (state/get-current-repo) (:db/id page-entity))]
-      (let [convert-fn
-            (fn convert-fn []
-              (let [page-txs [[:db/retract (:db/id page-entity) :db/ident]
-                              [:db/retract (:db/id page-entity) :block/tags :logseq.class/Tag]
-                              [:db/add (:db/id page-entity) :block/tags :logseq.class/Page]]
-                    obj-txs (mapcat (fn [obj]
-                                      (let [tags (map #(db/entity (state/get-current-repo) (:db/id %)) (:block/tags obj))]
-                                        [{:db/id (:db/id obj)
-                                          :block/title (db-content/replace-tag-refs-with-page-refs (:block/title obj) tags)}
-                                         [:db/retract (:db/id obj) :block/tags (:db/id page-entity)]]))
-                                    objects)
-                    txs (concat page-txs obj-txs)]
-                (db/transact! (state/get-current-repo) txs {:outliner-op :save-block})))]
-        (-> (shui/dialog-confirm!
-             "Converting a tag to page also removes tags from any nodes that have that tag. Are you ok with that?"
-             {:id :convert-tag-to-page
-              :data-reminder :ok})
-            (p/then convert-fn))))))
+    (when-not (:logseq.property/built-in? page-entity)
+     (p/let [objects (db-async/<get-tag-objects (state/get-current-repo) (:db/id page-entity))]
+       (let [convert-fn
+             (fn convert-fn []
+               (let [page-txs [[:db/retract (:db/id page-entity) :db/ident]
+                               [:db/retract (:db/id page-entity) :block/tags :logseq.class/Tag]
+                               [:db/add (:db/id page-entity) :block/tags :logseq.class/Page]]
+                     obj-txs (mapcat (fn [obj]
+                                       (let [tags (map #(db/entity (state/get-current-repo) (:db/id %)) (:block/tags obj))]
+                                         [{:db/id (:db/id obj)
+                                           :block/title (db-content/replace-tag-refs-with-page-refs (:block/title obj) tags)}
+                                          [:db/retract (:db/id obj) :block/tags (:db/id page-entity)]]))
+                                     objects)
+                     txs (concat page-txs obj-txs)]
+                 (db/transact! (state/get-current-repo) txs {:outliner-op :save-block})))]
+         (-> (shui/dialog-confirm!
+              "Converting a tag to page also removes tags from any nodes that have that tag. Are you ok with that?"
+              {:id :convert-tag-to-page
+               :data-reminder :ok})
+             (p/then convert-fn)))))))
 
 (defn <create-class!
   "Creates a class page and provides class-specific error handling"
