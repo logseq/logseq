@@ -1,8 +1,23 @@
 (ns logseq.db.frontend.schema
   "Main datascript schemas for the Logseq app"
-  (:require [clojure.set :as set]))
+  (:require [clojure.set :as set]
+            [clojure.string :as string]))
 
 (def version 63)
+
+(defn major-version
+  "Return a number.
+  Compatible with current schema-version number.
+  schema-version-now: 10, a number
+  schema-version-new: \"12.34\", string, <major-num>.<minor-num>"
+  [schema-version]
+  (assert (or (number? schema-version) (string? schema-version)) schema-version)
+  (cond
+    (number? schema-version) schema-version
+    (string? schema-version)
+    (let [[major _minor] (map parse-long (string/split schema-version #"\."))]
+      (assert (some? major) schema-version)
+      major)))
 
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema

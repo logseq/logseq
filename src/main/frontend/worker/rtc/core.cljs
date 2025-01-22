@@ -180,7 +180,7 @@
   TODO: auto refresh token if needed"
   [graph-uuid schema-version repo conn date-formatter token
    & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
-  (let [major-schema-version       (r.branch-graph/major-version schema-version)
+  (let [major-schema-version       (db-schema/major-version schema-version)
         ws-url                     (or debug-ws-url (ws-util/get-ws-url token))
         *auto-push?                (atom auto-push?)
         *remote-profile?           (atom false)
@@ -290,8 +290,11 @@
         (not remote-schema-version)
         (ex-info "Not found remote-schema-version" {:type :rtc.exception/not-found-remote-schema-version})
 
-        (apply not= (map r.branch-graph/major-version [app-schema-version remote-schema-version schema-version]))
+        (apply not= (map db-schema/major-version [app-schema-version remote-schema-version schema-version]))
         (ex-info "major schema version mismatch" {:type :rtc.exception/major-schema-version-mismatched
+                                                  :sub-type
+                                                  (r.branch-graph/compare-schemas
+                                                   remote-schema-version app-schema-version schema-version)
                                                   :app app-schema-version
                                                   :local schema-version
                                                   :remote remote-schema-version})
@@ -449,7 +452,7 @@
   (m/sp
     (if-let [conn (worker-state/get-datascript-conn repo)]
       (let [schema-version (ldb/get-graph-schema-version @conn)
-            major-schema-version (r.branch-graph/major-version schema-version)
+            major-schema-version (db-schema/major-version schema-version)
             {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
         (m/? (r.upload-download/new-task--upload-graph
               get-ws-create-task repo conn remote-graph-name major-schema-version)))
