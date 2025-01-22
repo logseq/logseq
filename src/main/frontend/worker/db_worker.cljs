@@ -439,11 +439,12 @@
   (worker-state/get-sqlite-conn repo :search))
 
 (defn- with-write-transit-str
-  [p]
-  (p/chain p
-           (fn [result]
-             (let [result (when-not (= result @worker-state/*state) result)]
-               (ldb/write-transit-str result)))))
+  [task]
+  (p/chain
+   (js/Promise. task)
+   (fn [result]
+     (let [result (when-not (= result @worker-state/*state) result)]
+       (ldb/write-transit-str result)))))
 
 #_:clj-kondo/ignore
 (defclass DBWorker
@@ -781,7 +782,7 @@
   (rtc-start
    [this repo token]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--rtc-start repo token))))
+     (rtc-core/new-task--rtc-start repo token)))
 
   (rtc-stop
    [this]
@@ -800,62 +801,60 @@
    (let [target-user-uuids (ldb/read-transit-str target-user-uuids-str)
          target-user-emails (ldb/read-transit-str target-user-emails-str)]
      (with-write-transit-str
-       (js/Promise.
-        (rtc-core/new-task--grant-access-to-others token graph-uuid
-                                                   :target-user-uuids target-user-uuids
-                                                   :target-user-emails target-user-emails)))))
+       (rtc-core/new-task--grant-access-to-others token graph-uuid
+                                                  :target-user-uuids target-user-uuids
+                                                  :target-user-emails target-user-emails))))
 
   (rtc-get-graphs
    [this token]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--get-graphs token))))
+     (rtc-core/new-task--get-graphs token)))
 
   (rtc-delete-graph
    [this token graph-uuid schema-version]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--delete-graph token graph-uuid schema-version))))
+     (rtc-core/new-task--delete-graph token graph-uuid schema-version)))
 
   (rtc-get-users-info
    [this token graph-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--get-users-info token graph-uuid))))
+     (rtc-core/new-task--get-users-info token graph-uuid)))
 
   (rtc-get-block-content-versions
    [this token graph-uuid block-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--get-block-content-versions token graph-uuid block-uuid))))
+     (rtc-core/new-task--get-block-content-versions token graph-uuid block-uuid)))
 
   (rtc-get-debug-state
    [this]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--get-debug-state))))
+     (rtc-core/new-task--get-debug-state)))
 
   (rtc-async-upload-graph
    [this repo token remote-graph-name]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--upload-graph token repo remote-graph-name))))
+     (rtc-core/new-task--upload-graph token repo remote-graph-name)))
 
   ;; ================================================================
   (rtc-request-download-graph
    [this token graph-uuid schema-version]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--request-download-graph token graph-uuid schema-version))))
+     (rtc-core/new-task--request-download-graph token graph-uuid schema-version)))
 
   (rtc-wait-download-graph-info-ready
    [this token download-info-uuid graph-uuid schema-version timeout-ms]
    (with-write-transit-str
-     (js/Promise.
-      (rtc-core/new-task--wait-download-info-ready token download-info-uuid graph-uuid schema-version timeout-ms))))
+     (rtc-core/new-task--wait-download-info-ready token download-info-uuid graph-uuid schema-version timeout-ms)))
 
   (rtc-download-graph-from-s3
    [this graph-uuid graph-name s3-url]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--download-graph-from-s3 graph-uuid graph-name s3-url))))
+     (rtc-core/new-task--download-graph-from-s3 graph-uuid graph-name s3-url)))
 
   (rtc-download-info-list
    [this token graph-uuid schema-version]
    (with-write-transit-str
-     (js/Promise. (rtc-core/new-task--download-info-list token graph-uuid schema-version))))
+     (rtc-core/new-task--download-info-list token graph-uuid schema-version)))
 
   (rtc-get-graph-keys
    [this repo]
@@ -865,24 +864,23 @@
   (rtc-sync-current-graph-encrypted-aes-key
    [this token device-uuids-transit-str]
    (with-write-transit-str
-     (js/Promise.
-      (worker-device/new-task--sync-current-graph-encrypted-aes-key
-       token device-uuids-transit-str))))
+     (worker-device/new-task--sync-current-graph-encrypted-aes-key
+      token device-uuids-transit-str)))
 
   (device-list-devices
    [this token]
    (with-write-transit-str
-     (js/Promise. (worker-device/new-task--list-devices token))))
+     (worker-device/new-task--list-devices token)))
 
   (device-remove-device-public-key
    [this token device-uuid key-name]
    (with-write-transit-str
-     (js/Promise. (worker-device/new-task--remove-device-public-key token device-uuid key-name))))
+     (worker-device/new-task--remove-device-public-key token device-uuid key-name)))
 
   (device-remove-device
    [this token device-uuid]
    (with-write-transit-str
-     (js/Promise. (worker-device/new-task--remove-device token device-uuid))))
+     (worker-device/new-task--remove-device token device-uuid)))
 
   (undo
    [_this repo _page-block-uuid-str]

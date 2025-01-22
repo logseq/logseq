@@ -292,6 +292,7 @@
 
         (apply not= (map r.branch-graph/major-version [app-schema-version remote-schema-version schema-version]))
         (ex-info "major schema version mismatch" {:type :rtc.exception/major-schema-version-mismatched
+                                                  :app app-schema-version
                                                   :local schema-version
                                                   :remote remote-schema-version})
         :else
