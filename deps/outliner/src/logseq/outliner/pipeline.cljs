@@ -221,7 +221,8 @@
   [conn tx-report]
   (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
         refs-tx-report (when-let [refs-tx (and (seq blocks) (rebuild-block-refs-tx tx-report blocks))]
-                         (ldb/transact! conn refs-tx {:pipeline-replace? true}))
+                         (ldb/transact! conn refs-tx {:pipeline-replace? true
+                                                      ::original-tx-meta (:tx-meta tx-report)}))
         blocks' (if refs-tx-report
                   (keep (fn [b] (d/entity (:db-after refs-tx-report) (:db/id b))) blocks)
                   blocks)
