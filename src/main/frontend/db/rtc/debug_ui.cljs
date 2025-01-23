@@ -230,7 +230,7 @@
                                     token (state/get-auth-id-token)
                                     remote-graph-name (:upload-as-graph-name debug-state*)
                                     ^js worker @db-browser/*worker]
-                                (.rtc-async-upload-graph worker repo token remote-graph-name)))})
+                                (.rtc-async-upload-graph worker repo token remote-graph-name false)))})
       [:b "➡️"]
       [:input.form-input.my-2.py-1.w-32
        {:on-change (fn [e] (swap! debug-state assoc :upload-as-graph-name (util/evalue e)))

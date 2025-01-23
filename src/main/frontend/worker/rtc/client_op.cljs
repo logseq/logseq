@@ -351,3 +351,8 @@
     (let [ent (d/entity @conn [:block/uuid asset-uuid])]
       (when-let [e (:db/id ent)]
         (d/transact! conn (map (fn [a] [:db.fn/retractAttribute e a]) asset-op-types))))))
+
+(defn reset-client-op-conn
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (d/reset-conn! conn (d/empty-db schema-in-db))))

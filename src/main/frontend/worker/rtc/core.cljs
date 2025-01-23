@@ -448,14 +448,14 @@
   (m/reduce {} nil (m/eduction (take 1) create-get-state-flow)))
 
 (defn new-task--upload-graph
-  [token repo remote-graph-name]
+  [token repo remote-graph-name reset-rtc-data-in-conn?]
   (m/sp
     (if-let [conn (worker-state/get-datascript-conn repo)]
       (let [schema-version (ldb/get-graph-schema-version @conn)
             major-schema-version (db-schema/major-version schema-version)
             {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
         (m/? (r.upload-download/new-task--upload-graph
-              get-ws-create-task repo conn remote-graph-name major-schema-version)))
+              get-ws-create-task repo conn remote-graph-name major-schema-version reset-rtc-data-in-conn?)))
       (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
                                                 :repo repo})))))
 
