@@ -20,7 +20,7 @@
   (apply println (if const/is-client1? "[client1]" "[client2]") objs))
 
 (def new-task--upload-example-graph
-  (rtc.core/new-task--upload-graph const/test-token const/test-repo const/test-graph-name))
+  (rtc.core/new-task--upload-graph const/test-token const/test-repo const/test-graph-name false))
 
 (defn new-task--wait-creating-graph
   [graph-uuid]
