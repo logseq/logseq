@@ -229,7 +229,7 @@
       (otree/blocks->vec-tree test-helper/test-db-name-db-version db
                               blocks page-uuid')))))
 
-(deftest ^:long ^:wip undo-redo-outliner-op-gen-test
+(deftest ^:long ^:fix-me undo-redo-outliner-op-gen-test
   (try
     (let [conn (db/get-db false)]
       (loop [num 100]
