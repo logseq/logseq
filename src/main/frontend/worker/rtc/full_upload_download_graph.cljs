@@ -117,11 +117,20 @@
                   (:db/ident block) (update :db/ident ldb/read-transit-str)
                   (:block/order block) (update :block/order ldb/read-transit-str)))))))
 
+(defn- remove-rtc-data-in-conn!
+  [repo]
+  (client-op/reset-client-op-conn repo)
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (d/transact! conn [[:db/retractEntity :logseq.kv/graph-uuid]
+                       [:db/retractEntity :logseq.kv/graph-local-tx]
+                       [:db/retractEntity :logseq.kv/remote-schema-version]])))
+
 (defn new-task--upload-graph
-  [get-ws-create-task repo conn remote-graph-name major-schema-version]
+  [get-ws-create-task repo conn remote-graph-name major-schema-version reset-rtc-data-in-conn?]
   (m/sp
     (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetch-presigned-put-url
                                                 :message "fetching presigned put-url"})
+    (when reset-rtc-data-in-conn? (remove-rtc-data-in-conn! repo))
     (let [[{:keys [url key]} all-blocks-str]
           (m/?
            (m/join

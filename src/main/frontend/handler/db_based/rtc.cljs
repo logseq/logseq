@@ -17,13 +17,13 @@
             [promesa.core :as p]))
 
 (defn <rtc-create-graph!
-  [repo & {:keys [remote-repo-name]}]
+  [repo & {:keys [remote-repo-name reset-rtc-data-in-conn?]}]
   (when-let [^js worker @state/*db-worker]
     (p/do!
      (js/Promise. user-handler/task--ensure-id&access-token)
      (let [token (state/get-auth-id-token)
            repo-name (sqlite-common-db/sanitize-db-name (or remote-repo-name repo))]
-       (.rtc-async-upload-graph worker repo token repo-name)))))
+       (.rtc-async-upload-graph worker repo token repo-name reset-rtc-data-in-conn?)))))
 
 (defn <rtc-delete-graph!
   [graph-uuid schema-version]
@@ -73,7 +73,7 @@
           (util/stop e)
           (<rtc-download-graph! graph-name* graph-uuid schema-version 60000))}
        "Download")]
-     :warning)))
+     :warning false)))
 
 (defn- notification-upload-higher-schema-graph!
   [repo schema-version]
@@ -83,9 +83,11 @@
      {:on-click
       (fn [e]
         (util/stop e)
-        (<rtc-create-graph! repo :remote-repo-name (str repo "-" schema-version)))}
+        (<rtc-create-graph! repo
+                            :remote-repo-name (str repo "-" schema-version)
+                            :reset-rtc-data-in-conn? true))}
      "Upload to server")]
-   :warning))
+   :warning false))
 
 (defn <rtc-start!
   [repo & {:keys [stop-before-start?] :or {stop-before-start? true}}]
