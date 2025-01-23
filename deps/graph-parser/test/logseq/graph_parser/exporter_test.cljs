@@ -197,7 +197,7 @@
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 12 (->> @conn
+      (is (= 13 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
@@ -270,7 +270,7 @@
       (is (= {:user.property/prop-bool true
               :user.property/prop-num 5
               :user.property/prop-string "yeehaw"
-              :block/tags [:logseq.class/Page]}
+              :block/tags [:logseq.class/Page :user.class/Some---Namespace]}
              (readable-properties @conn (db-test/find-page-by-title @conn "some page")))
           "Existing page has correct properties")
 
