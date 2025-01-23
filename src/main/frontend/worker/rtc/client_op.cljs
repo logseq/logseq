@@ -355,4 +355,9 @@
 (defn reset-client-op-conn
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (d/reset-conn! conn (d/empty-db schema-in-db))))
+    (let [tx-data (->> (concat (d/datoms @conn :avet :graph-uuid)
+                               (d/datoms @conn :avet :local-tx)
+                               (d/datoms @conn :avet :aes-key-jwk)
+                               (d/datoms @conn :avet :block/uuid))
+                       (map (fn [datom] [:db/retractEntity (:e datom)])))]
+      (d/transact! conn tx-data))))
