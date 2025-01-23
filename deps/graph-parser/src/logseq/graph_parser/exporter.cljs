@@ -50,11 +50,13 @@
             :block/name (common-util/page-name-sanity-lc new-title)})))
 
 (defn- get-page-uuid [page-names-to-uuids page-name ex-data']
-  (or (get @page-names-to-uuids (if (string/includes? (str page-name) "#")
-                                  (string/lower-case (gp-block/sanitize-hashtag-name page-name))
-                                  page-name))
+  (or (get @page-names-to-uuids (some-> (if (string/includes? (str page-name) "#")
+                                          (string/lower-case (gp-block/sanitize-hashtag-name page-name))
+                                          page-name)
+                                        string/trimr))
       (throw (ex-info (str "No uuid found for page name " (pr-str page-name))
-                      (merge ex-data' {:page-name page-name})))))
+                      (merge ex-data' {:page-name page-name
+                                       :page-names (sort (keys @page-names-to-uuids))})))))
 
 (defn- replace-namespace-with-parent [block page-names-to-uuids]
   (if (:block/namespace block)
