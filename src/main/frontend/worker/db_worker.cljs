@@ -835,7 +835,11 @@
    (with-write-transit-str
      (rtc-core/new-task--upload-graph token repo remote-graph-name reset-rtc-data-in-conn?)))
 
-  ;; ================================================================
+  (rtc-async-branch-graph
+   [this repo token]
+   (with-write-transit-str
+     (rtc-core/new-task--branch-graph token repo)))
+
   (rtc-request-download-graph
    [this token graph-uuid schema-version]
    (with-write-transit-str
