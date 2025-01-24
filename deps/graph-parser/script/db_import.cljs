@@ -6,6 +6,7 @@
             ["fs/promises" :as fsp]
             ["os" :as os]
             ["path" :as node-path]
+            #_:clj-kondo/ignore
             [babashka.cli :as cli]
             [cljs.pprint :as pprint]
             [clojure.set :as set]
@@ -13,7 +14,6 @@
             [datascript.core :as d]
             [logseq.common.graph :as common-graph]
             [logseq.graph-parser.exporter :as gp-exporter]
-            #_:clj-kondo/ignore
             [logseq.outliner.cli :as outliner-cli]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
@@ -24,11 +24,11 @@
 (def original-transact! d/transact!)
 (defn dev-transact! [conn tx-data tx-meta]
   (swap! tx-queue (fn [queue]
-                        (let [new-queue (conj queue {:tx-data tx-data :tx-meta tx-meta})]
+                    (let [new-queue (conj queue {:tx-data tx-data :tx-meta tx-meta})]
                           ;; Only care about last few so vary 10 as needed
-                          (if (> (count new-queue) 10)
-                            (pop new-queue)
-                            new-queue))))
+                      (if (> (count new-queue) 10)
+                        (pop new-queue)
+                        new-queue))))
   (original-transact! conn tx-data tx-meta))
 
 (defn- build-graph-files

@@ -86,7 +86,6 @@
            {:block/title value}))
         common-util/block-with-timestamps)))
 
-
 (defn build-property-values-tx-m
   "Builds a map of property names to their property value blocks to be
   transacted, given a block and a properties map with raw property values. The

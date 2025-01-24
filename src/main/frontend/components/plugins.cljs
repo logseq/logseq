@@ -531,25 +531,25 @@
        [:span.opacity-60 "effect?"]]]
      [:div.flex.justify-end.pt-3
       (shui/button
-        {:on-click (fn []
-                     (if (or (string/blank? (util/trim-safe url))
-                           (not (string/starts-with? url "https://")))
-                       (.focus (rum/deref *input))
-                       (let [url (string/replace-first url "https://github.com/" "")
-                             matched (re-find #"([^\/]+)/([^\/]+)" url)]
-                         (if-let [id (some-> matched (nth 2))]
-                           (do
-                             (set-pending! true)
-                             (-> #js {:id id :repo (first matched)
-                                      :theme (:theme? opts)
-                                      :effect (:effect? opts)}
-                               (js/window.logseq.api.__install_plugin)
-                               (p/then #(shui/dialog-close!))
-                               (p/catch #(notification/show! (str %) :error))
-                               (p/finally #(set-pending! false))))
-                           (notification/show! "Invalid GitHub repo url" :error)))))
-         :disabled pending}
-        (if pending (ui/loading "Installing") "Install"))]]))
+       {:on-click (fn []
+                    (if (or (string/blank? (util/trim-safe url))
+                            (not (string/starts-with? url "https://")))
+                      (.focus (rum/deref *input))
+                      (let [url (string/replace-first url "https://github.com/" "")
+                            matched (re-find #"([^\/]+)/([^\/]+)" url)]
+                        (if-let [id (some-> matched (nth 2))]
+                          (do
+                            (set-pending! true)
+                            (-> #js {:id id :repo (first matched)
+                                     :theme (:theme? opts)
+                                     :effect (:effect? opts)}
+                                (js/window.logseq.api.__install_plugin)
+                                (p/then #(shui/dialog-close!))
+                                (p/catch #(notification/show! (str %) :error))
+                                (p/finally #(set-pending! false))))
+                          (notification/show! "Invalid GitHub repo url" :error)))))
+        :disabled pending}
+       (if pending (ui/loading "Installing") "Install"))]]))
 
 (rum/defc auto-check-for-updates-control
   []
@@ -979,7 +979,7 @@
         (lazy-items-loader load-more-pages!)
         [:div.flex.items-center.justify-center.py-28.flex-col.gap-2.opacity-30
          (shui/tabler-icon "list-search" {:size 40})
-         [:span.text-sm "Nothing Founded."]])]]))
+         [:span.text-sm "Nothing Found."]])]]))
 
 (rum/defcs waiting-coming-updates
   < rum/reactive

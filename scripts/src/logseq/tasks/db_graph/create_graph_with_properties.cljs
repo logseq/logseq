@@ -2,8 +2,8 @@
   "Script that generates all the permutations of property types and cardinality.
    Also creates a page of queries that exercises most properties
    NOTE: This script is also used in CI to confirm graph creation works"
-  (:require ["fs-extra$default" :as fse]
-            ["fs" :as fs]
+  (:require ["fs" :as fs]
+            ["fs-extra$default" :as fse]
             ["os" :as os]
             ["path" :as node-path]
             [babashka.cli :as cli]

@@ -1,7 +1,7 @@
 (ns logseq.db.frontend.db-ident
   "Helper fns for class and property :db/ident"
-  (:require [datascript.core :as d]
-            [clojure.string :as string]))
+  (:require [clojure.string :as string]
+            [datascript.core :as d]))
 
 (defn ensure-unique-db-ident
   "Ensures the given db-ident is unique. If a db-ident conflicts, it is made

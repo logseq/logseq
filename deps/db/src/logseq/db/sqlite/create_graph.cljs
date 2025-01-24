@@ -147,11 +147,11 @@
        (mark-block-as-built-in
         (sqlite-util/build-new-class
          (let [class-properties (mapv
-                                  (fn [db-ident]
-                                    (let [property (get db-ident->properties db-ident)]
-                                      (assert property (str "Built-in property " db-ident " is not defined yet"))
-                                      db-ident))
-                                  (:properties schema))]
+                                 (fn [db-ident]
+                                   (let [property (get db-ident->properties db-ident)]
+                                     (assert property (str "Built-in property " db-ident " is not defined yet"))
+                                     db-ident))
+                                 (:properties schema))]
            (cond->
             {:block/title title'
              :block/name (common-util/page-name-sanity-lc title')
