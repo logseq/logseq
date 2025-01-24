@@ -1,0 +1,29 @@
+name: Build and Push Docker image
+
+on:
+  push:
+    tags:
+      - "feat-db"  # Указываем, что этот workflow должен запускаться при пуше тега feat-db
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build Docker image
+      run: |
+        docker build -t ghcr.io/${{ github.repository }}/logseq-webapp:${{ github.ref_name }} .
+    
+    - name: Push Docker image to GitHub Container Registry
+      run: |
+        docker push ghcr.io/${{ github.repository }}/logseq-webapp:${{ github.ref_name }}
