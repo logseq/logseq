@@ -15,10 +15,10 @@
                              :object-has-class-property :parent}
         property-value-deps (conj default-value-deps :property-value :property-scalar-default-value)
         property-deps (conj property-value-deps :simple-query-property)
-        task-deps #{:property :task}
-        priority-deps #{:property :priority}
-        task-priority-deps  #{:property :task :priority}]
-    (are [x y] (= (#'rules/get-full-deps x rules/rules-dependencies) y)
+        task-deps (conj property-deps :task)
+        priority-deps (conj property-deps :priority)
+        task-priority-deps (into priority-deps task-deps)]
+    (are [x y] (= y (#'rules/get-full-deps x rules/rules-dependencies))
       [:property-default-value] default-value-deps
       [:property-value] property-value-deps
       [:simple-query-property] property-deps
