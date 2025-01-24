@@ -358,7 +358,7 @@ docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
 These tasks are specific to database graphs. For these tasks there is a one time setup:
 
 ```sh
-  $ cd deps/db && yarn install && cd ../outliner && yarn install && cd ../..
+  $ cd deps/db && yarn install && cd ../outliner && yarn install && cd ../graph-parser && yarn install && cd ../..
 ```
 
 * `dev:validate-db` - Validates a DB graph's datascript schema
@@ -412,6 +412,24 @@ These tasks are specific to database graphs. For these tasks there is a one time
 
   Finally, upload this created graph with the dev command: `Replace graph with
   its db.sqlite file`. You'll be switched to the graph and you can use it!
+
+* `dev:db-import` and `dev:db-import-many` - Imports a file graph to DB graph, for one or many graphs
+
+  ```sh
+  # Import the local test graph with the debug option
+  $ bb dev:db-import deps/graph-parser/test/resources/exporter-test-graph test-file-graph -d
+  Importing 43 files ...
+  ...
+
+  # Import and validate multiple file graphs and write them to ./out/
+  $ bb dev:db-import-many /path/to/foo /path/to/bar -d
+  Importing ./out/foo ...
+  Importing 321 files ...
+  Valid!
+  Importing ./out/bar ...
+  Importing 542 files ...
+  Valid!
+  ```
 
 * `dev:db-datoms` and `dev:diff-datoms` - Save a db's datoms to file and diff two datom files
 

@@ -7,13 +7,15 @@
 ;; or
 ;; - DB 3 #Meeting #Tienson
 {:auto-create-ontology? true
- :classes {:Movie {:build/schema-properties [:actor :comment]}
-           :Meeting {:build/schema-properties [:attendee :duration]}}
+ :classes {:Movie {:build/class-properties [:actor :comment]}
+           :Meeting {:build/class-properties [:attendee :duration]}}
  :properties
- {:actor {:block/schema {:type :node :cardinality :many}
-          :build/schema-classes [:Person]}
-  :attendee {:block/schema {:type :node :cardinality :many}
-             :build/schema-classes [:Person]}}
+ {:actor {:logseq.property/type :node
+          :db/cardinality :many
+          :build/property-classes [:Person]}
+  :attendee {:logseq.property/type :node
+             :db/cardinality :many
+             :build/property-classes [:Person]}}
  :pages-and-blocks
  [{:page {:block/title "Matt-Damon" :build/tags [:Person]}}
   {:page {:block/title "Ben-Affleck" :build/tags [:Person]}}

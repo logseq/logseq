@@ -1,5 +1,6 @@
 (ns frontend.worker.undo-redo-test
-  (:require [cljs.pprint :as pp]
+  (:require ["fs" :as fs-node]
+            [cljs.pprint :as pp]
             [clojure.test :as t :refer [deftest is testing use-fixtures]]
             [clojure.test.check.generators :as gen]
             [clojure.walk :as walk]
@@ -8,13 +9,12 @@
             [frontend.test.generators :as t.gen]
             [frontend.test.helper :as test-helper]
             [frontend.worker.fixtures :as worker-fixtures]
+            [frontend.worker.state :as worker-state]
             [frontend.worker.undo-redo :as undo-redo]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.op :as outliner-op]
-            [logseq.outliner.tree :as otree]
-            [frontend.worker.state :as worker-state]
-            ["fs" :as fs-node]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.outliner.tree :as otree]))
 
 (def ^:private page-uuid (random-uuid))
 (def ^:private init-data (test-helper/initial-test-page-and-blocks {:page-uuid page-uuid}))
@@ -29,7 +29,6 @@
   start-and-destroy-db
   (worker-fixtures/listen-test-db-fixture [:gen-undo-ops])
   worker-fixtures/listen-test-db-to-write-tx-log-json-file)
-
 
 (def ^:private gen-non-exist-block-uuid gen/uuid)
 
@@ -115,7 +114,6 @@
                  [?parent :block/uuid ?parent-uuid]
                  [?left :block/uuid ?left-uuid]]
                db))))
-
 
 (defn- check-block-count
   [{:keys [op tx]} current-db]
@@ -229,7 +227,7 @@
       (otree/blocks->vec-tree test-helper/test-db-name-db-version db
                               blocks page-uuid')))))
 
-(deftest ^:long ^:wip undo-redo-outliner-op-gen-test
+(deftest ^:long ^:fix-me undo-redo-outliner-op-gen-test
   (try
     (let [conn (db/get-db false)]
       (loop [num 100]
@@ -280,8 +278,6 @@
       (let [data (ex-data e)]
         (fs-node/writeFileSync "debug.json" (sqlite-util/write-transit-str data))
         (throw (js/Error "check debug.json"))))))
-
-
 
 (comment
   (deftest debug-test

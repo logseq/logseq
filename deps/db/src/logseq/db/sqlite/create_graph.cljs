@@ -7,16 +7,26 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.property.build :as db-property-build]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- mark-block-as-built-in [block]
   (assoc block :logseq.property/built-in? true))
+
+(defn- schema->qualified-property-keyword
+  [prop-schema]
+  (reduce-kv
+   (fn [r k v]
+     (if-let [new-k (and (simple-keyword? k) (db-property/schema-properties-map k))]
+       (assoc r new-k v)
+       (assoc r k v)))
+   {}
+   prop-schema))
 
 (defn- ->property-value-tx-m
   "Given a new block and its properties, creates a map of properties which have values of property value tx.
@@ -29,28 +39,31 @@
                           ;; closed values are referenced by their :db/ident so no need to create values
                           (not (get-in db-property/built-in-properties [k :closed-values])))
                    (let [property-map {:db/ident k
-                                       :block/schema {:type built-in-type}}]
+                                       :logseq.property/type built-in-type}]
                      [property-map v])
                    (when-let [built-in-type' (get (:build/properties-ref-types new-block) built-in-type)]
                      (let [property-map {:db/ident k
-                                         :block/schema {:type built-in-type'}}]
+                                         :logseq.property/type built-in-type'}]
                        [property-map v]))))))
        (db-property-build/build-property-values-tx-m new-block)))
 
-(defn build-initial-properties*
+(defn build-properties
+  "Given a properties map in the format of db-property/built-in-properties, builds their properties tx"
   [built-in-properties]
   (mapcat
-   (fn [[db-ident {:keys [schema title closed-values properties] :as m}]]
-     (let [prop-name (or title (name (:name m)))
+   (fn [[db-ident {:keys [attribute schema title closed-values properties] :as m}]]
+     (let [db-ident (or attribute db-ident)
+           prop-name (or title (name (:name m)))
+           schema' (schema->qualified-property-keyword schema)
            [property & others] (if closed-values
                                  (db-property-build/build-closed-values
                                   db-ident
                                   prop-name
-                                  {:db/ident db-ident :block/schema schema :closed-values closed-values}
+                                  {:db/ident db-ident :schema schema' :closed-values closed-values}
                                   {})
                                  [(sqlite-util/build-new-property
                                    db-ident
-                                   schema
+                                   schema'
                                    {:title prop-name})])
            pvalue-tx-m (->property-value-tx-m
                         (merge property
@@ -78,35 +91,40 @@
                      properties
                      (db-property-build/build-properties-with-ref-values pvalue-tx-m))))]
        tx))
-   (dissoc built-in-properties :logseq.property/built-in?)))
+   built-in-properties))
+
+(defn- build-bootstrap-property
+  [db-ident]
+  (sqlite-util/build-new-property
+   db-ident
+   (schema->qualified-property-keyword (get-in db-property/built-in-properties [db-ident :schema]))
+   {:title (get-in db-property/built-in-properties [db-ident :title])}))
 
 (defn- build-initial-properties
   "Builds initial properties and their closed values and marks them
   as built-in?. Returns their tx data as well as data needed for subsequent build steps"
   []
-  (let [built-in-property-schema (get-in db-property/built-in-properties [:logseq.property/built-in? :schema])
-        built-in-property (sqlite-util/build-new-property
-                           :logseq.property/built-in?
-                           built-in-property-schema
-                           {:title (name :logseq.property/built-in?)})
-        mark-block-as-built-in' (fn [block]
-                                  (mark-block-as-built-in {:block/uuid (:block/uuid block)}))
-        properties (build-initial-properties* db-property/built-in-properties)
-        ;; Tx order matters. built-in-property must come first as all properties depend on it.
-        tx (concat [built-in-property]
-                   properties
-                   ;; Adding built-ins must come after initial properties
-                   [(mark-block-as-built-in' built-in-property)]
-                   (map mark-block-as-built-in' properties)
-                   (keep #(when (entity-util/closed-value? %)
-                            (mark-block-as-built-in' %))
-                         properties))]
+  ;; bootstrap-idents must either be necessary to define a property or be used on every property
+  (let [bootstrap-idents #{:logseq.property/type :logseq.property/hide? :logseq.property/built-in?}
+        bootstrap-properties (map build-bootstrap-property bootstrap-idents)
+        ;; First tx bootstrap properties so they can take affect. Then tx the bootstrap properties on themselves
+        bootstrap-properties-tx (into (mapv #(apply dissoc % bootstrap-idents) bootstrap-properties)
+                                      (mapv #(select-keys % (into [:block/uuid] bootstrap-idents))
+                                            bootstrap-properties))
+        properties-tx (build-properties (apply dissoc db-property/built-in-properties bootstrap-idents))
+        mark-block-as-built-in' (fn [b] (mark-block-as-built-in {:block/uuid (:block/uuid b)}))
+        ;; Tx order matters
+        tx (concat bootstrap-properties-tx
+                   properties-tx
+                   ;; Adding built-ins must come after its properties are defined
+                   (map mark-block-as-built-in' bootstrap-properties)
+                   (map mark-block-as-built-in' properties-tx))]
     (doseq [m tx]
       (when-let [block-uuid (and (:db/ident m) (:block/uuid m))]
         (assert (string/starts-with? (str block-uuid) "00000002") m)))
 
     {:tx tx
-     :properties (filter entity-util/property? properties)}))
+     :properties (filter entity-util/property? properties-tx)}))
 
 (def built-in-pages-names
   #{"Contents"})
@@ -128,19 +146,19 @@
      (let [title' (or title (name db-ident))]
        (mark-block-as-built-in
         (sqlite-util/build-new-class
-         (let [schema-properties (mapv
-                                  (fn [db-ident]
-                                    (let [property (get db-ident->properties db-ident)]
-                                      (assert property (str "Built-in property " db-ident " is not defined yet"))
-                                      db-ident))
-                                  (:properties schema))]
+         (let [class-properties (mapv
+                                 (fn [db-ident]
+                                   (let [property (get db-ident->properties db-ident)]
+                                     (assert property (str "Built-in property " db-ident " is not defined yet"))
+                                     db-ident))
+                                 (:properties schema))]
            (cond->
             {:block/title title'
              :block/name (common-util/page-name-sanity-lc title')
              :db/ident db-ident
              :block/uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)}
-             (seq schema-properties)
-             (assoc :logseq.property.class/properties schema-properties)
+             (seq class-properties)
+             (assoc :logseq.property.class/properties class-properties)
              (seq properties)
              (merge properties)))))))
    built-in-classes))
@@ -158,7 +176,7 @@
        :block/name common-config/views-page-name
        :block/title common-config/views-page-name
        :block/tags [:logseq.class/Page]
-       :block/schema {:public? false}
+       :logseq.property/hide? true
        :logseq.property/built-in? true})
      (sqlite-util/block-with-timestamps
       {:block/uuid (common-uuid/gen-uuid)
@@ -176,7 +194,7 @@
      :block/name common-config/favorites-page-name
      :block/title common-config/favorites-page-name
      :block/tags [:logseq.class/Page]
-     :block/schema {:public? false}
+     :logseq.property/hide? true
      :logseq.property/built-in? true})])
 
 (defn build-db-initial-data
@@ -222,7 +240,9 @@
         classes-tx (concat (map #(dissoc % :db/ident) bootstrap-classes)
                            (remove bootstrap-class? default-classes))
         ;; Order of tx is critical. bootstrap-class-ids bootstraps properties-tx and classes-tx
-        tx (vec (concat bootstrap-class-ids initial-data properties-tx classes-tx
+        ;; bootstrap-class-ids coming first is useful as Root, Tag and Property have stable :db/id's of 1, 2 and 3
+        tx (vec (concat bootstrap-class-ids
+                        initial-data properties-tx classes-tx
                         initial-files default-pages hidden-pages))]
     (validate-tx-for-duplicate-idents tx)
     tx))

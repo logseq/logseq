@@ -49,7 +49,7 @@
                    [:db/add 1000000 :db/valueType :db.type/ref]
                    [:db/add 1000000 :block/updated-at 1716882111476]
                    [:db/add 1000000 :block/created-at 1716882111476]
-                   [:db/add 1000000 :block/schema {:type :number}]
+                   [:db/add 1000000 :logseq.property/type :number]
                    [:db/add 1000000 :db/cardinality :db.cardinality/one]
                    [:db/add 1000000 :db/ident :user.property/qqq]
                    [:db/add 1000000 :block/tags :logseq.class/Property]
@@ -68,10 +68,10 @@
             [:update {:block-uuid #uuid "66558abf-6512-469d-9e83-8f1ba0be9305"
                       :av-coll
                       [[:db/index "[\"~#'\",true]"]
+                       [:logseq.property/type "[\"~#'\",\"~:number\"]"]
                        [:db/valueType "[\"~#'\",\"~:db.type/ref\"]"]
                        [:block/updated-at "[\"~#'\",1716882111476]"]
                        [:block/created-at "[\"~#'\",1716882111476]"]
-                       [:block/schema "[\"^ \",\"~:type\",\"~:number\"]"]
                        [:block/tags #uuid "00000002-1038-7670-4800-000000000000"]
                        [:block/title "[\"~#'\",\"qqq\"]"]
                        [:db/cardinality "[\"~#'\",\"~:db.cardinality/one\"]"]

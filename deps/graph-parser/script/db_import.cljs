@@ -6,6 +6,7 @@
             ["fs/promises" :as fsp]
             ["os" :as os]
             ["path" :as node-path]
+            #_:clj-kondo/ignore
             [babashka.cli :as cli]
             [cljs.pprint :as pprint]
             [clojure.set :as set]
@@ -13,16 +14,21 @@
             [datascript.core :as d]
             [logseq.common.graph :as common-graph]
             [logseq.graph-parser.exporter :as gp-exporter]
-            #_:clj-kondo/ignore
             [logseq.outliner.cli :as outliner-cli]
+            [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
             [promesa.core :as p]))
 
-(def last-tx-data (atom nil))
+(def tx-queue (atom cljs.core/PersistentQueue.EMPTY))
 (def original-transact! d/transact!)
 (defn dev-transact! [conn tx-data tx-meta]
-  (reset! last-tx-data tx-data)
+  (swap! tx-queue (fn [queue]
+                    (let [new-queue (conj queue {:tx-data tx-data :tx-meta tx-meta})]
+                          ;; Only care about last few so vary 10 as needed
+                      (if (> (count new-queue) 10)
+                        (pop new-queue)
+                        new-queue))))
   (original-transact! conn tx-data tx-meta))
 
 (defn- build-graph-files
@@ -54,7 +60,7 @@
     (println "Ex-data:" (pr-str (merge (dissoc (:ex-data m) :error)
                                        (when-let [err (get-in m [:ex-data :error])]
                                          {:original-error (ex-data (.-cause err))}))))
-    (println "Stacktrace:")
+    (println "\nStacktrace:")
     (if-let [stack (some-> (get-in m [:ex-data :error]) ex-data :sci.impl/callstack deref)]
       (println (string/join
                 "\n"
@@ -66,8 +72,12 @@
                  (reverse stack))))
       (println (some-> (get-in m [:ex-data :error]) .-stack)))
     (when debug
-      (println "Last Tx Data:")
-      (pprint/pprint @last-tx-data)))
+      (when-let [matching-tx (seq (filter #(and (get-in m [:ex-data :path])
+                                                (or (= (get-in % [:tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path]))
+                                                    (= (get-in % [:tx-meta ::outliner-pipeline/original-tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path]))))
+                                          @tx-queue))]
+        (println (str "\n" (count matching-tx)) "Tx Maps for failing path:")
+        (pprint/pprint matching-tx))))
   (when (and (= :error (:level m)) (not continue))
     (js/process.exit 1)))
 
@@ -112,8 +122,8 @@
         files' (mapv #(hash-map :path %)
                      (into [file] (map resolve-path files)))]
     (p/with-redefs [d/transact! dev-transact!]
-     (p/let [_ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
-       {:import-state (:import-state doc-options)}))))
+      (p/let [_ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
+        {:import-state (:import-state doc-options)}))))
 
 (def spec
   "Options spec"

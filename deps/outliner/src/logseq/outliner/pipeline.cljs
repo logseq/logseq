@@ -3,12 +3,12 @@
   (:require [clojure.set :as set]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
-            [logseq.outliner.datascript-report :as ds-report]
-            [logseq.common.util.date-time :as date-time-util]))
+            [logseq.outliner.datascript-report :as ds-report]))
 
 (defn filter-deleted-blocks
   [datoms]
@@ -25,7 +25,7 @@
                             (keep (fn [id]
                                     (when-let [entity (d/entity db-after [:block/uuid id])]
                                       (let [from-property (:logseq.property/created-from-property entity)
-                                            default? (= :default (get-in from-property [:block/schema :type]))
+                                            default? (= :default (:logseq.property/type from-property))
                                             page? (ldb/page? entity)]
                                         (when-not (or page? (and from-property (not default?)))
                                           [(:db/id entity)
@@ -68,7 +68,7 @@
   (let [*computed-ids (atom #{})
         blocks (remove (fn [block]
                          (let [from-property (:logseq.property/created-from-property block)
-                               default? (= :default (get-in from-property [:block/schema :type]))]
+                               default? (= :default (:logseq.property/type from-property))]
                            (and from-property (not default?))))
                        blocks*)]
     (->>
@@ -181,7 +181,7 @@
                                              (map :db/id v)
 
                                              :else
-                                             (let [datetime? (= :datetime (get-in (d/entity db property) [:block/schema :type]))]
+                                             (let [datetime? (= :datetime (:logseq.property/type (d/entity db property)))]
                                                (cond
                                                  (and datetime? (coll? v))
                                                  (keep #(get-journal-day-from-long db %) v)
@@ -221,7 +221,8 @@
   [conn tx-report]
   (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
         refs-tx-report (when-let [refs-tx (and (seq blocks) (rebuild-block-refs-tx tx-report blocks))]
-                         (ldb/transact! conn refs-tx {:pipeline-replace? true}))
+                         (ldb/transact! conn refs-tx {:pipeline-replace? true
+                                                      ::original-tx-meta (:tx-meta tx-report)}))
         blocks' (if refs-tx-report
                   (keep (fn [b] (d/entity (:db-after refs-tx-report) (:db/id b))) blocks)
                   blocks)

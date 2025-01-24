@@ -685,7 +685,7 @@
               page' (db/entity repo [:block/uuid (:block/uuid page)])
               link (if (config/db-based-graph? repo)
                      (some (fn [[k v]]
-                             (when (= :url (get-in (db/entity repo k) [:block/schema :type]))
+                             (when (= :url (:logseq.property/type (db/entity repo k)))
                                (:block/title v)))
                            (:block/properties page'))
                      (some #(re-find editor-handler/url-regex (val %)) (:block/properties page')))]
@@ -792,9 +792,9 @@
     ;; if not then clear that puppy out!
     ;; This was moved to a functional component
     (hooks/use-effect! (fn []
-                       (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
-                         (reset! (::highlighted-item state) nil)))
-                     [all-items])
+                         (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
+                           (reset! (::highlighted-item state) nil)))
+                       [all-items])
     (hooks/use-effect! (fn [] (load-results :default state)) [])
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input.cp__cmdk-search-input

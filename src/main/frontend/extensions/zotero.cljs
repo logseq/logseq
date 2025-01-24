@@ -9,14 +9,14 @@
             [frontend.extensions.zotero.setting :as setting]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
+            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (def term-chan (chan))
 (def debounce-chan-mult (a/mult (api/debounce term-chan 500)))
