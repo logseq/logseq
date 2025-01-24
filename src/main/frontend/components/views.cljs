@@ -112,7 +112,7 @@
                          :on-click #(column-set-sorting! sorting column false)}
                         [:div.flex.flex-row.items-center.gap-1
                          (ui/icon "arrow-down" {:size 15})
-                         [:div "Sort desending"]])
+                         [:div "Sort descending"]])
                        (when property
                          (shui/dropdown-menu-item
                           {:on-click (fn [_e]
