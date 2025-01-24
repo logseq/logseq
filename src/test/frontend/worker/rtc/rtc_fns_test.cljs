@@ -4,14 +4,14 @@
             [frontend.db.conn :as conn]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
+            [frontend.worker.fixtures :as worker-fixtures]
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.rtc.remote-update :as r.remote]
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.transaction :as outliner-tx]
-            [frontend.worker.fixtures :as worker-fixtures]))
+            [logseq.outliner.transaction :as outliner-tx]))
 
 (use-fixtures :each
   test-helper/db-based-start-and-destroy-db

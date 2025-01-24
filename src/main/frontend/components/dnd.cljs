@@ -1,12 +1,12 @@
 (ns frontend.components.dnd
-  (:require [rum.core :as rum]
-            [cljs-bean.core :as bean]
+  (:require ["@dnd-kit/core" :refer [DndContext closestCenter MouseSensor useSensor useSensors]]
             ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy horizontalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
-            ["@dnd-kit/core" :refer [DndContext closestCenter MouseSensor useSensor useSensors]]
+            [cljs-bean.core :as bean]
+            [frontend.hooks :as hooks]
             [frontend.rum :as r]
             [frontend.state :as state]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (def dnd-context (r/adapt-class DndContext))
 (def sortable-context (r/adapt-class SortableContext))
@@ -88,7 +88,7 @@
                                {:key id :id id})]
                      (cond
                        sort-by-inner-element?
-                       [:div (:content item)]
+                       [:div {:key id} (:content item)]
 
                        (:disabled? item)
                        (rum/with-key (non-sortable-item prop (:content item)) id)

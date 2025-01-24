@@ -26,4 +26,4 @@
        (remove ldb/hidden?)
        (remove (fn [e]
                  (and (ldb/property? e)
-                      (true? (get-in e [:block/schema :hide?])))))))
+                      (true? (:logseq.property/hide? e)))))))

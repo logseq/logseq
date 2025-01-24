@@ -73,11 +73,12 @@
 
 (defn hidden?
   [page]
-  (when page
-    (if (string? page)
-      (string/starts-with? page "$$$")
-      (when (or (map? page) (de/entity? page))
-        (false? (get-in page [:block/schema :public?]))))))
+  (boolean
+   (when page
+     (if (string? page)
+       (string/starts-with? page "$$$")
+       (when (or (map? page) (de/entity? page))
+         (:logseq.property/hide? page))))))
 
 (defn object?
   [node]
