@@ -8,6 +8,7 @@
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.components.dnd :as dnd]
+            [frontend.components.property.config :as property-config]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
             [frontend.config :as config]
@@ -15,6 +16,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.hooks :as hooks]
@@ -79,15 +81,65 @@
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
 (defn header-cp
-  [{:keys [column-toggle-sorting! state]} column]
+  [{:keys [view-entity column-toggle-sorting! state]} column]
   (let [sorting (:sorting state)
         [asc?] (some (fn [item] (when (= (:id item) (:id column))
                                   (when-some [asc? (:asc? item)]
-                                    [asc?]))) sorting)]
+                                    [asc?]))) sorting)
+        property (db/entity (:id column))
+        pinned? (when property
+                  (contains? (set (map :db/id (:logseq.property.table/pinned-columns view-entity)))
+                             (:db/id property)))
+        sub-content (fn [{:keys [id]}]
+                      [:<>
+                       (when property
+                         (shui/dropdown-menu-sub
+                          (shui/dropdown-menu-sub-trigger
+                           [:div.flex.flex-row.items-center.gap-1
+                            (ui/icon "settings" {:size 15})
+                            [:div "Configure"]])
+                          (shui/dropdown-menu-sub-content
+                           [:div.ls-property-dropdown-editor.-m-1
+                            (property-config/dropdown-editor property nil {})])))
+                       (shui/dropdown-menu-sub
+                        (shui/dropdown-menu-sub-trigger
+                         [:div.flex.flex-row.items-center.gap-1
+                          (ui/icon "arrows-down-up" {:size 15})
+                          [:div.mr-4 "Set order"]
+                          (cond asc? [:span.opacity-50.text-sm "ASC"]
+                                (false? asc?) [:span.opacity-50.text-sm "DESC"]
+                                :else nil)])
+                        (shui/dropdown-menu-sub-content
+                         {:on-click #(shui/popup-hide! id)}
+                         (shui/dropdown-menu-item
+                          {:key "asc"
+                           :on-click #(column-toggle-sorting! column)}
+                          "ASC")
+                         (shui/dropdown-menu-item
+                          {:key "desc"
+                           :on-click #(column-toggle-sorting! column)}
+                          "DESC")))
+                       (when property
+                         (shui/dropdown-menu-item
+                          {:on-click (fn [_e]
+                                       (if pinned?
+                                         (db-property-handler/delete-property-value! (:db/id view-entity)
+                                                                                     :logseq.property.table/pinned-columns
+                                                                                     (:db/id property))
+                                         (property-handler/set-block-property! (state/get-current-repo)
+                                                                               (:db/id view-entity)
+                                                                               :logseq.property.table/pinned-columns
+                                                                               (:db/id property)))
+                                       (shui/popup-hide! id))}
+                          [:div.flex.flex-row.items-center.gap-1
+                           (ui/icon "pin" {:size 15})
+                           [:div (if pinned? "Unpin" "Pin")]]))])]
     (shui/button
      {:variant "text"
       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
-      :on-click #(column-toggle-sorting! column)}
+      :on-mouse-up (fn [^js e]
+                     (when (string/blank? (some-> (.-target e) (.closest "[aria-roledescription=sortable]") (.-style) (.-transform)))
+                       (shui/popup-show! (.-target e) sub-content {:align "start" :as-dropdown? true})))}
      (let [title (str (:name column))]
        [:span {:title title
                :class "max-w-full overflow-hidden text-ellipsis"}
@@ -323,7 +375,7 @@
    (when (fn? on-delete-rows)
      (shui/button
       {:variant "ghost"
-       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
+       :class "h-8 !pl-0 !px-2 !py-0 text-muted-foreground hover:text-foreground w-full justify-start"
        :on-click (fn []
                    (on-delete-rows table selected-rows))}
       (ui/icon "trash")))))
@@ -410,47 +462,62 @@
      {:data-no-dnd true
       :ref *el}]))
 
-(defn- table-header
-  [table columns {:keys [show-add-property? add-property!] :as option} selected-rows]
-  (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
-        set-sized-columns! (get-in table [:data-fns :set-sized-columns!])
+(defn- table-header-cell
+  [table column]
+  (let [header-fn (:header column)
         sized-columns (get-in table [:state :sized-columns])
-        items (mapv (fn [column]
-                      {:id (:name column)
-                       :value (:id column)
-                       :content (let [header-fn (:header column)
-                                      width (get-column-size column sized-columns)
-                                      select? (= :select (:id column))]
-                                  [:div.ls-table-header-cell
-                                   {:style {:width width
-                                            :min-width width}
-                                    :class (when select? "!border-0")}
-                                   (if (fn? header-fn)
-                                     (header-fn table column)
-                                     header-fn)
+        set-sized-columns! (get-in table [:data-fns :set-sized-columns!])
+        width (get-column-size column sized-columns)
+        select? (= :select (:id column))]
+    [:div.ls-table-header-cell
+     {:style {:width width
+              :min-width width}
+      :class (when select? "!border-0")}
+     (if (fn? header-fn)
+       (header-fn table column)
+       header-fn)
                                    ;; resize handle
-                                   (when-not (false? (:resizable? column))
-                                     (column-resizer column
-                                                     (fn [size]
-                                                       (set-sized-columns! (assoc sized-columns (:id column) size)))))])
-                       :disabled? (= (:id column) :select)}) columns)
-        items (if show-add-property?
-                (conj items
-                      {:id "add property"
-                       :prop {:style {:width "-webkit-fill-available"
-                                      :min-width 160}
-                              :on-click (fn [] (when (fn? add-property!) (add-property!)))}
-                       :value :add-new-property
-                       :content (add-property-button)
-                       :disabled? true})
-                items)
+     (when-not (false? (:resizable? column))
+       (column-resizer column
+                       (fn [size]
+                         (set-sized-columns! (assoc sized-columns (:id column) size)))))]))
+
+(defn- table-header
+  [table {:keys [show-add-property? add-property!] :as option} selected-rows]
+  (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
+        pinned (get-in table [:state :pinned-columns])
+        unpinned (get-in table [:state :unpinned-columns])
+        build-item (fn [column]
+                     {:id (:name column)
+                      :value (:id column)
+                      :content (table-header-cell table column)
+                      :disabled? (= (:id column) :select)})
+        pinned-items (mapv build-item pinned)
+        unpinned-items (if show-add-property?
+                         (conj (mapv build-item unpinned)
+                               {:id "add property"
+                                :prop {:style {:width "-webkit-fill-available"
+                                               :min-width 160}
+                                       :on-click (fn [] (when (fn? add-property!) (add-property!)))}
+                                :value :add-new-property
+                                :content (add-property-button)
+                                :disabled? true})
+                         (mapv build-item unpinned))
         selection-rows-count (count selected-rows)]
     (shui/table-header
-     (dnd/items items {:vertical? false
-                       :on-drag-end (fn [ordered-columns _m]
-                                      (set-ordered-columns! ordered-columns))})
+     (when (seq pinned-items)
+       [:div.sticky-columns.flex.flex-row
+        (dnd/items pinned-items {:vertical? false
+                                 :on-drag-end (fn [ordered-columns _m]
+                                                (set-ordered-columns! ordered-columns))})])
+     (when (seq unpinned-items)
+       [:div.flex.flex-row
+        (dnd/items unpinned-items
+                   {:vertical? false
+                    :on-drag-end (fn [ordered-columns _m]
+                                   (set-ordered-columns! ordered-columns))})])
      (when (pos? selection-rows-count)
-       [:div.absolute.top-0.left-8
+       [:div.table-action-bar.absolute.top-0.left-8
         (action-bar table selected-rows option)]))))
 
 (rum/defc row-cell < rum/static
@@ -468,41 +535,46 @@
                        (render table row column)))))
 
 (rum/defc table-row-inner < rum/static
-  [{:keys [row-selected?] :as table} row columns props {:keys [show-add-property?]}]
+  [{:keys [row-selected?] :as table} row props {:keys [show-add-property?]}]
   (let [[first-col-rendered? set-first-col-rendered!] (rum/use-state false)
-        columns (if show-add-property?
-                  (conj (vec columns)
-                        {:id :add-property
-                         :cell (fn [_table _row _column])})
-                  columns)
-        sized-columns (get-in table [:state :sized-columns])]
+        pinned-columns (get-in table [:state :pinned-columns])
+        unpinned (get-in table [:state :unpinned-columns])
+        unpinned-columns (if show-add-property?
+                           (conj (vec unpinned)
+                                 {:id :add-property
+                                  :cell (fn [_table _row _column])})
+                           unpinned)
+        sized-columns (get-in table [:state :sized-columns])
+        row-cell-f (fn [idx column]
+                     (let [idx (inc idx)
+                           id (str (:id row) "-" (:id column))
+                           render (get column :cell)
+                           width (get-column-size column sized-columns)
+                           select? (= (:id column) :select)
+                           add-property? (= (:id column) :add-property)
+                           cell-opts {:key id
+                                      :select? select?
+                                      :add-property? add-property?
+                                      :style {:width width
+                                              :min-width width}}]
+                       (when render
+                         (row-cell table row column render cell-opts idx first-col-rendered? set-first-col-rendered!))))]
     (shui/table-row
      (merge
       props
       {:key (str (:id row))
        :data-state (when (row-selected? row) "selected")})
-     (map-indexed
-      (fn [idx column]
-        (let [id (str (:id row) "-" (:id column))
-              render (get column :cell)
-              width (get-column-size column sized-columns)
-              select? (= (:id column) :select)
-              add-property? (= (:id column) :add-property)
-              cell-opts {:key id
-                         :select? select?
-                         :add-property? add-property?
-                         :style {:width width
-                                 :min-width width}}]
-          (when render
-            (row-cell table row column render cell-opts idx first-col-rendered? set-first-col-rendered!))))
-      columns))))
+     [:div.sticky-columns.flex.flex-row
+      (map-indexed row-cell-f pinned-columns)]
+     [:div.flex.flex-row
+      (map-indexed row-cell-f unpinned-columns)])))
 
 (rum/defc table-row < rum/reactive
-  [table row columns props option]
+  [table row props option]
   (let [row' (db/sub-block (:id row))
         ;; merge entity temporal attributes
         row (reduce (fn [e [k v]] (assoc e k v)) row' (.-kv ^js row))]
-    (table-row-inner table row columns props option)))
+    (table-row-inner table row props option)))
 
 (rum/defc search
   [input {:keys [on-change set-input!]}]
@@ -1091,13 +1163,12 @@
      [])
 
     (shui/table
-     (let [columns' (:columns table)
-           rows (:rows table)]
+     (let [rows (:rows table)]
        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
         {:ref *rows-wrap}
         (when ready?
           [:div.relative
-           (table-header table columns' option selected-rows)
+           (table-header table option selected-rows)
 
            (ui/virtualized-list
             {:ref #(reset! *scroller-ref %)
@@ -1110,7 +1181,7 @@
              :total-count (count rows)
              :item-content (fn [idx]
                              (let [row (nth rows idx)]
-                               (table-row table row columns' {} option)))})
+                               (table-row table row {} option)))})
 
            (when add-new-object!
              (shui/table-footer (add-new-row table)))])]))))
@@ -1184,7 +1255,7 @@
            (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data' gallery?)))))
      [sorting data])))
 
-(rum/defc view-inner < rum/static
+(rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
                 :or {render-empty-title? false}}
    *scroller-ref]
@@ -1193,7 +1264,7 @@
         [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
         filters (:logseq.property.table/filters view-entity)
         [filters set-filters!] (rum/use-state (or filters []))
-        default-visible-columns (if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]
+        default-visible-columns (if-let [hidden-columns (conj (:logseq.property.table/hidden-columns view-entity) :id)]
                                   (zipmap hidden-columns (repeat false))
                                   ;; This case can happen for imported tables
                                   (if (seq (:logseq.property.table/ordered-columns view-entity))
@@ -1220,7 +1291,20 @@
         [input-filters set-input-filters!] (rum/use-state [input filters])
         [row-selection set-row-selection!] (rum/use-state {})
         columns (sort-columns columns ordered-columns)
-        table-map {:data data
+        select? (first (filter (fn [item] (= (:id item) :select)) columns))
+        id? (first (filter (fn [item] (= (:id item) :id)) columns))
+        pinned-properties (set (cond->> (map :db/ident (:logseq.property.table/pinned-columns view-entity))
+                                 id?
+                                 (cons :id)
+                                 select?
+                                 (cons :select)))
+        {pinned true unpinned false} (group-by (fn [item]
+                                                 (contains? pinned-properties (:id item)))
+                                               (remove (fn [column]
+                                                         (false? (get visible-columns (:id column))))
+                                                       columns))
+        table-map {:view-entity view-entity
+                   :data data
                    :columns columns
                    :state {:sorting sorting
                            :filters filters
@@ -1228,7 +1312,9 @@
                            :row-selection row-selection
                            :visible-columns visible-columns
                            :sized-columns sized-columns
-                           :ordered-columns ordered-columns}
+                           :ordered-columns ordered-columns
+                           :pinned-columns pinned
+                           :unpinned-columns unpinned}
                    :data-fns {:set-data! set-data!
                               :set-row-filter! set-row-filter!
                               :set-filters! set-filters!

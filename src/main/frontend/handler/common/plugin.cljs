@@ -67,7 +67,7 @@
   "Installs plugin given plugin map with id"
   [{:keys [id] :as manifest}]
   (when-not (and (:plugin/installing @state/state)
-              (installed? id))
+                 (installed? id))
     (state/set-state! :plugin/installing manifest)
     (if (util/electron?)
       (ipc/ipc :installMarketPlugin manifest)

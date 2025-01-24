@@ -259,7 +259,7 @@
                       item-props)
         [sub-open? set-sub-open!] (rum/use-state false)
         toggle? (boolean? toggle-checked?)
-        id1 (str (or id icon (random-uuid)))
+        id1 (str (or id (random-uuid)))
         id2 (str "d2-" id1)
         or-close-menu-sub! (fn []
                              (when (and (not (shui-popup/get-popup :ls-icon-picker))
@@ -287,7 +287,7 @@
     (wrap-menuitem
      [:div.inner-wrap.cursor-pointer
       {:class (util/classnames [{:disabled disabled?}])}
-      [:strong
+      [:div.property-setting-title
        (some-> icon (name) (shui/tabler-icon {:size 14
                                               :style {:margin-top "-1"}}))
        [:span title]]
@@ -690,11 +690,14 @@
                                                                                                                            :logseq.property/hide?
                                                                                                                            %)}))
                           (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
-                            (dropdown-editor-menuitem {:icon :eye-off :title "Hide empty value" :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
-                                                       :disabled? config/publishing?
-                                                       :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
-                                                                                                                           :logseq.property/hide-empty-value
-                                                                                                                           (not (:logseq.property/hide-empty-value property)))}))]
+                            (dropdown-editor-menuitem
+                             {:icon :eye-off :title "Hide empty value"
+                              :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
+                              :disabled? config/publishing?
+                              :on-toggle-checked-change (fn []
+                                                          (db-property-handler/set-block-property! (:db/id property)
+                                                                                                   :logseq.property/hide-empty-value
+                                                                                                   (not (:logseq.property/hide-empty-value property))))}))]
                          (remove nil?))]
          (when (> (count group') 0)
            (cons (shui/dropdown-menu-separator) group'))))
@@ -718,15 +721,16 @@
               {:icon :checkbox
                :title (if class-schema? "Show as checkbox on tagged nodes" "Show as checkbox on node")
                :disabled? config/publishing?
-               :desc (shui/switch
-                      {:id "show as checkbox" :size "sm"
-                       :checked checked?
-                       :on-click util/stop-propagation
-                       :on-checked-change
-                       (fn [value]
-                         (if value
-                           (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
-                           (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))})})))))
+               :desc (when owner-block
+                       (shui/switch
+                        {:id "show as checkbox" :size "sm"
+                         :checked checked?
+                         :on-click util/stop-propagation
+                         :on-checked-change
+                         (fn [value]
+                           (if value
+                             (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
+                             (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
 
      (when (and owner-block
                 ;; Any property should be removable from Tag Properties
