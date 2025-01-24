@@ -1292,7 +1292,10 @@
         [row-selection set-row-selection!] (rum/use-state {})
         columns (sort-columns columns ordered-columns)
         select? (first (filter (fn [item] (= (:id item) :select)) columns))
+        id? (first (filter (fn [item] (= (:id item) :id)) columns))
         pinned-properties (set (cond->> (map :db/ident (:logseq.property.table/pinned-columns view-entity))
+                                 id?
+                                 (cons :id)
                                  select?
                                  (cons :select)))
         {pinned true unpinned false} (group-by (fn [item]
