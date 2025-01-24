@@ -112,7 +112,7 @@
                          :on-click #(column-set-sorting! sorting column false)}
                         [:div.flex.flex-row.items-center.gap-1
                          (ui/icon "arrow-down" {:size 15})
-                         [:div "Sort desending"]])
+                         [:div "Sort descending"]])
                        (when property
                          (shui/dropdown-menu-item
                           {:on-click (fn [_e]
@@ -1368,7 +1368,7 @@
   (let [[input set-input!] (rum/use-state "")
         sorting* (:logseq.property.table/sorting view-entity)
         sorting (if (= sorting* :logseq.property/empty-placeholder) nil sorting*)
-        [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
+        [sorting set-sorting!] (rum/use-state sorting)
         filters (:logseq.property.table/filters view-entity)
         [filters set-filters!] (rum/use-state (or filters {}))
         default-visible-columns (if-let [hidden-columns (conj (:logseq.property.table/hidden-columns view-entity) :id)]

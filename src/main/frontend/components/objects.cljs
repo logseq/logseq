@@ -179,8 +179,8 @@
                    :add-property! (fn []
                                     (state/pub-event! [:editor/new-property {:block class
                                                                              :class-schema? true}]))
-                   ;; Objects of built-in classes must not be deleted e.g. Tag, Property and Root
                    :on-delete-rows (fn [table selected-rows]
+                                     ;; Built-in objects must not be deleted e.g. Tag, Property and Root
                                      (let [pages (->> selected-rows (filter ldb/page?) (remove :logseq.property/built-in?))
                                            blocks (->> selected-rows (remove ldb/page?) (remove :logseq.property/built-in?))]
                                        (p/do!
