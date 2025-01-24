@@ -309,21 +309,21 @@
     :task
     '[(task ?b ?statuses)
       ;; and needed to avoid binding error
-      (and (property ?b :logseq.task/status ?val)
+      (and (simple-query-property ?b :logseq.task/status ?val)
            [(contains? ?statuses ?val)])]
 
     :priority
     '[(priority ?b ?priorities)
       ;; and needed to avoid binding error
-      (and (property ?b :logseq.task/priority ?priority)
+      (and (simple-query-property ?b :logseq.task/priority ?priority)
            [(contains? ?priorities ?priority)])]}))
 
 (def rules-dependencies
   "For db graphs, a map of rule names and the rules they depend on. If this map
   becomes long or brittle, we could do scan rules for their deps with something
   like find-rules-in-where"
-  {:task #{:property}
-   :priority #{:property}
+  {:task #{:simple-query-property}
+   :priority #{:simple-query-property}
    :property-missing-value #{:object-has-class-property}
    :has-property-or-default-value #{:object-has-class-property}
    :object-has-class-property #{:parent}
