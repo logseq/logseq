@@ -81,7 +81,7 @@
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
 (defn header-cp
-  [{:keys [view-entity column-toggle-sorting! state]} column]
+  [{:keys [view-entity column-set-sorting! state]} column]
   (let [sorting (:sorting state)
         [asc?] (some (fn [item] (when (= (:id item) (:id column))
                                   (when-some [asc? (:asc? item)]
@@ -101,24 +101,18 @@
                           (shui/dropdown-menu-sub-content
                            [:div.ls-property-dropdown-editor.-m-1
                             (property-config/dropdown-editor property nil {})])))
-                       (shui/dropdown-menu-sub
-                        (shui/dropdown-menu-sub-trigger
-                         [:div.flex.flex-row.items-center.gap-1
-                          (ui/icon "arrows-down-up" {:size 15})
-                          [:div.mr-4 "Set order"]
-                          (cond asc? [:span.opacity-50.text-sm "ASC"]
-                                (false? asc?) [:span.opacity-50.text-sm "DESC"]
-                                :else nil)])
-                        (shui/dropdown-menu-sub-content
-                         {:on-click #(shui/popup-hide! id)}
-                         (shui/dropdown-menu-item
-                          {:key "asc"
-                           :on-click #(column-toggle-sorting! column)}
-                          "ASC")
-                         (shui/dropdown-menu-item
-                          {:key "desc"
-                           :on-click #(column-toggle-sorting! column)}
-                          "DESC")))
+                       (shui/dropdown-menu-item
+                        {:key "asc"
+                         :on-click #(column-set-sorting! sorting column true)}
+                        [:div.flex.flex-row.items-center.gap-1
+                         (ui/icon "arrow-up" {:size 15})
+                         [:div "Sort ascending"]])
+                       (shui/dropdown-menu-item
+                        {:key "desc"
+                         :on-click #(column-set-sorting! sorting column false)}
+                        [:div.flex.flex-row.items-center.gap-1
+                         (ui/icon "arrow-down" {:size 15})
+                         [:div "Sort descending"]])
                        (when property
                          (shui/dropdown-menu-item
                           {:on-click (fn [_e]
@@ -666,7 +660,8 @@
         timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
         filters (get-in table [:state :filters])
-        columns (remove #(false? (:column-list? %)) columns)
+        columns (remove #(or (false? (:column-list? %))
+                             (= :id (:id %))) columns)
         items (map (fn [column]
                      {:label (:name column)
                       :value column}) columns)
@@ -1255,13 +1250,93 @@
            (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data' gallery?)))))
      [sorting data])))
 
+(rum/defc view-sorting-item
+  [table sorting id name asc? set-sorting!]
+  [:div.flex.flex-row.gap-2.items-center.justify-between.px-2
+   [:div:div.flex.flex-row.gap-1.items-center
+    (shui/button
+     {:size :sm
+      :class "!px-1"
+      :variant :ghost
+      :title "Drag && Drop to reorder"}
+     (shui/tabler-icon "grip-vertical" {:size 14}))
+    [:div.text-muted-foreground.whitespace-nowrap (str name ":")]]
+
+   [:div.flex.flex-row.gap-2.items-center
+    (shui/select
+     {:default-value (if asc? "asc" "desc")
+      :on-value-change (fn [v]
+                         (let [asc? (= v "asc")
+                               f (:column-set-sorting! sorting table)]
+                           (f sorting {:id id} asc?)))}
+     (shui/select-trigger
+      {:class "order-button !px-2 !py-0 !h-8"}
+      (shui/select-value
+       {:placeholder "Select order"}))
+     (shui/select-content
+      (shui/select-group
+       (shui/select-item {:value "asc"} "Ascending")
+       (shui/select-item {:value "desc"} "Descending"))))
+    (shui/button
+     {:variant "ghost"
+      :class "text-muted-foreground !px-1"
+      :size :sm
+      :on-click (fn []
+                  (let [f (:column-set-sorting! table)
+                        new-sorting (f sorting {:id id} nil)
+                        f (get-in table [:data-fns :set-sorting!])]
+                    (set-sorting! new-sorting)
+                    (f new-sorting)
+                    (when (empty? new-sorting)
+                      (shui/popup-hide!))))}
+     (ui/icon "x"))]])
+
+(rum/defc view-sorting-config
+  [table sorting columns]
+  (let [[sorting set-sorting!] (rum/use-state sorting)]
+    [:div.ls-view-order-setting.flex.flex-col.gap-2.py-2.text-sm
+     (let [items (for [{:keys [id asc?]} sorting]
+                   (when-let [name (some (fn [column] (when (= id (:id column))
+                                                        (:name column))) columns)]
+                     {:id (str id)
+                      :value id
+                      :content (view-sorting-item table sorting id name asc? set-sorting!)}))]
+       (dnd/items items
+                  {:on-drag-end (fn [ordered-columns]
+                                  (let [f (get-in table [:data-fns :set-sorting!])
+                                        new-sorting (mapv (fn [column] (some #(when (= column (:id %)) %) sorting)) ordered-columns)]
+                                    (set-sorting! new-sorting)
+                                    (f new-sorting)))}))
+     (shui/dropdown-menu-item
+      {:class "text-muted-foreground"
+       :on-click (fn []
+                   (let [f (get-in table [:data-fns :set-sorting!])]
+                     (set-sorting! nil)
+                     (f nil)
+                     (shui/popup-hide!)))}
+      (ui/icon "trash" {:size 15})
+      [:span.ml-1 "Delete sort"])]))
+
+(rum/defc view-sorting
+  [table columns sorting]
+  (shui/button
+   {:variant "ghost"
+    :class "text-muted-foreground !px-1"
+    :size :sm
+    :on-click (fn [e]
+                (shui/popup-show! (.-target e)
+                                  (fn [] (view-sorting-config table sorting columns))
+                                  {:align :end}))}
+   (ui/icon "arrows-up-down")))
+
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
                 :or {render-empty-title? false}}
    *scroller-ref]
   (let [[input set-input!] (rum/use-state "")
-        sorting (:logseq.property.table/sorting view-entity)
-        [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
+        sorting* (:logseq.property.table/sorting view-entity)
+        sorting (if (= sorting* :logseq.property/empty-placeholder) nil sorting*)
+        [sorting set-sorting!] (rum/use-state sorting)
         filters (:logseq.property.table/filters view-entity)
         [filters set-filters!] (rum/use-state (or filters []))
         default-visible-columns (if-let [hidden-columns (conj (:logseq.property.table/hidden-columns view-entity) :id)]
@@ -1344,6 +1419,9 @@
             (t (or title-key :views.table/default-title)
                (count (:rows table)))])])
        [:div.view-actions.flex.items-center.gap-1
+
+        (when (seq sorting)
+          (view-sorting table columns sorting))
 
         (filter-properties columns table)
 
