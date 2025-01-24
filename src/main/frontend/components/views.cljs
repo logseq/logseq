@@ -89,60 +89,61 @@
         property (db/entity (:id column))
         pinned? (when property
                   (contains? (set (map :db/id (:logseq.property.table/pinned-columns view-entity)))
-                             (:db/id property)))]
-    (shui/dropdown-menu
-     (shui/dropdown-menu-trigger
-      {:asChild true}
-      (shui/button
-       {:variant "text"
-        :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"}
-       (let [title (str (:name column))]
-         [:span {:title title
-                 :class "max-w-full overflow-hidden text-ellipsis"}
-          title])
-       (case asc?
-         true
-         (ui/icon "arrow-up")
-         false
-         (ui/icon "arrow-down")
-         nil)))
-     (shui/dropdown-menu-content
-      {:align "start"}
-      (when property
-        (shui/dropdown-menu-sub
-         (shui/dropdown-menu-sub-trigger
-          [:div.flex.flex-row.items-center.gap-1
-           (ui/icon "settings" {:size 15})
-           [:div "Configure"]])
-         (shui/dropdown-menu-sub-content
-          [:div.ls-property-dropdown-editor
-           (property-config/dropdown-editor property nil {})])))
-      (shui/dropdown-menu-item
-       {:key "asc"
-        :on-click #(column-set-sorting! sorting column true)}
-       [:div.flex.flex-row.items-center.gap-1
-        (ui/icon "arrow-up" {:size 15})
-        [:div "Sort ascending"]])
-      (shui/dropdown-menu-item
-       {:key "desc"
-        :on-click #(column-set-sorting! sorting column false)}
-       [:div.flex.flex-row.items-center.gap-1
-        (ui/icon "arrow-down" {:size 15})
-        [:div "Sort desending"]])
-      (when property
-        (shui/dropdown-menu-item
-         {:on-click (fn [_e]
-                      (if pinned?
-                        (db-property-handler/delete-property-value! (:db/id view-entity)
-                                                                    :logseq.property.table/pinned-columns
-                                                                    (:db/id property))
-                        (property-handler/set-block-property! (state/get-current-repo)
-                                                              (:db/id view-entity)
-                                                              :logseq.property.table/pinned-columns
-                                                              (:db/id property))))}
-         [:div.flex.flex-row.items-center.gap-1
-          (ui/icon "pin" {:size 15})
-          [:div (if pinned? "Unpin" "Pin")]]))))))
+                             (:db/id property)))
+        sub-content (fn [{:keys [id]}]
+                      [:<>
+                       (when property
+                         (shui/dropdown-menu-sub
+                          (shui/dropdown-menu-sub-trigger
+                           [:div.flex.flex-row.items-center.gap-1
+                            (ui/icon "settings" {:size 15})
+                            [:div "Configure"]])
+                          (shui/dropdown-menu-sub-content
+                           [:div.ls-property-dropdown-editor.-m-1
+                            (property-config/dropdown-editor property nil {})])))
+                       (shui/dropdown-menu-item
+                        {:key "asc"
+                         :on-click #(column-set-sorting! sorting column true)}
+                        [:div.flex.flex-row.items-center.gap-1
+                         (ui/icon "arrow-up" {:size 15})
+                         [:div "Sort ascending"]])
+                       (shui/dropdown-menu-item
+                        {:key "desc"
+                         :on-click #(column-set-sorting! sorting column false)}
+                        [:div.flex.flex-row.items-center.gap-1
+                         (ui/icon "arrow-down" {:size 15})
+                         [:div "Sort desending"]])
+                       (when property
+                         (shui/dropdown-menu-item
+                          {:on-click (fn [_e]
+                                       (if pinned?
+                                         (db-property-handler/delete-property-value! (:db/id view-entity)
+                                                                                     :logseq.property.table/pinned-columns
+                                                                                     (:db/id property))
+                                         (property-handler/set-block-property! (state/get-current-repo)
+                                                                               (:db/id view-entity)
+                                                                               :logseq.property.table/pinned-columns
+                                                                               (:db/id property)))
+                                       (shui/popup-hide! id))}
+                          [:div.flex.flex-row.items-center.gap-1
+                           (ui/icon "pin" {:size 15})
+                           [:div (if pinned? "Unpin" "Pin")]]))])]
+    (shui/button
+     {:variant "text"
+      :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
+      :on-mouse-up (fn [^js e]
+                     (when (string/blank? (some-> (.-target e) (.closest "[aria-roledescription=sortable]") (.-style) (.-transform)))
+                       (shui/popup-show! (.-target e) sub-content {:align "start" :as-dropdown? true})))}
+     (let [title (str (:name column))]
+       [:span {:title title
+               :class "max-w-full overflow-hidden text-ellipsis"}
+        title])
+     (case asc?
+       true
+       (ui/icon "arrow-up")
+       false
+       (ui/icon "arrow-down")
+       nil))))
 
 (defn- timestamp-cell-cp
   [_table row column]
@@ -164,7 +165,7 @@
 
 (defn- get-property-value-for-search
   [block property]
-  (let [type (get-in property [:block/schema :type])
+  (let [type (:logseq.property/type property)
         many? (= :db.cardinality/many (get property :db/cardinality))
         number-type? (= :number type)
         v (get block (:db/ident property))
@@ -239,7 +240,7 @@
                                           :logseq.property/created-from-property}
                                         ident)
                              (and with-object-name? (= :block/title ident))
-                             (contains? #{:map :entity} (get-in property [:block/schema :type])))
+                             (contains? #{:map :entity} (:logseq.property/type property)))
                  (let [property (if (de/entity? property)
                                   property
                                   (or (merge (db/entity ident) property) property)) ; otherwise, :cell/:header/etc. will be removed
@@ -602,13 +603,6 @@
         :on-click #(set-show-input! true)}
        (ui/icon "search")))))
 
-(comment
-  (defn- property-ref-type?
-    [property]
-    (let [schema (:block/schema property)
-          type (:type schema)]
-      (db-property-type/all-ref-property-types type))))
-
 (defn- get-property-values
   [rows property]
   (let [property-ident (:db/ident property)
@@ -627,7 +621,7 @@
 (defn datetime-property?
   [property]
   (or
-   (= :datetime (get-in property [:block/schema :type]))
+   (= :datetime (:logseq.property/type property))
    (contains? #{:block/created-at :block/updated-at} (:db/ident property))))
 
 (def timestamp-options
@@ -681,7 +675,7 @@
                                    property (db/entity id)
                                    internal-property {:db/ident (:id column)
                                                       :block/title (:name column)
-                                                      :block/schema {:type (:type column)}}]
+                                                      :logseq.property/type (:type column)}]
                                (if (or property
                                        (= :db.cardinality/many (:db/cardinality (get schema id)))
                                        (not= (:type column) :string))
@@ -704,7 +698,7 @@
                                       (let [filters' (conj filters [(:db/ident property) :after value])]
                                         (set-filters! filters')))})
                  property
-                 (if (= :checkbox (get-in property [:block/schema :type]))
+                 (if (= :checkbox (:logseq.property/type property))
                    (let [items [{:value true :label "true"}
                                 {:value false :label "false"}]]
                      (merge option
@@ -767,7 +761,7 @@
     [:before :after]
     (concat
      [:is :is-not]
-     (case (get-in property [:block/schema :type])
+     (case (:logseq.property/type property)
        (:default :url :node)
        [:text-contains :text-not-contains]
        (:date)
@@ -860,7 +854,7 @@
 
 (rum/defc filter-value-select < rum/static
   [{:keys [data-fns] :as table} property value operator idx]
-  (let [type (get-in property [:block/schema :type])
+  (let [type (:logseq.property/type property)
         items (cond
                 (contains? #{:before :after} operator)
                 timestamp-options
@@ -1345,7 +1339,7 @@
         [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
         filters (:logseq.property.table/filters view-entity)
         [filters set-filters!] (rum/use-state (or filters []))
-        default-visible-columns (if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]
+        default-visible-columns (if-let [hidden-columns (conj (:logseq.property.table/hidden-columns view-entity) :id)]
                                   (zipmap hidden-columns (repeat false))
                                   ;; This case can happen for imported tables
                                   (if (seq (:logseq.property.table/ordered-columns view-entity))
@@ -1373,12 +1367,17 @@
         [row-selection set-row-selection!] (rum/use-state {})
         columns (sort-columns columns ordered-columns)
         select? (first (filter (fn [item] (= (:id item) :select)) columns))
+        id? (first (filter (fn [item] (= (:id item) :id)) columns))
         pinned-properties (set (cond->> (map :db/ident (:logseq.property.table/pinned-columns view-entity))
+                                 id?
+                                 (cons :id)
                                  select?
                                  (cons :select)))
         {pinned true unpinned false} (group-by (fn [item]
                                                  (contains? pinned-properties (:id item)))
-                                               columns)
+                                               (remove (fn [column]
+                                                         (false? (get visible-columns (:id column))))
+                                                       columns))
         table-map {:view-entity view-entity
                    :data data
                    :columns columns

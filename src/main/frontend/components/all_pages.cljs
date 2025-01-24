@@ -3,17 +3,17 @@
   (:require [frontend.components.block :as component-block]
             [frontend.components.page :as component-page]
             [frontend.components.views :as views]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.page :as page-handler]
+            [frontend.hooks :as hooks]
             [frontend.state :as state]
+            [frontend.ui :as ui]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.ui :as ui]
-            [frontend.config :as config]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (defn- columns
   []

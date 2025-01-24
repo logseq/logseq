@@ -3,12 +3,12 @@
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.hooks :as hooks]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (defn- dom-purify
   [html opts]

@@ -10,20 +10,20 @@
      * Some properties are skipped because they are superseded/deprecated or because they have a property
        type logseq doesnt' support yet
      * schema.org assumes no cardinality. For now, only :node properties are given a :cardinality :many"
-  (:require [logseq.outliner.cli :as outliner-cli]
-            [logseq.db.frontend.property :as db-property]
-            [clojure.string :as string]
-            [clojure.edn :as edn]
-            [datascript.core :as d]
-            ["path" :as node-path]
+  (:require ["fs" :as fs]
             ["os" :as os]
-            ["fs" :as fs]
-            [nbb.classpath :as cp]
-            [nbb.core :as nbb]
-            [clojure.set :as set]
-            [clojure.walk :as w]
+            ["path" :as node-path]
             [babashka.cli :as cli]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]))
+            [clojure.edn :as edn]
+            [clojure.set :as set]
+            [clojure.string :as string]
+            [clojure.walk :as w]
+            [datascript.core :as d]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.outliner.cli :as outliner-cli]
+            [nbb.classpath :as cp]
+            [nbb.core :as nbb]))
 
 (defn- get-comment-string
   [rdfs-comment renamed-pages]
@@ -69,7 +69,7 @@
       parent-class'
       (assoc :build/class-parent (keyword (strip-schema-prefix parent-class')))
       (seq properties)
-      (assoc :build/schema-properties (mapv (comp keyword strip-schema-prefix) properties)))))
+      (assoc :build/class-properties (mapv (comp keyword strip-schema-prefix) properties)))))
 
 (def schema->logseq-data-types
   "Schema datatypes, https://schema.org/DataType, mapped to their Logseq equivalents"
@@ -113,18 +113,17 @@
 
         inverted-renamed-properties (set/map-invert renamed-properties)
         class-name (strip-schema-prefix (property-m "@id"))
-        url (str "https://schema.org/" (get inverted-renamed-properties class-name class-name))
-        schema (cond-> {:type schema-type}
-                 ;; This cardinality rule should be adjusted as we use schema.org more
-                 (= schema-type :node)
-                 (assoc :cardinality :many))]
+        url (str "https://schema.org/" (get inverted-renamed-properties class-name class-name))]
     {(keyword (strip-schema-prefix (property-m "@id")))
-     (cond-> {:block/schema schema
+     (cond-> {:logseq.property/type schema-type
               :build/properties (cond-> {:url url}
                                   (property-m "rdfs:comment")
                                   (assoc :logseq.property/description (get-comment-string (property-m "rdfs:comment") renamed-pages)))}
+       ;; This cardinality rule should be adjusted as we use schema.org more
        (= schema-type :node)
-       (assoc :build/schema-classes (mapv (comp keyword strip-schema-prefix) range-includes)))}))
+       (assoc :db/cardinality :many)
+       (= schema-type :node)
+       (assoc :build/property-classes (mapv (comp keyword strip-schema-prefix) range-includes)))}))
 
 (defn- get-class-to-properties
   "Given a vec of class ids and a vec of properties map to process, return a map of
@@ -260,7 +259,8 @@
    (apply merge
           (mapv #(->property-page % class-map options) select-properties))
    ;; Have to update schema for now as validation doesn't take into account existing properties
-   :logseq.property/description {:block/schema {:public? true :type :default}
+   :logseq.property/description {:logseq.property/public? true
+                                 :logseq.property/type :default
                                  :build/properties {:url "https://schema.org/description"
                                                     :logseq.property/description "A description of the item."}}))
 
@@ -334,8 +334,8 @@
           (let [select-class-ids' (->> select-class-ids (map (comp keyword strip-schema-prefix)) set)]
             (-> properties
                 (update-vals (fn [m]
-                               (if (:build/schema-classes m)
-                                 (update m :build/schema-classes
+                               (if (:build/property-classes m)
+                                 (update m :build/property-classes
                                          (fn [cs] (vec (set (filter #(contains? select-class-ids' %) cs)))))
                                  m)))))
           properties)
@@ -364,25 +364,25 @@
   (let [ents (remove #(db-malli-schema/internal-ident? (:db/ident %))
                      (d/q '[:find [(pull ?b [*
                                              {:logseq.property.class/properties [:block/title]}
-                                             {:property/schema.classes [:block/title]}
+                                             {:logseq.property/classes [:block/title]}
                                              {:logseq.property/parent [:block/title]}
                                              {:block/tags [:block/title]}
                                              {:block/refs [:block/title]}]) ...]
                             :in $
                             :where [?b :db/ident ?ident]]
-                          db))]
+                          db))
+        top-level-properties [:logseq.property/type :logseq.property.class/properties :logseq.property/classes
+                              :logseq.property/parent :block/tags]
+        debug-attributes (into [:block/name :block/title :db/cardinality :db/ident :block/refs]
+                               top-level-properties)]
     (fs/writeFileSync "schema-org.edn"
                       (pr-str
                        (->> ents
                             (map (fn [m]
-                                   (let [props (->> (db-property/properties m)
-                                                    (into {}))]
-                                     (cond-> (select-keys m [:block/name :block/tags :block/title :block/schema :db/ident
-                                                             :logseq.property.class/properties :logseq.property/parent
-                                                             :db/cardinality :property/schema.classes :block/refs])
+                                   (let [props (apply dissoc (db-property/properties m) top-level-properties)]
+                                     (cond-> (select-keys m debug-attributes)
                                        (seq props)
                                        (assoc :block/properties (-> (update-keys props name)
-                                                                    (dissoc "tags")
                                                                     (update-vals (fn [v]
                                                                                    (if (:db/id v)
                                                                                      (db-property/property-value-content (d/entity db (:db/id v)))
@@ -391,8 +391,8 @@
                                        (update :logseq.property.class/properties #(set (map :block/title %)))
                                        (some? (:logseq.property/parent m))
                                        (update :logseq.property/parent :block/title)
-                                       (seq (:property/schema.classes m))
-                                       (update :property/schema.classes #(set (map :block/title %)))
+                                       (seq (:logseq.property/classes m))
+                                       (update :logseq.property/classes #(set (map :block/title %)))
                                        (seq (:block/tags m))
                                        (update :block/tags #(set (map :block/title %)))
                                        (seq (:block/refs m))

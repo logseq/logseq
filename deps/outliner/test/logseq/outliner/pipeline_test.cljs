@@ -1,15 +1,15 @@
 (ns logseq.outliner.pipeline-test
   (:require [cljs.test :refer [deftest is testing]]
-            [logseq.db.frontend.schema :as db-schema]
-            [datascript.core :as d]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.outliner.db-pipeline :as db-pipeline]
-            [logseq.outliner.pipeline :as outliner-pipeline]
+            [clojure.set :as set]
             [clojure.string :as string]
-            [logseq.db.test.helper :as db-test]
+            [datascript.core :as d]
             [logseq.common.util.page-ref :as page-ref]
-            [clojure.set :as set]))
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.db-pipeline :as db-pipeline]
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (defn- get-blocks [db]
   (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name :db/id]}])
@@ -51,7 +51,7 @@
                               ;; Only keep enough of content to uniquely identify block
                               (map #(hash-map :block/title (re-find #"\w+" (:block/title %))
                                               :path-ref-names (set (map :block/name (:block/path-refs %))))))
-          page-tag-refs #{"tags" "page"}]
+          page-tag-refs #{"page" "tags"}]
       (is (= [{:block/title "parent"
                :path-ref-names (set/union page-tag-refs #{"page1" "bar"})}
               {:block/title "child"

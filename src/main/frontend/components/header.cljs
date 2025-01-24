@@ -4,6 +4,7 @@
             [cljs-time.core :as t]
             [clojure.string :as string]
             [dommy.core :as d]
+            [frontend.common.missionary :as c.m]
             [frontend.components.export :as export]
             [frontend.components.file-sync :as fs-sync]
             [frontend.components.page-menu :as page-menu]
@@ -22,20 +23,19 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.hooks :as hooks]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :refer [version]]
-            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [logseq.shui.util :as shui-util]
             [missionary.core :as m]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [frontend.hooks :as hooks]))
+            [rum.core :as rum]))
 
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
