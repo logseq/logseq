@@ -1264,7 +1264,7 @@
         [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
         filters (:logseq.property.table/filters view-entity)
         [filters set-filters!] (rum/use-state (or filters []))
-        default-visible-columns (if-let [hidden-columns (:logseq.property.table/hidden-columns view-entity)]
+        default-visible-columns (if-let [hidden-columns (conj (:logseq.property.table/hidden-columns view-entity) :id)]
                                   (zipmap hidden-columns (repeat false))
                                   ;; This case can happen for imported tables
                                   (if (seq (:logseq.property.table/ordered-columns view-entity))
