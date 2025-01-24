@@ -1300,7 +1300,9 @@
                                  (cons :select)))
         {pinned true unpinned false} (group-by (fn [item]
                                                  (contains? pinned-properties (:id item)))
-                                               columns)
+                                               (remove (fn [column]
+                                                         (false? (get visible-columns (:id column))))
+                                                       columns))
         table-map {:view-entity view-entity
                    :data data
                    :columns columns
