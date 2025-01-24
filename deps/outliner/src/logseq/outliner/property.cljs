@@ -37,16 +37,18 @@
            retract-multiple-values? (and multiple-values? (sequential? value))
            multiple-values-empty? (and (sequential? old-value)
                                        (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
-           block' (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
-                         property-id value)
-           block-tx-data (cond-> block'
-                           (and status? (not (ldb/class-instance? (d/entity @conn :logseq.class/Task) block)))
-                           (assoc :block/tags :logseq.class/Task))]
-       [(when multiple-values-empty?
-          [:db/retract (:db/id block') property-id :logseq.property/empty-placeholder])
-        (when retract-multiple-values?
-          [:db/retract (:db/id block') property-id])
-        block-tx-data]))))
+           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
+                             true
+                             (assoc property-id value)
+                             (and status? (or (empty? (:block/tags block)) (ldb/internal-page? block)))
+                             (assoc :block/tags :logseq.class/Task))]
+       (cond-> []
+         multiple-values-empty?
+         (conj [:db/retract (:db/id update-block-tx) property-id :logseq.property/empty-placeholder])
+         retract-multiple-values?
+         (conj [:db/retract (:db/id update-block-tx) property-id])
+         true
+         (conj update-block-tx))))))
 
 (defn- get-property-value-schema
   "Gets a malli schema to validate the property value for the given property type and builds
