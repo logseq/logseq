@@ -449,15 +449,37 @@
 
 (defn new-task--upload-graph
   [token repo remote-graph-name reset-rtc-data-in-conn?]
-  (m/sp
-    (if-let [conn (worker-state/get-datascript-conn repo)]
-      (let [schema-version (ldb/get-graph-schema-version @conn)
-            major-schema-version (db-schema/major-version schema-version)
-            {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-        (m/? (r.upload-download/new-task--upload-graph
-              get-ws-create-task repo conn remote-graph-name major-schema-version reset-rtc-data-in-conn?)))
-      (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
-                                                :repo repo})))))
+  (let [{:keys [conn schema-version] :as r}
+        (if-let [conn (worker-state/get-datascript-conn repo)]
+          (if-let [schema-version (ldb/get-graph-schema-version @conn)]
+            {:conn conn :schema-version schema-version}
+            (ex-info "Not found schema-version" {:type :rtc.exception/not-found-schema-version}))
+          (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn :repo repo}))]
+    (m/sp
+      (if (instance? ExceptionInfo r)
+        (r.ex/->map r)
+        (let [major-schema-version (db-schema/major-version schema-version)
+              {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
+          (m/? (r.upload-download/new-task--upload-graph
+                get-ws-create-task repo conn remote-graph-name major-schema-version reset-rtc-data-in-conn?)))))))
+
+(defn new-task--branch-graph
+  [token repo]
+  (let [{:keys [conn graph-uuid schema-version] :as r}
+        (if-let [conn (worker-state/get-datascript-conn repo)]
+          (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
+            (if-let [schema-version (ldb/get-graph-schema-version @conn)]
+              {:conn conn :graph-uuid graph-uuid :schema-version schema-version}
+              (ex-info "Not found schema-version" {:type :rtc.exception/not-found-schema-version}))
+            r.ex/ex-local-not-rtc-graph)
+          (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn :repo repo}))]
+    (m/sp
+      (if (instance? ExceptionInfo r)
+        (r.ex/->map r)
+        (let [major-schema-version (db-schema/major-version schema-version)
+              {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
+          (m/? (r.upload-download/new-task--branch-graph
+                get-ws-create-task repo conn graph-uuid major-schema-version)))))))
 
 (defn new-task--request-download-graph
   [token graph-uuid schema-version]

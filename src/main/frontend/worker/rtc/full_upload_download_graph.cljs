@@ -128,7 +128,7 @@
 (defn new-task--upload-graph
   [get-ws-create-task repo conn remote-graph-name major-schema-version reset-rtc-data-in-conn?]
   (m/sp
-    (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetch-presigned-put-url
+    (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetching-presigned-put-url
                                                 :message "fetching presigned put-url"})
     (when reset-rtc-data-in-conn? (remove-rtc-data-in-conn! repo))
     (let [[{:keys [url key]} all-blocks-str]
@@ -444,3 +444,48 @@
                                                           :message "download completed"
                                                           :graph-uuid graph-uuid})
             nil))))))
+
+(defn new-task--branch-graph
+  [get-ws-create-task repo conn graph-uuid major-schema-version]
+  (m/sp
+    (rtc-log-and-state/rtc-log :rtc.log/branch-graph {:sub-type :fetching-presigned-put-url
+                                                      :message "fetching presigned put-url"})
+    (remove-rtc-data-in-conn! repo)
+    (let [[{:keys [url key]} all-blocks-str]
+          (m/?
+           (m/join
+            vector
+            (ws-util/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
+            (m/sp
+              (let [all-blocks (export-as-blocks
+                                @conn
+                                :ignore-attr-set rtc-const/ignore-attrs-when-init-upload
+                                :ignore-entity-set rtc-const/ignore-entities-when-init-upload)]
+                (ldb/write-transit-str all-blocks)))))]
+      (rtc-log-and-state/rtc-log :rtc.log/branch-graph {:sub-type :upload-data
+                                                        :message "uploading data"})
+      (m/? (http/put url {:body all-blocks-str :with-credentials? false}))
+      (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-branch-graph
+                                                  :message "requesting branch-graph"})
+      (let [aes-key (c.m/<? (crypt/<gen-aes-key))
+            aes-key-jwk (ldb/write-transit-str (c.m/<? (crypt/<export-key aes-key)))
+            resp (m/? (ws-util/send&recv get-ws-create-task {:action "branch-graph"
+                                                             :s3-key key
+                                                             :schema-version (str major-schema-version)
+                                                             :graph-uuid graph-uuid}))]
+        (if-let [graph-uuid (:graph-uuid resp)]
+          (let [schema-version (ldb/get-graph-schema-version @conn)]
+            (ldb/transact! conn
+                           [(ldb/kv :logseq.kv/graph-uuid graph-uuid)
+                            (ldb/kv :logseq.kv/graph-local-tx "0")
+                            (ldb/kv :logseq.kv/remote-schema-version schema-version)])
+            (client-op/update-graph-uuid repo graph-uuid)
+            (client-op/remove-local-tx repo)
+            (client-op/add-all-exists-asset-as-ops repo)
+            (crypt/store-graph-keys-jwk repo aes-key-jwk)
+            (let [^js worker-obj (:worker/object @worker-state/*state)]
+              (c.m/<? (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
+            (rtc-log-and-state/rtc-log :rtc.log/branch-graph {:sub-type :completed
+                                                              :message "branch-graph completed"})
+            nil)
+          (throw (ex-info "branch-graph failed" {:upload-resp resp})))))))
