@@ -209,6 +209,11 @@
         [:s3-key :string]
         [:graph-name :string]
         [:schema-version :string]]]
+      ["branch-graph"
+       [:map
+        [:s3-key :string]
+        [:graph-uuid :uuid]
+        [:schema-version :string]]]
       ["download-graph"
        [:map
         [:graph-uuid :string]

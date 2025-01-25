@@ -126,11 +126,10 @@
                        [:db/retractEntity :logseq.kv/remote-schema-version]])))
 
 (defn new-task--upload-graph
-  [get-ws-create-task repo conn remote-graph-name major-schema-version reset-rtc-data-in-conn?]
+  [get-ws-create-task repo conn remote-graph-name major-schema-version]
   (m/sp
     (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetching-presigned-put-url
                                                 :message "fetching presigned put-url"})
-    (when reset-rtc-data-in-conn? (remove-rtc-data-in-conn! repo))
     (let [[{:keys [url key]} all-blocks-str]
           (m/?
            (m/join
