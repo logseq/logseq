@@ -1,6 +1,7 @@
 (ns frontend.page
   "Provides root component for both Logseq app and publishing build"
-  (:require [rum.core :as rum]
+  (:require [logseq.shui.ui :as shui]
+            [rum.core :as rum]
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.ui :as ui]
@@ -108,6 +109,16 @@
               "open an issue."]]]]]]]]]
      (ui/notification)]))
 
+(rum/defc not-found
+  []
+  [:div {:class "flex flex-col items-center justify-center min-h-screen bg-background"}
+   [:h1 {:class "text-6xl font-bold text-gray-12 mb-4"} "404"]
+   [:h2 {:class "text-2xl font-semibold text-gray-10 mb-6"} "Page Not Found"]
+   [:p {:class "text-gray-500 mb-8"} "Oops! The page you're looking for doesn't exist."]
+   (shui/button {:on-click #(rfe/push-state :home)
+                 :variant :outline}
+     (shui/tabler-icon "home") "Go back home")])
+
 (rum/defc current-page < rum/reactive
   {:did-mount    (fn [state]
                    (state/set-root-component! (:rum/react-component state))
@@ -122,7 +133,7 @@
                    (when-let [teardown (::teardown state)]
                      (teardown)))}
   []
-  (when-let [route-match (state/sub :route-match)]
+  (if-let [route-match (state/sub :route-match)]
     (let [route-name (get-in route-match [:data :name])]
       (when-let [view (:view (:data route-match))]
         (ui/catch-error-and-notify
@@ -134,4 +145,5 @@
                route-match
                (view route-match)))
            (when config/lsp-enabled?
-             (plugin/hook-daemon-renderers))])))))
+             (plugin/hook-daemon-renderers))])))
+    (not-found)))

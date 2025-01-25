@@ -813,12 +813,13 @@
 ;; components
 (rum/defc lsp-indicator < rum/reactive
   []
-  (let [text (state/sub :plugin/indicator-text)]
-    [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
-     [:span.flex.items-center.justify-center.flex-col
-      [:small.scale-250.opacity-50.mb-10.animate-pulse (svg/logo)]
-      [:small.block.text-sm.relative.opacity-50 {:style {:right "-8px" :min-height "24px"}}
-       (str text)]]]))
+  (let [text (or (state/sub :plugin/indicator-text) (when (not (util/electron?)) "LOADING"))]
+    (when-not (true? text)
+      [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
+       [:span.flex.items-center.justify-center.flex-col
+        [:small.scale-250.opacity-50.mb-10.animate-pulse (svg/logo)]
+        [:small.block.text-sm.relative.opacity-50 {:style {:right "-8px" :min-height "24px"}}
+         (str text)]]])))
 
 (defn ^:large-vars/cleanup-todo init-plugins!
   [callback]
@@ -848,9 +849,9 @@
 
                   (.on "beforeload"
                        (fn [^js pl]
-                         (let [text (if (util/electron?)
-                                      (util/format "Load plugin: %s..." (.-id pl)) "Loading")]
-                           (state/set-state! :plugin/indicator-text text))))
+                         (let [text (when (util/electron?)
+                                      (util/format "Load plugin: %s..." (.-id pl)))]
+                           (some->> text (state/set-state! :plugin/indicator-text)))))
 
                   (.on "reloaded"
                        (fn [^js pl]
@@ -938,15 +939,16 @@
         plugins-async)
 
       (p/then
-       (fn [plugins-async]
-         (state/set-state! :plugin/indicator-text nil)
-        ;; wait for the plugin register async messages
-         (js/setTimeout
-          (fn [] (callback)
-            (some-> (seq plugins-async)
-                    (p/delay 16)
-                    (p/then #(.register js/LSPluginCore (bean/->js plugins-async) true))))
-          (if (util/electron?) 64 0))))
+        (fn [plugins-async]
+          ;; true indicate for preboot finished
+          (state/set-state! :plugin/indicator-text true)
+          ;; wait for the plugin register async messages
+          (js/setTimeout
+            (fn [] (callback)
+              (some-> (seq plugins-async)
+                (p/delay 16)
+                (p/then #(.register js/LSPluginCore (bean/->js plugins-async) true))))
+            (if (util/electron?) 64 0))))
       (p/catch
        (fn [^js e]
          (log/error :setup-plugin-system-error e)
