@@ -17,13 +17,13 @@
             [promesa.core :as p]))
 
 (defn <rtc-create-graph!
-  [repo & {:keys [remote-repo-name reset-rtc-data-in-conn?]}]
+  [repo]
   (when-let [^js worker @state/*db-worker]
     (p/do!
      (js/Promise. user-handler/task--ensure-id&access-token)
      (let [token (state/get-auth-id-token)
-           repo-name (sqlite-common-db/sanitize-db-name (or remote-repo-name repo))]
-       (.rtc-async-upload-graph worker repo token repo-name reset-rtc-data-in-conn?)))))
+           repo-name (sqlite-common-db/sanitize-db-name repo)]
+       (.rtc-async-upload-graph worker repo token repo-name)))))
 
 (defn <rtc-delete-graph!
   [graph-uuid schema-version]
@@ -62,6 +62,16 @@
   (when-let [^js worker @state/*db-worker]
     (.rtc-stop worker)))
 
+(defn <rtc-branch-graph!
+  [repo]
+  (when-let [^js worker @state/*db-worker]
+    (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+            token (state/get-auth-id-token)
+            result (.rtc-async-branch-graph worker repo token)
+            start-ex (ldb/read-transit-str result)]
+      (when-let [ex-data* (:ex-data start-ex)]
+        (throw (ex-info (:ex-message start-ex) ex-data*))))))
+
 (defn- notification-download-higher-schema-graph!
   [graph-name graph-uuid schema-version]
   (let [graph-name* (str graph-name "-" schema-version)]
@@ -75,17 +85,17 @@
        "Download")]
      :warning false)))
 
+(declare <rtc-start!)
 (defn- notification-upload-higher-schema-graph!
-  [repo schema-version]
+  [repo]
   (notification/show!
    [:div "The local graph has a higher schema version than the graph on the server."
     (shui/button
      {:on-click
       (fn [e]
         (util/stop e)
-        (<rtc-create-graph! repo
-                            :remote-repo-name (str repo "-" schema-version)
-                            :reset-rtc-data-in-conn? true))}
+        (p/do! (<rtc-branch-graph! repo)
+               (<rtc-start! repo)))}
      "Upload to server")]
    :warning false))
 
@@ -110,7 +120,7 @@
                        :download
                        (notification-download-higher-schema-graph! repo graph-uuid (:remote ex-data*))
                        :create-branch
-                       (notification-upload-higher-schema-graph! repo (:local ex-data*))
+                       (notification-upload-higher-schema-graph! repo)
                        ;; else
                        (notification/show! (:ex-message start-ex) :error))
 
