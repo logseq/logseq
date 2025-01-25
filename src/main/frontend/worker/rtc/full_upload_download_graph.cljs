@@ -464,8 +464,8 @@
       (rtc-log-and-state/rtc-log :rtc.log/branch-graph {:sub-type :upload-data
                                                         :message "uploading data"})
       (m/? (http/put url {:body all-blocks-str :with-credentials? false}))
-      (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-branch-graph
-                                                  :message "requesting branch-graph"})
+      (rtc-log-and-state/rtc-log :rtc.log/branch-graph {:sub-type :request-branch-graph
+                                                        :message "requesting branch-graph"})
       (let [aes-key (c.m/<? (crypt/<gen-aes-key))
             aes-key-jwk (ldb/write-transit-str (c.m/<? (crypt/<export-key aes-key)))
             resp (m/? (ws-util/send&recv get-ws-create-task {:action "branch-graph"
