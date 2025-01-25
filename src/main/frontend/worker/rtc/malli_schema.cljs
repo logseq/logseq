@@ -64,6 +64,20 @@
 
 (def to-ws-ops-decoder (m/decoder [:sequential to-ws-op-schema] mt/string-transformer))
 
+(defn- with-shared-schema-attrs
+  [shared-map-keys malli-schema]
+  (let [[head api-schema-seq] (split-at 2 malli-schema)]
+    (vec
+     (concat
+      head
+      (map
+       (fn [api-schema]
+         (let [[api-name [type']] api-schema]
+           (if (and (some? api-name) (= :map type'))
+             [api-name (vec (concat (second api-schema) shared-map-keys))]
+             api-schema)))
+       api-schema-seq)))))
+
 (def ^:private extra-attr-map-schema
   [:map-of
    :keyword
@@ -71,14 +85,13 @@
     [:or :uuid :string]
     [:sequential [:or :uuid :string]]]])
 
-(def data-from-ws-schema
+(def data-from-ws-schema-fallback
   "TODO: split this mix schema to multiple ones"
   [:map
    [:req-id :string]
    [:profile {:optional true} :map]
    [:t {:optional true} :int]
    [:t-before {:optional true} :int]
-   [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
    [:s3-presign-url {:optional true} :string]
    [:server-schema-version {:optional true} :int]
    [:server-builtin-db-idents {:optional true} [:set :keyword]]
@@ -98,16 +111,16 @@
                                      [:user/name :string]
                                      [:user/email :string]
                                      [:user/avatar {:optional true} :string]]]]
-   [:refed-blocks {:optional true}
-    [:maybe
-     [:sequential
-      [:map
-       [:block/uuid :uuid]
-       [:db/ident {:optional true} :keyword]
-       [:block/order {:optional true} db-malli-schema/block-order]
-       [:block/parent {:optional true} :uuid]
-       [::m/default extra-attr-map-schema]]]]]
-   [:affected-blocks {:optional true}
+   [:asset-uuid->url {:optional true} [:map-of :uuid :string]]
+   [:uploaded-assets {:optional true} [:map-of :uuid :map]]
+   [:ex-data {:optional true} [:map [:type :keyword]]]
+   [:ex-message {:optional true} :string]])
+
+(def ^:private apply-ops-response-schema
+  [:map
+   [:t :int]
+   [:t-before :int]
+   [:affected-blocks
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
       [:move
@@ -152,34 +165,42 @@
        [:map
         [:op :keyword]
         [:block-uuid :uuid]]]]]]
-   [:asset-uuid->url {:optional true} [:map-of :uuid :string]]
-   [:uploaded-assets {:optional true} [:map-of :uuid :map]]
-   [:ex-data {:optional true} [:map [:type :keyword]]]
-   [:ex-message {:optional true} :string]])
+   [:refed-blocks
+    [:maybe
+     [:sequential
+      [:map
+       [:block/uuid :uuid]
+       [:db/ident {:optional true} :keyword]
+       [:block/order {:optional true} db-malli-schema/block-order]
+       [:block/parent {:optional true} :uuid]
+       [::m/default extra-attr-map-schema]]]]]
+   [:failed-ops {:optional true}
+    [:maybe [:sequential to-ws-op-schema]]]])
+
+(def data-from-ws-schema
+  (with-shared-schema-attrs
+    [[:req-id :string]
+     [:ex-message {:optional true} :string]
+     [:ex-data {:optional true} [:map [:type :keyword]]]]
+    [:multi {:dispatch :action}
+     ["register-graph-updates"
+      [:map
+       [:t :int]
+       [:max-remote-schema-version {:optional true} :string]]]
+     ["apply-ops" apply-ops-response-schema]
+
+     [nil data-from-ws-schema-fallback]]))
 
 (def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
-
-(defn- with-shared-schema-attrs
-  [malli-schema]
-  (let [[head api-schema-seq] (split-at 2 malli-schema)]
-    (vec
-     (concat
-      head
-      (map
-       (fn [api-schema]
-         (let [[api-name [type']] api-schema]
-           (if (= :map type')
-             [api-name (vec (concat (second api-schema) [[:req-id :string]
-                                                         [:action :string]
-                                                         [:profile {:optional true} :boolean]]))]
-             api-schema)))
-       api-schema-seq)))))
 
 ;;; TODO: :graph-uuid's schema :uuid instead of :string
 (def ^:large-vars/data-var data-to-ws-schema
   (mu/closed-schema
    (with-shared-schema-attrs
+     [[:req-id :string]
+      [:action :string]
+      [:profile {:optional true} :boolean]]
      [:multi {:dispatch :action}
       ["list-graphs"
        [:map]]
