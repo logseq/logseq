@@ -317,7 +317,7 @@
     (let [{:keys [conn user-uuid graph-uuid schema-version _remote-schema-version date-formatter] :as r}
           (validate-rtc-start-conditions repo token)]
       (if (instance? ExceptionInfo r)
-        (r.ex/->map r)
+        (do (prn r) (r.ex/->map r))
         (let [{:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
               (create-rtc-loop graph-uuid schema-version repo conn date-formatter token)
               *last-stop-exception (atom nil)
@@ -327,7 +327,7 @@
                                              (js/console.log :rtc-loop-task e)))
               start-ex (m/? onstarted-task)]
           (if-let [start-ex (:ex-data start-ex)]
-            (r.ex/->map start-ex)
+            (do (prn start-ex) (r.ex/->map start-ex))
             (do (reset! *rtc-loop-metadata {:repo repo
                                             :graph-uuid graph-uuid
                                             :user-uuid user-uuid
@@ -448,7 +448,7 @@
   (m/reduce {} nil (m/eduction (take 1) create-get-state-flow)))
 
 (defn new-task--upload-graph
-  [token repo remote-graph-name reset-rtc-data-in-conn?]
+  [token repo remote-graph-name]
   (let [{:keys [conn schema-version] :as r}
         (if-let [conn (worker-state/get-datascript-conn repo)]
           (if-let [schema-version (ldb/get-graph-schema-version @conn)]
@@ -461,7 +461,7 @@
         (let [major-schema-version (db-schema/major-version schema-version)
               {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
           (m/? (r.upload-download/new-task--upload-graph
-                get-ws-create-task repo conn remote-graph-name major-schema-version reset-rtc-data-in-conn?)))))))
+                get-ws-create-task repo conn remote-graph-name major-schema-version)))))))
 
 (defn new-task--branch-graph
   [token repo]

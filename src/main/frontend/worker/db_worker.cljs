@@ -831,9 +831,9 @@
      (rtc-core/new-task--get-debug-state)))
 
   (rtc-async-upload-graph
-   [this repo token remote-graph-name reset-rtc-data-in-conn?]
+   [this repo token remote-graph-name]
    (with-write-transit-str
-     (rtc-core/new-task--upload-graph token repo remote-graph-name reset-rtc-data-in-conn?)))
+     (rtc-core/new-task--upload-graph token repo remote-graph-name)))
 
   (rtc-async-branch-graph
    [this repo token]
