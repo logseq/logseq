@@ -1,6 +1,7 @@
 (ns frontend.handler.db-based.rtc
   "RTC handler"
   (:require [cljs-time.core :as t]
+            [clojure.pprint :as pp]
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -122,7 +123,14 @@
                        :create-branch
                        (notification-upload-higher-schema-graph! repo)
                        ;; else
-                       (notification/show! (:ex-message start-ex) :error))
+                       (do (prn start-ex)
+                           (notification/show! [:div
+                                                [:div (:ex-message start-ex)]
+                                                [:div (-> ex-data*
+                                                          (select-keys [:app :local :remote])
+                                                          pp/pprint
+                                                          with-out-str)]]
+                                               :error)))
 
                      :rtc.exception/lock-failed
                      (js/setTimeout #(<rtc-start! repo) 1000)
