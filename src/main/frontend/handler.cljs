@@ -142,7 +142,6 @@
   (get-system-info)
   (set-global-error-notification!)
 
-  (set! js/window.onhashchange #(state/hide-custom-context-menu!)) ;; close context menu when page navs
   (register-components-fns!)
   (user-handler/restore-tokens-from-localstorage)
   (state/set-db-restoring! true)
