@@ -27,28 +27,27 @@
                     {:property property-ident}))))
 
 (defn- build-property-value-tx-data
-  ([conn block property-id value]
-   (build-property-value-tx-data conn block property-id value (= property-id :logseq.task/status)))
-  ([conn block property-id value status?]
-   (when (some? value)
-     (let [old-value (get block property-id)
-           property (d/entity @conn property-id)
-           multiple-values? (= :db.cardinality/many (:db/cardinality property))
-           retract-multiple-values? (and multiple-values? (sequential? value))
-           multiple-values-empty? (and (sequential? old-value)
-                                       (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
-           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
-                             true
-                             (assoc property-id value)
-                             (and status? (or (empty? (:block/tags block)) (ldb/internal-page? block)))
-                             (assoc :block/tags :logseq.class/Task))]
-       (cond-> []
-         multiple-values-empty?
-         (conj [:db/retract (:db/id update-block-tx) property-id :logseq.property/empty-placeholder])
-         retract-multiple-values?
-         (conj [:db/retract (:db/id update-block-tx) property-id])
-         true
-         (conj update-block-tx))))))
+  [conn block property-id value]
+  (when (some? value)
+    (let [old-value (get block property-id)
+          property (d/entity @conn property-id)
+          multiple-values? (= :db.cardinality/many (:db/cardinality property))
+          retract-multiple-values? (and multiple-values? (sequential? value))
+          multiple-values-empty? (and (sequential? old-value)
+                                      (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
+          update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
+                            true
+                            (assoc property-id value)
+                            (and (contains? #{:logseq.task/status :logseq.task/scheduled :logseq.task/deadline} property-id)
+                                 (or (empty? (:block/tags block)) (ldb/internal-page? block)))
+                            (assoc :block/tags :logseq.class/Task))]
+      (cond-> []
+        multiple-values-empty?
+        (conj [:db/retract (:db/id update-block-tx) property-id :logseq.property/empty-placeholder])
+        retract-multiple-values?
+        (conj [:db/retract (:db/id update-block-tx) property-id])
+        true
+        (conj update-block-tx)))))
 
 (defn- get-property-value-schema
   "Gets a malli schema to validate the property value for the given property type and builds
@@ -210,8 +209,7 @@
                         {:type :notification
                          :payload {:message msg'
                                    :type :warning}})))
-      (let [status? (= :logseq.task/status (:db/ident property))
-            tx-data (build-property-value-tx-data conn block property-id new-value status?)]
+      (let [tx-data (build-property-value-tx-data conn block property-id new-value)]
         (ldb/transact! conn tx-data {:outliner-op :save-block})))))
 
 (defn create-property-text-block!
@@ -332,11 +330,10 @@
         v' (if (db-property-type/value-ref-property-types property-type)
              (convert-ref-property-value conn property-id v property-type)
              v)
-        status? (= :logseq.task/status (:db/ident property))
         txs (mapcat
              (fn [eid]
                (if-let [block (d/entity @conn eid)]
-                 (build-property-value-tx-data conn block property-id v' status?)
+                 (build-property-value-tx-data conn block property-id v')
                  (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
              block-eids)]
     (when (seq txs)
