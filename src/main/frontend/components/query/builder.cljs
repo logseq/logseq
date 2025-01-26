@@ -549,60 +549,55 @@
 
 (rum/defc clause-inner
   [*tree loc clause & {:keys [operator?]}]
-  (ui/dropdown
-   (fn [{:keys [toggle-fn]}]
-     (if operator?
-       [:a.flex.text-sm.query-clause {:on-click toggle-fn}
-        clause]
-
-       [:div.flex.flex-row.items-center.gap-2.px-1.rounded.border.query-clause-btn
-        [:a.flex.query-clause {:on-click toggle-fn}
-         (dsl-human-output clause)]]))
-   (fn [{:keys [toggle-fn]}]
-     [:div.p-4.flex.flex-col.gap-2
-      [:a {:title "Delete"
-           :on-click (fn []
-                       (swap! *tree (fn [q]
-                                      (let [loc' (if operator? (vec (butlast loc)) loc)]
-                                        (query-builder/remove-element q loc'))))
-                       (toggle-fn))}
-       "Delete"]
-
-      (when operator?
-        [:a {:title "Unwrap this operator"
-             :on-click (fn []
-                         (swap! *tree (fn [q]
-                                        (let [loc' (vec (butlast loc))]
-                                          (query-builder/unwrap-operator q loc'))))
-                         (toggle-fn))}
-         "Unwrap"])
-
-      [:div.font-medium.text-sm "Wrap this filter with: "]
-      [:div.flex.flex-row.gap-2
-       (for [op query-builder/operators]
-         (ui/button (string/upper-case (name op))
-                    :intent "logseq"
-                    :small? true
+  (let [popup [:div.p-4.flex.flex-col.gap-2
+               [:a {:title "Delete"
                     :on-click (fn []
                                 (swap! *tree (fn [q]
                                                (let [loc' (if operator? (vec (butlast loc)) loc)]
-                                                 (query-builder/wrap-operator q loc' op))))
-                                (toggle-fn))))]
+                                                 (query-builder/remove-element q loc'))))
+                                (shui/popup-hide!))}
+                "Delete"]
 
-      (when operator?
-        [:div
-         [:div.font-medium.text-sm "Replace with: "]
-         [:div.flex.flex-row.gap-2
-          (for [op (remove #{(keyword (string/lower-case clause))} query-builder/operators)]
-            (ui/button (string/upper-case (name op))
-                       :intent "logseq"
-                       :small? true
-                       :on-click (fn []
-                                   (swap! *tree (fn [q]
-                                                  (query-builder/replace-element q loc op)))
-                                   (toggle-fn))))]])])
-   {:modal-class (util/hiccup->class
-                  "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg.w-64")}))
+               (when operator?
+                 [:a {:title "Unwrap this operator"
+                      :on-click (fn []
+                                  (swap! *tree (fn [q]
+                                                 (let [loc' (vec (butlast loc))]
+                                                   (query-builder/unwrap-operator q loc'))))
+                                  (shui/popup-hide!))}
+                  "Unwrap"])
+
+               [:div.font-medium.text-sm "Wrap this filter with: "]
+               [:div.flex.flex-row.gap-2
+                (for [op query-builder/operators]
+                  (ui/button (string/upper-case (name op))
+                             :intent "logseq"
+                             :small? true
+                             :on-click (fn []
+                                         (swap! *tree (fn [q]
+                                                        (let [loc' (if operator? (vec (butlast loc)) loc)]
+                                                          (query-builder/wrap-operator q loc' op))))
+                                         (shui/popup-hide!))))]
+
+               (when operator?
+                 [:div
+                  [:div.font-medium.text-sm "Replace with: "]
+                  [:div.flex.flex-row.gap-2
+                   (for [op (remove #{(keyword (string/lower-case clause))} query-builder/operators)]
+                     (ui/button (string/upper-case (name op))
+                                :intent "logseq"
+                                :small? true
+                                :on-click (fn []
+                                            (swap! *tree (fn [q]
+                                                           (query-builder/replace-element q loc op)))
+                                            (shui/popup-hide!))))]])]]
+    (if operator?
+      [:a.flex.text-sm.query-clause {:on-click #(shui/popup-show! (.-target %) popup {:align :start})}
+       clause]
+
+      [:div.flex.flex-row.items-center.gap-2.px-1.rounded.border.query-clause-btn
+       [:a.flex.query-clause {:on-click #(shui/popup-show! (.-target %) popup {:align :start})}
+        (dsl-human-output clause)]])))
 
 (rum/defc clause
   [*tree *find loc clauses]
