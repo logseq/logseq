@@ -11,22 +11,24 @@
   [db content]
   (if (instance? js/RegExp content)
     (->> content
-         (d/q '[:find [(pull ?b [*]) ...]
+         (d/q '[:find [?b ...]
                 :in $ ?pattern
                 :where
                 [?b :block/title ?content]
                 [?b :block/page]
                 [(re-find ?pattern ?content)]]
               db)
-         first)
+         first
+         (d/entity db))
     (->> content
-         (d/q '[:find [(pull ?b [*]) ...]
+         (d/q '[:find [?b ...]
                 :in $ ?content
                 :where
                 [?b :block/title ?content]
                 [?b :block/page]]
               db)
-         first)))
+         first
+         (d/entity db))))
 
 (defn find-page-by-title
   "Find first page by its title"

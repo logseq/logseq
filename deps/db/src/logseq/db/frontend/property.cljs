@@ -673,7 +673,7 @@
   (or (:block/title ent)
       (:logseq.property/value ent)))
 
-(defn ref->property-value-content
+(defn- ref->property-value-content
   "Given a ref from a pulled query e.g. `{:db/id X}`, gets a readable name for
   the property value of a ref type property"
   [db ref]
