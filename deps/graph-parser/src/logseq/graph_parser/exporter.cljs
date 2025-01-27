@@ -177,7 +177,7 @@
 
 (defn- logseq-class-ident?
   [k]
-  (and (qualified-keyword? k) (= "logseq.class" (namespace k))))
+  (and (qualified-keyword? k) (db-class/logseq-class? k)))
 
 (defn- convert-tags-to-classes
   "Handles converting tags to classes and any post processing of it e.g.
