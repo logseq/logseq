@@ -45,7 +45,7 @@
   db-attribute-ident. It's important to grow this list purposefully and have it
   start with 'logseq' to allow for users and 3rd party plugins to provide their
   own namespaces to core concepts."
-  (into db-property/logseq-property-namespaces #{"logseq.class" "logseq.kv"}))
+  (into db-property/logseq-property-namespaces #{db-class/logseq-class "logseq.kv"}))
 
 (def logseq-ident
   [:and :keyword [:fn

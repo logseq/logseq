@@ -1,7 +1,6 @@
 (ns frontend.components.objects
   "Provides table views for class objects and property related objects"
-  (:require [clojure.string :as string]
-            [frontend.components.filepicker :as filepicker]
+  (:require [frontend.components.filepicker :as filepicker]
             [frontend.components.views :as views]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -21,7 +20,8 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- get-class-objects
   [class]
@@ -131,7 +131,7 @@
                   columns*)
         columns (if (= (:db/ident class) :logseq.class/Asset)
                   ;; Insert in front of tag's properties
-                  (let [[before-cols after-cols] (split-with #(not (string/starts-with? (str (namespace (:id %))) "logseq.property")) columns)]
+                  (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)]
                     (concat before-cols [(build-asset-file-column config)] after-cols))
                   columns)]
 
