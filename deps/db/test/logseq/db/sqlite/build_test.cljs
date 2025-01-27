@@ -1,6 +1,5 @@
 (ns logseq.db.sqlite.build-test
   (:require [cljs.test :refer [deftest is]]
-            [datascript.core :as d]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.test.helper :as db-test]))
