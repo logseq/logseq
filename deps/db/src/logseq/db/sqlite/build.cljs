@@ -44,6 +44,17 @@
       val)
     val))
 
+(defn- block-with-timestamps
+  "Only adds timestamps to block if they don't exist"
+  [block]
+  (let [updated-at (common-util/time-ms)
+        block (cond-> block
+                (nil? (:block/updated-at block))
+                (assoc :block/updated-at updated-at)
+                (nil? (:block/created-at block))
+                (assoc :block/created-at updated-at))]
+    block))
+
 (defn- get-ident [all-idents kw]
   (if (and (qualified-keyword? kw) (db-property/logseq-property? kw))
     kw
@@ -125,7 +136,7 @@
       (seq pvalue-tx-m)
       (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
       true
-      (conj (merge (sqlite-util/block-with-timestamps new-block)
+      (conj (merge (block-with-timestamps new-block)
                    (dissoc m :build/properties :build/tags)
                    (when (seq properties)
                      (->block-properties (merge properties (db-property-build/build-properties-with-ref-values pvalue-tx-m))
@@ -366,7 +377,7 @@
            (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
            true
            (conj
-            (sqlite-util/block-with-timestamps
+            (block-with-timestamps
              (merge
               new-page
               (when (seq (:build/properties page))
