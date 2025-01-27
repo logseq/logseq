@@ -21,7 +21,8 @@
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.outliner.db-pipeline :as db-pipeline]
             [promesa.core :as p]
-            [datascript.impl.entity :as de]))
+            [datascript.impl.entity :as de]
+            [logseq.db.frontend.entity-plus :as entity-plus]))
 
 ;; Helpers
 ;; =======
@@ -535,16 +536,18 @@
 
     (testing "replacing refs in :block/title when :remove-inline-tags? set"
       (is (= 2
-             (->> (db-test/find-block-by-content @conn #"replace with same start string")
-                  :block/title
+             (->> (entity-plus/lookup-kv-then-entity
+                   (db-test/find-block-by-content @conn #"replace with same start string")
+                   :block/raw-title)
                   (re-seq db-content/id-ref-pattern)
                   distinct
                   count))
           "A block with ref names that start with same string has 2 distinct refs")
 
       (is (= 1
-             (->> (db-test/find-block-by-content @conn #"replace case insensitive")
-                  :block/title
+             (->> (entity-plus/lookup-kv-then-entity
+                   (db-test/find-block-by-content @conn #"replace case insensitive")
+                   :block/raw-title)
                   (re-seq db-content/id-ref-pattern)
                   distinct
                   count))
