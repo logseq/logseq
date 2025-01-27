@@ -10,19 +10,21 @@
         _ (sqlite-build/create-blocks
            conn
            [{:page {:block/title "page1"}
-             :blocks [{:block/title "Jrue Holiday" :build/tags [:Person]}]}
+             :blocks [{:block/title "Jrue Holiday" :build/tags [:Person]}
+                      {:block/title "some task" :build/tags [:logseq.class/Task]}]}
             {:page {:block/title "Jayson Tatum" :build/tags [:Person]}}])]
-    (is (= {:block/tags [{:block/title "Person"}]}
-           (first (d/q '[:find [(pull ?b [{:block/tags [:block/title]}]) ...]
-                         :where [?b :block/title "Jrue Holiday"]]
-                       @conn)))
+    (is (= [:user.class/Person]
+           (mapv :db/ident (:block/tags (db-test/find-block-by-content @conn "Jrue Holiday"))))
         "Person class is created and correctly associated to a block")
 
-    (is (= {:block/tags [{:block/title "Page"} {:block/title "Person"}]}
-           (first (d/q '[:find [(pull ?b [{:block/tags [:block/title]}]) ...]
-                         :where [?b :block/title "Jayson Tatum"]]
-                       @conn)))
-        "Person class is created and correctly associated to a page")))
+    (is (contains?
+         (set (map :db/ident (:block/tags (db-test/find-page-by-title @conn "Jayson Tatum"))))
+         :user.class/Person)
+        "Person class is created and correctly associated to a page")
+
+    (is (= [:logseq.class/Task]
+           (mapv :db/ident (:block/tags (db-test/find-block-by-content @conn "some task"))))
+        "Built-in class is associatedly correctly")))
 
 (deftest build-properties-user
   (let [conn (db-test/create-conn)
@@ -32,21 +34,15 @@
              :blocks [{:block/title "Jrue Holiday" :build/properties {:description "Clutch defense"}}]}
             {:page {:block/title "Jayson Tatum" :build/properties {:description "Awesome selfless basketball"}}}])]
     (is (= "Clutch defense"
-           (->> @conn
-                (d/q '[:find [(pull ?b [*]) ...]
-                       :where [?b :block/title "Jrue Holiday"]])
-                first
+           (->> (db-test/find-block-by-content @conn "Jrue Holiday")
                 :user.property/description
-                (db-property/ref->property-value-contents @conn)))
+                db-property/property-value-content))
         "description property is created and correctly associated to a block")
 
     (is (= "Awesome selfless basketball"
-           (->> @conn
-                (d/q '[:find [(pull ?b [*]) ...]
-                       :where [?b :block/title "Jayson Tatum"]])
-                first
+           (->> (db-test/find-page-by-title @conn "Jayson Tatum")
                 :user.property/description
-                (db-property/ref->property-value-contents @conn)))
+                db-property/property-value-content))
         "description property is created and correctly associated to a page")))
 
 (deftest build-properties-built-in
@@ -58,20 +54,14 @@
                        :build/properties {:logseq.task/status :logseq.task/status.doing}}
                       {:block/title "some slide"
                        :build/properties {:logseq.property/background-image "https://placekitten.com/200/300"}}]}])]
-    (is (= "Doing"
-           (->> @conn
-                (d/q '[:find [(pull ?b [*]) ...]
-                       :where [?b :block/title "some todo"]])
-                first
+    (is (= :logseq.task/status.doing
+           (->> (db-test/find-block-by-content @conn "some todo")
                 :logseq.task/status
-                (db-property/ref->property-value-contents @conn)))
+                :db/ident))
         "built-in property with closed value is created and correctly associated to a block")
 
     (is (= "https://placekitten.com/200/300"
-           (->> @conn
-                (d/q '[:find [(pull ?b [*]) ...]
-                       :where [?b :block/title "some slide"]])
-                first
+           (->> (db-test/find-block-by-content @conn "some slide")
                 :logseq.property/background-image
-                (db-property/ref->property-value-contents @conn)))
+                db-property/property-value-content))
         "built-in :default property is created and correctly associated to a block")))

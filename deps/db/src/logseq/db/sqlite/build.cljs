@@ -56,7 +56,8 @@
     block))
 
 (defn- get-ident [all-idents kw]
-  (if (and (qualified-keyword? kw) (db-property/logseq-property? kw))
+  (if (and (qualified-keyword? kw)
+           (or (db-property/logseq-property? kw) (db-class/logseq-class? kw)))
     kw
     (or (get all-idents kw)
         (throw (ex-info (str "No ident found for " (pr-str kw)) {})))))
@@ -521,9 +522,11 @@
   from any uses of :build/properties and :build/schema.properties. Creates classes from any uses of
   :build/tags"
   [{:keys [pages-and-blocks properties classes] :as options}]
-  (let [new-classes (-> (concat
-                         (mapcat #(mapcat :build/tags (:blocks %)) pages-and-blocks)
-                         (mapcat #(get-in % [:page :build/tags]) pages-and-blocks))
+  (let [new-classes (-> (remove
+                         #(and (keyword? %) (db-class/logseq-class? %))
+                         (concat
+                          (mapcat #(mapcat :build/tags (:blocks %)) pages-and-blocks)
+                          (mapcat #(get-in % [:page :build/tags]) pages-and-blocks)))
                         set
                         (set/difference (set (keys classes)))
                         (zipmap (repeat {})))
