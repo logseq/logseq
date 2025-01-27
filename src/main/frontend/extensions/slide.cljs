@@ -32,7 +32,7 @@
                                       [k
                                        (if (:db/id v)
                                          ;; Can't use db-property-util/lookup b/c vals aren't entities
-                                         (db-property/ref->property-value-content (conn/get-db) v)
+                                         (db-property/ref->property-value-contents (conn/get-db) v)
                                          v)])))
                             (into {})))
                      (:block/properties block))]

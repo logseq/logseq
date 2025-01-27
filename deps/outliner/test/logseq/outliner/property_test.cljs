@@ -70,7 +70,7 @@
           new-property-value (:user.property/default (db-test/find-block-by-content @conn "b2"))]
 
       (is (some? (:db/id new-property-value)) "New property value created")
-      (is (= "" (db-property/ref->property-value-content @conn new-property-value))
+      (is (= "" (db-property/property-value-content new-property-value))
           "Property value has correct content")
       (is (= :user.property/default
              (get-in (d/entity @conn (:db/id new-property-value)) [:logseq.property/created-from-property :db/ident]))
@@ -87,7 +87,7 @@
           new-property-value (:user.property/num (db-test/find-block-by-content @conn "b2"))]
 
       (is (some? (:db/id new-property-value)) "New property value created")
-      (is (= 3 (db-property/ref->property-value-content @conn new-property-value))
+      (is (= 3 (db-property/property-value-content new-property-value))
           "Property value has correct content")
       (is (= :user.property/num
              (get-in (d/entity @conn (:db/id new-property-value)) [:logseq.property/created-from-property :db/ident]))
@@ -112,7 +112,7 @@
           new-property-values (:user.property/num-many (db-test/find-block-by-content @conn "b2"))]
 
       (is (seq new-property-values) "New property values created")
-      (is (= #{3 4 5} (db-property/ref->property-value-contents @conn new-property-values))
+      (is (= #{3 4 5} (set (map db-property/property-value-content new-property-values)))
           "Property value has correct content"))))
 
 (deftest set-block-property-basic-cases
@@ -191,7 +191,7 @@
         _ (outliner-property/batch-set-property! conn block-ids :logseq.property/order-list-type "number")
         updated-blocks (map #(db-test/find-block-by-content @conn %) ["item 1" "item 2"])]
     (is (= ["number" "number"]
-           (map #(db-property/ref->property-value-contents @conn (:logseq.property/order-list-type %))
+           (map #(db-property/property-value-content (:logseq.property/order-list-type %))
                 updated-blocks))
         "Property values are batch set")))
 
