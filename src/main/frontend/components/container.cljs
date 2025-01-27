@@ -320,8 +320,8 @@
           (= (namespace nav) "tag")
           (when db-based?
             (let [name'' (name nav)
-                  name' (get {"assets" "Asset" "tasks" "Task"} name'')]
-              (when-let [tag-uuid (and name' (:block/uuid (db/entity (keyword "logseq.class" name'))))]
+                  class-ident (get {"assets" :logseq.class/Asset  "tasks" :logseq.class/Task} name'')]
+              (when-let [tag-uuid (and class-ident (:block/uuid (db/entity class-ident)))]
                 (sidebar-item
                  {:class (str "tag-view-nav " name'')
                   :title (tt (keyword "left-side-bar" name'')

@@ -127,3 +127,10 @@
   (let [db-ident (create-user-class-ident-from-name (:block/title page-m))
         db-ident' (db-ident/ensure-unique-db-ident db db-ident)]
     (sqlite-util/build-new-class (assoc page-m :db/ident db-ident'))))
+
+(defonce logseq-class "logseq.class")
+
+(defn logseq-class?
+  "Determines if keyword is a logseq class"
+  [kw]
+  (= logseq-class (namespace kw)))
