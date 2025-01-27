@@ -5,8 +5,6 @@ logseq.db.frontend.rules/db-query-dsl-rules
 ;; API
 logseq.db.frontend.rules/extract-rules
 ;; API
-logseq.db.frontend.property.type/infer-property-type-from-value
-;; API
 logseq.db.frontend.rules/rules
 ;; API
 logseq.db.frontend.rules/rules-dependencies
@@ -15,7 +13,7 @@ logseq.db.frontend.inputs/resolve-input
 ;; API
 logseq.db.frontend.class/build-new-class
 ;; API
-logseq.db.frontend.class/page-children-classes
+logseq.db.frontend.class/logseq-class?
 ;; API
 logseq.db.frontend.db-ident/ensure-unique-db-ident
 ;; API
