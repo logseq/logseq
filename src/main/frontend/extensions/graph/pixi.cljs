@@ -67,7 +67,8 @@
                 (-> (forceLink)
                     (.id (fn [d] (.-id d)))
                     (.distance link-dist)
-                    (.links links)))
+                    (.links links)
+                    (.strength 1)))
         (.force "charge"
                 ;; The many-body (or n-body) force applies mutually amongst all nodes.
                 ;; It can be used to simulate gravity or electrostatic charge.
@@ -88,13 +89,11 @@
                 (-> (forceCollide)
                     (.radius (+ 8 18))
                     (.iterations 2)))
-        (.force "x" (-> (forceX 0) (.strength 0.02)))
-        (.force "y" (-> (forceY 0) (.strength 0.02)))
         (.force "center" (forceCenter))
         ;; The decay factor is akin to atmospheric friction; after the application of any forces during a tick,
         ;; each node’s velocity is multiplied by 1 - decay. As with lowering the alpha decay rate,
         ;; less velocity decay may converge on a better solution, but risks numerical instabilities and oscillation.
-        (.velocityDecay 0.5))
+        (.velocityDecay 0.3))
     (reset! *simulation simulation)
     simulation))
 
