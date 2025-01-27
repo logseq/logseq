@@ -386,9 +386,8 @@
              (map :db/ident (:block/tags (db-test/find-page-by-title @conn "life"))))
           "When a class is used and referenced on the same page, there should only be one instance of it")
 
-      (is (= ["life"]
-             (->> (:block/tags (db-test/find-block-by-content @conn #"with namespace tag"))
-                  (mapv #(db-property/ref->property-value-contents @conn %))))
+      (is (= [:user.class/Quotes___life]
+             (mapv :db/ident (:block/tags (db-test/find-block-by-content @conn #"with namespace tag"))))
           "Block tagged with namespace tag is only associated with leaf child tag")
 
       (is (= []
