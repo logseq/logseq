@@ -12,7 +12,6 @@
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]
@@ -21,7 +20,8 @@
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.outliner.db-pipeline :as db-pipeline]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [datascript.impl.entity :as de]))
 
 ;; Helpers
 ;; =======
@@ -34,17 +34,18 @@
                        {:deps rules/rules-dependencies}))
 
 (defn- find-block-by-property [db property]
-  (d/q '[:find [(pull ?b [*]) ...]
+  (d/q '[:find [?b ...]
          :in $ ?prop %
          :where (has-property ?b ?prop)]
        db property (extract-rules [:has-property])))
 
 (defn- find-block-by-property-value [db property property-value]
-  (->> (d/q '[:find [(pull ?b [*]) ...]
+  (->> (d/q '[:find [?b ...]
               :in $ ?prop ?prop-value %
               :where (property ?b ?prop ?prop-value)]
             db property property-value (extract-rules [:property]))
-       first))
+       first
+       (d/entity db)))
 
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
@@ -126,19 +127,19 @@
                    (reset! gp-block/*export-to-db-graph? false)))))
 
 (defn- readable-properties
-  [db query-ent]
-  (->> (db-property/properties query-ent)
-       (map (fn [[k v]]
-              (if (boolean? v)
-                [k v]
-                [k
-                 (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
-                   (if (= :block/tags k)
-                     (mapv #(:db/ident (d/entity db (:db/id %))) v)
-                     (if (db-property-type/all-ref-property-types built-in-type)
-                       (db-property/ref->property-value-contents db v)
-                       v))
-                   (db-property/ref->property-value-contents db v))])))
+  [ent]
+  (->> (db-property/properties ent)
+       (mapv (fn [[k v]]
+               [k
+                (cond
+                  (= :block/tags k)
+                  (mapv :db/ident v)
+                  (and (set? v) (every? de/entity? v))
+                  (set (map db-property/property-value-content v))
+                  (de/entity? v)
+                  (db-property/property-value-content v)
+                  :else
+                  v)]))
        (into {})))
 
 ;; Tests
@@ -254,10 +255,10 @@
               :user.property/prop-num 5
               :user.property/prop-string "woot"}
              (update-vals (db-property/properties (db-test/find-block-by-content @conn "b1"))
-                          (fn [v] (if (map? v) (db-property/ref->property-value-content @conn v) v))))
+                          (fn [v] (if (de/entity? v) (db-property/property-value-content v) v))))
           "Basic block has correct properties")
       (is (= #{"prop-num" "prop-string" "prop-bool"}
-             (->> (d/entity @conn (:db/id (db-test/find-block-by-content @conn "b1")))
+             (->> (db-test/find-block-by-content @conn "b1")
                   :block/refs
                   (map :block/title)
                   set))
@@ -265,17 +266,17 @@
 
       (is (= {:user.property/prop-num2 10
               :block/tags [:logseq.class/Page]}
-             (readable-properties @conn (db-test/find-page-by-title @conn "new page")))
+             (readable-properties (db-test/find-page-by-title @conn "new page")))
           "New page has correct properties")
       (is (= {:user.property/prop-bool true
               :user.property/prop-num 5
               :user.property/prop-string "yeehaw"
               :block/tags [:logseq.class/Page :user.class/Some---Namespace]}
-             (readable-properties @conn (db-test/find-page-by-title @conn "some page")))
+             (readable-properties (db-test/find-page-by-title @conn "some page")))
           "Existing page has correct properties")
 
       (is (= {:user.property/rating 5.5}
-             (readable-properties @conn (db-test/find-block-by-content @conn ":rating float")))
+             (readable-properties (db-test/find-block-by-content @conn ":rating float")))
           "Block with float property imports as a float")
 
       (is (= []
@@ -293,17 +294,17 @@
 
       (let [b (db-test/find-block-by-content @conn #"MEETING TITLE")]
         (is (= {}
-               (and b (readable-properties @conn b)))
+               (and b (readable-properties b)))
             ":template properties are ignored to not invalidate its property types"))
 
       (is (= 20221126
-             (-> (readable-properties @conn (db-test/find-block-by-content @conn "only deadline"))
+             (-> (readable-properties (db-test/find-block-by-content @conn "only deadline"))
                  :logseq.task/deadline
                  date-time-util/ms->journal-day))
           "deadline block has correct journal as property value")
 
       (is (= 20221125
-             (-> (readable-properties @conn (db-test/find-block-by-content @conn "only scheduled"))
+             (-> (readable-properties (db-test/find-block-by-content @conn "only scheduled"))
                  :logseq.task/scheduled
                  date-time-util/ms->journal-day))
           "scheduled block converted to correct deadline")
@@ -315,23 +316,23 @@
           "Only one journal page exists when deadline is on same day as journal")
 
       (is (= {:logseq.task/priority "High"}
-             (readable-properties @conn (db-test/find-block-by-content @conn "high priority")))
+             (readable-properties (db-test/find-block-by-content @conn "high priority")))
           "priority block has correct property")
 
       (is (= {:logseq.task/status "Doing" :logseq.task/priority "Medium" :block/tags [:logseq.class/Task]}
-             (readable-properties @conn (db-test/find-block-by-content @conn "status test")))
+             (readable-properties (db-test/find-block-by-content @conn "status test")))
           "status block has correct task properties and class")
 
       (is (= #{:logseq.task/status :block/tags}
-             (set (keys (readable-properties @conn (db-test/find-block-by-content @conn "old todo block")))))
+             (set (keys (readable-properties (db-test/find-block-by-content @conn "old todo block")))))
           "old task properties like 'todo' are ignored")
 
       (is (= {:logseq.property/order-list-type "number"}
-             (readable-properties @conn (db-test/find-block-by-content @conn "list one")))
+             (readable-properties (db-test/find-block-by-content @conn "list one")))
           "numered block has correct property")
 
       (is (= #{"gpt"}
-             (:block/alias (readable-properties @conn (db-test/find-page-by-title @conn "chat-gpt"))))
+             (:block/alias (readable-properties (db-test/find-page-by-title @conn "chat-gpt"))))
           "alias set correctly")
       (is (= ["y"]
              (->> (d/q '[:find [?b ...] :where [?b :block/title "y"] [?b :logseq.property/parent]]
@@ -344,7 +345,7 @@
 
       (is (= {:logseq.property.linked-references/includes #{"Oct 9th, 2024"}
               :logseq.property.linked-references/excludes #{"ref2"}}
-             (select-keys (readable-properties @conn (db-test/find-page-by-title @conn "chat-gpt"))
+             (select-keys (readable-properties (db-test/find-page-by-title @conn "chat-gpt"))
                           [:logseq.property.linked-references/excludes :logseq.property.linked-references/includes]))
           "linked ref filters set correctly"))
 
@@ -355,7 +356,7 @@
               :logseq.property.table/ordered-columns [:block/title :user.property/prop-string :user.property/prop-num]
               :logseq.property/query "(property :prop-string)"
               :block/tags [:logseq.class/Query]}
-             (readable-properties @conn (find-block-by-property-value @conn :logseq.property/query "(property :prop-string)")))
+             (readable-properties (find-block-by-property-value @conn :logseq.property/query "(property :prop-string)")))
           "simple query block has correct query properties")
       (is (= "For example, here's a query with title text:"
              (:block/title (db-test/find-block-by-content @conn #"query with title text")))
@@ -364,7 +365,7 @@
               :logseq.property/query "{:query (task todo doing)}"
               :block/tags [:logseq.class/Query]
               :logseq.property.table/ordered-columns [:block/title]}
-             (readable-properties @conn (db-test/find-block-by-content @conn #"tasks with")))
+             (readable-properties (db-test/find-block-by-content @conn #"tasks with")))
           "Advanced query has correct query properties")
       (is (= "tasks with todo and doing"
              (:block/title (db-test/find-block-by-content @conn #"tasks with")))
@@ -372,7 +373,7 @@
 
       ;; Cards
       (is (= {:block/tags [:logseq.class/Card]}
-             (readable-properties @conn (db-test/find-block-by-content @conn "card 1")))
+             (readable-properties (db-test/find-block-by-content @conn "card 1")))
           "None of the card properties are imported since they are deprecated"))
 
     (testing "tags convert to classes"
@@ -406,12 +407,12 @@
         (is (= [{:parent "n1" :child "x"}
                 {:parent "x" :child "z"}
                 {:parent "x" :child "y"}]
-               (rest (expand-children (d/entity @conn (:db/id (db-test/find-page-by-title @conn "n1"))) nil)))
+               (rest (expand-children (db-test/find-page-by-title @conn "n1") nil)))
             "First namespace tests duplicate parent page name")
         (is (= [{:parent "n2" :child "x"}
                 {:parent "x" :child "z"}
                 {:parent "n2" :child "alias"}]
-               (rest (expand-children (d/entity @conn (:db/id (db-test/find-page-by-title @conn "n2"))) nil)))
+               (rest (expand-children (db-test/find-page-by-title @conn "n2") nil)))
             "First namespace tests duplicate child page name and built-in page name")))
 
     (testing "journal timestamps"
@@ -439,7 +440,7 @@
              (:logseq.property/type (d/entity @conn :user.property/description)))
           ":default property to :node (or any non :default value) remains :default")
       (is (= "[[Jakob]]"
-             (:user.property/description (readable-properties @conn (db-test/find-block-by-content @conn #":default to :node"))))
+             (:user.property/description (readable-properties (db-test/find-block-by-content @conn #":default to :node"))))
           ":default to :node property saves :default property value default with full text")
 
       (testing "with changes to upstream/existing property value"
@@ -447,17 +448,17 @@
                (:logseq.property/type (d/entity @conn :user.property/duration)))
             ":number property to :default value changes to :default")
         (is (= "20"
-               (:user.property/duration (readable-properties @conn (db-test/find-block-by-content @conn "existing :number to :default"))))
+               (:user.property/duration (readable-properties (db-test/find-block-by-content @conn "existing :number to :default"))))
             "existing :number property value correctly saved as :default")
 
         (is (= {:logseq.property/type :default :db/cardinality :db.cardinality/many}
                (select-keys (d/entity @conn :user.property/people) [:logseq.property/type :db/cardinality]))
             ":node property to :default value changes to :default and keeps existing cardinality")
         (is (= #{"[[Jakob]] [[Gabriel]]"}
-               (:user.property/people (readable-properties @conn (db-test/find-block-by-content @conn ":node people"))))
+               (:user.property/people (readable-properties (db-test/find-block-by-content @conn ":node people"))))
             "existing :node property value correctly saved as :default with full text")
         (is (= #{"[[Gabriel]] [[Jakob]]"}
-               (:user.property/people (readable-properties @conn (db-test/find-block-by-content @conn #"pending block for :node"))))
+               (:user.property/people (readable-properties (db-test/find-block-by-content @conn #"pending block for :node"))))
             "pending :node property value correctly saved as :default with full text")
         (is (some? (db-test/find-page-by-title @conn "Jakob"))
             "Previous :node property value still exists")
@@ -510,7 +511,7 @@
     (testing "whiteboards"
       (let [block-with-props (db-test/find-block-by-content @conn #"block with props")]
         (is (= {:user.property/prop-num 10}
-               (readable-properties @conn block-with-props)))
+               (readable-properties block-with-props)))
         (is (= "block with props" (:block/title block-with-props)))))))
 
 (deftest-async export-basic-graph-with-convert-all-tags-option-disabled
@@ -561,10 +562,10 @@
             "tag page is not a class")
 
         (is (= #{"Movie"}
-               (:logseq.property/page-tags (readable-properties @conn tagged-page)))
+               (:logseq.property/page-tags (readable-properties tagged-page)))
             "tagged page has existing page imported as a tag to page-tags")
         (is (= #{"LargeLanguageModel" "fun" "ai"}
-               (:logseq.property/page-tags (readable-properties @conn (db-test/find-page-by-title @conn "chat-gpt"))))
+               (:logseq.property/page-tags (readable-properties (db-test/find-page-by-title @conn "chat-gpt"))))
             "tagged page has new page and other pages marked with '#' and '[[]]` imported as tags to page-tags")))))
 
 (deftest-async export-files-with-tag-classes-option
@@ -581,7 +582,7 @@
       (is (= (:block/title block) "Inception")
           "tagged block with configured tag strips tag from content")
       (is (= [:user.class/Movie]
-             (:block/tags (readable-properties @conn block)))
+             (:block/tags (readable-properties block)))
           "tagged block has configured tag imported as a class")
 
       (is (= [:logseq.class/Tag] (mapv :db/ident (:block/tags tag-page)))
@@ -590,7 +591,7 @@
           "unconfigured tag page is not a class")
 
       (is (= {:block/tags [:logseq.class/Page :user.class/Movie]}
-             (readable-properties @conn (db-test/find-page-by-title @conn "Interstellar")))
+             (readable-properties (db-test/find-page-by-title @conn "Interstellar")))
           "tagged page has configured tag imported as a class"))))
 
 (deftest-async export-files-with-property-classes-option
@@ -624,7 +625,7 @@
       (is (= (:block/title block) "The Creator")
           "tagged block with configured tag strips tag from content")
       (is (= [:user.class/Movie]
-             (:block/tags (readable-properties @conn block)))
+             (:block/tags (readable-properties block)))
           "tagged block has configured tag imported as a class")
       (is (= (:user.property/testtagclass block) (:block/tags block))
           "tagged block can have another property that references the same class it is tagged with,
@@ -636,7 +637,7 @@
           "No page exists for configured property")
 
       (is (= #{:user.class/Property :logseq.class/Property}
-             (set (:block/tags (readable-properties @conn (db-test/find-page-by-title @conn "url")))))
+             (set (:block/tags (readable-properties (db-test/find-page-by-title @conn "url")))))
           "tagged page has correct tags including one from option"))))
 
 (deftest-async export-files-with-remove-inline-tags
