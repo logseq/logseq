@@ -57,7 +57,8 @@
 
 (defn- get-ident [all-idents kw]
   (if (and (qualified-keyword? kw)
-           (or (db-property/logseq-property? kw) (db-class/logseq-class? kw)))
+           ;; Loosen checks to any property or class for build-existing-tx?
+           (db-property/property? kw))
     kw
     (or (get all-idents kw)
         (throw (ex-info (str "No ident found for " (pr-str kw)) {})))))
@@ -125,19 +126,22 @@
     []
     (map second (re-seq page-ref/page-ref-re s))))
 
-(defn- ->block-tx [{:keys [build/properties] :as m} properties-config page-uuids all-idents page-id]
-  (let [new-block {:db/id (new-db-id)
-                   :block/page {:db/id page-id}
-                   :block/order (db-order/gen-key nil)
-                   :block/parent (or (:block/parent m) {:db/id page-id})}
-        pvalue-tx-m (->property-value-tx-m new-block properties properties-config all-idents)
+(defn- ->block-tx [{:keys [build/properties] :as m} page-uuids all-idents page-id
+                   {properties-config :properties :keys [build-existing-tx?]}]
+  (let [block (if (and build-existing-tx? (:block/uuid m))
+                (select-keys m [:block/uuid])
+                {:db/id (new-db-id)
+                 :block/page {:db/id page-id}
+                 :block/order (db-order/gen-key nil)
+                 :block/parent (or (:block/parent m) {:db/id page-id})})
+        pvalue-tx-m (->property-value-tx-m block properties properties-config all-idents)
         ref-names (extract-content-refs (:block/title m))]
     (cond-> []
       ;; Place property values first since they are referenced by block
       (seq pvalue-tx-m)
       (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
       true
-      (conj (merge (block-with-timestamps new-block)
+      (conj (merge (if build-existing-tx? {:block/updated-at (common-util/time-ms)} (block-with-timestamps block))
                    (dissoc m :build/properties :build/tags)
                    (when (seq properties)
                      (->block-properties (merge properties (db-property-build/build-properties-with-ref-values pvalue-tx-m))
@@ -256,14 +260,15 @@
                         [:build/tags {:optional true} [:vector Class]]]}}
    [:page [:and
            [:map
+            [:block/uuid {:optional true} :uuid]
             [:block/title {:optional true} :string]
             [:build/journal {:optional true} :int]
             [:build/properties {:optional true} User-properties]
             [:build/tags {:optional true} [:vector Class]]]
-           [:fn {:error/message ":block/title or :build/journal required"
+           [:fn {:error/message ":block/title, :block/uuid or :build/journal required"
                  :error/path [:block/title]}
             (fn [m]
-              (or (:block/title m) (:build/journal m)))]]]
+              (or (:block/title m) (:block/uuid m) (:build/journal m)))]]]
    [:blocks {:optional true} [:vector ::block]]])
 
 (def Properties
@@ -297,7 +302,8 @@
    [:classes {:optional true} Classes]
    [:graph-namespace {:optional true} :keyword]
    [:page-id-fn {:optional true} :any]
-   [:auto-create-ontology? {:optional true} :boolean]])
+   [:auto-create-ontology? {:optional true} :boolean]
+   [:build-existing-tx? {:optional true} :boolean]])
 
 (defn- get-used-properties-from-options
   "Extracts all used properties as a map of properties to their property values. Looks at properties
@@ -358,41 +364,47 @@
     all-idents))
 
 (defn- build-pages-and-blocks-tx
-  [pages-and-blocks all-idents page-uuids {:keys [page-id-fn properties]
-                                           :or {page-id-fn :db/id}}]
+  [pages-and-blocks all-idents page-uuids {:keys [page-id-fn properties build-existing-tx?]
+                                           :or {page-id-fn :db/id}
+                                           :as opts}]
   (vec
    (mapcat
     (fn [{:keys [page blocks]}]
-      (let [new-page (merge
-                      ;; TODO: Use sqlite-util/build-new-page
-                      {:db/id (or (:db/id page) (new-db-id))
-                       :block/title (or (:block/title page) (string/capitalize (:block/name page)))
-                       :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/title page)))
-                       :block/tags #{:logseq.class/Page}}
-                      (dissoc page :build/properties :db/id :block/name :block/title :build/tags))
-            pvalue-tx-m (->property-value-tx-m new-page (:build/properties page) properties all-idents)]
+      (let [page' (if (and build-existing-tx? (:block/uuid page))
+                    page
+                    (merge
+                     ;; TODO: Use sqlite-util/build-new-page
+                     {:db/id (or (:db/id page) (new-db-id))
+                      :block/title (or (:block/title page) (string/capitalize (:block/name page)))
+                      :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/title page)))
+                      :block/tags #{:logseq.class/Page}}
+                     (dissoc page :build/properties :db/id :block/name :block/title :build/tags)))]
         (into
          ;; page tx
-         (cond-> []
-           (seq pvalue-tx-m)
-           (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
-           true
-           (conj
-            (block-with-timestamps
-             (merge
-              new-page
-              (when (seq (:build/properties page))
-                (->block-properties (merge (:build/properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
-                                    page-uuids
-                                    all-idents))
-              (when-let [tags (:build/tags page)]
-                {:block/tags (-> (mapv #(hash-map :db/ident (get-ident all-idents %))
-                                       tags)
-                                 (conj :logseq.class/Page))})))))
+         (if (and build-existing-tx? (:block/uuid page))
+           ;; Ignore existing pages until there's a use case for updating them
+           []
+           (let [pvalue-tx-m (->property-value-tx-m page' (:build/properties page) properties all-idents)]
+             (cond-> []
+               (seq pvalue-tx-m)
+               (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+               true
+               (conj
+                (block-with-timestamps
+                 (merge
+                  page'
+                  (when (seq (:build/properties page))
+                    (->block-properties (merge (:build/properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+                                        page-uuids
+                                        all-idents))
+                  (when-let [tags (:build/tags page)]
+                    {:block/tags (-> (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                           tags)
+                                     (conj :logseq.class/Page))})))))))
          ;; blocks tx
          (reduce (fn [acc m]
                    (into acc
-                         (->block-tx m properties page-uuids all-idents (page-id-fn new-page))))
+                         (->block-tx m page-uuids all-idents (page-id-fn page') opts)))
                  []
                  blocks))))
     pages-and-blocks)))
@@ -543,13 +555,15 @@
     {:classes classes' :properties properties'}))
 
 (defn- build-blocks-tx*
-  [{:keys [pages-and-blocks properties graph-namespace auto-create-ontology?]
+  [{:keys [pages-and-blocks properties graph-namespace auto-create-ontology? build-existing-tx?]
     :as options}]
   (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks properties)
         page-uuids (create-page-uuids pages-and-blocks')
         {:keys [classes properties]} (if auto-create-ontology? (auto-create-ontology options) options)
         all-idents (create-all-idents properties classes graph-namespace)
-        properties-tx (build-properties-tx properties page-uuids all-idents)
+        properties-tx (if (and build-existing-tx? (every? qualified-keyword? (keys properties)))
+                        []
+                        (build-properties-tx properties page-uuids all-idents))
         classes-tx (build-classes-tx classes properties page-uuids all-idents)
         class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
         ;; Replace idents with db-ids to avoid any upsert issues
@@ -609,6 +623,8 @@
   * :graph-namespace - namespace to use for db-ident creation. Useful when importing an ontology
   * :auto-create-ontology? - When set to true, creates properties and classes from their use.
     See auto-create-ontology for more details
+  * :build-existing-tx? - When set to true, blocks and pages with :block/uuid are treated as existing in DB.
+     This is useful for building tx on existing DBs e.g. for importing.
   * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
     Default is :db/id
 
