@@ -179,22 +179,56 @@
 
 (def data-from-ws-schema
   (with-shared-schema-attrs
-    [[:req-id :string]
-     [:ex-message {:optional true} :string]
-     [:ex-data {:optional true} [:map [:type :keyword]]]]
-    [:multi {:dispatch :action}
+    [[:req-id :string]]
+    [:multi {:dispatch #(or (when (:ex-data %) :exception) (:action %))}
+     [:exception
+      [:map
+       [:ex-message :string]
+       [:ex-data [:map [:type :keyword]]]]]
      ["register-graph-updates"
       [:map
        [:t :int]
        [:max-remote-schema-version {:optional true} :string]]]
      ["apply-ops" apply-ops-response-schema]
-
+     ["branch-graph"
+      [:map
+       [:graph-uuid :uuid]
+       [:schema-version :string]]]
+     ["delete-graph" [:map]]
+     ["download-graph"
+      [:map
+       [:graph-uuid :uuid]
+       [:schema-version :string]
+       [:download-info-uuid :string]]]
+     ["upload-graph"
+      [:map
+       [:graph-uuid :uuid]
+       [:schema-version :string]]]
+     ["download-info-list"
+      [:map
+       [:download-info-list [:sequential :any]]]]
+     ["grant-access" [:map]]
+     ["get-graph-skeleton"
+      [:map
+       [:server-schema-version :int]
+       [:server-builtin-db-idents [:set :keyword]]]]
+     ["presign-put-temp-s3-obj" [:map]]
+     ["get-users-info"
+      [:map
+       [:users
+        [:sequential [:map
+                      [:user/uuid :uuid]
+                      [:user/name :string]
+                      [:user/email :string]
+                      [:user/avatar {:optional true} :string]
+                      [:graph<->user/user-type :keyword]
+                      [:user/online? :boolean]]]]]]
+     ["inject-users-info" [:map]]
      [nil data-from-ws-schema-fallback]]))
 
 (def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
-;;; TODO: :graph-uuid's schema :uuid instead of :string
 (def ^:large-vars/data-var data-to-ws-schema
   (mu/closed-schema
    (with-shared-schema-attrs
@@ -206,7 +240,7 @@
        [:map]]
       ["register-graph-updates"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:schema-version :string]]]
       ["apply-ops"
        [:or
@@ -214,7 +248,7 @@
          [:req-id :string]
          [:action :string]
          [:profile {:optional true} :boolean]
-         [:graph-uuid :string]
+         [:graph-uuid :uuid]
          [:schema-version :string]
          [:ops [:sequential to-ws-op-schema]]
          [:t-before :int]]
@@ -237,11 +271,11 @@
         [:schema-version :string]]]
       ["download-graph"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:schema-version :string]]]
       ["download-info-list"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:schema-version :string]]]
       ["grant-access"
        [:map
@@ -261,11 +295,11 @@
         [:schema-version :string]]]
       ["query-block-content-versions"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:block-uuids [:sequential :uuid]]]]
       ["calibrate-graph-skeleton"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:t :int]
         [:schema-version :int]
         [:db-ident-blocks [:sequential
@@ -274,19 +308,19 @@
                             [::m/default extra-attr-map-schema]]]]]]
       ["get-graph-skeleton"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:schema-version :string]]]
       ["get-assets-upload-urls"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:asset-uuid->metadata [:map-of :uuid [:map-of :string :string]]]]]
       ["get-assets-download-urls"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:asset-uuids [:sequential :uuid]]]]
       ["delete-assets"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:asset-uuids [:sequential :uuid]]]]
       ["get-user-devices"
        [:map]]
