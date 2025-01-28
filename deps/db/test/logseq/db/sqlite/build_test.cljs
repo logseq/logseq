@@ -3,8 +3,7 @@
             [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.test.helper :as db-test]
-            [datascript.impl.entity :as de]))
+            [logseq.db.test.helper :as db-test]))
 
 (deftest build-tags
   (let [conn (db-test/create-conn)
@@ -67,22 +66,6 @@
                 db-property/property-value-content))
         "built-in :default property is created and correctly associated to a block")))
 
-(defn- readable-properties
-  [ent]
-  (->> (db-property/properties ent)
-       (mapv (fn [[k v]]
-               [k
-                (cond
-                  (= :block/tags k)
-                  (mapv :db/ident v)
-                  (and (set? v) (every? de/entity? v))
-                  (set (map db-property/property-value-content v))
-                  (de/entity? v)
-                  (or (:db/ident v) (db-property/property-value-content v))
-                  :else
-                  v)]))
-       (into {})))
-
 (deftest build-for-existing-blocks
   (let [conn (db-test/create-conn)
         _ (sqlite-build/create-blocks
@@ -125,7 +108,7 @@
       (is (= "imported task" (:block/title updated-block)))
       (is (= {:block/tags [:logseq.class/Task]
               :logseq.task/status :logseq.task/status.todo}
-             (readable-properties updated-block))
+             (db-test/readable-properties updated-block))
           "Block's properties and tags are updated"))
 
     (testing "block with existing user properties and tags"
@@ -136,5 +119,5 @@
       (is (= "imported block" (:block/title updated-block2)))
       (is (= {:block/tags [:user.class/MyClass]
               :user.property/p1 "foo"}
-             (readable-properties updated-block2))
+             (db-test/readable-properties updated-block2))
           "Block's properties and tags are updated"))))
