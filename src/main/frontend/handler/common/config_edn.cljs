@@ -113,6 +113,10 @@ nested keys or positional errors e.g. tuples"
    :favorites
    "is not stored in config for DB graphs"
    :journal/page-title-format
+   "is not used in DB graphs"
+   :srs/learning-fraction
+   "is not used in DB graphs"
+   :srs/initial-interval
    "is not used in DB graphs"})
 
 (defn detect-deprecations
