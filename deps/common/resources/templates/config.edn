@@ -275,6 +275,7 @@
  :favorites []
 
  ;; Set flashcards interval.
+ ;; This is _only_ for file graphs.
  ;; Expected value:
  ;; - Float between 0 and 1
  ;; higher values result in faster changes to the next review interval.
@@ -282,10 +283,12 @@
  ;; :srs/learning-fraction 0.5
 
  ;; Set the initial interval after the first successful review of a card.
+ ;; This is _only_ for file graphs.
  ;; Default value: 4
  ;; :srs/initial-interval 4
 
  ;; Hide specific block properties.
+ ;; This is _only_ for file graphs.
  ;; Example usage:
  ;; :block-hidden-properties #{:public :icon}
 
