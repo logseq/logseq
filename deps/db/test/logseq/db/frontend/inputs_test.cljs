@@ -48,10 +48,7 @@
         ":current-page input doesn't resolve when :current-page-fn not provided")
 
     (is (= ["child 1" "child 2"]
-           (let [block-uuid (-> (d/q '[:find (pull ?b [:block/uuid])
-                                       :where [?b :block/title "parent"]] @conn)
-                                ffirst
-                                :block/uuid)]
+           (let [block-uuid (:block/uuid (db-test/find-block-by-content @conn "parent"))]
              (map :block/title
                   (custom-query @conn
                                 {:inputs [:current-block]
@@ -84,10 +81,7 @@
         ":current-block input doesn't resolve and fails when :current-block-uuid is invalid")
 
     (is (= ["parent"]
-           (let [block-uuid (-> (d/q '[:find (pull ?b [:block/uuid])
-                                       :where [?b :block/title "child 1"]] @conn)
-                                ffirst
-                                :block/uuid)]
+           (let [block-uuid (:block/uuid (db-test/find-block-by-content @conn "child 1"))]
              (map :block/title
                   (custom-query @conn
                                 {:inputs [:parent-block]
@@ -123,13 +117,6 @@
                                           :where (between ?b ?start ?end)]}))))
         ":tomorrow and :Xd-after resolve to correct journal range")))
 
-(defn- block-with-content [db block-content]
-  (-> (d/q '[:find (pull ?b [:block/uuid])
-             :in $ ?content
-             :where [?b :block/title ?content]]
-           db block-content)
-      ffirst))
-
 (defn- blocks-on-journal-page-from-block-with-content [db page-input block-content current-page-date]
   (map :block/title
        (custom-query db
@@ -139,7 +126,7 @@
                                :where [?b :block/page ?e]
                                [?e :block/name ?page]]
                       :input-options
-                      {:current-block-uuid (get (block-with-content db block-content) :block/uuid)
+                      {:current-block-uuid (:block/uuid (db-test/find-block-by-content db block-content))
                        :current-page-fn (constantly
                                          (date-time-util/int->journal-title (date-time-util/date->int current-page-date)
                                                                             "MMM do, yyyy"))}})))
