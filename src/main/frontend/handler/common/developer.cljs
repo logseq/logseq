@@ -1,6 +1,7 @@
 (ns frontend.handler.common.developer
   "Common fns for developer related functionality"
   (:require [cljs.pprint :as pprint]
+            [clojure.edn :as edn]
             [datascript.impl.entity :as de]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -9,8 +10,11 @@
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util :as util]
             [frontend.util.page :as page-util]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
 ;; Fns used between menus and commands
@@ -62,6 +66,43 @@
      :success
      false)))
 
+(defn- export-entity-data
+  [eid]
+  (let [result (sqlite-export/build-entity-export (db/get-db) eid)
+        pull-data (with-out-str (pprint/pprint result))]
+    (.writeText js/navigator.clipboard pull-data)
+    (println pull-data)
+    (notification/show! "Copied block's data!" :success)))
+
+(defn- import-submit [block import-input _]
+  (let [new-block (edn/read-string @import-input)
+        updated-block (merge (select-keys block [:block/uuid])
+                             {:block/page (select-keys (:block/page block) [:block/title :block/uuid])}
+                             new-block)
+        {:keys [init-tx]} (sqlite-export/build-entity-import (db/get-db) updated-block)]
+    (pprint/pprint init-tx)
+    (db/transact! (state/get-current-repo) init-tx {:save-block true})
+    ;; Also close cmd-k
+    (shui/dialog-close-all!)))
+
+(defn- import-entity-data
+  [eid]
+  (let [import-input (atom nil)
+        block (db/entity eid)]
+    (shui/dialog-open!
+     [:div
+      [:label.flex.my-2 "Import into block with text " (pr-str (:block/title block))]
+      (shui/textarea {:placeholder "Import EDN"
+                      :auto-focus true
+                      :on-key-down (fn [e]
+                                     (when (= "Enter" (util/ekey e))
+                                       (import-submit block import-input e)
+                                       (util/stop e)))
+                      :on-change (fn [^js e] (reset! import-input (util/evalue e)))})
+      (shui/button {:class "mt-3"
+                    :on-click (partial import-submit block import-input)}
+                   "Import")])))
+
 ;; Public Commands
 (defn ^:export show-block-data []
   ;; Use editor state to locate most recent block
@@ -88,6 +129,18 @@
         (show-content-ast (get-in page-data [:block/file :file/content])
                           (get page-data :block/format :markdown))
         (notification/show! "No page found" :warning)))))
+
+(defn ^:export export-block-data []
+  ;; Use editor state to locate most recent block
+  (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
+    (export-entity-data [:block/uuid block-uuid])
+    (notification/show! "No block found" :warning)))
+
+(defn ^:export import-block-data []
+  ;; Use editor state to locate most recent block
+  (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
+    (import-entity-data [:block/uuid block-uuid])
+    (notification/show! "No block found" :warning)))
 
 (defn ^:export validate-db []
   (when-let [^Object worker @state/*db-worker]
