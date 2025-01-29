@@ -179,7 +179,11 @@
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
              logseq.db.frontend.validate db-validate
+             logseq.db.sqlite.build sqlite-build
              logseq.db.sqlite.cli sqlite-cli
+             logseq.db.sqlite.common-db sqlite-common-db
+             logseq.db.sqlite.create-graph sqlite-create-graph
+             logseq.db.sqlite.export sqlite-export
              logseq.db.sqlite.util sqlite-util
              logseq.db.test.helper db-test
              logseq.graph-parser graph-parser
