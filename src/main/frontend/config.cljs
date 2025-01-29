@@ -79,9 +79,6 @@
   []
   (and lsp-enabled? (global-config-enabled?)))
 
-;; TODO: switch to `logseq-team` group check later @zhiyuan
-(def db-graph-enabled? true)
-
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
 
