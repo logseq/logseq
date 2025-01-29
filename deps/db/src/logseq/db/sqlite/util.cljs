@@ -90,7 +90,7 @@
          :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
          :block/title (name prop-name)
          :db/index true
-         :db/cardinality (if (= :many (:db/cardinality prop-schema))
+         :db/cardinality (if (#{:many :db.cardinality/many} (:db/cardinality prop-schema))
                            :db.cardinality/many
                            :db.cardinality/one)
          :block/order (db-order/gen-key)}
