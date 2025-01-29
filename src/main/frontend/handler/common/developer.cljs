@@ -75,13 +75,15 @@
     (notification/show! "Copied block's data!" :success)))
 
 (defn- import-submit [block import-input _]
-  (let [new-block (edn/read-string @import-input)
-        updated-block (merge (select-keys block [:block/uuid])
-                             {:block/page (select-keys (:block/page block) [:block/title :block/uuid])}
-                             new-block)
-        {:keys [init-tx]} (sqlite-export/build-entity-import (db/get-db) updated-block)]
-    (pprint/pprint init-tx)
-    (db/transact! (state/get-current-repo) init-tx {:save-block true})
+  (let [export-map (edn/read-string @import-input)
+        export-map' (sqlite-export/merge-export-map block export-map)
+        {:keys [init-tx block-props-tx] :as tx} (sqlite-export/build-entity-import (db/get-db) export-map')]
+    (pprint/pprint tx)
+    (p/do
+      ;; FIXME: Choose better metadata so that undo works consistently
+      (db/transact! (state/get-current-repo) init-tx {:save-block true})
+      (when (seq block-props-tx)
+        (db/transact! (state/get-current-repo) block-props-tx {:save-block true})))
     ;; Also close cmd-k
     (shui/dialog-close-all!)))
 
@@ -92,7 +94,8 @@
     (shui/dialog-open!
      [:div
       [:label.flex.my-2 "Import into block with text " (pr-str (:block/title block))]
-      (shui/textarea {:placeholder "Import EDN"
+      (shui/textarea {:placeholder "Import EDN Data"
+                      :rows 10
                       :auto-focus true
                       :on-key-down (fn [e]
                                      (when (= "Enter" (util/ekey e))

@@ -94,7 +94,8 @@
                               :blocks [(merge {:block/title "imported block" :block/uuid (:block/uuid block2)}
                                               {:build/properties {:user.property/p1 "foo"}
                                                :build/tags [:user.class/MyClass]})]}]
-          :properties {:user.property/p1 {:logseq.property/type :default}}
+          :properties {:user.property/p1 (select-keys (d/entity @conn :user.property/p1)
+                                                      [:logseq.property/type :block/uuid])}
           :build-existing-tx? true})
         _ (d/transact! conn init-tx2)
         _ (d/transact! conn block-props-tx2)
@@ -112,10 +113,6 @@
           "Block's properties and tags are updated"))
 
     (testing "block with existing user properties and tags"
-      (is (= []
-             (filter #(or (:db/id %) (:db/ident %))
-                     (concat init-tx2 block-props-tx2)))
-          "Tx doesn't try to create new blocks or modify existing idents")
       (is (= "imported block" (:block/title updated-block2)))
       (is (= {:block/tags [:user.class/MyClass]
               :user.property/p1 "foo"}

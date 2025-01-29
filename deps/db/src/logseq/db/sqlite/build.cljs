@@ -197,13 +197,18 @@
       true
       (into additional-tx))))
 
-(defn- build-properties-tx [properties page-uuids all-idents]
-  (let [property-db-ids (->> (keys properties)
+(defn- build-properties-tx [properties page-uuids all-idents {:keys [build-existing-tx?]}]
+  (let [properties' (if build-existing-tx?
+                     (->> properties
+                          (remove #(:block/uuid (val %)))
+                          (into {}))
+                     properties)
+        property-db-ids (->> (keys properties')
                              (map #(vector % (new-db-id)))
                              (into {}))
         new-properties-tx (vec
-                           (mapcat (partial build-property-tx properties page-uuids all-idents property-db-ids)
-                                   properties))]
+                           (mapcat (partial build-property-tx properties' page-uuids all-idents property-db-ids)
+                                   properties'))]
     new-properties-tx))
 
 (defn- build-classes-tx [classes properties-config uuid-maps all-idents]
@@ -555,15 +560,13 @@
     {:classes classes' :properties properties'}))
 
 (defn- build-blocks-tx*
-  [{:keys [pages-and-blocks properties graph-namespace auto-create-ontology? build-existing-tx?]
+  [{:keys [pages-and-blocks properties graph-namespace auto-create-ontology?]
     :as options}]
   (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks properties)
         page-uuids (create-page-uuids pages-and-blocks')
         {:keys [classes properties]} (if auto-create-ontology? (auto-create-ontology options) options)
         all-idents (create-all-idents properties classes graph-namespace)
-        properties-tx (if (and build-existing-tx? (every? qualified-keyword? (keys properties)))
-                        []
-                        (build-properties-tx properties page-uuids all-idents))
+        properties-tx (build-properties-tx properties page-uuids all-idents options)
         classes-tx (build-classes-tx classes properties page-uuids all-idents)
         class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
         ;; Replace idents with db-ids to avoid any upsert issues

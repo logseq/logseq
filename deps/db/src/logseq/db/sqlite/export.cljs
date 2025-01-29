@@ -7,10 +7,11 @@
             [logseq.db.sqlite.build :as sqlite-build]))
 
 (defn build-entity-export
-  "Given entity id, build an EDN map"
+  "Given entity id, build an EDN export map"
   [db eid]
   (let [entity (d/entity db eid)
-        properties (dissoc (:block/properties entity) :block/tags)
+        properties (dissoc (db-property/properties entity) :block/tags)
+        user-defined-properties (remove db-property/logseq-property? (keys properties))
         result (cond-> (select-keys entity [:block/title])
                  (seq (:block/tags entity))
                  (assoc :build/tags
@@ -29,16 +30,37 @@
                                        :else
                                        v)]))
                              (into {}))))]
-    result))
+    (cond-> {:build/block result}
+      (seq user-defined-properties)
+      (assoc :properties
+             (->> user-defined-properties
+                  (map (fn [ident]
+                         [ident (select-keys (d/entity db ident)
+                                             (-> (disj db-property/schema-properties :logseq.property/classes)
+                                                 (conj :block/title)))]))
+                  (into {}))))))
 
 (defn build-entity-import
   "Given an entity's export map, build the import tx to create it"
-  [db block]
-  (let [opts (cond-> {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/title :block/uuid])
-                                          :blocks [block]}]
+  [db {:build/keys [block] :keys [properties]}]
+  (let [opts (cond-> {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/uuid])
+                                          :blocks [(dissoc block :block/page)]}]
                       :build-existing-tx? true}
-               (seq (:build/properties block))
-               (assoc :properties (into {}
-                                        (map #(vector % (select-keys (d/entity db %) [:logseq.property/type]))
-                                             (keys (:build/properties block))))))]
+               (seq properties)
+               (assoc :properties
+                      (->> properties
+                           (map (fn [[k v]]
+                                  (if-let [ent (d/entity db k)]
+                                    [k (assoc v :block/uuid (:block/uuid ent))]
+                                    [k v])))
+                           (into {}))))]
     (sqlite-build/build-blocks-tx opts)))
+
+(defn merge-export-map
+  "Merges export map with the block that will receive the import"
+  [existing-block export-map]
+  (merge-with merge
+              export-map
+              {:build/block
+               {:block/uuid (:block/uuid existing-block)
+                :block/page (select-keys (:block/page existing-block) [:block/uuid])}}))
