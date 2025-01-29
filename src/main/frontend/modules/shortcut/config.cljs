@@ -609,6 +609,14 @@
                        :inactive (not (state/developer-mode?))
                        :fn :frontend.handler.common.developer/show-page-ast}
 
+   :dev/export-block-data {:binding []
+                           :inactive (not (state/developer-mode?))
+                           :fn :frontend.handler.common.developer/export-block-data}
+
+   :dev/import-block-data {:binding []
+                           :inactive (not (state/developer-mode?))
+                           :fn :frontend.handler.common.developer/import-block-data}
+
    :dev/validate-db   {:binding []
                        :inactive (not (state/developer-mode?))
                        :fn :frontend.handler.common.developer/validate-db}})
@@ -817,6 +825,8 @@
           :dev/show-block-ast
           :dev/show-page-data
           :dev/show-page-ast
+          :dev/export-block-data
+          :dev/import-block-data
           :dev/replace-graph-with-db-file
           :dev/validate-db
           :ui/customize-appearance])
@@ -1005,6 +1015,8 @@
      :dev/show-block-ast
      :dev/show-page-data
      :dev/show-page-ast
+     :dev/export-block-data
+     :dev/import-block-data
      :dev/replace-graph-with-db-file
      :dev/validate-db
      :ui/clear-all-notifications]

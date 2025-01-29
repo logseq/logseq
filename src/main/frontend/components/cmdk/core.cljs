@@ -482,10 +482,12 @@
       (reset! (::input state) search-query))))
 
 (defmethod handle-action :trigger [_ state _event]
-  (let [command (some-> state state->highlighted-item :source-command)]
+  (let [command (some-> state state->highlighted-item :source-command)
+        dont-close-commands #{:graph/open :graph/remove :dev/replace-graph-with-db-file
+                              :ui/toggle-settings :go/flashcards :dev/import-block-data}]
     (when-let [action (:action command)]
       (action)
-      (when-not (contains? #{:graph/open :graph/remove :dev/replace-graph-with-db-file :ui/toggle-settings :go/flashcards} (:id command))
+      (when-not (contains? dont-close-commands (:id command))
         (shui/dialog-close! :ls-dialog-cmdk)))))
 
 (defmethod handle-action :create [_ state _event]
