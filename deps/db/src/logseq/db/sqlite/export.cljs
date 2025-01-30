@@ -3,9 +3,28 @@
    Useful for exporting and importing across DB graphs"
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.sqlite.build :as sqlite-build]))
+
+(defn- build-export-properties
+  [db user-defined-properties]
+  (->> user-defined-properties
+       (map (fn [ident]
+              (let [property (d/entity db ident)
+                    closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
+                [ident
+                 (cond-> (select-keys property
+                                      (-> (disj db-property/schema-properties :logseq.property/classes)
+                                          (conj :block/title)))
+                   (seq closed-values)
+                   (assoc :build/closed-values
+                          (mapv #(cond-> {:value (db-property/property-value-content %) :uuid (random-uuid)}
+                                   (:logseq.property/icon %)
+                                   (assoc :icon (:logseq.property/icon %)))
+                                closed-values)))])))
+       (into {})))
 
 (defn build-entity-export
   "Given entity id, build an EDN export map"
@@ -16,6 +35,7 @@
                                         (->> (:block/tags entity)
                                              (mapcat :logseq.property.class/properties)
                                              (map :db/ident)))
+        properties-config (build-export-properties db user-defined-properties)
         result (cond-> (select-keys entity [:block/title])
                  (seq (:block/tags entity))
                  (assoc :build/tags
@@ -25,14 +45,20 @@
                         (->> properties
                              (map (fn [[k v]]
                                     [k
-                                     ;; Copied from readable-properties
-                                     (cond
-                                       (de/entity? v)
-                                       (or (:db/ident v) (db-property/property-value-content v))
-                                       (and (set? v) (every? de/entity? v))
-                                       (set (map db-property/property-value-content v))
-                                       :else
-                                       v)]))
+                                     (if (:block/closed-value-property v)
+                                       (if-let [closed-uuid (some #(when (= (:value %) (db-property/property-value-content v))
+                                                                     (:uuid %))
+                                                                  (get-in properties-config [k :build/closed-values]))]
+                                         [:block/uuid closed-uuid]
+                                         (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content v))) {:properties properties-config})))
+                                       ;; Copied from readable-properties
+                                       (cond
+                                         (de/entity? v)
+                                         (or (:db/ident v) (db-property/property-value-content v))
+                                         (and (set? v) (every? de/entity? v))
+                                         (set (map db-property/property-value-content v))
+                                         :else
+                                         v))]))
                              (into {}))))]
     (cond-> {:build/block result}
       (seq (:block/tags entity))
@@ -42,18 +68,12 @@
                   ;; TODO: Export class parents when there's ability to control granularity of export
                   (map #(vector (:db/ident %)
                                 (cond-> (select-keys % [:block/title])
-                                 (:logseq.property.class/properties %)
+                                  (:logseq.property.class/properties %)
                                   (assoc :build/class-properties
                                          (mapv :db/ident (:logseq.property.class/properties %))))))
                   (into {})))
-      (seq user-defined-properties)
-      (assoc :properties
-             (->> user-defined-properties
-                  (map (fn [ident]
-                         [ident (select-keys (d/entity db ident)
-                                             (-> (disj db-property/schema-properties :logseq.property/classes)
-                                                 (conj :block/title)))]))
-                  (into {}))))))
+      (seq properties-config)
+      (assoc :properties properties-config))))
 
 (defn build-entity-import
   "Given an entity's export map, build the import tx to create it"
