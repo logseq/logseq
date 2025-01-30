@@ -895,6 +895,12 @@
                                         (into {} entity))
                           eid (:db/id entity)
                           fix (cond
+                                (and (:db/valueType entity)
+                                     (not (or (:db/ident entity)
+                                              (:db/cardinality entity))))
+                                [[:db/retract eid :db/valueType]
+                                 [:db/retract eid :db/cardinality]]
+
                                 (= #{:block/tx-id} (set (keys entity)))
                                 [[:db/retractEntity (:db/id entity)]]
 
