@@ -380,7 +380,7 @@
   (vec
    (mapcat
     (fn [{:keys [page blocks]}]
-      (let [page' (if (and build-existing-tx? (:block/uuid page))
+      (let [page' (if (and build-existing-tx? (not (::new-page? (meta page))))
                     page
                     (merge
                      ;; TODO: Use sqlite-util/build-new-page
@@ -391,7 +391,7 @@
                      (dissoc page :build/properties :db/id :block/name :block/title :build/tags)))]
         (into
          ;; page tx
-         (if (and build-existing-tx? (:block/uuid page))
+         (if (and build-existing-tx? (not (::new-page? (meta page))))
            ;; Ignore existing pages until there's a use case for updating them
            []
            (let [pvalue-tx-m (->property-value-tx-m page' (:build/properties page) properties all-idents)]
@@ -462,9 +462,8 @@
         existing-pages (->> pages-and-blocks (keep #(get-in % [:page :block/title])) set)
         new-pages (->> (mapcat val used-properties)
                        (mapcat (fn [val-or-vals]
-                                 (if (coll? val-or-vals)
-                                   (keep #(when (page-prop-value? %) (second %)) val-or-vals)
-                                   (when (page-prop-value? val-or-vals) (second val-or-vals)))))
+                                 (keep #(when (page-prop-value? %) (second %))
+                                       (if (set? val-or-vals) val-or-vals [val-or-vals]))))
                        distinct
                        (remove existing-pages)
                        (map #(hash-map :page {:block/title %})))]
@@ -498,7 +497,8 @@
   (let [ensure-page-uuids (fn [m]
                             (if (get-in m [:page :block/uuid])
                               m
-                              (assoc-in m [:page :block/uuid] (random-uuid))))
+                              (-> (assoc-in m [:page :block/uuid] (random-uuid))
+                                  (update :page #(with-meta % {::new-page? true})))))
         expand-block-children (fn [m]
                                 (if (:blocks m)
                                   (update m :blocks expand-build-children)
@@ -513,7 +513,8 @@
                                                    :block/title page-name
                                                    :block/uuid
                                                    (common-uuid/gen-uuid :journal-page-uuid date-int)
-                                                   :block/tags :logseq.class/Journal})))))
+                                                   :block/tags :logseq.class/Journal})
+                                           (with-meta {::new-page? true})))))
                            m))]
     ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
     (->> pages-and-blocks
@@ -521,6 +522,7 @@
          (map expand-block-children)
          add-new-pages-from-refs
          (add-new-pages-from-properties properties)
+         ;; This needs to be last to ensure page metadata
          (map ensure-page-uuids)
          vec)))
 
