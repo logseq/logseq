@@ -4,14 +4,18 @@
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]))
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.frontend.class :as db-class]))
 
 (defn build-entity-export
   "Given entity id, build an EDN export map"
   [db eid]
   (let [entity (d/entity db eid)
         properties (dissoc (db-property/properties entity) :block/tags)
-        user-defined-properties (remove db-property/logseq-property? (keys properties))
+        user-defined-properties (concat (remove db-property/logseq-property? (keys properties))
+                                        (->> (:block/tags entity)
+                                             (mapcat :logseq.property.class/properties)
+                                             (map :db/ident)))
         result (cond-> (select-keys entity [:block/title])
                  (seq (:block/tags entity))
                  (assoc :build/tags
@@ -31,6 +35,17 @@
                                        v)]))
                              (into {}))))]
     (cond-> {:build/block result}
+      (seq (:block/tags entity))
+      (assoc :classes
+             (->> (:block/tags entity)
+                  (remove #(db-class/logseq-class? (:db/ident %)))
+                  ;; TODO: Export class parents when there's ability to control granularity of export
+                  (map #(vector (:db/ident %)
+                                (cond-> (select-keys % [:block/title])
+                                 (:logseq.property.class/properties %)
+                                  (assoc :build/class-properties
+                                         (mapv :db/ident (:logseq.property.class/properties %))))))
+                  (into {})))
       (seq user-defined-properties)
       (assoc :properties
              (->> user-defined-properties
@@ -42,10 +57,18 @@
 
 (defn build-entity-import
   "Given an entity's export map, build the import tx to create it"
-  [db {:build/keys [block] :keys [properties]}]
+  [db {:build/keys [block] :keys [properties classes]}]
   (let [opts (cond-> {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/uuid])
                                           :blocks [(dissoc block :block/page)]}]
                       :build-existing-tx? true}
+               (seq classes)
+               (assoc :classes
+                      (->> classes
+                           (map (fn [[k v]]
+                                  (if-let [ent (d/entity db k)]
+                                    [k (assoc v :block/uuid (:block/uuid ent))]
+                                    [k v])))
+                           (into {})))
                (seq properties)
                (assoc :properties
                       (->> properties

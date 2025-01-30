@@ -211,8 +211,13 @@
                                    properties'))]
     new-properties-tx))
 
-(defn- build-classes-tx [classes properties-config uuid-maps all-idents]
-  (let [class-db-ids (->> (keys classes)
+(defn- build-classes-tx [classes properties-config uuid-maps all-idents {:keys [build-existing-tx?]}]
+  (let [classes' (if build-existing-tx?
+                  (->> classes
+                       (remove #(:block/uuid (val %)))
+                       (into {}))
+                  classes)
+        class-db-ids (->> (keys classes')
                           (map #(vector % (new-db-id)))
                           (into {}))
         classes-tx (vec
@@ -247,7 +252,7 @@
                                {:logseq.property.class/properties
                                 (mapv #(hash-map :db/ident (get-ident all-idents %))
                                       class-properties)}))))))
-                     classes))]
+                     classes'))]
     classes-tx))
 
 (def Class :keyword)
@@ -567,7 +572,7 @@
         {:keys [classes properties]} (if auto-create-ontology? (auto-create-ontology options) options)
         all-idents (create-all-idents properties classes graph-namespace)
         properties-tx (build-properties-tx properties page-uuids all-idents options)
-        classes-tx (build-classes-tx classes properties page-uuids all-idents)
+        classes-tx (build-classes-tx classes properties page-uuids all-idents options)
         class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
         ;; Replace idents with db-ids to avoid any upsert issues
         properties-tx' (mapv (fn [m]
@@ -626,8 +631,8 @@
   * :graph-namespace - namespace to use for db-ident creation. Useful when importing an ontology
   * :auto-create-ontology? - When set to true, creates properties and classes from their use.
     See auto-create-ontology for more details
-  * :build-existing-tx? - When set to true, blocks and pages with :block/uuid are treated as existing in DB.
-     This is useful for building tx on existing DBs e.g. for importing.
+  * :build-existing-tx? - When set to true, blocks, pages, properties and classes with :block/uuid are treated as
+     existing in DB and are skipped for creation. This is useful for building tx on existing DBs e.g. for importing.
   * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
     Default is :db/id
 
