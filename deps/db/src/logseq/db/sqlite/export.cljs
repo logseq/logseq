@@ -78,7 +78,8 @@
 (defn build-entity-import
   "Given an entity's export map, build the import tx to create it"
   [db {:build/keys [block] :keys [properties classes]}]
-  (let [opts (cond-> {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/uuid])
+  (let [property-conflicts (atom [])
+        opts (cond-> {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/uuid])
                                           :blocks [(dissoc block :block/page)]}]
                       :build-existing-tx? true}
                (seq classes)
@@ -94,10 +95,22 @@
                       (->> properties
                            (map (fn [[k v]]
                                   (if-let [ent (d/entity db k)]
-                                    [k (assoc v :block/uuid (:block/uuid ent))]
+                                    (do
+                                      (when (not= (select-keys ent [:logseq.property/type :db/cardinality])
+                                                  (select-keys v [:logseq.property/type :db/cardinality]))
+                                        (swap! property-conflicts conj
+                                               {:property-id k
+                                                :actual (select-keys v [:logseq.property/type :db/cardinality])
+                                                :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
+                                      [k (assoc v :block/uuid (:block/uuid ent))])
                                     [k v])))
                            (into {}))))]
-    (sqlite-build/build-blocks-tx opts)))
+    (if (seq @property-conflicts)
+      (do
+        (js/console.error :property-conflicts @property-conflicts)
+        {:error (str "The following imported properties conflict with the current graph: "
+                     (pr-str (mapv :property-id @property-conflicts)))})
+      (sqlite-build/build-blocks-tx opts))))
 
 (defn merge-export-map
   "Merges export map with the block that will receive the import"
