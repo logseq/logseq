@@ -74,18 +74,22 @@
     (println pull-data)
     (notification/show! "Copied block's data!" :success)))
 
-(defn- import-submit [block import-input _]
-  (let [export-map (edn/read-string @import-input)
-        export-map' (sqlite-export/merge-export-map block export-map)
-        {:keys [init-tx block-props-tx] :as tx} (sqlite-export/build-entity-import (db/get-db) export-map')]
-    (pprint/pprint tx)
-    (p/do
-      ;; FIXME: Choose better metadata so that undo works consistently
-      (db/transact! (state/get-current-repo) init-tx {:save-block true})
-      (when (seq block-props-tx)
-        (db/transact! (state/get-current-repo) block-props-tx {:save-block true})))
-    ;; Also close cmd-k
-    (shui/dialog-close-all!)))
+(defn- import-submit [block import-input _e]
+  (let [export-map (try (edn/read-string @import-input) (catch :default _err ::invalid-import))]
+    (if (= ::invalid-import export-map)
+      (notification/show! "The submitted EDN data is invalid! Fix and try again." :warning)
+      (let [export-map' (sqlite-export/merge-export-map block export-map)
+            {:keys [init-tx block-props-tx error] :as txs} (sqlite-export/build-entity-import (db/get-db) export-map')]
+        (if error
+          (notification/show! error :error)
+          (p/do
+            (pprint/pprint txs)
+          ;; FIXME: Choose better metadata so that undo works consistently
+            (db/transact! (state/get-current-repo) init-tx {:save-block true})
+            (when (seq block-props-tx)
+              (db/transact! (state/get-current-repo) block-props-tx {:save-block true}))))
+        ;; Also close cmd-k
+        (shui/dialog-close-all!)))))
 
 (defn- import-entity-data
   [eid]
