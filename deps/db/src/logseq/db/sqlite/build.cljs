@@ -128,7 +128,8 @@
 
 (defn- ->block-tx [{:keys [build/properties] :as m} page-uuids all-idents page-id
                    {properties-config :properties :keys [build-existing-tx?]}]
-  (let [block (if (and build-existing-tx? (:block/uuid m))
+  (let [build-existing-tx?' (and build-existing-tx? (::existing-block? (meta m)))
+        block (if build-existing-tx?'
                 (select-keys m [:block/uuid])
                 {:db/id (new-db-id)
                  :block/page {:db/id page-id}
@@ -141,7 +142,7 @@
       (seq pvalue-tx-m)
       (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
       true
-      (conj (merge (if build-existing-tx? {:block/updated-at (common-util/time-ms)} (block-with-timestamps block))
+      (conj (merge (if build-existing-tx?' {:block/updated-at (common-util/time-ms)} (block-with-timestamps block))
                    (dissoc m :build/properties :build/tags)
                    (when (seq properties)
                      (->block-properties (merge properties (db-property-build/build-properties-with-ref-values pvalue-tx-m))
@@ -479,16 +480,17 @@
    (vec
     (mapcat
      (fn [block]
-       (let [block' (cond-> block
-                      (not (:block/uuid block))
-                      (assoc :block/uuid (random-uuid))
+       (let [block' (if (:block/uuid block)
+                      (with-meta block {::existing-block? true})
+                      (assoc block :block/uuid (random-uuid)))
+             block'' (cond-> block'
                       true
                       (dissoc :build/children)
                       parent-id
                       (assoc :block/parent {:db/id [:block/uuid parent-id]}))
              children (:build/children block)
-             child-maps (when children (expand-build-children children (:block/uuid block')))]
-         (cons block' child-maps)))
+             child-maps (when children (expand-build-children children (:block/uuid block'')))]
+         (cons block'' child-maps)))
      data))))
 
 (defn- pre-build-pages-and-blocks
@@ -635,6 +637,7 @@
     See auto-create-ontology for more details
   * :build-existing-tx? - When set to true, blocks, pages, properties and classes with :block/uuid are treated as
      existing in DB and are skipped for creation. This is useful for building tx on existing DBs e.g. for importing.
+     Blocks are updated with any attributes passed to it while all other node types are ignored for update.
   * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
     Default is :db/id
 
