@@ -5,7 +5,7 @@
             [frontend.ui :as ui]
             [frontend.config :as config]
             [frontend.state :as state]
-            [frontend.handler.plugin :refer [hook-extensions-enhancer-by-type]]
+            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key]]
             [promesa.core :as p]))
 
 ;; TODO: Why does shadow fail when code is required
@@ -23,7 +23,7 @@
                   (if-not @loaded?
                     (p/finally
                      (p/all (when-let [enhancers (and config/lsp-enabled?
-                                                      (seq (hook-extensions-enhancer-by-type :codemirror)))]
+                                                      (seq (hook-extensions-enhancers-by-key :codemirror)))]
                               (for [{f :enhancer} enhancers]
                                 (when (fn? f) (f (. js/window -CodeMirror))))))
                      (fn []
@@ -32,10 +32,10 @@
                     (reset! loaded? true))))
      state)}
   [config id attr code options]
-  (let [loaded? (rum/react loaded?)
+  (let [loaded?' (rum/react loaded?)
         theme   (state/sub :ui/theme)
         code    (or code "")
         code    (string/replace-first code #"\n$" "")]      ;; See-also: #3410
-    (if loaded?
+    (if loaded?'
       (@lazy-editor config id attr code theme options)
       (ui/loading "CodeMirror"))))

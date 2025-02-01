@@ -1,34 +1,35 @@
 (ns frontend.extensions.handbooks.core
-  (:require [clojure.string :as string]
-            [rum.core :as rum]
+  (:require [camel-snake-kebab.core :as csk]
+            [cljs-bean.core :as bean]
             [cljs.core.async :as async :refer [<! >!]]
-            [frontend.ui :as ui]
-            [frontend.state :as state]
-            [frontend.search :as search]
+            [clojure.edn :as edn]
+            [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.handler.notification :as notification]
+            [frontend.context.i18n :refer [t]]
             [frontend.extensions.lightbox :as lightbox]
+            [frontend.extensions.video.youtube :as youtube]
+            [frontend.handler.notification :as notification]
+            [frontend.hooks :as hooks]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.rum :as r]
-            [cljs-bean.core :as bean]
-            [promesa.core :as p]
-            [camel-snake-kebab.core :as csk]
-            [medley.core :as medley]
-            [frontend.util :as util]
+            [frontend.search :as search]
+            [frontend.state :as state]
             [frontend.storage :as storage]
-            [frontend.extensions.video.youtube :as youtube]
-            [frontend.context.i18n :refer [t]]
-            [clojure.edn :as edn]))
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [medley.core :as medley]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce *config (atom {}))
 
 (defn get-handbooks-endpoint
   [resource]
   (str
-    (if (storage/get :handbooks-dev-watch?)
-      "http://localhost:1337"
-      "https://handbooks.pages.dev")
-    resource))
+   (if (storage/get :handbooks-dev-watch?)
+     "http://localhost:1337"
+     "https://handbooks.pages.dev")
+   resource))
 
 (defn resolve-asset-url
   [path]
@@ -42,10 +43,10 @@
   (if-let [matches (and (not (string/blank? content))
                         (re-seq #"src=\"([^\"]+)\"" content))]
     (reduce
-      (fn [content matched]
-        (if-let [matched (second matched)]
-          (string/replace content matched (resolve-asset-url matched)) content))
-      content matches)
+     (fn [content matched]
+       (if-let [matched (second matched)]
+         (string/replace content matched (resolve-asset-url matched)) content))
+     content matches)
     content))
 
 (defn parse-key-from-href
@@ -68,9 +69,9 @@
 (defn bind-parent-key
   [{:keys [key] :as node}]
   (cond-> node
-          (and (string? key)
-               (string/includes? key "/"))
-          (assoc :parent (parse-parent-key key))))
+    (and (string? key)
+         (string/includes? key "/"))
+    (assoc :parent (parse-parent-key key))))
 
 (defn load-glide-assets!
   []
@@ -83,8 +84,8 @@
   [{:keys [key title description cover] :as _topic} nav-fn! opts]
   [:button.w-full.topic-card.flex.text-left
    (merge
-     {:key      key
-      :on-click nav-fn!} opts)
+    {:key      key
+     :on-click nav-fn!} opts)
    (when cover
      [:div.l.flex.items-center
       [:img {:src (resolve-asset-url cover)}]])
@@ -122,15 +123,15 @@
 (rum/defc chapter-select
   [topic children on-select]
   (let [[open?, set-open?] (rum/use-state false)]
-    (rum/use-effect!
-      (fn []
-        (when-let [^js el (js/document.querySelector "[data-identity=logseq-handbooks]")]
-          (let [h #(when-not (some->> (.-target %)
-                                      (.contains (js/document.querySelector ".chapters-select")))
-                     (set-open? false))]
-            (.addEventListener el "click" h)
-            #(.removeEventListener el "click" h))))
-      [])
+    (hooks/use-effect!
+     (fn []
+       (when-let [^js el (js/document.querySelector "[data-identity=logseq-handbooks]")]
+         (let [h #(when-not (some->> (.-target %)
+                                     (.contains (js/document.querySelector ".chapters-select")))
+                    (set-open? false))]
+           (.addEventListener el "click" h)
+           #(.removeEventListener el "click" h))))
+     [])
 
     [:div.chapters-select.w-full
      [:a.select-trigger
@@ -157,21 +158,21 @@
         *id-ref (rum/use-ref (str "glide--" (js/Date.now)))]
 
     ;; load deps assets
-    (rum/use-effect!
-      (fn []
-        (set-deps-pending? true)
-        (-> (load-glide-assets!)
-            (p/then (fn [] (js/setTimeout
-                             #(when (js/document.getElementById (rum/deref *id-ref))
-                                (doto (js/window.Glide. (str "#" (rum/deref *id-ref))) (.mount))) 50)))
-            (p/finally #(set-deps-pending? false))))
-      [])
+    (hooks/use-effect!
+     (fn []
+       (set-deps-pending? true)
+       (-> (load-glide-assets!)
+           (p/then (fn [] (js/setTimeout
+                           #(when (js/document.getElementById (rum/deref *id-ref))
+                              (doto (js/window.Glide. (str "#" (rum/deref *id-ref))) (.mount))) 50)))
+           (p/finally #(set-deps-pending? false))))
+     [])
 
-    (rum/use-effect!
-      (fn []
-        (js/setTimeout #(some-> (js/document.querySelector ".cp__handbooks-content")
-                                (.scrollTo 0 0))))
-      [pane-state])
+    (hooks/use-effect!
+     (fn []
+       (js/setTimeout #(some-> (js/document.querySelector ".cp__handbooks-content")
+                               (.scrollTo 0 0))))
+     [pane-state])
 
     (when-let [topic-key (:key (second pane-state))]
       (when-let [topic (get handbook-nodes topic-key)]
@@ -197,15 +198,15 @@
              (when show-chapters?
                [:div.chapters-wrap.py-2
                 (chapter-select
-                  topic chapters
-                  (fn [k]
-                    (when-let [chapter (get handbook-nodes k)]
-                      (nav! [:topic-detail chapter (:title parent)] pane-state))))])
+                 topic chapters
+                 (fn [k]
+                   (when-let [chapter (get handbook-nodes k)]
+                     (nav! [:topic-detail chapter (:title parent)] pane-state))))])
 
              ;; demos gallery
              (when-let [demos (:demos topic)]
                (let [demos (cond-> demos
-                                   (string? demos) (list))]
+                             (string? demos) (list))]
                  (if (> (count demos) 1)
                    [:div.flex.demos.glide
                     {:id (rum/deref *id-ref)}
@@ -218,10 +219,10 @@
 
                     [:div.glide__bullets {:data-glide-el "controls[nav]"}
                      (map-indexed
-                       (fn [idx _]
-                         [:button.glide__bullet {:data-glide-dir (str "=" idx)}
-                          (inc idx)])
-                       demos)]]
+                      (fn [idx _]
+                        [:button.glide__bullet {:data-glide-dir (str "=" idx)}
+                         (inc idx)])
+                      demos)]]
 
                    [:div.flex.demos.pt-1
                     (media-render (resolve-asset-url (first demos)))])))
@@ -321,39 +322,39 @@
         [selected, set-selected!] (rum/use-state 0)
         select-fn! #(when-let [ldx (and (seq results) (dec (count results)))]
                       (set-selected!
-                        (case %
-                          :up (if (zero? selected) ldx (max (dec selected) 0))
-                          :down (if (= selected ldx) 0 (min (inc selected) ldx))
-                          :dune)))
+                       (case %
+                         :up (if (zero? selected) ldx (max (dec selected) 0))
+                         :down (if (= selected ldx) 0 (min (inc selected) ldx))
+                         :dune)))
 
         q (util/trim-safe q)
         active? (not (string/blank? (util/trim-safe q)))
         reset-q! #(->> "" (set! (.-value (rum/deref *input-ref))) (set-q!))
         focus-q! #(some-> (rum/deref *input-ref) (.focus))]
 
-    (rum/use-effect!
-      #(focus-q!)
-      [pane-state])
+    (hooks/use-effect!
+     #(focus-q!)
+     [pane-state])
 
-    (rum/use-effect!
-      (fn []
-        (let [pane-nodes (:children (second pane-state))
-              pane-nodes (and (seq pane-nodes)
-                              (mapcat #(conj (:children %) %) pane-nodes))]
+    (hooks/use-effect!
+     (fn []
+       (let [pane-nodes (:children (second pane-state))
+             pane-nodes (and (seq pane-nodes)
+                             (mapcat #(conj (:children %) %) pane-nodes))]
 
-          (set-search-state!
-            (merge search-state {:active? active?}))
+         (set-search-state!
+          (merge search-state {:active? active?}))
 
-          (if (and (seq handbooks-nodes) active?)
-            (-> (or pane-nodes
+         (if (and (seq handbooks-nodes) active?)
+           (-> (or pane-nodes
                     ;; global
-                    (vals (dissoc handbooks-nodes "__root")))
-                (search/fuzzy-search q :limit 30 :extract-fn :title)
-                (set-results!))
-            (set-results! nil))
+                   (vals (dissoc handbooks-nodes "__root")))
+               (search/fuzzy-search q :limit 30 :extract-fn :title)
+               (set-results!))
+           (set-results! nil))
 
-          (set-selected! 0)))
-      [q])
+         (set-selected! 0)))
+     [q])
 
     [:div.search
      [:div.input-wrap.relative
@@ -414,8 +415,8 @@
   (let [{:keys [href]} opts]
     [:div.link-card
      (cond-> opts
-             (string? href)
-             (assoc :on-click #(util/open-url href)))
+       (string? href)
+       (assoc :on-click #(util/open-url href)))
      child]))
 
 ;(rum/defc related-topics
@@ -429,7 +430,6 @@
    :topic-detail [pane-topic-detail]
    :settings     [pane-settings]})
 
-
 (defonce discord-endpoint "https://plugins.logseq.io/ds")
 
 (rum/defc footer-link-cards
@@ -437,45 +437,45 @@
   (let [[config _] (r/use-atom *config)
         discord-count (:discord-online config)]
 
-    (rum/use-effect!
-      (fn []
-        (when (or (nil? discord-count)
-                  (> (- (js/Date.now) (:discord-online-created config)) (* 10 60 1000)))
-          (-> (js/window.fetch discord-endpoint)
-              (p/then #(.json %))
-              (p/then #(when-let [count (.-approximate_presence_count ^js %)]
-                         (swap! *config assoc
-                                :discord-online (.toLocaleString count)
-                                :discord-online-created (js/Date.now)))))))
-      [discord-count])
+    (hooks/use-effect!
+     (fn []
+       (when (or (nil? discord-count)
+                 (> (- (js/Date.now) (:discord-online-created config)) (* 10 60 1000)))
+         (-> (js/window.fetch discord-endpoint)
+             (p/then #(.json %))
+             (p/then #(when-let [count (.-approximate_presence_count ^js %)]
+                        (swap! *config assoc
+                               :discord-online (.toLocaleString count)
+                               :discord-online-created (js/Date.now)))))))
+     [discord-count])
 
     [:<>
      ;; more links
      [:div.flex.space-x-3
       {:style {:padding-top "4px"}}
       (link-card
-        {:class "flex-1" :href "https://discord.gg/KpN4eHY"}
-        [:div.inner.flex.space-x-1.flex-col
-         (ui/icon "brand-discord" {:class "opacity-30" :size 26})
-         [:h1.font-medium.py-1 "Chat on Discord"]
-         [:h2.text-xs.leading-4.opacity-40 "Ask quick questions, meet fellow users, and learn new workflows."]
-         [:small.flex.items-center.pt-1.5
-          [:i.block.rounded-full.bg-green-500 {:style {:width "8px" :height "8px"}}]
-          [:span.pl-2.opacity-90
-           [:strong.opacity-60 (or discord-count "?")]
-           [:span.opacity-70.font-light " users online"]]]])
+       {:class "flex-1" :href "https://discord.gg/KpN4eHY"}
+       [:div.inner.flex.space-x-1.flex-col
+        (ui/icon "brand-discord" {:class "opacity-30" :size 26})
+        [:h1.font-medium.py-1 "Chat on Discord"]
+        [:h2.text-xs.leading-4.opacity-40 "Ask quick questions, meet fellow users, and learn new workflows."]
+        [:small.flex.items-center.pt-1.5
+         [:i.block.rounded-full.bg-green-500 {:style {:width "8px" :height "8px"}}]
+         [:span.pl-2.opacity-90
+          [:strong.opacity-60 (or discord-count "?")]
+          [:span.opacity-70.font-light " users online"]]]])
 
       (link-card
-        {:class "flex-1" :href "https://discuss.logseq.com"}
-        [:div.inner.flex.space-x-1.flex-col
-         (ui/icon "message-dots" {:class "opacity-30" :size 26})
-         [:h1.font-medium.py-1 "Visit the forum"]
-         [:h2.text-xs.leading-4.opacity-40 "Give feedback, request features, and have in-depth conversations."]
-         [:small.flex.items-center.pt-1.5
-          [:i.flex.items-center.opacity-50 (ui/icon "bolt" {:size 14})]
-          [:span.pl-1.opacity-90
-           [:strong.opacity-60 "800+"]
-           [:span.opacity-70.font-light " monthly posts"]]]])]]))
+       {:class "flex-1" :href "https://discuss.logseq.com"}
+       [:div.inner.flex.space-x-1.flex-col
+        (ui/icon "message-dots" {:class "opacity-30" :size 26})
+        [:h1.font-medium.py-1 "Visit the forum"]
+        [:h2.text-xs.leading-4.opacity-40 "Give feedback, request features, and have in-depth conversations."]
+        [:small.flex.items-center.pt-1.5
+         [:i.flex.items-center.opacity-50 (ui/icon "bolt" {:size 14})]
+         [:span.pl-1.opacity-90
+          [:strong.opacity-60 "800+"]
+          [:span.opacity-70.font-light " monthly posts"]]]])]]))
 
 (rum/defc ^:large-vars/data-var content
   []
@@ -529,55 +529,57 @@
                                                    (apply = (map parse-parent-key [prev-key next-key]))))]
                          (when-not in-chapters?
                            (set-history-state!
-                             (conj (sequence history-state) prev-state))))
+                            (conj (sequence history-state) prev-state))))
                        (set-active-pane-state! next-state))
 
         [scrolled?, set-scrolled!] (rum/use-state false)
-        on-scroll (rum/use-memo #(util/debounce 100 (fn [^js e] (set-scrolled! (not (< (.. e -target -scrollTop) 10))))) [])]
+        on-scroll (hooks/use-memo
+                   #(util/debounce 100 (fn [^js e] (set-scrolled! (not (< (.. e -target -scrollTop) 10)))))
+                   [])]
 
     ;; load handbooks
-    (rum/use-effect!
-      #(load-handbooks!)
-      [])
+    (hooks/use-effect!
+     #(load-handbooks!)
+     [])
 
     ;; navigation sentry
-    (rum/use-effect!
-      (fn []
-        (when (seq handbooks-nodes)
-          (let [c (:handbook/route-chan @state/state)]
-            (async/go-loop []
-                           (let [v (<! c)]
-                             (when (not= v :return)
-                               (when-let [to (get handbooks-nodes v)]
-                                 (nav-to-pane! [:topic-detail to (t :handbook/title)] [:dashboard]))
-                               (recur))))
-            #(async/go (>! c :return)))))
-      [handbooks-nodes])
+    (hooks/use-effect!
+     (fn []
+       (when (seq handbooks-nodes)
+         (let [c (:handbook/route-chan @state/state)]
+           (async/go-loop []
+             (let [v (<! c)]
+               (when (not= v :return)
+                 (when-let [to (get handbooks-nodes v)]
+                   (nav-to-pane! [:topic-detail to (t :handbook/title)] [:dashboard]))
+                 (recur))))
+           #(async/go (>! c :return)))))
+     [handbooks-nodes])
 
-    (rum/use-effect!
-      (fn []
-        (let [*cnt-len (atom 0)
-              check! (fn []
-                       (-> (p/let [^js res (js/fetch (get-handbooks-endpoint "/handbooks.edn") #js{:method "HEAD"})]
-                             (when-let [cl (.get (.-headers res) "content-length")]
-                               (when (not= @*cnt-len cl)
-                                 (println "[Handbooks] dev reload!")
-                                 (load-handbooks!))
-                               (reset! *cnt-len cl)))
-                           (p/catch #(println "[Handbooks] dev check Error:" %))))
-              timer0 (if dev-watch?
-                       (js/setInterval check! 2000) 0)]
-          #(js/clearInterval timer0)))
-      [dev-watch?])
+    (hooks/use-effect!
+     (fn []
+       (let [*cnt-len (atom 0)
+             check! (fn []
+                      (-> (p/let [^js res (js/fetch (get-handbooks-endpoint "/handbooks.edn") #js{:method "HEAD"})]
+                            (when-let [cl (.get (.-headers res) "content-length")]
+                              (when (not= @*cnt-len cl)
+                                (println "[Handbooks] dev reload!")
+                                (load-handbooks!))
+                              (reset! *cnt-len cl)))
+                          (p/catch #(println "[Handbooks] dev check Error:" %))))
+             timer0 (if dev-watch?
+                      (js/setInterval check! 2000) 0)]
+         #(js/clearInterval timer0)))
+     [dev-watch?])
 
-    (rum/use-effect!
-      (fn []
-        (when handbooks-data
-          (let [nodes (->> (tree-seq map? :children handbooks-data)
-                           (reduce #(assoc %1 (or (:key %2) "__root") (bind-parent-key %2)) {}))]
-            (set-handbooks-nodes! nodes)
-            (set! (.-handbook-nodes js/window) (bean/->js nodes)))))
-      [handbooks-data])
+    (hooks/use-effect!
+     (fn []
+       (when handbooks-data
+         (let [nodes (->> (tree-seq map? :children handbooks-data)
+                          (reduce #(assoc %1 (or (:key %2) "__root") (bind-parent-key %2)) {}))]
+           (set-handbooks-nodes! nodes)
+           (set! (.-handbook-nodes js/window) (bean/->js nodes)))))
+     [handbooks-data])
 
     [:div.cp__handbooks-content
      {:class     (util/classnames [{:search-active (:active? search-state)
@@ -591,8 +593,8 @@
           [:button.active:opacity-80.flex.items-center.cursor-pointer
            {:on-click (fn [] (let [prev (first history-state)
                                    prev (cond-> prev
-                                                (nil? (seq prev))
-                                                [:dashboard])]
+                                          (nil? (seq prev))
+                                          [:dashboard])]
                                (set-active-pane-state! prev)
                                (set-history-state! (rest history-state))))}
            [:span.pr-2.flex.items-center (ui/icon "chevron-left")]
@@ -609,8 +611,8 @@
                           (let [s (str "logseq://handbook/" (:key (second active-pane-state)))]
                             (util/copy-to-clipboard! s)
                             (notification/show!
-                              [:div [:strong.block "Handbook link copied!"]
-                               [:label.opacity-50 s]] :success)))}
+                             [:div [:strong.block "Handbook link copied!"]
+                              [:label.opacity-50 s]] :success)))}
            (ui/icon "copy")])
         (when (state/developer-mode?)
           [:a.flex.items-center {:aria-label (t :handbook/settings)

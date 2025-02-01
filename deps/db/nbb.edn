@@ -1,0 +1,10 @@
+{:paths ["src"]
+ :deps
+ {logseq/common
+  {:local/root "../common"}
+  metosin/malli
+  {:mvn/version "0.16.1"}
+  logseq/clj-fractional-indexing        {:git/url "https://github.com/logseq/clj-fractional-indexing"
+                                         :sha     "7182b7878410f78536dc2b6df35ed32ef9cd6b61"}
+  io.github.nextjournal/nbb-test-runner
+  {:git/sha "60ed57aa04bca8d604f5ba6b28848bd887109347"}}}
