@@ -10,6 +10,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
@@ -209,7 +210,7 @@
                                      :db-before (:db-before tx-report))]
           {:tx-report final-tx-report})
 
-        (::gp-exporter/new-graph? tx-meta)
+        (or (::gp-exporter/new-graph? tx-meta) (::sqlite-export/imported-data? tx-meta))
         (invoke-hooks-for-imported-graph conn tx-report)
 
         :else

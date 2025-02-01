@@ -3,6 +3,7 @@
    Useful for exporting and importing across DB graphs"
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
@@ -28,8 +29,8 @@
 
 (defn build-entity-export
   "Given entity id, build an EDN export map"
-  [db eid]
-  (let [entity (d/entity db eid)
+  [db entity-or-eid]
+  (let [entity (if (de/entity? entity-or-eid) entity-or-eid (d/entity db entity-or-eid))
         properties (dissoc (db-property/properties entity) :block/tags)
         user-defined-properties (concat (remove db-property/logseq-property? (keys properties))
                                         (->> (:block/tags entity)
@@ -75,48 +76,75 @@
       (seq properties-config)
       (assoc :properties properties-config))))
 
-(defn build-entity-import
+(defn build-page-export [db eid]
+  (let [page-entity (d/entity db eid)
+        ;; TODO: Fetch unloaded page datoms
+        datoms (d/datoms db :avet :block/page eid)
+        block-eids (mapv :e datoms)
+        page-blocks (sort-by :block/order (map #(d/entity db %) block-eids))
+        ;; TODO: Handle block children
+        top-level-blocks (filter #(= page-entity (:block/parent %)) page-blocks)
+        exported-blocks (mapv #(build-entity-export db %) top-level-blocks)
+        page-export
+        {:pages-and-blocks [{:page (if (ldb/journal? page-entity)
+                                     {:build/journal (:block/journal-day page-entity)}
+                                     (select-keys page-entity [:block/title]))
+                             :blocks (mapv :build/block exported-blocks)}]
+         :properties (apply merge (keep :properties exported-blocks))
+         :classes (apply merge (keep :classes exported-blocks))}]
+    page-export))
+
+(defn- ->sqlite-build-options
+  [db {:keys [pages-and-blocks classes properties]} property-conflicts]
+  (cond-> {:pages-and-blocks pages-and-blocks
+           :build-existing-tx? true}
+    (seq classes)
+    (assoc :classes
+           (->> classes
+                (map (fn [[k v]]
+                       (if-let [ent (d/entity db k)]
+                         [k (assoc v :block/uuid (:block/uuid ent))]
+                         [k v])))
+                (into {})))
+    (seq properties)
+    (assoc :properties
+           (->> properties
+                (map (fn [[k v]]
+                       (if-let [ent (d/entity db k)]
+                         (do
+                           (when (not= (select-keys ent [:logseq.property/type :db/cardinality])
+                                       (select-keys v [:logseq.property/type :db/cardinality]))
+                             (swap! property-conflicts conj
+                                    {:property-id k
+                                     :actual (select-keys v [:logseq.property/type :db/cardinality])
+                                     :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
+                           [k (assoc v :block/uuid (:block/uuid ent))])
+                         [k v])))
+                (into {})))))
+
+(defn- build-block-export-options
+  "Builds options for sqlite-build to import into current-block"
+  [current-block export-map]
+  (let [{:build/keys [block]}
+        (merge-with merge
+                    export-map
+                    {:build/block
+                     {:block/uuid (:block/uuid current-block)
+                      :block/page (select-keys (:block/page current-block) [:block/uuid])}})
+        pages-and-blocks
+        [{:page (select-keys (:block/page block) [:block/uuid])
+          :blocks [(dissoc block :block/page)]}]]
+    (assoc export-map :pages-and-blocks pages-and-blocks)))
+
+(defn build-import
   "Given an entity's export map, build the import tx to create it"
-  [db {:build/keys [block] :keys [properties classes]}]
-  (let [property-conflicts (atom [])
-        opts (cond-> {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/uuid])
-                                          :blocks [(dissoc block :block/page)]}]
-                      :build-existing-tx? true}
-               (seq classes)
-               (assoc :classes
-                      (->> classes
-                           (map (fn [[k v]]
-                                  (if-let [ent (d/entity db k)]
-                                    [k (assoc v :block/uuid (:block/uuid ent))]
-                                    [k v])))
-                           (into {})))
-               (seq properties)
-               (assoc :properties
-                      (->> properties
-                           (map (fn [[k v]]
-                                  (if-let [ent (d/entity db k)]
-                                    (do
-                                      (when (not= (select-keys ent [:logseq.property/type :db/cardinality])
-                                                  (select-keys v [:logseq.property/type :db/cardinality]))
-                                        (swap! property-conflicts conj
-                                               {:property-id k
-                                                :actual (select-keys v [:logseq.property/type :db/cardinality])
-                                                :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
-                                      [k (assoc v :block/uuid (:block/uuid ent))])
-                                    [k v])))
-                           (into {}))))]
+  [db {:keys [current-block]} export-map*]
+  (let [export-map (if current-block (build-block-export-options current-block export-map*) export-map*)
+        property-conflicts (atom [])
+        opts (->sqlite-build-options db export-map property-conflicts)]
     (if (seq @property-conflicts)
       (do
         (js/console.error :property-conflicts @property-conflicts)
         {:error (str "The following imported properties conflict with the current graph: "
                      (pr-str (mapv :property-id @property-conflicts)))})
       (sqlite-build/build-blocks-tx opts))))
-
-(defn merge-export-map
-  "Merges export map with the block that will receive the import"
-  [existing-block export-map]
-  (merge-with merge
-              export-map
-              {:build/block
-               {:block/uuid (:block/uuid existing-block)
-                :block/page (select-keys (:block/page existing-block) [:block/uuid])}}))
