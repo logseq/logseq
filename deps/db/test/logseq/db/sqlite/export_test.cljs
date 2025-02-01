@@ -20,8 +20,7 @@
         import-block* (db-test/find-block-by-content @conn "import")
         {:keys [init-tx block-props-tx]}
         (->> (sqlite-export/build-entity-export @conn [:block/uuid (:block/uuid export-block)])
-             (sqlite-export/merge-export-map (db-test/find-block-by-content @conn "import"))
-             (sqlite-export/build-entity-import @conn))
+             (sqlite-export/build-import @conn {:current-block import-block*}))
         _ (assert (empty? block-props-tx) "This is empty for properties that already exist and thus no transacted")
         _ (d/transact! conn init-tx)
         import-block (d/entity @conn (:db/id import-block*))]
@@ -57,8 +56,7 @@
         import-block* (db-test/find-block-by-content @conn2 "import")
         {:keys [init-tx block-props-tx] :as _txs}
         (->> (sqlite-export/build-entity-export @conn [:block/uuid (:block/uuid export-block)])
-             (sqlite-export/merge-export-map import-block*)
-             (sqlite-export/build-entity-import @conn2))
+             (sqlite-export/build-import @conn2 {:current-block import-block*}))
         _ (assert (nil? (d/entity @conn2 :user.property/num-many)) "Does not have imported property")
         _ (d/transact! conn2 init-tx)
         _ (d/transact! conn2 block-props-tx)
@@ -94,8 +92,7 @@
         (let [import-block2* (db-test/find-block-by-content @conn2 "import2")
               {:keys [init-tx block-props-tx] :as _txs}
               (->> (sqlite-export/build-entity-export @conn [:block/uuid (:block/uuid export-block)])
-                   (sqlite-export/merge-export-map import-block2*)
-                   (sqlite-export/build-entity-import @conn2))
+                   (sqlite-export/build-import @conn2 {:current-block import-block2*}))
               _ (assert (empty? block-props-tx) "This is empty for properties that already exist and thus no transacted")
               _ (d/transact! conn2 init-tx)
               import-block2 (d/entity @conn2 (:db/id import-block2*))]

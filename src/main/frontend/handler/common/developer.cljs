@@ -74,41 +74,33 @@
     (println pull-data)
     (notification/show! "Copied block's data!" :success)))
 
-(defn- import-submit [block import-input _e]
-  (let [export-map (try (edn/read-string @import-input) (catch :default _err ::invalid-import))]
+(defn- import-submit [import-inputs _e]
+  (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))
+        import-block? (:build/block export-map)
+        block (when import-block?
+                    (if-let [eid (:block-id (first (state/get-editor-args)))]
+                      (db/entity [:block/uuid eid])
+                      (notification/show! "No block found" :warning)))]
     (if (= ::invalid-import export-map)
       (notification/show! "The submitted EDN data is invalid! Fix and try again." :warning)
-      (let [export-map' (sqlite-export/merge-export-map block export-map)
-            {:keys [init-tx block-props-tx error] :as txs} (sqlite-export/build-entity-import (db/get-db) export-map')]
+      (let [{:keys [init-tx block-props-tx error] :as txs}
+            (sqlite-export/build-import (db/get-db)
+                                        (when block {:current-block block})
+                                        export-map)]
+        (pprint/pprint txs)
         (if error
           (notification/show! error :error)
           (p/do
-            (pprint/pprint txs)
-          ;; FIXME: Choose better metadata so that undo works consistently
-            (db/transact! (state/get-current-repo) init-tx {:save-block true})
+            ;; TODO: Use metadata that supports undo
+            (db/transact! (state/get-current-repo) init-tx
+                          (if import-block? {:save-block true} {::sqlite-export/imported-data? true}))
             (when (seq block-props-tx)
-              (db/transact! (state/get-current-repo) block-props-tx {:save-block true}))))
+              (db/transact! (state/get-current-repo) block-props-tx
+                            (if import-block? {:save-block true} {::sqlite-export/imported-data? true})))
+            (when-not import-block?
+              (notification/show! "Import successful!" :success))))
         ;; Also close cmd-k
         (shui/dialog-close-all!)))))
-
-(defn- import-entity-data
-  [eid]
-  (let [import-input (atom nil)
-        block (db/entity eid)]
-    (shui/dialog-open!
-     [:div
-      [:label.flex.my-2 "Import into block with text " (pr-str (:block/title block))]
-      (shui/textarea {:placeholder "Import EDN Data"
-                      :rows 10
-                      :auto-focus true
-                      :on-key-down (fn [e]
-                                     (when (= "Enter" (util/ekey e))
-                                       (import-submit block import-input e)
-                                       (util/stop e)))
-                      :on-change (fn [^js e] (reset! import-input (util/evalue e)))})
-      (shui/button {:class "mt-3"
-                    :on-click (partial import-submit block import-input)}
-                   "Import")])))
 
 ;; Public Commands
 (defn ^:export show-block-data []
@@ -143,11 +135,32 @@
     (export-entity-data [:block/uuid block-uuid])
     (notification/show! "No block found" :warning)))
 
-(defn ^:export import-block-data []
-  ;; Use editor state to locate most recent block
-  (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
-    (import-entity-data [:block/uuid block-uuid])
-    (notification/show! "No block found" :warning)))
+(defn ^:export export-page-data []
+  (if-let [page-id (page-util/get-current-page-id)]
+    (let [result (sqlite-export/build-page-export (db/get-db) page-id)
+          pull-data (with-out-str (pprint/pprint result))]
+      (.writeText js/navigator.clipboard pull-data)
+      (println pull-data)
+      (notification/show! "Copied page's data!" :success))
+    (notification/show! "No page found" :warning)))
+
+(defn ^:export import-edn-data
+  []
+  (let [import-inputs (atom {:import-data "" :import-block? false})]
+    (shui/dialog-open!
+     [:div
+      [:label.flex.my-2.text-lg "Import EDN Data"]
+      #_[:label.block.flex.items-center.py-3
+       (shui/checkbox {:on-checked-change #(swap! import-inputs update :import-block? not)})
+       [:small.pl-2 (str "Import into current block")]]
+      (shui/textarea {:placeholder "{}"
+                      :rows 10
+                      :auto-focus true
+                      :on-change (fn [^js e] (swap! import-inputs assoc :import-data (util/evalue e)))})
+      (shui/button {:class "mt-3"
+                    :on-click (partial import-submit import-inputs)}
+                   "Import")])))
+
 
 (defn ^:export validate-db []
   (when-let [^Object worker @state/*db-worker]

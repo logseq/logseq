@@ -618,10 +618,15 @@
                            :inactive (not (state/developer-mode?))
                            :fn :frontend.handler.common.developer/export-block-data}
 
-   :dev/import-block-data {:binding []
-                           :db-graph? true
-                           :inactive (not (state/developer-mode?))
-                           :fn :frontend.handler.common.developer/import-block-data}
+   :dev/export-page-data {:binding []
+                          :db-graph? true
+                          :inactive (not (state/developer-mode?))
+                          :fn :frontend.handler.common.developer/export-page-data}
+
+   :dev/import-edn-data {:binding []
+                         :db-graph? true
+                         :inactive (not (state/developer-mode?))
+                         :fn :frontend.handler.common.developer/import-edn-data}
 
    :dev/validate-db   {:binding []
                        :db-graph? true
@@ -845,7 +850,8 @@
           :dev/show-page-data
           :dev/show-page-ast
           :dev/export-block-data
-          :dev/import-block-data
+          :dev/export-page-data
+          :dev/import-edn-data
           :dev/replace-graph-with-db-file
           :dev/validate-db
           :ui/customize-appearance])
@@ -1035,7 +1041,8 @@
      :dev/show-page-data
      :dev/show-page-ast
      :dev/export-block-data
-     :dev/import-block-data
+     :dev/export-page-data
+     :dev/import-edn-data
      :dev/replace-graph-with-db-file
      :dev/validate-db
      :ui/clear-all-notifications]
