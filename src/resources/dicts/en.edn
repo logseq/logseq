@@ -798,8 +798,9 @@
   :dev/show-block-ast "(Dev) Show block AST"
   :dev/show-page-data "(Dev) Show page data"
   :dev/show-page-ast "(Dev) Show page AST"
-  :dev/export-block-data "(Dev) Export block data as EDN"
-  :dev/import-block-data "(Dev) Import block data as EDN"
+  :dev/export-block-data "(Dev) Export block EDN data"
+  :dev/export-page-data "(Dev) Export page EDN data"
+  :dev/import-edn-data "(Dev) Import block EDN data"
   :dev/replace-graph-with-db-file "(Dev) Replace graph with its db.sqlite file"
   :dev/validate-db "(Dev) Validate current graph"
   :window/close "Close window"}}
