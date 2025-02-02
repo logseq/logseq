@@ -57,18 +57,17 @@
 
 (defn layout!
   "Node forces documentation can be read in more detail here https://d3js.org/d3-force"
-  [nodes links link-dist charge-strength charge-range]
+  [nodes links link-dist charge-strength charge-range link-strength]
   (let [simulation (forceSimulation nodes)]
     (-> simulation
         (.force "link"
                 ;; The link force pushes linked nodes together or apart according to the desired link distance.
-                ;; The strength of the force is proportional to the difference between the linked nodes distance
-                ;; and the target distance, similar to a spring force.
+                ;; The strength of the force is also controlled independently to allow flexibility for users
                 (-> (forceLink)
                     (.id (fn [d] (.-id d)))
                     (.distance link-dist)
                     (.links links)
-                    (.strength 1)))
+                    (.strength (* link-strength 0.05))))
         (.force "charge"
                 ;; The many-body (or n-body) force applies mutually amongst all nodes.
                 ;; It can be used to simulate gravity or electrostatic charge.
@@ -199,22 +198,22 @@
     (when @*graph-instance
       (clear-nodes! (:graph @*graph-instance))
       (destroy-instance!))
-    (let [{:keys [nodes links style hover-style height register-handlers-fn dark? link-dist charge-strength charge-range]} (first (:rum/args state))
+    (let [{:keys [nodes links style hover-style height register-handlers-fn dark? link-dist charge-strength charge-range link-strength]} (first (:rum/args state))
           style       (or style (default-style dark?))
           hover-style (or hover-style (default-hover-style dark?))
           graph       (Graph.)
           nodes-set   (set (map :id nodes))
           links       (->>
-                       (filter
-                        (fn [link]
-                          (and (nodes-set (:source link)) (nodes-set (:target link))))
-                        links)
-                       (distinct)) ;; #3331 (@zhaohui0923) seems caused by duplicated links. Why distinct doesn't work?
+                        (filter
+                         (fn [link]
+                           (and (nodes-set (:source link)) (nodes-set (:target link))))
+                          links)
+                         (distinct)) ;; #3331 (@zhaohui0923) seems caused by duplicated links. Why distinct doesn't work?
           nodes       (remove nil? nodes)
           links       (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
           nodes-js    (bean/->js nodes)
           links-js    (bean/->js links)
-          simulation  (layout! nodes-js links-js link-dist charge-strength charge-range)]
+          simulation  (layout! nodes-js links-js link-dist charge-strength charge-range link-strength)]
       (doseq [node nodes-js]
         (try (.addNode graph (.-id node) node)
              (catch :default e
