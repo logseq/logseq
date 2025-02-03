@@ -150,14 +150,14 @@
         "Page's blocks are imported")
 
     (testing "importing a 2nd time appends blocks"
-        (let [{:keys [init-tx block-props-tx] :as _txs}
-              (->> (sqlite-export/build-page-export @conn (:db/id page))
-                   (sqlite-export/build-import @conn2 {}))
+      (let [{:keys [init-tx block-props-tx] :as _txs}
+            (->> (sqlite-export/build-page-export @conn (:db/id page))
+                 (sqlite-export/build-import @conn2 {}))
             ;; _ (cljs.pprint/pprint _txs)
-              _ (d/transact! conn2 init-tx)
-              _ (d/transact! conn2 block-props-tx)
-              full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))
-              expected-page-and-blocks
-              (update-in (:pages-and-blocks original-data) [0 :blocks]
-                         (fn [blocks] (into blocks blocks)))]
-          (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))))
+            _ (d/transact! conn2 init-tx)
+            _ (d/transact! conn2 block-props-tx)
+            full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))
+            expected-page-and-blocks
+            (update-in (:pages-and-blocks original-data) [0 :blocks]
+                       (fn [blocks] (into blocks blocks)))]
+        (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))))
