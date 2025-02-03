@@ -161,3 +161,36 @@
             (update-in (:pages-and-blocks original-data) [0 :blocks]
                        (fn [blocks] (into blocks blocks)))]
         (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))))
+
+(deftest import-page-with-different-property-types
+  (let [original-data
+        {:properties {:user.property/num {:logseq.property/type :number
+                                          :db/cardinality :db.cardinality/one
+                                          :block/title "num"}
+                      :user.property/date {:logseq.property/type :date
+                                           :db/cardinality :db.cardinality/one
+                                           :block/title "date"}}
+         :pages-and-blocks
+         [{:page {:block/title "page1"}
+           :blocks [{:block/title "num block"
+                     :build/properties {:user.property/num 2}}
+                    {:block/title "date block"
+                     :build/properties {:user.property/date [:build/page {:build/journal 20250203}]}}]}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        page (db-test/find-page-by-title @conn "page1")
+        conn2 (db-test/create-conn)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (->> (sqlite-export/build-page-export @conn (:db/id page))
+             (sqlite-export/build-import @conn2 {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! conn2 init-tx)
+        _ (d/transact! conn2 block-props-tx)
+        page2 (db-test/find-page-by-title @conn2 "page1")
+        full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))]
+
+    (is (= (:properties original-data) (:properties full-imported-page))
+        "Page's properties are imported")
+    (is (= (:classes original-data) (:classes full-imported-page))
+        "Page's classes are imported")
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
+        "Page's blocks are imported")))
