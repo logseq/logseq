@@ -27,7 +27,7 @@
 ;; should match definition in translate-property-value
 (defn page-prop-value?
   [prop-value]
-  (and (vector? prop-value) (= :page (first prop-value))))
+  (and (vector? prop-value) (contains? #{:build/page :page} (first prop-value))))
 
 (defn- translate-property-value
   "Translates a property value for create-graph edn. A value wrapped in vector
@@ -35,7 +35,16 @@
   [val page-uuids]
   (if (vector? val)
     (case (first val)
-      ;; Converts a page name to block/uuid
+      ;; Converts a page or journal name to block/uuid
+      :build/page
+      (let [page-name (if-let [journal-day (:build/journal (second val))]
+                        ;; TODO: Make lookup more efficient than build name each time
+                        (date-time-util/int->journal-title journal-day "MMM do, yyyy")
+                        (:block/title (second val)))]
+        (if-let [page-uuid (page-uuids page-name)]
+          [:block/uuid page-uuid]
+          (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)}))))
+      ;; deprecated way to build page
       :page
       (if-let [page-uuid (page-uuids (second val))]
         [:block/uuid page-uuid]
@@ -460,19 +469,21 @@
       (println "Building additional pages from content refs:" (pr-str (mapv #(get-in % [:page :block/title]) new-pages-from-refs))))
     (concat pages-and-blocks new-pages-from-refs)))
 
-(defn- add-new-pages-from-properties
+(defn add-new-pages-from-properties
   [properties pages-and-blocks]
   (let [used-properties (get-used-properties-from-options {:pages-and-blocks pages-and-blocks :properties properties})
-        existing-pages (->> pages-and-blocks (keep #(get-in % [:page :block/title])) set)
+        existing-pages (->> pages-and-blocks (keep #(select-keys (:page %) [:build/journal :block/title])) set)
         new-pages (->> (mapcat val used-properties)
                        (mapcat (fn [val-or-vals]
-                                 (keep #(when (page-prop-value? %) (second %))
+                                 (keep #(when (page-prop-value? %)
+                                          (if (= :page (first %)) {:block/title (second %)} (second %)))
                                        (if (set? val-or-vals) val-or-vals [val-or-vals]))))
                        distinct
                        (remove existing-pages)
-                       (map #(hash-map :page {:block/title %})))]
+                       (map #(hash-map :page %)))]
     (when (seq new-pages)
-      (println "Building additional pages from property values:" (pr-str (mapv #(get-in % [:page :block/title]) new-pages))))
+      (println "Building additional pages from property values:"
+               (pr-str (mapv #(or (get-in % [:page :block/title]) (get-in % [:page :build/journal])) new-pages))))
     (concat pages-and-blocks new-pages)))
 
 (defn- expand-build-children
@@ -523,10 +534,10 @@
                            m))]
     ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
     (->> pages-and-blocks
+         (add-new-pages-from-properties properties)
          (map expand-journal)
          (map expand-block-children)
          add-new-pages-from-refs
-         (add-new-pages-from-properties properties)
          ;; This needs to be last to ensure page metadata
          (map ensure-page-uuids)
          vec)))

@@ -27,16 +27,25 @@
                                 closed-values)))])))
        (into {})))
 
+(defn- readable-property-value-entity
+  [v]
+  (cond (ldb/internal-page? v)
+        [:build/page (select-keys v [:block/title])]
+        (ldb/journal? v)
+        [:build/page {:build/journal (:block/journal-day v)}]
+        :else
+        (or (:db/ident v) (db-property/property-value-content v))))
+
 (defn build-entity-export
   "Given entity id and optional existing properties, build an EDN export map"
   [db entity-or-eid & {:keys [properties]}]
   (let [entity (if (de/entity? entity-or-eid) entity-or-eid (d/entity db entity-or-eid))
         ent-properties (dissoc (db-property/properties entity) :block/tags)
         new-user-property-ids (->> (remove db-property/logseq-property? (keys ent-properties))
-                                 (concat (->> (:block/tags entity)
-                                              (mapcat :logseq.property.class/properties)
-                                              (map :db/ident)))
-                                 (remove #(get properties %)))
+                                   (concat (->> (:block/tags entity)
+                                                (mapcat :logseq.property.class/properties)
+                                                (map :db/ident)))
+                                   (remove #(get properties %)))
         new-properties (build-export-properties db new-user-property-ids)
         all-properties (merge properties new-properties)
         result (cond-> (select-keys entity [:block/title])
@@ -54,12 +63,12 @@
                                                                   (get-in all-properties [k :build/closed-values]))]
                                          [:block/uuid closed-uuid]
                                          (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content v))) {:properties all-properties})))
-                                       ;; Copied from readable-properties
+                                       ;; Originally copied from readable-properties
                                        (cond
                                          (de/entity? v)
-                                         (or (:db/ident v) (db-property/property-value-content v))
+                                         (readable-property-value-entity v)
                                          (and (set? v) (every? de/entity? v))
-                                         (set (map db-property/property-value-content v))
+                                         (set (map readable-property-value-entity v))
                                          :else
                                          v))]))
                              (into {}))))]
