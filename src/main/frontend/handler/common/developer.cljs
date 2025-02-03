@@ -159,6 +159,7 @@
        (shui/checkbox {:on-checked-change #(swap! import-inputs update :import-block? not)})
        [:small.pl-2 (str "Import into current block")]]
       (shui/textarea {:placeholder "{}"
+                      :class "resize overflow-y-auto"
                       :rows 10
                       :auto-focus true
                       :on-change (fn [^js e] (swap! import-inputs assoc :import-data (util/evalue e)))})
