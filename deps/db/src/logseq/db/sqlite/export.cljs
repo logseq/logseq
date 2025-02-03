@@ -28,30 +28,32 @@
        (into {})))
 
 (defn build-entity-export
-  "Given entity id, build an EDN export map"
-  [db entity-or-eid]
+  "Given entity id and optional existing properties, build an EDN export map"
+  [db entity-or-eid & {:keys [properties]}]
   (let [entity (if (de/entity? entity-or-eid) entity-or-eid (d/entity db entity-or-eid))
-        properties (dissoc (db-property/properties entity) :block/tags)
-        user-defined-properties (concat (remove db-property/logseq-property? (keys properties))
-                                        (->> (:block/tags entity)
-                                             (mapcat :logseq.property.class/properties)
-                                             (map :db/ident)))
-        properties-config (build-export-properties db user-defined-properties)
+        ent-properties (dissoc (db-property/properties entity) :block/tags)
+        new-user-property-ids (->> (remove db-property/logseq-property? (keys ent-properties))
+                                 (concat (->> (:block/tags entity)
+                                              (mapcat :logseq.property.class/properties)
+                                              (map :db/ident)))
+                                 (remove #(get properties %)))
+        new-properties (build-export-properties db new-user-property-ids)
+        all-properties (merge properties new-properties)
         result (cond-> (select-keys entity [:block/title])
                  (seq (:block/tags entity))
                  (assoc :build/tags
                         (mapv :db/ident (:block/tags entity)))
-                 (seq properties)
+                 (seq ent-properties)
                  (assoc :build/properties
-                        (->> properties
+                        (->> ent-properties
                              (map (fn [[k v]]
                                     [k
                                      (if (:block/closed-value-property v)
                                        (if-let [closed-uuid (some #(when (= (:value %) (db-property/property-value-content v))
                                                                      (:uuid %))
-                                                                  (get-in properties-config [k :build/closed-values]))]
+                                                                  (get-in all-properties [k :build/closed-values]))]
                                          [:block/uuid closed-uuid]
-                                         (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content v))) {:properties properties-config})))
+                                         (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content v))) {:properties all-properties})))
                                        ;; Copied from readable-properties
                                        (cond
                                          (de/entity? v)
@@ -73,8 +75,8 @@
                                   (assoc :build/class-properties
                                          (mapv :db/ident (:logseq.property.class/properties %))))))
                   (into {})))
-      (seq properties-config)
-      (assoc :properties properties-config))))
+      (seq new-properties)
+      (assoc :properties new-properties))))
 
 (defn- build-blocks-tree
   "Given a page's block entities, returns the blocks in a sqlite.build EDN format
@@ -87,7 +89,7 @@
         build-block (fn build-block [block*]
                       (let [child-nodes (mapv build-block (get children (:db/id block*) []))
                             {:build/keys [block] :keys [properties classes]}
-                            (build-entity-export db block*)]
+                            (build-entity-export db block* {:properties @*properties})]
                         (when (seq properties) (swap! *properties merge properties))
                         (when (seq classes) (swap! *classes merge classes))
                         (cond-> block
