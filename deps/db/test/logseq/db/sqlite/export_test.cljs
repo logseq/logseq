@@ -110,13 +110,22 @@
                                               :block/title "Default"}
                       :user.property/p1 {:logseq.property/type :default
                                          :db/cardinality :db.cardinality/one
-                                         :block/title "p1"}}
+                                         :block/title "p1"}
+                      :user.property/num {:logseq.property/type :number
+                                          :db/cardinality :db.cardinality/one
+                                          :block/title "num"}}
          :classes {:user.class/MyClass {:block/title "My Class"
                                         :build/class-properties [:user.property/default :user.property/p1]}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title "b1"
-                     :build/properties {:user.property/default "woot"}}
+                     :build/properties {:user.property/default "woot"}
+                     :build/children [{:block/title "b1a"
+                                       :build/children
+                                       [{:block/title "b1aa"
+                                         :build/properties {:user.property/num 2}}
+                                        {:block/title "b1ab"}]}
+                                      {:block/title "b1b"}]}
                     {:block/title "b2"
                      :build/tags [:user.class/MyClass]}]}]}
         conn (db-test/create-conn-with-blocks original-data)
@@ -141,14 +150,14 @@
         "Page's blocks are imported")
 
     (testing "importing a 2nd time appends blocks"
-      (let [{:keys [init-tx block-props-tx] :as _txs}
-            (->> (sqlite-export/build-page-export @conn (:db/id page))
-                 (sqlite-export/build-import @conn2 {}))
+        (let [{:keys [init-tx block-props-tx] :as _txs}
+              (->> (sqlite-export/build-page-export @conn (:db/id page))
+                   (sqlite-export/build-import @conn2 {}))
             ;; _ (cljs.pprint/pprint _txs)
-            _ (d/transact! conn2 init-tx)
-            _ (d/transact! conn2 block-props-tx)
-            full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))
-            expected-page-and-blocks
-            (update-in (:pages-and-blocks original-data) [0 :blocks]
-                       (fn [blocks] (into blocks blocks)))]
-        (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))))
+              _ (d/transact! conn2 init-tx)
+              _ (d/transact! conn2 block-props-tx)
+              full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))
+              expected-page-and-blocks
+              (update-in (:pages-and-blocks original-data) [0 :blocks]
+                         (fn [blocks] (into blocks blocks)))]
+          (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))))
