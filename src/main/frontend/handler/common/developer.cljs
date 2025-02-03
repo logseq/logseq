@@ -15,7 +15,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.handler.ui :as ui-handler]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
@@ -94,10 +95,14 @@
             ;; TODO: Use metadata that supports undo
             (db/transact! (state/get-current-repo) init-tx
                           (if import-block? {:save-block true} {::sqlite-export/imported-data? true}))
+
             (when (seq block-props-tx)
               (db/transact! (state/get-current-repo) block-props-tx
                             (if import-block? {:save-block true} {::sqlite-export/imported-data? true})))
+
             (when-not import-block?
+              (state/clear-async-query-state!)
+              (ui-handler/re-render-root!)
               (notification/show! "Import successful!" :success))))
         ;; Also close cmd-k
         (shui/dialog-close-all!)))))
