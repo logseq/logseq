@@ -76,22 +76,48 @@
       (seq properties-config)
       (assoc :properties properties-config))))
 
+(defn- build-blocks-tree
+  "Given a page's block entities, returns the blocks in a sqlite.build EDN format
+   and all properties and classes used in these blocks"
+  [db blocks]
+  (let [*properties (atom {})
+        *classes (atom {})
+        id-map (into {} (map (juxt :db/id identity)) blocks)
+        children (group-by #(get-in % [:block/parent :db/id]) blocks)
+        build-block (fn build-block [block*]
+                      (let [child-nodes (mapv build-block (get children (:db/id block*) []))
+                            {:build/keys [block] :keys [properties classes]}
+                            (build-entity-export db block*)]
+                        (when (seq properties) (swap! *properties merge properties))
+                        (when (seq classes) (swap! *classes merge classes))
+                        (cond-> block
+                          (seq child-nodes) (assoc :build/children child-nodes))))
+        roots (remove #(contains? id-map (get-in % [:block/parent :db/id])) blocks)
+        exported-blocks (mapv build-block roots)]
+    {:blocks exported-blocks
+     :properties @*properties
+     :classes @*classes}))
+
 (defn build-page-export [db eid]
   (let [page-entity (d/entity db eid)
         ;; TODO: Fetch unloaded page datoms
         datoms (d/datoms db :avet :block/page eid)
         block-eids (mapv :e datoms)
-        page-blocks (sort-by :block/order (map #(d/entity db %) block-eids))
-        ;; TODO: Handle block children
-        top-level-blocks (filter #(= page-entity (:block/parent %)) page-blocks)
-        exported-blocks (mapv #(build-entity-export db %) top-level-blocks)
+        page-blocks (->> block-eids
+                         (map #(d/entity db %))
+                         (sort-by :block/order)
+                         ;; Remove property value blocks as they are included in the block they belong to
+                         (remove #(:logseq.property/created-from-property %)))
+        {:keys [blocks properties classes]} (build-blocks-tree db page-blocks)
         page-export
-        {:pages-and-blocks [{:page (if (ldb/journal? page-entity)
-                                     {:build/journal (:block/journal-day page-entity)}
-                                     (select-keys page-entity [:block/title]))
-                             :blocks (mapv :build/block exported-blocks)}]
-         :properties (apply merge (keep :properties exported-blocks))
-         :classes (apply merge (keep :classes exported-blocks))}]
+        (cond-> {:pages-and-blocks [{:page (if (ldb/journal? page-entity)
+                                             {:build/journal (:block/journal-day page-entity)}
+                                             (select-keys page-entity [:block/title]))
+                                     :blocks blocks}]}
+          (seq properties)
+          (assoc :properties properties)
+          (seq classes)
+          (assoc :classes classes))]
     page-export))
 
 (defn- ->sqlite-build-options
