@@ -1,12 +1,12 @@
 (ns logseq.db.sqlite.export-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.db.sqlite.export :as sqlite-export]
-            [logseq.db.test.helper :as db-test]
+            [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db :as ldb]))
+            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.db.test.helper :as db-test]))
 
-(deftest import-in-same-graph
+(deftest import-block-in-same-graph
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:default-many {:logseq.property/type :default :db/cardinality :many}}
                :classes {:MyClass {:build/class-properties [:default-many]}}
@@ -35,7 +35,7 @@
            (db-test/readable-properties import-block))
         "imported block properties and tags equals exported one")))
 
-(deftest import-in-different-graph
+(deftest import-block-in-different-graph
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:num-many {:logseq.property/type :number
                                        :db/cardinality :many
@@ -89,16 +89,66 @@
         "imported block properties equals exported one")
 
     (testing "importing a 2nd time is idempotent"
-        (let [import-block2* (db-test/find-block-by-content @conn2 "import2")
-              {:keys [init-tx block-props-tx] :as _txs}
-              (->> (sqlite-export/build-entity-export @conn [:block/uuid (:block/uuid export-block)])
-                   (sqlite-export/build-import @conn2 {:current-block import-block2*}))
-              _ (assert (empty? block-props-tx) "This is empty for properties that already exist and thus no transacted")
-              _ (d/transact! conn2 init-tx)
-              import-block2 (d/entity @conn2 (:db/id import-block2*))]
-          (is (= "export" (:block/title import-block2))
-              "imported block title equals exported one")
-          (is (= {:user.property/num-many #{3 6 9}
-                  :block/tags [:user.class/MyClass]}
-                 (db-test/readable-properties import-block))
-              "imported block properties equals exported one")))))
+      (let [import-block2* (db-test/find-block-by-content @conn2 "import2")
+            {:keys [init-tx block-props-tx] :as _txs}
+            (->> (sqlite-export/build-entity-export @conn [:block/uuid (:block/uuid export-block)])
+                 (sqlite-export/build-import @conn2 {:current-block import-block2*}))
+            _ (assert (empty? block-props-tx) "This is empty for properties that already exist and thus no transacted")
+            _ (d/transact! conn2 init-tx)
+            import-block2 (d/entity @conn2 (:db/id import-block2*))]
+        (is (= "export" (:block/title import-block2))
+            "imported block title equals exported one")
+        (is (= {:user.property/num-many #{3 6 9}
+                :block/tags [:user.class/MyClass]}
+               (db-test/readable-properties import-block))
+            "imported block properties equals exported one")))))
+
+(deftest import-page-in-different-graph
+  (let [original-data
+        {:properties {:user.property/default {:logseq.property/type :default
+                                              :db/cardinality :db.cardinality/one
+                                              :block/title "Default"}
+                      :user.property/p1 {:logseq.property/type :default
+                                         :db/cardinality :db.cardinality/one
+                                         :block/title "p1"}}
+         :classes {:user.class/MyClass {:block/title "My Class"
+                                        :build/class-properties [:user.property/default :user.property/p1]}}
+         :pages-and-blocks
+         [{:page {:block/title "page1"}
+           :blocks [{:block/title "b1"
+                     :build/properties {:user.property/default "woot"}}
+                    {:block/title "b2"
+                     :build/tags [:user.class/MyClass]}]}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        page (db-test/find-page-by-title @conn "page1")
+        conn2 (db-test/create-conn)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (->> (sqlite-export/build-page-export @conn (:db/id page))
+             (sqlite-export/build-import @conn2 {}))
+        _ (assert (nil? (d/entity @conn2 :user.property/default)))
+        _ (assert (nil? (d/entity @conn2 :user.class/MyClass)))
+        _ (d/transact! conn2 init-tx)
+        _ (d/transact! conn2 block-props-tx)
+        ;; _ (cljs.pprint/pprint _txs)
+        page2 (db-test/find-page-by-title @conn2 "page1")
+        full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))]
+
+    (is (= (:properties original-data) (:properties full-imported-page))
+        "Page's properties are imported")
+    (is (= (:classes original-data) (:classes full-imported-page))
+        "Page's classes are imported")
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
+        "Page's blocks are imported")
+
+    (testing "importing a 2nd time appends blocks"
+      (let [{:keys [init-tx block-props-tx] :as _txs}
+            (->> (sqlite-export/build-page-export @conn (:db/id page))
+                 (sqlite-export/build-import @conn2 {}))
+            ;; _ (cljs.pprint/pprint _txs)
+            _ (d/transact! conn2 init-tx)
+            _ (d/transact! conn2 block-props-tx)
+            full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))
+            expected-page-and-blocks
+            (update-in (:pages-and-blocks original-data) [0 :blocks]
+                       (fn [blocks] (into blocks blocks)))]
+        (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))))

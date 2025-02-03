@@ -389,7 +389,10 @@
                       :block/title (or (:block/title page) (string/capitalize (:block/name page)))
                       :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/title page)))
                       :block/tags #{:logseq.class/Page}}
-                     (dissoc page :build/properties :db/id :block/name :block/title :build/tags)))]
+                     (dissoc page :build/properties :db/id :block/name :block/title :build/tags)))
+            page-id-fn' (if (and build-existing-tx? (not (::new-page? (meta page))))
+                         #(vector :block/uuid (:block/uuid %))
+                         page-id-fn)]
         (into
          ;; page tx
          (if (and build-existing-tx? (not (::new-page? (meta page))))
@@ -415,7 +418,7 @@
          ;; blocks tx
          (reduce (fn [acc m]
                    (into acc
-                         (->block-tx m page-uuids all-idents (page-id-fn page') opts)))
+                         (->block-tx m page-uuids all-idents (page-id-fn' page') opts)))
                  []
                  blocks))))
     pages-and-blocks)))

@@ -122,7 +122,7 @@
                          [k v])))
                 (into {})))))
 
-(defn- build-block-export-options
+(defn- build-block-import-options
   "Builds options for sqlite-build to import into current-block"
   [current-block export-map]
   (let [{:build/keys [block]}
@@ -136,10 +136,27 @@
           :blocks [(dissoc block :block/page)]}]]
     (assoc export-map :pages-and-blocks pages-and-blocks)))
 
+(defn- build-page-import-options
+  [db export-map]
+  (assert (map? (get-in export-map [:pages-and-blocks 0 :page])) "page export exists")
+  (if-let [ent (some->> (get-in export-map [:pages-and-blocks 0 :page :build/journal])
+                        (d/datoms db :avet :block/journal-day)
+                        first
+                        :e
+                        (d/entity db))]
+    (assoc-in export-map [:pages-and-blocks 0 :page] (select-keys ent [:block/uuid]))
+    ;; FIXME: Find an existing page more reliably than :block/title, :block/uuid?
+    (if-let [ent (some->> (get-in export-map [:pages-and-blocks 0 :page :block/title])
+                          (ldb/get-case-page db))]
+      (assoc-in export-map [:pages-and-blocks 0 :page] (select-keys ent [:block/uuid]))
+      export-map)))
+
 (defn build-import
   "Given an entity's export map, build the import tx to create it"
   [db {:keys [current-block]} export-map*]
-  (let [export-map (if current-block (build-block-export-options current-block export-map*) export-map*)
+  (let [export-map (if current-block
+                     (build-block-import-options current-block export-map*)
+                     (build-page-import-options db export-map*))
         property-conflicts (atom [])
         opts (->sqlite-build-options db export-map property-conflicts)]
     (if (seq @property-conflicts)
