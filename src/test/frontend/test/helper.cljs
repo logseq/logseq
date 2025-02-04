@@ -64,7 +64,7 @@
                       (parse-property-value v)
                       (let [val (parse-property-value v)]
                         (if (coll? val)
-                          (set (map #(vector :page %) val))
+                          (set (map #(vector :build/page {:block/title %}) val))
                           val)))]))))
        (into {})))
 
