@@ -163,7 +163,8 @@
         (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))))
 
 (deftest import-page-with-different-property-types
-  (let [original-data
+  (let [block-object-uuid (random-uuid)
+        original-data
         {:properties {:user.property/num {:logseq.property/type :number
                                           :db/cardinality :db.cardinality/one
                                           :block/title "num"}
@@ -188,7 +189,12 @@
                      :build/properties {:user.property/date [:build/page {:build/journal 20250203}]}}
                     {:block/title "node block"
                      :build/properties {:user.property/node #{[:build/page {:block/title "page object"
-                                                                            :build/tags [:user.class/MyClass]}]}}}]}]}
+                                                                            :build/tags [:user.class/MyClass]}]
+                                                              [:block/uuid block-object-uuid]}}}]}
+          {:page {:block/title "Blocks"}
+           :blocks [{:block/title "myclass object"
+                     :build/tags [:user.class/MyClass]
+                     :block/uuid block-object-uuid}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         page (db-test/find-page-by-title @conn "page1")
         conn2 (db-test/create-conn)
