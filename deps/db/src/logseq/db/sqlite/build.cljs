@@ -25,7 +25,7 @@
             [malli.error :as me]))
 
 ;; should match definition in translate-property-value
-(defn- page-prop-value?
+(defn page-prop-value?
   [prop-value]
   (and (vector? prop-value) (= :build/page (first prop-value))))
 
