@@ -60,7 +60,7 @@
                                         :db/cardinality :many}}
                :pages-and-blocks
                [{:page {:block/title "Page1"
-                        :build/properties {:foo "bar" :number-many #{5 10} :page-many #{[:page "Page A"]}}}}
+                        :build/properties {:foo "bar" :number-many #{5 10} :page-many #{[:build/page {:block/title "Page A"}]}}}}
                 {:page {:block/title "Page A"
                         :build/properties {:foo "bar A"}}}]})]
     (testing "cardinality :one property"

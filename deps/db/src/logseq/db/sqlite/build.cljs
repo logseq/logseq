@@ -25,13 +25,13 @@
             [malli.error :as me]))
 
 ;; should match definition in translate-property-value
-(defn page-prop-value?
+(defn- page-prop-value?
   [prop-value]
-  (and (vector? prop-value) (contains? #{:build/page :page} (first prop-value))))
+  (and (vector? prop-value) (= :build/page (first prop-value))))
 
 (defn- translate-property-value
   "Translates a property value for create-graph edn. A value wrapped in vector
-  may indicate a reference type e.g. [:page \"some page\"]"
+  may indicate a reference type e.g. [:build/page {:block/title \"some page\"}]"
   [val page-uuids]
   (if (vector? val)
     (case (first val)
@@ -44,11 +44,6 @@
         (if-let [page-uuid (page-uuids page-name)]
           [:block/uuid page-uuid]
           (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)}))))
-      ;; deprecated way to build page
-      :page
-      (if-let [page-uuid (page-uuids (second val))]
-        [:block/uuid page-uuid]
-        (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)})))
       :block/uuid
       val)
     val))
@@ -475,8 +470,7 @@
         existing-pages (->> pages-and-blocks (keep #(select-keys (:page %) [:build/journal :block/title])) set)
         new-pages (->> (mapcat val used-properties)
                        (mapcat (fn [val-or-vals]
-                                 (keep #(when (page-prop-value? %)
-                                          (if (= :page (first %)) {:block/title (second %)} (second %)))
+                                 (keep #(when (page-prop-value? %) (second %))
                                        (if (set? val-or-vals) val-or-vals [val-or-vals]))))
                        distinct
                        (remove existing-pages)
@@ -660,7 +654,7 @@
    cardinality property are defined as a set. The following property types are
    supported: :default, :url, :checkbox, :number, :node and :date. :checkbox and
    :number values are written as booleans and integers/floats. :node references
-   are written as vectors e.g. `[:page \"PAGE NAME\"]`"
+   are written as vectors e.g. `[:build/page {:block/title \"PAGE NAME\"}]`"
   [options]
   (validate-options options)
   (build-blocks-tx* options))

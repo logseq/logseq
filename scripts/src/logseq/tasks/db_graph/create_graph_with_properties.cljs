@@ -51,6 +51,7 @@
   []
   (let [today (new js/Date)
         yesterday (subtract-days today 1)
+        [today-int yesterday-int] (map date-time-util/date->int [today yesterday])
         two-days-ago (subtract-days today 2)
         closed-values-config (build-closed-values-config)
         ;; Stores random closed values for use with queries
@@ -79,12 +80,12 @@
 
        ;; Journals
        [{:page
-         {:build/journal (date-time-util/date->int today)}
+         {:build/journal today-int}
          :blocks
          [{:block/title "[[Block Properties]]"}
           {:block/title "[[Property Queries]]"}
           {:block/title "[[Has Property Queries]]"}]}
-        {:page {:build/journal (date-time-util/date->int yesterday)}}
+        {:page {:build/journal yesterday-int}}
         {:page {:build/journal (date-time-util/date->int two-days-ago)}}
 
         ;; Block property blocks and queries
@@ -101,11 +102,11 @@
           {:block/title "number-many property block" :build/properties {:number-many #{5 10}}}
           {:block/title "number-closed property block" :build/properties {:number-closed (random-closed-value :number-closed)}}
           {:block/title "node property block" :build/properties {:node [:block/uuid object-uuid]}}
-          {:block/title "node without classes property block" :build/properties {:node-without-classes [:page "Page 1"]}}
-          {:block/title "node-many property block" :build/properties {:node-many #{[:block/uuid object-uuid] [:page "Page object"]}}}
-          {:block/title "date property block" :build/properties {:date [:page (date-journal-title today)]}}
-          {:block/title "date-many property block" :build/properties {:date-many #{[:page (date-journal-title today)]
-                                                                                   [:page (date-journal-title yesterday)]}}}
+          {:block/title "node without classes property block" :build/properties {:node-without-classes [:build/page {:block/title "Page 1"}]}}
+          {:block/title "node-many property block" :build/properties {:node-many #{[:block/uuid object-uuid] [:build/page {:block/title "Page object"}]}}}
+          {:block/title "date property block" :build/properties {:date [:build/page {:build/journal today-int}]}}
+          {:block/title "date-many property block" :build/properties {:date-many #{[:build/page {:build/journal today-int}]
+                                                                                   [:build/page {:build/journal yesterday-int}]}}}
           {:block/title "datetime property block" :build/properties {:datetime timestamp}}]}
         {:page {:block/title "Property Queries"}
          :blocks
@@ -138,11 +139,11 @@
         {:page {:block/title "number-many page" :build/properties {:number-many #{5 10}}}}
         {:page {:block/title "number-closed page" :build/properties {:number-closed (get-closed-value-ref :number-closed)}}}
         {:page {:block/title "node page" :build/properties {:node [:block/uuid object-uuid]}}}
-        {:page {:block/title "node without classes page" :build/properties {:node-without-classes [:page "Page 1"]}}}
-        {:page {:block/title "node-many page" :build/properties {:node-many #{[:block/uuid object-uuid] [:page "Page object"]}}}}
-        {:page {:block/title "date page" :build/properties {:date [:page (date-journal-title today)]}}}
-        {:page {:block/title "date-many page" :build/properties {:date-many #{[:page (date-journal-title today)]
-                                                                              [:page (date-journal-title yesterday)]}}}}
+        {:page {:block/title "node without classes page" :build/properties {:node-without-classes [:build/page {:block/title "Page 1"}]}}}
+        {:page {:block/title "node-many page" :build/properties {:node-many #{[:block/uuid object-uuid] [:build/page {:block/title "Page object"}]}}}}
+        {:page {:block/title "date page" :build/properties {:date [:build/page {:build/journal today-int}]}}}
+        {:page {:block/title "date-many page" :build/properties {:date-many #{[:build/page {:build/journal today-int}]
+                                                                              [:build/page {:build/journal yesterday-int}]}}}}
         {:page {:block/title "datetime page" :build/properties {:datetime timestamp}}}
 
         {:page {:block/title "Has Property Queries"}
