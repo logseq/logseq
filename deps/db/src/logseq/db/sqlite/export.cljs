@@ -19,6 +19,8 @@
                  (cond-> (select-keys property
                                       (-> (disj db-property/schema-properties :logseq.property/classes)
                                           (conj :block/title)))
+                   (:logseq.property/classes property)
+                   (assoc :build/property-classes (mapv :db/ident (:logseq.property/classes property)))
                    (seq closed-values)
                    (assoc :build/closed-values
                           (mapv #(cond-> {:value (db-property/property-value-content %) :uuid (random-uuid)}
@@ -27,14 +29,62 @@
                                 closed-values)))])))
        (into {})))
 
-(defn- readable-property-value-entity
+(defn- buildable-property-value-entity
+  "Converts property value to a buildable version"
   [v]
   (cond (ldb/internal-page? v)
-        [:build/page (select-keys v [:block/title])]
+        ;; Should page properties be pulled here?
+        [:build/page (cond-> (select-keys v [:block/title])
+                       (seq (:block/tags v))
+                       (assoc :build/tags (->> (map :db/ident (:block/tags v))
+                                               (remove #(= % :logseq.class/Page))
+                                               vec)))]
         (ldb/journal? v)
         [:build/page {:build/journal (:block/journal-day v)}]
         :else
         (or (:db/ident v) (db-property/property-value-content v))))
+
+(defn- buildable-properties
+  "Originally copied from db-test/readable-properties. Modified so that property values are
+   valid sqlite.build EDN"
+  [ent-properties all-properties]
+  (->> ent-properties
+       (map (fn [[k v]]
+              [k
+               (if (:block/closed-value-property v)
+                 (if-let [closed-uuid (some #(when (= (:value %) (db-property/property-value-content v))
+                                               (:uuid %))
+                                            (get-in all-properties [k :build/closed-values]))]
+                   [:block/uuid closed-uuid]
+                   (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content v))) {:properties all-properties})))
+                 (cond
+                   (de/entity? v)
+                   (buildable-property-value-entity v)
+                   (and (set? v) (every? de/entity? v))
+                   (set (map buildable-property-value-entity v))
+                   :else
+                   v))]))
+       (into {})))
+
+(defn- build-export-classes
+  [db build-block block-tags]
+  (let [pvalue-class-ents (->> (:build/properties build-block)
+                               vals
+                               (mapcat (fn [val-or-vals]
+                                         (mapcat #(when (sqlite-build/page-prop-value? %) (:build/tags (second %)))
+                                                 (if (set? val-or-vals) val-or-vals [val-or-vals]))))
+                               (remove db-class/logseq-class?)
+                               (map #(d/entity db %)))
+        new-class-ents (concat (remove #(db-class/logseq-class? (:db/ident %)) block-tags)
+                               pvalue-class-ents)]
+    (->> new-class-ents
+         ;; TODO: Export class parents when there's ability to control granularity of export
+         (map #(vector (:db/ident %)
+                       (cond-> (select-keys % [:block/title])
+                         (:logseq.property.class/properties %)
+                         (assoc :build/class-properties
+                                (mapv :db/ident (:logseq.property.class/properties %))))))
+         (into {}))))
 
 (defn build-entity-export
   "Given entity id and optional existing properties, build an EDN export map"
@@ -47,43 +97,17 @@
                                                 (map :db/ident)))
                                    (remove #(get properties %)))
         new-properties (build-export-properties db new-user-property-ids)
-        all-properties (merge properties new-properties)
-        result (cond-> (select-keys entity [:block/title])
-                 (seq (:block/tags entity))
-                 (assoc :build/tags
-                        (mapv :db/ident (:block/tags entity)))
-                 (seq ent-properties)
-                 (assoc :build/properties
-                        (->> ent-properties
-                             (map (fn [[k v]]
-                                    [k
-                                     (if (:block/closed-value-property v)
-                                       (if-let [closed-uuid (some #(when (= (:value %) (db-property/property-value-content v))
-                                                                     (:uuid %))
-                                                                  (get-in all-properties [k :build/closed-values]))]
-                                         [:block/uuid closed-uuid]
-                                         (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content v))) {:properties all-properties})))
-                                       ;; Originally copied from readable-properties
-                                       (cond
-                                         (de/entity? v)
-                                         (readable-property-value-entity v)
-                                         (and (set? v) (every? de/entity? v))
-                                         (set (map readable-property-value-entity v))
-                                         :else
-                                         v))]))
-                             (into {}))))]
-    (cond-> {:build/block result}
-      (seq (:block/tags entity))
-      (assoc :classes
-             (->> (:block/tags entity)
-                  (remove #(db-class/logseq-class? (:db/ident %)))
-                  ;; TODO: Export class parents when there's ability to control granularity of export
-                  (map #(vector (:db/ident %)
-                                (cond-> (select-keys % [:block/title])
-                                  (:logseq.property.class/properties %)
-                                  (assoc :build/class-properties
-                                         (mapv :db/ident (:logseq.property.class/properties %))))))
-                  (into {})))
+        build-block (cond-> (select-keys entity [:block/title])
+                      (seq (:block/tags entity))
+                      (assoc :build/tags
+                             (mapv :db/ident (:block/tags entity)))
+                      (seq ent-properties)
+                      (assoc :build/properties
+                             (buildable-properties ent-properties (merge properties new-properties))))
+        new-classes (build-export-classes db build-block (:block/tags entity))]
+    (cond-> {:build/block build-block}
+      (seq new-classes)
+      (assoc :classes new-classes)
       (seq new-properties)
       (assoc :properties new-properties))))
 

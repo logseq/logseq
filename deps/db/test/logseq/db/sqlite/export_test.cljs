@@ -167,15 +167,28 @@
         {:properties {:user.property/num {:logseq.property/type :number
                                           :db/cardinality :db.cardinality/one
                                           :block/title "num"}
+                      :user.property/checkbox {:logseq.property/type :checkbox
+                                               :db/cardinality :db.cardinality/one
+                                               :block/title "checkbox"}
                       :user.property/date {:logseq.property/type :date
                                            :db/cardinality :db.cardinality/one
-                                           :block/title "date"}}
+                                           :block/title "date"}
+                      :user.property/node {:logseq.property/type :node
+                                           :db/cardinality :db.cardinality/many
+                                           :block/title "node"
+                                           :build/property-classes [:user.class/MyClass]}}
+         :classes {:user.class/MyClass {:block/title "MyClass"}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title "num block"
                      :build/properties {:user.property/num 2}}
+                    {:block/title "checkbox block"
+                     :build/properties {:user.property/checkbox false}}
                     {:block/title "date block"
-                     :build/properties {:user.property/date [:build/page {:build/journal 20250203}]}}]}]}
+                     :build/properties {:user.property/date [:build/page {:build/journal 20250203}]}}
+                    {:block/title "node block"
+                     :build/properties {:user.property/node #{[:build/page {:block/title "page object"
+                                                                            :build/tags [:user.class/MyClass]}]}}}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         page (db-test/find-page-by-title @conn "page1")
         conn2 (db-test/create-conn)
