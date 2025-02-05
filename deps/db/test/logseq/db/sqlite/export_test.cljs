@@ -19,7 +19,7 @@
         export-block (db-test/find-block-by-content @conn "export")
         import-block* (db-test/find-block-by-content @conn "import")
         {:keys [init-tx block-props-tx]}
-        (->> (sqlite-export/build-entity-export @conn [:block/uuid (:block/uuid export-block)])
+        (->> (sqlite-export/build-block-export @conn [:block/uuid (:block/uuid export-block)])
              (sqlite-export/build-import @conn {:current-block import-block*}))
         _ (assert (empty? block-props-tx) "This is empty for properties that already exist and thus no transacted")
         _ (d/transact! conn init-tx)
@@ -55,7 +55,7 @@
         export-block (db-test/find-block-by-content @conn "export")
         import-block* (db-test/find-block-by-content @conn2 "import")
         {:keys [init-tx block-props-tx] :as _txs}
-        (->> (sqlite-export/build-entity-export @conn [:block/uuid (:block/uuid export-block)])
+        (->> (sqlite-export/build-block-export @conn [:block/uuid (:block/uuid export-block)])
              (sqlite-export/build-import @conn2 {:current-block import-block*}))
         _ (assert (nil? (d/entity @conn2 :user.property/num-many)) "Does not have imported property")
         _ (d/transact! conn2 init-tx)
@@ -91,7 +91,7 @@
     (testing "importing a 2nd time is idempotent"
       (let [import-block2* (db-test/find-block-by-content @conn2 "import2")
             {:keys [init-tx block-props-tx] :as _txs}
-            (->> (sqlite-export/build-entity-export @conn [:block/uuid (:block/uuid export-block)])
+            (->> (sqlite-export/build-block-export @conn [:block/uuid (:block/uuid export-block)])
                  (sqlite-export/build-import @conn2 {:current-block import-block2*}))
             _ (assert (empty? block-props-tx) "This is empty for properties that already exist and thus no transacted")
             _ (d/transact! conn2 init-tx)
@@ -213,3 +213,40 @@
         "Page's classes are imported")
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
         "Page's blocks are imported")))
+
+(deftest import-graph-ontology
+  (let [original-data
+        {:properties
+         {:user.property/num {:logseq.property/type :number
+                              :db/cardinality :db.cardinality/one
+                              :block/title "num"}
+          :user.property/checkbox {:logseq.property/type :checkbox
+                                   :db/cardinality :db.cardinality/one
+                                   :block/title "checkbox"}
+          :user.property/url {:logseq.property/type :url
+                              :db/cardinality :db.cardinality/one
+                              :block/title "url"
+                              :build/properties {:logseq.property/description "desc for url"}}
+          :user.property/node {:logseq.property/type :node
+                               :db/cardinality :db.cardinality/many
+                               :block/title "node"
+                               :build/property-classes [:user.class/MyClass]}}
+         :classes
+         {:user.class/MyClass {:block/title "MyClass"
+                               :build/class-parent :logseq.class/Root
+                               :build/properties {:user.property/url "https://example.com/MyClass"}}
+          :user.class/MyClass2 {:block/title "MyClass2"
+                                :build/class-parent :user.class/MyClass
+                                :build/properties {:logseq.property/description "tests child class"}}}}
+        conn (db-test/create-conn-with-blocks original-data)
+        conn2 (db-test/create-conn)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (->> (sqlite-export/build-graph-ontology-export @conn)
+             (sqlite-export/build-import @conn2 {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! conn2 init-tx)
+        _ (d/transact! conn2 block-props-tx)
+        imported-ontology (sqlite-export/build-graph-ontology-export @conn2)]
+
+    (is (= (:properties original-data) (:properties imported-ontology)))
+    (is (= (:classes original-data) (:classes imported-ontology)))))

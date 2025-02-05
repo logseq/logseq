@@ -7,6 +7,7 @@
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.notification :as notification]
+            [frontend.handler.ui :as ui-handler]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -15,8 +16,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [frontend.handler.ui :as ui-handler]))
+            [promesa.core :as p]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
@@ -69,7 +69,7 @@
 
 (defn- export-entity-data
   [eid]
-  (let [result (sqlite-export/build-entity-export (db/get-db) eid)
+  (let [result (sqlite-export/build-block-export (db/get-db) eid)
         pull-data (with-out-str (pprint/pprint result))]
     (.writeText js/navigator.clipboard pull-data)
     (println pull-data)
@@ -79,9 +79,9 @@
   (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))
         import-block? (:build/block export-map)
         block (when import-block?
-                    (if-let [eid (:block-id (first (state/get-editor-args)))]
-                      (db/entity [:block/uuid eid])
-                      (notification/show! "No block found" :warning)))]
+                (if-let [eid (:block-id (first (state/get-editor-args)))]
+                  (db/entity [:block/uuid eid])
+                  (notification/show! "No block found" :warning)))]
     (if (= ::invalid-import export-map)
       (notification/show! "The submitted EDN data is invalid! Fix and try again." :warning)
       (let [{:keys [init-tx block-props-tx error] :as txs}
@@ -149,6 +149,15 @@
       (notification/show! "Copied page's data!" :success))
     (notification/show! "No page found" :warning)))
 
+(defn ^:export export-graph-ontology-data []
+  (let [result (sqlite-export/build-graph-ontology-export (db/get-db))
+        pull-data (with-out-str (pprint/pprint result))]
+    (.writeText js/navigator.clipboard pull-data)
+    (println pull-data)
+    (js/console.log (str "Exported " (count (:classes result)) " classes and "
+                         (count (:properties result)) " properties"))
+    (notification/show! "Copied graphs's ontology data!" :success)))
+
 (defn ^:export import-edn-data
   []
   (let [import-inputs (atom {:import-data "" :import-block? false})]
@@ -156,17 +165,16 @@
      [:div
       [:label.flex.my-2.text-lg "Import EDN Data"]
       #_[:label.block.flex.items-center.py-3
-       (shui/checkbox {:on-checked-change #(swap! import-inputs update :import-block? not)})
-       [:small.pl-2 (str "Import into current block")]]
+         (shui/checkbox {:on-checked-change #(swap! import-inputs update :import-block? not)})
+         [:small.pl-2 (str "Import into current block")]]
       (shui/textarea {:placeholder "{}"
-                      :class "resize overflow-y-auto"
+                      :class "overflow-y-auto"
                       :rows 10
                       :auto-focus true
                       :on-change (fn [^js e] (swap! import-inputs assoc :import-data (util/evalue e)))})
       (shui/button {:class "mt-3"
                     :on-click (partial import-submit import-inputs)}
                    "Import")])))
-
 
 (defn ^:export validate-db []
   (when-let [^Object worker @state/*db-worker]
