@@ -370,7 +370,7 @@
                   (rest e))]
     (when (seq markers)
       (if db-graph?
-        (let [markers' (set (map (comp string/capitalize name) markers))]
+        (let [markers' (set (map (comp common-util/capitalize-all name) markers))]
           {:query (list 'task '?b (set markers'))
            :rules [:task]})
         (let [markers (set (map (comp string/upper-case name) markers))]
