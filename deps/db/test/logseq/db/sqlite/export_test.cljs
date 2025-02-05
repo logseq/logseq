@@ -105,19 +105,15 @@
 
 ;; Tests a variety of blocks including block children with new properties, blocks with new classes
 ;; and blocks with built-in properties
-(deftest import-page-in-different-graph
+(deftest import-page-with-different-blocks
   (let [original-data
         {:properties {:user.property/default {:logseq.property/type :default
                                               :db/cardinality :db.cardinality/one
                                               :block/title "Default"}
-                      :user.property/p1 {:logseq.property/type :default
-                                         :db/cardinality :db.cardinality/one
-                                         :block/title "p1"}
                       :user.property/num {:logseq.property/type :number
                                           :db/cardinality :db.cardinality/one
                                           :block/title "num"}}
-         :classes {:user.class/MyClass {:block/title "My Class"
-                                        :build/class-properties [:user.property/default :user.property/p1]}}
+         :classes {:user.class/MyClass {:block/title "My Class"}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title "b1"
@@ -166,6 +162,38 @@
             (update-in (:pages-and-blocks original-data) [0 :blocks]
                        (fn [blocks] (into blocks blocks)))]
         (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))))
+
+(deftest import-page-with-different-page-and-classes
+  (let [original-data
+        {:properties {:user.property/p1 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p1"}
+                      :user.property/p2 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p2"}}
+         :classes {:user.class/MyClass {:block/title "My Class"
+                                        :build/class-properties [:user.property/p1 :user.property/p2]}}
+         :pages-and-blocks
+         [{:page {:block/title "page1"
+                  :build/properties {:user.property/p1 "woot"}
+                  :build/tags [:user.class/MyClass]}
+           :blocks []}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        page (db-test/find-page-by-title @conn "page1")
+        conn2 (db-test/create-conn)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (->> (sqlite-export/build-page-export @conn (:db/id page))
+             (sqlite-export/build-import @conn2 {}))
+        _ (assert (nil? (d/entity @conn2 :user.property/default)))
+        _ (assert (nil? (d/entity @conn2 :user.class/MyClass)))
+        _ (d/transact! conn2 init-tx)
+        _ (d/transact! conn2 block-props-tx)
+        ;; _ (cljs.pprint/pprint _txs)
+        page2 (db-test/find-page-by-title @conn2 "page1")
+        full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))]
+
+    (is (= (:properties original-data) (:properties full-imported-page))
+        "Page's properties are imported")
+    (is (= (:classes original-data) (:classes full-imported-page))
+        "Page's classes are imported")
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
+        "Page's blocks are imported")))
 
 (deftest import-page-with-different-property-types
   (let [block-object-uuid (random-uuid)
