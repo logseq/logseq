@@ -623,6 +623,11 @@
                           :inactive (not (state/developer-mode?))
                           :fn :frontend.handler.common.developer/export-page-data}
 
+   :dev/export-graph-ontology-data {:binding []
+                                    :db-graph? true
+                                    :inactive (not (state/developer-mode?))
+                                    :fn :frontend.handler.common.developer/export-graph-ontology-data}
+
    :dev/import-edn-data {:binding []
                          :db-graph? true
                          :inactive (not (state/developer-mode?))
@@ -851,6 +856,7 @@
           :dev/show-page-ast
           :dev/export-block-data
           :dev/export-page-data
+          :dev/export-graph-ontology-data
           :dev/import-edn-data
           :dev/replace-graph-with-db-file
           :dev/validate-db
@@ -1042,6 +1048,7 @@
      :dev/show-page-ast
      :dev/export-block-data
      :dev/export-page-data
+     :dev/export-graph-ontology-data
      :dev/import-edn-data
      :dev/replace-graph-with-db-file
      :dev/validate-db

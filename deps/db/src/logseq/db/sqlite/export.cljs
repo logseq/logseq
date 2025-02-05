@@ -9,26 +9,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]))
 
-(defn- build-export-properties
-  [db user-defined-properties]
-  (->> user-defined-properties
-       (map (fn [ident]
-              (let [property (d/entity db ident)
-                    closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
-                [ident
-                 (cond-> (select-keys property
-                                      (-> (disj db-property/schema-properties :logseq.property/classes)
-                                          (conj :block/title)))
-                   (:logseq.property/classes property)
-                   (assoc :build/property-classes (mapv :db/ident (:logseq.property/classes property)))
-                   (seq closed-values)
-                   (assoc :build/closed-values
-                          (mapv #(cond-> {:value (db-property/property-value-content %) :uuid (random-uuid)}
-                                   (:logseq.property/icon %)
-                                   (assoc :icon (:logseq.property/icon %)))
-                                closed-values)))])))
-       (into {})))
-
+;; Export fns
+;; ==========
 (defn- buildable-property-value-entity
   "Converts property value to a buildable version"
   [property-ent pvalue]
@@ -70,7 +52,52 @@
                    v))]))
        (into {})))
 
-(defn- build-export-classes
+(defn- build-export-properties
+  [db user-defined-properties {:keys [include-properties?]}]
+  (let [properties-config-by-ent
+        (->> user-defined-properties
+             (map (fn [ident]
+                    (let [property (d/entity db ident)
+                          closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
+                      [property
+                       (cond-> (select-keys property
+                                            (-> (disj db-property/schema-properties :logseq.property/classes)
+                                                (conj :block/title)))
+                         (:logseq.property/classes property)
+                         (assoc :build/property-classes (mapv :db/ident (:logseq.property/classes property)))
+                         (seq closed-values)
+                         (assoc :build/closed-values
+                                (mapv #(cond-> {:value (db-property/property-value-content %) :uuid (random-uuid)}
+                                         (:logseq.property/icon %)
+                                         (assoc :icon (:logseq.property/icon %)))
+                                      closed-values)))])))
+
+             (into {}))
+        properties-config (update-keys properties-config-by-ent :db/ident)]
+    ;; By default properties aren't included as build and page exports do not include all user-defined-properties
+    ;; e.g. properties that are on property pages
+    (if include-properties?
+      (->> properties-config-by-ent
+           (map (fn [[ent build-property]]
+                  (let [ent-properties (apply dissoc (db-property/properties ent) :block/tags db-property/schema-properties)]
+                    [(:db/ident ent)
+                     (cond-> build-property
+                       (seq ent-properties)
+                       (assoc :build/properties (buildable-properties db ent-properties properties-config)))])))
+           (into {}))
+      properties-config)))
+
+(defn- build-export-class
+  [class-ent {:keys [include-parents?]}]
+  (cond-> (select-keys class-ent [:block/title])
+    (:logseq.property.class/properties class-ent)
+    (assoc :build/class-properties
+           (mapv :db/ident (:logseq.property.class/properties class-ent)))
+    (and include-parents? (:logseq.property/parent class-ent))
+    (assoc :build/class-parent
+           (:db/ident (:logseq.property/parent class-ent)))))
+
+(defn- build-export-block-classes
   [db build-block block-tags]
   (let [pvalue-class-ents (->> (:build/properties build-block)
                                vals
@@ -82,25 +109,19 @@
         new-class-ents (concat (remove #(db-class/logseq-class? (:db/ident %)) block-tags)
                                pvalue-class-ents)]
     (->> new-class-ents
-         ;; TODO: Export class parents when there's ability to control granularity of export
-         (map #(vector (:db/ident %)
-                       (cond-> (select-keys % [:block/title])
-                         (:logseq.property.class/properties %)
-                         (assoc :build/class-properties
-                                (mapv :db/ident (:logseq.property.class/properties %))))))
+         (map #(vector (:db/ident %) (build-export-class % {:include-parents? false})))
          (into {}))))
 
-(defn- build-entity-export*
+(defn- build-entity-export
   "Given entity id and optional existing properties, build an EDN export map"
-  [db entity-or-eid & {:keys [properties include-uuid?]}]
-  (let [entity (if (de/entity? entity-or-eid) entity-or-eid (d/entity db entity-or-eid))
-        ent-properties (dissoc (db-property/properties entity) :block/tags)
+  [db entity {:keys [properties include-uuid?]}]
+  (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
         new-user-property-ids (->> (remove db-property/logseq-property? (keys ent-properties))
                                    (concat (->> (:block/tags entity)
                                                 (mapcat :logseq.property.class/properties)
                                                 (map :db/ident)))
                                    (remove #(get properties %)))
-        new-properties (build-export-properties db new-user-property-ids)
+        new-properties (build-export-properties db new-user-property-ids {})
         build-block (cond-> (select-keys entity
                                          (cond-> [:block/title] include-uuid? (conj :block/uuid)))
                       (seq (:block/tags entity))
@@ -109,7 +130,7 @@
                       (seq ent-properties)
                       (assoc :build/properties
                              (buildable-properties db ent-properties (merge properties new-properties))))
-        new-classes (build-export-classes db build-block (:block/tags entity))]
+        new-classes (build-export-block-classes db build-block (:block/tags entity))]
     (cond-> {:build/block build-block}
       (seq new-classes)
       (assoc :classes new-classes)
@@ -128,9 +149,9 @@
                        (if (set? val-or-vals) val-or-vals [val-or-vals]))))
        set))
 
-(defn build-entity-export
-  [& args]
-  (let [export-map (apply build-entity-export* args)
+(defn build-block-export
+  [db eid]
+  (let [export-map (build-entity-export db (d/entity db eid) {})
         pvalue-uuids (get-pvalue-uuids (:build/block export-map))]
     ;; Maybe add support for this later
     (when (seq pvalue-uuids)
@@ -149,7 +170,7 @@
         build-block (fn build-block [block*]
                       (let [child-nodes (mapv build-block (get children (:db/id block*) []))
                             {:build/keys [block] :keys [properties classes]}
-                            (build-entity-export* db block* {:properties @*properties :include-uuid? include-uuid?})
+                            (build-entity-export db block* {:properties @*properties :include-uuid? include-uuid?})
                             new-pvalue-uuids (get-pvalue-uuids block)]
                         (when (seq properties) (swap! *properties merge properties))
                         (when (seq classes) (swap! *classes merge classes))
@@ -202,10 +223,41 @@
           (assoc :classes classes'))]
     page-export))
 
+(defn build-graph-ontology-export
+  [db]
+  (let [user-property-idents (d/q '[:find [?db-ident ...]
+                                    :where [?p :db/ident ?db-ident]
+                                    [?p :block/tags :logseq.class/Property]
+                                    (not [?p :logseq.property/built-in?])]
+                                  db)
+        properties (build-export-properties db user-property-idents {:include-properties? true})
+        class-ents (->> (d/q '[:find [?class ...]
+                               :where [?class :block/tags :logseq.class/Tag]
+                               (not [?class :logseq.property/built-in?])]
+                             db)
+                        (map #(d/entity db %)))
+        classes
+        (->> class-ents
+             (map (fn [ent]
+                    (let [ent-properties (dissoc (db-property/properties ent) :block/tags :logseq.property/parent)]
+                      (vector (:db/ident ent)
+                              (cond-> (build-export-class ent {:include-parents? true})
+                                (seq ent-properties)
+                                (assoc :build/properties (buildable-properties db ent-properties properties)))))))
+             (into {}))]
+    (cond-> {}
+      (seq properties)
+      (assoc :properties properties)
+      (seq classes)
+      (assoc :classes classes))))
+
+;; Import fns
+;; ==========
 (defn- ->sqlite-build-options
   [db {:keys [pages-and-blocks classes properties]} property-conflicts]
-  (cond-> {:pages-and-blocks pages-and-blocks
-           :build-existing-tx? true}
+  (cond-> {:build-existing-tx? true}
+    (seq pages-and-blocks)
+    (assoc :pages-and-blocks pages-and-blocks)
     (seq classes)
     (assoc :classes
            (->> classes
@@ -262,9 +314,12 @@
 (defn build-import
   "Given an entity's export map, build the import tx to create it"
   [db {:keys [current-block]} export-map*]
-  (let [export-map (if current-block
-                     (build-block-import-options current-block export-map*)
-                     (build-page-import-options db export-map*))
+  (let [export-map (cond current-block
+                         (build-block-import-options current-block export-map*)
+                         (:pages-and-blocks export-map*)
+                         (build-page-import-options db export-map*)
+                         :else
+                         export-map*)
         property-conflicts (atom [])
         opts (->sqlite-build-options db export-map property-conflicts)]
     (if (seq @property-conflicts)

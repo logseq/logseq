@@ -252,7 +252,9 @@
                              (when class-parent
                                {:logseq.property/parent
                                 (or (class-db-ids class-parent)
-                                    (throw (ex-info (str "No :db/id for " class-parent) {})))})
+                                    (if (db-class/logseq-class? class-parent)
+                                      class-parent
+                                      (throw (ex-info (str "No :db/id for " class-parent) {}))))})
                              (when class-properties
                                {:logseq.property.class/properties
                                 (mapv #(hash-map :db/ident (get-ident all-idents %))
