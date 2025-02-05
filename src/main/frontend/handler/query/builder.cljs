@@ -147,8 +147,9 @@
     (and (vector? f) (= :priority (keyword (first f))))
     (vec (cons (symbol :priority) (map symbol (rest f))))
 
+    ;; Stringify task property values to support multi-word values like "In Review"
     (and (vector? f) (= :task (keyword (first f))))
-    (vec (cons (symbol :task) (map symbol (rest f))))
+    (vec (cons (symbol :task) (map str (rest f))))
 
     (and (vector? f) (= :page-ref (keyword (first f))))
     (->page-ref (second f))
