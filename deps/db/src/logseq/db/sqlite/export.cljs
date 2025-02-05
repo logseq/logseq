@@ -11,6 +11,11 @@
 
 ;; Export fns
 ;; ==========
+(defn- ->build-tags [block-tags]
+  (->> (map :db/ident block-tags)
+       (remove #(= % :logseq.class/Page))
+       vec))
+
 (defn- buildable-property-value-entity
   "Converts property value to a buildable version"
   [property-ent pvalue]
@@ -18,9 +23,7 @@
         ;; Should page properties be pulled here?
         [:build/page (cond-> (select-keys pvalue [:block/title])
                        (seq (:block/tags pvalue))
-                       (assoc :build/tags (->> (map :db/ident (:block/tags pvalue))
-                                               (remove #(= % :logseq.class/Page))
-                                               vec)))]
+                       (assoc :build/tags (->build-tags (:block/tags pvalue))))]
         (ldb/journal? pvalue)
         [:build/page {:build/journal (:block/journal-day pvalue)}]
         :else
@@ -127,11 +130,11 @@
                                    (remove db-property/logseq-property?)
                                    (remove #(get properties %)))
         new-properties (build-export-properties db new-user-property-ids {})
+        build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
         build-block (cond-> (select-keys entity
                                          (cond-> [:block/title] include-uuid? (conj :block/uuid)))
-                      (seq (:block/tags entity))
-                      (assoc :build/tags
-                             (mapv :db/ident (:block/tags entity)))
+                      (seq build-tags)
+                      (assoc :build/tags build-tags)
                       (seq ent-properties)
                       (assoc :build/properties
                              (buildable-properties db ent-properties (merge properties new-properties))))
@@ -211,15 +214,17 @@
                                    ;; Don't export pvalue-uuids of pvalue blocks as it's too excessive for now
                                    (merge (build-blocks-tree db (sort-by :block/order blocks) {:include-uuid? true})
                                           {:page (select-keys parent-page-ent [:block/title])})))))
+        page-ent-export (build-entity-export db page-entity {:properties properties})
+        page (merge (dissoc (:build/block page-ent-export) :block/title)
+                    (if (ldb/journal? page-entity)
+                      {:build/journal (:block/journal-day page-entity)}
+                      (select-keys page-entity [:block/title])))
         pages-and-blocks
-        (cond-> [{:page (if (ldb/journal? page-entity)
-                          {:build/journal (:block/journal-day page-entity)}
-                          (select-keys page-entity [:block/title]))
-                  :blocks blocks}]
+        (cond-> [{:page page :blocks blocks}]
           (seq pvalue-pages)
           (into (map #(select-keys % [:page :blocks]) pvalue-pages)))
-        properties' (apply merge properties (map :properties pvalue-pages))
-        classes' (apply merge classes (map :classes pvalue-pages))
+        properties' (apply merge properties (:properties page-ent-export) (map :properties pvalue-pages))
+        classes' (apply merge classes (:classes page-ent-export) (map :classes pvalue-pages))
         page-export
         (cond-> {:pages-and-blocks pages-and-blocks}
           (seq properties')
