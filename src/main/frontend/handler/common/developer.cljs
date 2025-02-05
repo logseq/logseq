@@ -67,14 +67,6 @@
      :success
      false)))
 
-(defn- export-entity-data
-  [eid]
-  (let [result (sqlite-export/build-block-export (db/get-db) eid)
-        pull-data (with-out-str (pprint/pprint result))]
-    (.writeText js/navigator.clipboard pull-data)
-    (println pull-data)
-    (notification/show! "Copied block's data!" :success)))
-
 (defn- import-submit [import-inputs _e]
   (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))
         import-block? (:build/block export-map)
@@ -137,7 +129,11 @@
 (defn ^:export export-block-data []
   ;; Use editor state to locate most recent block
   (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
-    (export-entity-data [:block/uuid block-uuid])
+    (let [result (sqlite-export/build-block-export (db/get-db) [:block/uuid block-uuid])
+          pull-data (with-out-str (pprint/pprint result))]
+      (.writeText js/navigator.clipboard pull-data)
+      (println pull-data)
+      (notification/show! "Copied block's data!" :success))
     (notification/show! "No block found" :warning)))
 
 (defn ^:export export-page-data []

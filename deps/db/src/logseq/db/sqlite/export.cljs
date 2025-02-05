@@ -36,7 +36,7 @@
   (->> ent-properties
        (map (fn [[k v]]
               [k
-               (if (:block/closed-value-property v)
+               (if (and (:block/closed-value-property v) (not (db-property/logseq-property? k)))
                  (if-let [closed-uuid (some #(when (= (:value %) (db-property/property-value-content v))
                                                (:uuid %))
                                             (get-in properties-config [k :build/closed-values]))]
@@ -93,7 +93,9 @@
     (:logseq.property.class/properties class-ent)
     (assoc :build/class-properties
            (mapv :db/ident (:logseq.property.class/properties class-ent)))
-    (and include-parents? (:logseq.property/parent class-ent))
+    (and include-parents?
+         (:logseq.property/parent class-ent)
+         (not= :logseq.class/Root (:db/ident (:logseq.property/parent class-ent))))
     (assoc :build/class-parent
            (:db/ident (:logseq.property/parent class-ent)))))
 
@@ -109,17 +111,20 @@
         new-class-ents (concat (remove #(db-class/logseq-class? (:db/ident %)) block-tags)
                                pvalue-class-ents)]
     (->> new-class-ents
+         ;; TODO: Export class parents when there's ability to control granularity of export
          (map #(vector (:db/ident %) (build-export-class % {:include-parents? false})))
          (into {}))))
 
 (defn- build-entity-export
-  "Given entity id and optional existing properties, build an EDN export map"
+  "Given entity and optional existing properties, build an EDN export map"
   [db entity {:keys [properties include-uuid?]}]
   (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
-        new-user-property-ids (->> (remove db-property/logseq-property? (keys ent-properties))
+        new-user-property-ids (->> (keys ent-properties)
                                    (concat (->> (:block/tags entity)
                                                 (mapcat :logseq.property.class/properties)
                                                 (map :db/ident)))
+                                   ;; Built-in properties and any possible modifications are not exported
+                                   (remove db-property/logseq-property?)
                                    (remove #(get properties %)))
         new-properties (build-export-properties db new-user-property-ids {})
         build-block (cond-> (select-keys entity
