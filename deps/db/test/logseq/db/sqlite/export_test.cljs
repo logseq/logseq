@@ -103,6 +103,8 @@
                (db-test/readable-properties import-block))
             "imported block properties equals exported one")))))
 
+;; Tests a variety of blocks including block children with new properties, blocks with new classes
+;; and blocks with built-in properties
 (deftest import-page-in-different-graph
   (let [original-data
         {:properties {:user.property/default {:logseq.property/type :default
@@ -127,7 +129,10 @@
                                         {:block/title "b1ab"}]}
                                       {:block/title "b1b"}]}
                     {:block/title "b2"
-                     :build/tags [:user.class/MyClass]}]}]}
+                     :build/tags [:user.class/MyClass]}
+                    {:block/title "some task"
+                     :build/properties {:logseq.task/status :logseq.task/status.doing}
+                     :build/tags [:logseq.class/Task]}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         page (db-test/find-page-by-title @conn "page1")
         conn2 (db-test/create-conn)
@@ -233,7 +238,6 @@
                                :build/property-classes [:user.class/MyClass]}}
          :classes
          {:user.class/MyClass {:block/title "MyClass"
-                               :build/class-parent :logseq.class/Root
                                :build/properties {:user.property/url "https://example.com/MyClass"}}
           :user.class/MyClass2 {:block/title "MyClass2"
                                 :build/class-parent :user.class/MyClass
