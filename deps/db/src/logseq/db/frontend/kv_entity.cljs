@@ -15,7 +15,7 @@
                                                  :rtc/ignore-entity-when-init-download true}}
   :logseq.kv/schema-version               {:doc "Graph's current schema version"}
   :logseq.kv/remote-schema-version        {:doc "Graph's remote schema version.
-RTC won't start when (not= local-schema-version remote-schema-version)"
+RTC won't start when major-schema-versions don't match"
                                            :rtc {:rtc/ignore-entity-when-init-upload true
                                                  :rtc/ignore-entity-when-init-download true}}
   :logseq.kv/graph-created-at             {:doc "Graph's created at time"}

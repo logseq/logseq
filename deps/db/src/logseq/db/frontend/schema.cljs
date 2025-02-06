@@ -9,18 +9,6 @@
                   (str major "." minor)
                   (str major))))
 
-;;; nbb not support extend-protocol ICompareable for defrecord
-(defn compare-schema-version
-  [x y]
-  (assert (instance? SchemaVersion x) x)
-  (cond
-    (number? y) (compare (.-major x) y)
-    (sequential? y) (compare [(.-major x) (.-minor x)] [(first y) (second y)])
-    (instance? SchemaVersion y)
-    (compare [(.-major x) (.-minor x)] [(.-major y) (.-minor y)])
-    :else
-    (throw (js/Error. (str "Cannot compare " x " to " y)))))
-
 (defn parse-schema-version
   "schema-version-old: 10, a number
   schema-version-new: \"12.34\", string, <major-num>.<minor-num>"
@@ -34,6 +22,19 @@
       (->SchemaVersion major minor))
     :else
     (throw (ex-info (str "Bad schema version: " string-or-compatible-number) {:data string-or-compatible-number}))))
+
+;;; nbb not support extend-protocol ICompareable for defrecord
+(defn compare-schema-version
+  [x y]
+  (if (instance? SchemaVersion x)
+    (cond
+      (number? y) (compare (.-major x) y)
+      (sequential? y) (compare [(.-major x) (.-minor x)] [(first y) (second y)])
+      (instance? SchemaVersion y)
+      (compare [(.-major x) (.-minor x)] [(.-major y) (.-minor y)])
+      :else
+      (throw (js/Error. (str "Cannot compare " x " to " y))))
+    (compare-schema-version (parse-schema-version x) y)))
 
 (def version (parse-schema-version "63"))
 

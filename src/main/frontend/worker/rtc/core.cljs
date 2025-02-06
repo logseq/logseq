@@ -254,6 +254,8 @@
 (def ^:private empty-rtc-loop-metadata
   {:repo nil
    :graph-uuid nil
+   :local-graph-schema-version nil
+   :remote-graph-schema-version nil
    :user-uuid nil
    :rtc-state-flow nil
    :*rtc-auto-push? nil
@@ -314,7 +316,7 @@
   (m/sp
     ;; ensure device metadata existing first
     (m/? (worker-device/new-task--ensure-device-metadata! token))
-    (let [{:keys [conn user-uuid graph-uuid schema-version _remote-schema-version date-formatter] :as r}
+    (let [{:keys [conn user-uuid graph-uuid schema-version remote-schema-version date-formatter] :as r}
           (validate-rtc-start-conditions repo token)]
       (if (instance? ExceptionInfo r)
         (do (prn r) (r.ex/->map r))
@@ -330,6 +332,8 @@
             (do (prn start-ex) (r.ex/->map start-ex))
             (do (reset! *rtc-loop-metadata {:repo repo
                                             :graph-uuid graph-uuid
+                                            :local-graph-schema-version schema-version
+                                            :remote-graph-schema-version remote-schema-version
                                             :user-uuid user-uuid
                                             :rtc-state-flow rtc-state-flow
                                             :*rtc-auto-push? *rtc-auto-push?
@@ -413,7 +417,8 @@
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
       (let [{rtc-lock :*rtc-lock
-             :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *rtc-remote-profile?
+             :keys [repo graph-uuid local-graph-schema-version remote-graph-schema-version
+                    user-uuid rtc-state-flow *rtc-auto-push? *rtc-remote-profile?
                     *online-users *last-stop-exception]}
             (m/?< rtc-loop-metadata-flow)]
         (try
@@ -423,6 +428,8 @@
               (fn [rtc-state rtc-auto-push? rtc-remote-profile?
                    rtc-lock online-users pending-local-ops-count local-tx remote-tx]
                 {:graph-uuid graph-uuid
+                 :local-graph-schema-version (str local-graph-schema-version)
+                 :remote-graph-schema-version (str remote-graph-schema-version)
                  :user-uuid user-uuid
                  :unpushed-block-update-count pending-local-ops-count
                  :local-tx local-tx
