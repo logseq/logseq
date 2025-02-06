@@ -178,8 +178,7 @@
   (<list-db [_this]
     (when-let [^js sqlite @*worker]
       (-> (.listDB sqlite)
-          (p/then (fn [result]
-                    (bean/->clj result)))
+          (p/then ldb/read-transit-str)
           (p/catch sqlite-error-handler))))
 
   (<unsafe-delete [_this repo]

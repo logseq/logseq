@@ -473,7 +473,7 @@
   (listDB
    [_this]
    (p/let [dbs (<list-all-dbs)]
-     (bean/->js dbs)))
+     (ldb/write-transit-str dbs)))
 
   (createOrOpenDB
    [_this repo opts-str]
@@ -910,7 +910,8 @@
 
   (dangerousRemoveAllDbs
    [this repo]
-   (p/let [dbs (.listDB this)]
+   (p/let [r (.listDB this)
+           dbs (ldb/read-transit-str r)]
      (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
 
 (defn- rename-page!
