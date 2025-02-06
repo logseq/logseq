@@ -3,7 +3,9 @@
             [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.db :as ldb]
+            [logseq.common.util.page-ref :as page-ref]))
 
 (deftest build-tags
   (let [conn (db-test/create-conn)
@@ -118,3 +120,43 @@
               :user.property/p1 "foo"}
              (db-test/readable-properties updated-block2))
           "Block's properties and tags are updated"))))
+
+(deftest build-blocks-with-refs
+  (let [block-uuid (random-uuid)
+        class-uuid (random-uuid)
+        page-uuid (random-uuid)
+        property-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:classes {:C1 {:block/uuid class-uuid}}
+               :properties {:p1 {:block/uuid property-uuid}}
+               :pages-and-blocks
+               [{:page {:block/title "page 1"}
+                 :blocks [{:block/title "named page ref to [[named page]]"}
+                          {:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}
+                          {:block/title (str "block ref to " (page-ref/->page-ref block-uuid))}
+                          {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}
+                          {:block/title (str "inline class ref to #" (page-ref/->page-ref class-uuid))}
+                          {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}
+                          {:block/title "hi" :block/uuid block-uuid}]}
+                {:page {:block/title "another page" :block/uuid page-uuid}}]})
+        block-with-named-page-ref (db-test/find-block-by-content @conn #"^named page ref")
+        block-with-page-ref (db-test/find-block-by-content @conn #"^page ref")
+        block-with-class-ref (db-test/find-block-by-content @conn #"^class ref")
+        block-with-inline-class-ref (db-test/find-block-by-content @conn #"^inline class ref")
+        block-with-property-ref (db-test/find-block-by-content @conn #"^property ref")
+        block-with-block-ref (db-test/find-block-by-content @conn #"^block ref")]
+    (is (ldb/internal-page? (db-test/find-page-by-title @conn "named page")))
+    (is (contains? (:block/refs block-with-named-page-ref) (db-test/find-page-by-title @conn "named page")))
+
+    (is (= page-uuid (:block/uuid (db-test/find-page-by-title @conn "another page"))))
+    (is (contains? (:block/refs block-with-page-ref) (db-test/find-page-by-title @conn "another page")))
+
+    (is (= class-uuid (:block/uuid (d/entity @conn :user.class/C1))))
+    (is (contains? (:block/refs block-with-class-ref) (d/entity @conn :user.class/C1)))
+    (is (contains? (:block/refs block-with-inline-class-ref) (d/entity @conn :user.class/C1)))
+
+    (is (= property-uuid (:block/uuid (d/entity @conn :user.property/p1))))
+    (is (contains? (:block/refs block-with-property-ref) (d/entity @conn :user.property/p1)))
+
+    (is (= block-uuid (:block/uuid (db-test/find-block-by-content @conn "hi"))))
+    (is (contains? (:block/refs block-with-block-ref) (db-test/find-block-by-content @conn "hi")))))
