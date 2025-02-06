@@ -121,9 +121,11 @@
                      [property-map v])))))
        (db-property-build/build-property-values-tx-m new-block)))
 
-(defn- extract-content-refs
-  "Extracts basic refs from :block/title like `[[foo]]`. Adding more ref support would
-  require parsing each block with mldoc and extracting with text/extract-refs-from-mldoc-ast"
+(defn extract-content-refs
+  "Extracts basic refs from :block/title like `[[foo]]` or `[[UUID]]`. Can't
+  use db-content/get-matched-ids because of named ref support.  Adding more ref
+  support would require parsing each block with mldoc and extracting with
+  text/extract-refs-from-mldoc-ast"
   [s]
   ;; FIXME: Better way to ignore refs inside a macro
   (if (string/starts-with? s "{{")
@@ -208,10 +210,10 @@
 
 (defn- build-properties-tx [properties page-uuids all-idents {:keys [build-existing-tx?]}]
   (let [properties' (if build-existing-tx?
-                     (->> properties
-                          (remove #(:block/uuid (val %)))
-                          (into {}))
-                     properties)
+                      (->> properties
+                           (remove (fn [[_ v]] (and (:block/uuid v) (not (:build/new-property? v)))))
+                           (into {}))
+                      properties)
         property-db-ids (->> (keys properties')
                              (map #(vector % (new-db-id)))
                              (into {}))
@@ -222,10 +224,10 @@
 
 (defn- build-classes-tx [classes properties-config uuid-maps all-idents {:keys [build-existing-tx?]}]
   (let [classes' (if build-existing-tx?
-                  (->> classes
-                       (remove #(:block/uuid (val %)))
-                       (into {}))
-                  classes)
+                   (->> classes
+                        (remove (fn [[_ v]] (and (:block/uuid v) (not (:build/new-class? v)))))
+                        (into {}))
+                   classes)
         class-db-ids (->> (keys classes')
                           (map #(vector % (new-db-id)))
                           (into {}))
@@ -384,6 +386,26 @@
             "Class and property db-idents have no overlap")
     all-idents))
 
+(defn- build-page-tx [page all-idents page-uuids properties]
+  (let [page' (dissoc page :build/tags :build/properties)
+        pvalue-tx-m (->property-value-tx-m page' (:build/properties page) properties all-idents)]
+    (cond-> []
+      (seq pvalue-tx-m)
+      (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+      true
+      (conj
+       (block-with-timestamps
+        (merge
+         page'
+         (when (seq (:build/properties page))
+           (->block-properties (merge (:build/properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+                               page-uuids
+                               all-idents))
+         (when-let [tags (:build/tags page)]
+           {:block/tags (-> (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                  tags)
+                            (conj :logseq.class/Page))})))))))
+
 (defn- build-pages-and-blocks-tx
   [pages-and-blocks all-idents page-uuids {:keys [page-id-fn properties build-existing-tx?]
                                            :or {page-id-fn :db/id}
@@ -391,7 +413,11 @@
   (vec
    (mapcat
     (fn [{:keys [page blocks]}]
-      (let [page' (if (and build-existing-tx? (not (::new-page? (meta page))))
+      (let [;; For a page to be ignored it's important that it only sends a {:block/uuid UUID} map.
+            ;; This allows import processes to append blocks to an existing page or to create a page
+            ;; that is referenced by another page
+            ignore-page-tx? (and build-existing-tx? (not (::new-page? (meta page))) (= '(:block/uuid) (keys page)))
+            page' (if ignore-page-tx?
                     page
                     (merge
                      ;; TODO: Use sqlite-util/build-new-page
@@ -399,33 +425,16 @@
                       :block/title (or (:block/title page) (string/capitalize (:block/name page)))
                       :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/title page)))
                       :block/tags #{:logseq.class/Page}}
-                     (dissoc page :build/properties :db/id :block/name :block/title :build/tags)))
+                     (dissoc page :db/id :block/name :block/title)))
             page-id-fn' (if (and build-existing-tx? (not (::new-page? (meta page))))
-                         #(vector :block/uuid (:block/uuid %))
-                         page-id-fn)
+                          #(vector :block/uuid (:block/uuid %))
+                          page-id-fn)
             opts' (assoc opts :existing-page? (and build-existing-tx? (not (::new-page? (meta page)))))]
         (into
          ;; page tx
-         (if (and build-existing-tx? (not (::new-page? (meta page))))
-           ;; Ignore existing pages until there's a use case for updating them
+         (if ignore-page-tx?
            []
-           (let [pvalue-tx-m (->property-value-tx-m page' (:build/properties page) properties all-idents)]
-             (cond-> []
-               (seq pvalue-tx-m)
-               (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
-               true
-               (conj
-                (block-with-timestamps
-                 (merge
-                  page'
-                  (when (seq (:build/properties page))
-                    (->block-properties (merge (:build/properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
-                                        page-uuids
-                                        all-idents))
-                  (when-let [tags (:build/tags page)]
-                    {:block/tags (-> (mapv #(hash-map :db/ident (get-ident all-idents %))
-                                           tags)
-                                     (conj :logseq.class/Page))})))))))
+           (build-page-tx page' all-idents page-uuids properties))
          ;; blocks tx
          (reduce (fn [acc m]
                    (into acc
@@ -503,10 +512,10 @@
                       (with-meta block {::existing-block? true})
                       (assoc block :block/uuid (random-uuid)))
              block'' (cond-> block'
-                      true
-                      (dissoc :build/children)
-                      parent-id
-                      (assoc :block/parent {:db/id [:block/uuid parent-id]}))
+                       true
+                       (dissoc :build/children)
+                       parent-id
+                       (assoc :block/parent {:db/id [:block/uuid parent-id]}))
              children (:build/children block)
              child-maps (when children (expand-build-children children (:block/uuid block'')))]
          (cons block'' child-maps)))

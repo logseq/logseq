@@ -82,7 +82,7 @@
         block2 (db-test/find-block-by-content @conn "block 2")
         {:keys [init-tx block-props-tx]}
         (sqlite-build/build-blocks-tx
-         {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/uuid :block/title])
+         {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/uuid])
                               :blocks [(merge {:block/title "imported task" :block/uuid (:block/uuid block)}
                                               {:build/properties {:logseq.task/status :logseq.task/status.todo}
                                                :build/tags [:logseq.class/Task]})]}]
@@ -92,7 +92,7 @@
         updated-block (d/entity @conn [:block/uuid (:block/uuid block)])
         {init-tx2 :init-tx block-props-tx2 :block-props-tx :as _tx}
         (sqlite-build/build-blocks-tx
-         {:pages-and-blocks [{:page (select-keys (:block/page block2) [:block/uuid :block/title])
+         {:pages-and-blocks [{:page (select-keys (:block/page block2) [:block/uuid])
                               :blocks [(merge {:block/title "imported block" :block/uuid (:block/uuid block2)}
                                               {:build/properties {:user.property/p1 "foo"}
                                                :build/tags [:user.class/MyClass]})]}]
@@ -127,8 +127,9 @@
         page-uuid (random-uuid)
         property-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks
-              {:classes {:C1 {:block/uuid class-uuid}}
-               :properties {:p1 {:block/uuid property-uuid}}
+              {:classes {:C1 {:block/uuid class-uuid :build/new-class? true}}
+               :properties {:p1 {:block/uuid property-uuid :build/new-property? true}}
+               :build-existing-tx? true
                :pages-and-blocks
                [{:page {:block/title "page 1"}
                  :blocks [{:block/title "named page ref to [[named page]]"}
