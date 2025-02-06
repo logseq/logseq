@@ -10,6 +10,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [promesa.core :as p]
@@ -107,7 +108,10 @@
             :remote-profile? (:remote-profile? debug-state*)
             :current-page (state/get-current-page)
             :blocks-count (when-let [page (state/get-current-page)]
-                            (count (:block/_page (db/get-page page))))}
+                            (count (:block/_page (db/get-page page))))
+            :schema-version {:app (str db-schema/version)
+                             :local-graph (:local-graph-schema-version debug-state*)
+                             :remote-graph (:remote-graph-schema-version debug-state*)}}
            (fipp/pprint {:width 20})
            with-out-str)]]
 

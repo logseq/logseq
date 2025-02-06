@@ -5,6 +5,7 @@
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]
             [missionary.core :as m]))
 
 (defn- get-builtin-db-idents
@@ -34,7 +35,7 @@
         (let [{:keys [server-schema-version server-builtin-db-idents]} r
               client-builtin-db-idents (set (get-builtin-db-idents db))
               client-schema-version (ldb/get-graph-schema-version db)]
-          (when (not= client-schema-version server-schema-version)
+          (when-not (zero? (db-schema/compare-schema-version client-schema-version server-schema-version))
             (worker-util/post-message :notification
                                       [[:div
                                         [:p (str :client-schema-version client-schema-version)]
