@@ -140,7 +140,7 @@
                  :block/order (db-order/gen-key nil)
                  :block/parent (or (:block/parent m) {:db/id page-id})})
         pvalue-tx-m (->property-value-tx-m block properties properties-config all-idents)
-        ref-names (extract-content-refs (:block/title m))]
+        ref-strings (extract-content-refs (:block/title m))]
     (cond-> []
       ;; Place property values first since they are referenced by block
       (seq pvalue-tx-m)
@@ -154,12 +154,16 @@
                    (when-let [tags (:build/tags m)]
                      {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
                                         tags)})
-                   (when (seq ref-names)
-                     (let [block-refs (mapv #(hash-map :block/uuid
-                                                       (or (page-uuids %)
-                                                           (throw (ex-info (str "No uuid for page ref name" (pr-str %)) {})))
-                                                       :block/title %)
-                                            ref-names)]
+                   (when (seq ref-strings)
+                     ;; Use maps for uuids to avoid out of order tx issues
+                     (let [block-refs (mapv #(if-let [uuid' (parse-uuid %)]
+                                               (hash-map :block/uuid uuid')
+                                               (hash-map :block/uuid
+                                                         (or
+                                                          (page-uuids %)
+                                                          (throw (ex-info (str "No uuid for page ref name" (pr-str %)) {})))
+                                                         :block/title %))
+                                            ref-strings)]
                        {:block/title (db-content/title-ref->id-ref (:block/title m) block-refs {:replace-tag? false})
                         :block/refs block-refs})))))))
 
@@ -452,6 +456,9 @@
      :block-props-tx block-props-tx}))
 
 (defn- add-new-pages-from-refs
+  "This allows top-level page blocks to contain [[named]] refs and auto create
+  those pages.  This is for convenience. For robust EDN it's recommended
+  to use [[UUID]] refs and handle page creation with initial build-blocks-tx options"
   [pages-and-blocks]
   (let [existing-pages (->> pages-and-blocks (keep #(get-in % [:page :block/title])) set)
         new-pages-from-refs
@@ -460,6 +467,7 @@
               (fn [{:keys [blocks]}]
                 (->> blocks
                      (mapcat #(extract-content-refs (:block/title %)))
+                     (remove common-util/uuid-string?)
                      (remove existing-pages))))
              distinct
              (map #(hash-map :page {:block/title %})))]
