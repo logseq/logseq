@@ -80,6 +80,8 @@
        :class (str "flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
+(defonce *last-header-action-target (atom nil))
+
 (defn header-cp
   [{:keys [view-entity column-set-sorting! state]} column]
   (let [sorting (:sorting state)
@@ -132,23 +134,30 @@
      {:variant "text"
       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
       :on-mouse-up (fn [^js e]
-                     (when (string/blank? (some-> (.-target e) (.closest "[aria-roledescription=sortable]") (.-style) (.-transform)))
-                       (shui/popup-show! (.-target e) sub-content {:align "start" :as-dropdown? true})))}
-     (let [title (str (:name column))]
-       [:span {:title title
-               :class "max-w-full overflow-hidden text-ellipsis"}
-        title])
-     (case asc?
-       true
-       (ui/icon "arrow-up")
-       false
-       (ui/icon "arrow-down")
-       nil))))
+                     (when-let [^js el (some-> (.-target e) (.closest "[aria-roledescription=sortable]"))]
+                       (when (and (or (nil? @*last-header-action-target)
+                                    (not= el @*last-header-action-target))
+                               (string/blank? (some-> el (.-style) (.-transform))))
+                         (shui/popup-show! el sub-content
+                           {:align "start" :as-dropdown? true
+                            :on-before-hide (fn []
+                                              (reset! *last-header-action-target el)
+                                              (js/setTimeout #(reset! *last-header-action-target nil) 128))}))))}
+      (let [title (str (:name column))]
+        [:span {:title title
+                :class "max-w-full overflow-hidden text-ellipsis"}
+         title])
+      (case asc?
+        true
+        (ui/icon "arrow-up")
+        false
+        (ui/icon "arrow-down")
+        nil))))
 
 (defn- timestamp-cell-cp
   [_table row column]
   (some-> (get row (:id column))
-          date/int->local-time-2))
+    date/int->local-time-2))
 
 (defn- get-property-value-content
   [entity]
