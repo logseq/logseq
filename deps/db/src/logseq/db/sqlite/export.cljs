@@ -5,6 +5,7 @@
             [datascript.impl.entity :as de]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]))
@@ -56,9 +57,9 @@
        (into {})))
 
 (defn- build-export-properties
-  [db user-defined-properties {:keys [include-properties?]}]
+  [db user-property-idents {:keys [include-properties? include-uuid?]}]
   (let [properties-config-by-ent
-        (->> user-defined-properties
+        (->> user-property-idents
              (map (fn [ident]
                     (let [property (d/entity db ident)
                           closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
@@ -66,6 +67,8 @@
                        (cond-> (select-keys property
                                             (-> (disj db-property/schema-properties :logseq.property/classes)
                                                 (conj :block/title)))
+                         include-uuid?
+                         (assoc :block/uuid (:block/uuid property))
                          (:logseq.property/classes property)
                          (assoc :build/property-classes (mapv :db/ident (:logseq.property/classes property)))
                          (seq closed-values)
@@ -120,7 +123,7 @@
 
 (defn- build-entity-export
   "Given entity and optional existing properties, build an EDN export map"
-  [db entity {:keys [properties include-uuid?]}]
+  [db entity {:keys [properties include-uuid-fn] :or {include-uuid-fn (constantly false)}}]
   (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
         new-user-property-ids (->> (keys ent-properties)
                                    (concat (->> (:block/tags entity)
@@ -132,7 +135,8 @@
         new-properties (build-export-properties db new-user-property-ids {})
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
         build-block (cond-> (select-keys entity
-                                         (cond-> [:block/title] include-uuid? (conj :block/uuid)))
+                                         (cond-> [:block/title]
+                                           (include-uuid-fn (:block/uuid entity)) (conj :block/uuid)))
                       (seq build-tags)
                       (assoc :build/tags build-tags)
                       (seq ent-properties)
@@ -169,7 +173,7 @@
 (defn- build-blocks-tree
   "Given a page's block entities, returns the blocks in a sqlite.build EDN format
    and all properties and classes used in these blocks"
-  [db blocks & {:keys [include-uuid?]}]
+  [db blocks {:keys [include-uuid-fn]}]
   (let [*properties (atom {})
         *classes (atom {})
         *pvalue-uuids (atom #{})
@@ -178,7 +182,7 @@
         build-block (fn build-block [block*]
                       (let [child-nodes (mapv build-block (get children (:db/id block*) []))
                             {:build/keys [block] :keys [properties classes]}
-                            (build-entity-export db block* {:properties @*properties :include-uuid? include-uuid?})
+                            (build-entity-export db block* {:properties @*properties :include-uuid-fn include-uuid-fn})
                             new-pvalue-uuids (get-pvalue-uuids block)]
                         (when (seq properties) (swap! *properties merge properties))
                         (when (seq classes) (swap! *classes merge classes))
@@ -192,6 +196,20 @@
      :classes @*classes
      :pvalue-uuids @*pvalue-uuids}))
 
+(defn- get-uuid-block-pages [db pvalue-uuids content-ref-ents page-entity]
+  (let [uuid-block-ents-to-export (concat (map #(d/entity db [:block/uuid %]) pvalue-uuids)
+                                          (remove ldb/page? content-ref-ents))]
+    (when (seq uuid-block-ents-to-export)
+      (->> uuid-block-ents-to-export
+           (group-by :block/parent)
+           (map (fn [[parent-page-ent blocks]]
+                  ;; Not a common case but can support later if needed
+                  (when (= parent-page-ent page-entity)
+                    (throw (ex-info "Can't export a uuid block from exported page" {})))
+                  ;; Don't export pvalue-uuids of pvalue blocks as it's too excessive for now
+                  (merge (build-blocks-tree db (sort-by :block/order blocks) {:include-uuid-fn (constantly true)})
+                         {:page (select-keys parent-page-ent [:block/title])})))))))
+
 (defn build-page-export [db eid]
   (let [page-entity (d/entity db eid)
         ;; TODO: Fetch unloaded page datoms
@@ -202,18 +220,16 @@
                          (sort-by :block/order)
                          ;; Remove property value blocks as they are included in the block they belong to
                          (remove #(:logseq.property/created-from-property %)))
-        {:keys [blocks properties classes pvalue-uuids]} (build-blocks-tree db page-blocks)
-        pvalue-pages (when (seq pvalue-uuids)
-                       (->> pvalue-uuids
-                            (map #(d/entity db [:block/uuid %]))
-                            (group-by :block/parent)
-                            (map (fn [[parent-page-ent blocks]]
-                                   ;; Not a common case but can support later if needed
-                                   (when (= parent-page-ent page-entity)
-                                     (throw (ex-info "Can't export a block object from exported page" {})))
-                                   ;; Don't export pvalue-uuids of pvalue blocks as it's too excessive for now
-                                   (merge (build-blocks-tree db (sort-by :block/order blocks) {:include-uuid? true})
-                                          {:page (select-keys parent-page-ent [:block/title])})))))
+        content-ref-uuids (set (mapcat (comp db-content/get-matched-ids :block/title) page-blocks))
+        content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)
+        content-ref-pages (filter ldb/internal-page? content-ref-ents)
+        content-ref-properties* (map :db/ident (filter ldb/property? content-ref-ents))
+        content-ref-properties (when content-ref-properties*
+                                 (update-vals (build-export-properties db content-ref-properties* {:include-uuid? true})
+                                              #(merge % {:build/new-property? true})))
+        {:keys [blocks properties classes pvalue-uuids]}
+        (build-blocks-tree db page-blocks {:include-uuid-fn content-ref-uuids})
+        uuid-block-pages (get-uuid-block-pages db pvalue-uuids content-ref-ents page-entity)
         page-ent-export (build-entity-export db page-entity {:properties properties})
         page (merge (dissoc (:build/block page-ent-export) :block/title)
                     (if (ldb/journal? page-entity)
@@ -221,10 +237,17 @@
                       (select-keys page-entity [:block/title])))
         pages-and-blocks
         (cond-> [{:page page :blocks blocks}]
-          (seq pvalue-pages)
-          (into (map #(select-keys % [:page :blocks]) pvalue-pages)))
-        properties' (apply merge properties (:properties page-ent-export) (map :properties pvalue-pages))
-        classes' (apply merge classes (:classes page-ent-export) (map :classes pvalue-pages))
+          ;; pages from uuid blocks or content-ref-pages are shallow copies e.g. only :block/title
+          (seq uuid-block-pages)
+          (into (map #(select-keys % [:page :blocks]) uuid-block-pages))
+          (seq content-ref-pages)
+          (into (map #(hash-map :page (select-keys % [:block/title :block/uuid])) content-ref-pages)))
+        ;; Use merge-with to preserve new-property?
+        properties' (apply merge-with merge properties
+                           (:properties page-ent-export)
+                           content-ref-properties
+                           (map :properties uuid-block-pages))
+        classes' (apply merge classes (:classes page-ent-export) (map :classes uuid-block-pages))
         page-export
         (cond-> {:pages-and-blocks pages-and-blocks}
           (seq properties')

@@ -1,6 +1,7 @@
 (ns logseq.db.sqlite.export-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -103,8 +104,8 @@
                (db-test/readable-properties import-block))
             "imported block properties equals exported one")))))
 
-;; Tests a variety of blocks including block children with new properties, blocks with new classes
-;; and blocks with built-in properties
+;; Tests a variety of blocks including block children with new properties, blocks with users classes
+;; and blocks with built-in properties and classes
 (deftest import-page-with-different-blocks
   (let [original-data
         {:properties {:user.property/default {:logseq.property/type :default
@@ -135,11 +136,9 @@
         {:keys [init-tx block-props-tx] :as _txs}
         (->> (sqlite-export/build-page-export @conn (:db/id page))
              (sqlite-export/build-import @conn2 {}))
-        _ (assert (nil? (d/entity @conn2 :user.property/default)))
-        _ (assert (nil? (d/entity @conn2 :user.class/MyClass)))
+        ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! conn2 init-tx)
         _ (d/transact! conn2 block-props-tx)
-        ;; _ (cljs.pprint/pprint _txs)
         page2 (db-test/find-page-by-title @conn2 "page1")
         full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))]
 
@@ -163,6 +162,46 @@
                        (fn [blocks] (into blocks blocks)))]
         (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))))
 
+(deftest import-page-with-different-ref-types
+  (let [block-uuid (random-uuid)
+        ;; class-uuid (random-uuid)
+        page-uuid (random-uuid)
+        property-uuid (random-uuid)
+        original-data
+        {;:classes {:C1 {:block/uuid class-uuid}}
+         :properties {:user.property/p1
+                      {:db/cardinality :db.cardinality/one, :logseq.property/type :default
+                       :block/uuid property-uuid :block/title "p1" :build/new-property? true}}
+         :pages-and-blocks
+         [{:page {:block/title "page1"}
+           :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}
+                    {:block/title (str "block ref to " (page-ref/->page-ref block-uuid))}
+                    #_{:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}
+                    #_{:block/title (str "inline class ref to #" (page-ref/->page-ref class-uuid))}
+                    {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}]}
+          {:page {:block/title "page with block ref"}
+           :blocks [{:block/title "hi" :block/uuid block-uuid}]}
+          {:page {:block/title "another page" :block/uuid page-uuid}}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        page (db-test/find-page-by-title @conn "page1")
+        conn2 (db-test/create-conn)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (->> (sqlite-export/build-page-export @conn (:db/id page))
+             (sqlite-export/build-import @conn2 {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! conn2 init-tx)
+        _ (d/transact! conn2 block-props-tx)
+        page2 (db-test/find-page-by-title @conn2 "page1")
+        full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))]
+
+    (is (= (:properties original-data) (:properties full-imported-page))
+        "Page's properties are imported")
+    (is (= (:classes original-data) (:classes full-imported-page))
+        "Page's classes are imported")
+    ;; (cljs.pprint/pprint (:pages-and-blocks full-imported-page))
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
+        "Page's blocks are imported")))
+
 (deftest import-page-with-different-page-and-classes
   (let [original-data
         {:properties {:user.property/p1 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p1"}
@@ -180,7 +219,7 @@
         {:keys [init-tx block-props-tx] :as _txs}
         (->> (sqlite-export/build-page-export @conn (:db/id page))
              (sqlite-export/build-import @conn2 {}))
-        _ (assert (nil? (d/entity @conn2 :user.property/default)))
+        _ (assert (nil? (d/entity @conn2 :user.property/p1)))
         _ (assert (nil? (d/entity @conn2 :user.class/MyClass)))
         _ (d/transact! conn2 init-tx)
         _ (d/transact! conn2 block-props-tx)
