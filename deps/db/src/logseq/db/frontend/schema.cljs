@@ -9,6 +9,12 @@
                   (str major "." minor)
                   (str major))))
 
+(def major-schema-version-string-schema
+  [:and :string
+   [:fn
+    {:error/message "should be a major schema-version"}
+    (fn [s] (some? (parse-long s)))]])
+
 (defn parse-schema-version
   "Return SchemaVersion.
   schema-version-old: 10, a number
