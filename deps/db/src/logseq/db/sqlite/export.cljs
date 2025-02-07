@@ -17,6 +17,11 @@
        (remove #(= % :logseq.class/Page))
        vec))
 
+(defn- block-title
+  "Get an entity's original title"
+  [ent]
+  (or (:block/raw-title ent) (:block/title ent)))
+
 (defn- shallow-copy-page
   "Given a page or journal entity, shallow copies it e.g. no properties or tags info included.
    Pages that are shallow copied are at the edges of export and help keep the export size reasonable and
@@ -24,7 +29,7 @@
   [page-entity]
   (if (ldb/journal? page-entity)
     {:build/journal (:block/journal-day page-entity)}
-    (select-keys page-entity [:block/title])))
+    {:block/title (block-title page-entity)}))
 
 (defn- buildable-property-value-entity
   "Converts property value to a buildable version"
@@ -145,9 +150,9 @@
                                    (remove #(get properties %)))
         new-properties (build-export-properties db new-user-property-ids {})
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
-        build-block (cond-> (select-keys entity
-                                         (cond-> [:block/title]
-                                           (include-uuid-fn (:block/uuid entity)) (conj :block/uuid)))
+        build-block (cond-> {:block/title (block-title entity)}
+                      (include-uuid-fn (:block/uuid entity))
+                      (assoc :block/uuid (:block/uuid entity))
                       (seq build-tags)
                       (assoc :build/tags build-tags)
                       (seq ent-properties)
@@ -229,7 +234,7 @@
   "Builds an export config (and additional info) for refs in the given blocks. All the exported
    entities found in block refs include their uuid in order to preserve the relationship to the blocks"
   [db page-blocks]
-  (let [content-ref-uuids (set (mapcat (comp db-content/get-matched-ids :block/title) page-blocks))
+  (let [content-ref-uuids (set (mapcat (comp db-content/get-matched-ids block-title) page-blocks))
         content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)
         content-ref-pages (filter #(or (ldb/internal-page? %) (ldb/journal? %)) content-ref-ents)
         content-ref-properties (when-let [prop-ids (seq (map :db/ident (filter ldb/property? content-ref-ents)))]
