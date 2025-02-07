@@ -104,6 +104,27 @@
                (db-test/readable-properties import-block))
             "imported block properties equals exported one")))))
 
+(defn- export-page-and-import-to-another-graph
+  "Exports given page from one graph/conn, imports it to a 2nd graph and then
+   exports the page from the 2nd graph"
+  [export-conn import-conn page-title]
+  (let [page (db-test/find-page-by-title @export-conn page-title)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (->> (sqlite-export/build-page-export @export-conn (:db/id page))
+             (sqlite-export/build-import @import-conn {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! import-conn init-tx)
+        _ (d/transact! import-conn block-props-tx)
+        page2 (db-test/find-page-by-title @import-conn page-title)]
+    (sqlite-export/build-page-export @import-conn (:db/id page2))))
+
+(defn- import-second-time-appends-blocks [conn conn2 page-title original-data]
+  (let [full-imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
+        expected-page-and-blocks
+        (update-in (:pages-and-blocks original-data) [0 :blocks]
+                   (fn [blocks] (into blocks blocks)))]
+    (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))
+
 ;; Tests a variety of blocks including block children with new properties, blocks with users classes
 ;; and blocks with built-in properties and classes
 (deftest import-page-with-different-blocks
@@ -131,16 +152,8 @@
                      :build/properties {:logseq.task/status :logseq.task/status.doing}
                      :build/tags [:logseq.class/Task]}]}]}
         conn (db-test/create-conn-with-blocks original-data)
-        page (db-test/find-page-by-title @conn "page1")
         conn2 (db-test/create-conn)
-        {:keys [init-tx block-props-tx] :as _txs}
-        (->> (sqlite-export/build-page-export @conn (:db/id page))
-             (sqlite-export/build-import @conn2 {}))
-        ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 init-tx)
-        _ (d/transact! conn2 block-props-tx)
-        page2 (db-test/find-page-by-title @conn2 "page1")
-        full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))]
+        full-imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
     (is (= (:properties original-data) (:properties full-imported-page))
         "Page's properties are imported")
@@ -149,20 +162,9 @@
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
         "Page's blocks are imported")
 
-    (testing "importing a 2nd time appends blocks"
-      (let [{:keys [init-tx block-props-tx] :as _txs}
-            (->> (sqlite-export/build-page-export @conn (:db/id page))
-                 (sqlite-export/build-import @conn2 {}))
-            ;; _ (cljs.pprint/pprint _txs)
-            _ (d/transact! conn2 init-tx)
-            _ (d/transact! conn2 block-props-tx)
-            full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))
-            expected-page-and-blocks
-            (update-in (:pages-and-blocks original-data) [0 :blocks]
-                       (fn [blocks] (into blocks blocks)))]
-        (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))))
+    (import-second-time-appends-blocks conn conn2 "page1" original-data)))
 
-(deftest import-page-with-different-ref-types
+(deftest ^:focus import-page-with-different-ref-types
   (let [block-uuid (random-uuid)
         class-uuid (random-uuid)
         page-uuid (random-uuid)
@@ -183,16 +185,8 @@
            :blocks [{:block/title "hi" :block/uuid block-uuid}]}
           {:page {:block/title "another page" :block/uuid page-uuid}}]}
         conn (db-test/create-conn-with-blocks original-data)
-        page (db-test/find-page-by-title @conn "page1")
         conn2 (db-test/create-conn)
-        {:keys [init-tx block-props-tx] :as _txs}
-        (->> (sqlite-export/build-page-export @conn (:db/id page))
-             (sqlite-export/build-import @conn2 {}))
-        ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 init-tx)
-        _ (d/transact! conn2 block-props-tx)
-        page2 (db-test/find-page-by-title @conn2 "page1")
-        full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))]
+        full-imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
     (is (= (:properties original-data) (:properties full-imported-page))
         "Page's properties are imported")
@@ -200,7 +194,9 @@
         "Page's classes are imported")
     ;; (cljs.pprint/pprint (:pages-and-blocks full-imported-page))
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
-        "Page's blocks are imported")))
+        "Page's blocks are imported")
+
+    (import-second-time-appends-blocks conn conn2 "page1" original-data)))
 
 (deftest import-page-with-different-page-and-classes
   (let [original-data
@@ -214,25 +210,17 @@
                   :build/tags [:user.class/MyClass]}
            :blocks []}]}
         conn (db-test/create-conn-with-blocks original-data)
-        page (db-test/find-page-by-title @conn "page1")
         conn2 (db-test/create-conn)
-        {:keys [init-tx block-props-tx] :as _txs}
-        (->> (sqlite-export/build-page-export @conn (:db/id page))
-             (sqlite-export/build-import @conn2 {}))
-        _ (assert (nil? (d/entity @conn2 :user.property/p1)))
-        _ (assert (nil? (d/entity @conn2 :user.class/MyClass)))
-        _ (d/transact! conn2 init-tx)
-        _ (d/transact! conn2 block-props-tx)
-        ;; _ (cljs.pprint/pprint _txs)
-        page2 (db-test/find-page-by-title @conn2 "page1")
-        full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))]
+        full-imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
     (is (= (:properties original-data) (:properties full-imported-page))
         "Page's properties are imported")
     (is (= (:classes original-data) (:classes full-imported-page))
         "Page's classes are imported")
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
-        "Page's blocks are imported")))
+        "Page's blocks are imported")
+
+    (import-second-time-appends-blocks conn conn2 "page1" original-data)))
 
 (deftest import-page-with-different-property-types
   (let [block-object-uuid (random-uuid)
@@ -268,16 +256,8 @@
                      :build/tags [:user.class/MyClass]
                      :block/uuid block-object-uuid}]}]}
         conn (db-test/create-conn-with-blocks original-data)
-        page (db-test/find-page-by-title @conn "page1")
         conn2 (db-test/create-conn)
-        {:keys [init-tx block-props-tx] :as _txs}
-        (->> (sqlite-export/build-page-export @conn (:db/id page))
-             (sqlite-export/build-import @conn2 {}))
-        ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 init-tx)
-        _ (d/transact! conn2 block-props-tx)
-        page2 (db-test/find-page-by-title @conn2 "page1")
-        full-imported-page (sqlite-export/build-page-export @conn2 (:db/id page2))]
+        full-imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
     (is (= (:properties original-data) (:properties full-imported-page))
         "Page's properties are imported")
