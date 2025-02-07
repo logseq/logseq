@@ -580,7 +580,7 @@
     (d/reset-schema! conn (dissoc schema :block/schema))
     []))
 
-(def schema-version->updates
+(def ^:large-vars/cleanup-todo schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
    and :fix."
