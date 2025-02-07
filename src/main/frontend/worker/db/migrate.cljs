@@ -677,7 +677,10 @@
         :fix (rename-properties {:property/schema.classes :logseq.property/classes
                                  :property.value/content :logseq.property/value})}]
    [62 {:fix remove-block-schema}]
-   [63 {:properties [:logseq.property.table/pinned-columns]}]])
+   [63 {:properties [:logseq.property.table/pinned-columns]}]
+   ;;;; schema-version format: "<major>.<minor>"
+   ;;;; int number equals to "<major>" (without <minor>)
+   ])
 
 (let [max-schema-version (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                           schema-version->updates)))

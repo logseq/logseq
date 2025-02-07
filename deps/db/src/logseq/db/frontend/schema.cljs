@@ -10,7 +10,8 @@
                   (str major))))
 
 (defn parse-schema-version
-  "schema-version-old: 10, a number
+  "Return SchemaVersion.
+  schema-version-old: 10, a number
   schema-version-new: \"12.34\", string, <major-num>.<minor-num>"
   [string-or-compatible-number]
   (cond
