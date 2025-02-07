@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.malli-schema
   "Malli schema for rtc"
   (:require [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.schema :as db-schema]
             [malli.core :as m]
             [malli.transform :as mt]
             [malli.util :as mu]))
@@ -193,17 +194,17 @@
      ["branch-graph"
       [:map
        [:graph-uuid :uuid]
-       [:schema-version :string]]]
+       [:schema-version db-schema/major-schema-version-string-schema]]]
      ["delete-graph" [:map]]
      ["download-graph"
       [:map
        [:graph-uuid :uuid]
-       [:schema-version :string]
+       [:schema-version db-schema/major-schema-version-string-schema]
        [:download-info-uuid :string]]]
      ["upload-graph"
       [:map
        [:graph-uuid :uuid]
-       [:schema-version :string]]]
+       [:schema-version db-schema/major-schema-version-string-schema]]]
      ["download-info-list"
       [:map
        [:download-info-list [:sequential :any]]]]
@@ -241,7 +242,7 @@
       ["register-graph-updates"
        [:map
         [:graph-uuid :uuid]
-        [:schema-version :string]]]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["apply-ops"
        [:or
         [:map
@@ -249,7 +250,7 @@
          [:action :string]
          [:profile {:optional true} :boolean]
          [:graph-uuid :uuid]
-         [:schema-version :string]
+         [:schema-version db-schema/major-schema-version-string-schema]
          [:ops [:sequential to-ws-op-schema]]
          [:t-before :int]]
         [:map
@@ -263,20 +264,20 @@
        [:map
         [:s3-key :string]
         [:graph-name :string]
-        [:schema-version :string]]]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["branch-graph"
        [:map
         [:s3-key :string]
         [:graph-uuid :uuid]
-        [:schema-version :string]]]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["download-graph"
        [:map
         [:graph-uuid :uuid]
-        [:schema-version :string]]]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["download-info-list"
        [:map
         [:graph-uuid :uuid]
-        [:schema-version :string]]]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["grant-access"
        [:map
         [:graph-uuid :uuid]
@@ -288,11 +289,11 @@
       ["inject-users-info"
        [:map
         [:graph-uuid :uuid]
-        [:schema-version :string]]]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["delete-graph"
        [:map
         [:graph-uuid :uuid]
-        [:schema-version :string]]]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["query-block-content-versions"
        [:map
         [:graph-uuid :uuid]
@@ -309,7 +310,7 @@
       ["get-graph-skeleton"
        [:map
         [:graph-uuid :uuid]
-        [:schema-version :string]]]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["get-assets-upload-urls"
        [:map
         [:graph-uuid :uuid]
