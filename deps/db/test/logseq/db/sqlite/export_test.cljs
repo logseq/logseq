@@ -164,11 +164,11 @@
 
 (deftest import-page-with-different-ref-types
   (let [block-uuid (random-uuid)
-        ;; class-uuid (random-uuid)
+        class-uuid (random-uuid)
         page-uuid (random-uuid)
         property-uuid (random-uuid)
         original-data
-        {;:classes {:C1 {:block/uuid class-uuid}}
+        {:classes {:user.class/C1 {:block/title "C1" :block/uuid class-uuid :build/new-class? true}}
          :properties {:user.property/p1
                       {:db/cardinality :db.cardinality/one, :logseq.property/type :default
                        :block/uuid property-uuid :block/title "p1" :build/new-property? true}}
@@ -176,8 +176,8 @@
          [{:page {:block/title "page1"}
            :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}
                     {:block/title (str "block ref to " (page-ref/->page-ref block-uuid))}
-                    #_{:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}
-                    #_{:block/title (str "inline class ref to #" (page-ref/->page-ref class-uuid))}
+                    {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}
+                    {:block/title (str "inline class ref to #" (page-ref/->page-ref class-uuid))}
                     {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}]}
           {:page {:block/title "page with block ref"}
            :blocks [{:block/title "hi" :block/uuid block-uuid}]}
