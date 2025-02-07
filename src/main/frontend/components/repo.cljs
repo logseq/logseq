@@ -196,7 +196,9 @@
             :disabled remotes-loading?
             :on-click (fn []
                         (file-sync/load-session-graphs)
-                        (rtc-handler/<get-remote-graphs)))]]
+                        (p/do!
+                          (rtc-handler/<get-remote-graphs)
+                          (repo-handler/refresh-repos!))))]]
          (repos-inner remote-graphs)])]]))
 
 (defn- check-multiple-windows?
