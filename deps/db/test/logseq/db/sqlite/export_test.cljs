@@ -86,7 +86,7 @@
         {:pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}]}
-          {:page {:block/title "another page" :block/uuid page-uuid}}]}
+          {:page {:block/title "another page" :block/uuid page-uuid :build/keep-uuid? true}}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn-with-blocks
                {:pages-and-blocks [{:page {:block/title "page2"}
@@ -168,10 +168,10 @@
         property-uuid (random-uuid)
         journal-uuid (random-uuid)
         original-data
-        {:classes {:user.class/C1 {:block/title "C1" :block/uuid class-uuid :build/new-class? true}}
+        {:classes {:user.class/C1 {:block/title "C1" :block/uuid class-uuid :build/keep-uuid? true}}
          :properties {:user.property/p1
                       {:db/cardinality :db.cardinality/one, :logseq.property/type :default
-                       :block/uuid property-uuid :block/title "p1" :build/new-property? true}}
+                       :block/uuid property-uuid :block/title "p1" :build/keep-uuid? true}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}
@@ -181,9 +181,9 @@
                     {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}
                     {:block/title (str "journal ref to " (page-ref/->page-ref journal-uuid))}]}
           {:page {:block/title "page with block ref"}
-           :blocks [{:block/title "hi" :block/uuid block-uuid}]}
-          {:page {:block/title "another page" :block/uuid page-uuid}}
-          {:page {:build/journal 20250207 :block/uuid journal-uuid}}]}
+           :blocks [{:block/title "hi" :block/uuid block-uuid :build/keep-uuid? true}]}
+          {:page {:block/title "another page" :block/uuid page-uuid :build/keep-uuid? true}}
+          {:page {:build/journal 20250207 :block/uuid journal-uuid :build/keep-uuid? true}}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         full-imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
@@ -253,7 +253,8 @@
           {:page {:block/title "Blocks"}
            :blocks [{:block/title "myclass object"
                      :build/tags [:user.class/MyClass]
-                     :block/uuid block-object-uuid}]}]}
+                     :block/uuid block-object-uuid
+                     :build/keep-uuid? true}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         full-imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]

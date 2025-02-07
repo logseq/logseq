@@ -139,7 +139,7 @@
 
 (defn- build-entity-export
   "Given entity and optional existing properties, build an EDN export map"
-  [db entity {:keys [properties include-uuid-fn] :or {include-uuid-fn (constantly false)}}]
+  [db entity {:keys [properties include-uuid-fn keep-uuid?] :or {include-uuid-fn (constantly false)}}]
   (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
         new-user-property-ids (->> (keys ent-properties)
                                    (concat (->> (:block/tags entity)
@@ -153,6 +153,8 @@
         build-block (cond-> {:block/title (block-title entity)}
                       (include-uuid-fn (:block/uuid entity))
                       (assoc :block/uuid (:block/uuid entity))
+                      keep-uuid?
+                      (assoc :build/keep-uuid? true)
                       (seq build-tags)
                       (assoc :build/tags build-tags)
                       (seq ent-properties)
@@ -197,19 +199,20 @@
         content-ref-pages (filter #(or (ldb/internal-page? %) (ldb/journal? %)) content-ref-ents)
         content-ref-properties (when-let [prop-ids (seq (map :db/ident (filter ldb/property? content-ref-ents)))]
                                  (update-vals (build-export-properties db prop-ids {:include-uuid? true})
-                                              #(merge % {:build/new-property? true})))
+                                              #(merge % {:build/keep-uuid? true})))
         content-ref-classes (when-let [class-ents (seq (filter ldb/class? content-ref-ents))]
                               (->> class-ents
                                    ;; TODO: Export class parents when there's ability to control granularity of export
                                    (map #(vector (:db/ident %)
                                                  (assoc (build-export-class % {:include-parents? false :include-uuid? true})
-                                                        :build/new-class? true)))
+                                                        :build/keep-uuid? true)))
                                    (into {})))]
     {:content-ref-uuids content-ref-uuids
      :content-ref-ents content-ref-ents
      :properties content-ref-properties
      :classes content-ref-classes
-     :pages-and-blocks (mapv #(hash-map :page (assoc (shallow-copy-page %) :block/uuid (:block/uuid %)))
+     :pages-and-blocks (mapv #(hash-map :page (merge (shallow-copy-page %)
+                                                     {:block/uuid (:block/uuid %) :build/keep-uuid? true}))
                              content-ref-pages)}))
 
 (defn build-block-export
@@ -228,7 +231,7 @@
 (defn- build-blocks-tree
   "Given a page's block entities, returns the blocks in a sqlite.build EDN format
    and all properties and classes used in these blocks"
-  [db blocks {:keys [include-uuid-fn]}]
+  [db blocks opts]
   (let [*properties (atom {})
         *classes (atom {})
         *pvalue-uuids (atom #{})
@@ -237,7 +240,7 @@
         build-block (fn build-block [block*]
                       (let [child-nodes (mapv build-block (get children (:db/id block*) []))
                             {:build/keys [block] :keys [properties classes]}
-                            (build-entity-export db block* {:properties @*properties :include-uuid-fn include-uuid-fn})
+                            (build-entity-export db block* (assoc opts :properties @*properties))
                             new-pvalue-uuids (get-pvalue-uuids block)]
                         (when (seq properties) (swap! *properties merge properties))
                         (when (seq classes) (swap! *classes merge classes))
@@ -263,7 +266,9 @@
                ((fn [m] (dissoc m page-entity)))
                (map (fn [[parent-page-ent blocks]]
                       ;; Don't export pvalue-uuids of uuid blocks to keep export shallower
-                      (merge (build-blocks-tree db (sort-by :block/order blocks) {:include-uuid-fn (constantly true)})
+                      (merge (build-blocks-tree db
+                                                (sort-by :block/order blocks)
+                                                {:include-uuid-fn (constantly true) :keep-uuid? true})
                              {:page (shallow-copy-page parent-page-ent)})))))]
     {:properties (apply merge (map :properties uuid-block-pages))
      :classes (apply merge (map :classes uuid-block-pages))
