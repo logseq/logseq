@@ -542,7 +542,7 @@
                                            (merge {:block/journal-day date-int
                                                    :block/title page-name
                                                    :block/uuid
-                                                   (common-uuid/gen-uuid :journal-page-uuid date-int)
+                                                   (or (:block/uuid page) (common-uuid/gen-uuid :journal-page-uuid date-int))
                                                    :block/tags :logseq.class/Journal})
                                            (with-meta {::new-page? true})))))
                            m))]

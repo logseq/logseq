@@ -111,6 +111,7 @@
   (let [page (db-test/find-page-by-title @export-conn page-title)
         {:keys [init-tx block-props-tx] :as _txs}
         (->> (sqlite-export/build-page-export @export-conn (:db/id page))
+            ;;  ((fn [x] (cljs.pprint/pprint {:export x}) x))
              (sqlite-export/build-import @import-conn {}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! import-conn init-tx)
@@ -169,6 +170,7 @@
         class-uuid (random-uuid)
         page-uuid (random-uuid)
         property-uuid (random-uuid)
+        journal-uuid (random-uuid)
         original-data
         {:classes {:user.class/C1 {:block/title "C1" :block/uuid class-uuid :build/new-class? true}}
          :properties {:user.property/p1
@@ -180,10 +182,12 @@
                     {:block/title (str "block ref to " (page-ref/->page-ref block-uuid))}
                     {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}
                     {:block/title (str "inline class ref to #" (page-ref/->page-ref class-uuid))}
-                    {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}]}
+                    {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}
+                    {:block/title (str "journal ref to " (page-ref/->page-ref journal-uuid))}]}
           {:page {:block/title "page with block ref"}
            :blocks [{:block/title "hi" :block/uuid block-uuid}]}
-          {:page {:block/title "another page" :block/uuid page-uuid}}]}
+          {:page {:block/title "another page" :block/uuid page-uuid}}
+          {:page {:build/journal 20250207 :block/uuid journal-uuid}}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         full-imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]

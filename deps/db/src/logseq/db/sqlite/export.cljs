@@ -17,12 +17,21 @@
        (remove #(= % :logseq.class/Page))
        vec))
 
+(defn- shallow-copy-page
+  "Given a page or journal entity, shallow copies it e.g. no properties or tags info included.
+   Pages that are shallow copied are at the edges of export and help keep the export size reasonable and
+   avoid exporting unexpected info"
+  [page-entity]
+  (if (ldb/journal? page-entity)
+    {:build/journal (:block/journal-day page-entity)}
+    (select-keys page-entity [:block/title])))
+
 (defn- buildable-property-value-entity
   "Converts property value to a buildable version"
   [property-ent pvalue]
   (cond (ldb/internal-page? pvalue)
         ;; Should page properties be pulled here?
-        [:build/page (cond-> (select-keys pvalue [:block/title])
+        [:build/page (cond-> (shallow-copy-page pvalue)
                        (seq (:block/tags pvalue))
                        (assoc :build/tags (->build-tags (:block/tags pvalue))))]
         (ldb/journal? pvalue)
@@ -211,17 +220,18 @@
                (map (fn [[parent-page-ent blocks]]
                       ;; Don't export pvalue-uuids of uuid blocks to keep export shallower
                       (merge (build-blocks-tree db (sort-by :block/order blocks) {:include-uuid-fn (constantly true)})
-                             ;; only shallow copy pages
-                             {:page (select-keys parent-page-ent [:block/title])})))))]
+                             {:page (shallow-copy-page parent-page-ent)})))))]
     {:properties (apply merge (map :properties uuid-block-pages))
      :classes (apply merge (map :classes uuid-block-pages))
      :pages-and-blocks (mapv #(select-keys % [:page :blocks]) uuid-block-pages)}))
 
 (defn- build-content-ref-export
+  "Builds an export config (and additional info) for refs in the given blocks. All the exported
+   entities found in block refs include their uuid in order to preserve the relationship to the blocks"
   [db page-blocks]
   (let [content-ref-uuids (set (mapcat (comp db-content/get-matched-ids :block/title) page-blocks))
         content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)
-        content-ref-pages (filter ldb/internal-page? content-ref-ents)
+        content-ref-pages (filter #(or (ldb/internal-page? %) (ldb/journal? %)) content-ref-ents)
         content-ref-properties (when-let [prop-ids (seq (map :db/ident (filter ldb/property? content-ref-ents)))]
                                  (update-vals (build-export-properties db prop-ids {:include-uuid? true})
                                               #(merge % {:build/new-property? true})))
@@ -236,8 +246,8 @@
      :content-ref-ents content-ref-ents
      :properties content-ref-properties
      :classes content-ref-classes
-     ;; only shallow copy pages
-     :pages-and-blocks (mapv #(hash-map :page (select-keys % [:block/title :block/uuid])) content-ref-pages)}))
+     :pages-and-blocks (mapv #(hash-map :page (assoc (shallow-copy-page %) :block/uuid (:block/uuid %)))
+                             content-ref-pages)}))
 
 (defn build-page-export [db eid]
   (let [page-entity (d/entity db eid)
@@ -255,9 +265,7 @@
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents page-entity)
         page-ent-export (build-entity-export db page-entity {:properties properties})
         page (merge (dissoc (:build/block page-ent-export) :block/title)
-                    (if (ldb/journal? page-entity)
-                      {:build/journal (:block/journal-day page-entity)}
-                      (select-keys page-entity [:block/title])))
+                    (shallow-copy-page page-entity))
         pages-and-blocks
         (cond-> [{:page page :blocks blocks}]
           (seq (:pages-and-blocks uuid-block-export))
