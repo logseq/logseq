@@ -127,8 +127,8 @@
         page-uuid (random-uuid)
         property-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks
-              {:classes {:C1 {:block/uuid class-uuid :build/new-class? true}}
-               :properties {:p1 {:block/uuid property-uuid :build/new-property? true}}
+              {:classes {:C1 {:block/uuid class-uuid :build/keep-uuid? true}}
+               :properties {:p1 {:block/uuid property-uuid :build/keep-uuid? true}}
                :build-existing-tx? true
                :pages-and-blocks
                [{:page {:block/title "page 1"}
@@ -138,8 +138,8 @@
                           {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}
                           {:block/title (str "inline class ref to #" (page-ref/->page-ref class-uuid))}
                           {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}
-                          {:block/title "hi" :block/uuid block-uuid}]}
-                {:page {:block/title "another page" :block/uuid page-uuid}}]})
+                          {:block/title "hi" :block/uuid block-uuid :build/keep-uuid? true}]}
+                {:page {:block/title "another page" :block/uuid page-uuid :build/keep-uuid? true}}]})
         block-with-named-page-ref (db-test/find-block-by-content @conn #"^named page ref")
         block-with-page-ref (db-test/find-block-by-content @conn #"^page ref")
         block-with-class-ref (db-test/find-block-by-content @conn #"^class ref")
