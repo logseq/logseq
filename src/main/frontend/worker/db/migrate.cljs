@@ -586,7 +586,7 @@
             tx-data (mapcat (fn [eid]
                               (let [entity (d/entity db eid)
                                     schema (:block/schema entity)
-                                    schema-properties (schema->qualified-property-keyword schema)
+                                    schema-properties (dissoc (schema->qualified-property-keyword schema) :db/cardinality)
                                     hidden-page? (contains? #{common-config/favorites-page-name common-config/views-page-name}
                                                             (:block/title entity))
                                     m (assoc schema-properties :db/id eid)
