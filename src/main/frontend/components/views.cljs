@@ -309,7 +309,7 @@
     columns))
 
 (rum/defc more-actions
-  [columns {:keys [column-visible? column-toggle-visibility]}]
+  [view-entity columns {:keys [column-visible? column-toggle-visibility]}]
   (shui/dropdown-menu
    (shui/dropdown-menu-trigger
     {:asChild true}
@@ -332,6 +332,26 @@
            :className "capitalize"
            :checked (column-visible? column)
            :onCheckedChange #(column-toggle-visibility column %)
+           :onSelect (fn [e] (.preventDefault e))}
+          (:name column)))))
+     (shui/dropdown-menu-sub
+      (shui/dropdown-menu-sub-trigger
+       "Group by")
+      (shui/dropdown-menu-sub-content
+       (for [column (filter (fn [column]
+                              (when (:id column)
+                                (when-let [p (db/entity (:id column))]
+                                  (contains? #{:default :number :checkbox :url :node}
+                                             (:logseq.property/type p))))) columns)]
+         (shui/dropdown-menu-checkbox-item
+          {:key (str (:id column))
+           :className "capitalize"
+           :checked (= (:id column) (:db/ident (:logseq.property.view/group-by-property view-entity)))
+           :onCheckedChange (fn [result]
+                              (if result
+                                (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/group-by-property
+                                                                         (:db/id (db/entity (:id column))))
+                                (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/group-by-property)))
            :onSelect (fn [e] (.preventDefault e))}
           (:name column)))))))))
 
@@ -1473,7 +1493,7 @@
         [:div.text-muted-foreground.text-sm
          (pv/property-value view-entity (db/entity :logseq.property.view/type) {})]
 
-        (more-actions columns table)
+        (more-actions view-entity columns table)
 
         (when add-new-object! (new-record-button table view-entity))]]
       [:div.ls-view-body.flex.flex-col.gap-2.grid

@@ -700,7 +700,8 @@
                                  :property.value/content :logseq.property/value})}]
    [62 {:fix remove-block-schema}]
    [63 {:properties [:logseq.property.table/pinned-columns]}]
-   [64 {:fix update-view-filter}]])
+   [64 {:fix update-view-filter}]
+   [65 {:properties [:logseq.property.view/group-by-property]}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

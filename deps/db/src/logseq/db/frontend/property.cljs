@@ -406,6 +406,17 @@
             :rtc/ignore-attr-when-init-download true
             :rtc/ignore-attr-when-syncing true}}
 
+     :logseq.property.view/group-by-property
+     {:title "View group by property"
+      :schema
+      {:type :property
+       :public? false
+       :hide? true}
+      :queryable? true
+      :rtc {:rtc/ignore-attr-when-init-upload true
+            :rtc/ignore-attr-when-init-download true
+            :rtc/ignore-attr-when-syncing true}}
+
      :logseq.property.table/sorting {:title "View sorting"
                                      :schema
                                      {:type :coll
