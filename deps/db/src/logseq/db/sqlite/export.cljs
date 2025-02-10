@@ -137,8 +137,9 @@
          (map #(vector (:db/ident %) (build-export-class % {:include-parents? false})))
          (into {}))))
 
-(defn- build-entity-export
-  "Given entity and optional existing properties, build an EDN export map"
+(defn- build-node-export
+  "Given a block/page entity and optional existing properties, build an export map of its
+   tags and properties"
   [db entity {:keys [properties include-uuid-fn keep-uuid?] :or {include-uuid-fn (constantly false)}}]
   (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
         new-user-property-ids (->> (keys ent-properties)
@@ -150,7 +151,7 @@
                                    (remove #(get properties %)))
         new-properties (build-export-properties db new-user-property-ids {})
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
-        build-block (cond-> {:block/title (block-title entity)}
+        build-node (cond-> {:block/title (block-title entity)}
                       (include-uuid-fn (:block/uuid entity))
                       (assoc :block/uuid (:block/uuid entity))
                       keep-uuid?
@@ -160,8 +161,8 @@
                       (seq ent-properties)
                       (assoc :build/properties
                              (buildable-properties db ent-properties (merge properties new-properties))))
-        new-classes (build-export-block-classes db build-block (:block/tags entity))]
-    (cond-> {:build/block build-block}
+        new-classes (build-export-block-classes db build-node (:block/tags entity))]
+    (cond-> {:node build-node}
       (seq new-classes)
       (assoc :classes new-classes)
       (seq new-properties)
@@ -219,10 +220,10 @@
   [db eid]
   (let [block-entity (d/entity db eid)
         {:keys [content-ref-uuids _content-ref-ents] :as content-ref-export} (build-content-ref-export db [block-entity])
-        block-export* (build-entity-export db block-entity {:include-uuid-fn content-ref-uuids})
-        pvalue-uuids (get-pvalue-uuids (:build/block block-export*))
-        block-export (assoc (merge-export-maps block-export* content-ref-export)
-                            :build/block (:build/block block-export*))]
+        node-export (build-node-export db block-entity {:include-uuid-fn content-ref-uuids})
+        pvalue-uuids (get-pvalue-uuids (:node node-export))
+        block-export (merge {::block (:node node-export)}
+                            (merge-export-maps node-export content-ref-export))]
     ;; Maybe add support for this later
     (when (seq pvalue-uuids)
       (throw (ex-info "Exporting a block with :node block objects is not supported" {})))
@@ -239,13 +240,13 @@
         children (group-by #(get-in % [:block/parent :db/id]) blocks)
         build-block (fn build-block [block*]
                       (let [child-nodes (mapv build-block (get children (:db/id block*) []))
-                            {:build/keys [block] :keys [properties classes]}
-                            (build-entity-export db block* (assoc opts :properties @*properties))
-                            new-pvalue-uuids (get-pvalue-uuids block)]
+                            {:keys [node properties classes]}
+                            (build-node-export db block* (assoc opts :properties @*properties))
+                            new-pvalue-uuids (get-pvalue-uuids node)]
                         (when (seq properties) (swap! *properties merge properties))
                         (when (seq classes) (swap! *classes merge classes))
                         (when (seq new-pvalue-uuids) (swap! *pvalue-uuids into new-pvalue-uuids))
-                        (cond-> block
+                        (cond-> node
                           (seq child-nodes) (assoc :build/children child-nodes))))
         roots (remove #(contains? id-map (get-in % [:block/parent :db/id])) blocks)
         exported-blocks (mapv build-block roots)]
@@ -288,8 +289,8 @@
         {:keys [blocks properties classes pvalue-uuids]}
         (build-blocks-tree db page-blocks {:include-uuid-fn content-ref-uuids})
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents page-entity)
-        page-ent-export (build-entity-export db page-entity {:properties properties})
-        page (merge (dissoc (:build/block page-ent-export) :block/title)
+        page-ent-export (build-node-export db page-entity {:properties properties})
+        page (merge (dissoc (:node page-ent-export) :block/title)
                     (shallow-copy-page page-entity))
         page-blocks-export {:pages-and-blocks [{:page page :blocks blocks}]
                             :properties properties
@@ -327,11 +328,25 @@
 
 ;; Import fns
 ;; ==========
-(defn- ->sqlite-build-options
+(defn- check-for-existing-entities
+  "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
+   Also checks for property conflicts between existing properties and properties to be imported"
   [db {:keys [pages-and-blocks classes properties]} property-conflicts]
   (cond-> {:build-existing-tx? true}
     (seq pages-and-blocks)
-    (assoc :pages-and-blocks pages-and-blocks)
+    (assoc :pages-and-blocks
+           (mapv (fn [m]
+                   (if-let [ent (some->> (get-in m [:page :build/journal])
+                                         (d/datoms db :avet :block/journal-day)
+                                         first
+                                         :e
+                                         (d/entity db))]
+                     (assoc-in m [:page :block/uuid] (:block/uuid ent))
+                     ;; For now only check page uniqueness by title. Could handle more uniqueness checks later
+                     (if-let [ent (some->> (get-in m [:page :block/title]) (ldb/get-case-page db))]
+                       (assoc-in m [:page :block/uuid] (:block/uuid ent))
+                       m)))
+                 pages-and-blocks))
     (seq classes)
     (assoc :classes
            (->> classes
@@ -359,7 +374,7 @@
 (defn- build-block-import-options
   "Builds options for sqlite-build to import into current-block"
   [current-block export-map]
-  (let [block (merge (:build/block export-map)
+  (let [block (merge (::block export-map)
                      {:block/uuid (:block/uuid current-block)
                       :block/page (select-keys (:block/page current-block) [:block/uuid])})
         pages-and-blocks
@@ -367,35 +382,17 @@
           :blocks [(dissoc block :block/page)]}]]
     (merge-export-maps export-map {:pages-and-blocks pages-and-blocks})))
 
-(defn- build-page-import-options
-  [db export-map]
-  (assert (map? (get-in export-map [:pages-and-blocks 0 :page])) "page export exists")
-  (if-let [ent (some->> (get-in export-map [:pages-and-blocks 0 :page :build/journal])
-                        (d/datoms db :avet :block/journal-day)
-                        first
-                        :e
-                        (d/entity db))]
-    (assoc-in export-map [:pages-and-blocks 0 :page] (select-keys ent [:block/uuid]))
-    ;; FIXME: Find an existing page more reliably than :block/title, :block/uuid?
-    (if-let [ent (some->> (get-in export-map [:pages-and-blocks 0 :page :block/title])
-                          (ldb/get-case-page db))]
-      (assoc-in export-map [:pages-and-blocks 0 :page] (select-keys ent [:block/uuid]))
-      export-map)))
-
 (defn build-import
   "Given an entity's export map, build the import tx to create it"
-  [db {:keys [current-block]} export-map*]
-  (let [export-map (cond current-block
-                         (build-block-import-options current-block export-map*)
-                         (:pages-and-blocks export-map*)
-                         (build-page-import-options db export-map*)
-                         :else
-                         export-map*)
+  [export-map* db {:keys [current-block]}]
+  (let [export-map (if (and (::block export-map*) current-block)
+                     (build-block-import-options current-block export-map*)
+                     export-map*)
         property-conflicts (atom [])
-        opts (->sqlite-build-options db export-map property-conflicts)]
+        export-map' (check-for-existing-entities db export-map property-conflicts)]
     (if (seq @property-conflicts)
       (do
         (js/console.error :property-conflicts @property-conflicts)
         {:error (str "The following imported properties conflict with the current graph: "
                      (pr-str (mapv :property-id @property-conflicts)))})
-      (sqlite-build/build-blocks-tx opts))))
+      (sqlite-build/build-blocks-tx export-map'))))

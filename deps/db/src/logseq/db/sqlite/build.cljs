@@ -544,7 +544,7 @@
                                                    :block/uuid
                                                    (or (:block/uuid page) (common-uuid/gen-uuid :journal-page-uuid date-int))
                                                    :block/tags :logseq.class/Journal})
-                                           (with-meta {::new-page? true})))))
+                                           (with-meta {::new-page? (not (:block/uuid page))})))))
                            m))]
     ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
     (->> pages-and-blocks
@@ -641,12 +641,14 @@
        * :build/journal - Define a journal pages as an integer e.g. 20240101 is Jan 1, 2024. :block/title
          is not required if using this since it generates one
        * :build/properties - Defines properties on a page
+       * :build/tags - Defines tags on a page
        * :build/keep-uuid? - Keeps :block/uuid because another block depends on it
      * :blocks - This is a vec of datascript attribute maps for blocks with
        :block/title required. e.g. `{:block/title \"bar\"}`. Additional keys available:
        * :build/children - A vec of blocks that are nested (indented) under the current block.
           Allows for outlines to be expressed to whatever depth
        * :build/properties - Defines properties on a block
+       * :build/tags - Defines tags on a block
        * :build/keep-uuid? - Keeps :block/uuid because another block depends on it
    * :properties - This is a map to configure properties where the keys are property name keywords
      and the values are maps of datascript attributes e.g. `{:logseq.property/type :checkbox}`.

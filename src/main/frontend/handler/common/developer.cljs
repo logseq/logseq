@@ -69,7 +69,7 @@
 
 (defn- import-submit [import-inputs _e]
   (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))
-        import-block? (:build/block export-map)
+        import-block? (::sqlite-export/block export-map)
         block (when import-block?
                 (if-let [eid (:block-id (first (state/get-editor-args)))]
                   (db/entity [:block/uuid eid])
@@ -77,9 +77,9 @@
     (if (= ::invalid-import export-map)
       (notification/show! "The submitted EDN data is invalid! Fix and try again." :warning)
       (let [{:keys [init-tx block-props-tx error] :as txs}
-            (sqlite-export/build-import (db/get-db)
-                                        (when block {:current-block block})
-                                        export-map)]
+            (sqlite-export/build-import export-map
+                                        (db/get-db)
+                                        (when block {:current-block block}))]
         (pprint/pprint txs)
         (if error
           (notification/show! error :error)
