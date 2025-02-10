@@ -417,7 +417,7 @@
 
      :logseq.property.table/filters {:title "View filters"
                                      :schema
-                                     {:type :coll
+                                     {:type :map
                                       :hide? true
                                       :public? false}
                                      :rtc {:rtc/ignore-attr-when-init-upload true
