@@ -32,7 +32,6 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.table.core :as table-core]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defn- get-latest-entity
@@ -1526,7 +1525,7 @@
                                         (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}}))
                       table' (assoc-in table [:data-fns :add-new-object!] add-new-object!)]
                   (ui/foldable
-                   [:div.text-sm.font-medium
+                   [:div.text-sm.font-medium.ml-2
                     (if value
                       (let [icon (pu/get-block-property-value value :logseq.property/icon)]
                         [:div.flex.flex-row.gap-1.items-center

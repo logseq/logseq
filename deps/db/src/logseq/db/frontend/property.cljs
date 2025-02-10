@@ -393,13 +393,14 @@
        :public? false
        :hide? true}
       :closed-values
-      (mapv (fn [[db-ident value]]
+      (mapv (fn [[db-ident value icon]]
               {:db-ident db-ident
                :value value
-               :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
-            [[:logseq.property.view/type.table "Table View"]
-             [:logseq.property.view/type.list "List View"]
-             [:logseq.property.view/type.gallery "Gallery View"]])
+               :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)
+               :icon {:type :tabler-icon :id icon}})
+            [[:logseq.property.view/type.table "Table View" "table"]
+             [:logseq.property.view/type.list "List View" "list"]
+             [:logseq.property.view/type.gallery "Gallery View" "layout-grid"]])
       :properties {:logseq.property/default-value :logseq.property.view/type.table}
       :queryable? true
       :rtc {:rtc/ignore-attr-when-init-upload true

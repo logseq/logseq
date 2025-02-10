@@ -1,6 +1,7 @@
 (ns frontend.components.objects
   "Provides table views for class objects and property related objects"
   (:require [frontend.components.filepicker :as filepicker]
+            [frontend.components.icon :as icon-component]
             [frontend.components.views :as views]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -89,6 +90,10 @@
                          :align "start"
                          :content-props {:onClick shui/popup-hide!}})
                        (set-view-entity! view)))}
+        (let [display-type (or (:db/ident (get view :logseq.property.view/type))
+                               :logseq.property.view/type.table)]
+          (when-let [icon (:logseq.property/icon (db/entity display-type))]
+            (icon-component/icon icon {:color? true})))
         (if (= (:db/id view) (:db/id class))
           "All"
           (let [title (:block/title view)]
