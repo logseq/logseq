@@ -30,7 +30,7 @@
     :else
     (throw (ex-info (str "Bad schema version: " string-or-compatible-number) {:data string-or-compatible-number}))))
 
-;;; nbb not support extend-protocol ICompareable for defrecord
+;;; nbb not support extend-protocol IComparable for defrecord
 (defn compare-schema-version
   [x y]
   (if (instance? SchemaVersion x)
@@ -43,7 +43,7 @@
       (throw (js/Error. (str "Cannot compare " x " to " y))))
     (compare-schema-version (parse-schema-version x) y)))
 
-(def version (parse-schema-version "63"))
+(def version (parse-schema-version "64"))
 
 (defn major-version
   "Return a number.
