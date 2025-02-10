@@ -8,6 +8,7 @@
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.components.dnd :as dnd]
+            [frontend.components.icon :as icon-component]
             [frontend.components.property.config :as property-config]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
@@ -18,6 +19,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.ui :as ui-handler]
             [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
@@ -1391,6 +1393,17 @@
                                   {:align :end}))}
    (ui/icon "arrows-up-down")))
 
+(defn- view-cp
+  [view-entity table option {:keys [*scroller-ref display-type row-selection add-new-object!]}]
+  (case display-type
+    :logseq.property.view/type.list
+    (list-view (:config option) view-entity (:rows table))
+
+    :logseq.property.view/type.gallery
+    (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
+
+    (table-view table option row-selection add-new-object! *scroller-ref)))
+
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
                 :or {render-empty-title? false}}
@@ -1499,14 +1512,27 @@
       [:div.ls-view-body.flex.flex-col.gap-2.grid
        (filters-row table)
 
-       (case display-type
-         :logseq.property.view/type.list
-         (list-view (:config option) view-entity (:rows table))
-
-         :logseq.property.view/type.gallery
-         (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
-
-         (table-view table option row-selection add-new-object! *scroller-ref))]
+       (let [view-opts {:*scroller-ref *scroller-ref
+                        :display-type display-type
+                        :row-selection row-selection
+                        :add-new-object! add-new-object!}]
+         (if-let [group-by-property (:logseq.property.view/group-by-property view-entity)]
+           (let [groups (->> (group-by (:db/ident group-by-property) (:rows table))
+                             (sort-by #(db-property/property-value-content (first %))))]
+             [:div.flex.flex-col.gap-4.border-t.py-4
+              (for [[value group] groups]
+                (ui/foldable
+                 [:div.text-sm.font-medium
+                  (if value
+                    (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                      [:div.flex.flex-row.gap-1.items-center
+                       (when icon (icon-component/icon icon {:color? true}))
+                       (db-property/property-value-content value)])
+                    (str "No " (:block/title group-by-property)))]
+                 [:div.mt-2
+                  (view-cp view-entity (assoc table :rows group) option view-opts)]
+                 {:title-trigger? false}))])
+           (view-cp view-entity table option view-opts)))]
       {:title-trigger? false})]))
 
 (rum/defcs view
