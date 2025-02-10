@@ -136,28 +136,28 @@
       :on-mouse-up (fn [^js e]
                      (when-let [^js el (some-> (.-target e) (.closest "[aria-roledescription=sortable]"))]
                        (when (and (or (nil? @*last-header-action-target)
-                                    (not= el @*last-header-action-target))
-                               (string/blank? (some-> el (.-style) (.-transform))))
+                                      (not= el @*last-header-action-target))
+                                  (string/blank? (some-> el (.-style) (.-transform))))
                          (shui/popup-show! el sub-content
-                           {:align "start" :as-dropdown? true
-                            :on-before-hide (fn []
-                                              (reset! *last-header-action-target el)
-                                              (js/setTimeout #(reset! *last-header-action-target nil) 128))}))))}
-      (let [title (str (:name column))]
-        [:span {:title title
-                :class "max-w-full overflow-hidden text-ellipsis"}
-         title])
-      (case asc?
-        true
-        (ui/icon "arrow-up")
-        false
-        (ui/icon "arrow-down")
-        nil))))
+                                           {:align "start" :as-dropdown? true
+                                            :on-before-hide (fn []
+                                                              (reset! *last-header-action-target el)
+                                                              (js/setTimeout #(reset! *last-header-action-target nil) 128))}))))}
+     (let [title (str (:name column))]
+       [:span {:title title
+               :class "max-w-full overflow-hidden text-ellipsis"}
+        title])
+     (case asc?
+       true
+       (ui/icon "arrow-up")
+       false
+       (ui/icon "arrow-down")
+       nil))))
 
 (defn- timestamp-cell-cp
   [_table row column]
   (some-> (get row (:id column))
-    date/int->local-time-2))
+          date/int->local-time-2))
 
 (defn- get-property-value-content
   [entity]
@@ -1276,8 +1276,9 @@
      {:default-value (if asc? "asc" "desc")
       :on-value-change (fn [v]
                          (let [asc? (= v "asc")
-                               f (:column-set-sorting! sorting table)]
-                           (f sorting {:id id} asc?)))}
+                               f (:column-set-sorting! table)]
+                           (when f
+                             (f sorting {:id id} asc?))))}
      (shui/select-trigger
       {:class "order-button !px-2 !py-0 !h-8"}
       (shui/select-value
