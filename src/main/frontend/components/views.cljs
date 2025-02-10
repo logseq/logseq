@@ -32,6 +32,7 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.table.core :as table-core]
             [logseq.shui.ui :as shui]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defn- get-latest-entity
@@ -1211,7 +1212,7 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc table-view < rum/static
-  [table option row-selection add-new-object! *scroller-ref]
+  [table option row-selection *scroller-ref]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))
         [ready? set-ready?] (rum/use-state false)
         *rows-wrap (rum/use-ref nil)]
@@ -1241,7 +1242,7 @@
                              (let [row (nth rows idx)]
                                (table-row table row {} option)))})
 
-           (when add-new-object!
+           (when (get-in table [:data-fns :add-new-object!])
              (shui/table-footer (add-new-row table)))])]))))
 
 (rum/defc list-view < rum/static
@@ -1394,7 +1395,7 @@
    (ui/icon "arrows-up-down")))
 
 (defn- view-cp
-  [view-entity table option {:keys [*scroller-ref display-type row-selection add-new-object!]}]
+  [view-entity table option {:keys [*scroller-ref display-type row-selection]}]
   (case display-type
     :logseq.property.view/type.list
     (list-view (:config option) view-entity (:rows table))
@@ -1402,7 +1403,7 @@
     :logseq.property.view/type.gallery
     (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
 
-    (table-view table option row-selection add-new-object! *scroller-ref)))
+    (table-view table option row-selection *scroller-ref)))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
@@ -1521,17 +1522,20 @@
                              (sort-by #(db-property/property-value-content (first %))))]
              [:div.flex.flex-col.gap-4.border-t.py-4
               (for [[value group] groups]
-                (ui/foldable
-                 [:div.text-sm.font-medium
-                  (if value
-                    (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                      [:div.flex.flex-row.gap-1.items-center
-                       (when icon (icon-component/icon icon {:color? true}))
-                       (db-property/property-value-content value)])
-                    (str "No " (:block/title group-by-property)))]
-                 [:div.mt-2
-                  (view-cp view-entity (assoc table :rows group) option view-opts)]
-                 {:title-trigger? false}))])
+                (let [add-new-object! (fn [_]
+                                        (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}}))
+                      table' (assoc-in table [:data-fns :add-new-object!] add-new-object!)]
+                  (ui/foldable
+                   [:div.text-sm.font-medium
+                    (if value
+                      (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                        [:div.flex.flex-row.gap-1.items-center
+                         (when icon (icon-component/icon icon {:color? true}))
+                         (db-property/property-value-content value)])
+                      (str "No " (:block/title group-by-property)))]
+                   [:div.mt-2
+                    (view-cp view-entity (assoc table' :rows group) option view-opts)]
+                   {:title-trigger? false})))])
            (view-cp view-entity table option view-opts)))]
       {:title-trigger? false})]))
 
