@@ -14,7 +14,9 @@
 ;; ==========
 (defn- ->build-tags [block-tags]
   (->> (map :db/ident block-tags)
-       (remove #(= % :logseq.class/Page))
+       ;; These classes are redundant as :build/journal is enough for Journal and Page
+       ;; is implied by being in :pages-and-blocks
+       (remove #{:logseq.class/Page :logseq.class/Journal})
        vec))
 
 (defn- block-title

@@ -1,10 +1,12 @@
 (ns logseq.db.sqlite.export-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.pprint]
+            [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
-            [logseq.common.util.date-time :as date-time-util]))
+            [logseq.common.util.date-time :as date-time-util]
+            [logseq.db.frontend.validate :as db-validate]))
 
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
@@ -17,7 +19,10 @@
             (sqlite-export/build-import @import-conn {:current-block import-block}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)]
+        _ (d/transact! import-conn block-props-tx)
+        validation (db-validate/validate-db! @import-conn)
+        _ (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
+        _  (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")]
     (sqlite-export/build-block-export @import-conn (:db/id import-block))))
 
 (deftest import-block-in-same-graph
@@ -102,8 +107,8 @@
         "Imported page equals exported page of page ref")))
 
 (defn- export-page-and-import-to-another-graph
-  "Exports given page from one graph/conn, imports it to a 2nd graph and then
-   exports the page from the 2nd graph"
+  "Exports given page from one graph/conn, imports it to a 2nd graph, validates
+  it and then exports the page from the 2nd graph"
   [export-conn import-conn page-title]
   (let [page (db-test/find-page-by-title @export-conn page-title)
         {:keys [init-tx block-props-tx] :as _txs}
@@ -113,6 +118,9 @@
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! import-conn init-tx)
         _ (d/transact! import-conn block-props-tx)
+        validation (db-validate/validate-db! @import-conn)
+        _ (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
+        _  (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")
         page2 (db-test/find-page-by-title @import-conn page-title)]
     (sqlite-export/build-page-export @import-conn (:db/id page2))))
 
@@ -233,7 +241,7 @@
 (deftest import-journal-page
   (let [original-data
         {:pages-and-blocks
-         [{:page {:build/journal 20250210 :build/tags [:logseq.class/Journal]}
+         [{:page {:build/journal 20250210}
            :blocks [{:block/title "b1"} {:block/title "b2"}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
