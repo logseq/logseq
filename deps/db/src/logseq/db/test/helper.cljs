@@ -43,6 +43,18 @@
        first
        (d/entity db)))
 
+(defn find-journal-by-journal-day
+  [db journal-day]
+  (->> journal-day
+       (d/q
+        '[:find [?page ...]
+          :in $ ?journal-day
+          :where
+          [?page :block/journal-day ?journal-day]]
+        db)
+       first
+       (d/entity db)))
+
 (defn readable-properties
   "Returns an entity's properties and tags in readable form for assertions.
    tags are included here since they behave like properties on an ent"
