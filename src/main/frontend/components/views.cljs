@@ -1009,7 +1009,7 @@
        (when (> (count (:filters filters)) 1)
          [:div
           (shui/select
-           {:default-value (if (:or? filter) "or" "and")
+           {:default-value (if (:or? filters) "or" "and")
             :on-value-change (fn [v]
                                (set-filters! (assoc filters :or? (= v "or"))))}
            (shui/select-trigger
@@ -1025,7 +1025,7 @@
   [row input filters]
   (let [row (get-latest-entity row)
         or? (:or? filters)
-        check-f (if or? any? every?)]
+        check-f (if or? some every?)]
     (and
      ;; full-text-search match
      (if (string/blank? input)
