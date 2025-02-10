@@ -534,6 +534,28 @@
                           [:db/retract e :logseq.user/avatar]])
                  db-ids))))))
 
+(defn- update-view-filter
+  [conn _search-db]
+  (let [db @conn]
+    (when (ldb/db-based-graph? db)
+      (let [ident :logseq.property.table/filters
+            property (d/entity db ident)
+            property-tx {:db/id (:db/id property)
+                         :block/schema (assoc (:block/schema property) :type :map)}
+            data-tx (mapcat
+                     (fn [d]
+                       (let [v (:v d)]
+                         (cond
+                           (= v :logseq.property/empty-placeholder)
+                           [[:db/retract (:e d) ident]]
+                           (map? v)
+                           nil
+                           :else
+                           [[:db/retract (:e d) ident]
+                            [:db/add (:e d) ident {:or? false :filters (:v d)}]])))
+                     (d/datoms db :avet ident))]
+        (cons property-tx data-tx)))))
+
 (defn- schema->qualified-property-keyword
   [prop-schema]
   (reduce-kv
@@ -677,7 +699,8 @@
         :fix (rename-properties {:property/schema.classes :logseq.property/classes
                                  :property.value/content :logseq.property/value})}]
    [62 {:fix remove-block-schema}]
-   [63 {:properties [:logseq.property.table/pinned-columns]}]])
+   [63 {:properties [:logseq.property.table/pinned-columns]}]
+   [64 {:fix update-view-filter}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

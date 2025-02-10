@@ -693,10 +693,11 @@
                                    (shui/popup-hide!)
                                    (let [property internal-property
                                          new-filter [(:db/ident property) :text-contains]
-                                         filters' (if (seq filters)
-                                                    (conj filters new-filter)
+                                         filters' (if (seq (:filters filters))
+                                                    (conj (:filters filters) new-filter)
                                                     [new-filter])]
-                                     (set-filters! filters'))))))}
+                                     (set-filters! {:or? (:or? filters)
+                                                    :filters filters'}))))))}
         option (cond
                  timestamp?
                  (merge option
@@ -704,8 +705,9 @@
                          :input-default-placeholder (if property (:block/title property) "Select")
                          :on-chosen (fn [value]
                                       (shui/popup-hide!)
-                                      (let [filters' (conj filters [(:db/ident property) :after value])]
-                                        (set-filters! filters')))})
+                                      (let [filters' (conj (:filters filters) [(:db/ident property) :after value])]
+                                        (set-filters! {:or? (:or? filters)
+                                                       :filters filters'})))})
                  property
                  (if (= :checkbox (:logseq.property/type property))
                    (let [items [{:value true :label "true"}
@@ -714,8 +716,9 @@
                             {:items items
                              :input-default-placeholder (if property (:block/title property) "Select")
                              :on-chosen (fn [value]
-                                          (let [filters' (conj filters [(:db/ident property) :is value])]
-                                            (set-filters! filters')))}))
+                                          (let [filters' (conj (:filters filters) [(:db/ident property) :is value])]
+                                            (set-filters! {:or? (:or? filters)
+                                                           :filters filters'})))}))
                    (let [items (get-property-values (:data table) property)]
                      (merge option
                             {:items items
@@ -726,9 +729,10 @@
                                                                  (set (map :block/uuid selected))
                                                                  selected)
                                                 filters' (if (seq selected)
-                                                           (conj filters [(:db/ident property) :is selected-value])
-                                                           filters)]
-                                            (set-filters! filters')))})))
+                                                           (conj (:filters filters) [(:db/ident property) :is selected-value])
+                                                           (:filters filters))]
+                                            (set-filters! {:or? (:or? filters)
+                                                           :filters filters'})))})))
                  :else
                  option)]
     (select/select option)))
@@ -815,12 +819,14 @@
       (for [operator operators]
         (shui/dropdown-menu-item
          {:on-click (fn []
-                      (let [new-filters (update filters idx
-                                                (fn [[property _old-operator value]]
-                                                  (let [value' (get-filter-with-changed-operator property operator value)]
-                                                    (if value'
-                                                      [property operator value']
-                                                      [property operator]))))]
+                      (let [new-filters (update filters :filters
+                                                (fn [col]
+                                                  (update col idx
+                                                          (fn [[property _old-operator value]]
+                                                            (let [value' (get-filter-with-changed-operator property operator value)]
+                                                              (if value'
+                                                                [property operator value']
+                                                                [property operator]))))))]
                         (set-filters! new-filters)))}
          (operator->text operator)))))))
 
@@ -837,11 +843,13 @@
                                       (util/safe-parse-float input-value))
                        value [number-value end]
                        value (if (every? nil? value) nil value)]
-                   (let [new-filters (update filters idx
-                                             (fn [[property operator _old_value]]
-                                               (if (nil? value)
-                                                 [property operator]
-                                                 [property operator value])))]
+                   (let [new-filters (update filters :filters
+                                             (fn [col]
+                                               (update col idx
+                                                       (fn [[property operator _old_value]]
+                                                         (if (nil? value)
+                                                           [property operator]
+                                                           [property operator value])))))]
                      (set-filters! new-filters))))
      :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
    (shui/input
@@ -853,11 +861,13 @@
                                       (util/safe-parse-float input-value))
                        value [start number-value]
                        value (if (every? nil? value) nil value)]
-                   (let [new-filters (update filters idx
-                                             (fn [[property operator _old_value]]
-                                               (if (nil? value)
-                                                 [property operator]
-                                                 [property operator value])))]
+                   (let [new-filters (update filters :filters
+                                             (fn [col]
+                                               (update col idx
+                                                       (fn [[property operator _old_value]]
+                                                         (if (nil? value)
+                                                           [property operator]
+                                                           [property operator value])))))]
                      (set-filters! new-filters))))
      :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})])
 
@@ -890,9 +900,11 @@
                               (when-not many?
                                 (shui/popup-hide!))
                               (let [value' (if many? selected value)
-                                    new-filters (update filters idx
-                                                        (fn [[property operator _value]]
-                                                          [property operator value']))]
+                                    new-filters (update filters :filters
+                                                        (fn [col]
+                                                          (update col idx
+                                                                  (fn [[property operator _value]]
+                                                                    [property operator value']))))]
                                 (set-filters! new-filters)))}
                  many?
                  (assoc
@@ -947,11 +959,13 @@
                     (let [value (util/evalue e)
                           number-value (and number-operator? (when-not (string/blank? value)
                                                                (util/safe-parse-float value)))]
-                      (let [new-filters (update filters idx
-                                                (fn [[property operator _value]]
-                                                  (if (and number-operator? (nil? number-value))
-                                                    [property operator]
-                                                    [property operator (or number-value value)])))]
+                      (let [new-filters (update filters :filters
+                                                (fn [col]
+                                                  (update col idx
+                                                          (fn [[property operator _value]]
+                                                            (if (and number-operator? (nil? number-value))
+                                                              [property operator]
+                                                              [property operator (or number-value value)])))))]
                         (set-filters! new-filters))))
         :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
 
@@ -961,40 +975,57 @@
   [{:keys [data-fns columns] :as table}]
   (let [filters (get-in table [:state :filters])
         {:keys [set-filters!]} data-fns]
-    (when (seq filters)
-      [:div.filters-row.flex.flex-row.items-center.gap-4.flex-wrap.pb-2
-       (map-indexed
-        (fn [idx filter']
-          (let [[property-ident operator value] filter'
-                property (if (= property-ident :block/title)
-                           {:db/ident property-ident
-                            :block/title "Name"}
-                           (or (db/entity property-ident)
-                               (some (fn [column] (when (= (:id column) property-ident)
-                                                    {:db/ident (:id column)
-                                                     :block/title (:name column)})) columns)))]
-            [:div.flex.flex-row.items-center.border.rounded
-             (shui/button
-              {:class "!px-2 rounded-none border-r"
-               :variant "ghost"
-               :size :sm
-               :disabled true}
-              [:span.text-xs (:block/title property)])
-             (filter-operator property operator filters set-filters! idx)
-             (filter-value table property operator value filters set-filters! idx)
-             (shui/button
-              {:class "!px-1 rounded-none"
-               :variant "ghost"
-               :size :sm
-               :on-click (fn [_e]
-                           (let [new-filters (vec (remove #{filter'} filters))]
-                             (set-filters! new-filters)))}
-              (ui/icon "x"))]))
-        filters)])))
+    (when (seq (:filters filters))
+      [:div.filters-row.flex.flex-row.items-center.gap-4.justify-between.flex-wrap.py-2
+       [:div.flex.flex-row.items-center.gap-2
+        (map-indexed
+         (fn [idx filter']
+           (let [[property-ident operator value] filter'
+                 property (if (= property-ident :block/title)
+                            {:db/ident property-ident
+                             :block/title "Name"}
+                            (or (db/entity property-ident)
+                                (some (fn [column] (when (= (:id column) property-ident)
+                                                     {:db/ident (:id column)
+                                                      :block/title (:name column)})) columns)))]
+             [:div.flex.flex-row.items-center.border.rounded
+              (shui/button
+               {:class "!px-2 rounded-none border-r"
+                :variant "ghost"
+                :size :sm
+                :disabled true}
+               [:span.text-xs (:block/title property)])
+              (filter-operator property operator filters set-filters! idx)
+              (filter-value table property operator value filters set-filters! idx)
+              (shui/button
+               {:class "!px-1 rounded-none text-muted-foreground"
+                :variant "ghost"
+                :size :sm
+                :on-click (fn [_e]
+                            (let [new-filters (update filters :filters (fn [col] (vec (remove #{filter'} col))))]
+                              (set-filters! new-filters)))}
+               (ui/icon "x"))]))
+         (:filters filters))]
+       (when (> (count (:filters filters)) 1)
+         [:div
+          (shui/select
+           {:default-value (if (:or? filters) "or" "and")
+            :on-value-change (fn [v]
+                               (set-filters! (assoc filters :or? (= v "or"))))}
+           (shui/select-trigger
+            {:class "opacity-75 hover:opacity-100 !px-2 !py-0 !h-6"}
+            (shui/select-value
+             {:placeholder "Match"}))
+           (shui/select-content
+            (shui/select-group
+             (shui/select-item {:value "and"} "Match all filters")
+             (shui/select-item {:value "or"} "Match any filter"))))])])))
 
 (defn- row-matched?
   [row input filters]
-  (let [row (get-latest-entity row)]
+  (let [row (get-latest-entity row)
+        or? (:or? filters)
+        check-f (if or? some every?)]
     (and
      ;; full-text-search match
      (if (string/blank? input)
@@ -1003,7 +1034,7 @@
        ;; fuzzy search is too slow
          (string/includes? (string/lower-case (:block/title row)) (string/lower-case input))))
      ;; filters check
-     (every?
+     (check-f
       (fn [[property-ident operator match]]
         (if (nil? match)
           true
@@ -1086,7 +1117,7 @@
 
                   true)]
             result)))
-      filters))))
+      (:filters filters)))))
 
 (rum/defc new-record-button < rum/static
   [table view-entity]
@@ -1121,7 +1152,7 @@
 
                       :else
                       matches)]
-       (if matches'
+       (if (some? matches')
          [property operator matches']
          [property operator])))
    filters))
@@ -1136,7 +1167,8 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sorting sorting))
      :set-filters!
      (fn [filters]
-       (let [filters (table-filters->persist-state filters)]
+       (let [filters (-> (update filters :filters table-filters->persist-state)
+                         (update :or? boolean))]
          (set-filters! filters)
          (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/filters filters)))
      :set-visible-columns!
@@ -1348,7 +1380,7 @@
         sorting (if (= sorting* :logseq.property/empty-placeholder) nil sorting*)
         [sorting set-sorting!] (rum/use-state sorting)
         filters (:logseq.property.table/filters view-entity)
-        [filters set-filters!] (rum/use-state (or filters []))
+        [filters set-filters!] (rum/use-state (or filters {}))
         default-visible-columns (if-let [hidden-columns (conj (:logseq.property.table/hidden-columns view-entity) :id)]
                                   (zipmap hidden-columns (repeat false))
                                   ;; This case can happen for imported tables
