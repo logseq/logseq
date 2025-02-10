@@ -44,7 +44,7 @@
       e)))
 
 (rum/defc header-checkbox < rum/static
-  [{:keys [selected-all? selected-some? toggle-selected-all!]}]
+  [{:keys [selected-all? selected-some? toggle-selected-all!] :as table}]
   (let [[show? set-show!] (rum/use-state false)]
     [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
      {:html-for "header-checkbox"
@@ -53,7 +53,8 @@
      (shui/checkbox
       {:id "header-checkbox"
        :checked (or selected-all? (and selected-some? "indeterminate"))
-       :on-checked-change toggle-selected-all!
+       :on-checked-change (fn [value]
+                            (toggle-selected-all! table value))
        :aria-label "Select all"
        :class (str "flex transition-opacity "
                    (if (or show? selected-all? selected-some?) "opacity-100" "opacity-0"))})]))
@@ -1453,6 +1454,7 @@
                                                (remove (fn [column]
                                                          (false? (get visible-columns (:id column))))
                                                        columns))
+        group-by-property (:logseq.property.view/group-by-property view-entity)
         table-map {:view-entity view-entity
                    :data data
                    :columns columns
@@ -1464,7 +1466,8 @@
                            :sized-columns sized-columns
                            :ordered-columns ordered-columns
                            :pinned-columns pinned
-                           :unpinned-columns unpinned}
+                           :unpinned-columns unpinned
+                           :group-by-property group-by-property}
                    :data-fns {:set-data! set-data!
                               :set-row-filter! set-row-filter!
                               :set-filters! set-filters!
@@ -1516,14 +1519,16 @@
                         :display-type display-type
                         :row-selection row-selection
                         :add-new-object! add-new-object!}]
-         (if-let [group-by-property (:logseq.property.view/group-by-property view-entity)]
+         (if group-by-property
            (let [groups (->> (group-by (:db/ident group-by-property) (:rows table))
                              (sort-by #(db-property/property-value-content (first %))))]
              [:div.flex.flex-col.gap-4.border-t.py-4
               (for [[value group] groups]
                 (let [add-new-object! (fn [_]
                                         (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}}))
-                      table' (assoc-in table [:data-fns :add-new-object!] add-new-object!)]
+                      table' (shui/table-option (-> table-map
+                                                    (assoc-in [:data-fns :add-new-object!] add-new-object!)
+                                                    (assoc :data group)))]
                   (ui/foldable
                    [:div.text-sm.font-medium.ml-2
                     (if value
