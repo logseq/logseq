@@ -541,7 +541,7 @@
       (let [ident :logseq.property.table/filters
             property (d/entity db ident)
             property-tx {:db/id (:db/id property)
-                         :block/schema (assoc (:block/schema property) :type :map)}
+                         :logseq.property/type :map}
             data-tx (mapcat
                      (fn [d]
                        (let [v (:v d)]
