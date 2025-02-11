@@ -219,14 +219,22 @@
 (deftest import-page-with-different-page-and-classes
   (let [original-data
         {:properties {:user.property/p1 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p1"}
-                      :user.property/p2 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p2"}}
+                      :user.property/p2 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p2"}
+                      :user.property/p3 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p3"}}
          :classes {:user.class/MyClass {:block/title "My Class"
-                                        :build/class-properties [:user.property/p1 :user.property/p2]}}
+                                        :build/class-properties [:user.property/p1 :user.property/p2]}
+                   :user.class/MyClass2 {:block/title "MyClass2"}
+                   :user.class/ChildClass {:block/title "ChildClass"
+                                           :build/class-parent :user.class/MyClass
+                                           :build/class-properties [:user.property/p3]}
+                   :user.class/ChildClass2 {:block/title "ChildClass2"
+                                            :build/class-parent :user.class/MyClass2}}
          :pages-and-blocks
          [{:page {:block/title "page1"
                   :build/properties {:user.property/p1 "woot"}
-                  :build/tags [:user.class/MyClass]}
-           :blocks []}]}
+                  :build/tags [:user.class/ChildClass]}
+           :blocks [{:block/title "child object"
+                     :build/tags [:user.class/ChildClass2]}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
