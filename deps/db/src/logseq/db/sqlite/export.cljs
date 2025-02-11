@@ -110,20 +110,21 @@
       properties-config)))
 
 (defn- build-export-class
-  [class-ent {:keys [include-parents? include-uuid?]}]
+  [class-ent {:keys [include-parents? include-uuid?] :or {include-parents? true}}]
   (cond-> (select-keys class-ent [:block/title])
     include-uuid?
     (assoc :block/uuid (:block/uuid class-ent))
     (:logseq.property.class/properties class-ent)
     (assoc :build/class-properties
            (mapv :db/ident (:logseq.property.class/properties class-ent)))
+    ;; It's caller's responsibility to ensure parent is included in final export
     (and include-parents?
          (:logseq.property/parent class-ent)
          (not= :logseq.class/Root (:db/ident (:logseq.property/parent class-ent))))
     (assoc :build/class-parent
            (:db/ident (:logseq.property/parent class-ent)))))
 
-(defn- build-export-block-classes
+(defn- build-node-classes
   [db build-block block-tags]
   (let [pvalue-class-ents (->> (:build/properties build-block)
                                vals
@@ -135,14 +136,14 @@
         new-class-ents (concat (remove #(db-class/logseq-class? (:db/ident %)) block-tags)
                                pvalue-class-ents)]
     (->> new-class-ents
-         ;; TODO: Export class parents when there's ability to control granularity of export
-         (map #(vector (:db/ident %) (build-export-class % {:include-parents? false})))
+         (map #(vector (:db/ident %) (build-export-class % {})))
          (into {}))))
 
 (defn- build-node-export
   "Given a block/page entity and optional existing properties, build an export map of its
    tags and properties"
-  [db entity {:keys [properties include-uuid-fn keep-uuid?] :or {include-uuid-fn (constantly false)}}]
+  [db entity {:keys [properties include-uuid-fn keep-uuid?]
+              :or {include-uuid-fn (constantly false)}}]
   (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
         new-user-property-ids (->> (keys ent-properties)
                                    (concat (->> (:block/tags entity)
@@ -154,16 +155,16 @@
         new-properties (build-export-properties db new-user-property-ids {})
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
         build-node (cond-> {:block/title (block-title entity)}
-                      (include-uuid-fn (:block/uuid entity))
-                      (assoc :block/uuid (:block/uuid entity))
-                      keep-uuid?
-                      (assoc :build/keep-uuid? true)
-                      (seq build-tags)
-                      (assoc :build/tags build-tags)
-                      (seq ent-properties)
-                      (assoc :build/properties
-                             (buildable-properties db ent-properties (merge properties new-properties))))
-        new-classes (build-export-block-classes db build-node (:block/tags entity))]
+                     (include-uuid-fn (:block/uuid entity))
+                     (assoc :block/uuid (:block/uuid entity))
+                     keep-uuid?
+                     (assoc :build/keep-uuid? true)
+                     (seq build-tags)
+                     (assoc :build/tags build-tags)
+                     (seq ent-properties)
+                     (assoc :build/properties
+                            (buildable-properties db ent-properties (merge properties new-properties))))
+        new-classes (build-node-classes db build-node (:block/tags entity))]
     (cond-> {:node build-node}
       (seq new-classes)
       (assoc :classes new-classes)
@@ -205,9 +206,8 @@
                                               #(merge % {:build/keep-uuid? true})))
         content-ref-classes (when-let [class-ents (seq (filter ldb/class? content-ref-ents))]
                               (->> class-ents
-                                   ;; TODO: Export class parents when there's ability to control granularity of export
                                    (map #(vector (:db/ident %)
-                                                 (assoc (build-export-class % {:include-parents? false :include-uuid? true})
+                                                 (assoc (build-export-class % {:include-uuid? true})
                                                         :build/keep-uuid? true)))
                                    (into {})))]
     {:content-ref-uuids content-ref-uuids
@@ -218,6 +218,25 @@
                                                      {:block/uuid (:block/uuid %) :build/keep-uuid? true}))
                              content-ref-pages)}))
 
+(defn- build-class-parents-export [db classes-config]
+  (let [class-parent-ents (->> classes-config
+                               (filter #(:build/class-parent (val %)))
+                               (map #(d/entity db (key %)))
+                               ldb/get-classes-parents)
+        classes
+        (->> class-parent-ents
+             (remove #(db-class/logseq-class? (:db/ident %)))
+             (map #(vector (:db/ident %) (build-export-class % {})))
+             (into {}))
+        class-parent-properties
+        (->> class-parent-ents
+             (mapcat :logseq.property.class/properties)
+             (map :db/ident)
+             (remove db-property/logseq-property?))
+        properties (build-export-properties db class-parent-properties {})]
+    {:classes classes
+     :properties properties}))
+
 (defn- build-block-export
   "Exports block for given block eid"
   [db eid]
@@ -225,14 +244,16 @@
         {:keys [content-ref-uuids _content-ref-ents] :as content-ref-export} (build-content-ref-export db [block-entity])
         node-export (build-node-export db block-entity {:include-uuid-fn content-ref-uuids})
         pvalue-uuids (get-pvalue-uuids (:node node-export))
-        block-export (merge {::block (:node node-export)}
-                            (merge-export-maps node-export content-ref-export))]
+        block-export* (merge-export-maps node-export content-ref-export)
+        class-parents-export (some->> (:classes block-export*) (build-class-parents-export db))
+        block-export (merge-export-maps block-export* class-parents-export)]
     ;; Maybe add support for this later
     (when (seq pvalue-uuids)
       (throw (ex-info "Exporting a block with :node block objects is not supported" {})))
-    block-export))
+    (merge {::block (:node node-export)}
+           block-export)))
 
-(defn- build-blocks-tree
+(defn- build-blocks-export
   "Given a page's block entities, returns the blocks in a sqlite.build EDN format
    and all properties and classes used in these blocks"
   [db blocks opts]
@@ -270,9 +291,9 @@
                ((fn [m] (dissoc m page-entity)))
                (map (fn [[parent-page-ent blocks]]
                       ;; Don't export pvalue-uuids of uuid blocks to keep export shallower
-                      (merge (build-blocks-tree db
-                                                (sort-by :block/order blocks)
-                                                {:include-uuid-fn (constantly true) :keep-uuid? true})
+                      (merge (build-blocks-export db
+                                                  (sort-by :block/order blocks)
+                                                  {:include-uuid-fn (constantly true) :keep-uuid? true})
                              {:page (shallow-copy-page parent-page-ent)})))))]
     {:properties (apply merge (map :properties uuid-block-pages))
      :classes (apply merge (map :classes uuid-block-pages))
@@ -291,7 +312,7 @@
                          (remove #(:logseq.property/created-from-property %)))
         {:keys [content-ref-uuids content-ref-ents] :as content-ref-export} (build-content-ref-export db page-blocks)
         {:keys [blocks properties classes pvalue-uuids]}
-        (build-blocks-tree db page-blocks {:include-uuid-fn content-ref-uuids})
+        (build-blocks-export db page-blocks {:include-uuid-fn content-ref-uuids})
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents page-entity)
         page-ent-export (build-node-export db page-entity {:properties properties})
         page (merge (dissoc (:node page-ent-export) :block/title)
@@ -299,7 +320,9 @@
         page-blocks-export {:pages-and-blocks [{:page page :blocks blocks}]
                             :properties properties
                             :classes classes}
-        page-export (merge-export-maps page-blocks-export page-ent-export uuid-block-export content-ref-export)]
+        page-export* (merge-export-maps page-blocks-export page-ent-export uuid-block-export content-ref-export)
+        class-parents-export (build-class-parents-export db (:classes page-export*))
+        page-export (merge-export-maps page-export* class-parents-export)]
     page-export))
 
 (defn- build-graph-ontology-export
@@ -321,7 +344,7 @@
              (map (fn [ent]
                     (let [ent-properties (dissoc (db-property/properties ent) :block/tags :logseq.property/parent)]
                       (vector (:db/ident ent)
-                              (cond-> (build-export-class ent {:include-parents? true})
+                              (cond-> (build-export-class ent {})
                                 (seq ent-properties)
                                 (assoc :build/properties (buildable-properties db ent-properties properties)))))))
              (into {}))]
