@@ -35,6 +35,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
@@ -915,6 +916,12 @@
      (let [result (worker-db-validate/validate-db @conn)]
        (db-migrate/fix-db! conn {:invalid-entity-ids (:invalid-entity-ids result)})
        result)))
+
+  (export-edn
+   [_this repo options]
+   (let [conn (worker-state/get-datascript-conn repo)
+         result (sqlite-export/build-export @conn (ldb/read-transit-str options))]
+     (ldb/write-transit-str result)))
 
   (dangerousRemoveAllDbs
    [this repo]

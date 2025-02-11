@@ -15,7 +15,8 @@
   (let [export-block (db-test/find-block-by-content @export-conn export-block-content)
         import-block (db-test/find-block-by-content @import-conn import-block-content)
         {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-block-export @export-conn [:block/uuid (:block/uuid export-block)])
+        (-> (sqlite-export/build-export @export-conn {:export-type :block
+                                                      :block-id [:block/uuid (:block/uuid export-block)]})
             (sqlite-export/build-import @import-conn {:current-block import-block}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! import-conn init-tx)
@@ -23,7 +24,8 @@
         validation (db-validate/validate-db! @import-conn)
         _ (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
         _  (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")]
-    (sqlite-export/build-block-export @import-conn (:db/id import-block))))
+    (sqlite-export/build-export @import-conn {:export-type :block
+                                              :block-id (:db/id import-block)})))
 
 (deftest import-block-in-same-graph
   (let [original-data
@@ -112,7 +114,7 @@
   [export-conn import-conn page-title]
   (let [page (db-test/find-page-by-title @export-conn page-title)
         {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-page-export @export-conn (:db/id page))
+        (-> (sqlite-export/build-export @export-conn {:export-type :page :page-id (:db/id page)})
             ;; ((fn [x] (cljs.pprint/pprint {:export x}) x))
             (sqlite-export/build-import @import-conn {}))
         ;; _ (cljs.pprint/pprint _txs)
@@ -122,7 +124,7 @@
         _ (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
         _  (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")
         page2 (db-test/find-page-by-title @import-conn page-title)]
-    (sqlite-export/build-page-export @import-conn (:db/id page2))))
+    (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
 
 (defn- import-second-time-assertions [conn conn2 page-title original-data]
   (let [page (db-test/find-page-by-title @conn2 page-title)
@@ -324,12 +326,12 @@
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-graph-ontology-export @conn)
+        (-> (sqlite-export/build-export @conn {:export-type :graph-ontology})
             (sqlite-export/build-import @conn2 {}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! conn2 init-tx)
         _ (d/transact! conn2 block-props-tx)
-        imported-ontology (sqlite-export/build-graph-ontology-export @conn2)]
+        imported-ontology (sqlite-export/build-export @conn2 {:export-type :graph-ontology})]
 
     (is (= (:properties original-data) (:properties imported-ontology)))
     (is (= (:classes original-data) (:classes imported-ontology)))))
