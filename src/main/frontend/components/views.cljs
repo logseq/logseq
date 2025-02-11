@@ -29,7 +29,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.table.core :as table-core]
-            [logseq.shui.popup.core :as popup-core]
+            [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
@@ -101,7 +101,7 @@
                              {:open open?
                               :on-open-change (fn [v]
                                                 (when (or (true? v)
-                                                        (not (or (some-> @popup-core/*last-show-target
+                                                        (not (or (some-> @shui-popup/*last-show-target
                                                                    (.closest "[data-icon-picker=true]"))
                                                                (js/document.querySelector ".cp__emoji-icon-picker"))))
                                                   (set-open! v)))}
