@@ -71,6 +71,8 @@
             (d/add-class! target "ls-popup-closed")
             (.focus target)))))))
 
+(defonce *last-show-target (atom nil))
+
 (defn show!
   [^js event content & {:keys [id as-dropdown? as-content? align root-props content-props
                                on-before-hide on-after-hide trigger-id] :as opts}]
@@ -96,6 +98,8 @@
                                 (/ width 2)))
                       (- bottom height) width height])
                    :else [0 0])]
+    (reset! *last-show-target @*target)
+    (js/setTimeout #(reset! *last-show-target nil) 64)
     (upsert-popup!
      (merge opts
             {:id (or id (gen-id)) :target (deref *target)
