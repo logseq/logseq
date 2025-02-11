@@ -12,7 +12,7 @@
    [frontend.extensions.zip :as zip]
    [frontend.external.roam-export :as roam-export]
    [frontend.handler.assets :as assets-handler]
-   ;; Loads commmands
+   ;; Loads commands
    [frontend.handler.db-based.export]
    [frontend.handler.export.common :as export-common-handler]
    [frontend.handler.notification :as notification]
