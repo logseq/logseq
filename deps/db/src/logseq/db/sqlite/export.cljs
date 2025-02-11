@@ -218,7 +218,8 @@
                                                      {:block/uuid (:block/uuid %) :build/keep-uuid? true}))
                              content-ref-pages)}))
 
-(defn build-block-export
+(defn- build-block-export
+  "Exports block for given block eid"
   [db eid]
   (let [block-entity (d/entity db eid)
         {:keys [content-ref-uuids _content-ref-ents] :as content-ref-export} (build-content-ref-export db [block-entity])
@@ -277,9 +278,10 @@
      :classes (apply merge (map :classes uuid-block-pages))
      :pages-and-blocks (mapv #(select-keys % [:page :blocks]) uuid-block-pages)}))
 
-(defn build-page-export [db eid]
+(defn- build-page-export
+  "Exports page for given page eid"
+  [db eid]
   (let [page-entity (d/entity db eid)
-        ;; TODO: Fetch unloaded page datoms
         datoms (d/datoms db :avet :block/page eid)
         block-eids (mapv :e datoms)
         page-blocks (->> block-eids
@@ -300,7 +302,8 @@
         page-export (merge-export-maps page-blocks-export page-ent-export uuid-block-export content-ref-export)]
     page-export))
 
-(defn build-graph-ontology-export
+(defn- build-graph-ontology-export
+  "Exports a graph's tags and properties"
   [db]
   (let [user-property-idents (d/q '[:find [?db-ident ...]
                                     :where [?p :db/ident ?db-ident]
@@ -327,6 +330,17 @@
       (assoc :properties properties)
       (seq classes)
       (assoc :classes classes))))
+
+(defn build-export
+  "Handles exporting db by given export-type"
+  [db {:keys [export-type] :as options}]
+  (case export-type
+    :block
+    (build-block-export db (:block-id options))
+    :page
+    (build-page-export db (:page-id options))
+    :graph-ontology
+    (build-graph-ontology-export db)))
 
 ;; Import fns
 ;; ==========

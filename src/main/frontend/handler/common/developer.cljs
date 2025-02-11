@@ -16,7 +16,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db :as ldb]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
@@ -129,30 +130,38 @@
 (defn ^:export export-block-data []
   ;; Use editor state to locate most recent block
   (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
-    (let [result (sqlite-export/build-block-export (db/get-db) [:block/uuid block-uuid])
-          pull-data (with-out-str (pprint/pprint result))]
-      (.writeText js/navigator.clipboard pull-data)
-      (println pull-data)
-      (notification/show! "Copied block's data!" :success))
+    (when-let [^Object worker @state/*db-worker]
+      (p/let [result* (.export-edn worker
+                                   (state/get-current-repo)
+                                   (ldb/write-transit-str {:export-type :block :block-id [:block/uuid block-uuid]}))
+              result (ldb/read-transit-str result*)
+              pull-data (with-out-str (pprint/pprint result))]
+        (.writeText js/navigator.clipboard pull-data)
+        (println pull-data)
+        (notification/show! "Copied block's data!" :success)))
     (notification/show! "No block found" :warning)))
 
 (defn ^:export export-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
-    (let [result (sqlite-export/build-page-export (db/get-db) page-id)
-          pull-data (with-out-str (pprint/pprint result))]
-      (.writeText js/navigator.clipboard pull-data)
-      (println pull-data)
-      (notification/show! "Copied page's data!" :success))
+    (when-let [^Object worker @state/*db-worker]
+      (p/let [result* (.export-edn worker (state/get-current-repo) (ldb/write-transit-str {:export-type :page :page-id page-id}))
+              result (ldb/read-transit-str result*)
+              pull-data (with-out-str (pprint/pprint result))]
+        (.writeText js/navigator.clipboard pull-data)
+        (println pull-data)
+        (notification/show! "Copied page's data!" :success)))
     (notification/show! "No page found" :warning)))
 
 (defn ^:export export-graph-ontology-data []
-  (let [result (sqlite-export/build-graph-ontology-export (db/get-db))
-        pull-data (with-out-str (pprint/pprint result))]
-    (.writeText js/navigator.clipboard pull-data)
-    (println pull-data)
-    (js/console.log (str "Exported " (count (:classes result)) " classes and "
-                         (count (:properties result)) " properties"))
-    (notification/show! "Copied graphs's ontology data!" :success)))
+  (when-let [^Object worker @state/*db-worker]
+    (p/let [result* (.export-edn worker (state/get-current-repo) (ldb/write-transit-str {:export-type :graph-ontology}))
+            result (ldb/read-transit-str result*)
+            pull-data (with-out-str (pprint/pprint result))]
+      (.writeText js/navigator.clipboard pull-data)
+      (println pull-data)
+      (js/console.log (str "Exported " (count (:classes result)) " classes and "
+                           (count (:properties result)) " properties"))
+      (notification/show! "Copied graphs's ontology data!" :success))))
 
 (defn ^:export import-edn-data
   []
