@@ -351,7 +351,7 @@
        (for [column (filter (fn [column]
                               (when (:id column)
                                 (when-let [p (db/entity (:id column))]
-                                  (contains? #{:default :number :checkbox :url :node}
+                                  (contains? #{:default :number :checkbox :url :node :date}
                                              (:logseq.property/type p))))) columns)]
          (shui/dropdown-menu-checkbox-item
           {:key (str (:id column))
@@ -1539,11 +1539,11 @@
                                                            :all-data (:data table))))]
                   (ui/foldable
                    [:div.text-sm.font-medium.ml-2
-                    (if value
+                    (if (some? value)
                       (let [icon (pu/get-block-property-value value :logseq.property/icon)]
                         [:div.flex.flex-row.gap-1.items-center
                          (when icon (icon-component/icon icon {:color? true}))
-                         (db-property/property-value-content value)])
+                         (if (de/entity? value) (db-property/property-value-content value) (str value))])
                       (str "No " (:block/title group-by-property)))]
                    [:div.mt-2
                     (view-cp view-entity (assoc table' :rows group) option view-opts)]
