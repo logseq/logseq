@@ -1529,7 +1529,11 @@
                         :add-new-object! add-new-object!}]
          (if group-by-property
            (let [readable-property-value #(if (de/entity? %) (db-property/property-value-content %) (str %))
-                 groups (->> (group-by #(-> (:db/ident group-by-property) % readable-property-value)
+                 ;; similar to readable-property but return entity if :db/ident to allow for icons
+                 groupable-readable-property-value #(if (de/entity? %)
+                                                      (if (:db/ident %) % (db-property/property-value-content %))
+                                                      (str %))
+                 groups (->> (group-by #(-> (:db/ident group-by-property) % groupable-readable-property-value)
                                        (:rows table))
                              (sort-by #(db-property/property-value-content (first %))))]
              [:div.flex.flex-col.gap-4.border-t.py-4
