@@ -524,6 +524,14 @@
   [db]
   (when db (get-key-value db :logseq.kv/graph-uuid)))
 
+(defn get-graph-schema-version
+  [db]
+  (when db (get-key-value db :logseq.kv/schema-version)))
+
+(defn get-graph-remote-schema-version
+  [db]
+  (when db (get-key-value db :logseq.kv/remote-schema-version)))
+
 ;; File based fns
 (defn get-namespace-pages
   "Accepts both sanitized and unsanitized namespaces"

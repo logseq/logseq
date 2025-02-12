@@ -4,11 +4,9 @@
             [datascript.core :as d]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.util :as worker-util]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]
             [missionary.core :as m]))
-
-(defn- get-schema-version
-  [db]
-  (:kv/value (d/entity db :logseq.kv/schema-version)))
 
 (defn- get-builtin-db-idents
   [db]
@@ -21,11 +19,12 @@
        db))
 
 (defn new-task--calibrate-graph-skeleton
-  [get-ws-create-task graph-uuid db]
+  [get-ws-create-task graph-uuid major-schema-version db]
   (m/sp
     (let [r (m/? (ws-util/send&recv get-ws-create-task
                                     {:action "get-graph-skeleton"
-                                     :graph-uuid graph-uuid}))]
+                                     :graph-uuid graph-uuid
+                                     :schema-version (str major-schema-version)}))]
       (if-let [remote-ex (:ex-data r)]
         (case (:type remote-ex)
           :graph-lock-failed
@@ -35,8 +34,8 @@
               (throw (ex-info "Unavailable2" {:remote-ex remote-ex}))))
         (let [{:keys [server-schema-version server-builtin-db-idents]} r
               client-builtin-db-idents (set (get-builtin-db-idents db))
-              client-schema-version (get-schema-version db)]
-          (when (not= client-schema-version server-schema-version)
+              client-schema-version (ldb/get-graph-schema-version db)]
+          (when-not (zero? (db-schema/compare-schema-version client-schema-version server-schema-version))
             (worker-util/post-message :notification
                                       [[:div
                                         [:p (str :client-schema-version client-schema-version)]

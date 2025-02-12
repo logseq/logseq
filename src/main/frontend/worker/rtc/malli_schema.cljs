@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.malli-schema
   "Malli schema for rtc"
   (:require [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.schema :as db-schema]
             [malli.core :as m]
             [malli.transform :as mt]
             [malli.util :as mu]))
@@ -64,6 +65,20 @@
 
 (def to-ws-ops-decoder (m/decoder [:sequential to-ws-op-schema] mt/string-transformer))
 
+(defn- with-shared-schema-attrs
+  [shared-map-keys malli-schema]
+  (let [[head api-schema-seq] (split-at 2 malli-schema)]
+    (vec
+     (concat
+      head
+      (map
+       (fn [api-schema]
+         (let [[api-name [type']] api-schema]
+           (if (and (some? api-name) (= :map type'))
+             [api-name (vec (concat (second api-schema) shared-map-keys))]
+             api-schema)))
+       api-schema-seq)))))
+
 (def ^:private extra-attr-map-schema
   [:map-of
    :keyword
@@ -71,14 +86,13 @@
     [:or :uuid :string]
     [:sequential [:or :uuid :string]]]])
 
-(def data-from-ws-schema
+(def data-from-ws-schema-fallback
   "TODO: split this mix schema to multiple ones"
   [:map
    [:req-id :string]
    [:profile {:optional true} :map]
    [:t {:optional true} :int]
    [:t-before {:optional true} :int]
-   [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
    [:s3-presign-url {:optional true} :string]
    [:server-schema-version {:optional true} :int]
    [:server-builtin-db-idents {:optional true} [:set :keyword]]
@@ -98,16 +112,16 @@
                                      [:user/name :string]
                                      [:user/email :string]
                                      [:user/avatar {:optional true} :string]]]]
-   [:refed-blocks {:optional true}
-    [:maybe
-     [:sequential
-      [:map
-       [:block/uuid :uuid]
-       [:db/ident {:optional true} :keyword]
-       [:block/order {:optional true} db-malli-schema/block-order]
-       [:block/parent {:optional true} :uuid]
-       [::m/default extra-attr-map-schema]]]]]
-   [:affected-blocks {:optional true}
+   [:asset-uuid->url {:optional true} [:map-of :uuid :string]]
+   [:uploaded-assets {:optional true} [:map-of :uuid :map]]
+   [:ex-data {:optional true} [:map [:type :keyword]]]
+   [:ex-message {:optional true} :string]])
+
+(def ^:private apply-ops-response-schema
+  [:map
+   [:t :int]
+   [:t-before :int]
+   [:affected-blocks
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
       [:move
@@ -152,46 +166,91 @@
        [:map
         [:op :keyword]
         [:block-uuid :uuid]]]]]]
-   [:asset-uuid->url {:optional true} [:map-of :uuid :string]]
-   [:uploaded-assets {:optional true} [:map-of :uuid :map]]
-   [:ex-data {:optional true} [:map [:type :keyword]]]
-   [:ex-message {:optional true} :string]])
+   [:refed-blocks
+    [:maybe
+     [:sequential
+      [:map
+       [:block/uuid :uuid]
+       [:db/ident {:optional true} :keyword]
+       [:block/order {:optional true} db-malli-schema/block-order]
+       [:block/parent {:optional true} :uuid]
+       [::m/default extra-attr-map-schema]]]]]
+   [:failed-ops {:optional true}
+    [:maybe [:sequential to-ws-op-schema]]]])
+
+(def data-from-ws-schema
+  (with-shared-schema-attrs
+    [[:req-id :string]]
+    [:multi {:dispatch #(or (when (:ex-data %) :exception) (:action %))}
+     [:exception
+      [:map
+       [:ex-message :string]
+       [:ex-data [:map [:type :keyword]]]]]
+     ["register-graph-updates"
+      [:map
+       [:t :int]
+       [:max-remote-schema-version {:optional true} :string]]]
+     ["apply-ops" apply-ops-response-schema]
+     ["branch-graph"
+      [:map
+       [:graph-uuid :uuid]
+       [:schema-version db-schema/major-schema-version-string-schema]]]
+     ["delete-graph" [:map]]
+     ["download-graph"
+      [:map
+       [:graph-uuid :uuid]
+       [:schema-version db-schema/major-schema-version-string-schema]
+       [:download-info-uuid :string]]]
+     ["upload-graph"
+      [:map
+       [:graph-uuid :uuid]
+       [:schema-version db-schema/major-schema-version-string-schema]]]
+     ["download-info-list"
+      [:map
+       [:download-info-list [:sequential :any]]]]
+     ["grant-access" [:map]]
+     ["get-graph-skeleton"
+      [:map
+       [:server-schema-version :int]
+       [:server-builtin-db-idents [:set :keyword]]]]
+     ["presign-put-temp-s3-obj" [:map]]
+     ["get-users-info"
+      [:map
+       [:users
+        [:sequential [:map
+                      [:user/uuid :uuid]
+                      [:user/name :string]
+                      [:user/email :string]
+                      [:user/avatar {:optional true} :string]
+                      [:graph<->user/user-type :keyword]
+                      [:user/online? :boolean]]]]]]
+     ["inject-users-info" [:map]]
+     [nil data-from-ws-schema-fallback]]))
 
 (def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
-(defn- with-shared-schema-attrs
-  [malli-schema]
-  (let [[head api-schema-seq] (split-at 2 malli-schema)]
-    (vec
-     (concat
-      head
-      (map
-       (fn [api-schema]
-         (let [[api-name [type']] api-schema]
-           (if (= :map type')
-             [api-name (vec (concat (second api-schema) [[:req-id :string]
-                                                         [:action :string]
-                                                         [:profile {:optional true} :boolean]]))]
-             api-schema)))
-       api-schema-seq)))))
-
 (def ^:large-vars/data-var data-to-ws-schema
   (mu/closed-schema
    (with-shared-schema-attrs
+     [[:req-id :string]
+      [:action :string]
+      [:profile {:optional true} :boolean]]
      [:multi {:dispatch :action}
       ["list-graphs"
        [:map]]
       ["register-graph-updates"
        [:map
-        [:graph-uuid :string]]]
+        [:graph-uuid :uuid]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["apply-ops"
        [:or
         [:map
          [:req-id :string]
          [:action :string]
          [:profile {:optional true} :boolean]
-         [:graph-uuid :string]
+         [:graph-uuid :uuid]
+         [:schema-version db-schema/major-schema-version-string-schema]
          [:ops [:sequential to-ws-op-schema]]
          [:t-before :int]]
         [:map
@@ -204,19 +263,21 @@
       ["upload-graph"
        [:map
         [:s3-key :string]
-        [:graph-name :string]]]
+        [:graph-name :string]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
+      ["branch-graph"
+       [:map
+        [:s3-key :string]
+        [:graph-uuid :uuid]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["download-graph"
        [:map
-        [:graph-uuid :string]]]
+        [:graph-uuid :uuid]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["download-info-list"
        [:map
-        [:graph-uuid :string]]]
-      ["snapshot-list"
-       [:map
-        [:graph-uuid :string]]]
-      ["snapshot-graph"
-       [:map
-        [:graph-uuid :string]]]
+        [:graph-uuid :uuid]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["grant-access"
        [:map
         [:graph-uuid :uuid]
@@ -227,17 +288,19 @@
         [:graph-uuid :uuid]]]
       ["inject-users-info"
        [:map
-        [:graph-uuid :uuid]]]
+        [:graph-uuid :uuid]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["delete-graph"
        [:map
-        [:graph-uuid :uuid]]]
+        [:graph-uuid :uuid]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["query-block-content-versions"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:block-uuids [:sequential :uuid]]]]
       ["calibrate-graph-skeleton"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:t :int]
         [:schema-version :int]
         [:db-ident-blocks [:sequential
@@ -246,18 +309,19 @@
                             [::m/default extra-attr-map-schema]]]]]]
       ["get-graph-skeleton"
        [:map
-        [:graph-uuid :string]]]
+        [:graph-uuid :uuid]
+        [:schema-version db-schema/major-schema-version-string-schema]]]
       ["get-assets-upload-urls"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:asset-uuid->metadata [:map-of :uuid [:map-of :string :string]]]]]
       ["get-assets-download-urls"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:asset-uuids [:sequential :uuid]]]]
       ["delete-assets"
        [:map
-        [:graph-uuid :string]
+        [:graph-uuid :uuid]
         [:asset-uuids [:sequential :uuid]]]]
       ["get-user-devices"
        [:map]]

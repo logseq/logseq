@@ -128,7 +128,7 @@
 (defn combine-local-&-remote-graphs
   [local-repos remote-repos]
   (when-let [repos' (seq (concat (map (fn [{:keys [sync-meta metadata] :as repo}]
-                                        (let [graph-id (or (:kv/value metadata) (second sync-meta))]
+                                        (let [graph-id (some-> (or (:kv/value metadata) (second sync-meta)) str)]
                                           (if graph-id (assoc repo :GraphUUID graph-id) repo)))
                                       local-repos)
                                  (some->> remote-repos

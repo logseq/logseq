@@ -2,8 +2,10 @@
   "Main(use missionary) ns for rtc related fns"
   (:require [clojure.data :as data]
             [datascript.core :as d]
+            [frontend.common.missionary :as c.m]
             [frontend.worker.device :as worker-device]
             [frontend.worker.rtc.asset :as r.asset]
+            [frontend.worker.rtc.branch-graph :as r.branch-graph]
             [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.exception :as r.ex]
@@ -16,8 +18,8 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.config :as common-config]
-            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]
             [malli.core :as ma]
             [missionary.core :as m])
   (:import [missionary Cancelled]))
@@ -176,9 +178,10 @@
 (defn- create-rtc-loop
   "Return a map with [:rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
   TODO: auto refresh token if needed"
-  [graph-uuid repo conn date-formatter token
+  [graph-uuid schema-version repo conn date-formatter token
    & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
-  (let [ws-url                     (or debug-ws-url (ws-util/get-ws-url token))
+  (let [major-schema-version       (db-schema/major-version schema-version)
+        ws-url                     (or debug-ws-url (ws-util/get-ws-url token))
         *auto-push?                (atom auto-push?)
         *remote-profile?           (atom false)
         *last-calibrate-t          (atom nil)
@@ -191,7 +194,8 @@
         {:keys [*current-ws get-ws-create-task]}
         (gen-get-ws-create-map--memoized ws-url)
         get-ws-create-task         (r.client/ensure-register-graph-updates
-                                    get-ws-create-task graph-uuid repo conn *last-calibrate-t *online-users)
+                                    get-ws-create-task graph-uuid major-schema-version
+                                    repo conn *last-calibrate-t *online-users add-log-fn)
         {:keys [assets-sync-loop-task]}
         (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid conn *auto-push?)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push? *online-users)]
@@ -219,14 +223,14 @@
                     (catch :default e
                       (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
                         (m/? (r.client/new-task--pull-remote-data
-                              repo conn graph-uuid date-formatter get-ws-create-task add-log-fn)))))
+                              repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn)))))
                :remote-asset-update
                (m/? (r.asset/new-task--emit-remote-asset-updates-from-push-asset-upload-updates
                      repo @conn (:value event)))
 
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
-                     repo conn graph-uuid date-formatter
+                     repo conn graph-uuid major-schema-version date-formatter
                      get-ws-create-task *remote-profile? add-log-fn))
 
                :online-users-updated
@@ -234,10 +238,10 @@
 
                :pull-remote-updates
                (m/? (r.client/new-task--pull-remote-data
-                     repo conn graph-uuid date-formatter get-ws-create-task add-log-fn))
+                     repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn))
 
                :inject-users-info
-               (m/? (new-task--inject-users-info token graph-uuid))))
+               (m/? (new-task--inject-users-info token graph-uuid major-schema-version))))
            (m/ap)
            (m/reduce {} nil)
            (m/?))
@@ -250,6 +254,8 @@
 (def ^:private empty-rtc-loop-metadata
   {:repo nil
    :graph-uuid nil
+   :local-graph-schema-version nil
+   :remote-graph-schema-version nil
    :user-uuid nil
    :rtc-state-flow nil
    :*rtc-auto-push? nil
@@ -264,19 +270,58 @@
                                             (fn [v] (= (set (keys empty-rtc-loop-metadata))
                                                        (set (keys v))))))
 
+(defn- validate-rtc-start-conditions
+  "Return exception if validation failed"
+  [repo token]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
+    (let [user-uuid (:sub (worker-util/parse-jwt token))
+          graph-uuid (ldb/get-graph-rtc-uuid @conn)
+          schema-version (ldb/get-graph-schema-version @conn)
+          remote-schema-version (ldb/get-graph-remote-schema-version @conn)
+          app-schema-version db-schema/version]
+      (cond
+        (not user-uuid)
+        (ex-info "Invalid token" {:type :rtc.exception/invalid-token})
+
+        (not graph-uuid)
+        r.ex/ex-local-not-rtc-graph
+
+        (not schema-version)
+        (ex-info "Not found schema-version" {:type :rtc.exception/not-found-schema-version})
+
+        (not remote-schema-version)
+        (ex-info "Not found remote-schema-version" {:type :rtc.exception/not-found-remote-schema-version})
+
+        (apply not= (map db-schema/major-version [app-schema-version remote-schema-version schema-version]))
+        (ex-info "major schema version mismatch" {:type :rtc.exception/major-schema-version-mismatched
+                                                  :sub-type
+                                                  (r.branch-graph/compare-schemas
+                                                   remote-schema-version app-schema-version schema-version)
+                                                  :app app-schema-version
+                                                  :local schema-version
+                                                  :remote remote-schema-version})
+        :else
+        {:conn conn
+         :user-uuid user-uuid
+         :graph-uuid graph-uuid
+         :schema-version schema-version
+         :remote-schema-version remote-schema-version
+         :date-formatter (common-config/get-date-formatter (worker-state/get-config repo))}))
+    (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
+                                  :repo repo})))
+
 ;;; ================ API ================
 (defn new-task--rtc-start
   [repo token]
   (m/sp
-   ;; ensure device metadata existing first
+    ;; ensure device metadata existing first
     (m/? (worker-device/new-task--ensure-device-metadata! token))
-    (if-let [conn (worker-state/get-datascript-conn repo)]
-      (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
-        (let [user-uuid (:sub (worker-util/parse-jwt token))
-              config (worker-state/get-config repo)
-              date-formatter (common-config/get-date-formatter config)
-              {:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
-              (create-rtc-loop graph-uuid repo conn date-formatter token)
+    (let [{:keys [conn user-uuid graph-uuid schema-version remote-schema-version date-formatter] :as r}
+          (validate-rtc-start-conditions repo token)]
+      (if (instance? ExceptionInfo r)
+        (do (prn r) (r.ex/->map r))
+        (let [{:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
+              (create-rtc-loop graph-uuid schema-version repo conn date-formatter token)
               *last-stop-exception (atom nil)
               canceler (c.m/run-task rtc-loop-task :rtc-loop-task
                                      :fail (fn [e]
@@ -284,9 +329,11 @@
                                              (js/console.log :rtc-loop-task e)))
               start-ex (m/? onstarted-task)]
           (if-let [start-ex (:ex-data start-ex)]
-            (r.ex/->map start-ex)
+            (do (prn start-ex) (r.ex/->map start-ex))
             (do (reset! *rtc-loop-metadata {:repo repo
                                             :graph-uuid graph-uuid
+                                            :local-graph-schema-version schema-version
+                                            :remote-graph-schema-version remote-schema-version
                                             :user-uuid user-uuid
                                             :rtc-state-flow rtc-state-flow
                                             :*rtc-auto-push? *rtc-auto-push?
@@ -295,10 +342,7 @@
                                             :*rtc-lock *rtc-lock
                                             :canceler canceler
                                             :*last-stop-exception *last-stop-exception})
-                nil)))
-        (r.ex/->map r.ex/ex-local-not-rtc-graph))
-      (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
-                                                :repo repo})))))
+                nil)))))))
 
 (defn rtc-stop
   []
@@ -324,12 +368,14 @@
 
 (defn new-task--delete-graph
   "Return a task that return true if succeed"
-  [token graph-uuid]
+  [token graph-uuid schema-version]
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
     (m/sp
       (let [{:keys [ex-data]}
             (m/? (ws-util/send&recv get-ws-create-task
-                                    {:action "delete-graph" :graph-uuid graph-uuid}))]
+                                    {:action "delete-graph"
+                                     :graph-uuid graph-uuid
+                                     :schema-version (str schema-version)}))]
         (when ex-data (prn ::delete-graph-failed graph-uuid ex-data))
         (boolean (nil? ex-data))))))
 
@@ -342,10 +388,12 @@
                                {:action "get-users-info" :graph-uuid graph-uuid}))))
 
 (defn new-task--inject-users-info
-  [token graph-uuid]
+  [token graph-uuid major-schema-version]
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
     (ws-util/send&recv get-ws-create-task
-                       {:action "inject-users-info" :graph-uuid graph-uuid})))
+                       {:action "inject-users-info"
+                        :graph-uuid graph-uuid
+                        :schema-version (str major-schema-version)})))
 
 (defn new-task--grant-access-to-others
   [token graph-uuid & {:keys [target-user-uuids target-user-emails]}]
@@ -369,7 +417,8 @@
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
       (let [{rtc-lock :*rtc-lock
-             :keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *rtc-remote-profile?
+             :keys [repo graph-uuid local-graph-schema-version remote-graph-schema-version
+                    user-uuid rtc-state-flow *rtc-auto-push? *rtc-remote-profile?
                     *online-users *last-stop-exception]}
             (m/?< rtc-loop-metadata-flow)]
         (try
@@ -379,6 +428,8 @@
               (fn [rtc-state rtc-auto-push? rtc-remote-profile?
                    rtc-lock online-users pending-local-ops-count local-tx remote-tx]
                 {:graph-uuid graph-uuid
+                 :local-graph-schema-version (db-schema/schema-version->string local-graph-schema-version)
+                 :remote-graph-schema-version (db-schema/schema-version->string remote-graph-schema-version)
                  :user-uuid user-uuid
                  :unpushed-block-update-count pending-local-ops-count
                  :local-tx local-tx
@@ -403,43 +454,55 @@
   []
   (m/reduce {} nil (m/eduction (take 1) create-get-state-flow)))
 
-(defn new-task--snapshot-graph
-  [token graph-uuid]
-  (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-    (m/join #(select-keys % [:snapshot-uuid :graph-uuid])
-            (ws-util/send&recv get-ws-create-task {:action "snapshot-graph"
-                                                   :graph-uuid graph-uuid}))))
-(defn new-task--snapshot-list
-  [token graph-uuid]
-  (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-    (m/join :snapshot-list
-            (ws-util/send&recv get-ws-create-task {:action "snapshot-list"
-                                                   :graph-uuid graph-uuid}))))
-
 (defn new-task--upload-graph
   [token repo remote-graph-name]
-  (m/sp
-    (if-let [conn (worker-state/get-datascript-conn repo)]
-      (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-        (m/? (r.upload-download/new-task--upload-graph get-ws-create-task repo conn remote-graph-name)))
-      (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
-                                                :repo repo})))))
+  (let [{:keys [conn schema-version] :as r}
+        (if-let [conn (worker-state/get-datascript-conn repo)]
+          (if-let [schema-version (ldb/get-graph-schema-version @conn)]
+            {:conn conn :schema-version schema-version}
+            (ex-info "Not found schema-version" {:type :rtc.exception/not-found-schema-version}))
+          (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn :repo repo}))]
+    (m/sp
+      (if (instance? ExceptionInfo r)
+        (r.ex/->map r)
+        (let [major-schema-version (db-schema/major-version schema-version)
+              {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
+          (m/? (r.upload-download/new-task--upload-graph
+                get-ws-create-task repo conn remote-graph-name major-schema-version)))))))
+
+(defn new-task--branch-graph
+  [token repo]
+  (let [{:keys [conn graph-uuid schema-version] :as r}
+        (if-let [conn (worker-state/get-datascript-conn repo)]
+          (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
+            (if-let [schema-version (ldb/get-graph-schema-version @conn)]
+              {:conn conn :graph-uuid graph-uuid :schema-version schema-version}
+              (ex-info "Not found schema-version" {:type :rtc.exception/not-found-schema-version}))
+            r.ex/ex-local-not-rtc-graph)
+          (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn :repo repo}))]
+    (m/sp
+      (if (instance? ExceptionInfo r)
+        (r.ex/->map r)
+        (let [major-schema-version (db-schema/major-version schema-version)
+              {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
+          (m/? (r.upload-download/new-task--branch-graph
+                get-ws-create-task repo conn graph-uuid major-schema-version)))))))
 
 (defn new-task--request-download-graph
-  [token graph-uuid]
+  [token graph-uuid schema-version]
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-    (r.upload-download/new-task--request-download-graph get-ws-create-task graph-uuid)))
+    (r.upload-download/new-task--request-download-graph get-ws-create-task graph-uuid schema-version)))
 
 (defn new-task--download-info-list
-  [token graph-uuid]
+  [token graph-uuid schema-version]
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-    (r.upload-download/new-task--download-info-list get-ws-create-task graph-uuid)))
+    (r.upload-download/new-task--download-info-list get-ws-create-task graph-uuid schema-version)))
 
 (defn new-task--wait-download-info-ready
-  [token download-info-uuid graph-uuid timeout-ms]
+  [token download-info-uuid graph-uuid schema-version timeout-ms]
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
     (r.upload-download/new-task--wait-download-info-ready
-     get-ws-create-task download-info-uuid graph-uuid timeout-ms)))
+     get-ws-create-task download-info-uuid graph-uuid schema-version timeout-ms)))
 
 (def new-task--download-graph-from-s3 r.upload-download/new-task--download-graph-from-s3)
 
@@ -447,11 +510,11 @@
 
 ;;; subscribe state ;;;
 (when-not common-config/PUBLISHING
- (c.m/run-background-task
-  ::subscribe-state
-  (m/reduce
-   (fn [_ v] (worker-util/post-message :rtc-sync-state v))
-   create-get-state-flow)))
+  (c.m/run-background-task
+   ::subscribe-state
+   (m/reduce
+    (fn [_ v] (worker-util/post-message :rtc-sync-state v))
+    create-get-state-flow)))
 
 (comment
   (do

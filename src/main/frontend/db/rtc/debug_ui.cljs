@@ -1,6 +1,7 @@
 (ns frontend.db.rtc.debug-ui
   "Debug UI for rtc module"
   (:require [fipp.edn :as fipp]
+            [frontend.common.missionary :as c.m]
             [frontend.db :as db]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.user :as user]
@@ -8,8 +9,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [promesa.core :as p]
@@ -78,7 +79,9 @@
                      (map
                       #(into {}
                              (filter second
-                                     (select-keys % [:graph-uuid :graph-name
+                                     (select-keys % [:graph-uuid
+                                                     :graph-schema-version
+                                                     :graph-name
                                                      :graph-status
                                                      :graph<->user-user-type
                                                      :graph<->user-grant-by-user])))
@@ -105,7 +108,10 @@
             :remote-profile? (:remote-profile? debug-state*)
             :current-page (state/get-current-page)
             :blocks-count (when-let [page (state/get-current-page)]
-                            (count (:block/_page (db/get-page page))))}
+                            (count (:block/_page (db/get-page page))))
+            :schema-version {:app (db-schema/schema-version->string db-schema/version)
+                             :local-graph (:local-graph-schema-version debug-state*)
+                             :remote-graph (str (:remote-graph-schema-version debug-state*))}}
            (fipp/pprint {:width 20})
            with-out-str)]]
 
@@ -174,14 +180,16 @@
                   :class "mr-2"
                   :on-click (fn []
                               (when-let [graph-name (:download-graph-to-repo debug-state*)]
-                                (when-let [graph-uuid (:graph-uuid-to-download debug-state*)]
+                                (when-let [{:keys [graph-uuid graph-schema-version]}
+                                           (:graph-uuid-to-download debug-state*)]
                                   (let [^object worker @db-browser/*worker]
-                                    (prn :download-graph graph-uuid :to graph-name)
+                                    (prn :download-graph graph-uuid graph-schema-version :to graph-name)
                                     (p/let [token (state/get-auth-id-token)
-                                            download-info-uuid (.rtc-request-download-graph worker token graph-uuid)
+                                            download-info-uuid (.rtc-request-download-graph
+                                                                worker token graph-uuid graph-schema-version)
                                             download-info-uuid (ldb/read-transit-str download-info-uuid)
                                             result (.rtc-wait-download-graph-info-ready
-                                                    worker token download-info-uuid graph-uuid 60000)
+                                                    worker token download-info-uuid graph-uuid graph-schema-version 60000)
                                             {:keys [_download-info-uuid
                                                     download-info-s3-url
                                                     _download-info-tx-instant
@@ -195,18 +203,20 @@
       [:b "➡"]
       [:div.flex.flex-row.items-center.gap-2
        (shui/select
-        {:on-value-change (fn [v]
-                            (some->> (parse-uuid v)
-                                     str
-                                     (swap! debug-state assoc :graph-uuid-to-download)))}
+        {:on-value-change (fn [[graph-uuid graph-schema-version]]
+                            (when (and (parse-uuid graph-uuid) graph-schema-version)
+                              (swap! debug-state assoc
+                                     :graph-uuid-to-download
+                                     {:graph-uuid graph-uuid
+                                      :graph-schema-version graph-schema-version})))}
         (shui/select-trigger
          {:class "!px-2 !py-0 !h-8 border-gray-04"}
          (shui/select-value
           {:placeholder "Select a graph-uuid"}))
         (shui/select-content
          (shui/select-group
-          (for [{:keys [graph-uuid graph-status]} (sort-by :graph-uuid (:remote-graphs debug-state*))]
-            (shui/select-item {:value graph-uuid :disabled (some? graph-status)} graph-uuid)))))
+          (for [{:keys [graph-uuid graph-schema-version graph-status]} (sort-by :graph-uuid (:remote-graphs debug-state*))]
+            (shui/select-item {:value [graph-uuid graph-schema-version] :disabled (some? graph-status)} graph-uuid)))))
 
        [:b "＋"]
        [:input.form-input.my-2.py-1
@@ -237,25 +247,27 @@
       (ui/button (str "delete graph")
                  {:icon "trash"
                   :on-click (fn []
-                              (when-let [graph-uuid (:graph-uuid-to-delete debug-state*)]
+                              (when-let [{:keys [graph-uuid graph-schema-version]} (:graph-uuid-to-delete debug-state*)]
                                 (let [token (state/get-auth-id-token)
                                       ^object worker @db-browser/*worker]
-                                  (prn ::delete-graph graph-uuid)
-                                  (.rtc-delete-graph worker token graph-uuid))))})
+                                  (prn ::delete-graph graph-uuid graph-schema-version)
+                                  (.rtc-delete-graph worker token graph-uuid graph-schema-version))))})
 
       (shui/select
-       {:on-value-change (fn [v]
-                           (some->> (parse-uuid v)
-                                    str
-                                    (swap! debug-state assoc :graph-uuid-to-delete)))}
+       {:on-value-change (fn [[graph-uuid graph-schema-version]]
+                           (when (and (parse-uuid graph-uuid) graph-schema-version)
+                             (swap! debug-state assoc
+                                    :graph-uuid-to-delete
+                                    {:graph-uuid graph-uuid
+                                     :graph-schema-version graph-schema-version})))}
        (shui/select-trigger
         {:class "!px-2 !py-0 !h-8"}
         (shui/select-value
          {:placeholder "Select a graph-uuid"}))
        (shui/select-content
         (shui/select-group
-         (for [{:keys [graph-uuid graph-status]} (:remote-graphs debug-state*)]
-           (shui/select-item {:value graph-uuid :disabled (some? graph-status)} graph-uuid)))))]
+         (for [{:keys [graph-uuid graph-schema-version graph-status]} (:remote-graphs debug-state*)]
+           (shui/select-item {:value [graph-uuid graph-schema-version] :disabled (some? graph-status)} graph-uuid)))))]
 
      [:hr.my-2]
 

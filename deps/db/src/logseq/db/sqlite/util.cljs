@@ -16,8 +16,11 @@
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
 
-(def transit-w (transit/writer :json))
-(def transit-r (transit/reader :json))
+(def ^:private write-handlers (cljs-bean.transit/writer-handlers))
+(def ^:private read-handlers {})
+
+(def transit-w (transit/writer :json {:handlers write-handlers}))
+(def transit-r (transit/reader :json {:handlers read-handlers}))
 (defn transit-write
   [data]
   (transit/write transit-w data))
@@ -27,14 +30,14 @@
   (transit/read transit-r s))
 
 (def write-transit-str
-  (let [write-handlers (->> (assoc dt/write-handlers
-                                   de/Entity (transit/write-handler (constantly "datascript/Entity")
-                                                                    (fn [^de/entity entity]
-                                                                      (assert (some? (:db/id entity)))
-                                                                      (assoc (.-kv entity)
-                                                                             :db/id (:db/id entity)))))
-                            (merge (cljs-bean.transit/writer-handlers)))
-        writer (transit/writer :json {:handlers write-handlers})]
+  (let [write-handlers* (->> (assoc dt/write-handlers
+                                    de/Entity (transit/write-handler (constantly "datascript/Entity")
+                                                                     (fn [^de/entity entity]
+                                                                       (assert (some? (:db/id entity)))
+                                                                       (assoc (.-kv entity)
+                                                                              :db/id (:db/id entity)))))
+                             (merge write-handlers))
+        writer (transit/writer :json {:handlers write-handlers*})]
     (fn write-transit-str* [o]
       (try (transit/write writer o)
            (catch :default e
@@ -42,9 +45,10 @@
              (throw e))))))
 
 (def read-transit-str
-  (let [read-handlers (assoc dt/read-handlers
-                             "datascript/Entity" identity)
-        reader (transit/reader :json {:handlers read-handlers})]
+  (let [read-handlers* (->> (assoc dt/read-handlers
+                                   "datascript/Entity" identity)
+                            (merge read-handlers))
+        reader (transit/reader :json {:handlers read-handlers*})]
     (fn read-transit-str* [s] (transit/read reader s))))
 
 (defn db-based-graph?

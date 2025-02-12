@@ -602,7 +602,7 @@
     (d/reset-schema! conn (dissoc schema :block/schema))
     []))
 
-(def schema-version->updates
+(def ^:large-vars/cleanup-todo schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
    and :fix."
@@ -647,8 +647,8 @@
    [27 {:properties [:logseq.property.code/mode]}]
    [28 {:fix (rename-properties {:logseq.property.node/type :logseq.property.node/display-type})}]
    [29 {:properties [:logseq.property.code/lang]}]
-   [29.1 {:fix add-card-view}]
-   [29.2 {:fix rename-card-view-to-gallery-view}]
+   ["29.1" {:fix add-card-view}]
+   ["29.2" {:fix rename-card-view-to-gallery-view}]
    ;; Asset relies on :logseq.property.view/type.gallery
    [30 {:classes [:logseq.class/Asset]
         :properties [:logseq.property.asset/type :logseq.property.asset/size :logseq.property.asset/checksum]}]
@@ -700,11 +700,16 @@
                                  :property.value/content :logseq.property/value})}]
    [62 {:fix remove-block-schema}]
    [63 {:properties [:logseq.property.table/pinned-columns]}]
-   [64 {:fix update-view-filter}]])
+   [64 {:fix update-view-filter}]
+   ;;;; schema-version format: "<major>.<minor>"
+   ;;;; int number equals to "<major>" (without <minor>)
+   ])
 
-(let [max-schema-version (apply max (map first schema-version->updates))]
-  (assert (<= db-schema/version max-schema-version))
-  (when (< db-schema/version max-schema-version)
+(let [max-schema-version (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
+                                          schema-version->updates)))
+      compare-result (db-schema/compare-schema-version db-schema/version max-schema-version)]
+  (assert (>= 0 compare-result) [db-schema/version max-schema-version])
+  (when (neg? compare-result)
     (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-version is " max-schema-version))))
 
 (defn- ensure-built-in-data-exists!
@@ -765,9 +770,10 @@
 
 (defn- upgrade-version!
   [conn search-db db-based? version {:keys [properties classes fix]}]
-  (let [db @conn
+  (let [version (db-schema/parse-schema-version version)
+        db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
-                                  ;; property already exists, this should never happen
+                            ;; property already exists, this should never happen
                             (remove (fn [[k _]]
                                       (when (d/entity db k)
                                         (assert (str "DB migration: property already exists " k)))))
@@ -865,21 +871,24 @@
   [conn search-db]
   (when (ldb/db-based-graph? @conn)
     (let [db @conn
-          version-in-db (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0)]
+          version-in-db (db-schema/parse-schema-version (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0))
+          compare-result (db-schema/compare-schema-version db-schema/version version-in-db)]
       (cond
-        (= version-in-db db-schema/version)
+        (zero? compare-result)
         nil
 
-        (< db-schema/version version-in-db) ; outdated client, db version could be synced from server
-      ;; FIXME: notify users to upgrade to the latest version asap
+        (neg? compare-result) ; outdated client, db version could be synced from server
+        ;; FIXME: notify users to upgrade to the latest version asap
         nil
 
-        (> db-schema/version version-in-db)
+        (pos? compare-result)
         (try
           (let [db-based? (ldb/db-based-graph? @conn)
                 updates (keep (fn [[v updates]]
-                                (when (and (< version-in-db v) (<= v db-schema/version))
-                                  [v updates]))
+                                (let [v* (db-schema/parse-schema-version v)]
+                                  (when (and (neg? (db-schema/compare-schema-version version-in-db v*))
+                                             (not (pos? (db-schema/compare-schema-version v* db-schema/version))))
+                                    [v updates])))
                               schema-version->updates)]
             (fix-path-refs! conn)
             (fix-missing-title! conn)

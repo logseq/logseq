@@ -12,23 +12,26 @@
   "used by rtc-e2e-test"
   (m/watch *rtc-log))
 
-(defkeywords
-  :rtc.log/upload {:doc "rtc log type for upload-graph."}
-  :rtc.log/download {:doc "rtc log type for upload-graph."})
-
 (def ^:private rtc-log-type-schema
-  [:enum
-   :rtc.log/upload
-   :rtc.log/download
-   :rtc.log/cancelled
-   :rtc.log/apply-remote-update
-   :rtc.log/push-local-update
+  (vec
+   (concat
+    [:enum]
+    (take-nth
+     2
+     (defkeywords
+       :rtc.log/upload {:doc "rtc log type for upload-graph."}
+       :rtc.log/download {:doc "rtc log type for upload-graph."}
+       :rtc.log/cancelled {:doc "rtc has been cancelled"}
+       :rtc.log/apply-remote-update {:doc "apply remote updates to local graph"}
+       :rtc.log/push-local-update {:doc "push local updates to remote graph"}
+       :rtc.log/higher-remote-schema-version-exists {:doc "remote-graph with larger schema-version exists"}
+       :rtc.log/branch-graph {:doc "rtc log type for creating a new graph branch"}
 
-   :rtc.asset.log/cancelled
-   :rtc.asset.log/upload-assets
-   :rtc.asset.log/download-assets
-   :rtc.asset.log/remove-assets
-   :rtc.asset.log/initial-download-missing-assets-count])
+       :rtc.asset.log/cancelled {:doc "rtc asset sync has been cancelled"}
+       :rtc.asset.log/upload-assets {:doc "upload local assets to remote"}
+       :rtc.asset.log/download-assets {:doc "download assets from remote"}
+       :rtc.asset.log/remove-assets {:doc "remove remote assets"}
+       :rtc.asset.log/initial-download-missing-assets {:doc "download assets if not exists in rtc-asset-sync initial phase"})))))
 
 (def ^:private rtc-log-type-validator (ma/validator rtc-log-type-schema))
 

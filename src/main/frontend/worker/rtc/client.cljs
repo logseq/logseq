@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.missionary :as c.m]
+            [frontend.worker.rtc.branch-graph :as r.branch-graph]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
@@ -11,18 +12,21 @@
             [frontend.worker.rtc.skeleton :as r.skeleton]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util]
+            [logseq.db.frontend.schema :as db-schema]
             [missionary.core :as m]))
 
-(defn- register-graph-updates
-  [get-ws-create-task graph-uuid repo]
+(defn- new-task--register-graph-updates
+  [get-ws-create-task graph-uuid major-schema-version repo]
   (m/sp
     (try
-      (let [{remote-t :t}
+      (let [{remote-t :t :as resp}
             (m/? (ws-util/send&recv get-ws-create-task {:action "register-graph-updates"
-                                                        :graph-uuid graph-uuid}))]
+                                                        :graph-uuid graph-uuid
+                                                        :schema-version (str major-schema-version)}))]
         (rtc-log-and-state/update-remote-t graph-uuid remote-t)
         (when-not (client-op/get-local-tx repo)
-          (client-op/update-local-tx repo remote-t)))
+          (client-op/update-local-tx repo remote-t))
+        resp)
       (catch :default e
         (if (= :rtc.exception/remote-graph-not-ready (:type (ex-data e)))
           (throw (ex-info "remote graph is still creating" {:missionary/retry true} e))
@@ -32,7 +36,7 @@
   "Return a task: get or create a mws(missionary wrapped websocket).
   see also `ws/get-mws-create`.
   But ensure `register-graph-updates` and `calibrate-graph-skeleton` has been sent"
-  [get-ws-create-task graph-uuid repo conn *last-calibrate-t *online-users]
+  [get-ws-create-task graph-uuid major-schema-version repo conn *last-calibrate-t *online-users add-log-fn]
   (assert (some? graph-uuid))
   (let [*sent (atom {}) ;; ws->bool
         ]
@@ -56,14 +60,23 @@
                  (reset! *online-users online-users)))
              :update-online-user-when-register-graph-updates
              :succ (constantly nil)))
-          (m/? (c.m/backoff
-                (take 5 (drop 2 c.m/delays)) ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
-                (register-graph-updates get-ws-create-task graph-uuid repo)))
+          (let [{:keys [max-remote-schema-version]}
+                (m/?
+                 (c.m/backoff
+                  (take 5 (drop 2 c.m/delays)) ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
+                  (new-task--register-graph-updates get-ws-create-task graph-uuid major-schema-version repo)))]
+            (when max-remote-schema-version
+              (add-log-fn :rtc.log/higher-remote-schema-version-exists
+                          {:sub-type (r.branch-graph/compare-schemas
+                                      max-remote-schema-version db-schema/version major-schema-version)
+                           :repo repo
+                           :graph-uuid graph-uuid
+                           :remote-schema-version max-remote-schema-version})))
           (let [t (client-op/get-local-tx repo)]
             (when (or (nil? @*last-calibrate-t)
                       (< 500 (- t @*last-calibrate-t)))
               ;; (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid conn t))
-              (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid @conn))
+              (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid major-schema-version @conn))
               (reset! *last-calibrate-t t)))
           (swap! *sent assoc ws true))
         ws))))
@@ -326,7 +339,7 @@
 
 (defn new-task--push-local-ops
   "Return a task: push local updates"
-  [repo conn graph-uuid date-formatter get-ws-create-task *remote-profile? add-log-fn]
+  [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task *remote-profile? add-log-fn]
   (m/sp
     (let [block-ops-map-coll (client-op/get&remove-all-block-ops repo)]
       (when-let [block-uuid->remote-ops (not-empty (gen-block-uuid->remote-ops @conn block-ops-map-coll))]
@@ -336,7 +349,8 @@
           (let [local-tx (client-op/get-local-tx repo)
                 r (try
                     (m/? (ws-util/send&recv get-ws-create-task
-                                            (cond-> {:action "apply-ops" :graph-uuid graph-uuid
+                                            (cond-> {:action "apply-ops"
+                                                     :graph-uuid graph-uuid :schema-version (str major-schema-version)
                                                      :ops ops-for-remote :t-before (or local-tx 1)}
                                               (true? @*remote-profile?) (assoc :profile true))))
                     (catch :default e
@@ -369,10 +383,11 @@
                   (add-log-fn :rtc.log/push-local-update {:remote-t (:t r)})))))))))
 
 (defn new-task--pull-remote-data
-  [repo conn graph-uuid date-formatter get-ws-create-task add-log-fn]
+  [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn]
   (m/sp
     (let [local-tx (client-op/get-local-tx repo)
-          r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
+          r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops"
+                                                        :graph-uuid graph-uuid :schema-version (str major-schema-version)
                                                         :ops [] :t-before (or local-tx 1)}))]
       (if-let [remote-ex (:ex-data r)]
         (do (add-log-fn :rtc.log/push-local-update (assoc remote-ex :sub-type :pull-remote-data))
