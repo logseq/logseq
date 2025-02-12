@@ -149,7 +149,7 @@
       (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
       true
       (conj (merge (if build-existing-tx?' {:block/updated-at (common-util/time-ms)} (block-with-timestamps block))
-                   (dissoc m :build/properties :build/tags)
+                   (dissoc m :build/properties :build/tags :build/keep-uuid?)
                    (when (seq properties)
                      (->block-properties (merge properties (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                          page-uuids all-idents))
@@ -252,7 +252,7 @@
                            (conj
                             (merge
                              new-block
-                             (dissoc class-m :build/properties :build/class-parent :build/class-properties)
+                             (dissoc class-m :build/properties :build/class-parent :build/class-properties :build/keep-uuid?)
                              (when-let [props (not-empty (:build/properties class-m))]
                                (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) uuid-maps all-idents))
                              (when class-parent
@@ -391,7 +391,7 @@
     all-idents))
 
 (defn- build-page-tx [page all-idents page-uuids properties]
-  (let [page' (dissoc page :build/tags :build/properties)
+  (let [page' (dissoc page :build/tags :build/properties :build/keep-uuid?)
         pvalue-tx-m (->property-value-tx-m page' (:build/properties page) properties all-idents)]
     (cond-> []
       (seq pvalue-tx-m)
@@ -405,10 +405,10 @@
            (->block-properties (merge (:build/properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                page-uuids
                                all-idents))
-         (when-let [tags (:build/tags page)]
-           {:block/tags (-> (mapv #(hash-map :db/ident (get-ident all-idents %))
-                                  tags)
-                            (conj :logseq.class/Page))})))))))
+         (when-let [tag-idents (->> (:build/tags page) (map #(get-ident all-idents %)) seq)]
+           {:block/tags (cond-> (mapv #(hash-map :db/ident %) tag-idents)
+                          (empty? (set/intersection (set tag-idents) db-class/page-classes))
+                          (conj :logseq.class/Page))})))))))
 
 (defn- build-pages-and-blocks-tx
   [pages-and-blocks all-idents page-uuids {:keys [page-id-fn properties build-existing-tx?]
@@ -544,7 +544,7 @@
                                                    :block/uuid
                                                    (or (:block/uuid page) (common-uuid/gen-uuid :journal-page-uuid date-int))
                                                    :block/tags :logseq.class/Journal})
-                                           (with-meta {::new-page? true})))))
+                                           (with-meta {::new-page? (not (:block/uuid page))})))))
                            m))]
     ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
     (->> pages-and-blocks
@@ -641,12 +641,14 @@
        * :build/journal - Define a journal pages as an integer e.g. 20240101 is Jan 1, 2024. :block/title
          is not required if using this since it generates one
        * :build/properties - Defines properties on a page
+       * :build/tags - Defines tags on a page
        * :build/keep-uuid? - Keeps :block/uuid because another block depends on it
      * :blocks - This is a vec of datascript attribute maps for blocks with
        :block/title required. e.g. `{:block/title \"bar\"}`. Additional keys available:
        * :build/children - A vec of blocks that are nested (indented) under the current block.
           Allows for outlines to be expressed to whatever depth
        * :build/properties - Defines properties on a block
+       * :build/tags - Defines tags on a block
        * :build/keep-uuid? - Keeps :block/uuid because another block depends on it
    * :properties - This is a map to configure properties where the keys are property name keywords
      and the values are maps of datascript attributes e.g. `{:logseq.property/type :checkbox}`.

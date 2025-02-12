@@ -18,3 +18,7 @@ logseq.db.frontend.class/logseq-class?
 logseq.db.frontend.db-ident/ensure-unique-db-ident
 ;; API
 logseq.db.sqlite.build/create-blocks
+;; API
+logseq.db.sqlite.export/build-export
+;; API
+logseq.db.sqlite.export/build-import

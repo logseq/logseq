@@ -1,9 +1,12 @@
 (ns logseq.db.sqlite.export-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.pprint]
+            [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.sqlite.export :as sqlite-export]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.common.util.date-time :as date-time-util]
+            [logseq.db.frontend.validate :as db-validate]))
 
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
@@ -12,12 +15,17 @@
   (let [export-block (db-test/find-block-by-content @export-conn export-block-content)
         import-block (db-test/find-block-by-content @import-conn import-block-content)
         {:keys [init-tx block-props-tx] :as _txs}
-        (->> (sqlite-export/build-block-export @export-conn [:block/uuid (:block/uuid export-block)])
-             (sqlite-export/build-import @import-conn {:current-block import-block}))
+        (-> (sqlite-export/build-export @export-conn {:export-type :block
+                                                      :block-id [:block/uuid (:block/uuid export-block)]})
+            (sqlite-export/build-import @import-conn {:current-block import-block}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)]
-    (sqlite-export/build-block-export @import-conn (:db/id import-block))))
+        _ (d/transact! import-conn block-props-tx)
+        validation (db-validate/validate-db! @import-conn)
+        _ (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
+        _  (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")]
+    (sqlite-export/build-export @import-conn {:export-type :block
+                                              :block-id (:db/id import-block)})))
 
 (deftest import-block-in-same-graph
   (let [original-data
@@ -35,7 +43,7 @@
         imported-block (export-block-and-import-to-another-block conn conn "export" "import")]
 
     (is (= (get-in original-data [:pages-and-blocks 0 :blocks 0])
-           (:build/block imported-block))
+           (::sqlite-export/block imported-block))
         "Imported block equals exported block")
     (is (= (:properties original-data) (:properties imported-block)))
     (is (= (:classes original-data) (:classes imported-block)))))
@@ -67,7 +75,7 @@
         imported-block (export-block-and-import-to-another-block conn conn2 "export" "import")]
 
     (is (= (get-in original-data [:pages-and-blocks 0 :blocks 0])
-           (:build/block imported-block))
+           (::sqlite-export/block imported-block))
         "Imported block equals exported block")
     (is (= (:properties original-data) (:properties imported-block)))
     (is (= (:classes original-data) (:classes imported-block)))
@@ -75,7 +83,7 @@
     (testing "same import in another block"
       (let [imported-block (export-block-and-import-to-another-block conn conn2 "export" "import2")]
         (is (= (get-in original-data [:pages-and-blocks 0 :blocks 0])
-               (:build/block imported-block))
+               (::sqlite-export/block imported-block))
             "Imported block equals exported block")
         (is (= (:properties original-data) (:properties imported-block)))
         (is (= (:classes original-data) (:classes imported-block)))))))
@@ -94,33 +102,44 @@
         imported-block (export-block-and-import-to-another-block conn conn2 #"page ref" "import")]
 
     (is (= (get-in original-data [:pages-and-blocks 0 :blocks 0])
-           (:build/block imported-block))
+           (::sqlite-export/block imported-block))
         "Imported block equals exported block")
     (is (= (second (:pages-and-blocks original-data))
            (first (:pages-and-blocks imported-block)))
         "Imported page equals exported page of page ref")))
 
 (defn- export-page-and-import-to-another-graph
-  "Exports given page from one graph/conn, imports it to a 2nd graph and then
-   exports the page from the 2nd graph"
+  "Exports given page from one graph/conn, imports it to a 2nd graph, validates
+  it and then exports the page from the 2nd graph"
   [export-conn import-conn page-title]
   (let [page (db-test/find-page-by-title @export-conn page-title)
         {:keys [init-tx block-props-tx] :as _txs}
-        (->> (sqlite-export/build-page-export @export-conn (:db/id page))
-            ;;  ((fn [x] (cljs.pprint/pprint {:export x}) x))
-             (sqlite-export/build-import @import-conn {}))
+        (-> (sqlite-export/build-export @export-conn {:export-type :page :page-id (:db/id page)})
+            ;; ((fn [x] (cljs.pprint/pprint {:export x}) x))
+            (sqlite-export/build-import @import-conn {}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! import-conn init-tx)
         _ (d/transact! import-conn block-props-tx)
+        validation (db-validate/validate-db! @import-conn)
+        _ (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
+        _  (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")
         page2 (db-test/find-page-by-title @import-conn page-title)]
-    (sqlite-export/build-page-export @import-conn (:db/id page2))))
+    (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
 
-(defn- import-second-time-appends-blocks [conn conn2 page-title original-data]
-  (let [full-imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
+(defn- import-second-time-assertions [conn conn2 page-title original-data]
+  (let [page (db-test/find-page-by-title @conn2 page-title)
+        imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
+        updated-page (db-test/find-page-by-title @conn2 page-title)
         expected-page-and-blocks
         (update-in (:pages-and-blocks original-data) [0 :blocks]
                    (fn [blocks] (into blocks blocks)))]
-    (is (= expected-page-and-blocks (:pages-and-blocks full-imported-page)))))
+
+    (is (= expected-page-and-blocks (:pages-and-blocks imported-page))
+        "Blocks are appended to existing page blocks")
+    (is (= (:block/created-at page) (:block/created-at updated-page))
+        "Existing page didn't get re-created")
+    (is (= (:block/updated-at page) (:block/updated-at updated-page))
+        "Existing page didn't get updated")))
 
 ;; Tests a variety of blocks including block children with new properties, blocks with users classes
 ;; and blocks with built-in properties and classes
@@ -150,16 +169,16 @@
                      :build/tags [:logseq.class/Task]}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
-        full-imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
+        imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
-    (is (= (:properties original-data) (:properties full-imported-page))
+    (is (= (:properties original-data) (:properties imported-page))
         "Page's properties are imported")
-    (is (= (:classes original-data) (:classes full-imported-page))
+    (is (= (:classes original-data) (:classes imported-page))
         "Page's classes are imported")
-    (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
-    (import-second-time-appends-blocks conn conn2 "page1" original-data)))
+    (import-second-time-assertions conn conn2 "page1" original-data)))
 
 (deftest import-page-with-different-ref-types
   (let [block-uuid (random-uuid)
@@ -186,40 +205,63 @@
           {:page {:build/journal 20250207 :block/uuid journal-uuid :build/keep-uuid? true}}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
-        full-imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
+        imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
-    (is (= (:properties original-data) (:properties full-imported-page))
+    (is (= (:properties original-data) (:properties imported-page))
         "Page's properties are imported")
-    (is (= (:classes original-data) (:classes full-imported-page))
+    (is (= (:classes original-data) (:classes imported-page))
         "Page's classes are imported")
-    (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
-    (import-second-time-appends-blocks conn conn2 "page1" original-data)))
+    (import-second-time-assertions conn conn2 "page1" original-data)))
 
 (deftest import-page-with-different-page-and-classes
   (let [original-data
         {:properties {:user.property/p1 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p1"}
-                      :user.property/p2 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p2"}}
+                      :user.property/p2 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p2"}
+                      :user.property/p3 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p3"}}
          :classes {:user.class/MyClass {:block/title "My Class"
-                                        :build/class-properties [:user.property/p1 :user.property/p2]}}
+                                        :build/class-properties [:user.property/p1 :user.property/p2]}
+                   :user.class/MyClass2 {:block/title "MyClass2"}
+                   :user.class/ChildClass {:block/title "ChildClass"
+                                           :build/class-parent :user.class/MyClass
+                                           :build/class-properties [:user.property/p3]}
+                   :user.class/ChildClass2 {:block/title "ChildClass2"
+                                            :build/class-parent :user.class/MyClass2}}
          :pages-and-blocks
          [{:page {:block/title "page1"
                   :build/properties {:user.property/p1 "woot"}
-                  :build/tags [:user.class/MyClass]}
-           :blocks []}]}
+                  :build/tags [:user.class/ChildClass]}
+           :blocks [{:block/title "child object"
+                     :build/tags [:user.class/ChildClass2]}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
-        full-imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
+        imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
-    (is (= (:properties original-data) (:properties full-imported-page))
+    (is (= (:properties original-data) (:properties imported-page))
         "Page's properties are imported")
-    (is (= (:classes original-data) (:classes full-imported-page))
+    (is (= (:classes original-data) (:classes imported-page))
         "Page's classes are imported")
-    (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
-    (import-second-time-appends-blocks conn conn2 "page1" original-data)))
+    (import-second-time-assertions conn conn2 "page1" original-data)))
+
+(deftest import-journal-page
+  (let [original-data
+        {:pages-and-blocks
+         [{:page {:build/journal 20250210}
+           :blocks [{:block/title "b1"} {:block/title "b2"}]}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        conn2 (db-test/create-conn)
+        journal-title (date-time-util/int->journal-title 20250210 "MMM do, yyyy")
+        imported-page (export-page-and-import-to-another-graph conn conn2 journal-title)]
+
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
+        "Page's blocks are imported")
+
+    (import-second-time-assertions conn conn2 journal-title original-data)))
 
 (deftest import-page-with-different-property-types
   (let [block-object-uuid (random-uuid)
@@ -257,13 +299,13 @@
                      :build/keep-uuid? true}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
-        full-imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
+        imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
-    (is (= (:properties original-data) (:properties full-imported-page))
+    (is (= (:properties original-data) (:properties imported-page))
         "Page's properties are imported")
-    (is (= (:classes original-data) (:classes full-imported-page))
+    (is (= (:classes original-data) (:classes imported-page))
         "Page's classes are imported")
-    (is (= (:pages-and-blocks original-data) (:pages-and-blocks full-imported-page))
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")))
 
 (deftest import-graph-ontology
@@ -292,12 +334,12 @@
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         {:keys [init-tx block-props-tx] :as _txs}
-        (->> (sqlite-export/build-graph-ontology-export @conn)
-             (sqlite-export/build-import @conn2 {}))
+        (-> (sqlite-export/build-export @conn {:export-type :graph-ontology})
+            (sqlite-export/build-import @conn2 {}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! conn2 init-tx)
         _ (d/transact! conn2 block-props-tx)
-        imported-ontology (sqlite-export/build-graph-ontology-export @conn2)]
+        imported-ontology (sqlite-export/build-export @conn2 {:export-type :graph-ontology})]
 
     (is (= (:properties original-data) (:properties imported-ontology)))
     (is (= (:classes original-data) (:classes imported-ontology)))))
