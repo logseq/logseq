@@ -351,8 +351,9 @@
        (for [column (filter (fn [column]
                               (when (:id column)
                                 (when-let [p (db/entity (:id column))]
-                                  (contains? #{:default :number :checkbox :url :node :date}
-                                             (:logseq.property/type p))))) columns)]
+                                  (and (not (db-property/many? p))
+                                       (contains? #{:default :number :checkbox :url :node :date}
+                                              (:logseq.property/type p)))))) columns)]
          (shui/dropdown-menu-checkbox-item
           {:key (str (:id column))
            :className "capitalize"
