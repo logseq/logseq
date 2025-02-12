@@ -428,8 +428,8 @@
               (fn [rtc-state rtc-auto-push? rtc-remote-profile?
                    rtc-lock online-users pending-local-ops-count local-tx remote-tx]
                 {:graph-uuid graph-uuid
-                 :local-graph-schema-version (str local-graph-schema-version)
-                 :remote-graph-schema-version (str remote-graph-schema-version)
+                 :local-graph-schema-version (db-schema/schema-version->string local-graph-schema-version)
+                 :remote-graph-schema-version (db-schema/schema-version->string remote-graph-schema-version)
                  :user-uuid user-uuid
                  :unpushed-block-update-count pending-local-ops-count
                  :local-tx local-tx

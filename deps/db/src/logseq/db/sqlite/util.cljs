@@ -16,13 +16,8 @@
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
 
-(def ^:private write-handlers
-  (assoc (cljs-bean.transit/writer-handlers)
-         db-schema/SchemaVersion (transit/write-handler (constantly "logseq/SchemaVersion")
-                                                        (fn [^db-schema/SchemaVersion v]
-                                                          (into {} v)))))
-
-(def ^:private read-handlers {"logseq/SchemaVersion" db-schema/map->SchemaVersion})
+(def ^:private write-handlers (cljs-bean.transit/writer-handlers))
+(def ^:private read-handlers {})
 
 (def transit-w (transit/writer :json {:handlers write-handlers}))
 (def transit-r (transit/reader :json {:handlers read-handlers}))
