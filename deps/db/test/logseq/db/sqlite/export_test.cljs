@@ -2,11 +2,11 @@
   (:require [cljs.pprint]
             [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.sqlite.export :as sqlite-export]
-            [logseq.db.test.helper :as db-test]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.db.frontend.validate :as db-validate]))
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.db.test.helper :as db-test]))
 
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
@@ -15,7 +15,8 @@
   (let [export-block (db-test/find-block-by-content @export-conn export-block-content)
         import-block (db-test/find-block-by-content @import-conn import-block-content)
         {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-block-export @export-conn [:block/uuid (:block/uuid export-block)])
+        (-> (sqlite-export/build-export @export-conn {:export-type :block
+                                                      :block-id [:block/uuid (:block/uuid export-block)]})
             (sqlite-export/build-import @import-conn {:current-block import-block}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! import-conn init-tx)
@@ -23,7 +24,8 @@
         validation (db-validate/validate-db! @import-conn)
         _ (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
         _  (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")]
-    (sqlite-export/build-block-export @import-conn (:db/id import-block))))
+    (sqlite-export/build-export @import-conn {:export-type :block
+                                              :block-id (:db/id import-block)})))
 
 (deftest import-block-in-same-graph
   (let [original-data
@@ -112,7 +114,7 @@
   [export-conn import-conn page-title]
   (let [page (db-test/find-page-by-title @export-conn page-title)
         {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-page-export @export-conn (:db/id page))
+        (-> (sqlite-export/build-export @export-conn {:export-type :page :page-id (:db/id page)})
             ;; ((fn [x] (cljs.pprint/pprint {:export x}) x))
             (sqlite-export/build-import @import-conn {}))
         ;; _ (cljs.pprint/pprint _txs)
@@ -122,7 +124,7 @@
         _ (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
         _  (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")
         page2 (db-test/find-page-by-title @import-conn page-title)]
-    (sqlite-export/build-page-export @import-conn (:db/id page2))))
+    (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
 
 (defn- import-second-time-assertions [conn conn2 page-title original-data]
   (let [page (db-test/find-page-by-title @conn2 page-title)
@@ -217,14 +219,22 @@
 (deftest import-page-with-different-page-and-classes
   (let [original-data
         {:properties {:user.property/p1 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p1"}
-                      :user.property/p2 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p2"}}
+                      :user.property/p2 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p2"}
+                      :user.property/p3 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p3"}}
          :classes {:user.class/MyClass {:block/title "My Class"
-                                        :build/class-properties [:user.property/p1 :user.property/p2]}}
+                                        :build/class-properties [:user.property/p1 :user.property/p2]}
+                   :user.class/MyClass2 {:block/title "MyClass2"}
+                   :user.class/ChildClass {:block/title "ChildClass"
+                                           :build/class-parent :user.class/MyClass
+                                           :build/class-properties [:user.property/p3]}
+                   :user.class/ChildClass2 {:block/title "ChildClass2"
+                                            :build/class-parent :user.class/MyClass2}}
          :pages-and-blocks
          [{:page {:block/title "page1"
                   :build/properties {:user.property/p1 "woot"}
-                  :build/tags [:user.class/MyClass]}
-           :blocks []}]}
+                  :build/tags [:user.class/ChildClass]}
+           :blocks [{:block/title "child object"
+                     :build/tags [:user.class/ChildClass2]}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
@@ -324,12 +334,12 @@
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-graph-ontology-export @conn)
+        (-> (sqlite-export/build-export @conn {:export-type :graph-ontology})
             (sqlite-export/build-import @conn2 {}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! conn2 init-tx)
         _ (d/transact! conn2 block-props-tx)
-        imported-ontology (sqlite-export/build-graph-ontology-export @conn2)]
+        imported-ontology (sqlite-export/build-export @conn2 {:export-type :graph-ontology})]
 
     (is (= (:properties original-data) (:properties imported-ontology)))
     (is (= (:classes original-data) (:classes imported-ontology)))))
