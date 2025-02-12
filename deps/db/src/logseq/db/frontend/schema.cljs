@@ -54,6 +54,7 @@
   [schema-version]
   (cond
     (string? schema-version) schema-version
+    (int? schema-version) (str schema-version)
     (schema-version? schema-version)
     (if-let [minor (:minor schema-version)]
       (str (:major schema-version) "." minor)
