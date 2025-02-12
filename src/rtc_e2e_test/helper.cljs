@@ -94,11 +94,11 @@
   #_:clj-kondo/ignore
   (me/find
    client-op
-    [?op-type _ {:block-uuid ?block-uuid :av-coll [[!a !v _ !add] ...]}]
-    [?op-type ?block-uuid (map vector !a !v !add)]
+   [?op-type _ {:block-uuid ?block-uuid :av-coll [[!a !v _ !add] ...]}]
+   [?op-type ?block-uuid (map vector !a !v !add)]
 
-    [?op-type _ {:block-uuid ?block-uuid}]
-    [?op-type ?block-uuid]))
+   [?op-type _ {:block-uuid ?block-uuid}]
+   [?op-type ?block-uuid]))
 
 (defn new-task--wait-all-client-ops-sent
   [& {:keys [timeout] :or {timeout 10000}}]

@@ -14,7 +14,7 @@ It's a server internal error, shouldn't happen."}
 Trying to start rtc loop but there's already one running, need to cancel that one first."}
   :rtc.exception/not-found-db-conn {:doc "Local exception. Cannot find db-conn by repo"}
   :rtc.exception/not-found-schema-version {:doc "Local exception. graph doesn't have :logseq.kv/schema-version value"}
-  :rtc.exception/not-found-remote-schema-version{:doc "Local exception.
+  :rtc.exception/not-found-remote-schema-version {:doc "Local exception.
 graph doesn't have :logseq.kv/remote-schema-version value"}
   :rtc.exception/major-schema-version-mismatched {:doc "Local exception.
 local-schema-version, remote-schema-version, app-schema-version are not equal, cannot start rtc"}

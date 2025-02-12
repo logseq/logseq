@@ -1,6 +1,7 @@
 (ns frontend.components.objects
   "Provides table views for class objects and property related objects"
   (:require [frontend.components.filepicker :as filepicker]
+            [frontend.components.icon :as icon-component]
             [frontend.components.views :as views]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -17,11 +18,11 @@
             [frontend.util :as util]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.db.frontend.property :as db-property]))
+            [rum.core :as rum]))
 
 (defn- get-class-objects
   [class]
@@ -29,13 +30,14 @@
        (map (fn [row] (assoc row :id (:db/id row))))))
 
 (defn- add-new-class-object!
-  [class set-data!]
+  [class set-data! properties]
   (p/let [block (editor-handler/api-insert-new-block! ""
                                                       {:page (:block/uuid class)
-                                                       :properties {:block/tags (:db/id class)}
+                                                       :properties (merge properties {:block/tags (:db/id class)})
                                                        :edit-block? false})
           _ (set-data! (get-class-objects class))]
-    (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 :unknown-container)))
+    (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
+    block))
 
 (defn- get-views
   [ent]
@@ -88,6 +90,10 @@
                          :align "start"
                          :content-props {:onClick shui/popup-hide!}})
                        (set-view-entity! view)))}
+        (let [display-type (or (:db/ident (get view :logseq.property.view/type))
+                               :logseq.property.view/type.table)]
+          (when-let [icon (:logseq.property/icon (db/entity display-type))]
+            (icon-component/icon icon {:color? true})))
         (if (= (:db/id view) (:db/id class))
           "All"
           (let [title (:block/title view)]
@@ -162,8 +168,8 @@
                    :views-title (class-views class views view-entity {:set-view-entity! set-view-entity!
                                                                       :set-views! set-views!})
                    :columns columns
-                   :add-new-object! (if (= :logseq.class/Asset (:db/ident class))
-                                      (fn [_e]
+                   :add-new-object! (fn [{:keys [properties]}]
+                                      (if (= :logseq.class/Asset (:db/ident class))
                                         (shui/dialog-open!
                                          (fn []
                                            [:div.flex.flex-col.gap-2
@@ -173,8 +179,8 @@
                                                            (p/do!
                                                             (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)
                                                             (set-data! (get-class-objects class))
-                                                            (shui/dialog-close!)))})])))
-                                      #(add-new-class-object! class set-data!))
+                                                            (shui/dialog-close!)))})]))
+                                        (add-new-class-object! class set-data! properties)))
                    :show-add-property? true
                    :add-property! (fn []
                                     (state/pub-event! [:editor/new-property {:block class
@@ -184,7 +190,6 @@
                                      (let [pages (->> selected-rows (filter ldb/page?) (remove :logseq.property/built-in?))
                                            blocks (->> selected-rows (remove ldb/page?) (remove :logseq.property/built-in?))]
                                        (p/do!
-                                        (set-data! (get-class-objects class))
                                         (when-let [f (get-in table [:data-fns :set-row-selection!])]
                                           (f {}))
                                         (ui-outliner-tx/transact!
@@ -194,7 +199,8 @@
                                          (let [page-ids (map :db/id pages)
                                                tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id class)]) page-ids)]
                                            (when (seq tx-data)
-                                             (outliner-op/transact! tx-data {:outliner-op :save-block})))))))}))))
+                                             (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+                                        (set-data! (get-class-objects class)))))}))))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class {:keys [current-page? sidebar?]}]
@@ -215,13 +221,16 @@
        (map (fn [row] (assoc row :id (:db/id row))))))
 
 (defn- add-new-property-object!
-  [property set-data!]
+  [property set-data! properties]
   (p/let [block (editor-handler/api-insert-new-block! ""
                                                       {:page (:block/uuid property)
-                                                       :properties {(:db/ident property) (:db/id (db/entity :logseq.property/empty-placeholder))}
+                                                       :properties (merge
+                                                                    {(:db/ident property) (:db/id (db/entity :logseq.property/empty-placeholder))}
+                                                                    properties)
                                                        :edit-block? false})
           _ (set-data! (get-property-related-objects (state/get-current-repo) property))]
-    (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 :unknown-container)))
+    (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
+    block))
 
 (rum/defc property-related-objects-inner < rum/static
   [config property objects properties]
@@ -251,7 +260,8 @@
                    :set-data! set-data!
                    :title-key :views.table/property-nodes
                    :columns columns
-                   :add-new-object! #(add-new-property-object! property set-data!)
+                   :add-new-object! (fn [{:keys [properties]}]
+                                      (add-new-property-object! property set-data! properties))
                    ;; TODO: Add support for adding column
                    :show-add-property? false
                    ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
