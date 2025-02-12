@@ -611,7 +611,7 @@
    {:db/ident :logseq.property.view/type.gallery
     :logseq.property/icon {:type :tabler-icon :id "layout-grid"}}])
 
-(def schema-version->updates
+(def ^:large-vars/cleanup-todo schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
    and :fix."
