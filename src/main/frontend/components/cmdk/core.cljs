@@ -484,7 +484,7 @@
 (defmethod handle-action :trigger [_ state _event]
   (let [command (some-> state state->highlighted-item :source-command)
         dont-close-commands #{:graph/open :graph/remove :dev/replace-graph-with-db-file
-                              :ui/toggle-settings :go/flashcards :dev/import-edn-data}]
+                              :ui/toggle-settings :go/flashcards :misc/import-edn-data}]
     (when-let [action (:action command)]
       (action)
       (when-not (contains? dont-close-commands (:id command))

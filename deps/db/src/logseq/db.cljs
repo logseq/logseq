@@ -598,7 +598,7 @@
 (defn get-classes-parents
   [tags]
   (let [tags' (filter class? tags)
-        result (mapcat get-page-parents tags' {:node-class? true})]
+        result (mapcat #(get-page-parents % {:node-class? true}) tags')]
     (set result)))
 
 (defn class-instance?

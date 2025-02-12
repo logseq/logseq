@@ -613,25 +613,21 @@
                        :inactive (not (state/developer-mode?))
                        :fn :frontend.handler.common.developer/show-page-ast}
 
-   :dev/export-block-data {:binding []
+   :misc/export-block-data {:binding []
+                            :db-graph? true
+                            :fn :frontend.handler.db-based.export/export-block-data}
+
+   :misc/export-page-data {:binding []
                            :db-graph? true
-                           :inactive (not (state/developer-mode?))
-                           :fn :frontend.handler.common.developer/export-block-data}
+                           :fn :frontend.handler.db-based.export/export-page-data}
 
-   :dev/export-page-data {:binding []
+   :misc/export-graph-ontology-data {:binding []
+                                     :db-graph? true
+                                     :fn :frontend.handler.db-based.export/export-graph-ontology-data}
+
+   :misc/import-edn-data {:binding []
                           :db-graph? true
-                          :inactive (not (state/developer-mode?))
-                          :fn :frontend.handler.common.developer/export-page-data}
-
-   :dev/export-graph-ontology-data {:binding []
-                                    :db-graph? true
-                                    :inactive (not (state/developer-mode?))
-                                    :fn :frontend.handler.common.developer/export-graph-ontology-data}
-
-   :dev/import-edn-data {:binding []
-                         :db-graph? true
-                         :inactive (not (state/developer-mode?))
-                         :fn :frontend.handler.common.developer/import-edn-data}
+                          :fn :frontend.handler.db-based.export/import-edn-data}
 
    :dev/validate-db   {:binding []
                        :db-graph? true
@@ -650,7 +646,10 @@
   marked as ^:export for advanced mode"
   [keyword-fn]
   (fn []
-    (if-let [resolved-fn (some-> (find-ns-obj (namespace keyword-fn))
+    (if-let [resolved-fn (some-> (namespace keyword-fn)
+                                 ;; export is reserved word
+                                 (string/replace-first ".export" ".export$")
+                                 find-ns-obj
                                  (aget (munge (name keyword-fn))))]
       (resolved-fn)
       (throw (ex-info (str "Unable to resolve " keyword-fn " to a fn") {})))))
@@ -850,14 +849,14 @@
           :ui/clear-all-notifications
           :git/commit
           :sidebar/close-top
+          :misc/export-block-data
+          :misc/export-page-data
+          :misc/export-graph-ontology-data
+          :misc/import-edn-data
           :dev/show-block-data
           :dev/show-block-ast
           :dev/show-page-data
           :dev/show-page-ast
-          :dev/export-block-data
-          :dev/export-page-data
-          :dev/export-graph-ontology-data
-          :dev/import-edn-data
           :dev/replace-graph-with-db-file
           :dev/validate-db
           :ui/customize-appearance])
@@ -1042,14 +1041,14 @@
      :auto-complete/shift-complete
      :auto-complete/meta-complete
      :git/commit
+     :misc/export-block-data
+     :misc/export-page-data
+     :misc/export-graph-ontology-data
+     :misc/import-edn-data
      :dev/show-block-data
      :dev/show-block-ast
      :dev/show-page-data
      :dev/show-page-ast
-     :dev/export-block-data
-     :dev/export-page-data
-     :dev/export-graph-ontology-data
-     :dev/import-edn-data
      :dev/replace-graph-with-db-file
      :dev/validate-db
      :ui/clear-all-notifications]
