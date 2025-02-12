@@ -175,7 +175,7 @@
     (let [token (state/get-auth-id-token)]
       (->
        (p/do!
-        (.rtc-grant-graph-access worker token graph-uuid
+        (.rtc-grant-graph-access worker token (str graph-uuid)
                                  (ldb/write-transit-str [])
                                  (ldb/write-transit-str [email]))
         (notification/show! (str "Invitation sent!") :success))
@@ -199,20 +199,20 @@
           (c.m/<? (<rtc-start! (state/get-current-repo) :stop-before-start? false)))))))
 
   (when-not config/publishing?
-   (c.m/run-background-task
-    ::notify-client-need-upgrade-when-larger-remote-schema-version-exists
-    (m/reduce
-     (constantly nil)
-     (m/ap
-      (let [{:keys [repo graph-uuid remote-schema-version sub-type]}
-            (m/?>
-             (m/eduction
-              (filter #(keyword-identical? :rtc.log/higher-remote-schema-version-exists (:type %)))
-              rtc-flows/rtc-log-flow))]
-        (case sub-type
-          :download
-          (notification-download-higher-schema-graph! repo graph-uuid remote-schema-version)
+    (c.m/run-background-task
+     ::notify-client-need-upgrade-when-larger-remote-schema-version-exists
+     (m/reduce
+      (constantly nil)
+      (m/ap
+        (let [{:keys [repo graph-uuid remote-schema-version sub-type]}
+              (m/?>
+               (m/eduction
+                (filter #(keyword-identical? :rtc.log/higher-remote-schema-version-exists (:type %)))
+                rtc-flows/rtc-log-flow))]
+          (case sub-type
+            :download
+            (notification-download-higher-schema-graph! repo graph-uuid remote-schema-version)
           ;; else
-          (notification/show!
-           "The server has a graph with a higher schema version, the client may need to upgrade."
-           :warning))))))))
+            (notification/show!
+             "The server has a graph with a higher schema version, the client may need to upgrade."
+             :warning))))))))
