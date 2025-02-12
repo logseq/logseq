@@ -1528,7 +1528,9 @@
                         :row-selection row-selection
                         :add-new-object! add-new-object!}]
          (if group-by-property
-           (let [groups (->> (group-by (:db/ident group-by-property) (:rows table))
+           (let [readable-property-value #(if (de/entity? %) (db-property/property-value-content %) (str %))
+                 groups (->> (group-by #(-> (:db/ident group-by-property) % readable-property-value)
+                                       (:rows table))
                              (sort-by #(db-property/property-value-content (first %))))]
              [:div.flex.flex-col.gap-4.border-t.py-4
               (for [[value group] groups]
@@ -1544,7 +1546,7 @@
                       (let [icon (pu/get-block-property-value value :logseq.property/icon)]
                         [:div.flex.flex-row.gap-1.items-center
                          (when icon (icon-component/icon icon {:color? true}))
-                         (if (de/entity? value) (db-property/property-value-content value) (str value))])
+                         (readable-property-value value)])
                       (str "No " (:block/title group-by-property)))]
                    [:div.mt-2
                     (view-cp view-entity (assoc table' :rows group) option view-opts)]
