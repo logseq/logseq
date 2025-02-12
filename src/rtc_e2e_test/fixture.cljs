@@ -3,12 +3,19 @@
             [const]
             [datascript.core :as d]
             [example]
+            [frontend.common.missionary :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.state :as worker-state]
             [helper]
-            [frontend.common.missionary :as c.m]
             [missionary.core :as m]))
+
+(def graph-schema-version "0")
+
+(defn- transact-graph-schema-version
+  [conn]
+  (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                      :kv/value graph-schema-version}]))
 
 (def install-some-consts
   {:before
@@ -21,6 +28,7 @@
      (prn :test-repo const/test-repo)
      (swap! worker-state/*client-ops-conns assoc const/test-repo (d/create-conn client-op/schema-in-db))
      (let [conn (d/conn-from-db example/example-db)]
+       (transact-graph-schema-version conn)
        (swap! worker-state/*datascript-conns assoc const/test-repo conn)))
    :after
    (fn []

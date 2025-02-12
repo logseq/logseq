@@ -7,11 +7,11 @@
     indicates need to upload the asset to server"
   (:require [clojure.set :as set]
             [datascript.core :as d]
+            [frontend.common.missionary :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
-            [frontend.common.missionary :as c.m]
             [logseq.common.path :as path]
             [logseq.db :as ldb]
             [malli.core :as ma]
@@ -270,7 +270,7 @@
                  (not-empty
                   (map (fn [asset-uuid] {:op :update-asset :block/uuid asset-uuid})
                        (set/difference local-all-asset-uuids local-all-asset-file-uuids)))]
-        (add-log-fn :rtc.asset.log/initial-download-missing-assets-count {:count (count asset-update-ops)})
+        (add-log-fn :rtc.asset.log/initial-download-missing-assets {:count (count asset-update-ops)})
         (m/? (new-task--pull-remote-asset-updates
               repo get-ws-create-task conn graph-uuid add-log-fn asset-update-ops))))))
 

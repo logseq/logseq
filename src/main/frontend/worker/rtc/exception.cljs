@@ -8,16 +8,19 @@
   :rtc.exception/remote-graph-lock-missing {:doc "
 Remote exception. Failed to remote graph lock isn't exist.
 It's a server internal error, shouldn't happen."}
+  :rtc.exception/invalid-token {:doc "Local exception"}
   :rtc.exception/not-rtc-graph {:doc "Local exception. Trying to start rtc loop on a local-graph."}
-  :rtc.exception/lock-failed {:doc "
-Local exception.
+  :rtc.exception/lock-failed {:doc "Local exception.
 Trying to start rtc loop but there's already one running, need to cancel that one first."}
   :rtc.exception/not-found-db-conn {:doc "Local exception. Cannot find db-conn by repo"}
-  :rtc.exception/get-s3-object-failed {:doc "
-Failed to fetch response from s3.
+  :rtc.exception/not-found-schema-version {:doc "Local exception. graph doesn't have :logseq.kv/schema-version value"}
+  :rtc.exception/not-found-remote-schema-version {:doc "Local exception.
+graph doesn't have :logseq.kv/remote-schema-version value"}
+  :rtc.exception/major-schema-version-mismatched {:doc "Local exception.
+local-schema-version, remote-schema-version, app-schema-version are not equal, cannot start rtc"}
+  :rtc.exception/get-s3-object-failed {:doc "Failed to fetch response from s3.
 When response from remote is too huge(> 32KB),
 the server will put it to s3 and return its presigned-url to clients."}
-  :rtc.exception/different-graph-skeleton {:doc "remote graph skeleton data is different from local's."}
   :rtc.exception/bad-request-body {:doc "bad request body, rejected by server-schema"}
   :rtc.exception/not-allowed {:doc "this api-call is not allowed"}
   :rtc.exception/ws-timeout {:doc "websocket timeout"})

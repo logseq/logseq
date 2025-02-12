@@ -3,19 +3,18 @@
 
    This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
-            [frontend.persist-db.protocol :as protocol]
-            [frontend.config :as config]
-            [promesa.core :as p]
-            [frontend.util :as util]
-            [frontend.handler.notification :as notification]
-            [cljs-bean.core :as bean]
-            [frontend.state :as state]
             [electron.ipc :as ipc]
-            [frontend.handler.worker :as worker-handler]
-            [logseq.db :as ldb]
-            [frontend.db.transact :as db-transact]
+            [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.handler.assets :as assets-handler]))
+            [frontend.db.transact :as db-transact]
+            [frontend.handler.assets :as assets-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.worker :as worker-handler]
+            [frontend.persist-db.protocol :as protocol]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defonce *worker state/*db-worker)
 
@@ -178,8 +177,7 @@
   (<list-db [_this]
     (when-let [^js sqlite @*worker]
       (-> (.listDB sqlite)
-          (p/then (fn [result]
-                    (bean/->clj result)))
+          (p/then ldb/read-transit-str)
           (p/catch sqlite-error-handler))))
 
   (<unsafe-delete [_this repo]

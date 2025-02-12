@@ -1,31 +1,31 @@
 (ns frontend.handler.repo
   "System-component-like ns that manages user's repos/graphs"
   (:refer-clojure :exclude [clone])
-  (:require [clojure.string :as string]
+  (:require [borkdude.rewrite-edn :as rewrite]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.persist :as db-persist]
             [frontend.db.restore :as db-restore]
-            [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.handler.notification :as notification]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.graph :as graph-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.idb :as idb]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.persist-db :as persist-db]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as util-fs]
             [frontend.util.text :as text-util]
-            [frontend.persist-db :as persist-db]
-            [promesa.core :as p]
-            [frontend.db.persist :as db-persist]
-            [electron.ipc :as ipc]
-            [cljs-bean.core :as bean]
-            [frontend.mobile.util :as mobile-util]
-            [borkdude.rewrite-edn :as rewrite]))
+            [promesa.core :as p]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -128,7 +128,7 @@
 (defn combine-local-&-remote-graphs
   [local-repos remote-repos]
   (when-let [repos' (seq (concat (map (fn [{:keys [sync-meta metadata] :as repo}]
-                                        (let [graph-id (or (:kv/value metadata) (second sync-meta))]
+                                        (let [graph-id (some-> (or (:kv/value metadata) (second sync-meta)) str)]
                                           (if graph-id (assoc repo :GraphUUID graph-id) repo)))
                                       local-repos)
                                  (some->> remote-repos

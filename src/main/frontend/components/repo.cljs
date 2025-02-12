@@ -63,7 +63,7 @@
 (rum/defc repos-inner
   "Graph list in `All graphs` page"
   [repos]
-  (for [{:keys [root url remote? GraphUUID GraphName created-at last-seen-at] :as repo}
+  (for [{:keys [root url remote? GraphUUID GraphSchemaVersion GraphName created-at last-seen-at] :as repo}
         (sort-repos-with-metadata-local repos)
         :let [only-cloud? (and remote? (nil? root))
               db-based? (config/db-based-graph? url)]]
@@ -78,7 +78,7 @@
                                      (state/pub-event! [:graph/switch url])
 
                                      (and db-based? remote?)
-                                     (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
+                                     (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion])
 
                                      :else
                                      (state/pub-event! [:graph/pull-down-remote-graph repo])))))]
@@ -122,10 +122,10 @@
                                                       (when (or manager? (not db-graph?))
                                                         (let [<delete-graph (if db-graph?
                                                                               rtc-handler/<rtc-delete-graph!
-                                                                              (fn [graph-uuid]
+                                                                              (fn [graph-uuid _graph-schema-version]
                                                                                 (async-util/c->p (file-sync/<delete-graph graph-uuid))))]
                                                           (state/set-state! [:file-sync/remote-graphs :loading] true)
-                                                          (p/do! (<delete-graph GraphUUID)
+                                                          (p/do! (<delete-graph GraphUUID GraphSchemaVersion)
                                                                  (state/delete-repo! repo)
                                                                  (state/delete-remote-graph! repo)
                                                                  (state/set-state! [:file-sync/remote-graphs :loading] false)))))
@@ -196,7 +196,9 @@
             :disabled remotes-loading?
             :on-click (fn []
                         (file-sync/load-session-graphs)
-                        (rtc-handler/<get-remote-graphs)))]]
+                        (p/do!
+                         (rtc-handler/<get-remote-graphs)
+                         (repo-handler/refresh-repos!))))]]
          (repos-inner remote-graphs)])]]))
 
 (defn- check-multiple-windows?
@@ -209,7 +211,7 @@
   (let [switch-repos (if-not (nil? current-repo)
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
-                    (fn [{:keys [url remote? rtc-graph? GraphName GraphUUID] :as graph}]
+                    (fn [{:keys [url remote? rtc-graph? GraphName GraphSchemaVersion GraphUUID] :as graph}]
                       (let [local? (config/local-file-based-graph? url)
                             db-only? (config/db-based-graph? url)
                             repo-url (cond
@@ -228,22 +230,24 @@
                                                          (when downloading?
                                                            [:span.opacity.text-sm.pl-1 "downloading"])])]
                            :hover-detail repo-url ;; show full path on hover
-                           :options      {:on-click (fn [e]
-                                                      (when-not downloading?
-                                                        (when-let [on-click (:on-click opts)]
-                                                          (on-click e))
-                                                        (if (and (gobj/get e "shiftKey")
-                                                                 (not (and rtc-graph? remote?)))
-                                                          (state/pub-event! [:graph/open-new-window url])
-                                                          (cond
-                                                            (:root graph) ; exists locally
-                                                            (state/pub-event! [:graph/switch url])
+                           :options      {:on-click
+                                          (fn [e]
+                                            (when-not downloading?
+                                              (when-let [on-click (:on-click opts)]
+                                                (on-click e))
+                                              (if (and (gobj/get e "shiftKey")
+                                                       (not (and rtc-graph? remote?)))
+                                                (state/pub-event! [:graph/open-new-window url])
+                                                (cond
+                                                  (:root graph) ; exists locally
+                                                  (state/pub-event! [:graph/switch url])
 
-                                                            (and rtc-graph? remote?)
-                                                            (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
+                                                  (and rtc-graph? remote?)
+                                                  (state/pub-event!
+                                                   [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion])
 
-                                                            :else
-                                                            (state/pub-event! [:graph/pull-down-remote-graph graph])))))}})))
+                                                  :else
+                                                  (state/pub-event! [:graph/pull-down-remote-graph graph])))))}})))
                     switch-repos)]
     (->> repo-links (remove nil?))))
 

@@ -1,8 +1,64 @@
 (ns logseq.db.frontend.schema
   "Main datascript schemas for the Logseq app"
-  (:require [clojure.set :as set]))
+  (:require [clojure.set :as set]
+            [clojure.string :as string]))
 
-(def version 65)
+(def schema-version? (every-pred map? :major))
+
+(def major-schema-version-string-schema
+  [:and :string
+   [:fn
+    {:error/message "should be a major schema-version"}
+    (fn [s] (some? (parse-long s)))]])
+
+(defn parse-schema-version
+  "Return schema-version({:major <num> :minor <num>}).
+  schema-version-old: 10, a number
+  schema-version-new: \"12.34\", string, <major-num>.<minor-num>"
+  [string-or-compatible-number]
+  (cond
+    (schema-version? string-or-compatible-number) string-or-compatible-number
+    (int? string-or-compatible-number) {:major string-or-compatible-number :minor nil}
+    (string? string-or-compatible-number)
+    (let [[major minor] (map parse-long (string/split string-or-compatible-number #"\."))]
+      (assert (some? major))
+      {:major major :minor minor})
+    :else
+    (throw (ex-info (str "Bad schema version: " string-or-compatible-number) {:data string-or-compatible-number}))))
+
+(defn compare-schema-version
+  [x y]
+  (if (schema-version? x)
+    (cond
+      (number? y) (compare (:major x) y)
+      (sequential? y) (compare [(:major x) (:minor x)] [(first y) (second y)])
+      (schema-version? y)
+      (apply compare (map (juxt :major :minor) [x y]))
+      :else
+      (throw (js/Error. (str "Cannot compare " x " to " y))))
+    (compare-schema-version (parse-schema-version x) y)))
+
+(def version (parse-schema-version "64"))
+
+(defn major-version
+  "Return a number.
+  Compatible with current schema-version number.
+  schema-version-old: 10, a number
+  schema-version-new: \"12.34\", string, <major-num>.<minor-num>"
+  [schema-version]
+  (if (schema-version? schema-version)
+    (:major schema-version)
+    (:major (parse-schema-version schema-version))))
+
+(defn schema-version->string
+  [schema-version]
+  (cond
+    (string? schema-version) schema-version
+    (schema-version? schema-version)
+    (if-let [minor (:minor schema-version)]
+      (str (:major schema-version) "." minor)
+      (str (:major schema-version)))
+    :else (throw (ex-info "Not a schema-version" {:data schema-version}))))
 
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema

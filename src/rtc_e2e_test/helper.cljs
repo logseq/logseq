@@ -3,6 +3,7 @@
             [const]
             [datascript.core :as d]
             [datascript.transit :as dt]
+            [fixture]
             [frontend.common.missionary :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
@@ -41,7 +42,7 @@
                                 (not= "deleting" (:graph-status graph)))
                               graphs)]
       (doseq [graph test-graphs]
-        (m/? (rtc.core/new-task--delete-graph const/test-token (:graph-uuid graph)))
+        (m/? (rtc.core/new-task--delete-graph const/test-token (:graph-uuid graph) fixture/graph-schema-version))
         (log :deleted-graph (:graph-name graph) (:graph-uuid graph))))))
 
 (def new-task--get-remote-example-graph-uuid
@@ -69,8 +70,10 @@
 (defn new-task--download-graph
   [graph-uuid graph-name]
   (m/sp
-    (let [download-info-uuid (m/? (rtc.core/new-task--request-download-graph const/test-token graph-uuid))
-          result (m/? (rtc.core/new-task--wait-download-info-ready const/test-token download-info-uuid graph-uuid 60000))
+    (let [download-info-uuid (m/? (rtc.core/new-task--request-download-graph
+                                   const/test-token graph-uuid fixture/graph-schema-version))
+          result (m/? (rtc.core/new-task--wait-download-info-ready
+                       const/test-token download-info-uuid graph-uuid fixture/graph-schema-version 60000))
           {:keys [_download-info-uuid
                   download-info-s3-url
                   _download-info-tx-instant
