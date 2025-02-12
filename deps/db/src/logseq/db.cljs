@@ -70,7 +70,7 @@
                       (common-util/fast-remove-nils)
                       (remove empty?))
          delete-blocks-tx (when-not (string? repo-or-conn)
-                            (delete-blocks/update-refs-and-macros @repo-or-conn tx-data tx-meta))
+                            (delete-blocks/update-refs-history-and-macros @repo-or-conn tx-data tx-meta))
          tx-data (concat tx-data delete-blocks-tx)]
 
      ;; Ensure worker can handle the request sequentially (one by one)
