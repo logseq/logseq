@@ -351,3 +351,13 @@
     (let [ent (d/entity @conn [:block/uuid asset-uuid])]
       (when-let [e (:db/id ent)]
         (d/transact! conn (map (fn [a] [:db.fn/retractAttribute e a]) asset-op-types))))))
+
+(defn reset-client-op-conn
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (let [tx-data (->> (concat (d/datoms @conn :avet :graph-uuid)
+                               (d/datoms @conn :avet :local-tx)
+                               (d/datoms @conn :avet :aes-key-jwk)
+                               (d/datoms @conn :avet :block/uuid))
+                       (map (fn [datom] [:db/retractEntity (:e datom)])))]
+      (d/transact! conn tx-data))))
