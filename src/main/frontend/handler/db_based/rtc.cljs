@@ -165,7 +165,7 @@
     (when-let [^js worker @state/*db-worker]
       (p/let [token (state/get-auth-id-token)
               repo (state/get-current-repo)
-              result (.rtc-get-users-info worker token graph-uuid)
+              result (.rtc-get-users-info worker token (str graph-uuid))
               result (ldb/read-transit-str result)]
         (state/set-state! :rtc/users-info {repo result})))))
 
