@@ -190,7 +190,6 @@
                                      (let [pages (->> selected-rows (filter ldb/page?) (remove :logseq.property/built-in?))
                                            blocks (->> selected-rows (remove ldb/page?) (remove :logseq.property/built-in?))]
                                        (p/do!
-                                        (set-data! (get-class-objects class))
                                         (when-let [f (get-in table [:data-fns :set-row-selection!])]
                                           (f {}))
                                         (ui-outliner-tx/transact!
@@ -200,7 +199,8 @@
                                          (let [page-ids (map :db/id pages)
                                                tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id class)]) page-ids)]
                                            (when (seq tx-data)
-                                             (outliner-op/transact! tx-data {:outliner-op :save-block})))))))}))))
+                                             (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+                                        (set-data! (get-class-objects class)))))}))))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class {:keys [current-page? sidebar?]}]
