@@ -109,9 +109,9 @@
             :current-page (state/get-current-page)
             :blocks-count (when-let [page (state/get-current-page)]
                             (count (:block/_page (db/get-page page))))
-            :schema-version {:app (str db-schema/version)
+            :schema-version {:app (db-schema/schema-version->string db-schema/version)
                              :local-graph (:local-graph-schema-version debug-state*)
-                             :remote-graph (:remote-graph-schema-version debug-state*)}}
+                             :remote-graph (str (:remote-graph-schema-version debug-state*))}}
            (fipp/pprint {:width 20})
            with-out-str)]]
 
