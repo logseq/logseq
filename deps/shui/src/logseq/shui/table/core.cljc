@@ -1,6 +1,7 @@
 (ns logseq.shui.table.core
   "Table"
-  (:require [dommy.core :refer-macros [sel1]]
+  (:require [clojure.set :as set]
+            [dommy.core :refer-macros [sel1]]
             [logseq.shui.table.impl :as impl]
             [rum.core :as rum]))
 
@@ -27,15 +28,38 @@
   [row-selection rows]
   (boolean
    (or
-    (seq (:selected-ids row-selection))
+    (and (seq (:selected-ids row-selection))
+         (some (:selected-ids row-selection) (map :db/id rows)))
     (and (seq (:exclude-ids row-selection))
          (not= (count rows) (count (:exclude-ids row-selection)))))))
 
+(defn- select-all?
+  [row-selection rows]
+  (set/subset? (set (map :db/id rows))
+               (:selected-ids row-selection)))
+
 (defn- toggle-selected-all!
-  [value set-row-selection!]
-  (if value
-    (set-row-selection! {:selected-all? value})
-    (set-row-selection! {})))
+  [table value set-row-selection!]
+  (let [group-by-property (get-in table [:state :group-by-property])
+        row-selection (get-in table [:state :row-selection])]
+    (cond
+      (and group-by-property value)
+      (let [new-selection (update row-selection :selected-ids
+                                  (fn [ids]
+                                    (set/union (set ids) (set (map :db/id (:rows table))))))]
+        (set-row-selection! new-selection))
+
+      value
+      (set-row-selection! {:selected-all? value})
+
+      group-by-property
+      (let [new-selection (update row-selection :selected-ids
+                                  (fn [ids]
+                                    (set/difference (set ids) (set (map :db/id (:rows table))))))]
+        (set-row-selection! new-selection))
+
+      :else
+      (set-row-selection! {}))))
 
 (defn- set-conj
   [col item]
@@ -96,11 +120,13 @@
            ;; fns
            :column-visible? (fn [column] (impl/column-visible? column visible-columns))
            :column-toggle-visibility (fn [column v] (set-visible-columns! (assoc visible-columns (impl/column-id column) v)))
-           :selected-all? (:selected-all? row-selection)
+           :selected-all? (or (:selected-all? row-selection)
+                              (select-all? row-selection filtered-rows))
            :selected-some? (select-some? row-selection filtered-rows)
            :row-selected? (fn [row] (row-selected? row row-selection))
            :row-toggle-selected! (fn [row value] (row-toggle-selected! row value set-row-selection! row-selection))
-           :toggle-selected-all! (fn [value] (toggle-selected-all! value set-row-selection!))
+           :toggle-selected-all! (fn [table value]
+                                   (toggle-selected-all! table value set-row-selection!))
            :column-set-sorting! (fn [sorting column asc?] (column-set-sorting! column set-sorting! sorting asc?)))))
 
 (defn- get-prop-and-children

@@ -414,7 +414,7 @@
 
 (defmethod handle :go/install-plugin-from-github [[_]]
   (shui/dialog-open!
-    (plugin/install-from-github-release-container)))
+   (plugin/install-from-github-release-container)))
 
 (defmethod handle :go/plugins-settings [[_ pid nav? title]]
   (when pid

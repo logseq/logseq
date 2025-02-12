@@ -968,7 +968,7 @@
             icon
             (if icon?
               (icon-component/icon icon {:color? true})
-              [:div.flex.flex-row.items-center.gap-2.h-6
+              [:div.flex.flex-row.items-center.gap-1.h-6
                (icon-component/icon icon {:color? true})
                (when value'
                  [:span value'])])

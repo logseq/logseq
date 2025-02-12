@@ -602,6 +602,15 @@
     (d/reset-schema! conn (dissoc schema :block/schema))
     []))
 
+(defn- add-view-icons
+  [_conn _search-db]
+  [{:db/ident :logseq.property.view/type.table
+    :logseq.property/icon {:type :tabler-icon :id "table"}}
+   {:db/ident :logseq.property.view/type.list
+    :logseq.property/icon {:type :tabler-icon :id "list"}}
+   {:db/ident :logseq.property.view/type.gallery
+    :logseq.property/icon {:type :tabler-icon :id "layout-grid"}}])
+
 (def ^:large-vars/cleanup-todo schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -703,7 +712,8 @@
    [64 {:fix update-view-filter}]
    ;;;; schema-version format: "<major>.<minor>"
    ;;;; int number equals to "<major>" (without <minor>)
-   ])
+   ["64.1" {:properties [:logseq.property.view/group-by-property]
+            :fix add-view-icons}]])
 
 (let [max-schema-version (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                           schema-version->updates)))
