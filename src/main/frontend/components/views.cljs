@@ -197,20 +197,18 @@
       (reduce + (filter number? col))
       (string/join ", " col))))
 
-(rum/defcs block-container < rum/reactive db-mixins/query
-  (rum/local false ::deleted?)
+(rum/defcs block-container < (rum/local false ::deleted?)
   [state config row table]
   (let [*deleted? (::deleted? state)
-        container (state/get-component :block/container)
-        row' (db/sub-block (:db/id row))]
-    (if (nil? row')                    ; this row has been deleted
+        container (state/get-component :block/container)]
+    (if (nil? (:db/id row))                    ; this row has been deleted
       (when-not @*deleted?
         (when-let [f (get-in table [:data-fns :set-data!])]
-          (f (remove (fn [r] (= (:id r) (:id row))) (:data table)))
+          (f (remove (fn [r] (= (:id r) (:id row))) (or (:all-data table) (:data table))))
           (reset! *deleted? true)
           nil))
       [:div.relative.w-full
-       (container config row')])))
+       (container config row)])))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column?]
@@ -604,7 +602,7 @@
      [:div.flex.flex-row
       (map-indexed row-cell-f unpinned-columns)])))
 
-(rum/defc table-row < rum/reactive
+(rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
   (let [row' (db/sub-block (:id row))
         ;; merge entity temporal attributes
@@ -1537,7 +1535,8 @@
                                         (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}}))
                       table' (shui/table-option (-> table-map
                                                     (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                    (assoc :data group)))]
+                                                    (assoc :data group
+                                                           :all-data (:data table))))]
                   (ui/foldable
                    [:div.text-sm.font-medium.ml-2
                     (if value
