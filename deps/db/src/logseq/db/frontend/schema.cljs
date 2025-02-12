@@ -38,7 +38,7 @@
       (throw (js/Error. (str "Cannot compare " x " to " y))))
     (compare-schema-version (parse-schema-version x) y)))
 
-(def version (parse-schema-version "64"))
+(def version (parse-schema-version "64.1"))
 
 (defn major-version
   "Return a number.
