@@ -1530,10 +1530,10 @@
          (if group-by-property
            (let [readable-property-value #(if (de/entity? %) (db-property/property-value-content %) (str %))
                  ;; similar to readable-property but return entity if :db/ident to allow for icons
-                 groupable-readable-property-value #(if (de/entity? %)
-                                                      (if (:db/ident %) % (db-property/property-value-content %))
-                                                      (str %))
-                 groups (->> (group-by #(-> (:db/ident group-by-property) % groupable-readable-property-value)
+                 readable-property-value-or-ent #(if (de/entity? %)
+                                                   (if (:db/ident %) % (db-property/property-value-content %))
+                                                   (str %))
+                 groups (->> (group-by #(-> (:db/ident group-by-property) % readable-property-value-or-ent)
                                        (:rows table))
                              (sort-by #(db-property/property-value-content (first %))))]
              [:div.flex.flex-col.gap-4.border-t.py-4
