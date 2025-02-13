@@ -6,7 +6,8 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.common.util :as common-util]))
 
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
@@ -53,7 +54,7 @@
                  (assoc :block/title (name k)))]))
        (into {})))
 
-(deftest ^:focus import-block-in-same-graph
+(deftest import-block-in-same-graph
   (let [original-data
         {:properties {:user.property/default-many {:logseq.property/type :default :db/cardinality :db.cardinality/many}}
          :classes {:user.class/MyClass
@@ -73,7 +74,7 @@
     (is (= (expand-properties (:properties original-data)) (:properties imported-block)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-block)))))
 
-(deftest ^:focus2 import-block-in-different-graph
+(deftest import-block-in-different-graph
   (let [original-data
         {:properties {:user.property/num-many
                       {:logseq.property/type :number
@@ -238,13 +239,20 @@
 (deftest import-page-with-different-page-and-classes
   (let [original-data
         {:properties {:user.property/p1 {:logseq.property/type :default}
-                      :user.property/p2 {:logseq.property/type :default}
-                      :user.property/p3 {:logseq.property/type :default}}
+                      ;; shallow property b/c it's a property for a class' parent
+                      :user.property/p2 {:logseq.property/type :node
+                                         :build/property-classes [:user.class/NodeClass2]}
+                      :user.property/p3 {:logseq.property/type :node
+                                         :build/property-classes [:user.class/NodeClass]}
+                      :user.property/node-p1 {:logseq.property/type :default}}
          :classes {:user.class/MyClass {:build/class-properties [:user.property/p1 :user.property/p2]}
-                   :user.class/MyClass2 {}
+                   :user.class/MyClass2 {:build/class-properties [:user.property/p2]}
                    :user.class/ChildClass {:build/class-parent :user.class/MyClass
                                            :build/class-properties [:user.property/p3]}
-                   :user.class/ChildClass2 {:build/class-parent :user.class/MyClass2}}
+                   :user.class/ChildClass2 {:build/class-parent :user.class/MyClass2}
+                   ;; shallow class b/c it's a property's class property
+                   :user.class/NodeClass {:build/class-properties [:user.property/node-p1]}
+                   :user.class/NodeClass2 {}}
          :pages-and-blocks
          [{:page {:block/title "page1"
                   :build/properties {:user.property/p1 "woot"}
@@ -255,10 +263,18 @@
         conn2 (db-test/create-conn)
         imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
-    (is (= (expand-properties (:properties original-data)) (:properties imported-page))
-        "Page's properties are imported")
-    (is (= (expand-classes (:classes original-data)) (:classes imported-page))
-        "Page's classes are imported")
+    (is (= (-> (expand-properties (:properties original-data))
+               (dissoc :user.property/node-p1)
+               ;; Shallow property doesn't have class
+               (common-util/dissoc-in [:user.property/p2 :build/property-classes]))
+           (:properties imported-page))
+        "Page's properties are imported except for shallow class' property")
+    (is (= (-> (expand-classes (:classes original-data))
+               ;; Shallow class doesn't have properties
+               (common-util/dissoc-in [:user.class/NodeClass :build/class-properties])
+               (dissoc :user.class/NodeClass2))
+           (:classes imported-page))
+        "Page's classes are imported except for shallow property's class")
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
