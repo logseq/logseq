@@ -1,7 +1,8 @@
 (ns logseq.db.sqlite.export
   "Builds sqlite.build EDN to represent nodes in a graph-agnostic way.
    Useful for exporting and importing across DB graphs"
-  (:require [datascript.core :as d]
+  (:require [clojure.set :as set]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
@@ -354,16 +355,48 @@
       (seq classes)
       (assoc :classes classes))))
 
+(defn- ensure-export-is-valid
+  "Checks that export map is usable by sqlite.build including checking that
+   all referenced properties and classes are defined"
+  [{:keys [classes properties pages-and-blocks] :as export-map}]
+  (sqlite-build/validate-options export-map)
+  (let [referenced-classes
+        (->> (concat (mapcat :build/property-classes (vals properties))
+                     (keep :class/parent (vals classes))
+                     (mapcat (comp :block/tags :page) pages-and-blocks)
+                     (mapcat #(sqlite-build/extract-from-blocks (:blocks %) :build/tags) pages-and-blocks))
+             (remove db-class/logseq-class?)
+             set)
+        undefined-classes (set/difference referenced-classes (set (keys classes)))
+        referenced-properties
+        (->> (concat (mapcat :build/class-properties (vals classes))
+              (mapcat (comp keys :build/properties :page) pages-and-blocks)
+                     (mapcat #(sqlite-build/extract-from-blocks (:blocks %) (comp keys :build/properties)) pages-and-blocks))
+             (remove db-property/logseq-property?)
+             set)
+        undefined-properties (set/difference referenced-properties (set (keys properties)))
+        undefined (cond-> {}
+                    (seq undefined-classes) (assoc :classes undefined-classes)
+                    (seq undefined-properties) (assoc :properties undefined-properties))]
+    ;; (prn :rclasses referenced-classes)
+    ;; (prn :rproperties referenced-properties)
+    (when (seq undefined)
+      (throw (ex-info (str "The following classes and properties are not defined: " (pr-str undefined))
+                      undefined)))))
+
 (defn build-export
   "Handles exporting db by given export-type"
   [db {:keys [export-type] :as options}]
-  (case export-type
-    :block
-    (build-block-export db (:block-id options))
-    :page
-    (build-page-export db (:page-id options))
-    :graph-ontology
-    (build-graph-ontology-export db)))
+  (let [export-map
+        (case export-type
+          :block
+          (build-block-export db (:block-id options))
+          :page
+          (build-page-export db (:page-id options))
+          :graph-ontology
+          (build-graph-ontology-export db))]
+    (ensure-export-is-valid (dissoc export-map ::block))
+    export-map))
 
 ;; Import fns
 ;; ==========

@@ -911,9 +911,16 @@
 
   (export-edn
    [_this repo options]
-   (let [conn (worker-state/get-datascript-conn repo)
-         result (sqlite-export/build-export @conn (ldb/read-transit-str options))]
-     (ldb/write-transit-str result)))
+   (let [conn (worker-state/get-datascript-conn repo)]
+     (try
+       (->> (ldb/read-transit-str options)
+            (sqlite-export/build-export @conn)
+            ldb/write-transit-str)
+       (catch :default e
+         (js/console.error "export-edn error: " e)
+         (worker-util/post-message :notification
+                                   ["An unexpected error occurred during export. See the javascript console for details."
+                                    :error])))))
 
   (dangerousRemoveAllDbs
    [this repo]
