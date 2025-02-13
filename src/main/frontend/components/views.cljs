@@ -353,7 +353,7 @@
                                 (when-let [p (db/entity (:id column))]
                                   (and (not (db-property/many? p))
                                        (contains? #{:default :number :checkbox :url :node :date}
-                                              (:logseq.property/type p)))))) columns)]
+                                                  (:logseq.property/type p)))))) columns)]
          (shui/dropdown-menu-checkbox-item
           {:key (str (:id column))
            :className "capitalize"
@@ -1574,7 +1574,7 @@
   < rum/reactive
   (rum/local nil ::scroller-ref)
   [state view-entity option]
-  (let [view-entity' (db/sub-block (:db/id view-entity))]
+  (let [view-entity' (or (db/sub-block (:db/id view-entity)) view-entity)]
     (rum/with-key (view-inner view-entity'
                               (cond-> option
                                 config/publishing?

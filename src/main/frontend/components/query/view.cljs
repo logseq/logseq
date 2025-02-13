@@ -12,7 +12,7 @@
 
 (defn- columns
   [config result]
-  (->> (mapcat (comp keys :block/properties) result)
+  (->> (mapcat :block.temp/property-keys result)
        distinct
        (map db/entity)
        (ldb/sort-by-order)
