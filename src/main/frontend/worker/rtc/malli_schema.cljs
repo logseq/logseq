@@ -94,7 +94,6 @@
    [:t {:optional true} :int]
    [:t-before {:optional true} :int]
    [:s3-presign-url {:optional true} :string]
-   [:server-schema-version {:optional true} :int]
    [:server-builtin-db-idents {:optional true} [:set :keyword]]
    [:server-only-db-ident-blocks {:optional true} [:maybe :string] ;;transit
     ]
@@ -211,7 +210,7 @@
      ["grant-access" [:map]]
      ["get-graph-skeleton"
       [:map
-       [:server-schema-version :int]
+       [:server-schema-version :string]
        [:server-builtin-db-idents [:set :keyword]]]]
      ["presign-put-temp-s3-obj" [:map]]
      ["get-users-info"

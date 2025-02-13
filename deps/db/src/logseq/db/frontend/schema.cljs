@@ -28,15 +28,9 @@
 
 (defn compare-schema-version
   [x y]
-  (if (schema-version? x)
-    (cond
-      (number? y) (compare (:major x) y)
-      (sequential? y) (compare [(:major x) (:minor x)] [(first y) (second y)])
-      (schema-version? y)
-      (apply compare (map (juxt :major :minor) [x y]))
-      :else
-      (throw (js/Error. (str "Cannot compare " x " to " y))))
-    (compare-schema-version (parse-schema-version x) y)))
+  (apply compare
+         (map (juxt :major :minor)
+              [(parse-schema-version x) (parse-schema-version y)])))
 
 (def version (parse-schema-version "64.1"))
 
