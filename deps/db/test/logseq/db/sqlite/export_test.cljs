@@ -7,7 +7,7 @@
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
-            [logseq.common.util :as common-util]))
+            [medley.core :as medley]))
 
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
@@ -266,12 +266,12 @@
     (is (= (-> (expand-properties (:properties original-data))
                (dissoc :user.property/node-p1)
                ;; Shallow property doesn't have class
-               (common-util/dissoc-in [:user.property/p2 :build/property-classes]))
+               (medley/dissoc-in [:user.property/p2 :build/property-classes]))
            (:properties imported-page))
         "Page's properties are imported except for shallow class' property")
     (is (= (-> (expand-classes (:classes original-data))
                ;; Shallow class doesn't have properties
-               (common-util/dissoc-in [:user.class/NodeClass :build/class-properties])
+               (medley/dissoc-in [:user.class/NodeClass :build/class-properties])
                (dissoc :user.class/NodeClass2))
            (:classes imported-page))
         "Page's classes are imported except for shallow property's class")

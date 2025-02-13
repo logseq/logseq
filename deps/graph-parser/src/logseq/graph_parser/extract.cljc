@@ -17,7 +17,8 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
+            [medley.core :as medley]))
 
 (defn- filepath->page-name
   [filepath]
@@ -319,9 +320,9 @@
         blocks (map
                 (fn [block]
                   (-> block
-                      (common-util/dissoc-in [:block/parent :block/name])
+                      (medley/dissoc-in [:block/parent :block/name])
                       ;; :block/left here for backward compatibility
-                      (common-util/dissoc-in [:block/left :block/name])))
+                      (medley/dissoc-in [:block/left :block/name])))
                 blocks)
         serialized-page (first pages)
         ;; whiteboard edn file should normally have valid :block/title, :block/name, :block/uuid
