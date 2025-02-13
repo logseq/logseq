@@ -74,7 +74,7 @@
        (into {})))
 
 (defn- build-export-properties
-  [db user-property-idents {:keys [include-properties? include-uuid?]}]
+  [db user-property-idents {:keys [include-properties? include-uuid? shallow-copy?]}]
   (let [properties-config-by-ent
         (->> user-property-idents
              (map (fn [ident]
@@ -86,7 +86,7 @@
                                                 (conj :block/title)))
                          include-uuid?
                          (assoc :block/uuid (:block/uuid property))
-                         (:logseq.property/classes property)
+                         (and (not shallow-copy?) (:logseq.property/classes property))
                          (assoc :build/property-classes (mapv :db/ident (:logseq.property/classes property)))
                          (seq closed-values)
                          (assoc :build/closed-values
@@ -111,22 +111,24 @@
       properties-config)))
 
 (defn- build-export-class
-  [class-ent {:keys [include-parents? include-uuid?] :or {include-parents? true}}]
+  [class-ent {:keys [include-parents? include-uuid? shallow-copy?]
+              :or {include-parents? true}}]
   (cond-> (select-keys class-ent [:block/title])
     include-uuid?
     (assoc :block/uuid (:block/uuid class-ent))
-    (:logseq.property.class/properties class-ent)
+    (and (:logseq.property.class/properties class-ent) (not shallow-copy?))
     (assoc :build/class-properties
            (mapv :db/ident (:logseq.property.class/properties class-ent)))
     ;; It's caller's responsibility to ensure parent is included in final export
     (and include-parents?
+         (not shallow-copy?)
          (:logseq.property/parent class-ent)
          (not= :logseq.class/Root (:db/ident (:logseq.property/parent class-ent))))
     (assoc :build/class-parent
            (:db/ident (:logseq.property/parent class-ent)))))
 
 (defn- build-node-classes
-  [db build-block block-tags]
+  [db build-block block-tags properties]
   (let [pvalue-class-ents (->> (:build/properties build-block)
                                vals
                                (mapcat (fn [val-or-vals]
@@ -134,11 +136,21 @@
                                                  (if (set? val-or-vals) val-or-vals [val-or-vals]))))
                                (remove db-class/logseq-class?)
                                (map #(d/entity db %)))
+        property-classes (->> (mapcat :build/property-classes (vals properties))
+                              (remove db-class/logseq-class?)
+                              set)
         new-class-ents (concat (remove #(db-class/logseq-class? (:db/ident %)) block-tags)
-                               pvalue-class-ents)]
-    (->> new-class-ents
-         (map #(vector (:db/ident %) (build-export-class % {})))
-         (into {}))))
+                               pvalue-class-ents)
+        shallow-classes (set/difference property-classes (set (map :db/ident new-class-ents)))]
+    (merge
+     (when (seq shallow-classes)
+       (->> shallow-classes
+            (map #(d/entity db %))
+            (map #(vector (:db/ident %) (build-export-class % {:shallow-copy? true})))
+            (into {})))
+     (->> new-class-ents
+          (map #(vector (:db/ident %) (build-export-class % {})))
+          (into {})))))
 
 (defn- build-node-export
   "Given a block/page entity and optional existing properties, build an export map of its
@@ -165,7 +177,7 @@
                      (seq ent-properties)
                      (assoc :build/properties
                             (buildable-properties db ent-properties (merge properties new-properties))))
-        new-classes (build-node-classes db build-node (:block/tags entity))]
+        new-classes (build-node-classes db build-node (:block/tags entity) new-properties)]
     (cond-> {:node build-node}
       (seq new-classes)
       (assoc :classes new-classes)
@@ -234,7 +246,7 @@
              (mapcat :logseq.property.class/properties)
              (map :db/ident)
              (remove db-property/logseq-property?))
-        properties (build-export-properties db class-parent-properties {})]
+        properties (build-export-properties db class-parent-properties {:shallow-copy? true})]
     {:classes classes
      :properties properties}))
 
