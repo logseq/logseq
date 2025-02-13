@@ -121,7 +121,7 @@
                      [property-map v])))))
        (db-property-build/build-property-values-tx-m new-block)))
 
-(defn extract-content-refs
+(defn- extract-content-refs
   "Extracts basic refs from :block/title like `[[foo]]` or `[[UUID]]`. Can't
   use db-content/get-matched-ids because of named ref support.  Adding more ref
   support would require parsing each block with mldoc and extracting with
@@ -352,20 +352,6 @@
                              ((fn [x] (update-vals x #(mapv second %)))))]
     props-to-values))
 
-(defn- validate-options
-  [{:keys [properties] :as options}]
-  (when-let [errors (->> options (m/explain Options) me/humanize)]
-    (println "The build-blocks-tx has the following options errors:")
-    (pprint/pprint errors)
-    (throw (ex-info "Options validation failed" {:errors errors})))
-  (when-not (:auto-create-ontology? options)
-    (let [used-properties (get-used-properties-from-options options)
-          undeclared-properties (-> (set (keys used-properties))
-                                    (set/difference (set (keys properties)))
-                                    ((fn [x] (remove db-property/logseq-property? x))))]
-      (assert (empty? undeclared-properties)
-              (str "The following properties used in EDN were not declared in :properties: " undeclared-properties)))))
-
 ;; TODO: How to detect these idents don't conflict with existing? :db/add?
 (defn- create-all-idents
   [properties classes graph-namespace]
@@ -484,7 +470,7 @@
       (println "Building additional pages from content refs:" (pr-str (mapv #(get-in % [:page :block/title]) new-pages-from-refs))))
     (concat pages-and-blocks new-pages-from-refs)))
 
-(defn add-new-pages-from-properties
+(defn- add-new-pages-from-properties
   [properties pages-and-blocks]
   (let [used-properties (get-used-properties-from-options {:pages-and-blocks pages-and-blocks :properties properties})
         existing-pages (->> pages-and-blocks (keep #(select-keys (:page %) [:build/journal :block/title])) set)
@@ -622,6 +608,34 @@
     (split-blocks-tx (concat properties-tx'
                              classes-tx
                              pages-and-blocks-tx))))
+
+;; Public API
+;; ==========
+
+(defn extract-from-blocks
+  "Given a vec of blocks and a fn which applied to a block returns a coll, this
+  returns the coll produced by applying f to all blocks including :build/children blocks"
+  [blocks f]
+  (let [apply-to-block-and-all-children
+        (fn apply-to-block-and-all-children [m f]
+          (into (f m)
+                (when-let [children (seq (:build/children m))]
+                  (mapcat #(apply-to-block-and-all-children % f) children))))]
+    (mapcat #(apply-to-block-and-all-children % f) blocks)))
+
+(defn validate-options
+  [{:keys [properties] :as options}]
+  (when-let [errors (->> options (m/explain Options) me/humanize)]
+    (println "The build-blocks-tx has the following options errors:")
+    (pprint/pprint errors)
+    (throw (ex-info "Options validation failed" {:errors errors})))
+  (when-not (:auto-create-ontology? options)
+    (let [used-properties (get-used-properties-from-options options)
+          undeclared-properties (-> (set (keys used-properties))
+                                    (set/difference (set (keys properties)))
+                                    ((fn [x] (remove db-property/logseq-property? x))))]
+      (assert (empty? undeclared-properties)
+              (str "The following properties used in EDN were not declared in :properties: " undeclared-properties)))))
 
 (defn ^:large-vars/doc-var build-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a map

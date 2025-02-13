@@ -59,9 +59,13 @@
     (if (= ::invalid-import export-map)
       (notification/show! "The submitted EDN data is invalid! Fix and try again." :warning)
       (let [{:keys [init-tx block-props-tx error] :as txs}
-            (sqlite-export/build-import export-map
-                                        (db/get-db)
-                                        (when block {:current-block block}))]
+            (try
+              (sqlite-export/build-import export-map
+                                          (db/get-db)
+                                          (when block {:current-block block}))
+              (catch :default e
+                (js/console.error "Import EDN error: " e)
+                {:error "An unexpected error occurred during import. See the javascript console for details."}))]
         (pprint/pprint txs)
         (if error
           (notification/show! error :error)
