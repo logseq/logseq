@@ -27,12 +27,37 @@
     (sqlite-export/build-export @import-conn {:export-type :block
                                               :block-id (:db/id import-block)})))
 
-(deftest import-block-in-same-graph
+(defn- expand-properties
+  "Add default values to properties of an input export map to test against a
+  db-based export map"
+  [properties]
+  (->> properties
+       (map (fn [[k m]]
+              [k
+               (cond->
+                (merge {:db/cardinality :db.cardinality/one}
+                       m)
+                 (not (:block/title m))
+                 (assoc :block/title (name k)))]))
+       (into {})))
+
+(defn- expand-classes
+  "Add default values to classes of an input export map to test against a
+  db-based export map"
+  [classes]
+  (->> classes
+       (map (fn [[k m]]
+              [k
+               (cond-> m
+                 (not (:block/title m))
+                 (assoc :block/title (name k)))]))
+       (into {})))
+
+(deftest ^:focus import-block-in-same-graph
   (let [original-data
-        {:properties {:user.property/default-many
-                      {:block/title "default-many" :logseq.property/type :default :db/cardinality :db.cardinality/many}}
+        {:properties {:user.property/default-many {:logseq.property/type :default :db/cardinality :db.cardinality/many}}
          :classes {:user.class/MyClass
-                   {:block/title "MyClass" :build/class-properties [:user.property/default-many]}}
+                   {:build/class-properties [:user.property/default-many]}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title "export"
@@ -45,23 +70,19 @@
     (is (= (get-in original-data [:pages-and-blocks 0 :blocks 0])
            (::sqlite-export/block imported-block))
         "Imported block equals exported block")
-    (is (= (:properties original-data) (:properties imported-block)))
-    (is (= (:classes original-data) (:classes imported-block)))))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-block)))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-block)))))
 
-(deftest import-block-in-different-graph
+(deftest ^:focus2 import-block-in-different-graph
   (let [original-data
         {:properties {:user.property/num-many
                       {:logseq.property/type :number
                        :db/cardinality :db.cardinality/many
                        :block/title "Num Many"
                        :logseq.property/hide? true}
-                      :user.property/p1
-                      {:db/cardinality :db.cardinality/one,
-                       :logseq.property/type :default,
-                       :block/title "p1"}}
+                      :user.property/p1 {:logseq.property/type :default}}
          :classes {:user.class/MyClass
-                   {:block/title "My Class"
-                    :build/class-properties [:user.property/num-many :user.property/p1]}}
+                   {:build/class-properties [:user.property/num-many :user.property/p1]}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title "export"
@@ -77,16 +98,16 @@
     (is (= (get-in original-data [:pages-and-blocks 0 :blocks 0])
            (::sqlite-export/block imported-block))
         "Imported block equals exported block")
-    (is (= (:properties original-data) (:properties imported-block)))
-    (is (= (:classes original-data) (:classes imported-block)))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-block)))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-block)))
 
     (testing "same import in another block"
       (let [imported-block (export-block-and-import-to-another-block conn conn2 "export" "import2")]
         (is (= (get-in original-data [:pages-and-blocks 0 :blocks 0])
                (::sqlite-export/block imported-block))
             "Imported block equals exported block")
-        (is (= (:properties original-data) (:properties imported-block)))
-        (is (= (:classes original-data) (:classes imported-block)))))))
+        (is (= (expand-properties (:properties original-data)) (:properties imported-block)))
+        (is (= (expand-classes (:classes original-data)) (:classes imported-block)))))))
 
 (deftest import-block-with-block-ref
   (let [page-uuid (random-uuid)
@@ -146,11 +167,8 @@
 (deftest import-page-with-different-blocks
   (let [original-data
         {:properties {:user.property/default {:logseq.property/type :default
-                                              :db/cardinality :db.cardinality/one
                                               :block/title "Default"}
-                      :user.property/num {:logseq.property/type :number
-                                          :db/cardinality :db.cardinality/one
-                                          :block/title "num"}}
+                      :user.property/num {:logseq.property/type :number}}
          :classes {:user.class/MyClass {:block/title "My Class"}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
@@ -171,7 +189,7 @@
         conn2 (db-test/create-conn)
         imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
-    (is (= (:properties original-data) (:properties imported-page))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-page))
         "Page's properties are imported")
     (is (= (:classes original-data) (:classes imported-page))
         "Page's classes are imported")
@@ -187,10 +205,11 @@
         property-uuid (random-uuid)
         journal-uuid (random-uuid)
         original-data
-        {:classes {:user.class/C1 {:block/title "C1" :block/uuid class-uuid :build/keep-uuid? true}}
+        {:classes {:user.class/C1 {:block/uuid class-uuid :build/keep-uuid? true}}
          :properties {:user.property/p1
-                      {:db/cardinality :db.cardinality/one, :logseq.property/type :default
-                       :block/uuid property-uuid :block/title "p1" :build/keep-uuid? true}}
+                      {:logseq.property/type :default
+                       :block/uuid property-uuid
+                       :build/keep-uuid? true}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}
@@ -207,9 +226,9 @@
         conn2 (db-test/create-conn)
         imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
-    (is (= (:properties original-data) (:properties imported-page))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-page))
         "Page's properties are imported")
-    (is (= (:classes original-data) (:classes imported-page))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-page))
         "Page's classes are imported")
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")
@@ -218,17 +237,14 @@
 
 (deftest import-page-with-different-page-and-classes
   (let [original-data
-        {:properties {:user.property/p1 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p1"}
-                      :user.property/p2 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p2"}
-                      :user.property/p3 {:db/cardinality :db.cardinality/one, :logseq.property/type :default, :block/title "p3"}}
-         :classes {:user.class/MyClass {:block/title "My Class"
-                                        :build/class-properties [:user.property/p1 :user.property/p2]}
-                   :user.class/MyClass2 {:block/title "MyClass2"}
-                   :user.class/ChildClass {:block/title "ChildClass"
-                                           :build/class-parent :user.class/MyClass
+        {:properties {:user.property/p1 {:logseq.property/type :default}
+                      :user.property/p2 {:logseq.property/type :default}
+                      :user.property/p3 {:logseq.property/type :default}}
+         :classes {:user.class/MyClass {:build/class-properties [:user.property/p1 :user.property/p2]}
+                   :user.class/MyClass2 {}
+                   :user.class/ChildClass {:build/class-parent :user.class/MyClass
                                            :build/class-properties [:user.property/p3]}
-                   :user.class/ChildClass2 {:block/title "ChildClass2"
-                                            :build/class-parent :user.class/MyClass2}}
+                   :user.class/ChildClass2 {:build/class-parent :user.class/MyClass2}}
          :pages-and-blocks
          [{:page {:block/title "page1"
                   :build/properties {:user.property/p1 "woot"}
@@ -239,9 +255,9 @@
         conn2 (db-test/create-conn)
         imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
-    (is (= (:properties original-data) (:properties imported-page))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-page))
         "Page's properties are imported")
-    (is (= (:classes original-data) (:classes imported-page))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-page))
         "Page's classes are imported")
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")
@@ -266,20 +282,13 @@
 (deftest import-page-with-different-property-types
   (let [block-object-uuid (random-uuid)
         original-data
-        {:properties {:user.property/num {:logseq.property/type :number
-                                          :db/cardinality :db.cardinality/one
-                                          :block/title "num"}
-                      :user.property/checkbox {:logseq.property/type :checkbox
-                                               :db/cardinality :db.cardinality/one
-                                               :block/title "checkbox"}
-                      :user.property/date {:logseq.property/type :date
-                                           :db/cardinality :db.cardinality/one
-                                           :block/title "date"}
+        {:properties {:user.property/num {:logseq.property/type :number}
+                      :user.property/checkbox {:logseq.property/type :checkbox}
+                      :user.property/date {:logseq.property/type :date}
                       :user.property/node {:logseq.property/type :node
                                            :db/cardinality :db.cardinality/many
-                                           :block/title "node"
                                            :build/property-classes [:user.class/MyClass]}}
-         :classes {:user.class/MyClass {:block/title "MyClass"}}
+         :classes {:user.class/MyClass {}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title "num block"
@@ -301,9 +310,9 @@
         conn2 (db-test/create-conn)
         imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
-    (is (= (:properties original-data) (:properties imported-page))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-page))
         "Page's properties are imported")
-    (is (= (:classes original-data) (:classes imported-page))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-page))
         "Page's classes are imported")
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")))
@@ -311,25 +320,16 @@
 (deftest import-graph-ontology
   (let [original-data
         {:properties
-         {:user.property/num {:logseq.property/type :number
-                              :db/cardinality :db.cardinality/one
-                              :block/title "num"}
-          :user.property/checkbox {:logseq.property/type :checkbox
-                                   :db/cardinality :db.cardinality/one
-                                   :block/title "checkbox"}
+         {:user.property/num {:logseq.property/type :number}
+          :user.property/checkbox {:logseq.property/type :checkbox}
           :user.property/url {:logseq.property/type :url
-                              :db/cardinality :db.cardinality/one
-                              :block/title "url"
                               :build/properties {:logseq.property/description "desc for url"}}
           :user.property/node {:logseq.property/type :node
                                :db/cardinality :db.cardinality/many
-                               :block/title "node"
                                :build/property-classes [:user.class/MyClass]}}
          :classes
-         {:user.class/MyClass {:block/title "MyClass"
-                               :build/properties {:user.property/url "https://example.com/MyClass"}}
-          :user.class/MyClass2 {:block/title "MyClass2"
-                                :build/class-parent :user.class/MyClass
+         {:user.class/MyClass {:build/properties {:user.property/url "https://example.com/MyClass"}}
+          :user.class/MyClass2 {:build/class-parent :user.class/MyClass
                                 :build/properties {:logseq.property/description "tests child class"}}}}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
@@ -341,5 +341,5 @@
         _ (d/transact! conn2 block-props-tx)
         imported-ontology (sqlite-export/build-export @conn2 {:export-type :graph-ontology})]
 
-    (is (= (:properties original-data) (:properties imported-ontology)))
-    (is (= (:classes original-data) (:classes imported-ontology)))))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-ontology)))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-ontology)))))
