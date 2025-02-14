@@ -612,10 +612,6 @@
 ;; Public API
 ;; ==========
 
-(defn uuid-prop-value?
-  [prop-value]
-  (and (vector? prop-value) (= :block/uuid (first prop-value))))
-
 (defn extract-from-blocks
   "Given a vec of blocks and a fn which applied to a block returns a coll, this
   returns the coll produced by applying f to all blocks including :build/children blocks"
