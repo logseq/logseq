@@ -47,7 +47,7 @@
                    (if (zero? hours) "" (str hours "h"))
                    (if (zero? minutes) "" (str minutes "m")))
       :else
-      (if (> seconds 1)
+      (if (> seconds 0)
         (str seconds "s")
         ""))))
 
