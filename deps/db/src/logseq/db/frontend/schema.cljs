@@ -18,6 +18,11 @@
   [string-or-compatible-number]
   (cond
     (schema-version? string-or-compatible-number) string-or-compatible-number
+    (and (sequential? string-or-compatible-number)
+         (first string-or-compatible-number))
+    {:major (first string-or-compatible-number)
+     :minor (second string-or-compatible-number)}
+
     (int? string-or-compatible-number) {:major string-or-compatible-number :minor nil}
     (string? string-or-compatible-number)
     (let [[major minor] (map parse-long (string/split string-or-compatible-number #"\."))]
