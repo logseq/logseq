@@ -156,8 +156,10 @@
         (update-in (:pages-and-blocks original-data) [0 :blocks]
                    (fn [blocks] (into blocks blocks)))]
 
-    (is (= expected-page-and-blocks (:pages-and-blocks imported-page))
-        "Blocks are appended to existing page blocks")
+    ;; Assume first page is one being imported for now
+    (is (= (first expected-page-and-blocks)
+           (first (:pages-and-blocks imported-page)))
+        "Blocks are appended to existing page")
     (is (= (:block/created-at page) (:block/created-at updated-page))
         "Existing page didn't get re-created")
     (is (= (:block/updated-at page) (:block/updated-at updated-page))
@@ -205,12 +207,15 @@
         page-uuid (random-uuid)
         property-uuid (random-uuid)
         journal-uuid (random-uuid)
+        block-object-uuid (random-uuid)
         original-data
-        {:classes {:user.class/C1 {:block/uuid class-uuid :build/keep-uuid? true}}
+        {:classes {:user.class/C1 {:block/uuid class-uuid :build/keep-uuid? true}
+                   :user.class/NodeClass {}}
          :properties {:user.property/p1
-                      {:logseq.property/type :default
+                      {:logseq.property/type :node
                        :block/uuid property-uuid
-                       :build/keep-uuid? true}}
+                       :build/keep-uuid? true
+                       :build/property-classes [:user.class/NodeClass]}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}
@@ -220,18 +225,32 @@
                     {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}
                     {:block/title (str "journal ref to " (page-ref/->page-ref journal-uuid))}]}
           {:page {:block/title "page with block ref"}
-           :blocks [{:block/title "hi" :block/uuid block-uuid :build/keep-uuid? true}]}
+           :blocks [{:block/title "hi" :block/uuid block-uuid :build/keep-uuid? true
+                     :build/properties {:user.property/p1 [:block/uuid block-object-uuid]}}]}
           {:page {:block/title "another page" :block/uuid page-uuid :build/keep-uuid? true}}
-          {:page {:build/journal 20250207 :block/uuid journal-uuid :build/keep-uuid? true}}]}
+          {:page {:build/journal 20250207 :block/uuid journal-uuid :build/keep-uuid? true}}
+          {:page {:block/title "Blocks"}
+           :blocks [{:block/title "myclass object"
+                     :build/tags [:user.class/MyClass]
+                     :block/uuid block-object-uuid
+                     :build/keep-uuid? true}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
-    (is (= (expand-properties (:properties original-data)) (:properties imported-page))
+    (is (= (-> (expand-properties (:properties original-data))
+               (medley/dissoc-in [:user.property/p1 :build/property-classes]))
+           (:properties imported-page))
         "Page's properties are imported")
-    (is (= (expand-classes (:classes original-data)) (:classes imported-page))
-        "Page's classes are imported")
-    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
+    (is (= (-> (expand-classes (:classes original-data))
+               (dissoc :user.class/NodeClass))
+           (:classes imported-page))
+        "Page's classes are imported except for shallow property's class")
+    (is (= (-> (:pages-and-blocks original-data)
+               (medley/dissoc-in [1 :blocks 0 :build/properties])
+               ;; shallow block means this page doesn't get included
+               butlast)
+           (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
     (import-second-time-assertions conn conn2 "page1" original-data)))
@@ -330,7 +349,10 @@
         "Page's properties are imported")
     (is (= (expand-classes (:classes original-data)) (:classes imported-page))
         "Page's classes are imported")
-    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
+    (is (= (-> (:pages-and-blocks original-data)
+               ;; adjust shallow block
+               (medley/dissoc-in [1 :blocks 0 :build/tags]))
+           (:pages-and-blocks imported-page))
         "Page's blocks are imported")))
 
 (deftest import-graph-ontology
