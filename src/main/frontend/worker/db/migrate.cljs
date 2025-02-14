@@ -715,8 +715,9 @@
    ["64.1" {:properties [:logseq.property.view/group-by-property]
             :fix add-view-icons}]])
 
-(let [max-schema-version (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
-                                          schema-version->updates)))
+(let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
+                                     schema-version->updates)))
+      max-schema-version {:major major :minor minor}
       compare-result (db-schema/compare-schema-version db-schema/version max-schema-version)]
   (assert (>= 0 compare-result) [db-schema/version max-schema-version])
   (when (neg? compare-result)
