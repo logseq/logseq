@@ -322,8 +322,9 @@
                       :user.property/date {:logseq.property/type :date}
                       :user.property/node {:logseq.property/type :node
                                            :db/cardinality :db.cardinality/many
-                                           :build/property-classes [:user.class/MyClass]}}
-         :classes {:user.class/MyClass {}}
+                                           :build/property-classes [:user.class/MyClass]}
+                      :user.property/p1 {:logseq.property/type :default}}
+         :classes {:user.class/MyClass {:build/class-properties [:user.property/p1]}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title "num block"
@@ -345,9 +346,14 @@
         conn2 (db-test/create-conn)
         imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
 
-    (is (= (expand-properties (:properties original-data)) (:properties imported-page))
+    (is (= (-> (expand-properties (:properties original-data))
+               ;; Don't include shallow page object's property
+               (dissoc :user.property/p1))
+           (:properties imported-page))
         "Page's properties are imported")
-    (is (= (expand-classes (:classes original-data)) (:classes imported-page))
+    (is (= (-> (expand-classes (:classes original-data))
+               (medley/dissoc-in [:user.class/MyClass :build/class-properties]))
+           (:classes imported-page))
         "Page's classes are imported")
     (is (= (-> (:pages-and-blocks original-data)
                ;; adjust shallow block

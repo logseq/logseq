@@ -132,20 +132,20 @@
 
 (defn- build-node-classes
   [db build-block block-tags properties]
-  (let [pvalue-class-ents (->> (:build/properties build-block)
-                               vals
-                               (mapcat (fn [val-or-vals]
-                                         (mapcat #(when (sqlite-build/page-prop-value? %) (:build/tags (second %)))
-                                                 (if (set? val-or-vals) val-or-vals [val-or-vals]))))
-                               (remove db-class/logseq-class?)
-                               (map #(d/entity db %)))
+  (let [pvalue-classes (->> (:build/properties build-block)
+                            vals
+                            (mapcat (fn [val-or-vals]
+                                      (mapcat #(when (sqlite-build/page-prop-value? %) (:build/tags (second %)))
+                                              (if (set? val-or-vals) val-or-vals [val-or-vals]))))
+                            (remove db-class/logseq-class?))
         property-classes (->> (mapcat :build/property-classes (vals properties))
                               (remove db-class/logseq-class?)
                               set)
-        new-class-ents (concat (remove #(db-class/logseq-class? (:db/ident %)) block-tags)
-                               pvalue-class-ents)
-        shallow-classes (set/difference property-classes (set (map :db/ident new-class-ents)))]
+        new-class-ents (remove #(db-class/logseq-class? (:db/ident %)) block-tags)
+        shallow-classes (set/difference (into property-classes pvalue-classes)
+                                        (set (map :db/ident new-class-ents)))]
     (merge
+     ;; These are shallow b/c properties have already been built
      (when (seq shallow-classes)
        (->> shallow-classes
             (map #(d/entity db %))
