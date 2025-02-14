@@ -10,21 +10,12 @@
   border-radius: 5px;
 }
 
-.editor-wrapper {
-  width: 100%;
-  margin: 0 auto;
-}
-
 .editor-inner {
-  position: relative;
-  display: flex;
+  @apply relative flex;
 
   textarea {
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    padding: 0;
-    resize: none;
+    @apply border-none rounded-none bg-transparent p-0 resize-none;
+
     box-shadow: none;
   }
 }
@@ -43,22 +34,6 @@
 
   &[data-modal-name] {
     @apply bg-popover border overflow-x-hidden overflow-y-auto rounded-lg py-1;
-  }
-
-  &[data-modal-name="commands"],
-  &[data-modal-name="select-code-block-mode"] {
-    @screen sm {
-      width: 380px !important;
-      max-width: 90vw !important;
-    }
-  }
-
-  &[data-modal-name="date-picker"] {
-    @apply py-0;
-
-    .rc-datepicker {
-      @apply my-0;
-    }
   }
 }
 
@@ -96,5 +71,53 @@ pre {
   }
 }
 
+.ui__popover-content, .ui__dropdown-menu-content {
+  &[data-editor-popup-ref] {
+    @apply p-1.5 w-72;
 
+    &[data-side=top] {
+      position: relative;
+      top: -18px;
+    }
+  }
 
+  &[data-editor-popup-ref=commands] {
+    @apply w-72;
+
+    &[data-side=top] {
+      max-height: min(calc(var(--radix-popover-content-available-height) - 60px), 460px);
+    }
+
+    &[data-side=bottom] {
+      max-height: min(calc(var(--radix-popover-content-available-height) - 20px), 480px);
+    }
+  }
+
+  &[data-editor-popup-ref=page-search],
+  &[data-editor-popup-ref=block-search],
+  &[data-editor-popup-ref=page-search-hashtag] {
+    @apply w-full sm:w-128;
+  }
+
+  &[data-editor-popup-ref=datepicker] {
+    @apply w-auto;
+  }
+}
+
+.cp__commands-slash {
+  .ui__icon {
+    opacity: .7;
+    margin-right: 1px;
+    color: inherit !important;
+
+    &.ls-icon-queryCode {
+      @apply relative left-[1px];
+    }
+  }
+
+  .menu-link {
+    &.chosen .ui__icon {
+      @apply opacity-100;
+    }
+  }
+}

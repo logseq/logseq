@@ -23,6 +23,7 @@
 (s/def ::developer-mode string?) ;; Funny string boolean
 (s/def :document/mode? boolean?)
 (s/def :ui/shortcut-tooltip? boolean?)
+(s/def :ui/recent-pages map?)
 (s/def :copy/export-block-text-indent-style string?)
 (s/def :copy/export-block-text-remove-options set?)
 (s/def :copy/export-block-text-other-options map?)
@@ -37,12 +38,16 @@
 ;; if all keys were namespaced with a unique name like this one
 (s/def ::local-storage
   ;; All these keys are optional since we usually only validate one key at a time
+  ;; Also note that none of the storage keys save with their namespace so names
+  ;; from different namespaces can clobber each other
+  ;; TODO: Actually use namespaced keys in storage
   (s/keys
    :opt-un [::ls-right-sidebar-state
             ::ls-right-sidebar-width
             ::ls-left-sidebar-open?
             :ui/theme
             :ui/system-theme?
+            :ui/recent-pages
             ::lsp-core-enabled
             ::instrument-disabled
             ::ls-pdf-area-is-dashed
