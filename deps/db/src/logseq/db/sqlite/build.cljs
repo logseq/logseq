@@ -16,6 +16,7 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
@@ -258,7 +259,7 @@
                              (when class-parent
                                {:logseq.property/parent
                                 (or (class-db-ids class-parent)
-                                    (if (db-class/logseq-class? class-parent)
+                                    (if (db-malli-schema/class? class-parent)
                                       class-parent
                                       (throw (ex-info (str "No :db/id for " class-parent) {}))))})
                              (when class-properties
