@@ -1417,6 +1417,14 @@
 
     (table-view table option row-selection *scroller-ref)))
 
+(defn- get-views
+  [ent view-identity]
+  (let [entity (db/entity (:db/id ent))
+        views (->> (:logseq.property/_view-for entity)
+                   (filter (fn [view]
+                             (= view-identity (:logseq.property.view/identity view)))))]
+    (ldb/sort-by-order views)))
+
 (defn- create-view!
   [view-parent view-identity]
   (when-let [page (db/get-case-page common-config/views-page-name)]
@@ -1425,8 +1433,24 @@
                          :logseq.property.view/identity view-identity}
                          (contains? #{:linked-references :unlinked-references} view-identity)
                          (assoc :logseq.property.view/type (:db/id (db/entity :logseq.property.view/type.list))))
-            result (editor-handler/api-insert-new-block! "" {:page (:block/uuid page)
-                                                             :properties properties})]
+            view-exists? (seq (get-views view-parent view-identity))
+            view-title (if view-exists?
+                         ""
+                         (case view-identity
+                           :linked-references
+                           "Linked references"
+                           :unlinked-references
+                           "Unlinked references"
+                           :class-objects
+                           "All"
+                           :property-objects
+                           "All"
+                           :all-pages
+                           "All pages"
+                           ""))
+            result (editor-handler/api-insert-new-block! view-title
+                                                         {:page (:block/uuid page)
+                                                          :properties properties})]
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
@@ -1469,17 +1493,17 @@
                                :logseq.property.view/type.table)]
           (when-let [icon (:logseq.property/icon (db/entity display-type))]
             (icon-component/icon icon {:color? true})))
-        (if (= (:db/id view) (:db/id view-parent))
-          "All"
-          (let [title (:block/title view)]
-            (if (= title "")
-              "New view"
-              title))))))
+        (let [title (:block/title view)]
+          (if (= title "")
+            "New view"
+            title)))))
    (shui/button
     {:variant :text
      :size :sm
      :class "!px-1 text-muted-foreground hover:text-foreground"
-     :on-click (fn [] (create-view! view-parent view-identity))}
+     :on-click (fn []
+                 (p/let [view (create-view! view-parent view-identity)]
+                   (set-views! (concat views [view]))))}
     (ui/icon "plus" {}))])
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
@@ -1646,15 +1670,6 @@
                               (::scroller-ref state))
       (str "view-" (:db/id view-entity')))))
 
-(defn- get-views
-  [ent]
-  (let [class (db/entity (:db/id ent))]
-    (->> (:logseq.property/_view-for class)
-         (remove (fn [view]
-                   (contains? #{:linked-references :unlinked-references}
-                              (:logseq.property.view/identity view))))
-         (ldb/sort-by-order))))
-
 (rum/defc view < rum/static
   [{:keys [view-parent view-identity view-entity] :as option}]
   (let [[view-entity set-view-entity!] (rum/use-state view-entity)
@@ -1662,7 +1677,7 @@
     (hooks/use-effect!
      (fn []
        (p/let [_result (db-async/<get-views (state/get-current-repo) (:db/id view-parent) view-identity)
-               views (get-views view-parent)]
+               views (get-views view-parent view-identity)]
          (if-let [v (first views)]
            (do
              (when-not view-entity (set-view-entity! v))
@@ -1671,7 +1686,7 @@
              (p/let [new-view (create-view! view-parent view-identity)]
                (set-view-entity! new-view)
                (set-views! (concat views [new-view])))))))
-     [])
+     [view-entity views])
     (view-container view-entity (assoc option
                                        :views views
                                        :set-views! set-views!

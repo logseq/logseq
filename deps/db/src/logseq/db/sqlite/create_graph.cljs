@@ -177,14 +177,6 @@
        :block/title common-config/views-page-name
        :block/tags [:logseq.class/Page]
        :logseq.property/hide? true
-       :logseq.property/built-in? true})
-     (sqlite-util/block-with-timestamps
-      {:block/uuid (common-uuid/gen-uuid)
-       :block/title "All Pages Default View"
-       :block/parent [:block/uuid page-id]
-       :block/order (db-order/gen-key nil)
-       :block/page [:block/uuid page-id]
-       :logseq.property/view-for [:block/uuid page-id]
        :logseq.property/built-in? true})]))
 
 (defn- build-favorites-page
