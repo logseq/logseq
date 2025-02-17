@@ -3426,7 +3426,34 @@
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
         selected? (contains? (set (state/get-selection-block-ids)) (:block/uuid block))
-        db-based? (config/db-based-graph? repo)]
+        db-based? (config/db-based-graph? repo)
+        page-icon (when (:page-title? config)
+                    (let [icon' (get block (pu/get-pid :logseq.property/icon))]
+                      (when-let [icon (and (ldb/page? block)
+                                           (or icon'
+                                               (some :logseq.property/icon (:block/tags block))
+                                               (when (ldb/class? block)
+                                                 {:type :tabler-icon
+                                                  :id "hash"})
+                                               (when (ldb/property? block)
+                                                 {:type :tabler-icon
+                                                  :id "letter-p"})))]
+                        [:div.ls-page-icon.flex.self-start
+                         (icon-component/icon-picker icon
+                                                     {:on-chosen (fn [_e icon]
+                                                                   (if icon
+                                                                     (db-property-handler/set-block-property!
+                                                                      (:db/id block)
+                                                                      (pu/get-pid :logseq.property/icon)
+                                                                      (select-keys icon [:id :type :color]))
+                                                             ;; del
+                                                                     (db-property-handler/remove-block-property!
+                                                                      (:db/id block)
+                                                                      (pu/get-pid :logseq.property/icon))))
+                                                      :del-btn? (boolean icon')
+                                                      :icon-props {:style {:width "1lh"
+                                                                           :height "1lh"
+                                                                           :font-size (if (:page-title? config) 38 18)}}})])))]
     [:div.ls-block
      (cond->
       {:id (str "ls-block-"
@@ -3478,7 +3505,7 @@
      (when-not (:hide-title? config)
        [:div.block-main-container.flex.flex-row.gap-1
         {:style (when (and db-based? (:page-title? config))
-                  {:margin-left -30})
+                  {:margin-left (if page-icon -36 -30)})
          :data-has-heading (some-> block (pu/lookup :logseq.property/heading))
          :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
          :on-touch-move (fn [event]
@@ -3510,37 +3537,12 @@
          [:div.block-main-content.flex.flex-row.gap-2
           (when-let [actions-cp (:page-title-actions-cp config)]
             (actions-cp block))
-          (when (:page-title? config)
-            (let [icon' (get block (pu/get-pid :logseq.property/icon))]
-              (when-let [icon (and (ldb/page? block)
-                                   (or icon'
-                                       (some :logseq.property/icon (:block/tags block))
-                                       (when (ldb/class? block)
-                                         {:type :tabler-icon
-                                          :id "hash"})
-                                       (when (ldb/property? block)
-                                         {:type :tabler-icon
-                                          :id "letter-p"})))]
-                [:div.ls-page-icon.flex.self-start
-                 (icon-component/icon-picker icon
-                                             {:on-chosen (fn [_e icon]
-                                                           (if icon
-                                                             (db-property-handler/set-block-property!
-                                                              (:db/id block)
-                                                              (pu/get-pid :logseq.property/icon)
-                                                              (select-keys icon [:id :type :color]))
-                                                             ;; del
-                                                             (db-property-handler/remove-block-property!
-                                                              (:db/id block)
-                                                              (pu/get-pid :logseq.property/icon))))
-                                              :del-btn? (boolean icon')
-                                              :icon-props {:style {:width "1lh"
-                                                                   :height "1lh"
-                                                                   :font-size (if (:page-title? config) 38 18)}}})])))
+          (when page-icon
+            page-icon)
 
           (if whiteboard-block?
             (block-reference {} (str uuid) nil)
-          ;; Not embed self
+            ;; Not embed self
             [:div.flex.flex-col.w-full
              (let [block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) pre-block? title))
                    hide-block-refs-count? (or (and (:embed? config)

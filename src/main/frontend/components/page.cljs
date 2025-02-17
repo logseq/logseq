@@ -696,7 +696,7 @@
                                                    :whiteboard? whiteboard?}))]])
 
            (when (not preview?)
-             [:div {:style {:padding-left 9}}
+             [:div.ml-1
               (when today?
                 (today-queries repo today? sidebar?))
 
