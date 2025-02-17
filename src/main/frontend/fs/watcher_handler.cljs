@@ -7,7 +7,7 @@
             [frontend.db.model :as model]
             [frontend.fs :as fs]
             [logseq.common.path :as path]
-            [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]

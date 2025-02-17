@@ -5,7 +5,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.db-based.editor :as db-editor-handler]
-            [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.state :as state]))
 

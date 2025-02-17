@@ -3,7 +3,7 @@
   (:require [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.common.file :as file-common-handler]
             [frontend.handler.route :as route-handler]

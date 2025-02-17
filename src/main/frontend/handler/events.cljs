@@ -46,7 +46,7 @@
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export]
-            [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.graph :as graph-handler]

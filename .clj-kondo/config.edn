@@ -108,6 +108,7 @@
              frontend.handler.editor.property editor-property
              frontend.handler.events events
              frontend.handler.extract extract
+             frontend.handler.file-based.file file-handler
              frontend.handler.file-based.page file-page-handler
              frontend.handler.file-based.page-property file-page-property
              frontend.handler.file-based.property file-property-handler
