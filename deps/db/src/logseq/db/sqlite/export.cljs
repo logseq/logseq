@@ -179,7 +179,7 @@
         new-properties (when-not shallow-copy? (build-node-properties db entity ent-properties properties))
         build-node (cond-> {:block/title (block-title entity)}
                      (include-uuid-fn (:block/uuid entity))
-                     (assoc :block/uuid (:block/uuid entity))
+                     (assoc :block/uuid (:block/uuid entity) :build/keep-uuid? true)
                      keep-uuid?
                      (assoc :build/keep-uuid? true)
                      (and (not shallow-copy?) (seq build-tags))
