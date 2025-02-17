@@ -1478,8 +1478,8 @@
                             (shui/dropdown-menu-sub-trigger
                              "Rename")
                             (shui/dropdown-menu-sub-content
-                             (when-let [block-container (state/get-component :block/container)]
-                               (block-container {} view))))
+                             (when-let [block-container-cp (state/get-component :block/container)]
+                               (block-container-cp {} view))))
                            (shui/dropdown-menu-item
                             {:key "Delete"
                              :on-click (fn []
