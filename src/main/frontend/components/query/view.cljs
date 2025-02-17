@@ -48,22 +48,23 @@
         columns' (columns (assoc config :container-id (::container-id state)) result')
         set-data! (fn [data] (reset! *result data))]
     [:div.query-result.w-full
-     (views/view view-entity
-                 {:title-key :views.table/live-query-title
-                  :data result'
-                  :set-data! set-data!
-                  :columns columns'
-                  :on-delete-rows (fn [table selected-rows]
-                                    (let [pages (filter ldb/page? selected-rows)
-                                          blocks (remove ldb/page? selected-rows)
-                                          selected (set (map :id (remove :logseq.property/built-in? selected-rows)))
-                                          data' (remove (fn [row] (contains? selected (:id row))) (:data table))]
-                                      (p/do!
-                                       (set-data! data')
-                                       (ui-outliner-tx/transact!
-                                        {:outliner-op :delete-blocks}
-                                        (when (seq blocks)
-                                          (outliner-op/delete-blocks! blocks nil))
-                                        (doseq [page pages]
-                                          (when-let [id (:block/uuid page)]
-                                            (outliner-op/delete-page! id)))))))})]))
+     (views/view
+      {:title-key :views.table/live-query-title
+       :view-entity view-entity
+       :data result'
+       :set-data! set-data!
+       :columns columns'
+       :on-delete-rows (fn [table selected-rows]
+                         (let [pages (filter ldb/page? selected-rows)
+                               blocks (remove ldb/page? selected-rows)
+                               selected (set (map :id (remove :logseq.property/built-in? selected-rows)))
+                               data' (remove (fn [row] (contains? selected (:id row))) (:data table))]
+                           (p/do!
+                            (set-data! data')
+                            (ui-outliner-tx/transact!
+                             {:outliner-op :delete-blocks}
+                             (when (seq blocks)
+                               (outliner-op/delete-blocks! blocks nil))
+                             (doseq [page pages]
+                               (when-let [id (:block/uuid page)]
+                                 (outliner-op/delete-page! id)))))))})]))
