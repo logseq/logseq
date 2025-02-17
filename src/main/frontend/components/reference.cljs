@@ -112,11 +112,17 @@
   ;;                       (reset! *collapsed? collapsed-atom))}))
   (let [blocks (->> (mapcat second filtered-ref-blocks)
                     (map (fn [b] (assoc (db/entity (:db/id b)) :id (:db/id b)))))
-        columns' (columns {} blocks)]
-    (views/view {:logseq.property.view/type (db/entity :logseq.property.view/type.list)}
-                {:views-title "Linked references"
-                 :data blocks
-                 :columns columns'})))
+        columns' (columns {} blocks)
+        views (filter (fn [v] (= (:logseq.property.view/identity v) :linked-references))
+                      (:logseq.property/_view-for page-entity))]
+    (when (seq blocks)
+      (views/view (first views)
+                  {:views-title "Linked references"
+                   :view-identity :linked-references
+                   :view-block-title "Linked references"
+                   :view-parent page-entity
+                   :data blocks
+                   :columns columns'}))))
 
 (defn- get-filtered-children
   [block parent->blocks]

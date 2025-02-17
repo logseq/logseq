@@ -42,8 +42,11 @@
 (defn- get-views
   [ent]
   (let [class (db/entity (:db/id ent))]
-    (-> (:logseq.property/_view-for class)
-        (ldb/sort-by-order))))
+    (->> (:logseq.property/_view-for class)
+         (remove (fn [view]
+                   (contains? #{:linked-references :unlinked-references}
+                              (:logseq.property.view/identity view))))
+         (ldb/sort-by-order))))
 
 (defn- create-view!
   [class view-title views set-view-entity! set-views!]
@@ -167,6 +170,7 @@
                    :set-data! set-data!
                    :views-title (class-views class views view-entity {:set-view-entity! set-view-entity!
                                                                       :set-views! set-views!})
+                   :view-parent class
                    :columns columns
                    :add-new-object! (fn [{:keys [properties]}]
                                       (if (= :logseq.class/Asset (:db/ident class))
@@ -257,6 +261,7 @@
       (views/view view-entity
                   {:config config
                    :data data
+                   :view-parent property
                    :set-data! set-data!
                    :title-key :views.table/property-nodes
                    :columns columns

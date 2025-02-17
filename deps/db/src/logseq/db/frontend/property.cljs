@@ -407,6 +407,17 @@
             :rtc/ignore-attr-when-init-download true
             :rtc/ignore-attr-when-syncing true}}
 
+     :logseq.property.view/identity
+     {:title "View Identity"
+      :schema
+      {:type :keyword
+       :public? false
+       :hide? true}
+      :queryable? false
+      :rtc {:rtc/ignore-attr-when-init-upload true
+            :rtc/ignore-attr-when-init-download true
+            :rtc/ignore-attr-when-syncing true}}
+
      :logseq.property.view/group-by-property
      {:title "View group by property"
       :schema
