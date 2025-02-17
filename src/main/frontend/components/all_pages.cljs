@@ -10,6 +10,7 @@
             [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -55,9 +56,7 @@
         [loading? set-loading!] (rum/use-state true)
         columns' (views/build-columns {} (columns)
                                       {:with-object-name? false
-                                       :with-id? false})
-        ;; view-entity (first (ldb/get-all-pages-views db))
-        ]
+                                       :with-id? false})]
     (hooks/use-effect!
      (fn []
        (when-let [^js worker @state/*db-worker]
@@ -73,7 +72,7 @@
        (ui/skeleton)
        (views/view {:data data
                     :set-data! set-data!
-                    :view-parent nil
+                    :view-parent (db/get-page common-config/views-page-name)
                     :view-identity :all-pages
                     :columns columns'
                     :on-delete-rows (fn [table selected-rows]

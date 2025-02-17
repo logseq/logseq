@@ -611,12 +611,6 @@
      (let [class-parent-ids (set (map :db/id (get-classes-parents tags)))]
        (contains? (set/union class-parent-ids tags-ids) (:db/id class))))))
 
-(defn get-all-pages-views
-  [db]
-  (when (db-based-graph? db)
-    (when-let [page (get-page db common-config/views-page-name)]
-      (:logseq.property/_view-for page))))
-
 (defn inline-tag?
   [block-raw-title tag]
   (assert (string? block-raw-title) "block-raw-title should be a string")
