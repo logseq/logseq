@@ -1,7 +1,6 @@
 (ns frontend.components.objects
   "Provides table views for class objects and property related objects"
   (:require [frontend.components.filepicker :as filepicker]
-            [frontend.components.icon :as icon-component]
             [frontend.components.views :as views]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -15,8 +14,6 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util]
-            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.property :as outliner-property]
@@ -39,77 +36,6 @@
     (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
     block))
 
-(defn- get-views
-  [ent]
-  (let [class (db/entity (:db/id ent))]
-    (->> (:logseq.property/_view-for class)
-         (remove (fn [view]
-                   (contains? #{:linked-references :unlinked-references}
-                              (:logseq.property.view/identity view))))
-         (ldb/sort-by-order))))
-
-(defn- create-view!
-  [class view-title views set-view-entity! set-views!]
-  (when-let [page (db/get-case-page common-config/views-page-name)]
-    (p/let [result (editor-handler/api-insert-new-block! view-title {:page (:block/uuid page)
-                                                                     :properties {:logseq.property/view-for (:db/id class)}})
-            view (db/entity [:block/uuid (:block/uuid result)])]
-      (set-view-entity! view)
-      (set-views! (concat views [view])))))
-
-(rum/defc class-views < rum/reactive db-mixins/query
-  [class views current-view {:keys [set-view-entity! set-views!]}]
-  [:div.views.flex.flex-row.items-center.flex-wrap.gap-1
-   (for [view* views]
-     (let [view (db/sub-block (:db/id view*))
-           current-view? (= (:db/id current-view) (:db/id view))]
-       (shui/button
-        {:variant :ghost
-         :size :sm
-         :class (str "text-sm px-2 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
-         :on-click (fn [e]
-                     (if (and current-view? (not= (:db/id view) (:db/id class)))
-                       (shui/popup-show!
-                        (.-target e)
-                        (fn []
-                          [:<>
-                           (shui/dropdown-menu-sub
-                            (shui/dropdown-menu-sub-trigger
-                             "Rename")
-                            (shui/dropdown-menu-sub-content
-                             (when-let [block-container (state/get-component :block/container)]
-                               (block-container {} view))))
-                           (shui/dropdown-menu-item
-                            {:key "Delete"
-                             :on-click (fn []
-                                         (p/do!
-                                          (editor-handler/delete-block-aux! view)
-                                          (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
-                                            (set-views! views')
-                                            (set-view-entity! (first views'))
-                                            (shui/popup-hide!))))}
-                            "Delete")])
-                        {:as-dropdown? true
-                         :align "start"
-                         :content-props {:onClick shui/popup-hide!}})
-                       (set-view-entity! view)))}
-        (let [display-type (or (:db/ident (get view :logseq.property.view/type))
-                               :logseq.property.view/type.table)]
-          (when-let [icon (:logseq.property/icon (db/entity display-type))]
-            (icon-component/icon icon {:color? true})))
-        (if (= (:db/id view) (:db/id class))
-          "All"
-          (let [title (:block/title view)]
-            (if (= title "")
-              "New view"
-              title))))))
-   (shui/button
-    {:variant :text
-     :size :sm
-     :class "!px-1 text-muted-foreground hover:text-foreground"
-     :on-click (fn [] (create-view! class "" views set-view-entity! set-views!))}
-    (ui/icon "plus" {}))])
-
 (defn- build-asset-file-column
   [config]
   {:id :file
@@ -124,8 +50,6 @@
 (rum/defc class-objects-inner < rum/static
   [config class objects properties]
   (let [[loading? set-loading?] (rum/use-state nil)
-        [view-entity set-view-entity!] (rum/use-state class)
-        [views set-views!] (rum/use-state [class])
         [data set-data!] (rum/use-state objects)
         ;; Properties can be nil for published private graphs
         properties' (remove nil? properties)
@@ -148,29 +72,20 @@
      (fn []
        (when (nil? loading?)
          (set-loading? true)
-         (p/let [_result (db-async/<get-views (state/get-current-repo) (:db/id class))
-                 views (get-views class)
-                 views (->> (concat [class] views)
-                            (util/distinct-by :db/id))]
-           (set-views! views)
-           (when-let [view (first views)]
-             (set-view-entity! view))
-           (p/let [_result (db-async/<get-tag-objects (state/get-current-repo) (:db/id class))]
-             (react/refresh! (state/get-current-repo)
-                             [[:frontend.worker.react/objects (:db/id class)]])
-             (set-data! (get-class-objects class))
-             (set-loading? false)))))
+         (p/let [_result (db-async/<get-tag-objects (state/get-current-repo) (:db/id class))]
+           (react/refresh! (state/get-current-repo)
+                           [[:frontend.worker.react/objects (:db/id class)]])
+           (set-data! (get-class-objects class))
+           (set-loading? false))))
      [])
 
     (if loading?
       (ui/skeleton)
-      (views/view view-entity
-                  {:config config
+      (views/view {:config config
                    :data data
                    :set-data! set-data!
-                   :views-title (class-views class views view-entity {:set-view-entity! set-view-entity!
-                                                                      :set-views! set-views!})
                    :view-parent class
+                   :view-identity :class-objects
                    :columns columns
                    :add-new-object! (fn [{:keys [properties]}]
                                       (if (= :logseq.class/Asset (:db/ident class))
@@ -239,31 +154,25 @@
 (rum/defc property-related-objects-inner < rum/static
   [config property objects properties]
   (let [[loading? set-loading?] (rum/use-state property)
-        [view-entity set-view-entity!] (rum/use-state property)
         [data set-data!] (rum/use-state objects)
         columns (views/build-columns config properties)]
 
     (hooks/use-effect!
      (fn []
        (set-loading? true)
-       (p/let [_result (db-async/<get-views (state/get-current-repo) (:db/id property))
-               views (get-views property)]
-         (when-let [view (first views)]
-           (set-view-entity! view))
-         (p/let [result (db-async/<get-property-objects (state/get-current-repo) (:db/ident property))]
-           (set-data! (mapv (fn [m]
-                              (let [e (db/entity (:db/id m))]
-                                (assoc e :id (:db/id m)))) result))
-           (set-loading? false))))
+       (p/let [result (db-async/<get-property-objects (state/get-current-repo) (:db/ident property))]
+         (set-data! (mapv (fn [m]
+                            (let [e (db/entity (:db/id m))]
+                              (assoc e :id (:db/id m)))) result))
+         (set-loading? false)))
      [])
 
     (when (false? loading?)
-      (views/view view-entity
-                  {:config config
+      (views/view {:config config
                    :data data
                    :view-parent property
+                   :view-identity :property-objects
                    :set-data! set-data!
-                   :title-key :views.table/property-nodes
                    :columns columns
                    :add-new-object! (fn [{:keys [properties]}]
                                       (add-new-property-object! property set-data! properties))

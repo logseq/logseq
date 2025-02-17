@@ -17,6 +17,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.async :as db-async]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
@@ -1416,9 +1417,73 @@
 
     (table-view table option row-selection *scroller-ref)))
 
+(defn- create-view!
+  [view-parent view-identity]
+  (when-let [page (db/get-case-page common-config/views-page-name)]
+    (p/let [properties (cond->
+                        {:logseq.property/view-for (:db/id view-parent)
+                         :logseq.property.view/identity view-identity}
+                         (contains? #{:linked-references :unlinked-references} view-identity)
+                         (assoc :logseq.property.view/type (:db/id (db/entity :logseq.property.view/type.list))))
+            result (editor-handler/api-insert-new-block! "" {:page (:block/uuid page)
+                                                             :properties properties})]
+      (db/entity [:block/uuid (:block/uuid result)]))))
+
+(rum/defc views-tab < rum/reactive db-mixins/query
+  [view-parent current-view {:keys [views set-view-entity! set-views! view-identity]}]
+  [:div.views.flex.flex-row.items-center.flex-wrap.gap-1
+   (for [view* views]
+     (let [view (db/sub-block (:db/id view*))
+           current-view? (= (:db/id current-view) (:db/id view))]
+       (shui/button
+        {:variant :ghost
+         :size :sm
+         :class (str "text-sm px-2 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
+         :on-click (fn [e]
+                     (if (and current-view? (not= (:db/id view) (:db/id view-parent)))
+                       (shui/popup-show!
+                        (.-target e)
+                        (fn []
+                          [:<>
+                           (shui/dropdown-menu-sub
+                            (shui/dropdown-menu-sub-trigger
+                             "Rename")
+                            (shui/dropdown-menu-sub-content
+                             (when-let [block-container (state/get-component :block/container)]
+                               (block-container {} view))))
+                           (shui/dropdown-menu-item
+                            {:key "Delete"
+                             :on-click (fn []
+                                         (p/do!
+                                          (editor-handler/delete-block-aux! view)
+                                          (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
+                                            (set-views! views')
+                                            (set-view-entity! (first views'))
+                                            (shui/popup-hide!))))}
+                            "Delete")])
+                        {:as-dropdown? true
+                         :align "start"
+                         :content-props {:onClick shui/popup-hide!}})
+                       (set-view-entity! view)))}
+        (let [display-type (or (:db/ident (get view :logseq.property.view/type))
+                               :logseq.property.view/type.table)]
+          (when-let [icon (:logseq.property/icon (db/entity display-type))]
+            (icon-component/icon icon {:color? true})))
+        (if (= (:db/id view) (:db/id view-parent))
+          "All"
+          (let [title (:block/title view)]
+            (if (= title "")
+              "New view"
+              title))))))
+   (shui/button
+    {:variant :text
+     :size :sm
+     :class "!px-1 text-muted-foreground hover:text-foreground"
+     :on-click (fn [] (create-view! view-parent view-identity))}
+    (ui/icon "plus" {}))])
+
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
-  [view-entity {:keys [data set-data! columns add-new-object! views-title title-key render-empty-title?] :as option
-                :or {render-empty-title? false}}
+  [view-entity {:keys [view-parent data set-data! columns add-new-object!] :as option}
    *scroller-ref]
   (let [[input set-input!] (rum/use-state "")
         sorting* (:logseq.property.table/sorting view-entity)
@@ -1501,13 +1566,8 @@
      {:ref *view-ref}
      (ui/foldable
       [:div.flex.flex-1.flex-wrap.items-center.justify-between.gap-1
-       (when-not render-empty-title?
-         [:div.flex.flex-row.items-center.gap-2
-          (or
-           views-title
-           [:div.font-medium.opacity-50.text-sm
-            (t (or title-key :views.table/default-title)
-               (count (:rows table)))])])
+       [:div.flex.flex-row.items-center.gap-2
+        (views-tab view-parent view-entity option)]
        [:div.view-actions.flex.items-center.gap-1
 
         (when (seq sorting)
@@ -1562,19 +1622,7 @@
            (view-cp view-entity table option view-opts)))]
       {:title-trigger? false})]))
 
-(defn- create-view!
-  [view-parent view-title view-identity]
-  (when-let [page (db/get-case-page common-config/views-page-name)]
-    (p/let [properties (cond->
-                        {:logseq.property/view-for (:db/id view-parent)
-                         :logseq.property.view/identity view-identity}
-                         (contains? #{:linked-references :unlinked-references} view-identity)
-                         (assoc :logseq.property.view/type (:db/id (db/entity :logseq.property.view/type.list))))
-            result (editor-handler/api-insert-new-block! view-title {:page (:block/uuid page)
-                                                                     :properties properties})]
-      (db/entity [:block/uuid (:block/uuid result)]))))
-
-(rum/defcs view
+(rum/defcs view-container
   "Provides a view for data like query results and tagged objects, multiple
    layouts such as table and list are supported. Args:
    * view-entity: a db Entity
@@ -1587,27 +1635,44 @@
      * show-add-property?: whether to show `Add property`
      * add-property!: `fn` to add a new property (or column)
      * on-delete-rows: `fn` to trigger when deleting selected objects"
-  < rum/reactive
-  {:init (fn [state]
-           (let [[view-entity option] (:rum/args state)
-                 *view-entity (atom view-entity)]
-             (when (and (nil? view-entity)
-                        (:view-parent option)
-                        (string? (:view-block-title option))
-                        (keyword? (:view-identity option)))
-               ;; view not exists yet, let's create one
-               (p/let [new-view (create-view! (:view-parent option)
-                                              (:view-block-title option)
-                                              (:view-identity option))]
-                 (reset! *view-entity new-view)))
-             (assoc state ::view-entity *view-entity)))}
+  < rum/reactive db-mixins/query
   (rum/local nil ::scroller-ref)
-  [state _view-entity option]
-  (let [view-entity (rum/react (::view-entity state))
-        view-entity' (or (db/sub-block (:db/id view-entity)) view-entity)]
+  [state view-entity option]
+  (let [view-entity' (or (db/sub-block (:db/id view-entity)) view-entity)]
     (rum/with-key (view-inner view-entity'
                               (cond-> option
                                 config/publishing?
                                 (dissoc :add-new-object!))
                               (::scroller-ref state))
       (str "view-" (:db/id view-entity')))))
+
+(defn- get-views
+  [ent]
+  (let [class (db/entity (:db/id ent))]
+    (->> (:logseq.property/_view-for class)
+         (remove (fn [view]
+                   (contains? #{:linked-references :unlinked-references}
+                              (:logseq.property.view/identity view))))
+         (ldb/sort-by-order))))
+
+(rum/defc view < rum/static
+  [{:keys [view-parent view-identity view-entity] :as option}]
+  (let [[view-entity set-view-entity!] (rum/use-state view-entity)
+        [views set-views!] (rum/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [_result (db-async/<get-views (state/get-current-repo) (:db/id view-parent) view-identity)
+               views (get-views view-parent)]
+         (if-let [v (first views)]
+           (do
+             (when-not view-entity (set-view-entity! v))
+             (set-views! views))
+           (when (and view-parent view-identity (not view-entity))
+             (p/let [new-view (create-view! view-parent view-identity)]
+               (set-view-entity! new-view)
+               (set-views! (concat views [new-view])))))))
+     [])
+    (view-container view-entity (assoc option
+                                       :views views
+                                       :set-views! set-views!
+                                       :set-view-entity! set-view-entity!))))
