@@ -15,7 +15,7 @@
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
-            [frontend.components.git :as git-component]
+            [frontend.components.file-based.git :as git-component]
             [frontend.components.plugins :as plugin]
             [frontend.components.property.dialog :as property-dialog]
             [frontend.components.repo :as repo]
