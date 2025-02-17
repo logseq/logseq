@@ -10,6 +10,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.fs :as fs]
+            [frontend.handler.file-based.import :as file-import-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.import :as import-handler]
             [frontend.handler.notification :as notification]
@@ -59,7 +60,7 @@
           (set! (.-onload reader)
                 (fn [e]
                   (let [text (.. e -target -result)]
-                    (import-handler/import-from-roam-json!
+                    (file-import-handler/import-from-roam-json!
                      text
                      #(do
                         (state/set-state! :graph/importing nil)
