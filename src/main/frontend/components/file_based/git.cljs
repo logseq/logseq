@@ -1,4 +1,4 @@
-(ns frontend.components.git
+(ns frontend.components.file-based.git
   (:require [clojure.string :as string]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.shell :as shell]

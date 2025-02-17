@@ -49,7 +49,8 @@
                  (config/db-based-graph? repo))
             (db-editor-handler/save-file! (:file-path config) value)
 
-            (not-empty (:file-path config))
+            (and (not-empty (:file-path config))
+                 (not (config/db-based-graph? repo)))
             (let [path (:file-path config)
                   repo-dir (config/get-repo-dir repo)
                   rpath (when (string/starts-with? path repo-dir)
