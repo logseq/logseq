@@ -6,7 +6,7 @@
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.handler.common.file :as file-common-handler]
+            [frontend.handler.file-based.reset-file :as reset-file-handler]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -168,7 +168,7 @@
                                          [[:db/retract page-id :block/alias]
                                           [:db/retract page-id :block/tags]]
                                          opts)))
-                       (file-common-handler/reset-file!
+                       (reset-file-handler/reset-file!
                         repo path content (merge opts
                                                  ;; To avoid skipping the `:or` bounds for keyword destructuring
                                                  (when (some? extracted-block-ids) {:extracted-block-ids extracted-block-ids})
@@ -248,7 +248,7 @@
     (when update-db?
       (doseq [[path content] files]
         (if reset?
-          (file-common-handler/reset-file! repo path content)
+          (reset-file-handler/reset-file! repo path content)
           (db/set-file-content! repo path content))))
     (alter-files-handler! repo files opts file->content)))
 

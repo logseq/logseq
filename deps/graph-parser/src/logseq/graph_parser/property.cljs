@@ -1,5 +1,5 @@
 (ns logseq.graph-parser.property
-  "Core vars and util fns for properties and file based graphs"
+  "For file graphs, core vars and util fns for properties"
   (:require [logseq.common.util :as common-util]
             [clojure.string :as string]
             [clojure.set :as set]
