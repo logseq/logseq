@@ -18,6 +18,7 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.ui :as ui-handler]
@@ -27,12 +28,14 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.table.core :as table-core]
             [logseq.shui.ui :as shui]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defn- get-latest-entity
@@ -1488,9 +1491,10 @@
         table (shui/table-option table-map)
         *view-ref (rum/use-ref nil)
         display-type (or (:db/ident (get view-entity :logseq.property.view/type))
+                         (when (= (:view-type option) :linked-references)
+                           :logseq.property.view/type.list)
                          :logseq.property.view/type.table)
         gallery? (= display-type :logseq.property.view/type.gallery)]
-
     (run-effects! option table-map input input-filters set-input-filters! *scroller-ref gallery?)
 
     [:div.flex.flex-col.gap-2.grid
@@ -1558,6 +1562,18 @@
            (view-cp view-entity table option view-opts)))]
       {:title-trigger? false})]))
 
+(defn- create-view!
+  [view-parent view-title view-identity]
+  (when-let [page (db/get-case-page common-config/views-page-name)]
+    (p/let [properties (cond->
+                        {:logseq.property/view-for (:db/id view-parent)
+                         :logseq.property.view/identity view-identity}
+                         (contains? #{:linked-references :unlinked-references} view-identity)
+                         (assoc :logseq.property.view/type (:db/id (db/entity :logseq.property.view/type.list))))
+            result (editor-handler/api-insert-new-block! view-title {:page (:block/uuid page)
+                                                                     :properties properties})]
+      (db/entity [:block/uuid (:block/uuid result)]))))
+
 (rum/defcs view
   "Provides a view for data like query results and tagged objects, multiple
    layouts such as table and list are supported. Args:
@@ -1572,9 +1588,23 @@
      * add-property!: `fn` to add a new property (or column)
      * on-delete-rows: `fn` to trigger when deleting selected objects"
   < rum/reactive
+  {:init (fn [state]
+           (let [[view-entity option] (:rum/args state)
+                 *view-entity (atom view-entity)]
+             (when (and (nil? view-entity)
+                        (:view-parent option)
+                        (string? (:view-block-title option))
+                        (keyword? (:view-identity option)))
+               ;; view not exists yet, let's create one
+               (p/let [new-view (create-view! (:view-parent option)
+                                              (:view-block-title option)
+                                              (:view-identity option))]
+                 (reset! *view-entity new-view)))
+             (assoc state ::view-entity *view-entity)))}
   (rum/local nil ::scroller-ref)
-  [state view-entity option]
-  (let [view-entity' (or (db/sub-block (:db/id view-entity)) view-entity)]
+  [state _view-entity option]
+  (let [view-entity (rum/react (::view-entity state))
+        view-entity' (or (db/sub-block (:db/id view-entity)) view-entity)]
     (rum/with-key (view-inner view-entity'
                               (cond-> option
                                 config/publishing?

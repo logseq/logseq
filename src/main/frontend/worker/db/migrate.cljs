@@ -713,7 +713,8 @@
    ;;;; schema-version format: "<major>.<minor>"
    ;;;; int number equals to "<major>" (without <minor>)
    ["64.1" {:properties [:logseq.property.view/group-by-property]
-            :fix add-view-icons}]])
+            :fix add-view-icons}]
+   ["64.2" {:properties [:logseq.property.view/identity]}]])
 
 (let [max-schema-version (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                           schema-version->updates)))
