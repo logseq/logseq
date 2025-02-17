@@ -333,7 +333,7 @@
        {:variant "ghost"
         :class "text-muted-foreground !px-1"
         :size :sm}
-       (ui/icon "dots")))
+       (ui/icon "dots" {:size 15})))
      (shui/dropdown-menu-content
       {:align "end"}
       (shui/dropdown-menu-group
@@ -650,7 +650,7 @@
         :class "text-muted-foreground !px-1"
         :size :sm
         :on-click #(set-show-input! true)}
-       (ui/icon "search")))))
+       (ui/icon "search" {:size 15})))))
 
 (defn- get-property-values
   [rows property]
@@ -1459,15 +1459,15 @@
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
-  [view-parent current-view {:keys [views set-view-entity! set-views! view-identity]}]
-  [:div.views.flex.flex-row.items-center.flex-wrap.gap-1
+  [view-parent current-view {:keys [views set-view-entity! set-views! view-identity]} hover?]
+  [:div.views.flex.flex-row.items-center.flex-wrap.gap-2
    (for [view* views]
      (let [view (db/sub-block (:db/id view*))
            current-view? (= (:db/id current-view) (:db/id view))]
        (shui/button
-        {:variant :ghost
+        {:variant :text
          :size :sm
-         :class (str "text-sm px-2 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
+         :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
          :on-click (fn [e]
                      (if (and current-view? (not= (:db/id view) (:db/id view-parent)))
                        (shui/popup-show!
@@ -1497,7 +1497,8 @@
         (let [display-type (or (:db/ident (get view :logseq.property.view/type))
                                :logseq.property.view/type.table)]
           (when-let [icon (:logseq.property/icon (db/entity display-type))]
-            (icon-component/icon icon {:color? true})))
+            (icon-component/icon icon {:color? true
+                                       :size 15})))
         (let [title (:block/title view)]
           (if (= title "")
             "New view"
@@ -1505,11 +1506,46 @@
    (shui/button
     {:variant :text
      :size :sm
-     :class "!px-1 text-muted-foreground hover:text-foreground"
+     :title "Add new view"
+     :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 "
+                 (if hover? "opacity-100" "opacity-0"))
      :on-click (fn []
                  (p/let [view (create-view! view-parent view-identity)]
                    (set-views! (concat views [view]))))}
-    (ui/icon "plus" {}))])
+    (ui/icon "plus" {:size 15}))])
+
+(rum/defc view-head < rum/static
+  [view-parent view-entity table columns input sorting
+   set-input! add-new-object!
+   {:keys [view-identity title-key]
+    :as option}]
+  (let [[hover? set-hover?] (hooks/use-state nil)]
+    [:div.flex.flex-1.flex-wrap.items-center.justify-between.gap-1
+     {:on-mouse-over #(set-hover? true)
+      :on-mouse-out #(set-hover? false)}
+     [:div.flex.flex-row.items-center.gap-2
+      (if (= view-identity :query-result)
+        [:div.font-medium.opacity-50.text-sm
+         (t (or title-key :views.table/default-title)
+            (count (:rows table)))]
+        (views-tab view-parent view-entity option hover?))]
+     [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
+      {:class (if hover? "opacity-100" "opacity-0")}
+
+      (when (seq sorting)
+        (view-sorting table columns sorting))
+
+      (filter-properties columns table)
+
+      (search input {:on-change set-input!
+                     :set-input! set-input!})
+
+      [:div.text-muted-foreground.text-sm
+       (pv/property-value view-entity (db/entity :logseq.property.view/type) {})]
+
+      (more-actions view-entity columns table)
+
+      (when add-new-object! (new-record-button table view-entity))]]))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [view-parent data set-data! columns add-new-object!] :as option}
@@ -1594,25 +1630,7 @@
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
      (ui/foldable
-      [:div.flex.flex-1.flex-wrap.items-center.justify-between.gap-1
-       [:div.flex.flex-row.items-center.gap-2
-        (views-tab view-parent view-entity option)]
-       [:div.view-actions.flex.items-center.gap-1
-
-        (when (seq sorting)
-          (view-sorting table columns sorting))
-
-        (filter-properties columns table)
-
-        (search input {:on-change set-input!
-                       :set-input! set-input!})
-
-        [:div.text-muted-foreground.text-sm
-         (pv/property-value view-entity (db/entity :logseq.property.view/type) {})]
-
-        (more-actions view-entity columns table)
-
-        (when add-new-object! (new-record-button table view-entity))]]
+      (view-head view-parent view-entity table columns input sorting set-input! add-new-object! option)
       [:div.ls-view-body.flex.flex-col.gap-2.grid.mt-1
        (filters-row table)
 
