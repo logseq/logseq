@@ -132,7 +132,7 @@
           repo (state/get-current-repo)
           objects (->> (db-model/sub-class-objects repo (:db/id class))
                        (map (fn [row] (assoc row :id (:db/id row)))))]
-      [:div.ml-2
+      [:div.ml-1
        (class-objects-inner config class objects properties)])))
 
 (defn- get-property-related-objects [repo property]
@@ -207,5 +207,5 @@
           properties [property' (db/entity :block/tags)]
           repo (state/get-current-repo)
           objects (get-property-related-objects repo property)]
-      [:div.ml-2
+      [:div.ml-1
        (property-related-objects-inner config property' objects properties)])))
