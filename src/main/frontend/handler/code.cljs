@@ -4,7 +4,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.state :as state]
             [goog.object :as gobj]
             [logseq.graph-parser.utf8 :as utf8]

@@ -13,7 +13,7 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.editor :as editor]
-            [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
