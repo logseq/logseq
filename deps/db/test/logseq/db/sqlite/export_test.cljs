@@ -148,13 +148,14 @@
         page2 (db-test/find-page-by-title @import-conn page-title)]
     (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
 
-(defn- import-second-time-assertions [conn conn2 page-title original-data]
+(defn- import-second-time-assertions [conn conn2 page-title original-data
+                                      & {:keys [transform-expected-blocks]
+                                         :or {transform-expected-blocks (fn [bs] (into bs bs))}}]
   (let [page (db-test/find-page-by-title @conn2 page-title)
         imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
         updated-page (db-test/find-page-by-title @conn2 page-title)
         expected-page-and-blocks
-        (update-in (:pages-and-blocks original-data) [0 :blocks]
-                   (fn [blocks] (into blocks blocks)))]
+        (update-in (:pages-and-blocks original-data) [0 :blocks] transform-expected-blocks)]
 
     ;; Assume first page is one being imported for now
     (is (= (first expected-page-and-blocks)
@@ -203,6 +204,7 @@
 
 (deftest import-page-with-different-ref-types
   (let [block-uuid (random-uuid)
+        internal-block-uuid (random-uuid)
         class-uuid (random-uuid)
         page-uuid (random-uuid)
         property-uuid (random-uuid)
@@ -220,6 +222,8 @@
          [{:page {:block/title "page1"}
            :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}
                     {:block/title (str "block ref to " (page-ref/->page-ref block-uuid))}
+                    {:block/title "hola" :block/uuid internal-block-uuid :build/keep-uuid? true}
+                    {:block/title (str "internal block ref to " (page-ref/->page-ref internal-block-uuid))}
                     {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}
                     {:block/title (str "inline class ref to #" (page-ref/->page-ref class-uuid))}
                     {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}
@@ -253,7 +257,12 @@
            (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
-    (import-second-time-assertions conn conn2 "page1" original-data)))
+    (import-second-time-assertions conn conn2 "page1" original-data
+                                   {:transform-expected-blocks
+                                    (fn [bs]
+                                      ;; internal referenced block doesn't get copied b/c it already exists
+                                      (into (vec (remove #(= "hola" (:block/title %)) bs))
+                                            bs))})))
 
 (deftest import-page-with-different-page-and-classes
   (let [original-data
