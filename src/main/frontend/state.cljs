@@ -604,8 +604,9 @@ should be done through this fn in order to get global config and config defaults
              "MMM do, yyyy"))
       (common-config/get-date-formatter (get-config)))))
 
-(defn shortcuts []
-  (:shortcuts (get-config)))
+(defn custom-shortcuts []
+  (merge (storage/get :ls-shortcuts)
+    (:shortcuts (get-config))))
 
 (defn get-commands
   []

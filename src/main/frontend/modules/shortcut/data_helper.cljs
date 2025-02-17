@@ -50,15 +50,15 @@
 
 (defn get-bindings
   []
-  (m-flatten-bindings-by-id @shortcut-config/*config (state/shortcuts) true))
+  (m-flatten-bindings-by-id @shortcut-config/*config (state/custom-shortcuts) true))
 
 (defn get-bindings-keys-map
   []
-  (m-flatten-bindings-by-key @shortcut-config/*config (state/shortcuts)))
+  (m-flatten-bindings-by-key @shortcut-config/*config (state/custom-shortcuts)))
 
 (defn get-bindings-ids-map
   []
-  (m-flatten-bindings-by-id @shortcut-config/*config (state/shortcuts) false))
+  (m-flatten-bindings-by-id @shortcut-config/*config (state/custom-shortcuts) false))
 
 (defn get-shortcut-desc
   [binding-map]
