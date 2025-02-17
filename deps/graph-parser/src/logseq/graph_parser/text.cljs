@@ -1,5 +1,5 @@
 (ns logseq.graph-parser.text
-  "Miscellaneous text util fns for the parser"
+  "Miscellaneous text util fns for the parser. Used by file and DB graphs"
   (:require [goog.string :as gstring]
             [clojure.string :as string]
             [clojure.set :as set]

@@ -1,6 +1,6 @@
 (ns logseq.graph-parser
-  "Main ns used by logseq app to parse graph from source files and then save to
-  the given database connection"
+  "For file graphs, provides main ns to parse graph from source files.
+   Used by logseq app to parse graph and then save to the given database connection"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]

@@ -1,5 +1,5 @@
-(ns frontend.handler.common.file
-  "Common file related fns for handlers"
+(ns frontend.handler.file-based.reset-file
+  "Fns for resetting a db file with parsed file content"
   (:require [frontend.config :as config]
             [frontend.state :as state]
             [frontend.db :as db]
