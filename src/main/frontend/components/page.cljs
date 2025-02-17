@@ -721,6 +721,7 @@
                   (hierarchy/structures (:block/title page))))
 
               (when-not (or whiteboard? unlinked-refs?
+                            db-based?
                             sidebar?
                             home?
                             (or class-page? property-page?)

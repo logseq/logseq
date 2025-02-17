@@ -68,57 +68,58 @@
 
 (rum/defc references-cp
   [page-entity *filters total filter-n filtered-ref-blocks *ref-pages]
-  ;; (let [filters @*filters
-  ;;       threshold (state/get-linked-references-collapsed-threshold)
-  ;;       default-collapsed? (or (>= total threshold) (ldb/class? page-entity))
-  ;;       *collapsed? (atom nil)]
-  ;;   (ui/foldable
-  ;;    [:div.flex.flex-row.flex-1.justify-between.items-center
-  ;;     [:div.font-medium.opacity-50
-  ;;      (t :linked-references/reference-count (when (or (seq (:included filters))
-  ;;                                                      (seq (:excluded filters))) filter-n) total)]
-  ;;     [:a.filter.fade-link
-  ;;      {:title (t :linked-references/filter-heading)
-  ;;       :on-mouse-over (fn [_e]
-  ;;                        (when @*collapsed? ; collapsed
-  ;;                          ;; expand
-  ;;                          (reset! @*collapsed? false)))
-  ;;       :on-pointer-down (fn [e]
-  ;;                          (util/stop-propagation e)
-  ;;                          (shui/popup-show! (.-target e)
-  ;;                                            (fn []
-  ;;                                              [:div.p-4
-  ;;                                               (filters/filter-dialog page-entity *filters *ref-pages)])
-  ;;                                            {:align "end"}))}
-  ;;      (ui/icon "filter" {:class (cond
-  ;;                                  (and (empty? (:included filters)) (empty? (:excluded filters)))
-  ;;                                  "opacity-60 hover:opacity-100"
+  (if (config/db-based-graph?)
+    (let [blocks (->> (mapcat second filtered-ref-blocks)
+                      (map (fn [b] (assoc (db/entity (:db/id b)) :id (:db/id b)))))
+          columns' (columns {} blocks)]
+      (when (seq blocks)
+        (views/view
+         {:view-parent page-entity
+          :view-identity :linked-references
+          :data blocks
+          :columns columns'})))
+    (let [filters @*filters
+          threshold (state/get-linked-references-collapsed-threshold)
+          default-collapsed? (or (>= total threshold) (ldb/class? page-entity))
+          *collapsed? (atom nil)]
+      (ui/foldable
+       [:div.flex.flex-row.flex-1.justify-between.items-center
+        [:div.font-medium.opacity-50
+         (t :linked-references/reference-count (when (or (seq (:included filters))
+                                                         (seq (:excluded filters))) filter-n) total)]
+        [:a.filter.fade-link
+         {:title (t :linked-references/filter-heading)
+          :on-mouse-over (fn [_e]
+                           (when @*collapsed? ; collapsed
+                           ;; expand
+                             (reset! @*collapsed? false)))
+          :on-pointer-down (fn [e]
+                             (util/stop-propagation e)
+                             (shui/popup-show! (.-target e)
+                                               (fn []
+                                                 [:div.p-4
+                                                  (filters/filter-dialog page-entity *filters *ref-pages)])
+                                               {:align "end"}))}
+         (ui/icon "filter" {:class (cond
+                                     (and (empty? (:included filters)) (empty? (:excluded filters)))
+                                     "opacity-60 hover:opacity-100"
 
-  ;;                                  (and (seq (:included filters)) (empty? (:excluded filters)))
-  ;;                                  "text-success"
+                                     (and (seq (:included filters)) (empty? (:excluded filters)))
+                                     "text-success"
 
-  ;;                                  (and (empty? (:included filters)) (seq (:excluded filters)))
-  ;;                                  "text-error"
-  ;;                                  :else
-  ;;                                  "text-warning")
-  ;;                         :size  22})]]
+                                     (and (empty? (:included filters)) (seq (:excluded filters)))
+                                     "text-error"
+                                     :else
+                                     "text-warning")
+                            :size  22})]]
 
-  ;;    (fn []
-  ;;      (references-inner page-entity filters filtered-ref-blocks))
+       (fn []
+         (references-inner page-entity filters filtered-ref-blocks))
 
-  ;;    {:default-collapsed? default-collapsed?
-  ;;     :title-trigger? true
-  ;;     :init-collapsed (fn [collapsed-atom]
-  ;;                       (reset! *collapsed? collapsed-atom))}))
-  (let [blocks (->> (mapcat second filtered-ref-blocks)
-                    (map (fn [b] (assoc (db/entity (:db/id b)) :id (:db/id b)))))
-        columns' (columns {} blocks)]
-    (when (seq blocks)
-      (views/view
-       {:view-parent page-entity
-        :view-identity :linked-references
-        :data blocks
-        :columns columns'}))))
+       {:default-collapsed? default-collapsed?
+        :title-trigger? true
+        :init-collapsed (fn [collapsed-atom]
+                          (reset! *collapsed? collapsed-atom))}))))
 
 (defn- get-filtered-children
   [block parent->blocks]

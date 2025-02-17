@@ -51,6 +51,7 @@
      (views/view
       {:title-key :views.table/live-query-title
        :view-entity view-entity
+       :view-identity :query-result
        :data result'
        :set-data! set-data!
        :columns columns'
