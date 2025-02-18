@@ -1,6 +1,6 @@
 (ns const
   "Consts for rtc e2e tests"
-  (:require [logseq.db.frontend.order :as db-order]))
+  (:require [logseq.db.common.order :as db-order]))
 
 (assert (exists? js/__karma__))
 (def seed js/__karma__.config.seed)

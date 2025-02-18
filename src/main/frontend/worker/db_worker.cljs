@@ -32,7 +32,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.order :as db-order]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]

@@ -1,5 +1,6 @@
-(ns logseq.db.frontend.order
-  "Use fractional-indexing order for blocks/properties/closed values/etc."
+(ns logseq.db.common.order
+  "Use fractional-indexing order for blocks/properties/closed values/etc.
+   Used by DB and file graphs"
   (:require [logseq.clj-fractional-indexing :as index]
             [datascript.core :as d]))
 

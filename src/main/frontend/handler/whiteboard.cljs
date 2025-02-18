@@ -19,7 +19,7 @@
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.order :as db-order]
+            [logseq.db.common.order :as db-order]
             [logseq.outliner.core :as outliner-core]))
 
 (defn js->clj-keywordize

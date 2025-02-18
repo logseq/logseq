@@ -9,7 +9,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.order :as db-order]
+            [logseq.db.common.order :as db-order]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- get-pages-by-name
