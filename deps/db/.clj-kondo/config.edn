@@ -13,11 +13,11 @@
              logseq.db.frontend.class db-class
              logseq.db.frontend.db-ident db-ident
              logseq.db.frontend.inputs db-inputs
-             logseq.db.frontend.order db-order
+             logseq.db.common.order db-order
              logseq.db.frontend.property db-property
              logseq.db.frontend.property.build db-property-build
              logseq.db.frontend.property.type db-property-type
-             logseq.db.frontend.property.util db-property-util
+             logseq.db.common.property-util db-property-util
              logseq.db.frontend.entity-plus entity-plus
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema

@@ -11,7 +11,7 @@
             [logseq.common.config :as common-config]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.common.order :as db-order]))
 
 
 (defn- replace-page-ref-aux

@@ -6,8 +6,7 @@
             [datascript.impl.entity :as de :refer [Entity]]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.order :as db-order]
-            [logseq.db.frontend.property.util :as db-property-util]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -444,7 +443,7 @@
                        (if (sqlite-util/db-based-graph? repo)
                          ;; Get raw id since insert-blocks doesn't auto-handle raw property values
                          (:db/id (:logseq.property/order-list-type block))
-                         (get (:block/properties block) (db-property-util/get-pid repo :logseq.property/order-list-type))))
+                         (get (:block/properties block) :logseq.order-list-type)))
         db-based? (sqlite-util/db-based-graph? repo)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
       (mapv
@@ -456,7 +455,7 @@
              ((fn [b]
                 (if db-based?
                   (assoc b :logseq.property/order-list-type list-type)
-                  (update b :block/properties assoc (db-property-util/get-pid repo :logseq.property/order-list-type) list-type))))
+                  (update b :block/properties assoc :logseq.order-list-type list-type))))
 
              (not db-based?)
              (assoc :block/title (gp-property/insert-property repo format title :logseq.order-list-type list-type)))))

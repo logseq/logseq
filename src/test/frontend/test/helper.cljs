@@ -13,7 +13,7 @@
             [frontend.state :as state]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
-            [logseq.db.frontend.order :as db-order]
+            [logseq.db.common.order :as db-order]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
