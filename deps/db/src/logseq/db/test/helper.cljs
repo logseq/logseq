@@ -76,7 +76,7 @@
 (defn create-conn
   "Create a conn for a DB graph seeded with initial data"
   []
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
+  (let [conn (d/create-conn db-schema/schema)
         _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))]
     (entity-plus/reset-immutable-entities-cache!)
     conn))

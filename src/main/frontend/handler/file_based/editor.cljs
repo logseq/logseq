@@ -23,7 +23,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.file-based.schema :as file-schema]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -119,7 +119,7 @@
         block (assoc block
                      :block/title content'
                      :block/format format)
-        block (apply dissoc block (remove #{:block/pre-block?} db-schema/retract-attributes))
+        block (apply dissoc block (remove #{:block/pre-block?} file-schema/retract-attributes))
         block (block/parse-block block)
         block (if (and first-block? (:block/pre-block? block))
                 block

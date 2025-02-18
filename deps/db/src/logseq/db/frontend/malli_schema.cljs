@@ -515,7 +515,7 @@
     :property-value-placeholder property-value-placeholder}))
 
 (def DB
-  "Malli schema for entities from schema/schema-for-db-based-graph. In order to
+  "Malli schema for entities from db-schema/schema. In order to
   thoroughly validate properties, the entities and this schema should be
   prepared with update-properties-in-ents and update-properties-in-schema
   respectively"

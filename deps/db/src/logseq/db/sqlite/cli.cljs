@@ -1,5 +1,5 @@
 (ns ^:node-only logseq.db.sqlite.cli
-  "Primary ns to interact with DB graphs with node.js based CLIs"
+  "Primary ns to interact with DB files for DB and file graphs with node.js based CLIs"
   (:require ["better-sqlite3" :as sqlite3]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
@@ -7,6 +7,7 @@
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
@@ -91,8 +92,8 @@
         db (new sqlite db-full-path nil)
         ;; For both desktop and CLI, only file graphs have db-name that indicate their db type
         schema (if (sqlite-util/local-file-based-graph? db-name)
-                 db-schema/schema
-                 db-schema/schema-for-db-based-graph)]
+                 file-schema/schema
+                 db-schema/schema)]
     (sqlite-common-db/create-kvs-table! db)
     (let [storage (new-sqlite-storage db)
           conn (sqlite-common-db/get-storage-conn storage schema)]

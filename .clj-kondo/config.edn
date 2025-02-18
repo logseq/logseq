@@ -166,6 +166,8 @@
              logseq.common.util.namespace ns-util
              logseq.common.util.page-ref page-ref
              logseq.db ldb
+             logseq.db.file-based.rules file-rules
+             logseq.db.file-based.schema file-schema
              logseq.db.frontend.class db-class
              logseq.db.frontend.content db-content
              logseq.db.frontend.db-ident db-ident
