@@ -12,7 +12,7 @@
 (def db-graph-ns
   "Namespaces or parent namespaces _only_ for DB graphs. Use a '.' at end of a namespace for parent namespaces"
   (mapv escape-shell-regex
-        ["logseq.db.sqlite." "logseq.db.frontend.property" "logseq.db.frontend.malli-schema"
+        ["logseq.db.sqlite." "logseq.db.frontend."
          "electron.db"
          "frontend.handler.db-based."
          "frontend.worker.handler.page.db-based"
@@ -114,7 +114,7 @@
                    "git grep -E" (str "(" (string/join "|" file-concepts) ")")
                    db-graph-paths)
         invalid-lines (when (= 0 (:exit res))
-                        (remove #(->> (string/split % #":\s+") second string/trim (contains? allowed-exceptions))
+                        (remove #(some->> (string/split % #":\s+") second string/trim (contains? allowed-exceptions))
                                 (string/split-lines (:out res))))]
     (when (> (:exit res) 1) (System/exit 1))
     (when (and (= 0 (:exit res)) (seq invalid-lines))

@@ -114,7 +114,7 @@
   "Persistent-sorted-set has been broken, used addresses can't be found"
   [datascript-conn sqlite-db import-type]
   (let [datoms (get-all-datoms-from-sqlite-db sqlite-db)
-        db (d/init-db [] db-schema/schema-for-db-based-graph
+        db (d/init-db [] db-schema/schema
                       {:storage (storage/storage @datascript-conn)})
         db (d/db-with db
                       (map (fn [d]

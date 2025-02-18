@@ -8,6 +8,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
@@ -283,8 +284,8 @@
                   (seq retract-attributes))
           (let [retract-attributes (concat
                                     (if db-based?
-                                      db-schema/db-version-retract-attributes
-                                      db-schema/retract-attributes)
+                                      db-schema/retract-attributes
+                                      file-schema/retract-attributes)
                                     retract-attributes)]
             (swap! txs-state (fn [txs]
                                (vec

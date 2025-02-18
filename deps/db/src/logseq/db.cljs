@@ -18,7 +18,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.sqlite.util :as sqlite-util])
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.file-based.rules :as file-rules])
   (:refer-clojure :exclude [object?]))
 
 (defonce *transact-fn (atom nil))
@@ -548,7 +549,7 @@
       ['?p :block/name '?namespace]
       (list 'namespace '?p '?c)]
      db
-     (:namespace rules/rules)
+     (:namespace file-rules/rules)
      namespace'')))
 
 (defn get-pages-by-name-partition

@@ -81,7 +81,7 @@
   ([repo {:keys [listen-handler]}]
    (let [db-name (db-conn-state/get-repo-path repo)
          db-conn (if (config/db-based-graph? repo)
-                   (d/create-conn db-schema/schema-for-db-based-graph)
+                   (d/create-conn db-schema/schema)
                    (gp-db/start-conn))]
      (swap! conns assoc db-name db-conn)
      (when listen-handler

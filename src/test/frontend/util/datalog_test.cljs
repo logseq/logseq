@@ -1,7 +1,7 @@
 (ns frontend.util.datalog-test
   (:require [cljs.test :refer [deftest is]]
             [frontend.util.datalog :as datalog-util]
-            [logseq.db.frontend.rules :as rules]))
+            [logseq.db.file-based.rules :as file-rules]))
 
 (deftest add-to-end-of-query-in
   (is (= '[:find ?b
@@ -35,4 +35,4 @@
          (datalog-util/find-rules-in-where
           ['(page-property ?b :foo "bar")
            '(page-property ?b :bar "baz")]
-          (-> rules/query-dsl-rules keys set)))))
+          (-> file-rules/query-dsl-rules keys set)))))
