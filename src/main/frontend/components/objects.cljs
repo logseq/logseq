@@ -13,7 +13,6 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.property :as outliner-property]
@@ -151,18 +150,19 @@
 
 (rum/defc property-related-objects-inner < rum/static
   [config property objects properties]
-  (let [[loading? set-loading?] (rum/use-state property)
+  (let [[loading? set-loading?] (rum/use-state nil)
         [data set-data!] (rum/use-state objects)
         columns (views/build-columns config properties)]
 
     (hooks/use-effect!
      (fn []
-       (set-loading? true)
-       (p/let [result (db-async/<get-property-objects (state/get-current-repo) (:db/ident property))]
-         (set-data! (mapv (fn [m]
-                            (let [e (db/entity (:db/id m))]
-                              (assoc e :id (:db/id m)))) result))
-         (set-loading? false)))
+       (when (nil? loading?)
+         (set-loading? true)
+         (p/let [result (db-async/<get-property-objects (state/get-current-repo) (:db/ident property))]
+           (set-data! (mapv (fn [m]
+                              (let [e (db/entity (:db/id m))]
+                                (assoc e :id (:db/id m)))) result))
+           (set-loading? false))))
      [])
 
     (views/view {:config config

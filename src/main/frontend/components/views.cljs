@@ -1508,7 +1508,7 @@
 (rum/defc view-head < rum/static
   [view-parent view-entity table columns input sorting
    set-input! add-new-object!
-   {:keys [view-identity title-key]
+   {:keys [view-identity title-key additional-actions]
     :as option}]
   (let [[hover? set-hover?] (hooks/use-state nil)]
     [:div.flex.flex-1.flex-wrap.items-center.justify-between.gap-1
@@ -1523,6 +1523,9 @@
      [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
       {:class (if hover? "opacity-100" "opacity-0")}
 
+      (when (seq additional-actions)
+        [:<> (for [action additional-actions]
+               action)])
       (when (seq sorting)
         (view-sorting table columns sorting))
 
