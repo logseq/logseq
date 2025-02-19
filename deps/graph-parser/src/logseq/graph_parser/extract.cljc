@@ -1,6 +1,6 @@
 (ns logseq.graph-parser.extract
-  "Handles extraction of blocks, pages and mldoc ast in preparation for db
-  transaction"
+  "For file graphs, handles extraction of blocks, pages and mldoc ast in
+  preparation for db transaction"
   ;; Disable clj linters since we don't support clj
   #?(:clj {:clj-kondo/config {:linters {:unresolved-namespace {:level :off}
                                         :unresolved-symbol {:level :off}}}})
@@ -17,7 +17,8 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
+            [medley.core :as medley]))
 
 (defn- filepath->page-name
   [filepath]
@@ -225,7 +226,7 @@
      :resolve-uuid-fn - Optional fn which is called to resolve uuids of each block. Enables diff-merge
        (2 ways diff) based uuid resolution upon external editing.
        returns a list of the uuids, given the receiving ast, or nil if not able to resolve.
-       Implemented in file-common-handler/diff-merge-uuids for IoC
+       Implemented in reset-file-handler/diff-merge-uuids-2ways for IoC
        Called in gp-extract/extract as AST is being parsed and properties are extracted there"
   [format ast properties file content {:keys [date-formatter db filename-format extracted-block-ids resolve-uuid-fn]
                                        :or {extracted-block-ids (atom #{})
@@ -319,9 +320,9 @@
         blocks (map
                 (fn [block]
                   (-> block
-                      (common-util/dissoc-in [:block/parent :block/name])
+                      (medley/dissoc-in [:block/parent :block/name])
                       ;; :block/left here for backward compatibility
-                      (common-util/dissoc-in [:block/left :block/name])))
+                      (medley/dissoc-in [:block/left :block/name])))
                 blocks)
         serialized-page (first pages)
         ;; whiteboard edn file should normally have valid :block/title, :block/name, :block/uuid

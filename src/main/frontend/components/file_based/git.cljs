@@ -1,6 +1,6 @@
-(ns frontend.components.git
+(ns frontend.components.file-based.git
   (:require [clojure.string :as string]
-            [frontend.handler.file :as file]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.shell :as shell]
             [frontend.hooks :as hooks]
             [frontend.state :as state]
@@ -72,7 +72,7 @@
        [:pre content]
        (ui/button "Revert"
                   :on-click (fn []
-                              (file/alter-file (state/get-current-repo)
+                              (file-handler/alter-file (state/get-current-repo)
                                                path
                                                content
                                                {:re-render-root? true

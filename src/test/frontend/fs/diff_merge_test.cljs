@@ -3,7 +3,7 @@
             [cljs.test :refer [are deftest is]]
             [frontend.db.conn :as conn]
             [frontend.fs.diff-merge :as fs-diff]
-            [frontend.handler.common.file :as file-common-handler]
+            [frontend.handler.file-based.reset-file :as reset-file-handler]
             [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.db :as gp-db]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -377,7 +377,7 @@
     (graph-parser/parse-file conn "bar.md" bar-content {})
     (are [ast content page-name uuids]
          (= (with-redefs [conn/get-db (constantly @conn)]
-              (#'file-common-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
+              (#'reset-file-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
                                                                              :block-pattern "-"}))
             uuids)
 
@@ -409,7 +409,7 @@
     ;; Compare if the uuids are the same as those inside DB when the modified content (adding new line) is parsed
     (are [ast content page-name DB-uuids->new-uuids-fn]
          (= (with-redefs [conn/get-db (constantly @conn)]
-              (#'file-common-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
+              (#'reset-file-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
                                                                              :block-pattern "-"}))
             ;; Get all uuids under the page
             (->> page-name
@@ -441,7 +441,7 @@
          (= (with-redefs [conn/get-db (constantly @conn)
                                 ;; Hijack the function to throw an exception
                           fs-diff/db->diff-blocks #(throw (js/Error. "intentional exception for testing diff-merge-uuids-2ways error capture"))]
-              (#'file-common-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
+              (#'reset-file-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
                                                                                    :block-pattern "-"}))
             nil)
 

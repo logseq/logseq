@@ -25,7 +25,7 @@
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.diff-merge :as diff-merge]
-            [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user]
             [frontend.mobile.util :as mobile-util]

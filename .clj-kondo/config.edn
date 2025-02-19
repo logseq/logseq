@@ -97,7 +97,6 @@
              frontend.fs.nfs nfs
              frontend.handler.common common-handler
              frontend.handler.common.developer dev-common-handler
-             frontend.handler.common.file file-common-handler
              frontend.handler.common.page page-common-handler
              frontend.handler.common.plugin plugin-common-handler
              frontend.handler.config config-handler
@@ -108,11 +107,13 @@
              frontend.handler.editor.property editor-property
              frontend.handler.events events
              frontend.handler.extract extract
+             frontend.handler.file-based.file file-handler
              frontend.handler.file-based.page file-page-handler
              frontend.handler.file-based.page-property file-page-property
              frontend.handler.file-based.property file-property-handler
              frontend.handler.file-based.property.util property-util
              frontend.handler.file-based.recent file-recent-handler
+             frontend.handler.file-based.reset-file reset-file-handler
              frontend.handler.file-based.repo file-repo-handler
              frontend.handler.global-config global-config-handler
              frontend.handler.notification notification

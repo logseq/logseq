@@ -4,7 +4,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.state :as state]
             [goog.object :as gobj]
             [logseq.graph-parser.utf8 :as utf8]
@@ -49,7 +49,8 @@
                  (config/db-based-graph? repo))
             (db-editor-handler/save-file! (:file-path config) value)
 
-            (not-empty (:file-path config))
+            (and (not-empty (:file-path config))
+                 (not (config/db-based-graph? repo)))
             (let [path (:file-path config)
                   repo-dir (config/get-repo-dir repo)
                   rpath (when (string/starts-with? path repo-dir)

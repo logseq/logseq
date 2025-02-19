@@ -13,11 +13,15 @@
 
 (defn parse-schema-version
   "Return schema-version({:major <num> :minor <num>}).
-  schema-version-old: 10, a number
-  schema-version-new: \"12.34\", string, <major-num>.<minor-num>"
+  supported input: 10, \"10.1\", [10 1]"
   [string-or-compatible-number]
   (cond
     (schema-version? string-or-compatible-number) string-or-compatible-number
+    (and (sequential? string-or-compatible-number)
+         (first string-or-compatible-number))
+    {:major (first string-or-compatible-number)
+     :minor (second string-or-compatible-number)}
+
     (int? string-or-compatible-number) {:major string-or-compatible-number :minor nil}
     (string? string-or-compatible-number)
     (let [[major minor] (map parse-long (string/split string-or-compatible-number #"\."))]
@@ -28,15 +32,9 @@
 
 (defn compare-schema-version
   [x y]
-  (if (schema-version? x)
-    (cond
-      (number? y) (compare (:major x) y)
-      (sequential? y) (compare [(:major x) (:minor x)] [(first y) (second y)])
-      (schema-version? y)
-      (apply compare (map (juxt :major :minor) [x y]))
-      :else
-      (throw (js/Error. (str "Cannot compare " x " to " y))))
-    (compare-schema-version (parse-schema-version x) y)))
+  (apply compare
+         (map (juxt :major :minor)
+              [(parse-schema-version x) (parse-schema-version y)])))
 
 (def version (parse-schema-version "64.2"))
 

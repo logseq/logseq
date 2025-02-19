@@ -1,7 +1,7 @@
 (ns frontend.components.diff
   (:require [clojure.string :as string]
             [frontend.diff :as diff]
-            [frontend.handler.file :as file]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
@@ -70,7 +70,7 @@
                  :on-click
                  (fn []
                    (when-let [value @disk-value]
-                     (file/alter-file repo path value
+                     (file-handler/alter-file repo path value
                                       {:re-render-root? true
                                        :skip-compare? true}))
                    (shui/dialog-close!)))]
@@ -87,7 +87,7 @@
                  :on-click
                  (fn []
                    (when-let [value @db-value]
-                     (file/alter-file repo path value
+                     (file-handler/alter-file repo path value
                                       {:re-render-root? true
                                        :skip-compare? true}))
                    (shui/dialog-close!)))]]]])

@@ -1,12 +1,12 @@
-(ns frontend.handler.file
-  "Provides util handler fns for files"
+(ns frontend.handler.file-based.file
+  "Provides util handler fns for file graph files"
   (:refer-clojure :exclude [load-file])
   (:require [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.handler.common.file :as file-common-handler]
+            [frontend.handler.file-based.reset-file :as reset-file-handler]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -35,7 +35,7 @@
          (println "Load file failed: " path)
          (js/console.error e)))))
 
-(defn load-multiple-files
+(defn- load-multiple-files
   [repo-url paths]
   (doall
    (mapv #(load-file repo-url %) paths)))
@@ -92,7 +92,7 @@
   [path content]
   (when (or (= path "logseq/config.edn")
             (= (path/dirname path) (global-config-handler/safe-global-config-dir)))
-    (config-edn-common-handler/detect-deprecations path content {:db-graph? (config/db-based-graph? (state/get-current-repo))})))
+    (config-edn-common-handler/detect-deprecations path content {:db-graph? false})))
 
 (defn- validate-file
   "Returns true if valid and if false validator displays error message. Files
@@ -168,7 +168,7 @@
                                          [[:db/retract page-id :block/alias]
                                           [:db/retract page-id :block/tags]]
                                          opts)))
-                       (file-common-handler/reset-file!
+                       (reset-file-handler/reset-file!
                         repo path content (merge opts
                                                  ;; To avoid skipping the `:or` bounds for keyword destructuring
                                                  (when (some? extracted-block-ids) {:extracted-block-ids extracted-block-ids})
@@ -202,7 +202,7 @@
   (alter-file repo path new-content {:reset? false
                                      :re-render-root? false}))
 
-(defn alter-files-handler!
+(defn- alter-files-handler!
   [repo files {:keys [finish-handler]} file->content]
   (let [write-file-f (fn [[path content]]
                        (when path
@@ -248,14 +248,14 @@
     (when update-db?
       (doseq [[path content] files]
         (if reset?
-          (file-common-handler/reset-file! repo path content)
+          (reset-file-handler/reset-file! repo path content)
           (db/set-file-content! repo path content))))
     (alter-files-handler! repo files opts file->content)))
 
 (defn watch-for-current-graph-dir!
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [dir (and (not (config/db-based-graph? repo)) (config/get-repo-dir repo))]
+    (when-let [dir (config/get-repo-dir repo)]
       ;; An unwatch shouldn't be needed on startup. However not having this
       ;; after an app refresh can cause stale page data to load
       (fs/unwatch-dir! dir)
