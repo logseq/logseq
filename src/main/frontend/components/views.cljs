@@ -33,7 +33,6 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.table.core :as table-core]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -101,51 +100,43 @@
                   (contains? (set (map :db/id (:logseq.property.table/pinned-columns view-entity)))
                              (:db/id property)))
         sub-content (fn [{:keys [id]}]
-                      (let [[open? set-open!] (rum/use-state false)]
-                        [:<>
-                         (when property
-                           (shui/dropdown-menu-sub
-                            {:open open?
-                             :on-open-change (fn [v]
-                                               (when (or (true? v)
-                                                         (not (or (some-> @shui-popup/*last-show-target
-                                                                          (.closest "[data-icon-picker=true]"))
-                                                                  (js/document.querySelector ".cp__emoji-icon-picker"))))
-                                                 (set-open! v)))}
-                            (shui/dropdown-menu-sub-trigger
-                             [:div.flex.flex-row.items-center.gap-1
-                              (ui/icon "settings" {:size 15})
-                              [:div "Configure"]])
-                            (shui/dropdown-menu-sub-content
-                             [:div.ls-property-dropdown-editor.-m-1
-                              (property-config/dropdown-editor property nil {})])))
+                      [:<>
+                       (shui/dropdown-menu-item
+                        {:key "asc"
+                         :on-click #(column-set-sorting! sorting column true)}
+                        [:div.flex.flex-row.items-center.gap-1
+                         (ui/icon "arrow-up" {:size 15})
+                         [:div "Sort ascending"]])
+                       (shui/dropdown-menu-item
+                        {:key "desc"
+                         :on-click #(column-set-sorting! sorting column false)}
+                        [:div.flex.flex-row.items-center.gap-1
+                         (ui/icon "arrow-down" {:size 15})
+                         [:div "Sort descending"]])
+                       (when property
                          (shui/dropdown-menu-item
-                          {:key "asc"
-                           :on-click #(column-set-sorting! sorting column true)}
+                          {:on-click #(shui/popup-show! (.-target %)
+                                                        (fn []
+                                                          [:div.ls-property-dropdown-editor.-m-1
+                                                           (property-config/dropdown-editor property nil {})])
+                                                        {:align "start"})}
                           [:div.flex.flex-row.items-center.gap-1
-                           (ui/icon "arrow-up" {:size 15})
-                           [:div "Sort ascending"]])
+                           (ui/icon "adjustments" {:size 15}) "Configure"]))
+                       (when property
                          (shui/dropdown-menu-item
-                          {:key "desc"
-                           :on-click #(column-set-sorting! sorting column false)}
+                          {:on-click (fn [_e]
+                                       (if pinned?
+                                         (db-property-handler/delete-property-value! (:db/id view-entity)
+                                                                                     :logseq.property.table/pinned-columns
+                                                                                     (:db/id property))
+                                         (property-handler/set-block-property! (state/get-current-repo)
+                                                                               (:db/id view-entity)
+                                                                               :logseq.property.table/pinned-columns
+                                                                               (:db/id property)))
+                                       (shui/popup-hide! id))}
                           [:div.flex.flex-row.items-center.gap-1
-                           (ui/icon "arrow-down" {:size 15})
-                           [:div "Sort descending"]])
-                         (when property
-                           (shui/dropdown-menu-item
-                            {:on-click (fn [_e]
-                                         (if pinned?
-                                           (db-property-handler/delete-property-value! (:db/id view-entity)
-                                                                                       :logseq.property.table/pinned-columns
-                                                                                       (:db/id property))
-                                           (property-handler/set-block-property! (state/get-current-repo)
-                                                                                 (:db/id view-entity)
-                                                                                 :logseq.property.table/pinned-columns
-                                                                                 (:db/id property)))
-                                         (shui/popup-hide! id))}
-                            [:div.flex.flex-row.items-center.gap-1
-                             (ui/icon "pin" {:size 15})
-                             [:div (if pinned? "Unpin" "Pin")]]))]))]
+                           (ui/icon "pin" {:size 15})
+                           [:div (if pinned? "Unpin" "Pin")]]))])]
     (shui/button
      {:variant "text"
       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"

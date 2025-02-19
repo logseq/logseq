@@ -580,7 +580,7 @@
 
 (defn keyboard-shortcut-from-config [shortcut-name & {:keys [pick-first?]}]
   (let [built-in-binding (:binding (get shortcut-config/all-built-in-keyboard-shortcuts shortcut-name))
-        custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))
+        custom-binding  (when (state/custom-shortcuts) (get (state/custom-shortcuts) shortcut-name))
         binding         (or custom-binding built-in-binding)]
     (if (and pick-first? (coll? binding))
       (first binding)

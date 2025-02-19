@@ -1,5 +1,5 @@
 (ns ^:node-only logseq.graph-parser.cli
-  "Primary ns to parse graphs with node.js based CLIs"
+  "For file graphs, primary ns to parse graphs with node.js based CLIs"
   (:require ["fs" :as fs]
             ["path" :as path]
             [clojure.edn :as edn]

@@ -9,6 +9,7 @@
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.storage :as storage]
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
             [lambdaisland.glogi :as log])
@@ -274,20 +275,22 @@
 
 (defn persist-user-shortcut!
   [id binding]
-  (let [graph-shortcuts (or (:shortcuts (state/get-graph-config)) {})
-        global-shortcuts (or (:shortcuts (state/get-global-config)) {})
-        global? true]
+  (let [global? true]
     (letfn [(into-shortcuts [shortcuts]
-              (cond-> shortcuts
+              (cond-> (or shortcuts {})
                 (nil? binding)
                 (dissoc id)
 
                 (and global?
-                     (or (string? binding)
-                         (vector? binding)
-                         (boolean? binding)))
+                  (or (string? binding)
+                    (vector? binding)
+                    (boolean? binding)))
                 (assoc id binding)))]
       ;; TODO: exclude current graph config shortcuts
-      (config-handler/set-config! :shortcuts (into-shortcuts graph-shortcuts))
-      (when (util/electron?)
-        (global-config-handler/set-global-config-kv! :shortcuts (into-shortcuts global-shortcuts))))))
+      (config-handler/set-config!
+        :shortcuts (into-shortcuts (:shortcuts (state/get-graph-config))))
+      (if (util/electron?)
+        (global-config-handler/set-global-config-kv!
+          :shortcuts (into-shortcuts (:shortcuts (state/get-global-config))))
+        ;; web browser platform
+        (storage/set :ls-shortcuts (into-shortcuts (storage/get :ls-shortcuts)))))))

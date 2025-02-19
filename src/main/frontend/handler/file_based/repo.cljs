@@ -3,9 +3,9 @@
   (:require [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.handler.common.file :as file-common-handler]
+            [frontend.handler.file-based.reset-file :as reset-file-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.spec :as spec]
@@ -37,7 +37,7 @@
         (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir pages-dir))
                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
           (when-not file-exists?
-            (file-common-handler/reset-file! repo-url file-rpath default-content)))))))
+            (reset-file-handler/reset-file! repo-url file-rpath default-content)))))))
 
 (defn- create-custom-theme
   [repo-url]
@@ -49,7 +49,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
       (when-not file-exists?
-        (file-common-handler/reset-file! repo-url path default-content)))))
+        (reset-file-handler/reset-file! repo-url path default-content)))))
 
 (comment
   (defn- create-dummy-notes-page
@@ -59,7 +59,7 @@
          file-rpath (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")]
      (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-pages-directory)))
              _file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
-       (file-common-handler/reset-file! repo-url file-rpath content)))))
+       (reset-file-handler/reset-file! repo-url file-rpath content)))))
 
 (comment
   (defn- create-today-journal-if-not-exists
@@ -93,7 +93,7 @@
                  _ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-journals-directory)))
                  file-exists? (fs/file-exists? repo-dir file-rpath)]
            (when-not file-exists?
-             (p/let [_ (file-common-handler/reset-file! repo-url file-rpath content)]
+             (p/let [_ (reset-file-handler/reset-file! repo-url file-rpath content)]
                (fs/create-if-not-exists repo-url repo-dir file-rpath content)))))))))
 
 
@@ -109,7 +109,7 @@
             path (str app-dir "/" config/config-file)]
         (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir "logseq/config.edn" default-content)]
           (when-not file-exists?
-            (file-common-handler/reset-file! repo-url path default-content)
+            (reset-file-handler/reset-file! repo-url path default-content)
             (repo-config-handler/set-repo-config-state! repo-url default-content)))))))
 
 (defn- create-default-files!
