@@ -9,7 +9,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.hooks :as hooks]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
