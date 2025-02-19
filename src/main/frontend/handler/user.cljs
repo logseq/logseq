@@ -1,19 +1,21 @@
 (ns frontend.handler.user
   "Provides user related handler fns like login and logout"
   (:require-macros [frontend.handler.user])
-  (:require [frontend.config :as config]
-            [frontend.handler.config :as config-handler]
-            [frontend.state :as state]
-            [frontend.debug :as debug]
-            [clojure.string :as string]
-            [cljs-time.core :as t]
+  (:require [cljs-http.client :as http]
             [cljs-time.coerce :as tc]
-            [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [go <!]]
-            [goog.crypt.Sha256]
-            [goog.crypt.Hmac]
+            [cljs-time.core :as t]
+            [cljs.core.async :as async :refer [<! go]]
+            [clojure.string :as string]
+            [frontend.common.missionary :as c.m]
+            [frontend.config :as config]
+            [frontend.debug :as debug]
+            [frontend.handler.config :as config-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]
             [goog.crypt :as crypt]
-            [frontend.handler.notification :as notification]))
+            [goog.crypt.Hmac]
+            [goog.crypt.Sha256]
+            [missionary.core :as m]))
 
 (defn set-preferred-format!
   [format]
@@ -36,7 +38,7 @@
       (aset arr i (.charCodeAt username i)))
     (.decode (new js/TextDecoder "utf-8") arr)))
 
-(defn- parse-jwt [jwt]
+(defn parse-jwt [jwt]
   (some-> jwt
           (string/split ".")
           second
@@ -201,13 +203,13 @@
   (state/pub-event! [:user/fetch-info-and-graphs]))
 
 (defn ^:export login-with-username-password-e2e
-  [username password client-id client-secret]
+  [username' password client-id client-secret]
   (let [text-encoder (new js/TextEncoder)
         key          (.encode text-encoder client-secret)
         hasher       (new crypt/Sha256)
         hmacer       (new crypt/Hmac hasher key)
-        secret-hash  (.encodeByteArray ^js crypt/base64 (.getHmac hmacer (str username client-id)))
-        payload      {"AuthParameters" {"USERNAME"    username,
+        secret-hash  (.encodeByteArray ^js crypt/base64 (.getHmac hmacer (str username' client-id)))
+        payload      {"AuthParameters" {"USERNAME"    username',
                                         "PASSWORD"    password,
                                         "SECRET_HASH" secret-hash}
                       "AuthFlow"       "USER_PASSWORD_AUTH",
@@ -233,9 +235,9 @@
 
 (defn upgrade []
   (let [base-upgrade-url "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"
-        user-uuid (user-uuid)
+        user-uuid' (user-uuid)
         url (cond-> base-upgrade-url
-              user-uuid (str "?checkout[custom][user_uuid]=" (name user-uuid)))]
+              user-uuid' (str "?checkout[custom][user_uuid]=" (name user-uuid')))]
     (println " ~~~ LEMON: " url " ~~~ ")
     (js/window.open url)))
   ; (js/window.open
@@ -253,6 +255,17 @@
                   (-> (state/get-auth-id-token) parse-jwt expired?))
           (ex-info "empty or expired token and refresh failed" {:anom :expired-token}))))))
 
+(def task--ensure-id&access-token
+  (m/sp
+    (let [id-token (state/get-auth-id-token)]
+      (when (or (nil? id-token)
+                (-> id-token parse-jwt almost-expired-or-expired?))
+        (prn (str "refresh tokens... " (tc/to-string (t/now))))
+        (c.m/<? (<refresh-id-token&access-token))
+        (when (or (nil? (state/get-auth-id-token))
+                  (-> (state/get-auth-id-token) parse-jwt expired?))
+          (throw (ex-info "empty or expired token and refresh failed" {:type :expired-token})))))))
+
 (defn <user-uuid
   []
   (go
@@ -261,6 +274,10 @@
       (user-uuid))))
 
 ;;; user groups
+
+(defn team-member?
+  []
+  (contains? (state/user-groups) "team"))
 
 (defn alpha-user?
   []
@@ -275,6 +292,37 @@
 (defn alpha-or-beta-user?
   []
   (or (alpha-user?) (beta-user?)))
+
+(defn get-user-type
+  [repo]
+  (-> (some #(when (= repo (:url %)) %) (:rtc/graphs @state/state))
+      :graph<->user-user-type))
+
+(defn manager?
+  [repo]
+  (= (get-user-type repo) "manager"))
+
+;; TODO: Remove if still unused
+#_(defn member?
+    [repo]
+    (= (get-user-type repo) "member"))
+
+(defn new-task--upload-user-avatar
+  [avatar-str]
+  (m/sp
+    (when-let [token (state/get-auth-id-token)]
+      (let [{:keys [status body] :as resp}
+            (c.m/<?
+             (http/post
+              (str "https://" config/API-DOMAIN "/logseq/get_presigned_user_avatar_put_url")
+              {:oauth-token token
+               :with-credentials? false}))]
+        (when-not (http/unexceptional-status? status)
+          (throw (ex-info "failed to get presigned url" {:resp resp})))
+        (let [presigned-url (:presigned-url body)
+              {:keys [status]} (c.m/<? (http/put presigned-url {:body avatar-str :with-credentials? false}))]
+          (when-not (http/unexceptional-status? status)
+            (throw (ex-info "failed to upload avatar" {:resp resp}))))))))
 
 (comment
   ;; We probably need this for some new features later

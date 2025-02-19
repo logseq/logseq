@@ -12,7 +12,7 @@ on:
       - '.github/workflows/publishing.yml'
       - '!deps/publishing/**.md'
   pull_request:
-    branches: [master]
+    branches: [master, "feat/db"]
     paths:
       - 'deps/publishing/**'
       - 'deps/db/**'
