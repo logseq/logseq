@@ -17,6 +17,7 @@
             [frontend.worker.rtc.ws-util :as ws-util :refer [gen-get-ws-create-map--memoized]]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
@@ -319,17 +320,17 @@
     (let [{:keys [conn user-uuid graph-uuid schema-version remote-schema-version date-formatter] :as r}
           (validate-rtc-start-conditions repo token)]
       (if (instance? ExceptionInfo r)
-        (do (prn r) (r.ex/->map r))
+        (do (log/info :e r) (r.ex/->map r))
         (let [{:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
               (create-rtc-loop graph-uuid schema-version repo conn date-formatter token)
               *last-stop-exception (atom nil)
               canceler (c.m/run-task rtc-loop-task :rtc-loop-task
                                      :fail (fn [e]
                                              (reset! *last-stop-exception e)
-                                             (js/console.log :rtc-loop-task e)))
+                                             (log/info :rtc-loop-task e)))
               start-ex (m/? onstarted-task)]
           (if-let [start-ex (:ex-data start-ex)]
-            (do (prn start-ex) (r.ex/->map start-ex))
+            (do (log/info :start-ex start-ex) (r.ex/->map start-ex))
             (do (reset! *rtc-loop-metadata {:repo repo
                                             :graph-uuid graph-uuid
                                             :local-graph-schema-version schema-version
@@ -376,7 +377,7 @@
                                     {:action "delete-graph"
                                      :graph-uuid graph-uuid
                                      :schema-version (str schema-version)}))]
-        (when ex-data (prn ::delete-graph-failed graph-uuid ex-data))
+        (when ex-data (log/info ::delete-graph-failed {:graph-uuid graph-uuid :ex-data ex-data}))
         (boolean (nil? ex-data))))))
 
 (defn new-task--get-users-info
