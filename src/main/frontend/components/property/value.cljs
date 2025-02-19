@@ -33,6 +33,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.property :as outliner-property]
@@ -604,7 +605,7 @@
     "hash"
     (ldb/property? node)
     "letter-p"
-    (ldb/page? node)
+    (entity-util/page? node)
     "page"
     :else
     "letter-n"))
@@ -732,7 +733,7 @@
                                                   (when-not (string/blank? (string/trim chosen))
                                                     (p/let [result (<create-page-if-not-exists! block property classes' chosen)]
                                                       [result true])))
-                                      _ (when (and (integer? id) (not (ldb/page? (db/entity id))))
+                                      _ (when (and (integer? id) (not (entity-util/page? (db/entity id))))
                                           (db-async/<get-block repo id))]
                                 (p/do!
                                  (if id
@@ -947,7 +948,7 @@
               (property-normal-block-value block property v-block)
 
               ;; page/class/etc.
-              (ldb/page? v-block)
+              (entity-util/page? v-block)
               (rum/with-key
                 (page-cp {:disable-preview? true
                           :tag? class?} v-block)
@@ -997,7 +998,7 @@
        closed-values?
        (closed-value-item value opts)
 
-       (or (ldb/page? value)
+       (or (entity-util/page? value)
            (and (seq (:block/tags value))
                 ;; FIXME: page-cp should be renamed to node-cp and
                 ;; support this case and maybe other complex cases.

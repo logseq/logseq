@@ -12,7 +12,7 @@
             [frontend.util :as util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [promesa.core :as p]))

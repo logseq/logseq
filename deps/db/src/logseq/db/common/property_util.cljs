@@ -1,4 +1,4 @@
-(ns logseq.db.frontend.property.util
+(ns logseq.db.common.property-util
   "Property related util fns. Fns used in both DB and file graphs should go here"
   (:require [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]

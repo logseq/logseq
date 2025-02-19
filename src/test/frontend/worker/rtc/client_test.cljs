@@ -6,7 +6,7 @@
    [logseq.db :as ldb]
    [logseq.db.frontend.schema :as db-schema]))
 
-(def empty-db (d/empty-db db-schema/schema-for-db-based-graph))
+(def empty-db (d/empty-db db-schema/schema))
 
 (deftest local-block-ops->remote-ops-test
   (testing "user.class/yyy creation"

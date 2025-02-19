@@ -17,6 +17,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.file-based.entity-util :as file-entity-util]
             [logseq.outliner.tree :as otree]
             [malli.core :as m]))
 
@@ -81,7 +82,7 @@
     (let [format (name (get page-block :block/format (:preferred-format context)))
           date-formatter (:date-formatter context)
           title (string/capitalize (:block/name page-block))
-          whiteboard-page? (ldb/whiteboard? page-block)
+          whiteboard-page? (file-entity-util/whiteboard? page-block)
           format (if whiteboard-page? "edn" format)
           journal-page? (common-date/valid-journal-title? title date-formatter)
           journal-title (common-date/normalize-journal-title title date-formatter)
@@ -112,7 +113,7 @@
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (d/entity db file-db-id) :file/path)
         result (if (and (string? file-path) (not-empty file-path))
-                 (let [new-content (if (ldb/whiteboard? page-block)
+                 (let [new-content (if (file-entity-util/whiteboard? page-block)
                                      (->
                                       (wfu/ugly-pr-str {:blocks tree
                                                         :pages (list (remove-transit-ids page-block))})
@@ -148,7 +149,7 @@
   [repo conn page-db-id outliner-op context request-id]
   (let [page-block (d/pull @conn '[*] page-db-id)
         page-db-id (:db/id page-block)
-        whiteboard? (ldb/whiteboard? page-block)
+        whiteboard? (file-entity-util/whiteboard? page-block)
         blocks-count (ldb/get-page-blocks-count @conn page-db-id)
         blocks-just-deleted? (and (zero? blocks-count)
                                   (contains? #{:delete-blocks :move-blocks} outliner-op))]
@@ -202,15 +203,7 @@
       (async/put! file-writes-chan [repo page-id (:outliner-op tx-meta) (tc/to-long (t/now)) request-id]))))
 
 (defn <ratelimit-file-writes!
-  []
+  [flush-fn]
   (async-util/<ratelimit file-writes-chan batch-write-interval
-                          :filter-fn (fn [_] true)
-                          :flush-fn
-                          (fn [col]
-                            (when (seq col)
-                              (let [repo (ffirst col)
-                                    conn (worker-state/get-datascript-conn repo)]
-                                (if conn
-                                  (when-not (ldb/db-based-graph? @conn)
-                                    (write-files! conn col (worker-state/get-context)))
-                                  (js/console.error (str "DB is not found for ") repo)))))))
+                         :filter-fn (fn [_] true)
+                         :flush-fn flush-fn))

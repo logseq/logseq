@@ -1,12 +1,13 @@
 (ns frontend.common.file.core
-  "Save file to disk. Used by both file and DB graphs and shared
-   by worker and frontend namespaces"
+  "Convert blocks to file content. Used for exports and saving file to disk. Shared
+  by worker and frontend namespaces"
   (:require [clojure.string :as string]
-            [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.graph-parser.property :as gp-property]
             [logseq.outliner.tree :as otree]))
 
 (defn- indented-block-content
@@ -107,6 +108,12 @@
   [repo db tree opts context]
   (->> (tree->file-content-aux repo db tree opts context) (string/join "\n")))
 
+(defn- update-block-content
+  [db item eid]
+  ;; This may not be needed if this becomes a file-graph only context
+  (if (entity-plus/db-based-graph? db)
+    (db-content/update-block-content db item eid)
+    item))
 
 (defn block->content
   "Converts a block including its children (recursively) to plain-text."
@@ -117,7 +124,7 @@
                          0
                          1))
         blocks (->> (d/pull-many db '[*] (keep :db/id (ldb/get-block-and-children db root-block-uuid)))
-                    (map #(db-content/update-block-content db % (:db/id %))))
+                    (map #(update-block-content db % (:db/id %))))
         tree (otree/blocks->vec-tree repo db blocks (str root-block-uuid))]
     (tree->file-content repo db tree
                         (assoc tree->file-opts :init-level init-level)

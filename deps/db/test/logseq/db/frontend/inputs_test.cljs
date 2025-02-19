@@ -17,7 +17,7 @@
          (map first))))
 
 (deftest resolve-input-for-page-and-block-inputs
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
+  (let [conn (d/create-conn db-schema/schema)
         _ (d/transact! conn [{:db/ident :logseq.class/Page}])
         _ (sqlite-build/create-blocks
            conn

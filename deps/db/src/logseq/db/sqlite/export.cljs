@@ -7,6 +7,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]))
@@ -30,7 +31,7 @@
    Pages that are shallow copied are at the edges of export and help keep the export size reasonable and
    avoid exporting unexpected info"
   [page-entity]
-  (if (ldb/journal? page-entity)
+  (if (entity-util/journal? page-entity)
     {:build/journal (:block/journal-day page-entity)}
     {:block/title (block-title page-entity)}))
 
@@ -42,7 +43,7 @@
         [:build/page (cond-> (shallow-copy-page pvalue)
                        (seq (:block/tags pvalue))
                        (assoc :build/tags (->build-tags (:block/tags pvalue))))]
-        (ldb/journal? pvalue)
+        (entity-util/journal? pvalue)
         [:build/page {:build/journal (:block/journal-day pvalue)}]
         :else
         (if (= :node (:logseq.property/type property-ent))
@@ -223,7 +224,7 @@
   [db page-blocks]
   (let [content-ref-uuids (set (mapcat (comp db-content/get-matched-ids block-title) page-blocks))
         content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)
-        content-ref-pages (filter #(or (ldb/internal-page? %) (ldb/journal? %)) content-ref-ents)
+        content-ref-pages (filter #(or (ldb/internal-page? %) (entity-util/journal? %)) content-ref-ents)
         content-ref-properties (when-let [prop-ids (seq (map :db/ident (filter ldb/property? content-ref-ents)))]
                                  (update-vals (build-export-properties db prop-ids {:include-uuid? true :shallow-copy? true})
                                               #(merge % {:build/keep-uuid? true})))
@@ -288,7 +289,7 @@
      :pvalue-uuids @*pvalue-uuids}))
 
 (defn- build-uuid-block-export [db pvalue-uuids content-ref-ents {:keys [page-entity]}]
-  (let [content-ref-blocks (set (remove ldb/page? content-ref-ents))
+  (let [content-ref-blocks (set (remove entity-util/page? content-ref-ents))
         uuid-block-ents-to-export (concat (map #(d/entity db [:block/uuid %]) pvalue-uuids)
                                           content-ref-blocks)
         uuid-block-pages

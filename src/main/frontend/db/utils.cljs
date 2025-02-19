@@ -3,7 +3,8 @@
   (:require [datascript.core :as d]
             [frontend.state :as state]
             [frontend.db.conn :as conn]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.entity-plus :as entity-plus]))
 
 ;; transit serialization
 
@@ -46,7 +47,9 @@
   "Replace `[[internal-id]]` with `[[page name]]`"
   [item eid]
   (if-let [db (conn/get-db)]
-    (db-content/update-block-content db item eid)
+    (if (entity-plus/db-based-graph? db)
+      (db-content/update-block-content db item eid)
+      item)
     item))
 
 (defn pull

@@ -1,6 +1,6 @@
 (ns logseq.graph-parser.whiteboard
   "Whiteboard related parser utilities"
-  (:require [logseq.db.frontend.property.util :as db-property-util]
+  (:require [logseq.db.common.property-util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn block->shape [block]

@@ -49,7 +49,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.property.util :as db-property-util]
+            [logseq.db.common.property-util :as db-property-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.sdk.assets :as sdk-assets]
             [logseq.sdk.core]

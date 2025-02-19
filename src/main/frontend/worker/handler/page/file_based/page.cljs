@@ -10,7 +10,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.common.date :as common-date]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.common.order :as db-order]))
 
 (defn- file-based-properties-block
   [repo conn config date-formatter properties format page]

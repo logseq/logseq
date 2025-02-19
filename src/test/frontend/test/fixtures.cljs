@@ -1,10 +1,10 @@
 (ns frontend.test.fixtures
   (:require [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.state :as state]
-            [frontend.test.helper :as test-helper]))
+            [frontend.test.helper :as test-helper]
+            [logseq.db.file-based.schema :as file-schema]))
 
 (defn react-components
   [f]
@@ -16,7 +16,7 @@
 (defn- reset-datascript
   [repo]
   (let [db-name (conn/get-repo-path repo)
-        db-conn (d/create-conn db-schema/schema)]
+        db-conn (d/create-conn file-schema/schema)]
     (state/set-current-repo! repo)
     (swap! conn/conns assoc db-name db-conn)))
 
