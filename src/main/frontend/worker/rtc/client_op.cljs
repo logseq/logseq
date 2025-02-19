@@ -4,6 +4,7 @@
             [frontend.common.missionary :as c.m]
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.state :as worker-state]
+            [lambdaisland.glogi :as log]
             [logseq.db.sqlite.util :as sqlite-util]
             [malli.core :as ma]
             [malli.transform :as mt]
@@ -58,7 +59,7 @@
 
 (def ops-schema [:sequential op-schema])
 (def ops-coercer (ma/coercer ops-schema mt/json-transformer nil
-                             #(do (prn ::bad-ops (:value %))
+                             #(do (log/error ::bad-ops (:value %))
                                   (ma/-fail! ::ops-schema %))))
 
 (def ^:private block-op-types #{:move :remove :update-page :remove-page :update})

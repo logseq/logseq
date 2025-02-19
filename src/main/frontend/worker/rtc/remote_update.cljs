@@ -12,6 +12,7 @@
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
+            [lambdaisland.glogi :as log]
             [logseq.clj-fractional-indexing :as index]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]
@@ -544,7 +545,7 @@ so need to pull earlier remote-data from websocket."})
     (doseq [refed-block sorted-refed-blocks]
       (let [ent (d/entity @conn [:block/uuid (:block/uuid refed-block)])]
         (when-not ent
-          (prn :ensure-refed-blocks-exist refed-block)
+          (log/info :ensure-refed-blocks-exist refed-block)
           (if (:block/name refed-block)
             (apply-remote-update-page-ops repo conn [(-> refed-block
                                                          (assoc :self (:block/uuid refed-block))
