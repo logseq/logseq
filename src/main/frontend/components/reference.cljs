@@ -124,7 +124,9 @@
       (let [blocks (->> (mapcat second filtered-ref-blocks)
                         (map (fn [b] (assoc (db/entity (:db/id b)) :id (:db/id b)))))
             columns' (columns {} blocks)]
-        (when (seq blocks)
+        (when (or (seq blocks)
+                  (seq (:included filters))
+                  (seq (:excluded filters)))
           (views/view
            {:view-parent page-entity
             :view-identity :linked-references
