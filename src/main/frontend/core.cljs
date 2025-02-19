@@ -22,6 +22,7 @@
 
 (defn set-router!
   []
+  (.addEventListener js/window "popstate" route-handler/restore-scroll-pos)
   (rfe/start!
    (rf/router (plugins/hook-custom-routes routes/routes) nil)
    (fn [route]
