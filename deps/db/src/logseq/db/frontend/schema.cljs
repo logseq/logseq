@@ -13,8 +13,7 @@
 
 (defn parse-schema-version
   "Return schema-version({:major <num> :minor <num>}).
-  schema-version-old: 10, a number
-  schema-version-new: \"12.34\", string, <major-num>.<minor-num>"
+  supported input: 10, \"10.1\", [10 1]"
   [string-or-compatible-number]
   (cond
     (schema-version? string-or-compatible-number) string-or-compatible-number
