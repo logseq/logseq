@@ -17,6 +17,7 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
+            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.file-based.rules :as file-rules])
@@ -90,13 +91,13 @@
              (prn :debug-tx-data tx-data)
              (throw e))))))))
 
-(def page? entity-util/page?)
+(def page? common-entity-util/page?)
 (def internal-page? entity-util/internal-page?)
 (def class? entity-util/class?)
 (def property? entity-util/property?)
 (def closed-value? entity-util/closed-value?)
-(def whiteboard? entity-util/whiteboard?)
-(def journal? entity-util/journal?)
+(def whiteboard? common-entity-util/whiteboard?)
+(def journal? common-entity-util/journal?)
 (def hidden? entity-util/hidden?)
 (def object? entity-util/object?)
 (def asset? entity-util/asset?)

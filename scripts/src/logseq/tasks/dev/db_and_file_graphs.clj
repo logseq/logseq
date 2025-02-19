@@ -77,7 +77,9 @@
 
 (defn- validate-multi-graph-fns-not-in-file-or-db
   []
-  (let [multi-graph-fns ["config/db-based-graph\\?" "sqlite-util/db-based-graph\\?"]
+  (let [multi-graph-fns ["config/db-based-graph\\?" "sqlite-util/db-based-graph\\?"
+                         ;; Use file-entity-util and entity-util when in a single graph context
+                         "ldb/whiteboard\\?" "ldb/journal\\?" "ldb/page\\?"]
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" multi-graph-fns) ")")
                    (into file-graph-paths db-graph-paths))]

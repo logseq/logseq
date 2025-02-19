@@ -10,6 +10,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
             [logseq.db.sqlite.util :as sqlite-util]))
 
@@ -30,7 +31,7 @@
   (->> (d/datoms db :avet :block/title page-name)
        (filter (fn [d]
                  (let [e (d/entity db (:e d))]
-                   (entity-util/page? e))))
+                   (common-entity-util/page? e))))
        (map :e)
        sort
        first))
@@ -143,9 +144,9 @@
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
                              id))
-        page? (entity-util/page? block)
+        page? (common-entity-util/page? block)
         get-children (fn [block children]
-                       (let [long-page? (and (> (count children) 500) (not (entity-util/whiteboard? block)))]
+                       (let [long-page? (and (> (count children) 500) (not (common-entity-util/whiteboard? block)))]
                          (if long-page?
                            (->> (map (fn [e]
                                        (select-keys e [:db/id :block/uuid :block/page :block/order :block/parent :block/collapsed? :block/link]))

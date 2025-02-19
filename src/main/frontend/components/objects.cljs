@@ -19,6 +19,7 @@
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -187,8 +188,8 @@
                                                                              :class-schema? true}]))
                    :on-delete-rows (fn [table selected-rows]
                                      ;; Built-in objects must not be deleted e.g. Tag, Property and Root
-                                     (let [pages (->> selected-rows (filter ldb/page?) (remove :logseq.property/built-in?))
-                                           blocks (->> selected-rows (remove ldb/page?) (remove :logseq.property/built-in?))]
+                                     (let [pages (->> selected-rows (filter entity-util/page?) (remove :logseq.property/built-in?))
+                                           blocks (->> selected-rows (remove entity-util/page?) (remove :logseq.property/built-in?))]
                                        (p/do!
                                         (when-let [f (get-in table [:data-fns :set-row-selection!])]
                                           (f {}))
@@ -267,8 +268,8 @@
                    ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
                    :on-delete-rows (when-not (:logseq.property/built-in? property)
                                      (fn [table selected-rows]
-                                       (let [pages (->> selected-rows (filter ldb/page?) (remove :logseq.property/built-in?))
-                                             blocks (->> selected-rows (remove ldb/page?) (remove :logseq.property/built-in?))]
+                                       (let [pages (->> selected-rows (filter entity-util/page?) (remove :logseq.property/built-in?))
+                                             blocks (->> selected-rows (remove entity-util/page?) (remove :logseq.property/built-in?))]
                                          (p/do!
                                           (set-data! (get-property-related-objects (state/get-current-repo) property))
                                           (when-let [f (get-in table [:data-fns :set-row-selection!])]
