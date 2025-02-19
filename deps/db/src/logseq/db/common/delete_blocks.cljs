@@ -1,5 +1,5 @@
-(ns logseq.db.frontend.delete-blocks
-  "Delete refs/macros when deleting blocks"
+(ns logseq.db.common.delete-blocks
+  "For file and DB graphs, provides fn to handle any deletion to occur per ldb/transact!"
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util :as common-util]

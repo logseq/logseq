@@ -5,7 +5,7 @@
             [frontend.persist-db :as persist-db]
             [promesa.core :as p]
             [cljs-time.core :as t]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.common.sqlite :as sqlite-common-db]
             [datascript.transit :as dt]))
 
 (defn restore-graph!

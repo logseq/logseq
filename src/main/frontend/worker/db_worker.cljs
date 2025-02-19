@@ -34,7 +34,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]

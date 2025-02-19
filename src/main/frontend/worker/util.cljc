@@ -6,7 +6,7 @@
                      [goog.crypt :as crypt]
                      [goog.crypt.Hmac]
                      [goog.crypt.Sha256]
-                     [logseq.db.sqlite.common-db :as sqlite-common-db]
+                     [logseq.db.common.sqlite :as sqlite-common-db]
                      [frontend.common.file.util :as wfu])))
 
 ;; Copied from https://github.com/tonsky/datascript-todo

@@ -3,7 +3,7 @@
   (:require ["path" :as node-path]
             ["fs-extra" :as fs]
             ["electron" :refer [app]]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]))
+            [logseq.db.common.sqlite :as sqlite-common-db]))
 
 (defn get-graphs-dir
   []

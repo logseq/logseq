@@ -1,5 +1,6 @@
-(ns logseq.db.sqlite.common-db
-  "Common sqlite db fns for browser and node"
+(ns logseq.db.common.sqlite
+  "Provides common sqlite db fns for file and DB graphs. These fns work on
+  browser and node"
   (:require ["path" :as node-path]
             [clojure.set :as set]
             [clojure.string :as string]

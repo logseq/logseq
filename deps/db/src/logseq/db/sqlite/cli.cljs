@@ -1,7 +1,7 @@
 (ns ^:node-only logseq.db.sqlite.cli
   "Primary ns to interact with DB files for DB and file graphs with node.js based CLIs"
   (:require ["better-sqlite3" :as sqlite3]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.common.sqlite :as sqlite-common-db]
             ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
             #_:clj-kondo/ignore
             [datascript.core :as d]
