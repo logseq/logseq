@@ -3,6 +3,7 @@
   (:require-macros [frontend.common.missionary])
   (:require [cljs.core.async.impl.channels]
             [clojure.core.async :as a]
+            [lambdaisland.glogi :as log]
             [missionary.core :as m]
             [promesa.protocols :as pt]))
 
@@ -82,11 +83,11 @@
 (defn run-task
   "Return the canceler"
   [task key & {:keys [succ fail]}]
-  (task (or succ #(prn key :succ %)) (or fail #(js/console.log key %))))
+  (task (or succ #(log/info :key key :succ %)) (or fail #(log/info :key key :stopped %))))
 
 (defn run-task-throw
   [task key & {:keys [succ]}]
-  (task (or succ #(prn key :succ %)) #(throw (ex-info "task failed" {:key key :e %}))))
+  (task (or succ #(log/info :key key :succ %)) #(throw (ex-info "task stopped" {:key key :e %}))))
 
 (defonce ^:private *background-task-cancelers ; key -> canceler
   (volatile! {}))

@@ -2,6 +2,7 @@
   "Fns to generate rtc related logs"
   (:require [frontend.common.missionary :as c.m]
             [frontend.worker.util :as worker-util]
+            [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [malli.core :as ma]
             [missionary.core :as m]))
@@ -50,7 +51,7 @@
                                          (fn [v]
                                            (if (validator v)
                                              true
-                                             (do (prn :debug-graph-uuid->t-validator v)
+                                             (do (log/error :debug-graph-uuid->t-validator v)
                                                  false)))))
 
 (def *graph-uuid->local-t (atom {} :validator graph-uuid->t-validator))
