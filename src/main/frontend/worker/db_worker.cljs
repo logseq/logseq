@@ -33,8 +33,8 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -959,6 +959,18 @@
     :delete-page (fn [repo conn [page-uuid]]
                    (delete-page! repo conn page-uuid))}))
 
+(defn- <ratelimit-file-writes!
+  []
+  (file/<ratelimit-file-writes!
+   (fn [col]
+     (when (seq col)
+       (let [repo (ffirst col)
+             conn (worker-state/get-datascript-conn repo)]
+         (if conn
+           (when-not (ldb/db-based-graph? @conn)
+             (file/write-files! conn col (worker-state/get-context)))
+           (js/console.error (str "DB is not found for " repo))))))))
+
 (defn init
   "web worker entry"
   []
@@ -967,7 +979,7 @@
   (let [^js obj (DBWorker.)]
     (outliner-register-op-handlers!)
     (worker-state/set-worker-object! obj)
-    (file/<ratelimit-file-writes!)
+    (<ratelimit-file-writes!)
     (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
     (Comlink/expose obj)
     (reset! worker-state/*main-thread (Comlink/wrap js/self))))
