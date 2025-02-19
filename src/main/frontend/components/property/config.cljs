@@ -21,7 +21,7 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [logseq.db :as ldb]
-            [logseq.db.frontend.order :as db-order]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.core :as outliner-core]

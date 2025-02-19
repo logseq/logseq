@@ -1,5 +1,5 @@
 (ns logseq.db.frontend.entity-util
-  "Lower level entity util fns used across db namespaces"
+  "Lower level entity util fns for DB graphs"
   (:require [clojure.string :as string]
             [datascript.db]
             [datascript.impl.entity :as de])
@@ -33,11 +33,7 @@
 (defn whiteboard?
   "Given a page entity or map, check if it is a whiteboard page"
   [entity]
-  (or
-   ;; db based graph
-   (has-tag? entity :logseq.class/Whiteboard)
-   ;; file based graph
-   (identical? "whiteboard" (:block/type entity))))
+  (has-tag? entity :logseq.class/Whiteboard))
 
 (defn closed-value?
   [entity]
@@ -46,24 +42,15 @@
 (defn journal?
   "Given a page entity or map, check if it is a journal page"
   [entity]
-  (or
-   ;; db based graph
-   (has-tag? entity :logseq.class/Journal)
-   ;; file based graph
-   (identical? "journal" (:block/type entity))))
+  (has-tag? entity :logseq.class/Journal))
 
 (defn page?
   [entity]
-  (or
-   ;; db based graph
-   (internal-page? entity)
-   (class? entity)
-   (property? entity)
-   (whiteboard? entity)
-   (journal? entity)
-
-   ;; file based graph
-   (contains? #{"page" "journal" "whiteboard"} (:block/type entity))))
+  (or (internal-page? entity)
+      (class? entity)
+      (property? entity)
+      (whiteboard? entity)
+      (journal? entity)))
 
 (defn asset?
   "Given an entity or map, check if it is an asset block"

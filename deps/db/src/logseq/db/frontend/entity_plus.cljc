@@ -16,9 +16,9 @@
 
 (def nil-db-ident-entities
   "No such entities with these :db/ident, but `(d/entity <db> <ident>)` has been called somewhere."
-  #{:block/tx-id :block/warning :block/pre-block? :block/uuid :block/scheduled
-    :block/deadline :block/journal-day :block/level :block/heading-level
-    :block/type :block/name :block/marker :block/_refs
+  #{:block/tx-id :block/uuid :block/journal-day :block/_refs :block/level :block/heading-level :block/warning
+    ;; File graph only attributes. Can these be removed if this is only called in db graphs?
+    :block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker
 
     :block.temp/ast-title :block.temp/top? :block.temp/bottom? :block.temp/search?
     :block.temp/fully-loaded? :block.temp/ast-body

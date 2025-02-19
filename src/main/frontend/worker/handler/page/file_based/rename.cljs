@@ -11,7 +11,8 @@
             [logseq.common.config :as common-config]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.common.order :as db-order]
+            [logseq.db.file-based.entity-util :as file-entity-util]))
 
 
 (defn- replace-page-ref-aux
@@ -205,7 +206,7 @@
   [db old-page-name new-page-name]
   (let [page (d/entity db [:block/name old-page-name])
         file (:block/file page)]
-    (when (and file (not (ldb/journal? page)))
+    (when (and file (not (file-entity-util/journal? page)))
       (let [old-path (:file/path file)
             new-file-name (wfu/file-name-sanity new-page-name) ;; w/o file extension
             new-path (compute-new-file-path old-path new-file-name)]
@@ -317,8 +318,8 @@
       :invalid-empty-name
 
       (and page-e new-page-e
-           (or (ldb/whiteboard? page-e)
-               (ldb/whiteboard? new-page-e)))
+           (or (file-entity-util/whiteboard? page-e)
+               (file-entity-util/whiteboard? new-page-e)))
       :merge-whiteboard-pages
 
       (and old-name new-name name-changed?)

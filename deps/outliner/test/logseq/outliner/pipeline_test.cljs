@@ -23,7 +23,7 @@
 
 (deftest compute-block-path-refs-tx
   (testing "when a block's :refs change, descendants of block have correct :block/path-refs"
-    (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
+    (let [conn (d/create-conn db-schema/schema)
           ;; needed in order for path-refs to be setup correctly with init data
           _ (db-pipeline/add-listener conn)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))

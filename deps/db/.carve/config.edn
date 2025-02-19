@@ -1,12 +1,12 @@
 {:paths ["src"]
- :api-namespaces [logseq.db.sqlite.common-db
+ :api-namespaces [logseq.db.common.sqlite
                   logseq.db.sqlite.util
                   logseq.db.sqlite.cli
                   logseq.db.frontend.property
                   logseq.db.frontend.property.build
-                  logseq.db.frontend.property.util
+                  logseq.db.common.property-util
                   logseq.db.frontend.content
-                  logseq.db.frontend.order
+                  logseq.db.common.order
                   logseq.db.sqlite.create-graph
                   logseq.db.frontend.malli-schema
                   ;; Some fns are used by frontend but not worth moving over yet

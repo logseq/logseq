@@ -1,10 +1,11 @@
-(ns logseq.db.frontend.delete-blocks
-  "Delete refs/macros when deleting blocks"
+(ns logseq.db.common.delete-blocks
+  "For file and DB graphs, provides fn to handle any deletion to occur per ldb/transact!"
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]))
 
@@ -54,7 +55,7 @@
                                                     (contains? #{:db.fn/retractEntity :db/retractEntity} (first tx)))
                                            (second tx))) txs)
                                  (filter (fn [id]
-                                           (not (entity-util/page? (d/entity db id))))))]
+                                           (not (common-entity-util/page? (d/entity db id))))))]
     (when (seq retracted-block-ids)
       (let [retracted-blocks (map #(d/entity db %) retracted-block-ids)
             retracted-tx (build-retracted-tx retracted-blocks)

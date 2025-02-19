@@ -15,7 +15,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.order :as db-order]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.schema :as db-schema]
