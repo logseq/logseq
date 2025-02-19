@@ -79,47 +79,45 @@
            (set-loading? false))))
      [])
 
-    (if loading?
-      (ui/skeleton)
-      (views/view {:config config
-                   :data data
-                   :set-data! set-data!
-                   :view-parent class
-                   :view-identity :class-objects
-                   :columns columns
-                   :add-new-object! (fn [{:keys [properties]}]
-                                      (if (= :logseq.class/Asset (:db/ident class))
-                                        (shui/dialog-open!
-                                         (fn []
-                                           [:div.flex.flex-col.gap-2
-                                            [:div.font-medium "Add assets"]
-                                            (filepicker/picker
-                                             {:on-change (fn [_e files]
-                                                           (p/do!
-                                                            (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)
-                                                            (set-data! (get-class-objects class))
-                                                            (shui/dialog-close!)))})]))
-                                        (add-new-class-object! class set-data! properties)))
-                   :show-add-property? true
-                   :add-property! (fn []
-                                    (state/pub-event! [:editor/new-property {:block class
-                                                                             :class-schema? true}]))
-                   :on-delete-rows (fn [table selected-rows]
+    (views/view {:config config
+                 :data data
+                 :set-data! set-data!
+                 :view-parent class
+                 :view-identity :class-objects
+                 :columns columns
+                 :add-new-object! (fn [{:keys [properties]}]
+                                    (if (= :logseq.class/Asset (:db/ident class))
+                                      (shui/dialog-open!
+                                       (fn []
+                                         [:div.flex.flex-col.gap-2
+                                          [:div.font-medium "Add assets"]
+                                          (filepicker/picker
+                                           {:on-change (fn [_e files]
+                                                         (p/do!
+                                                          (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)
+                                                          (set-data! (get-class-objects class))
+                                                          (shui/dialog-close!)))})]))
+                                      (add-new-class-object! class set-data! properties)))
+                 :show-add-property? true
+                 :add-property! (fn []
+                                  (state/pub-event! [:editor/new-property {:block class
+                                                                           :class-schema? true}]))
+                 :on-delete-rows (fn [table selected-rows]
                                      ;; Built-in objects must not be deleted e.g. Tag, Property and Root
-                                     (let [pages (->> selected-rows (filter ldb/page?) (remove :logseq.property/built-in?))
-                                           blocks (->> selected-rows (remove ldb/page?) (remove :logseq.property/built-in?))]
-                                       (p/do!
-                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                          (f {}))
-                                        (ui-outliner-tx/transact!
-                                         {:outliner-op :delete-blocks}
-                                         (when (seq blocks)
-                                           (outliner-op/delete-blocks! blocks nil))
-                                         (let [page-ids (map :db/id pages)
-                                               tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id class)]) page-ids)]
-                                           (when (seq tx-data)
-                                             (outliner-op/transact! tx-data {:outliner-op :save-block}))))
-                                        (set-data! (get-class-objects class)))))}))))
+                                   (let [pages (->> selected-rows (filter ldb/page?) (remove :logseq.property/built-in?))
+                                         blocks (->> selected-rows (remove ldb/page?) (remove :logseq.property/built-in?))]
+                                     (p/do!
+                                      (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                        (f {}))
+                                      (ui-outliner-tx/transact!
+                                       {:outliner-op :delete-blocks}
+                                       (when (seq blocks)
+                                         (outliner-op/delete-blocks! blocks nil))
+                                       (let [page-ids (map :db/id pages)
+                                             tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id class)]) page-ids)]
+                                         (when (seq tx-data)
+                                           (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+                                      (set-data! (get-class-objects class)))))})))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class {:keys [current-page? sidebar?]}]
@@ -167,34 +165,33 @@
          (set-loading? false)))
      [])
 
-    (when (false? loading?)
-      (views/view {:config config
-                   :data data
-                   :view-parent property
-                   :view-identity :property-objects
-                   :set-data! set-data!
-                   :columns columns
-                   :add-new-object! (fn [{:keys [properties]}]
-                                      (add-new-property-object! property set-data! properties))
-                   ;; TODO: Add support for adding column
-                   :show-add-property? false
-                   ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
-                   :on-delete-rows (when-not (:logseq.property/built-in? property)
-                                     (fn [table selected-rows]
-                                       (let [pages (->> selected-rows (filter ldb/page?) (remove :logseq.property/built-in?))
-                                             blocks (->> selected-rows (remove ldb/page?) (remove :logseq.property/built-in?))]
-                                         (p/do!
-                                          (set-data! (get-property-related-objects (state/get-current-repo) property))
-                                          (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                            (f {}))
-                                          (ui-outliner-tx/transact!
-                                           {:outliner-op :delete-blocks}
-                                           (when (seq blocks)
-                                             (outliner-op/delete-blocks! blocks nil))
-                                           (let [page-ids (map :db/id pages)
-                                                 tx-data (map (fn [pid] [:db/retract pid (:db/ident property)]) page-ids)]
-                                             (when (seq tx-data)
-                                               (outliner-op/transact! tx-data {:outliner-op :save-block}))))))))}))))
+    (views/view {:config config
+                 :data data
+                 :view-parent property
+                 :view-identity :property-objects
+                 :set-data! set-data!
+                 :columns columns
+                 :add-new-object! (fn [{:keys [properties]}]
+                                    (add-new-property-object! property set-data! properties))
+                 ;; TODO: Add support for adding column
+                 :show-add-property? false
+                 ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
+                 :on-delete-rows (when-not (:logseq.property/built-in? property)
+                                   (fn [table selected-rows]
+                                     (let [pages (->> selected-rows (filter ldb/page?) (remove :logseq.property/built-in?))
+                                           blocks (->> selected-rows (remove ldb/page?) (remove :logseq.property/built-in?))]
+                                       (p/do!
+                                        (set-data! (get-property-related-objects (state/get-current-repo) property))
+                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                          (f {}))
+                                        (ui-outliner-tx/transact!
+                                         {:outliner-op :delete-blocks}
+                                         (when (seq blocks)
+                                           (outliner-op/delete-blocks! blocks nil))
+                                         (let [page-ids (map :db/id pages)
+                                               tx-data (map (fn [pid] [:db/retract pid (:db/ident property)]) page-ids)]
+                                           (when (seq tx-data)
+                                             (outliner-op/transact! tx-data {:outliner-op :save-block}))))))))})))
 
 ;; Show all nodes containing the given property
 (rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
