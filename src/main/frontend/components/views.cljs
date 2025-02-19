@@ -1700,7 +1700,7 @@
              (p/let [new-view (create-view! view-parent view-identity)]
                (set-view-entity! new-view)
                (set-views! (concat views [new-view])))))))
-     [view-entity views])
+     [(:db/id view-parent)])
     (view-container view-entity (assoc option
                                        :views views
                                        :set-views! set-views!
