@@ -696,7 +696,7 @@
                                                    :whiteboard? whiteboard?}))]])
 
            (when (not preview?)
-             [:div {:style {:padding-left 9}}
+             [:div.ml-1
               (when today?
                 (today-queries repo today? sidebar?))
 
@@ -721,6 +721,7 @@
                   (hierarchy/structures (:block/title page))))
 
               (when-not (or whiteboard? unlinked-refs?
+                            db-based?
                             sidebar?
                             home?
                             (or class-page? property-page?)

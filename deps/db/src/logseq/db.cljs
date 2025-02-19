@@ -6,7 +6,6 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -610,12 +609,6 @@
      (contains? tags-ids (:db/id class))
      (let [class-parent-ids (set (map :db/id (get-classes-parents tags)))]
        (contains? (set/union class-parent-ids tags-ids) (:db/id class))))))
-
-(defn get-all-pages-views
-  [db]
-  (when (db-based-graph? db)
-    (when-let [page (get-page db common-config/views-page-name)]
-      (:logseq.property/_view-for page))))
 
 (defn inline-tag?
   [block-raw-title tag]

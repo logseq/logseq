@@ -310,13 +310,15 @@
         class-ids)))
 
 (defn <get-views
-  [graph class-id]
+  [graph class-id view-identity]
   (<q graph {:transact-db? true}
       '[:find [(pull ?b [*]) ...]
-        :in $ ?class-id
+        :in $ ?class-id ?view-identity
         :where
-        [?b :logseq.property/view-for ?class-id]]
-      class-id))
+        [?b :logseq.property/view-for ?class-id]
+        [?b :logseq.property.view/identity ?view-identity]]
+      class-id
+      view-identity))
 
 (defn <get-asset-with-checksum
   [graph checksum]

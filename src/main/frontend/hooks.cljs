@@ -15,25 +15,33 @@
 #_{:clj-kondo/ignore [:discouraged-var]}
 (defn use-memo
   [f deps & {:keys [equal-fn]}]
-  (rum/use-memo f #js[(memo-deps equal-fn deps)]))
+  (rum/use-memo f (if (empty? deps)
+                    deps
+                    #js[(memo-deps equal-fn deps)])))
 
 #_{:clj-kondo/ignore [:discouraged-var]}
 (defn use-effect!
   "setup-fn will be invoked every render of component when no deps arg provided"
   ([setup-fn] (rum/use-effect! setup-fn))
   ([setup-fn deps & {:keys [equal-fn]}]
-   (rum/use-effect! setup-fn #js[(memo-deps equal-fn deps)])))
+   (rum/use-effect! setup-fn (if (empty? deps)
+                               deps
+                               #js[(memo-deps equal-fn deps)]))))
 
 #_{:clj-kondo/ignore [:discouraged-var]}
 (defn use-layout-effect!
   ([setup-fn] (rum/use-layout-effect! setup-fn))
   ([setup-fn deps & {:keys [equal-fn]}]
-   (rum/use-layout-effect! setup-fn #js[(memo-deps equal-fn deps)])))
+   (rum/use-layout-effect! setup-fn (if (empty? deps)
+                                      deps
+                                      #js[(memo-deps equal-fn deps)]))))
 
 #_{:clj-kondo/ignore [:discouraged-var]}
 (defn use-callback
   [callback deps & {:keys [equal-fn]}]
-  (rum/use-callback callback #js[(memo-deps equal-fn deps)]))
+  (rum/use-callback callback (if (empty? deps)
+                               deps
+                               #js[(memo-deps equal-fn deps)])))
 
 ;;; unchanged hooks, link to rum/use-xxx directly
 (def use-ref rum/use-ref)

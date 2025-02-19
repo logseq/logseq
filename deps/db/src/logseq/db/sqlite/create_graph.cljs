@@ -8,7 +8,6 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -177,14 +176,6 @@
        :block/title common-config/views-page-name
        :block/tags [:logseq.class/Page]
        :logseq.property/hide? true
-       :logseq.property/built-in? true})
-     (sqlite-util/block-with-timestamps
-      {:block/uuid (common-uuid/gen-uuid)
-       :block/title "All Pages Default View"
-       :block/parent [:block/uuid page-id]
-       :block/order (db-order/gen-key nil)
-       :block/page [:block/uuid page-id]
-       :logseq.property/view-for [:block/uuid page-id]
        :logseq.property/built-in? true})]))
 
 (defn- build-favorites-page
