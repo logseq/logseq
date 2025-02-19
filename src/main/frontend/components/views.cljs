@@ -1499,7 +1499,7 @@
      :size :sm
      :title "Add new view"
      :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 "
-                 (if hover? "opacity-100" "opacity-0"))
+                 (if hover? "opacity-100" "opacity-75"))
      :on-click (fn []
                  (p/let [view (create-view! view-parent view-identity)]
                    (set-views! (concat views [view]))))}
@@ -1521,7 +1521,7 @@
             (count (:rows table)))]
         (views-tab view-parent view-entity option hover?))]
      [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
-      {:class (if hover? "opacity-100" "opacity-0")}
+      {:class (if hover? "opacity-100" "opacity-75")}
 
       (when (seq additional-actions)
         [:<> (for [action additional-actions]
