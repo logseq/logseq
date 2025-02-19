@@ -12,12 +12,12 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.delete-blocks :as delete-blocks] ;; Load entity extensions
+            [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.file-based.rules :as file-rules])
   (:refer-clojure :exclude [object?]))

@@ -24,7 +24,7 @@
    [goog.dom :as gdom]
    [lambdaisland.glogi :as log]
    [logseq.db :as ldb]
-   [logseq.db.sqlite.common-db :as sqlite-common-db]
+   [logseq.db.common.sqlite :as sqlite-common-db]
    [logseq.publishing.html :as publish-html]
    [promesa.core :as p])
   (:import
