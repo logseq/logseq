@@ -19,23 +19,35 @@ the remaining chars for data of this type"
   (let [s-length (count s)]
     (apply str s (repeat (- length s-length) "0"))))
 
-(defn- gen-db-ident-block-uuid
-  "00000002-<hash-of-db-ident>-<padding-with-0>"
-  [db-ident]
-  {:pre [(keyword? db-ident)]}
-  (let [hash-num (str (Math/abs (hash db-ident)))
+(defn gen-block-uuid
+  "prefix-<hash-of-db-ident>-<padding-with-0>"
+  [key prefix]
+  {:pre [(keyword? key)]}
+  (let [hash-num (str (Math/abs (hash key)))
         part1 (fill-with-0 (subs hash-num 0 4) 4)
         part2 (fill-with-0 (subs hash-num 4 8) 4)
         part3 (fill-with-0 (subs hash-num 8 12) 4)
         part4 (fill-with-0 (subs hash-num 12) 12)]
-    (uuid (str "00000002-" part1 "-" part2 "-" part3 "-" part4))))
+    (uuid (str prefix "-" part1 "-" part2 "-" part3 "-" part4))))
+
+(defn- gen-db-ident-block-uuid
+  "00000002-<hash-of-db-ident>-<padding-with-0>"
+  [db-ident]
+  {:pre [(keyword? db-ident)]}
+  (gen-block-uuid db-ident "00000002"))
+
+;; 00000001 journal
+;; 00000002 db ident
+;; 00000003 new blocks created by migration
 
 (defn gen-uuid
   "supported type:
   - :journal-page-uuid
-  - :db-ident-block-uuid"
+  - :db-ident-block-uuid
+  - :migrate-new-block-uuid"
   ([] (d/squuid))
   ([type' v]
    (case type'
      :journal-page-uuid (gen-journal-page-uuid v)
-     :db-ident-block-uuid (gen-db-ident-block-uuid v))))
+     :db-ident-block-uuid (gen-db-ident-block-uuid v)
+     :migrate-new-block-uuid (gen-block-uuid v "00000003"))))

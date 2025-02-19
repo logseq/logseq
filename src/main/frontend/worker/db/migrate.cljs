@@ -636,8 +636,11 @@
                        (let [view-page-id (:db/id (ldb/get-page db common-config/views-page-name))
                              _ (when (nil? view-page-id)
                                  (throw (ex-info "View page not exists" {})))
-                             view (-> (assoc view-properties :logseq.property/view-for id)
-                                      (merge {:block/uuid (common-uuid/gen-uuid)
+                             view (-> view-properties
+                                      (merge {:logseq.property/view-for id
+                                              :block/uuid (common-uuid/gen-uuid :migrate-new-block-uuid
+                                                                                (keyword "temp-view-for"
+                                                                                         (string/replace (str (:block/uuid e)) "-" "")))
                                               :block/title "All"
                                               :block/parent view-page-id
                                               :block/page view-page-id
