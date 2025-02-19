@@ -1559,7 +1559,8 @@
   "Builds options for use with export-doc-files"
   [config options]
   (-> {:extract-options {:date-formatter (common-config/get-date-formatter config)
-                         :user-config config
+                         ;; Remove config keys that break importing
+                         :user-config (dissoc config :property-pages/excludelist :property-pages/enabled?)
                          :filename-format (or (:file/name-format config) :legacy)
                          :verbose (:verbose options)}
        :user-config config
