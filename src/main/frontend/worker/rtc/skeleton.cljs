@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.util :as worker-util]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [missionary.core :as m]))
@@ -30,7 +31,7 @@
           :graph-lock-failed
           (throw (ex-info "retry calibrate-graph-skeleton" {:missionary/retry true}))
           ;; else
-          (do (prn {:remote-ex remote-ex})
+          (do (log/info :remote-ex remote-ex)
               (throw (ex-info "Unavailable2" {:remote-ex remote-ex}))))
         (let [{:keys [server-schema-version server-builtin-db-idents]} r
               client-builtin-db-idents (set (get-builtin-db-idents db))

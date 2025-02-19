@@ -191,8 +191,7 @@
                    ;; get links ast
                    (map last)
                    (mapcat (fn [value]
-                             (let [f (or (:extract-refs-from-property-value-fn user-config) extract-refs-from-property-value)]
-                               (f value (get user-config :format :markdown)))))
+                             (extract-refs-from-property-value value (get user-config :format :markdown))))
                    ;; comma separated collections
                    (concat (->> (map second properties)
                                 (filter coll?)

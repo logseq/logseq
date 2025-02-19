@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.malli-schema
   "Malli schema for rtc"
-  (:require [logseq.db.frontend.malli-schema :as db-malli-schema]
+  (:require [lambdaisland.glogi :as log]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.schema :as db-schema]
             [malli.core :as m]
             [malli.transform :as mt]
@@ -353,5 +354,5 @@
                                                       (mt/key-transformer {:encode m/-keyword->string}))))
 (def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer nil
                                    #(do
-                                      (prn ::data-to-ws-schema %)
+                                      (log/error ::data-to-ws-schema %)
                                       (m/-fail! ::data-to-ws-schema %))))

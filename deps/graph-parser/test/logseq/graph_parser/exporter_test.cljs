@@ -673,6 +673,17 @@
     (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:logseq.property/parent :block/title]))
         "New page correctly set as class parent")))
 
+(deftest-async export-files-with-property-pages-disabled
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          ;; any page with properties
+          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_01_17.md"])
+          conn (db-test/create-conn)
+          _ (import-files-to-db files conn {:user-config {:property-pages/enabled? false
+                                                          :property-pages/excludelist #{:prop-string}}})]
+
+    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+        "Created graph has no validation errors")))
+
 (deftest-async export-config-file-sets-title-format
   (p/let [conn (db-test/create-conn)
           read-file #(p/do! (pr-str {:journal/page-title-format "yyyy-MM-dd"}))

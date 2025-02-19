@@ -28,6 +28,7 @@
             [frontend.worker.undo-redo2 :as undo-redo]
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
+            [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -961,6 +962,7 @@
 (defn init
   "web worker entry"
   []
+  (glogi-console/install!)
   (check-worker-scope!)
   (let [^js obj (DBWorker.)]
     (outliner-register-op-handlers!)
