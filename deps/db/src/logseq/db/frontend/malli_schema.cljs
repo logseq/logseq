@@ -536,9 +536,8 @@
 (let [malli-one-ref-attrs (->> (concat property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (filter #(= (last %) :int))
                                (map first)
-                               set)
-      attrs-to-ignore #{:block/file}]
-  (when-let [undeclared-ref-attrs (seq (remove (some-fn malli-one-ref-attrs attrs-to-ignore) db-schema/card-one-ref-type-attributes))]
+                               set)]
+  (when-let [undeclared-ref-attrs (seq (remove malli-one-ref-attrs db-schema/card-one-ref-type-attributes))]
     (throw (ex-info (str "The malli DB schema is missing the following cardinality-one ref attributes from datascript's schema: "
                          (string/join ", " undeclared-ref-attrs))
                     {}))))

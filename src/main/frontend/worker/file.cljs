@@ -203,15 +203,7 @@
       (async/put! file-writes-chan [repo page-id (:outliner-op tx-meta) (tc/to-long (t/now)) request-id]))))
 
 (defn <ratelimit-file-writes!
-  []
+  [flush-fn]
   (async-util/<ratelimit file-writes-chan batch-write-interval
-                          :filter-fn (fn [_] true)
-                          :flush-fn
-                          (fn [col]
-                            (when (seq col)
-                              (let [repo (ffirst col)
-                                    conn (worker-state/get-datascript-conn repo)]
-                                (if conn
-                                  (when-not (ldb/db-based-graph? @conn)
-                                    (write-files! conn col (worker-state/get-context)))
-                                  (js/console.error (str "DB is not found for ") repo)))))))
+                         :filter-fn (fn [_] true)
+                         :flush-fn flush-fn))
