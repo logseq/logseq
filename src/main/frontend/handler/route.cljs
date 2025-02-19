@@ -193,12 +193,15 @@
   (swap! state/state assoc :route-match route)
   (update-page-title! route)
   (update-page-label! route)
-  (if-let [anchor (get-in route [:query-params :anchor])]
-    (jump-to-anchor! anchor)
-    (js/setTimeout #(util/scroll-to (util/app-scroll-container-node)
-                                    (state/get-saved-scroll-position)
-                                    false)
-                   100)))
+  (when-let [anchor (get-in route [:query-params :anchor])]
+    (jump-to-anchor! anchor)))
+
+(defn restore-scroll-pos
+  []
+  (js/setTimeout #(util/scroll-to (util/app-scroll-container-node)
+                                  (state/get-saved-scroll-position)
+                                  false)
+                 100))
 
 (defn go-to-search!
   ([search-mode] (go-to-search! search-mode nil))
