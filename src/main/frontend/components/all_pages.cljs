@@ -53,7 +53,6 @@
 (rum/defc all-pages < rum/static
   []
   (let [[data set-data!] (rum/use-state nil)
-        [loading? set-loading!] (rum/use-state true)
         columns' (views/build-columns {} (columns)
                                       {:with-object-name? false
                                        :with-id? false})]
@@ -64,22 +63,19 @@
                  result (ldb/read-transit-str result-str)
                  data (get-all-pages)
                  data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
-           (set-data! data)
-           (set-loading! false))))
+           (set-data! data))))
      [])
     [:div.ls-all-pages.w-full.mx-auto
-     (if loading?
-       (ui/skeleton)
-       (views/view {:data data
-                    :set-data! set-data!
-                    :view-parent (db/get-page common-config/views-page-name)
-                    :view-identity :all-pages
-                    :columns columns'
-                    :on-delete-rows (fn [table selected-rows]
-                                      (shui/dialog-open!
-                                       (component-page/batch-delete-dialog
-                                        selected-rows false
-                                        (fn []
-                                          (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                            (f {}))
-                                          (set-data! (get-all-pages))))))}))]))
+     (views/view {:data data
+                  :set-data! set-data!
+                  :view-parent (db/get-page common-config/views-page-name)
+                  :view-identity :all-pages
+                  :columns columns'
+                  :on-delete-rows (fn [table selected-rows]
+                                    (shui/dialog-open!
+                                     (component-page/batch-delete-dialog
+                                      selected-rows false
+                                      (fn []
+                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                          (f {}))
+                                        (set-data! (get-all-pages))))))})]))

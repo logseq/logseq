@@ -267,7 +267,7 @@
 
 (rum/defc table-footer
   [children]
-  [:div.ls-table-footer
+  [:div.ls-table-footer.fade-in.faster
    children])
 
 (rum/defc table-row < rum/static

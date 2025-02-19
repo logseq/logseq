@@ -691,6 +691,8 @@
                 (tabs page {:current-page? option :sidebar? sidebar?}))
 
               [:div.ls-page-blocks
+               {:class (when (and db-based? (or class-page? (ldb/property? page)))
+                         "fade-in faster")}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)
                                                    :whiteboard? whiteboard?}))]])
