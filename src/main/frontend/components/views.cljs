@@ -555,23 +555,13 @@
         (action-bar table selected-rows option)]))))
 
 (rum/defc row-cell < rum/static
-  [table row column render cell-opts idx first-col-rendered? set-first-col-rendered!]
-  (let [primary-key? (or (= idx 1) (= (:id column) :block/title))]
-    (when primary-key?
-      (hooks/use-effect!
-       (fn []
-         (let [timeout (js/setTimeout #(set-first-col-rendered! true) 0)]
-           #(js/clearTimeout timeout)))
-       []))
-
-    (shui/table-cell cell-opts
-                     (when (or primary-key? first-col-rendered?)
-                       (render table row column)))))
+  [table row column render cell-opts]
+  (shui/table-cell cell-opts
+                   (render table row column)))
 
 (rum/defc table-row-inner < rum/static
   [{:keys [row-selected?] :as table} row props {:keys [show-add-property?]}]
-  (let [[first-col-rendered? set-first-col-rendered!] (rum/use-state false)
-        pinned-columns (get-in table [:state :pinned-columns])
+  (let [pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (if show-add-property?
                            (conj (vec unpinned)
@@ -579,9 +569,8 @@
                                   :cell (fn [_table _row _column])})
                            unpinned)
         sized-columns (get-in table [:state :sized-columns])
-        row-cell-f (fn [idx column]
-                     (let [idx (inc idx)
-                           id (str (:id row) "-" (:id column))
+        row-cell-f (fn [column]
+                     (let [id (str (:id row) "-" (:id column))
                            render (get column :cell)
                            width (get-column-size column sized-columns)
                            select? (= (:id column) :select)
@@ -592,16 +581,16 @@
                                       :style {:width width
                                               :min-width width}}]
                        (when render
-                         (row-cell table row column render cell-opts idx first-col-rendered? set-first-col-rendered!))))]
+                         (row-cell table row column render cell-opts))))]
     (shui/table-row
      (merge
       props
       {:key (str (:id row))
        :data-state (when (row-selected? row) "selected")})
      [:div.sticky-columns.flex.flex-row
-      (map-indexed row-cell-f pinned-columns)]
+      (map row-cell-f pinned-columns)]
      [:div.flex.flex-row
-      (map-indexed row-cell-f unpinned-columns)])))
+      (map row-cell-f unpinned-columns)])))
 
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
@@ -1222,36 +1211,29 @@
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))
-        [ready? set-ready?] (rum/use-state false)
         *rows-wrap (rum/use-ref nil)]
-
-    (hooks/use-effect!
-     (fn [] (set-ready? true))
-     [])
-
     (shui/table
      (let [rows (:rows table)]
        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
         {:ref *rows-wrap}
-        (when ready?
-          [:div.relative
-           (table-header table option selected-rows)
+        [:div.relative
+         (table-header table option selected-rows)
 
-           (ui/virtualized-list
-            {:ref #(reset! *scroller-ref %)
-             :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
-                                       (gdom/getElement "main-content-container"))
-             :increase-viewport-by {:top 300 :bottom 300}
-             :compute-item-key (fn [idx]
-                                 (let [block (nth rows idx)]
-                                   (str "table-row-" (:db/id block))))
-             :total-count (count rows)
-             :item-content (fn [idx]
-                             (let [row (nth rows idx)]
-                               (table-row table row {} option)))})
+         (ui/virtualized-list
+          {:ref #(reset! *scroller-ref %)
+           :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
+                                     (gdom/getElement "main-content-container"))
+           :increase-viewport-by {:top 300 :bottom 300}
+           :compute-item-key (fn [idx]
+                               (let [block (nth rows idx)]
+                                 (str "table-row-" (:db/id block))))
+           :total-count (count rows)
+           :item-content (fn [idx]
+                           (let [row (nth rows idx)]
+                             (table-row table row {} option)))})
 
-           (when (get-in table [:data-fns :add-new-object!])
-             (shui/table-footer (add-new-row table)))])]))))
+         (when (get-in table [:data-fns :add-new-object!])
+           (shui/table-footer (add-new-row table)))]]))))
 
 (rum/defc list-view < rum/static
   [config view-entity result]
