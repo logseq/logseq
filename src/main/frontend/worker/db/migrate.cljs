@@ -611,6 +611,43 @@
    {:db/ident :logseq.property.view/type.gallery
     :logseq.property/icon {:type :tabler-icon :id "layout-grid"}}])
 
+(defn- migrate-views
+  [conn _search-db]
+  (let [db @conn
+        tags (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
+                  (map (fn [d] (d/entity db (:e d)))))
+        properties (->> (d/datoms db :avet :block/tags :logseq.class/Property)
+                        (map (fn [d] (d/entity db (:e d)))))
+        tx-data (mapcat
+                 (fn [e]
+                   (let [id (:db/id e)
+                         ks [:logseq.property.table/sorting
+                             :logseq.property.table/filters
+                             :logseq.property.view/group-by-property
+                             :logseq.property.table/hidden-columns
+                             :logseq.property.table/ordered-columns
+                             :logseq.property.table/sized-columns
+                             :logseq.property.table/pinned-columns
+                             :logseq.property.view/type]
+                         view-properties (->> (keep (fn [k] (when-let [v (get (d/pull db [k] id) k)]
+                                                              [k v])) ks)
+                                              (into {}))]
+                     (when (seq view-properties)
+                       (let [view-page-id (:db/id (ldb/get-page db common-config/views-page-name))
+                             _ (when (nil? view-page-id)
+                                 (throw (ex-info "View page not exists" {})))
+                             view (-> (assoc view-properties :logseq.property/view-for id)
+                                      (merge {:block/uuid (common-uuid/gen-uuid)
+                                              :block/title "All"
+                                              :block/parent view-page-id
+                                              :block/page view-page-id
+                                              :block/order (db-order/gen-key nil)})
+                                      (sqlite-util/block-with-timestamps))]
+                         (-> (mapv (fn [k] [:db/retract id k]) (keys view-properties))
+                             (conj view))))))
+                 (common-util/distinct-by :db/id (concat tags properties)))]
+    tx-data))
+
 (def ^:large-vars/cleanup-todo schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -714,7 +751,8 @@
    ;;;; int number equals to "<major>" (without <minor>)
    ["64.1" {:properties [:logseq.property.view/group-by-property]
             :fix add-view-icons}]
-   ["64.2" {:properties [:logseq.property.view/identity]}]])
+   ["64.2" {:properties [:logseq.property.view/identity]
+            :fix migrate-views}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))
