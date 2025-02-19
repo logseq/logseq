@@ -21,9 +21,9 @@ the remaining chars for data of this type"
 
 (defn gen-block-uuid
   "prefix-<hash-of-db-ident>-<padding-with-0>"
-  [key prefix]
-  {:pre [(keyword? key)]}
-  (let [hash-num (str (Math/abs (hash key)))
+  [k prefix]
+  {:pre [(keyword? k)]}
+  (let [hash-num (str (Math/abs (hash k)))
         part1 (fill-with-0 (subs hash-num 0 4) 4)
         part2 (fill-with-0 (subs hash-num 4 8) 4)
         part3 (fill-with-0 (subs hash-num 8 12) 4)
