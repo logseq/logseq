@@ -938,6 +938,13 @@
                                         (into {} entity))
                           eid (:db/id entity)
                           fix (cond
+                                (and (:db/ident entity) (= "logseq.property.attribute" (namespace (:db/ident entity))))
+                                [[:db/retractEntity (:db/id entity)]]
+
+                                (and (:logseq.property.history/property entity)
+                                     (nil? (:logseq.property.history/block entity)))
+                                [[:db/retractEntity (:db/id entity)]]
+
                                 (and (:db/valueType entity)
                                      (not (or (:db/ident entity)
                                               (:db/cardinality entity))))
@@ -1019,13 +1026,13 @@
       (fix-properties! conn)
       (fix-block-timestamps! conn)
       (fix-missing-page-tag! conn)
-      (when (seq invalid-entity-ids)
-        (fix-invalid-data! conn invalid-entity-ids))
-
       ;; TODO: remove this after RTC db fixed
       (let [data (deprecate-logseq-user-ns conn nil)]
         (when (seq data)
           (d/transact! conn data {:fix-db? true})))
+      (when (seq invalid-entity-ids)
+        (fix-invalid-data! conn invalid-entity-ids))
+
       (catch :default e
         (js/console.error e)))))
 
