@@ -1686,21 +1686,22 @@
 
 (rum/defc view < rum/static
   [{:keys [view-parent view-identity view-entity] :as option}]
-  (let [[view-entity set-view-entity!] (rum/use-state view-entity)
-        [views set-views!] (rum/use-state nil)]
+  (let [[view-entity set-view-entity!] (hooks/use-state view-entity)
+        [views set-views!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
-       (p/let [_result (db-async/<get-views (state/get-current-repo) (:db/id view-parent) view-identity)
-               views (get-views view-parent view-identity)]
-         (if-let [v (first views)]
-           (do
-             (when-not view-entity (set-view-entity! v))
-             (set-views! views))
-           (when (and view-parent view-identity (not view-entity))
-             (p/let [new-view (create-view! view-parent view-identity)]
-               (set-view-entity! new-view)
-               (set-views! (concat views [new-view])))))))
-     [(:db/id view-parent)])
+       (let [repo (state/get-current-repo)]
+         (p/let [_result (db-async/<get-views repo (:db/id view-parent) view-identity)
+                 views (get-views view-parent view-identity)]
+           (if-let [v (first views)]
+             (do
+               (when-not view-entity (set-view-entity! v))
+               (set-views! views))
+             (when (and view-parent view-identity (not view-entity))
+               (p/let [new-view (create-view! view-parent view-identity)]
+                 (set-view-entity! new-view)
+                 (set-views! (concat views [new-view]))))))))
+     [])
     (view-container view-entity (assoc option
                                        :views views
                                        :set-views! set-views!
