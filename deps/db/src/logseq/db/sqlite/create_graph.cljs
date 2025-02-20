@@ -1,10 +1,10 @@
 (ns logseq.db.sqlite.create-graph
   "Helper fns for creating a DB graph"
   (:require [clojure.string :as string]
-            [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
@@ -31,20 +31,22 @@
   "Given a new block and its properties, creates a map of properties which have values of property value tx.
    This map is used for both creating the new property values and then adding them to a block"
   [new-block properties]
-  (->> properties
-       (keep (fn [[k v]]
-               (when-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
-                 (if (and (db-property-type/value-ref-property-types built-in-type)
-                          ;; closed values are referenced by their :db/ident so no need to create values
-                          (not (get-in db-property/built-in-properties [k :closed-values])))
-                   (let [property-map {:db/ident k
-                                       :logseq.property/type built-in-type}]
-                     [property-map v])
-                   (when-let [built-in-type' (get (:build/properties-ref-types new-block) built-in-type)]
-                     (let [property-map {:db/ident k
-                                         :logseq.property/type built-in-type'}]
-                       [property-map v]))))))
-       (db-property-build/build-property-values-tx-m new-block)))
+  (db-property-build/build-property-values-tx-m
+   new-block
+   (->> properties
+        (keep (fn [[k v]]
+                (when-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
+                  (if (and (db-property-type/value-ref-property-types built-in-type)
+                           ;; closed values are referenced by their :db/ident so no need to create values
+                           (not (get-in db-property/built-in-properties [k :closed-values])))
+                    (let [property-map {:db/ident k
+                                        :logseq.property/type built-in-type}]
+                      [property-map v])
+                    (when-let [built-in-type' (get (:build/properties-ref-types new-block) built-in-type)]
+                      (let [property-map {:db/ident k
+                                          :logseq.property/type built-in-type'}]
+                        [property-map v])))))))
+   :pure? true))
 
 (defn build-properties
   "Given a properties map in the format of db-property/built-in-properties, builds their properties tx"
@@ -169,7 +171,7 @@
 (defn build-initial-views
   "Builds initial blocks used for storing views. Used by db and file graphs"
   []
-  (let [page-id (common-uuid/gen-uuid)]
+  (let [page-id (common-uuid/gen-uuid :builtin-block-uuid common-config/views-page-name)]
     [(sqlite-util/block-with-timestamps
       {:block/uuid page-id
        :block/name common-config/views-page-name
@@ -181,7 +183,7 @@
 (defn- build-favorites-page
   []
   [(sqlite-util/block-with-timestamps
-    {:block/uuid (common-uuid/gen-uuid)
+    {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid common-config/favorites-page-name)
      :block/name common-config/favorites-page-name
      :block/title common-config/favorites-page-name
      :block/tags [:logseq.class/Page]
@@ -202,17 +204,17 @@
                        {:db/ident :logseq.property/empty-placeholder}]
                        import-type
                        (into (sqlite-util/import-tx import-type)))
-        initial-files [{:block/uuid (d/squuid)
+        initial-files [{:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/config.edn")
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content
                         :file/created-at (js/Date.)
                         :file/last-modified-at (js/Date.)}
-                       {:block/uuid (d/squuid)
+                       {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.css")
                         :file/path (str "logseq/" "custom.css")
                         :file/content ""
                         :file/created-at (js/Date.)
                         :file/last-modified-at (js/Date.)}
-                       {:block/uuid (d/squuid)
+                       {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.js")
                         :file/path (str "logseq/" "custom.js")
                         :file/content ""
                         :file/created-at (js/Date.)
