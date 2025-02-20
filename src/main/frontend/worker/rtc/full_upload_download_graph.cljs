@@ -266,7 +266,7 @@
 (defn- create-graph-for-rtc-test
   "it's complex to setup db-worker related stuff, when I only want to test rtc related logic"
   [repo init-tx-data other-tx-data]
-  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
+  (let [conn (d/create-conn db-schema/schema)
         db-initial-data (sqlite-create-graph/build-db-initial-data "")]
     (swap! worker-state/*datascript-conns assoc repo conn)
     (d/transact! conn db-initial-data {:initial-db? true

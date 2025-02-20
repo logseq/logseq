@@ -4,17 +4,17 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.graph-parser.extract :as extract]
-            [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]))
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
+            [logseq.db.file-based.schema :as file-schema]
+            [logseq.graph-parser.extract :as extract]))
 
 (defn- retract-blocks-tx
   [blocks retain-uuids]
   (mapcat (fn [{uuid' :block/uuid eid :db/id}]
             (if (and uuid' (contains? retain-uuids uuid'))
-              (map (fn [attr] [:db.fn/retractAttribute eid attr]) db-schema/retract-attributes)
+              (map (fn [attr] [:db.fn/retractAttribute eid attr]) file-schema/retract-attributes)
               (when eid [[:db.fn/retractEntity eid]])))
           blocks))
 

@@ -3,10 +3,10 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.schema :as db-schema]))
@@ -515,7 +515,7 @@
     :property-value-placeholder property-value-placeholder}))
 
 (def DB
-  "Malli schema for entities from schema/schema-for-db-based-graph. In order to
+  "Malli schema for entities from db-schema/schema. In order to
   thoroughly validate properties, the entities and this schema should be
   prepared with update-properties-in-ents and update-properties-in-schema
   respectively"
@@ -536,9 +536,8 @@
 (let [malli-one-ref-attrs (->> (concat property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (filter #(= (last %) :int))
                                (map first)
-                               set)
-      attrs-to-ignore #{:block/file}]
-  (when-let [undeclared-ref-attrs (seq (remove (some-fn malli-one-ref-attrs attrs-to-ignore) db-schema/card-one-ref-type-attributes))]
+                               set)]
+  (when-let [undeclared-ref-attrs (seq (remove malli-one-ref-attrs db-schema/card-one-ref-type-attributes))]
     (throw (ex-info (str "The malli DB schema is missing the following cardinality-one ref attributes from datascript's schema: "
                          (string/join ", " undeclared-ref-attrs))
                     {}))))

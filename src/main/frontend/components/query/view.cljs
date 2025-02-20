@@ -7,6 +7,7 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state]
             [logseq.db :as ldb]
+            [logseq.db.frontend.entity-util :as entity-util]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -56,8 +57,8 @@
        :set-data! set-data!
        :columns columns'
        :on-delete-rows (fn [table selected-rows]
-                         (let [pages (filter ldb/page? selected-rows)
-                               blocks (remove ldb/page? selected-rows)
+                         (let [pages (filter entity-util/page? selected-rows)
+                               blocks (remove entity-util/page? selected-rows)
                                selected (set (map :id (remove :logseq.property/built-in? selected-rows)))
                                data' (remove (fn [row] (contains? selected (:id row))) (:data table))]
                            (p/do!

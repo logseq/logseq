@@ -1,16 +1,16 @@
 (ns frontend.worker.handler.page.file-based.page
   "Page operations for file graphs"
-  (:require [logseq.db :as ldb]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.outliner.core :as outliner-core]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
-            [clojure.string :as string]
-            [logseq.graph-parser.text :as text]
-            [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.common.date :as common-date]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
+            [logseq.db.common.order :as db-order]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.text :as text]
+            [logseq.outliner.core :as outliner-core]))
 
 (defn- file-based-properties-block
   [repo conn config date-formatter properties format page]

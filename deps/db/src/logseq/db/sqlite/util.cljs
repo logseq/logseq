@@ -8,7 +8,8 @@
             [datascript.transit :as dt]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
-            [logseq.db.frontend.order :as db-order]
+            [logseq.db.common.order :as db-order]
+            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.schema :as db-schema]))
@@ -65,8 +66,8 @@
   "Returns schema for given repo"
   [repo]
   (if (db-based-graph? repo)
-    db-schema/schema-for-db-based-graph
-    db-schema/schema))
+    db-schema/schema
+    file-schema/schema))
 
 (def block-with-timestamps common-util/block-with-timestamps)
 

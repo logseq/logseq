@@ -4,7 +4,7 @@
   compatible with file graphs"
   (:require [frontend.db.conn :as conn]
             [frontend.state :as state]
-            [logseq.db.frontend.property.util :as db-property-util]))
+            [logseq.db.common.property-util :as db-property-util]))
 
 (defn lookup
   "Get the property value by a built-in property's db-ident from block. For file and db graphs"

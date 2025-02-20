@@ -55,9 +55,9 @@
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
+            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
@@ -385,7 +385,7 @@
         selection-end (util/get-selection-end input)
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
         current-block (assoc block :block/title fst-block-text)
-        current-block (apply dissoc current-block db-schema/retract-attributes)
+        current-block (apply dissoc current-block file-schema/retract-attributes)
         new-m {:block/uuid (db/new-block-id)
                :block/title snd-block-text}
         next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])

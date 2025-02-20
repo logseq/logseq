@@ -6,10 +6,10 @@
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -289,7 +289,7 @@
   (let [block-eid (->eid block-eid)
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (d/entity @conn block-eid)
-        db-attribute? (some? (db-schema/schema-for-db-based-graph property-id))]
+        db-attribute? (some? (db-schema/schema property-id))]
     (when (= property-id :block/tags)
       (outliner-validate/validate-tags-property @conn [block-eid] v))
     (when (= property-id :logseq.property/parent)

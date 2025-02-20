@@ -18,6 +18,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.file-based.rules :as file-rules]
             [logseq.db.frontend.rules :as rules]
             [logseq.graph-parser.text :as text]))
 
@@ -696,7 +697,7 @@ Some bindings in this fn:
       {:query result'
        :rules (if db-graph?
                 (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies})
-                (mapv rules/query-dsl-rules rules))
+                (mapv file-rules/query-dsl-rules rules))
        :sort-by @sort-by
        :blocks? (boolean @blocks?)
        :sample sample})))

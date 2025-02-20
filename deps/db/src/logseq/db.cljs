@@ -10,13 +10,15 @@
             [logseq.common.util.namespace :as ns-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
+            [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
+            [logseq.db.common.entity-util :as common-entity-util]
+            [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.file-based.rules :as file-rules]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.delete-blocks :as delete-blocks] ;; Load entity extensions
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
 
@@ -88,13 +90,13 @@
              (prn :debug-tx-data tx-data)
              (throw e))))))))
 
-(def page? entity-util/page?)
+(def page? common-entity-util/page?)
 (def internal-page? entity-util/internal-page?)
 (def class? entity-util/class?)
 (def property? entity-util/property?)
 (def closed-value? entity-util/closed-value?)
-(def whiteboard? entity-util/whiteboard?)
-(def journal? entity-util/journal?)
+(def whiteboard? common-entity-util/whiteboard?)
+(def journal? common-entity-util/journal?)
 (def hidden? entity-util/hidden?)
 (def object? entity-util/object?)
 (def asset? entity-util/asset?)
@@ -547,7 +549,7 @@
       ['?p :block/name '?namespace]
       (list 'namespace '?p '?c)]
      db
-     (:namespace rules/rules)
+     (:namespace file-rules/rules)
      namespace'')))
 
 (defn get-pages-by-name-partition

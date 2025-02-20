@@ -1,6 +1,6 @@
 (ns logseq.graph-parser.whiteboard
   "Whiteboard related parser utilities"
-  (:require [logseq.db.frontend.property.util :as db-property-util]
+  (:require [logseq.db.common.property-util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn block->shape [block]
@@ -37,14 +37,13 @@
       (assoc block :block/properties properties))
     block))
 
-
 (defn- get-shape-refs [shape]
   (let [portal-refs (when (= "logseq-portal" (:type shape))
                       [{:block/uuid (uuid (:pageId shape))}])
         shape-link-refs (->> (:refs shape)
                              (filter (complement empty?))
                              (keep (fn [ref] (when (parse-uuid ref)
-                                              {:block/uuid (parse-uuid ref)}))))]
+                                               {:block/uuid (parse-uuid ref)}))))]
     (concat portal-refs shape-link-refs)))
 
 (defn- with-whiteboard-block-refs
@@ -59,10 +58,10 @@
   "Main purpose of this function is to populate contents when shapes are used as references in outliner."
   [shape]
   {:block/title (case (:type shape)
-                    "text" (:text shape)
-                    "logseq-portal" ""
-                    "line" (str "whiteboard arrow" (when-let [label (:label shape)] (str ": " label)))
-                    (str "whiteboard " (:type shape)))})
+                  "text" (:text shape)
+                  "logseq-portal" ""
+                  "line" (str "whiteboard arrow" (when-let [label (:label shape)] (str ": " label)))
+                  (str "whiteboard " (:type shape)))})
 
 (defn with-whiteboard-block-props
   "Builds additional block attributes for a whiteboard block. Expects :block/properties
