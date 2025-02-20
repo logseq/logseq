@@ -3,6 +3,7 @@
   (:require [cljs-bean.transit]
             [clojure.string :as string]
             [cognitect.transit :as transit]
+            [datascript.core]
             [datascript.impl.entity :as de]
             [datascript.transit :as dt]
             [logseq.common.util :as common-util]
