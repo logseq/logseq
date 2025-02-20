@@ -3430,7 +3430,7 @@
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
-        selected? (state/sub-block-selected? (:block/uuid block))
+        selected? (when (uuid? (:block/uuid block)) (state/sub-block-selected? (:block/uuid block)))
         db-based? (config/db-based-graph? repo)]
     [:div.ls-block
      (cond->
