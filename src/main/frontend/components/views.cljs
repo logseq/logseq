@@ -1209,7 +1209,7 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc table-body < rum/static
-  [table option rows *scroller-ref *rows-wrap]
+  [table option rows *scroller-ref *rows-wrap set-items-rendered!]
   (ui/virtualized-list
    {:ref #(reset! *scroller-ref %)
     :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
@@ -1221,12 +1221,16 @@
     :total-count (count rows)
     :item-content (fn [idx]
                     (let [row (nth rows idx)]
-                      (table-row table row {} option)))}))
+                      (table-row table row {} option)))
+    :items-rendered (fn [props]
+                      (when (seq props)
+                        (set-items-rendered! true)))}))
 
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))
-        *rows-wrap (rum/use-ref nil)]
+        *rows-wrap (rum/use-ref nil)
+        [items-rendered? set-items-rendered!] (hooks/use-state false)]
     (shui/table
      (let [rows (:rows table)]
        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
@@ -1234,9 +1238,9 @@
         [:div.relative
          (table-header table option selected-rows)
 
-         (table-body table option rows *scroller-ref *rows-wrap)
+         (table-body table option rows *scroller-ref *rows-wrap set-items-rendered!)
 
-         (when (get-in table [:data-fns :add-new-object!])
+         (when (and (get-in table [:data-fns :add-new-object!]) (or (empty? rows) items-rendered?))
            (shui/table-footer (add-new-row table)))]]))))
 
 (rum/defc list-view < rum/static
