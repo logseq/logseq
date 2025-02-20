@@ -2726,7 +2726,7 @@
                (property-component/property-key-cp block property opts)
                [:div.select-none ":"]]
               (pv/property-value block property opts)]))]
-        [:div.positioned-properties.flex.flex-row.gap-1.select-none
+        [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6
          {:class (name position)}
          (for [pid properties]
            (when-let [property (db/entity pid)]
