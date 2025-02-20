@@ -177,10 +177,9 @@
                  (custom-query-inner config q opts))
                {:default-collapsed? collapsed?
                 :title-trigger? true})]
-             (when-not (:table? config)
-               [:div.bd
-                (when-not collapsed?'
-                  (custom-query-inner config q opts))]))])))))
+             [:div.bd
+              (when-not collapsed?'
+                (custom-query-inner config q opts))])])))))
 
 (rum/defc trigger-custom-query
   [config q]
