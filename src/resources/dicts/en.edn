@@ -528,6 +528,7 @@
  :plugin/uninstall "Uninstall"
  :plugin/marketplace "Marketplace"
  :plugin/downloads "Downloads"
+ :plugin/popular "Popular"
  :plugin/stars "Stars"
  :plugin/title "Title ({1})"
  :plugin/all "All"
