@@ -3,7 +3,7 @@
   (:require [cljs-bean.transit]
             [clojure.string :as string]
             [cognitect.transit :as transit]
-            [datascript.core :as d]
+            [datascript.core]
             [datascript.impl.entity :as de]
             [datascript.transit :as dt]
             [logseq.common.util :as common-util]
@@ -121,7 +121,7 @@
   (block-with-timestamps
    {:block/name (common-util/page-name-sanity-lc page-name)
     :block/title page-name
-    :block/uuid (d/squuid)
+    :block/uuid (common-uuid/gen-uuid :builtin-block-uuid page-name)
     :block/tags #{:logseq.class/Page}}))
 
 (defn kv

@@ -19,10 +19,9 @@ the remaining chars for data of this type"
   (let [s-length (count s)]
     (apply str s (repeat (- length s-length) "0"))))
 
-(defn gen-block-uuid
+(defn- gen-block-uuid
   "prefix-<hash-of-db-ident>-<padding-with-0>"
   [k prefix]
-  {:pre [(keyword? k)]}
   (let [hash-num (str (Math/abs (hash k)))
         part1 (fill-with-0 (subs hash-num 0 4) 4)
         part2 (fill-with-0 (subs hash-num 4 8) 4)
@@ -36,18 +35,17 @@ the remaining chars for data of this type"
   {:pre [(keyword? db-ident)]}
   (gen-block-uuid db-ident "00000002"))
 
-;; 00000001 journal
-;; 00000002 db ident
-;; 00000003 new blocks created by migration
-
 (defn gen-uuid
   "supported type:
-  - :journal-page-uuid
-  - :db-ident-block-uuid
-  - :migrate-new-block-uuid"
+  - :journal-page-uuid, 00000001
+  - :db-ident-block-uuid, 00000002
+  - :migrate-new-block-uuid, 00000003
+  - :builtin-block-uuid, 00000004"
   ([] (d/squuid))
   ([type' v]
+   (assert (some? v))
    (case type'
      :journal-page-uuid (gen-journal-page-uuid v)
      :db-ident-block-uuid (gen-db-ident-block-uuid v)
-     :migrate-new-block-uuid (gen-block-uuid v "00000003"))))
+     :migrate-new-block-uuid (gen-block-uuid v "00000003")
+     :builtin-block-uuid (gen-block-uuid v "00000004"))))

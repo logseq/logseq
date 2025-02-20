@@ -1,7 +1,7 @@
 (ns logseq.db.frontend.property.build
   "Builds core property concepts"
-  (:require [datascript.core :as d]
-            [logseq.common.util :as common-util]
+  (:require [logseq.common.util :as common-util]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -68,10 +68,10 @@
 (defn- build-property-value-block
   "Builds a property value entity given a block map/entity, a property entity or
   ident and its property value"
-  [block property value]
+  [block property value & {:keys [block-uuid]}]
   (let [block-id (or (:db/id block) (:db/ident block))]
     (-> (merge
-         {:block/uuid (d/squuid)
+         {:block/uuid (or block-uuid (common-uuid/gen-uuid))
           :block/page (if (:block/page block)
                         (:db/id (:block/page block))
                         ;; page block
@@ -91,18 +91,32 @@
   transacted, given a block and a properties map with raw property values. The
   properties map can have keys that are db-idents or they can be maps. If a map,
   it should have :original-property-id and :db/ident keys.  See
-  ->property-value-tx-m for such an example"
-  [block properties]
+  ->property-value-tx-m for such an example
+
+  :pure? - ensure this fn is a pure function"
+  [block properties & {:keys [pure?]}]
   ;; Build :db/id out of uuid if block doesn't have one for tx purposes
   (let [block' (if (:db/id block) block (assoc block :db/id [:block/uuid (:block/uuid block)]))]
     (->> properties
          (map (fn [[k v]]
-                (let [property-map (if (map? k) k {:db/ident k})]
+                (let [property-map (if (map? k) k {:db/ident k})
+                      gen-uuid-value-prefix (when pure?
+                                              (or (:db/ident block) (:block/uuid block)))]
                   (assert (:db/ident property-map) "Key in map must have a :db/ident")
+                  (when pure? (assert (some? gen-uuid-value-prefix) block))
                   [(or (:original-property-id property-map) (:db/ident property-map))
                    (if (set? v)
-                     (set (map #(build-property-value-block block' property-map %) v))
-                     (build-property-value-block block' property-map v))])))
+                     (set (map #(build-property-value-block
+                                 block' property-map %
+                                 (when pure?
+                                   {:block-uuid
+                                    (common-uuid/gen-uuid :builtin-block-uuid (str gen-uuid-value-prefix "-" %))}))
+                               v))
+                     (build-property-value-block block' property-map v
+                                                 (when pure?
+                                                   {:block-uuid
+                                                    (common-uuid/gen-uuid
+                                                     :builtin-block-uuid (str gen-uuid-value-prefix "-" v))})))])))
          (into {}))))
 
 (defn build-properties-with-ref-values
