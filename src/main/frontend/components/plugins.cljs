@@ -650,7 +650,11 @@
 
       (when market?
         (let [aim-icon #(if (= sort-by %) "check" "circle")
-              items [{:title (t :plugin/downloads)
+              items [{:title (t :plugin/popular)
+                      :options {:on-click #(reset! *sort-by :default)}
+                      :icon (ui/icon (aim-icon :default))}
+
+                     {:title (t :plugin/downloads)
                       :options {:on-click #(reset! *sort-by :downloads)}
                       :icon (ui/icon (aim-icon :downloads))}
 
@@ -664,7 +668,7 @@
 
           (ui/button
            (ui/icon "arrows-sort")
-           :class (str (when-not (contains? #{:default :downloads} sort-by) "picked ") "sort-or-filter-by")
+           :class (str (when-not (contains? #{:default :popular} sort-by) "picked ") "sort-or-filter-by")
            :on-click #(shui/popup-show! (.-target %)
                                         (fn [{:keys [id]}]
                                           (render-classic-dropdown-items id items))
@@ -749,13 +753,37 @@
     [:div {:ref (.-ref inViewState)}
      [:p.py-1.text-center.opacity-0 (when (.-inView inViewState) "·")]]))
 
+(defn weighted-sort-by
+  [key pkgs]
+  (let [default? (or (nil? key) (= key :default))
+        grouped-pkgs (if default?
+                       (some->> pkgs
+                         (group-by (fn [{:keys [addedAt]}]
+                                     (and (number? addedAt)
+                                       (< (- (js/Date.now) addedAt)
+                                         ;; under 6 days
+                                         (* 1000 60 60 24 6)))))
+                         (into {}))
+                       {false pkgs})
+        pinned-pkgs (get grouped-pkgs true)
+        pkgs (get grouped-pkgs false)]
+    (->>
+      ;; weight sort
+      (apply sort-by
+        (conj
+          (case key
+            :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
+            [(if default? :downloads key) #(compare %2 %1)])
+          pkgs))
+      (concat pinned-pkgs))))
+
 (rum/defcs ^:large-vars/data-var marketplace-plugins
   < rum/static rum/reactive
   plugin-items-list-mixins
   (rum/local false ::fetching)
   (rum/local "" ::search-key)
   (rum/local :plugins ::category)
-  (rum/local :downloads ::sort-by)                        ;; downloads / stars / letters / updates
+  (rum/local :default ::sort-by)        ;; default (weighted) / downloads / stars / letters / updates
   (rum/local :default ::filter-by)
   (rum/local nil ::error)
   (rum/local nil ::cached-query-flag)
@@ -811,17 +839,16 @@
                              filtered-pkgs)
         filtered-pkgs      (map #(if-let [stat (get stats (keyword (:id %)))]
                                    (let [downloads (:total_downloads stat)
-                                         stars     (:stargazers_count stat)]
-                                     (assoc % :stat stat
-                                            :stars stars
-                                            :downloads downloads))
+                                         stars     (:stargazers_count stat)
+                                         latest-at (some-> (:updated_at stat) (js/Date.) (.getTime))]
+                                     (assoc %
+                                       :stat stat
+                                       :stars stars
+                                       :latestAt latest-at
+                                       :downloads downloads))
                                    %) filtered-pkgs)
-        sorted-plugins     (apply sort-by
-                                  (conj
-                                   (case @*sort-by
-                                     :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
-                                     [@*sort-by #(compare %2 %1)])
-                                   filtered-pkgs))
+        _ (def debug-pkgs filtered-pkgs)
+        sorted-plugins     (weighted-sort-by @*sort-by filtered-pkgs)
 
         fn-query-flag      (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
         str-query-flag     (fn-query-flag)
