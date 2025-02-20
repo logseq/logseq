@@ -6,7 +6,7 @@
             ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
             #_:clj-kondo/ignore
             [cljs-bean.core :as bean]
-            [datascript.core :as d]
+            [datascript.core]
             [datascript.storage :refer [IStorage]]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.file-based.schema :as file-schema]
