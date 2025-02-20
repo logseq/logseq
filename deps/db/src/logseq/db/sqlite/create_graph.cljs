@@ -1,14 +1,13 @@
 (ns logseq.db.sqlite.create-graph
   "Helper fns for creating a DB graph"
   (:require [clojure.string :as string]
-            [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -211,17 +210,17 @@
                        {:db/ident :logseq.property/empty-placeholder}]
                        import-type
                        (into (sqlite-util/import-tx import-type)))
-        initial-files [{:block/uuid (d/squuid)
+        initial-files [{:block/uuid (common-uuid/gen-uuid :builtin-page-uuid "logseq/config.edn")
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content
                         :file/created-at (js/Date.)
                         :file/last-modified-at (js/Date.)}
-                       {:block/uuid (d/squuid)
+                       {:block/uuid (common-uuid/gen-uuid :builtin-page-uuid "logseq/custom.css")
                         :file/path (str "logseq/" "custom.css")
                         :file/content ""
                         :file/created-at (js/Date.)
                         :file/last-modified-at (js/Date.)}
-                       {:block/uuid (d/squuid)
+                       {:block/uuid (common-uuid/gen-uuid :builtin-page-uuid "logseq/custom.js")
                         :file/path (str "logseq/" "custom.js")
                         :file/content ""
                         :file/created-at (js/Date.)
