@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [frontend.common.file-based.db :as common-file-db]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
@@ -912,7 +913,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-namespace-pages
   "Accepts both sanitized and unsanitized namespaces"
   [repo namespace]
-  (ldb/get-namespace-pages (conn/get-db repo) namespace {:db-graph? (config/db-based-graph? repo)}))
+  (common-file-db/get-namespace-pages (conn/get-db repo) namespace))
 
 (defn- tree [flat-col root]
   (let [sort-fn #(sort-by :block/name %)
