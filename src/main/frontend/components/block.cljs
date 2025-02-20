@@ -1578,7 +1578,7 @@
                          {:builder (query-builder-component/builder build-option {})
                           :query query}))])
 
-(defn- macro-function-cp
+(rum/defc macro-function-cp < rum/reactive
   [config arguments]
   (or
    (some-> (:query-result config) rum/react (block-macros/function-macro arguments))
