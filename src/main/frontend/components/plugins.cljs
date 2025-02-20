@@ -847,7 +847,6 @@
                                        :latestAt latest-at
                                        :downloads downloads))
                                    %) filtered-pkgs)
-        _ (def debug-pkgs filtered-pkgs)
         sorted-plugins     (weighted-sort-by @*sort-by filtered-pkgs)
 
         fn-query-flag      (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
