@@ -19,8 +19,7 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.sqlite :as sqlite-common-db]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.file-based.rules :as file-rules])
+            [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
 
 (defonce *transact-fn (atom nil))
@@ -533,39 +532,6 @@
 (defn get-graph-remote-schema-version
   [db]
   (when db (get-key-value db :logseq.kv/remote-schema-version)))
-
-;; File based fns
-(defn get-namespace-pages
-  "Accepts both sanitized and unsanitized namespaces"
-  [db namespace' {:keys [db-graph?]}]
-  (assert (string? namespace'))
-  (let [namespace'' (common-util/page-name-sanity-lc namespace')
-        pull-attrs  (cond-> [:db/id :block/name :block/title :block/namespace]
-                      (not db-graph?)
-                      (conj {:block/file [:db/id :file/path]}))]
-    (d/q
-     [:find [(list 'pull '?c pull-attrs) '...]
-      :in '$ '% '?namespace
-      :where
-      ['?p :block/name '?namespace]
-      (list 'namespace '?p '?c)]
-     db
-     (:namespace file-rules/rules)
-     namespace'')))
-
-(defn get-pages-by-name-partition
-  [db partition']
-  (when-not (string/blank? partition')
-    (let [partition'' (common-util/page-name-sanity-lc (string/trim partition'))
-          ids (->> (d/datoms db :aevt :block/name)
-                   (filter (fn [datom]
-                             (let [page (:v datom)]
-                               (string/includes? page partition''))))
-                   (map :e))]
-      (when (seq ids)
-        (d/pull-many db
-                     '[:db/id :block/name :block/title]
-                     ids)))))
 
 (defn get-all-properties
   [db]

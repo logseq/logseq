@@ -26,6 +26,7 @@
         ["frontend.handler.file-based" "frontend.handler.file-sync"
          "frontend.db.file-based"
          "frontend.util.file-based"
+         "frontend.common.file-based"
          "frontend.worker.handler.page.file-based"
          ;; Want to only specify this ns and not the ones under it but don't have a way yet
          "frontend.worker.file"
@@ -56,6 +57,7 @@
   "Paths _only_ for file graphs"
   ["src/main/frontend/handler/file_based" "src/main/frontend/handler/file_sync.cljs" "src/main/frontend/db/file_based"
    "src/main/frontend/util/file_based" "src/main/frontend/worker/handler/page/file_based" "src/main/frontend/worker/file.cljs"
+   "src/main/frontend/common/file_based"
    "src/main/frontend/fs"
    "src/main/frontend/components/file_sync.cljs"
    "src/main/frontend/components/file_based"
