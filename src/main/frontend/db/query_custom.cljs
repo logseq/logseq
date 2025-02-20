@@ -1,14 +1,14 @@
 (ns frontend.db.query-custom
   "Handles executing custom queries a.k.a. advanced queries"
-  (:require [frontend.state :as state]
-            [frontend.db.query-react :as query-react]
-            [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.model :as model]
-            [logseq.db.frontend.rules :as rules]
-            [frontend.util.datalog :as datalog-util]
-            [clojure.walk :as walk]
+  (:require [clojure.walk :as walk]
             [frontend.config :as config]
-            [logseq.db.file-based.rules :as file-rules]))
+            [frontend.db.model :as model]
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.query-react :as query-react]
+            [frontend.state :as state]
+            [frontend.util.datalog :as datalog-util]
+            [logseq.db.file-based.rules :as file-rules]
+            [logseq.db.frontend.rules :as rules]))
 
 ;; FIXME: what if users want to query other attributes than block-attrs?
 (defn- replace-star-with-block-attrs!

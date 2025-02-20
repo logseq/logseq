@@ -35,8 +35,9 @@
 
 (defn- select-all?
   [row-selection rows]
-  (set/subset? (set (map :db/id rows))
-               (:selected-ids row-selection)))
+  (and (seq (:selected-ids row-selection))
+       (set/subset? (set (map :db/id rows))
+                    (:selected-ids row-selection))))
 
 (defn- toggle-selected-all!
   [table value set-row-selection!]
@@ -266,7 +267,7 @@
 
 (rum/defc table-footer
   [children]
-  [:div.ls-table-footer
+  [:div.ls-table-footer.fade-in.faster
    children])
 
 (rum/defc table-row < rum/static

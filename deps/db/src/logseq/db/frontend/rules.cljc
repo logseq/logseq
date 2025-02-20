@@ -1,7 +1,7 @@
 (ns ^:bb-compatible logseq.db.frontend.rules
   "Datalog rules mostly for DB graphs. `rules`
    is the only var also used by file graphs"
-    (:require [logseq.db.file-based.rules :as file-rules]))
+  (:require [logseq.db.file-based.rules :as file-rules]))
 
 (def ^:large-vars/data-var rules
   "Rules used mainly in frontend.db.model for both DB and file graphs"

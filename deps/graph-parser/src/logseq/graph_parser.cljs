@@ -4,11 +4,11 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.graph-parser.extract :as extract]
-            [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.file-based.schema :as file-schema]))
+            [logseq.db.file-based.schema :as file-schema]
+            [logseq.graph-parser.extract :as extract]))
 
 (defn- retract-blocks-tx
   [blocks retain-uuids]

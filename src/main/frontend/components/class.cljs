@@ -27,7 +27,7 @@
     (let [children-pages (set (model/get-structured-children (state/get-current-repo) (:db/id class)))
           ;; Expand children if there are about a pageful of total blocks to display
           default-collapsed? (> (count children-pages) 30)]
-      [:div.mt-4
+      [:div.my-4
        (ui/foldable
         [:div.font-medium.opacity-50
          (str "Children (" (count children-pages) ")")]

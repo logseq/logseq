@@ -1,11 +1,11 @@
 (ns logseq.db.frontend.inputs-test
-  (:require [cljs.test :refer [deftest is]]
-            [cljs-time.core :as t]
+  (:require [cljs-time.core :as t]
+            [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.db.frontend.inputs :as db-inputs]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.frontend.inputs :as db-inputs]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.test.helper :as db-test]))
 

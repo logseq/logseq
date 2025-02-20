@@ -19,5 +19,5 @@
 }
 
 .custom-query-page-result {
-  @apply p-4 my-1.5 -mx-1 rounded bg-gray-03;
+  @apply p-4 my-1 rounded bg-gray-03;
 }
