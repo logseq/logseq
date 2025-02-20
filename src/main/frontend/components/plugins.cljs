@@ -766,15 +766,39 @@
                          (into {}))
                        {false pkgs})
         pinned-pkgs (get grouped-pkgs true)
-        pkgs (get grouped-pkgs false)]
-    (->>
-      ;; weight sort
-      (apply sort-by
-        (conj
-          (case key
-            :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
-            [(if default? :downloads key) #(compare %2 %1)])
-          pkgs))
+        pkgs (get grouped-pkgs false)
+        ;; calculate weight
+        [key pkgs] (if default?
+                     (let [decay-factor 0.01
+                           download-weight 0.8
+                           star-weight 0.2]
+                       (letfn [(normalize [vals val]
+                                 (let [min-val (apply min vals)
+                                       max-val (apply max vals)]
+                                   (if (= max-val min-val) 1
+                                     (/ (- val min-val) (- max-val val)))))
+                               (time-diff-in-days [ts]
+                                 (let [time-diff (- (js/Date.now) ts)]
+                                   (/ time-diff (* 1000 60 60 24))))]
+                         [:weight
+                          (let [all-downloads (map :downloads pkgs)
+                                all-stars (map :stars pkgs)]
+                            (->> pkgs
+                              (map (fn [{:keys [downloads stars latestAt] :as pkg}]
+                                     (let [days-since-latest (time-diff-in-days latestAt)
+                                           decay (js/Math.exp (* -1 decay-factor days-since-latest))
+                                           normalized-downloads (normalize all-downloads downloads)
+                                           normalize-stars (normalize all-stars stars)
+                                           download-score (* normalized-downloads download-weight)
+                                           star-score (* normalize-stars star-weight)]
+                                       (assoc pkg :weight (+ download-score star-score decay)))))))]))
+                     [key pkgs])]
+    (->> (apply sort-by
+           (conj
+             (case key
+               :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
+               [key #(compare %2 %1)])
+             pkgs))
       (concat pinned-pkgs))))
 
 (rum/defcs ^:large-vars/data-var marketplace-plugins
