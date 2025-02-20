@@ -379,7 +379,7 @@
 }
 
 .page-reference {
-  @apply inline rounded transition-[background];
+  @apply inline-flex flex-row items-center rounded transition-[background];
 
   .bracket {
     @apply opacity-30;

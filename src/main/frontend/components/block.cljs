@@ -1056,6 +1056,7 @@
         (contains? config/audio-formats asset-type)
         (contains? config/video-formats asset-type))))
 
+(declare block-positioned-properties)
 (rum/defc page-reference < rum/reactive
   "Component for page reference"
   [html-export? uuid-or-title* {:keys [nested-link? show-brackets? id] :as config} label]
@@ -1082,6 +1083,10 @@
                     (not html-export?)
                     (not contents-page?))
            [:span.text-gray-500.bracket page-ref/left-brackets])
+         (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
+           [:div.inline-block {:style {:margin-right 1}
+                               :on-pointer-down (fn [e]
+                                                  (util/stop e))} (block-positioned-properties config block :block-left)])
          (page-cp config' (if (uuid? uuid-or-title)
                             {:block/uuid uuid-or-title}
                             {:block/name uuid-or-title}))
@@ -2721,7 +2726,7 @@
                (property-component/property-key-cp block property opts)
                [:div.select-none ":"]]
               (pv/property-value block property opts)]))]
-        [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6
+        [:div.positioned-properties.flex.flex-row.gap-1.select-none
          {:class (name position)}
          (for [pid properties]
            (when-let [property (db/entity pid)]
