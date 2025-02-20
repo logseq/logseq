@@ -157,12 +157,15 @@
     (letfn [(remove-ignored-attrs&entities [init-data]
               (let [[before after] (split-with #(not= :logseq.kv/graph-created-at (:db/ident %)) init-data)
                     init-data* (concat before (rest after))]
-                (map (fn [ent] (dissoc ent :block/created-at :block/updated-at
+                (map (fn [ent] (dissoc ent
+                                       :block/created-at :block/updated-at
+                                       :file/last-modified-at :file/created-at
                                        :block/order ;; TODO: block/order should be same as well
                                        ))
                      init-data*)))]
-      (let [[first-only second-only _common]
+      (let [[first-only second-only common]
             (data/diff (remove-ignored-attrs&entities (sqlite-create-graph/build-db-initial-data ""))
                        (remove-ignored-attrs&entities (sqlite-create-graph/build-db-initial-data "")))]
         (is (and (every? nil? first-only)
-                 (every? nil? second-only)))))))
+                 (every? nil? second-only))
+            (pr-str [first-only second-only common]))))))

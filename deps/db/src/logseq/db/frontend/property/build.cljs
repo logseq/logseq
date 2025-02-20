@@ -1,7 +1,7 @@
 (ns logseq.db.frontend.property.build
   "Builds core property concepts"
-  (:require [datascript.core :as d]
-            [logseq.common.util :as common-util]
+  (:require [logseq.common.util :as common-util]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -68,10 +68,10 @@
 (defn- build-property-value-block
   "Builds a property value entity given a block map/entity, a property entity or
   ident and its property value"
-  [block property value]
+  [block property value & {:keys [block-uuid]}]
   (let [block-id (or (:db/id block) (:db/ident block))]
     (-> (merge
-         {:block/uuid (d/squuid)
+         {:block/uuid (or block-uuid (common-uuid/gen-uuid))
           :block/page (if (:block/page block)
                         (:db/id (:block/page block))
                         ;; page block
@@ -101,8 +101,11 @@
                   (assert (:db/ident property-map) "Key in map must have a :db/ident")
                   [(or (:original-property-id property-map) (:db/ident property-map))
                    (if (set? v)
-                     (set (map #(build-property-value-block block' property-map %) v))
-                     (build-property-value-block block' property-map v))])))
+                     (set (map #(build-property-value-block
+                                 block' property-map %
+                                 :block-uuid (common-uuid/gen-uuid :builtin-block-uuid %)) v))
+                     (build-property-value-block block' property-map v
+                                                 :block-uuid (common-uuid/gen-uuid :builtin-block-uuid v)))])))
          (into {}))))
 
 (defn build-properties-with-ref-values

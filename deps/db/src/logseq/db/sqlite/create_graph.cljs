@@ -169,7 +169,7 @@
 (defn build-initial-views
   "Builds initial blocks used for storing views. Used by db and file graphs"
   []
-  (let [page-id (common-uuid/gen-uuid)]
+  (let [page-id (common-uuid/gen-uuid :builtin-block-uuid common-config/views-page-name)]
     [(sqlite-util/block-with-timestamps
       {:block/uuid page-id
        :block/name common-config/views-page-name
@@ -178,7 +178,7 @@
        :logseq.property/hide? true
        :logseq.property/built-in? true})
      (sqlite-util/block-with-timestamps
-      {:block/uuid (common-uuid/gen-uuid)
+      {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "All Pages Default View")
        :block/title "All Pages Default View"
        :block/parent [:block/uuid page-id]
        :block/order (db-order/gen-key nil)
@@ -189,7 +189,7 @@
 (defn- build-favorites-page
   []
   [(sqlite-util/block-with-timestamps
-    {:block/uuid (common-uuid/gen-uuid)
+    {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid common-config/favorites-page-name)
      :block/name common-config/favorites-page-name
      :block/title common-config/favorites-page-name
      :block/tags [:logseq.class/Page]
@@ -210,17 +210,17 @@
                        {:db/ident :logseq.property/empty-placeholder}]
                        import-type
                        (into (sqlite-util/import-tx import-type)))
-        initial-files [{:block/uuid (common-uuid/gen-uuid :builtin-page-uuid "logseq/config.edn")
+        initial-files [{:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/config.edn")
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content
                         :file/created-at (js/Date.)
                         :file/last-modified-at (js/Date.)}
-                       {:block/uuid (common-uuid/gen-uuid :builtin-page-uuid "logseq/custom.css")
+                       {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.css")
                         :file/path (str "logseq/" "custom.css")
                         :file/content ""
                         :file/created-at (js/Date.)
                         :file/last-modified-at (js/Date.)}
-                       {:block/uuid (common-uuid/gen-uuid :builtin-page-uuid "logseq/custom.js")
+                       {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.js")
                         :file/path (str "logseq/" "custom.js")
                         :file/content ""
                         :file/created-at (js/Date.)
