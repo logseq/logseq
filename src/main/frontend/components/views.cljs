@@ -1208,6 +1208,21 @@
        (set-sized-columns! sized-columns)
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
+(rum/defc table-body < rum/static
+  [table option rows *scroller-ref *rows-wrap]
+  (ui/virtualized-list
+   {:ref #(reset! *scroller-ref %)
+    :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
+                              (gdom/getElement "main-content-container"))
+    :increase-viewport-by {:top 300 :bottom 300}
+    :compute-item-key (fn [idx]
+                        (let [block (nth rows idx)]
+                          (str "table-row-" (:db/id block))))
+    :total-count (count rows)
+    :item-content (fn [idx]
+                    (let [row (nth rows idx)]
+                      (table-row table row {} option)))}))
+
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))
@@ -1219,18 +1234,7 @@
         [:div.relative
          (table-header table option selected-rows)
 
-         (ui/virtualized-list
-          {:ref #(reset! *scroller-ref %)
-           :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
-                                     (gdom/getElement "main-content-container"))
-           :increase-viewport-by {:top 300 :bottom 300}
-           :compute-item-key (fn [idx]
-                               (let [block (nth rows idx)]
-                                 (str "table-row-" (:db/id block))))
-           :total-count (count rows)
-           :item-content (fn [idx]
-                           (let [row (nth rows idx)]
-                             (table-row table row {} option)))})
+         (table-body table option rows *scroller-ref *rows-wrap)
 
          (when (get-in table [:data-fns :add-new-object!])
            (shui/table-footer (add-new-row table)))]]))))

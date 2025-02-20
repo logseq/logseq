@@ -553,7 +553,11 @@
        (plugins/hook-ui-slot :page-head-actions-slotted nil)
        (plugins/hook-ui-items :pagebar)])))
 
-(rum/defc tabs
+(rum/defc tabs < rum/static
+  {:did-mount (fn [state]
+                (let [*tabs-rendered? (:*tabs-rendered? (last (:rum/args state)))]
+                  (reset! *tabs-rendered? true)
+                  state))}
   [page opts]
   (let [class? (ldb/class? page)
         property? (ldb/property? page)
@@ -617,9 +621,11 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
+  (rum/local false ::tabs-rendered?)
   [state {:keys [repo page-name preview? sidebar? linked-refs? unlinked-refs? config] :as option}]
   (when-let [path-page-name (get-path-page-name state page-name)]
     (let [current-repo (state/sub :git/current-repo)
+          *tabs-rendered? (::tabs-rendered? state)
           repo (or repo current-repo)
           page-name (util/page-name-sanity-lc path-page-name)
           page (get-page-entity page-name)
@@ -642,7 +648,9 @@
           *control-show? (::control-show? state)
           *all-collapsed? (::all-collapsed? state)
           block-or-whiteboard? (or block? whiteboard?)
-          home? (= :home (state/get-current-route))]
+          home? (= :home (state/get-current-route))
+          show-tabs? (and db-based? (or class-page? (ldb/property? page)))
+          tabs-rendered? (rum/react *tabs-rendered?)]
       (if page
         (when (or page-name block-or-whiteboard?)
           [:div.flex-1.page.relative.cp__page-inner-wrap
@@ -687,17 +695,16 @@
                   [:div.mb-4
                    (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-              (when (and db-based? (or class-page? (ldb/property? page)))
-                (tabs page {:current-page? option :sidebar? sidebar?}))
+              (when show-tabs?
+                (tabs page {:current-page? option :sidebar? sidebar? :*tabs-rendered? *tabs-rendered?}))
 
-              [:div.ls-page-blocks
-               {:class (when (and db-based? (or class-page? (ldb/property? page)))
-                         "fade-in faster")}
-               (page-blocks-cp page (merge option {:sidebar? sidebar?
-                                                   :container-id (:container-id state)
-                                                   :whiteboard? whiteboard?}))]])
+              (when (or (not show-tabs?) tabs-rendered?)
+                [:div.ls-page-blocks
+                 (page-blocks-cp page (merge option {:sidebar? sidebar?
+                                                     :container-id (:container-id state)
+                                                     :whiteboard? whiteboard?}))])])
 
-           (when (not preview?)
+           (when (and (not preview?) (or (not show-tabs?) tabs-rendered?))
              [:div.ml-1
               (when today?
                 (today-queries repo today? sidebar?))
@@ -711,7 +718,7 @@
               (when (and (ldb/page? page) (:logseq.property/_parent page))
                 (class-component/class-children page))
 
-            ;; referenced blocks
+              ;; referenced blocks
               (when-not (or whiteboard? linked-refs? (and block? (not db-based?)))
                 [:div {:key "page-references"}
                  (rum/with-key
