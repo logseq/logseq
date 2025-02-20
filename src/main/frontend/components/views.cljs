@@ -316,38 +316,39 @@
 (rum/defc more-actions
   [view-entity columns {:keys [column-visible? column-toggle-visibility]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
-        table? (= display-type :logseq.property.view/type.table)]
-    (shui/dropdown-menu
-     (shui/dropdown-menu-trigger
-      {:asChild true}
-      (shui/button
-       {:variant "ghost"
-        :class "text-muted-foreground !px-1"
-        :size :sm}
-       (ui/icon "dots" {:size 15})))
-     (shui/dropdown-menu-content
-      {:align "end"}
-      (shui/dropdown-menu-group
-       (when table?
-         (shui/dropdown-menu-sub
-          (shui/dropdown-menu-sub-trigger
-           "Columns visibility")
-          (shui/dropdown-menu-sub-content
-           (for [column (remove #(or (false? (:column-list? %))
-                                     (:disable-hide? %)) columns)]
-             (shui/dropdown-menu-checkbox-item
-              {:key (str (:id column))
-               :className "capitalize"
-               :checked (column-visible? column)
-               :onCheckedChange #(column-toggle-visibility column %)
-               :onSelect (fn [e] (.preventDefault e))}
-              (:name column))))))
-       (let [columns' (filter (fn [column]
-                                (when (:id column)
-                                  (when-let [p (db/entity (:id column))]
-                                    (and (not (db-property/many? p))
-                                         (contains? #{:default :number :checkbox :url :node :date}
-                                                    (:logseq.property/type p)))))) columns)]
+        table? (= display-type :logseq.property.view/type.table)
+        columns' (filter (fn [column]
+                           (when (:id column)
+                             (when-let [p (db/entity (:id column))]
+                               (and (not (db-property/many? p))
+                                    (contains? #{:default :number :checkbox :url :node :date}
+                                               (:logseq.property/type p)))))) columns)]
+    (when (or table? (seq columns'))
+      (shui/dropdown-menu
+       (shui/dropdown-menu-trigger
+        {:asChild true}
+        (shui/button
+         {:variant "ghost"
+          :class "text-muted-foreground !px-1"
+          :size :sm}
+         (ui/icon "dots" {:size 15})))
+       (shui/dropdown-menu-content
+        {:align "end"}
+        (shui/dropdown-menu-group
+         (when table?
+           (shui/dropdown-menu-sub
+            (shui/dropdown-menu-sub-trigger
+             "Columns visibility")
+            (shui/dropdown-menu-sub-content
+             (for [column (remove #(or (false? (:column-list? %))
+                                       (:disable-hide? %)) columns)]
+               (shui/dropdown-menu-checkbox-item
+                {:key (str (:id column))
+                 :className "capitalize"
+                 :checked (column-visible? column)
+                 :onCheckedChange #(column-toggle-visibility column %)
+                 :onSelect (fn [e] (.preventDefault e))}
+                (:name column))))))
          (when (seq columns')
            (shui/dropdown-menu-sub
             (shui/dropdown-menu-sub-trigger
