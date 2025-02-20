@@ -31,20 +31,22 @@
   "Given a new block and its properties, creates a map of properties which have values of property value tx.
    This map is used for both creating the new property values and then adding them to a block"
   [new-block properties]
-  (->> properties
-       (keep (fn [[k v]]
-               (when-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
-                 (if (and (db-property-type/value-ref-property-types built-in-type)
-                          ;; closed values are referenced by their :db/ident so no need to create values
-                          (not (get-in db-property/built-in-properties [k :closed-values])))
-                   (let [property-map {:db/ident k
-                                       :logseq.property/type built-in-type}]
-                     [property-map v])
-                   (when-let [built-in-type' (get (:build/properties-ref-types new-block) built-in-type)]
-                     (let [property-map {:db/ident k
-                                         :logseq.property/type built-in-type'}]
-                       [property-map v]))))))
-       (db-property-build/build-property-values-tx-m new-block)))
+  (db-property-build/build-property-values-tx-m
+   new-block
+   (->> properties
+        (keep (fn [[k v]]
+                (when-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
+                  (if (and (db-property-type/value-ref-property-types built-in-type)
+                           ;; closed values are referenced by their :db/ident so no need to create values
+                           (not (get-in db-property/built-in-properties [k :closed-values])))
+                    (let [property-map {:db/ident k
+                                        :logseq.property/type built-in-type}]
+                      [property-map v])
+                    (when-let [built-in-type' (get (:build/properties-ref-types new-block) built-in-type)]
+                      (let [property-map {:db/ident k
+                                          :logseq.property/type built-in-type'}]
+                        [property-map v])))))))
+   :pure? true))
 
 (defn build-properties
   "Given a properties map in the format of db-property/built-in-properties, builds their properties tx"
