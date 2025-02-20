@@ -12,7 +12,7 @@
 
 (rum/defc mobile-bar-command [command-handler icon]
   [:button.bottom-action
-   {:on-mouse-down (fn [e]
+   {:on-pointer-down (fn [e]
                      (util/stop e)
                      (command-handler))}
    (if (= icon "player-stop")
@@ -51,7 +51,7 @@
 (rum/defc footer < rum/reactive
   []
   (when (and (#{:page :home} (state/sub [:route-match :data :name]))
-             (not (state/sub :editor/editing?))
+             (not (state/editing?))
              (state/sub :mobile/show-tabbar?)
              (state/get-current-repo))
     [:div.cp__footer.w-full.bottom-0.justify-between

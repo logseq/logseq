@@ -1,6 +1,24 @@
 ;; API
-logseq.db/start-conn
+logseq.db.file-based.schema/retract-attributes
 ;; API
-logseq.db.rules/query-dsl-rules
-;; Internal API
-logseq.db.rules/rules
+logseq.db.frontend.rules/db-query-dsl-rules
+;; API
+logseq.db.frontend.rules/extract-rules
+;; API
+logseq.db.frontend.rules/rules
+;; API
+logseq.db.frontend.rules/rules-dependencies
+;; API
+logseq.db.frontend.inputs/resolve-input
+;; API
+logseq.db.frontend.class/build-new-class
+;; API
+logseq.db.frontend.class/logseq-class?
+;; API
+logseq.db.frontend.db-ident/ensure-unique-db-ident
+;; API
+logseq.db.sqlite.build/create-blocks
+;; API
+logseq.db.sqlite.export/build-export
+;; API
+logseq.db.sqlite.export/build-import

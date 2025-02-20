@@ -4,14 +4,14 @@
             [frontend.state :as state]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.highlight :as highlight]
-            [logseq.graph-parser.util.block-ref :as block-ref]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [rum.core :as rum]
             [frontend.components.shortcut :as shortcut]
-            [logseq.shui.core :as shui]))
+            [logseq.shui.ui :as shui]))
 
 (rum/defc trigger-table []
-  [:table
+  [:table.classic-table.w-full
    [:thead
     [:tr
      [:th.text-left [:b (t :help/shortcuts-triggers)]]
@@ -75,14 +75,14 @@
                   :link [:a {:href "https://www.example.com"} "Link"]
                   :del [:del (t :strikethrough)]
                   :mark [:mark (t :highlight)]
-                  :latex (latex/latex "help-latex" "E = mc^2" true false)
+                  :latex (latex/latex "E = mc^2" true false)
                   :code [:code (t :code)]
                   :pre (highlight/highlight "help-highlight" {:data-lang "clojure"} "(println \"Hello world!\")")
                   :img [:img {:style {:float "right" :width 32 :height 32}
                               :src "https://asset.logseq.com/static/img/logo.png"
                               :alt "image"}]}]
 
-    [:table
+    [:table.classic-table.w-full
      [:thead
       [:tr
        [:th.text-left [:b title]]
@@ -92,13 +92,13 @@
              [:tr
               [:td.text-left [(if (= :pre name) :pre :code) (get raw name)]]
               [:td.text-right (get rendered name)]])
-        list)]]))
-
+           list)]]))
 
 (rum/defc shortcut-page
   [{:keys [show-title?]
     :or {show-title? true}}]
-  [:div.cp__shortcut-page
+  [:div.cp__shortcut-page.px-2
+   {:class "-mt-2"}
    (when show-title? [:h1.title (t :help/shortcut-page-title)])
    (trigger-table)
    (markdown-and-orgmode-syntax)
