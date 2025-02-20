@@ -241,8 +241,9 @@
               blocks (if block? [block] (db/sort-by-order children block))]
           (let [add-button? (not (or config/publishing?
                                      (let [last-child-id (model/get-block-deep-last-open-child-id (db/get-db) (:db/id (last blocks)))
-                                           block' (if last-child-id (db/entity last-child-id) (last blocks))]
-                                       (string/blank? (:block/title block')))))]
+                                           block' (if last-child-id (db/entity last-child-id) (last blocks))
+                                           link (:block/link block')]
+                                       (string/blank? (:block/title (or link block'))))))]
             [:div
              {:class (when add-button? "show-add-button")}
              (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
