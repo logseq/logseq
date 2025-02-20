@@ -30,6 +30,7 @@
             [goog.dom :as gdom]
             [goog.string :as gstring]
             [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.graph-parser.property :as gp-property]
@@ -338,7 +339,17 @@
            (when (>= (count edit-content) current-pos)
              (subs edit-content pos current-pos)))]
     (when input
-      (block-search-auto-complete edit-block input id q format selected-text))))
+      (let [db? (config/db-based-graph? (state/get-current-repo))
+            embed? (and db? (= @commands/*current-command "Block embed"))
+            page (when embed? (page-ref/get-page-name edit-content))
+            embed-block-id (when (and embed? page (common-util/uuid-string? page))
+                             (uuid page))]
+        (if embed-block-id
+          (let [f (block-on-chosen-handler true input id q format nil)
+                block (db/entity embed-block-id)]
+            (when block (f block))
+            nil)
+          (block-search-auto-complete edit-block input id q format selected-text))))))
 
 (rum/defc template-search-aux
   [id q]
