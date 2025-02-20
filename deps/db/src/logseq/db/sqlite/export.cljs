@@ -213,9 +213,14 @@
 (defn- merge-export-maps [& export-maps]
   (let [pages-and-blocks
         (->> (mapcat :pages-and-blocks export-maps)
-             ;; TODO: Group by more correct identity, same as check-for-existing-entities
-             (group-by #(get-in % [:page :block/title]))
-             (mapv #(apply merge (second %))))
+             ;; TODO: Group by more correct identity for title, same as check-for-existing-entities
+             (group-by #(select-keys (:page %) [:block/title :build/journal]))
+             (mapv #(apply merge-with (fn [e1 e2]
+                                        ;; merge :page and add :blocks
+                                        (if (and (map? e1) (map e2))
+                                          (merge e1 e2)
+                                          (into e1 e2)))
+                           (second %))))
         ;; Use merge-with to preserve new-property? and to allow full copies to overwrite shallow ones
         properties (apply merge-with merge (keep :properties export-maps))
         classes (apply merge-with merge (keep :classes export-maps))]

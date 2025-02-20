@@ -9,6 +9,8 @@
             [logseq.db.test.helper :as db-test]
             [medley.core :as medley]))
 
+;; Test helpers
+;; ============
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
    exports the 2nd block. The two blocks do not have to be in the same graph"
@@ -53,6 +55,38 @@
                  (not (:block/title m))
                  (assoc :block/title (name k)))]))
        (into {})))
+
+;; Tests
+;; =====
+
+(deftest merge-export-maps
+  (is (= {:pages-and-blocks
+          [{:page {:block/title "page1"}
+            :blocks [{:block/title "b1"}
+                     {:block/title "b2"}]}
+           {:page {:block/title "page2"}}]}
+         (#'sqlite-export/merge-export-maps
+          {:pages-and-blocks
+           [{:page {:block/title "page1"}
+             :blocks [{:block/title "b1"}]}]}
+          {:pages-and-blocks
+           [{:page {:block/title "page1"}
+             :blocks [{:block/title "b2"}]}
+            {:page {:block/title "page2"}}]}))
+      "In :pages-and-blocks, identical pages and their :blocks are merged")
+
+  (is (= {:pages-and-blocks
+          [{:page {:build/journal 20250220}
+            :blocks [{:block/title "b1"}]}
+           {:page {:build/journal 20250221}}]}
+       (#'sqlite-export/merge-export-maps
+          {:pages-and-blocks
+           [{:page {:build/journal 20250220}
+             :blocks [{:block/title "b1"}]}]}
+          {:pages-and-blocks
+           [{:page {:build/journal 20250220}}
+            {:page {:build/journal 20250221}}]}))
+      "In :pages-and-blocks, identical journals and their :blocks are merged"))
 
 (deftest import-block-in-same-graph
   (let [original-data
