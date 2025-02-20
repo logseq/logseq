@@ -112,11 +112,15 @@
 
 (deftest import-block-with-block-ref
   (let [page-uuid (random-uuid)
+        block-uuid (random-uuid)
         original-data
-        {:pages-and-blocks
+        {:properties {:user.property/p1 {:logseq.property/type :default}}
+         :pages-and-blocks
          [{:page {:block/title "page1"}
-           :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}]}
-          {:page {:block/title "another page" :block/uuid page-uuid :build/keep-uuid? true}}]}
+           :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))
+                     :build/properties {:user.property/p1 (str "block ref to " (page-ref/->page-ref block-uuid))}}]}
+          {:page {:block/title "another page" :block/uuid page-uuid :build/keep-uuid? true}
+           :blocks [{:block/title "b1" :block/uuid block-uuid :build/keep-uuid? true}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn-with-blocks
                {:pages-and-blocks [{:page {:block/title "page2"}
@@ -207,6 +211,7 @@
         internal-block-uuid (random-uuid)
         class-uuid (random-uuid)
         page-uuid (random-uuid)
+        pvalue-page-uuid (random-uuid)
         property-uuid (random-uuid)
         journal-uuid (random-uuid)
         block-object-uuid (random-uuid)
@@ -217,11 +222,15 @@
                       {:logseq.property/type :node
                        :block/uuid property-uuid
                        :build/keep-uuid? true
-                       :build/property-classes [:user.class/NodeClass]}}
+                       :build/property-classes [:user.class/NodeClass]}
+                      :user.property/p2
+                      {:logseq.property/type :default}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}
                     {:block/title (str "block ref to " (page-ref/->page-ref block-uuid))}
+                    {:block/title "ref in properties"
+                     :build/properties {:user.property/p2 (str "pvalue ref to " (page-ref/->page-ref pvalue-page-uuid))}}
                     {:block/title "hola" :block/uuid internal-block-uuid :build/keep-uuid? true}
                     {:block/title (str "internal block ref to " (page-ref/->page-ref internal-block-uuid))}
                     {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}
@@ -231,7 +240,8 @@
           {:page {:block/title "page with block ref"}
            :blocks [{:block/title "hi" :block/uuid block-uuid :build/keep-uuid? true
                      :build/properties {:user.property/p1 [:block/uuid block-object-uuid]}}]}
-          {:page {:block/title "another page" :block/uuid page-uuid :build/keep-uuid? true}}
+          {:page {:block/title "page ref page" :block/uuid page-uuid :build/keep-uuid? true}}
+          {:page {:block/title "pvalue ref page" :block/uuid pvalue-page-uuid :build/keep-uuid? true}}
           {:page {:build/journal 20250207 :block/uuid journal-uuid :build/keep-uuid? true}}
           {:page {:block/title "Blocks"}
            :blocks [{:block/title "myclass object"
