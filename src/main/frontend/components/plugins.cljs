@@ -758,12 +758,12 @@
   (let [default? (or (nil? key) (= key :default))
         grouped-pkgs (if default?
                        (some->> pkgs
-                         (group-by (fn [{:keys [addedAt]}]
-                                     (and (number? addedAt)
-                                       (< (- (js/Date.now) addedAt)
+                                (group-by (fn [{:keys [addedAt]}]
+                                            (and (number? addedAt)
+                                                 (< (- (js/Date.now) addedAt)
                                          ;; under 6 days
-                                         (* 1000 60 60 24 6)))))
-                         (into {}))
+                                                    (* 1000 60 60 24 6)))))
+                                (into {}))
                        {false pkgs})
         pinned-pkgs (get grouped-pkgs true)
         pkgs (get grouped-pkgs false)
@@ -776,7 +776,7 @@
                                  (let [min-val (apply min vals)
                                        max-val (apply max vals)]
                                    (if (= max-val min-val) 1
-                                     (/ (- val min-val) (- max-val val)))))
+                                       (/ (- val min-val) (- max-val val)))))
                                (time-diff-in-days [ts]
                                  (let [time-diff (- (js/Date.now) ts)]
                                    (/ time-diff (* 1000 60 60 24))))]
@@ -784,22 +784,22 @@
                           (let [all-downloads (map :downloads pkgs)
                                 all-stars (map :stars pkgs)]
                             (->> pkgs
-                              (map (fn [{:keys [downloads stars latestAt] :as pkg}]
-                                     (let [days-since-latest (time-diff-in-days latestAt)
-                                           decay (js/Math.exp (* -1 decay-factor days-since-latest))
-                                           normalized-downloads (normalize all-downloads downloads)
-                                           normalize-stars (normalize all-stars stars)
-                                           download-score (* normalized-downloads download-weight)
-                                           star-score (* normalize-stars star-weight)]
-                                       (assoc pkg :weight (+ download-score star-score decay)))))))]))
+                                 (map (fn [{:keys [downloads stars latestAt] :as pkg}]
+                                        (let [days-since-latest (time-diff-in-days latestAt)
+                                              decay (js/Math.exp (* -1 decay-factor days-since-latest))
+                                              normalized-downloads (normalize all-downloads downloads)
+                                              normalize-stars (normalize all-stars stars)
+                                              download-score (* normalized-downloads download-weight)
+                                              star-score (* normalize-stars star-weight)]
+                                          (assoc pkg :weight (+ download-score star-score decay)))))))]))
                      [key pkgs])]
     (->> (apply sort-by
-           (conj
-             (case key
-               :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
-               [key #(compare %2 %1)])
-             pkgs))
-      (concat pinned-pkgs))))
+                (conj
+                 (case key
+                   :letters [#(util/safe-lower-case (or (:title %) (:name %)))]
+                   [key #(compare %2 %1)])
+                 pkgs))
+         (concat pinned-pkgs))))
 
 (rum/defcs ^:large-vars/data-var marketplace-plugins
   < rum/static rum/reactive
@@ -866,12 +866,11 @@
                                          stars     (:stargazers_count stat)
                                          latest-at (some-> (:updated_at stat) (js/Date.) (.getTime))]
                                      (assoc %
-                                       :stat stat
-                                       :stars stars
-                                       :latestAt latest-at
-                                       :downloads downloads))
+                                            :stat stat
+                                            :stars stars
+                                            :latestAt latest-at
+                                            :downloads downloads))
                                    %) filtered-pkgs)
-        _ (def debug-pkgs filtered-pkgs)
         sorted-plugins     (weighted-sort-by @*sort-by filtered-pkgs)
 
         fn-query-flag      (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
