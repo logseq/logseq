@@ -3235,10 +3235,14 @@
     (when-let [block-id (:block/uuid current-block)]
       (let [db? (config/db-based-graph? (state/get-current-repo))]
         (if (= format "embed")
-          (copy-block-ref! block-id
-                           (if db?
-                             block-ref/->block-ref
-                             #(str "{{embed ((" % "))}}")))
+          (if db?
+            (p/do!
+             (save-current-block!)
+             (util/copy-to-clipboard! (page-ref/->page-ref block-id)
+                                      {:graph (state/get-current-repo)
+                                       :blocks [{:block/uuid (:block/uuid current-block)}]
+                                       :embed-block? true}))
+            (copy-block-ref! block-id #(str "{{embed ((" % "))}}")))
           (copy-block-ref! block-id
                            (if db?
                              page-ref/->page-ref
