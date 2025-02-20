@@ -39,15 +39,8 @@
 
 (defn- get-all-pages
   []
-  (let [pages (->> (page-handler/get-all-pages (state/get-current-repo))
-                   (map (fn [p] (assoc p :id (:db/id p)))))]
-    (if (config/db-based-graph? (state/get-current-repo))
-      pages
-      ;; FIXME: Remove when bug with page named 'page with #tag' is fixed
-      (let [buggy-pages (remove :block/type pages)]
-        (when (seq buggy-pages)
-          (js/console.error "The following pages aren't displayed because they don't have a :block/type" buggy-pages))
-        (filter :block/type pages)))))
+  (->> (page-handler/get-all-pages (state/get-current-repo))
+       (map (fn [p] (assoc p :id (:db/id p))))))
 
 (rum/defc all-pages < rum/static
   []
