@@ -1,18 +1,18 @@
 (ns frontend.db.conn
   "Contains db connections."
   (:require [clojure.string :as string]
-            [frontend.util :as util]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.config :as config]
-            [frontend.util.text :as text-util]
-            [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.db :as gp-db]
             [datascript.core :as d]
-            [logseq.db :as ldb]
-            [logseq.common.util :as common-util]
-            [logseq.db.frontend.schema :as db-schema]
+            [frontend.config :as config]
             [frontend.db.conn-state :as db-conn-state]
-            [frontend.state :as state]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.text :as text-util]
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.graph-parser.db :as gp-db]
+            [logseq.graph-parser.text :as text]))
 
 (defonce conns db-conn-state/conns)
 (def get-repo-path db-conn-state/get-repo-path)
@@ -81,7 +81,7 @@
   ([repo {:keys [listen-handler]}]
    (let [db-name (db-conn-state/get-repo-path repo)
          db-conn (if (config/db-based-graph? repo)
-                   (d/create-conn db-schema/schema-for-db-based-graph)
+                   (d/create-conn db-schema/schema)
                    (gp-db/start-conn))]
      (swap! conns assoc db-name db-conn)
      (when listen-handler

@@ -1,8 +1,8 @@
 (ns logseq.graph-parser.extract-test
   (:require [cljs.test :refer [deftest is are]]
-            [logseq.graph-parser.extract :as extract]
             [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.file-based.schema :as file-schema]
+            [logseq.graph-parser.extract :as extract]))
 
 ;; This is a copy of frontend.util.fs/multiplatform-reserved-chars for reserved chars testing
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
@@ -45,7 +45,7 @@
 (defn- extract [file content & [options]]
   (extract/extract file
                    content
-                   (merge {:block-pattern "-" :db (d/empty-db db-schema/schema)
+                   (merge {:block-pattern "-" :db (d/empty-db file-schema/schema)
                            :verbose false}
                           options)))
 

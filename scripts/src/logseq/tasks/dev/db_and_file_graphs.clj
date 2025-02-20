@@ -1,5 +1,6 @@
 (ns logseq.tasks.dev.db-and-file-graphs
   (:require [babashka.process :refer [shell]]
+            [clojure.set :as set]
             [clojure.string :as string]))
 
 (defn- escape-shell-regex
@@ -12,7 +13,7 @@
 (def db-graph-ns
   "Namespaces or parent namespaces _only_ for DB graphs. Use a '.' at end of a namespace for parent namespaces"
   (mapv escape-shell-regex
-        ["logseq.db.sqlite." "logseq.db.frontend.property" "logseq.db.frontend.malli-schema"
+        ["logseq.db.sqlite." "logseq.db.frontend."
          "electron.db"
          "frontend.handler.db-based."
          "frontend.worker.handler.page.db-based"
@@ -33,18 +34,23 @@
          "frontend.components.file-based"
          "frontend.util.fs"]))
 
+(def block-name-db-graph-paths
+  "DB graph paths with :block/name"
+  ["deps/db/src/logseq/db/frontend"
+   "deps/db/src/logseq/db/sqlite"
+   "src/main/frontend/worker/handler/page/db_based"])
+
 (def db-graph-paths
   "Paths _only_ for DB graphs"
-  ["src/main/frontend/handler/db_based"
-   ;; TODO: Re-enable if db namespace support is moved elsewhere
-  ;;  "src/main/frontend/worker/handler/page/db_based"
-   "src/main/frontend/components/class.cljs"
-   "src/main/frontend/components/property.cljs"
-   "src/main/frontend/components/property"
-   "src/main/frontend/components/objects.cljs"
-   "src/main/frontend/components/db_based"
-   "src/main/frontend/components/query/view.cljs"
-   "src/electron/electron/db.cljs"])
+  (into block-name-db-graph-paths
+        ["src/main/frontend/handler/db_based"
+         "src/main/frontend/components/class.cljs"
+         "src/main/frontend/components/property.cljs"
+         "src/main/frontend/components/property"
+         "src/main/frontend/components/objects.cljs"
+         "src/main/frontend/components/db_based"
+         "src/main/frontend/components/query/view.cljs"
+         "src/electron/electron/db.cljs"]))
 
 (def file-graph-paths
   "Paths _only_ for file graphs"
@@ -55,11 +61,16 @@
    "src/main/frontend/components/file_based"
    "src/main/frontend/util/fs.cljs"])
 
+(defn- grep-many
+  "Git greps a coll of patterns for given paths. Returns result from process/shell"
+  [patterns paths]
+  (apply shell {:out :string :continue true}
+         "git grep -E" (str "(" (string/join "|" patterns) ")")
+         paths))
+
 (defn- validate-db-ns-not-in-file
   []
-  (let [res (apply shell {:out :string :continue true}
-                   "git grep -E" (str "(" (string/join "|" db-graph-ns) ")")
-                   file-graph-paths)]
+  (let [res (grep-many db-graph-ns file-graph-paths)]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
       (println "The following db graph namespaces should not be in file graph files:")
       (println (:out res))
@@ -67,9 +78,7 @@
 
 (defn- validate-file-ns-not-in-db
   []
-  (let [res (apply shell {:out :string :continue true}
-                   "git grep -E" (str "(" (string/join "|" file-graph-ns) ")")
-                   db-graph-paths)]
+  (let [res (grep-many file-graph-ns db-graph-paths)]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
       (println "The following file graph namespaces should not be in db graph files:")
       (println (:out res))
@@ -77,10 +86,11 @@
 
 (defn- validate-multi-graph-fns-not-in-file-or-db
   []
-  (let [multi-graph-fns ["config/db-based-graph\\?" "sqlite-util/db-based-graph\\?"]
-        res (apply shell {:out :string :continue true}
-                   "git grep -E" (str "(" (string/join "|" multi-graph-fns) ")")
-                   (into file-graph-paths db-graph-paths))]
+  ;; TODO: Lint `(db-based-graph?` when db.frontend.entity-plus is split into separate graph contexts
+  (let [multi-graph-fns ["/db-based-graph\\?"
+                         ;; Use file-entity-util and entity-util when in a single graph context
+                         "ldb/whiteboard\\?" "ldb/journal\\?" "ldb/page\\?"]
+        res (grep-many multi-graph-fns (into file-graph-paths db-graph-paths))]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
       (println "The following files should not have fns meant to be used in multi-graph contexts:")
       (println (:out res))
@@ -89,37 +99,47 @@
 (defn- validate-file-concepts-not-in-db
   []
   (let [file-concepts (->>
-                       ;; from logseq.db.frontend.schema
+                       ;; from logseq.db.file-based.schema
                        [:block/namespace :block/properties-text-values :block/pre-block :recent/pages :block/file :block/properties-order
                         :block/repeated :block/deadline :block/scheduled :block/priority :block/marker :block/macros
                         :block/type :block/format]
                        (map str)
                        (into [;; e.g. block/properties :title
                               "block/properties :"
-                              "block/name"
-                              ;; anything org mode
-                              "org"
+                              ;; anything org mode except for org.babashka
+                              "org[^\\.]"
                               "#+BEGIN_"
                               "#+END_"
-                              "pre-block"
-                              "db/get-page"
-                              "/page-name-sanity-lc"]))
+                              "pre-block"]))
         ;; For now use the whole code line. If this is too brittle can make this smaller
-        allowed-exceptions #{"{:block/name page-title})))"
+        allowed-exceptions #{":block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker"
+                             "(dissoc :block/format))]"
+                             ;; The next 3 are from components.property.value
                              "{:block/name page-title})"
                              "(when-not (db/get-page journal)"
-                             "(let [value (if datetime? (tc/to-long d) (db/get-page journal))]"
-                             "(dissoc :block/format))]"}
-        res (apply shell {:out :string :continue true}
-                   "git grep -E" (str "(" (string/join "|" file-concepts) ")")
-                   db-graph-paths)
+                             "(let [value (if datetime? (tc/to-long d) (db/get-page journal))]"}
+        res (grep-many file-concepts db-graph-paths)
         invalid-lines (when (= 0 (:exit res))
-                        (remove #(->> (string/split % #":\s+") second string/trim (contains? allowed-exceptions))
-                                (string/split-lines (:out res))))]
-    (when (> (:exit res) 1) (System/exit 1))
-    (when (and (= 0 (:exit res)) (seq invalid-lines))
+                        (remove #(some->> (string/split % #":\s+") second string/trim (contains? allowed-exceptions))
+                                (string/split-lines (:out res))))
+        _ (when (> (:exit res) 1) (System/exit 1))
+        _ (when (and (= 0 (:exit res)) (seq invalid-lines))
+            (println "The following files should not have contained file specific concepts:")
+            (println (string/join "\n" invalid-lines))
+            (System/exit 1))
+
+        ;; :block/name isn't used in db graphs except for fns with journal or internal-page
+        block-name-file-concepts #{"block/name" "/page-name-sanity-lc" "db/get-page"}
+        no-block-name-db-graph-paths (set/difference (set db-graph-paths) (set block-name-db-graph-paths))
+        block-name-res (grep-many block-name-file-concepts no-block-name-db-graph-paths)
+        block-name-invalid-lines (when (= 0 (:exit block-name-res))
+                                   (remove #(some->> (string/split % #":\s+") second string/trim (contains? allowed-exceptions))
+                                           (string/split-lines (:out block-name-res))))]
+
+    (when (> (:exit block-name-res) 1) (System/exit 1))
+    (when (and (= 0 (:exit block-name-res)) (seq block-name-invalid-lines))
       (println "The following files should not have contained file specific concepts:")
-      (println (string/join "\n" invalid-lines))
+      (println (string/join "\n" block-name-invalid-lines))
       (System/exit 1))))
 
 (defn- validate-db-concepts-not-in-file
@@ -128,9 +148,7 @@
         ;; from logseq.db.frontend.schema
         ["closed-value" "class/properties" "classes" "property/parent"
          "logseq.property" "logseq.class"]
-        res (apply shell {:out :string :continue true}
-                   "git grep -E" (str "(" (string/join "|" db-concepts) ")")
-                   file-graph-paths)]
+        res (grep-many db-concepts file-graph-paths)]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
       (println "The following files should not have contained db specific concepts:")
       (println (:out res))

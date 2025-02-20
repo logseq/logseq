@@ -1,11 +1,11 @@
 (ns logseq.graph-parser.db
   "File graph specific db fns"
-  (:require [datascript.core :as d]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.common.util :as common-util]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.file-based.schema :as file-schema]))
 
 (defonce built-in-markers
   ["NOW" "LATER" "DOING" "DONE" "CANCELED" "CANCELLED" "IN-PROGRESS" "TODO" "WAIT" "WAITING"])
@@ -50,7 +50,7 @@
 (defn start-conn
   "Create datascript conn with schema and default data"
   []
-  (let [db-conn (d/create-conn db-schema/schema)]
+  (let [db-conn (d/create-conn file-schema/schema)]
     (create-default-pages! db-conn)
     db-conn))
 

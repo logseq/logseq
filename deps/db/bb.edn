@@ -24,13 +24,14 @@
 
   lint:rules
   {:requires ([logseq.bb-tasks.lint.datalog :as datalog]
+              [logseq.db.file-based.rules :as file-rules]
               [logseq.db.frontend.rules :as rules])
    :doc "Lint datalog rules for parsability and unbound variables"
    :task (datalog/lint-rules
           (set
-           (concat (mapcat val rules/rules)
+           (concat (mapcat val (merge file-rules/rules rules/rules))
                    ;; TODO: Update linter to handle false positive on ?str-val for :property
-                   (rules/extract-rules (dissoc rules/query-dsl-rules :property))
+                   (rules/extract-rules (dissoc file-rules/query-dsl-rules :property))
                    ;; TODO: Update linter to handle false positive on :task, :priority, :*property* rules
                    (rules/extract-rules (dissoc rules/db-query-dsl-rules
                                                 :task :priority

@@ -1,12 +1,12 @@
 (ns frontend.db.restore
   "Fns for DB restore(from text or sqlite)"
-  (:require [frontend.db.conn :as db-conn]
-            [frontend.state :as state]
+  (:require [cljs-time.core :as t]
+            [datascript.transit :as dt]
+            [frontend.db.conn :as db-conn]
             [frontend.persist-db :as persist-db]
-            [promesa.core :as p]
-            [cljs-time.core :as t]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [datascript.transit :as dt]))
+            [frontend.state :as state]
+            [logseq.db.common.sqlite :as sqlite-common-db]
+            [promesa.core :as p]))
 
 (defn restore-graph!
   "Restore db from SQLite"

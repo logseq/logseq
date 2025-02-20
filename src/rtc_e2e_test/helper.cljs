@@ -10,7 +10,7 @@
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.state :as worker-state]
             [logseq.db :as ldb]
-            [logseq.db.frontend.order :as db-order]
+            [logseq.db.common.order :as db-order]
             [logseq.outliner.batch-tx :as batch-tx]
             [meander.epsilon :as me]
             [missionary.core :as m]))

@@ -1,9 +1,9 @@
-(ns logseq.db.sqlite.common-db-test
+(ns logseq.db.common.sqlite-test
   (:require [cljs.test :refer [deftest async use-fixtures is testing]]
             ["fs" :as fs]
             ["path" :as node-path]
             [datascript.core :as d]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.sqlite.cli :as sqlite-cli]
             [clojure.string :as string]))

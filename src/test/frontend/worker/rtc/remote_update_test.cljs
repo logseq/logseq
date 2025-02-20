@@ -8,7 +8,7 @@
 
 (deftest remote-op-value->tx-data-test
   (let [[block-uuid ref-uuid1 ref-uuid2] (repeatedly random-uuid)
-        db (d/db-with (d/empty-db db-schema/schema-for-db-based-graph)
+        db (d/db-with (d/empty-db db-schema/schema)
                       (sqlite-create-graph/build-db-initial-data "{}" {}))]
     (testing ":block/title"
       (let [db (d/db-with db [{:block/uuid block-uuid

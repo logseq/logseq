@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.test.helper :as db-test]))
 
 ;;; datoms
@@ -21,7 +21,7 @@
     :block/parent 2}])
 
 (deftest get-block-children-ids-on-bad-outliner-data
-  (let [db (d/db-with (d/empty-db db-schema/schema)
+  (let [db (d/db-with (d/empty-db file-schema/schema)
                       broken-outliner-data-with-cycle)]
     (is (= "bad outliner data, need to re-index to fix"
            (try (ldb/get-block-children-ids db #uuid "e538d319-48d4-4a6d-ae70-c03bb55b6fe4")

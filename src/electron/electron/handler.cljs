@@ -31,7 +31,7 @@
             [electron.window :as win]
             [goog.functions :refer [debounce]]
             [logseq.common.graph :as common-graph]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 

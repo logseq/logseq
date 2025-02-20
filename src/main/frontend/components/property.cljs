@@ -25,7 +25,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.order :as db-order]
+            [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.core :as outliner-core]
@@ -355,7 +356,7 @@
         *show-new-property-config? (::show-new-property-config? state)
         *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
-        page? (ldb/page? block)
+        page? (entity-util/page? block)
         block-types (let [types (ldb/get-entity-types block)]
                       (cond-> types
                         (and page? (not (contains? types :page)))
@@ -675,7 +676,7 @@
             properties' (remove (fn [[k _v]] (contains? remove-properties k)) full-properties)
             properties'' (->> properties'
                               (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
-            page? (ldb/page? block)]
+            page? (entity-util/page? block)]
         [:div.ls-properties-area
          {:id id
           :class (util/classnames [{:ls-page-properties page?}])

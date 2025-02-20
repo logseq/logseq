@@ -1,13 +1,14 @@
 (ns frontend.db.query-custom
   "Handles executing custom queries a.k.a. advanced queries"
-  (:require [frontend.state :as state]
-            [frontend.db.query-react :as query-react]
-            [frontend.db.query-dsl :as query-dsl]
+  (:require [clojure.walk :as walk]
+            [frontend.config :as config]
             [frontend.db.model :as model]
-            [logseq.db.frontend.rules :as rules]
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.query-react :as query-react]
+            [frontend.state :as state]
             [frontend.util.datalog :as datalog-util]
-            [clojure.walk :as walk]
-            [frontend.config :as config]))
+            [logseq.db.file-based.rules :as file-rules]
+            [logseq.db.frontend.rules :as rules]))
 
 ;; FIXME: what if users want to query other attributes than block-attrs?
 (defn- replace-star-with-block-attrs!
@@ -27,7 +28,7 @@
   "Searches query's :where for rules and adds them to query if used"
   [{:keys [query] :as query-m} {:keys [db-graph?]}]
   (let [{:keys [where in]} (datalog-util/query-vec->map query)
-        query-dsl-rules (if db-graph? rules/db-query-dsl-rules rules/query-dsl-rules)
+        query-dsl-rules (if db-graph? rules/db-query-dsl-rules file-rules/query-dsl-rules)
         rules-found (datalog-util/find-rules-in-where where (-> query-dsl-rules keys set))]
     (if (seq rules-found)
       (if (and (= '% (last in)) (vector? (last (:inputs query-m))))

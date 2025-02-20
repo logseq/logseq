@@ -1,26 +1,26 @@
 (ns frontend.handler.whiteboard
   "Whiteboard related handlers"
-  (:require [datascript.core :as d]
+  (:require [cljs-bean.core :as bean]
+            [clojure.set :as set]
+            [clojure.string :as string]
+            [datascript.core :as d]
             [dommy.core :as dom]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
-            [frontend.config :as config]
             [frontend.storage :as storage]
             [frontend.util :as util]
-            [logseq.common.util :as common-util]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [promesa.core :as p]
             [goog.object :as gobj]
-            [clojure.set :as set]
-            [clojure.string :as string]
-            [cljs-bean.core :as bean]
+            [logseq.common.util :as common-util]
+            [logseq.db.common.order :as db-order]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.order :as db-order]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
+            [logseq.outliner.core :as outliner-core]
+            [promesa.core :as p]))
 
 (defn js->clj-keywordize
   [obj]

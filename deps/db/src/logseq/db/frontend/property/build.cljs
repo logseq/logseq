@@ -2,7 +2,7 @@
   "Builds core property concepts"
   (:require [datascript.core :as d]
             [logseq.common.util :as common-util]
-            [logseq.db.frontend.order :as db-order]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]))
