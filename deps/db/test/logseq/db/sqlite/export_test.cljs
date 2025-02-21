@@ -144,7 +144,7 @@
         (is (= (expand-properties (:properties original-data)) (:properties imported-block)))
         (is (= (expand-classes (:classes original-data)) (:classes imported-block)))))))
 
-(deftest import-block-with-block-ref
+(deftest import-block-with-different-ref-types
   (let [page-uuid (random-uuid)
         block-uuid (random-uuid)
         original-data
@@ -412,7 +412,9 @@
                ;; adjust shallow block
                (medley/dissoc-in [1 :blocks 0 :build/tags]))
            (:pages-and-blocks imported-page))
-        "Page's blocks are imported")))
+        "Page's blocks are imported")
+
+    (import-second-time-assertions conn conn2 "page1" original-data)))
 
 (deftest import-graph-ontology
   (let [original-data
