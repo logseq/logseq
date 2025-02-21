@@ -7,7 +7,7 @@
 
 (defn- has-tag?
   [entity tag-ident]
-  (when (map? entity)
+  (when (or (map? entity) (de/entity? entity))
     (some (fn [t]
             (or (keyword-identical? (:db/ident t) tag-ident)
                 (keyword-identical? t tag-ident)))
