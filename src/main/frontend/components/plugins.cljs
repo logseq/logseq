@@ -213,6 +213,12 @@
    [:p.text-sm
     (t :plugin/security-warning)]))
 
+(defn format-number [num & {:keys [precision] :or {precision 2}}]
+  (cond
+    (< num 1000) (str num)
+    (and (>= num 1000))
+    (str (.toFixed (/ num 1000) precision) "k")))
+
 (rum/defc card-ctls-of-market < rum/static
   [item stat installed? installing-or-updating?]
   [:div.ctl
@@ -225,7 +231,7 @@
     (when-let [downloads (and stat (:total_downloads stat))]
       (when (and downloads (> downloads 0))
         [:li.flex.text-sm.items-center.pr-3
-         (svg/cloud-down 16) [:span.pl-1 downloads]]))]
+         (svg/cloud-down 16) [:span.pl-1 (format-number downloads)]]))]
 
    [:div.r.flex.items-center
 
