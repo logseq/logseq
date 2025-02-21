@@ -216,8 +216,7 @@
 (defn format-number [num & {:keys [precision] :or {precision 2}}]
   (cond
     (< num 1000) (str num)
-    (and (>= num 1000))
-    (str (.toFixed (/ num 1000) precision) "k")))
+    (>= num 1000) (str (.toFixed (/ num 1000) precision) "k")))
 
 (rum/defc card-ctls-of-market < rum/static
   [item stat installed? installing-or-updating?]
