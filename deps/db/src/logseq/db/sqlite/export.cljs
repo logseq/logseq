@@ -2,13 +2,14 @@
   "Builds sqlite.build EDN to represent nodes in a graph-agnostic way.
    Useful for exporting and importing across DB graphs"
   (:require [clojure.set :as set]
+            [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]))
 
@@ -473,48 +474,60 @@
 
 ;; Import fns
 ;; ==========
+(defn- add-uuid-to-page-if-exists
+  [db m]
+  (if-let [ent (some->> (:build/journal m)
+                        (d/datoms db :avet :block/journal-day)
+                        first
+                        :e
+                        (d/entity db))]
+    (assoc m :block/uuid (:block/uuid ent))
+    ;; TODO: For now only check page uniqueness by title. Could handle more uniqueness checks later
+    (if-let [ent (some->> (:block/title m) (ldb/get-case-page db))]
+      (assoc m :block/uuid (:block/uuid ent))
+      m)))
+
 (defn- check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
   [db {:keys [pages-and-blocks classes properties]} property-conflicts]
-  (cond-> {:build-existing-tx? true}
-    (seq pages-and-blocks)
-    (assoc :pages-and-blocks
-           (mapv (fn [m]
-                   (if-let [ent (some->> (get-in m [:page :build/journal])
-                                         (d/datoms db :avet :block/journal-day)
-                                         first
-                                         :e
-                                         (d/entity db))]
-                     (assoc-in m [:page :block/uuid] (:block/uuid ent))
-                     ;; TODO: For now only check page uniqueness by title. Could handle more uniqueness checks later
-                     (if-let [ent (some->> (get-in m [:page :block/title]) (ldb/get-case-page db))]
-                       (assoc-in m [:page :block/uuid] (:block/uuid ent))
-                       m)))
-                 pages-and-blocks))
-    (seq classes)
-    (assoc :classes
-           (->> classes
-                (map (fn [[k v]]
-                       (if-let [ent (d/entity db k)]
-                         [k (assoc v :block/uuid (:block/uuid ent))]
-                         [k v])))
-                (into {})))
-    (seq properties)
-    (assoc :properties
-           (->> properties
-                (map (fn [[k v]]
-                       (if-let [ent (d/entity db k)]
-                         (do
-                           (when (not= (select-keys ent [:logseq.property/type :db/cardinality])
-                                       (select-keys v [:logseq.property/type :db/cardinality]))
-                             (swap! property-conflicts conj
-                                    {:property-id k
-                                     :actual (select-keys v [:logseq.property/type :db/cardinality])
-                                     :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
-                           [k (assoc v :block/uuid (:block/uuid ent))])
-                         [k v])))
-                (into {})))))
+  (let [export-map
+        (cond-> {:build-existing-tx? true}
+          (seq pages-and-blocks)
+          (assoc :pages-and-blocks
+                 (mapv (fn [m]
+                         (update m :page (partial add-uuid-to-page-if-exists db)))
+                       pages-and-blocks))
+          (seq classes)
+          (assoc :classes
+                 (->> classes
+                      (map (fn [[k v]]
+                             (if-let [ent (d/entity db k)]
+                               [k (assoc v :block/uuid (:block/uuid ent))]
+                               [k v])))
+                      (into {})))
+          (seq properties)
+          (assoc :properties
+                 (->> properties
+                      (map (fn [[k v]]
+                             (if-let [ent (d/entity db k)]
+                               (do
+                                 (when (not= (select-keys ent [:logseq.property/type :db/cardinality])
+                                             (select-keys v [:logseq.property/type :db/cardinality]))
+                                   (swap! property-conflicts conj
+                                          {:property-id k
+                                           :actual (select-keys v [:logseq.property/type :db/cardinality])
+                                           :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
+                                 [k (assoc v :block/uuid (:block/uuid ent))])
+                               [k v])))
+                      (into {}))))
+        export-map'
+        (walk/postwalk (fn [f]
+                         (if (and (vector? f) (= :build/page (first f)))
+                           [:build/page (add-uuid-to-page-if-exists db (second f))]
+                           f))
+                       export-map)]
+    export-map'))
 
 (defn- build-block-import-options
   "Builds options for sqlite-build to import into current-block"

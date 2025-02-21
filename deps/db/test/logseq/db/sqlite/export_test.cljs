@@ -414,7 +414,11 @@
            (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
-    (import-second-time-assertions conn conn2 "page1" original-data)))
+    (import-second-time-assertions conn conn2 "page1" original-data)
+    (is (= 1 (count (d/datoms @conn2 :avet :block/title "page object")))
+        "Page property value is only created first time")
+    (is (= 1 (count (d/datoms @conn2 :avet :block/journal-day 20250203)))
+        "Journal property value is only created first time")))
 
 (deftest import-graph-ontology
   (let [original-data
