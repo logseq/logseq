@@ -9,6 +9,8 @@
             [logseq.db.test.helper :as db-test]
             [medley.core :as medley]))
 
+;; Test helpers
+;; ============
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
    exports the 2nd block. The two blocks do not have to be in the same graph"
@@ -53,6 +55,38 @@
                  (not (:block/title m))
                  (assoc :block/title (name k)))]))
        (into {})))
+
+;; Tests
+;; =====
+
+(deftest merge-export-maps
+  (is (= {:pages-and-blocks
+          [{:page {:block/title "page1"}
+            :blocks [{:block/title "b1"}
+                     {:block/title "b2"}]}
+           {:page {:block/title "page2"}}]}
+         (#'sqlite-export/merge-export-maps
+          {:pages-and-blocks
+           [{:page {:block/title "page1"}
+             :blocks [{:block/title "b1"}]}]}
+          {:pages-and-blocks
+           [{:page {:block/title "page1"}
+             :blocks [{:block/title "b2"}]}
+            {:page {:block/title "page2"}}]}))
+      "In :pages-and-blocks, identical pages and their :blocks are merged")
+
+  (is (= {:pages-and-blocks
+          [{:page {:build/journal 20250220}
+            :blocks [{:block/title "b1"}]}
+           {:page {:build/journal 20250221}}]}
+       (#'sqlite-export/merge-export-maps
+          {:pages-and-blocks
+           [{:page {:build/journal 20250220}
+             :blocks [{:block/title "b1"}]}]}
+          {:pages-and-blocks
+           [{:page {:build/journal 20250220}}
+            {:page {:build/journal 20250221}}]}))
+      "In :pages-and-blocks, identical journals and their :blocks are merged"))
 
 (deftest import-block-in-same-graph
   (let [original-data
@@ -110,13 +144,17 @@
         (is (= (expand-properties (:properties original-data)) (:properties imported-block)))
         (is (= (expand-classes (:classes original-data)) (:classes imported-block)))))))
 
-(deftest import-block-with-block-ref
+(deftest import-block-with-different-ref-types
   (let [page-uuid (random-uuid)
+        block-uuid (random-uuid)
         original-data
-        {:pages-and-blocks
+        {:properties {:user.property/p1 {:logseq.property/type :default}}
+         :pages-and-blocks
          [{:page {:block/title "page1"}
-           :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}]}
-          {:page {:block/title "another page" :block/uuid page-uuid :build/keep-uuid? true}}]}
+           :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))
+                     :build/properties {:user.property/p1 (str "block ref to " (page-ref/->page-ref block-uuid))}}]}
+          {:page {:block/title "another page" :block/uuid page-uuid :build/keep-uuid? true}
+           :blocks [{:block/title "b1" :block/uuid block-uuid :build/keep-uuid? true}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn-with-blocks
                {:pages-and-blocks [{:page {:block/title "page2"}
@@ -207,6 +245,7 @@
         internal-block-uuid (random-uuid)
         class-uuid (random-uuid)
         page-uuid (random-uuid)
+        pvalue-page-uuid (random-uuid)
         property-uuid (random-uuid)
         journal-uuid (random-uuid)
         block-object-uuid (random-uuid)
@@ -217,11 +256,15 @@
                       {:logseq.property/type :node
                        :block/uuid property-uuid
                        :build/keep-uuid? true
-                       :build/property-classes [:user.class/NodeClass]}}
+                       :build/property-classes [:user.class/NodeClass]}
+                      :user.property/p2
+                      {:logseq.property/type :default}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}
                     {:block/title (str "block ref to " (page-ref/->page-ref block-uuid))}
+                    {:block/title "ref in properties"
+                     :build/properties {:user.property/p2 (str "pvalue ref to " (page-ref/->page-ref pvalue-page-uuid))}}
                     {:block/title "hola" :block/uuid internal-block-uuid :build/keep-uuid? true}
                     {:block/title (str "internal block ref to " (page-ref/->page-ref internal-block-uuid))}
                     {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}
@@ -231,7 +274,8 @@
           {:page {:block/title "page with block ref"}
            :blocks [{:block/title "hi" :block/uuid block-uuid :build/keep-uuid? true
                      :build/properties {:user.property/p1 [:block/uuid block-object-uuid]}}]}
-          {:page {:block/title "another page" :block/uuid page-uuid :build/keep-uuid? true}}
+          {:page {:block/title "page ref page" :block/uuid page-uuid :build/keep-uuid? true}}
+          {:page {:block/title "pvalue ref page" :block/uuid pvalue-page-uuid :build/keep-uuid? true}}
           {:page {:build/journal 20250207 :block/uuid journal-uuid :build/keep-uuid? true}}
           {:page {:block/title "Blocks"}
            :blocks [{:block/title "myclass object"
@@ -368,7 +412,13 @@
                ;; adjust shallow block
                (medley/dissoc-in [1 :blocks 0 :build/tags]))
            (:pages-and-blocks imported-page))
-        "Page's blocks are imported")))
+        "Page's blocks are imported")
+
+    (import-second-time-assertions conn conn2 "page1" original-data)
+    (is (= 1 (count (d/datoms @conn2 :avet :block/title "page object")))
+        "Page property value is only created first time")
+    (is (= 1 (count (d/datoms @conn2 :avet :block/journal-day 20250203)))
+        "Journal property value is only created first time")))
 
 (deftest import-graph-ontology
   (let [original-data

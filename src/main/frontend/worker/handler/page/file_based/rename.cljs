@@ -4,6 +4,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.common.file.util :as wfu]
+            [frontend.common.file-based.db :as common-file-db]
             [frontend.worker.handler.page :as worker-page]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -253,7 +254,7 @@
 (defn- rename-namespace-pages!
   "Original names (unsanitized only)"
   [repo conn config old-name new-name]
-  (let [pages (ldb/get-namespace-pages @conn old-name {})
+  (let [pages (common-file-db/get-namespace-pages @conn old-name)
         page (d/pull @conn '[*] [:block/name (common-util/page-name-sanity-lc old-name)])
         pages (cons page pages)]
     (doseq [{:block/keys [name title]} pages]
@@ -273,8 +274,8 @@
   (let [nested-page-str (page-ref/->page-ref (common-util/page-name-sanity-lc old-ns-name))
         ns-prefix-format-str (str page-ref/left-brackets "%s/")
         ns-prefix       (common-util/format ns-prefix-format-str (common-util/page-name-sanity-lc old-ns-name))
-        nested-pages    (ldb/get-pages-by-name-partition @conn nested-page-str)
-        nested-pages-ns (ldb/get-pages-by-name-partition @conn ns-prefix)]
+        nested-pages    (common-file-db/get-pages-by-name-partition @conn nested-page-str)
+        nested-pages-ns (common-file-db/get-pages-by-name-partition @conn ns-prefix)]
     (when nested-pages
       ;; rename page "[[obsidian]] is a tool" to "[[logseq]] is a tool"
       (doseq [{:block/keys [name title]} nested-pages]

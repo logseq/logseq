@@ -213,6 +213,11 @@
    [:p.text-sm
     (t :plugin/security-warning)]))
 
+(defn format-number [num & {:keys [precision] :or {precision 2}}]
+  (cond
+    (< num 1000) (str num)
+    (>= num 1000) (str (.toFixed (/ num 1000) precision) "k")))
+
 (rum/defc card-ctls-of-market < rum/static
   [item stat installed? installing-or-updating?]
   [:div.ctl
@@ -225,7 +230,7 @@
     (when-let [downloads (and stat (:total_downloads stat))]
       (when (and downloads (> downloads 0))
         [:li.flex.text-sm.items-center.pr-3
-         (svg/cloud-down 16) [:span.pl-1 downloads]]))]
+         (svg/cloud-down 16) [:span.pl-1 (format-number downloads)]]))]
 
    [:div.r.flex.items-center
 
@@ -769,23 +774,25 @@
         pkgs (get grouped-pkgs false)
         ;; calculate weight
         [key pkgs] (if default?
-                     (let [decay-factor 0.01
+                     (let [decay-factor 0.001
                            download-weight 0.8
                            star-weight 0.2]
                        (letfn [(normalize [vals val]
                                  (let [min-val (apply min vals)
                                        max-val (apply max vals)]
-                                   (if (= max-val min-val) 1
-                                       (/ (- val min-val) (- max-val val)))))
+                                   (if (= max-val min-val) 0
+                                       (/ (- val min-val) (- max-val min-val)))))
                                (time-diff-in-days [ts]
-                                 (let [time-diff (- (js/Date.now) ts)]
+                                 (when-let [time-diff (and (number? ts) (- (js/Date.now) ts))]
                                    (/ time-diff (* 1000 60 60 24))))]
                          [:weight
-                          (let [all-downloads (map :downloads pkgs)
-                                all-stars (map :stars pkgs)]
+                          (let [all-downloads (->> (map :downloads pkgs) (remove #(not (number? %))))
+                                all-stars (->> (map :stars pkgs) (remove #(not (number? %))))]
                             (->> pkgs
                                  (map (fn [{:keys [downloads stars latestAt] :as pkg}]
-                                        (let [days-since-latest (time-diff-in-days latestAt)
+                                        (let [downloads (if (number? downloads) downloads 1)
+                                              stars (if (number? stars) stars 1)
+                                              days-since-latest (time-diff-in-days latestAt)
                                               decay (js/Math.exp (* -1 decay-factor days-since-latest))
                                               normalized-downloads (normalize all-downloads downloads)
                                               normalize-stars (normalize all-stars stars)

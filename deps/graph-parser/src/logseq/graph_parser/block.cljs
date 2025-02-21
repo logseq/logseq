@@ -376,8 +376,10 @@
    & {:keys [page-uuid class? created-by] :as options}]
   (when-not (and db (common-util/uuid-string? original-page-name)
                  (not (ldb/page? (d/entity db [:block/uuid (uuid original-page-name)]))))
-    (let [original-page-name (-> (string/trim original-page-name)
-                                 sanitize-hashtag-name)
+    (let [db-based? (ldb/db-based-graph? db)
+          original-page-name (cond-> (string/trim original-page-name)
+                               db-based?
+                               sanitize-hashtag-name)
           [page _page-entity] (cond
                                 (and original-page-name (string? original-page-name))
                                 (page-name-string->map original-page-name db date-formatter
@@ -393,7 +395,7 @@
                                                  nil)]
                                   [page nil]))]
       (when page
-        (if (ldb/db-based-graph? db)
+        (if db-based?
           (let [tags (if class? [:logseq.class/Tag]
                          (or (:block/tags page)
                              [:logseq.class/Page]))]

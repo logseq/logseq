@@ -189,7 +189,7 @@
         property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))]
     [:div.overflow-x-auto {:on-pointer-down (fn [e] (.stopPropagation e))
                            :style {:width "100%"}
-                           :class (when-not page? "query-table")}
+                           :class "query-table"}
      [:table.table-auto
       [:thead
        [:tr.cursor

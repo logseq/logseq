@@ -2,6 +2,7 @@
   "Builds sqlite.build EDN to represent nodes in a graph-agnostic way.
    Useful for exporting and importing across DB graphs"
   (:require [clojure.set :as set]
+            [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.db :as ldb]
@@ -49,7 +50,10 @@
         (if (= :node (:logseq.property/type property-ent))
           ;; Have to distinguish from block references that don't exist like closed values
           ^::existing-property-value? [:block/uuid (:block/uuid pvalue)]
-          (or (:db/ident pvalue) (db-property/property-value-content pvalue)))))
+          (or (:db/ident pvalue)
+              ;; nbb-compatible version of db-property/property-value-content
+              (or (block-title pvalue)
+                  (:logseq.property/value pvalue))))))
 
 (defn- buildable-properties
   "Originally copied from db-test/readable-properties. Modified so that property values are
@@ -208,7 +212,16 @@
        set))
 
 (defn- merge-export-maps [& export-maps]
-  (let [pages-and-blocks (reduce into [] (keep :pages-and-blocks export-maps))
+  (let [pages-and-blocks
+        (->> (mapcat :pages-and-blocks export-maps)
+             ;; TODO: Group by more correct identity for title, same as check-for-existing-entities
+             (group-by #(select-keys (:page %) [:block/title :build/journal]))
+             (mapv #(apply merge-with (fn [e1 e2]
+                                        ;; merge :page and add :blocks
+                                        (if (and (map? e1) (map e2))
+                                          (merge e1 e2)
+                                          (into e1 e2)))
+                           (second %))))
         ;; Use merge-with to preserve new-property? and to allow full copies to overwrite shallow ones
         properties (apply merge-with merge (keep :properties export-maps))
         classes (apply merge-with merge (keep :classes export-maps))]
@@ -221,8 +234,10 @@
 (defn- build-content-ref-export
   "Builds an export config (and additional info) for refs in the given blocks. All the exported
    entities found in block refs include their uuid in order to preserve the relationship to the blocks"
-  [db page-blocks]
-  (let [content-ref-uuids (set (mapcat (comp db-content/get-matched-ids block-title) page-blocks))
+  [db blocks*]
+  (let [;; Remove property value blocks that can't have content refs
+        blocks (remove :logseq.property/value blocks*)
+        content-ref-uuids (set (mapcat (comp db-content/get-matched-ids block-title) blocks))
         content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)
         content-ref-pages (filter #(or (ldb/internal-page? %) (entity-util/journal? %)) content-ref-ents)
         content-ref-properties (when-let [prop-ids (seq (map :db/ident (filter ldb/property? content-ref-ents)))]
@@ -322,7 +337,11 @@
   "Exports block for given block eid"
   [db eid]
   (let [block-entity (d/entity db eid)
-        {:keys [content-ref-uuids content-ref-ents] :as content-ref-export} (build-content-ref-export db [block-entity])
+        property-value-ents (->> (dissoc (db-property/properties block-entity) :block/tags)
+                                 vals
+                                 (filter de/entity?))
+        {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
+        (build-content-ref-export db (into [block-entity] property-value-ents))
         node-export (build-node-export db block-entity {:include-uuid-fn content-ref-uuids})
         pvalue-uuids (get-pvalue-uuids (:node node-export))
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {})
@@ -345,12 +364,12 @@
   (let [page-entity (d/entity db eid)
         datoms (d/datoms db :avet :block/page eid)
         block-eids (mapv :e datoms)
-        page-blocks (->> block-eids
-                         (map #(d/entity db %))
+        page-blocks* (map #(d/entity db %) block-eids)
+        {:keys [content-ref-uuids content-ref-ents] :as content-ref-export} (build-content-ref-export db page-blocks*)
+        page-blocks (->> page-blocks*
                          (sort-by :block/order)
-                         ;; Remove property value blocks as they are included in the block they belong to
+                         ;; Remove property value blocks as they are exported in a block's :build/properties
                          (remove #(:logseq.property/created-from-property %)))
-        {:keys [content-ref-uuids content-ref-ents] :as content-ref-export} (build-content-ref-export db page-blocks)
         {:keys [pvalue-uuids] :as blocks-export}
         (build-blocks-export db page-blocks {:include-uuid-fn content-ref-uuids})
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:page-entity page-entity})
@@ -455,48 +474,60 @@
 
 ;; Import fns
 ;; ==========
+(defn- add-uuid-to-page-if-exists
+  [db m]
+  (if-let [ent (some->> (:build/journal m)
+                        (d/datoms db :avet :block/journal-day)
+                        first
+                        :e
+                        (d/entity db))]
+    (assoc m :block/uuid (:block/uuid ent))
+    ;; TODO: For now only check page uniqueness by title. Could handle more uniqueness checks later
+    (if-let [ent (some->> (:block/title m) (ldb/get-case-page db))]
+      (assoc m :block/uuid (:block/uuid ent))
+      m)))
+
 (defn- check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
   [db {:keys [pages-and-blocks classes properties]} property-conflicts]
-  (cond-> {:build-existing-tx? true}
-    (seq pages-and-blocks)
-    (assoc :pages-and-blocks
-           (mapv (fn [m]
-                   (if-let [ent (some->> (get-in m [:page :build/journal])
-                                         (d/datoms db :avet :block/journal-day)
-                                         first
-                                         :e
-                                         (d/entity db))]
-                     (assoc-in m [:page :block/uuid] (:block/uuid ent))
-                     ;; For now only check page uniqueness by title. Could handle more uniqueness checks later
-                     (if-let [ent (some->> (get-in m [:page :block/title]) (ldb/get-case-page db))]
-                       (assoc-in m [:page :block/uuid] (:block/uuid ent))
-                       m)))
-                 pages-and-blocks))
-    (seq classes)
-    (assoc :classes
-           (->> classes
-                (map (fn [[k v]]
-                       (if-let [ent (d/entity db k)]
-                         [k (assoc v :block/uuid (:block/uuid ent))]
-                         [k v])))
-                (into {})))
-    (seq properties)
-    (assoc :properties
-           (->> properties
-                (map (fn [[k v]]
-                       (if-let [ent (d/entity db k)]
-                         (do
-                           (when (not= (select-keys ent [:logseq.property/type :db/cardinality])
-                                       (select-keys v [:logseq.property/type :db/cardinality]))
-                             (swap! property-conflicts conj
-                                    {:property-id k
-                                     :actual (select-keys v [:logseq.property/type :db/cardinality])
-                                     :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
-                           [k (assoc v :block/uuid (:block/uuid ent))])
-                         [k v])))
-                (into {})))))
+  (let [export-map
+        (cond-> {:build-existing-tx? true}
+          (seq pages-and-blocks)
+          (assoc :pages-and-blocks
+                 (mapv (fn [m]
+                         (update m :page (partial add-uuid-to-page-if-exists db)))
+                       pages-and-blocks))
+          (seq classes)
+          (assoc :classes
+                 (->> classes
+                      (map (fn [[k v]]
+                             (if-let [ent (d/entity db k)]
+                               [k (assoc v :block/uuid (:block/uuid ent))]
+                               [k v])))
+                      (into {})))
+          (seq properties)
+          (assoc :properties
+                 (->> properties
+                      (map (fn [[k v]]
+                             (if-let [ent (d/entity db k)]
+                               (do
+                                 (when (not= (select-keys ent [:logseq.property/type :db/cardinality])
+                                             (select-keys v [:logseq.property/type :db/cardinality]))
+                                   (swap! property-conflicts conj
+                                          {:property-id k
+                                           :actual (select-keys v [:logseq.property/type :db/cardinality])
+                                           :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
+                                 [k (assoc v :block/uuid (:block/uuid ent))])
+                               [k v])))
+                      (into {}))))
+        export-map'
+        (walk/postwalk (fn [f]
+                         (if (and (vector? f) (= :build/page (first f)))
+                           [:build/page (add-uuid-to-page-if-exists db (second f))]
+                           f))
+                       export-map)]
+    export-map'))
 
 (defn- build-block-import-options
   "Builds options for sqlite-build to import into current-block"

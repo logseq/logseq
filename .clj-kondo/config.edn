@@ -65,6 +65,7 @@
              electron.ipc ipc
              electron.utils utils
              frontend.commands commands
+             frontend.common.file-based.db common-file-db
              frontend.common.date common-date
              frontend.common.file.core common-file
              frontend.common.file.util wfu

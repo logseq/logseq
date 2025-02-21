@@ -807,7 +807,7 @@
 
 #?(:cljs
    (defn copy-to-clipboard!
-     [text & {:keys [graph html blocks owner-window]}]
+     [text & {:keys [graph html blocks embed-block? owner-window]}]
      (let [blocks (map (fn [block] (if (de/entity? block)
                                      (-> (into {} block)
                                          ;; FIXME: why :db/id is not included?
@@ -820,6 +820,7 @@
                    :blocks (when (and graph (seq blocks))
                              (pr-str
                               {:graph graph
+                               :embed-block? embed-block?
                                :blocks (mapv #(dissoc % :block.temp/fully-loaded? %) blocks)}))}))]
        (if owner-window
          (utils/writeClipboard data owner-window)
