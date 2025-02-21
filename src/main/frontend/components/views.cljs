@@ -1219,6 +1219,7 @@
     :compute-item-key (fn [idx]
                         (let [block (nth rows idx)]
                           (str "table-row-" (:db/id block))))
+    :skipAnimationFrameInResizeObserver true
     :total-count (count rows)
     :item-content (fn [idx]
                     (let [row (nth rows idx)]
