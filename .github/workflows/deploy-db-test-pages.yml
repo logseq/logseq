@@ -37,7 +37,8 @@ jobs:
 
       - name: Set Build Environment Variables
         run: |
-          echo "ENABLE_FILE_SYNC_PRODUCTION=false" >> $GITHUB_ENV
+          echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+          echo "ENABLE_RTC_SYNC_PRODUCTION=true" >> $GITHUB_ENV
 
       - name: Build Released-Web
         run: |
