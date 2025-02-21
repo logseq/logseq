@@ -5,11 +5,13 @@
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.flows :as flows]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.sqlite :as sqlite-common-db]
@@ -198,21 +200,30 @@
           (prn :trying-to-restart-rtc graph-uuid (t/now))
           (c.m/<? (<rtc-start! (state/get-current-repo) :stop-before-start? false)))))))
 
-  (when-not config/publishing?
-    (c.m/run-background-task
-     ::notify-client-need-upgrade-when-larger-remote-schema-version-exists
-     (m/reduce
-      (constantly nil)
-      (m/ap
-        (let [{:keys [repo graph-uuid remote-schema-version sub-type]}
-              (m/?>
-               (m/eduction
-                (filter #(keyword-identical? :rtc.log/higher-remote-schema-version-exists (:type %)))
-                rtc-flows/rtc-log-flow))]
-          (case sub-type
-            :download
-            (notification-download-higher-schema-graph! repo graph-uuid remote-schema-version)
+  (c.m/run-background-task
+   ::notify-client-need-upgrade-when-larger-remote-schema-version-exists
+   (m/reduce
+    (constantly nil)
+    (m/ap
+      (let [{:keys [repo graph-uuid remote-schema-version sub-type]}
+            (m/?>
+             (m/eduction
+              (filter #(keyword-identical? :rtc.log/higher-remote-schema-version-exists (:type %)))
+              rtc-flows/rtc-log-flow))]
+        (case sub-type
+          :download
+          (notification-download-higher-schema-graph! repo graph-uuid remote-schema-version)
           ;; else
-            (notification/show!
-             "The server has a graph with a higher schema version, the client may need to upgrade."
-             :warning))))))))
+          (notification/show!
+           "The server has a graph with a higher schema version, the client may need to upgrade."
+           :warning))))))
+
+  (c.m/run-background-task
+   ::stop-rtc-when-user-logout
+   (m/reduce
+    (constantly nil)
+    (m/ap
+      (let [login-user (m/?> flows/current-login-user-flow)]
+        (when (= :logout login-user)
+          (log/info :try-to-stop-rtc-when-user-logout nil)
+          (c.m/<? (<rtc-stop!))))))))
