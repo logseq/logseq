@@ -424,7 +424,9 @@
                  (do
                    (assert (or (:db/id block) (:block/uuid block)) "save-block db/id not exists")
                    (when-let [eid (or (:db/id block) (when-let [id (:block/uuid block)] [:block/uuid id]))]
-                     (merge (d/entity @conn eid) block))))]
+                     (let [ent (d/entity @conn eid)]
+                       (assert (some? ent) "save-block entity not exists")
+                       (merge ent block)))))]
     (otree/-save block' txs-state conn repo date-formatter opts)
     {:tx-data @txs-state}))
 

@@ -800,12 +800,14 @@
             (when-not (and has-children? left-has-children?)
               (when block-parent-id
                 (let [block-parent (gdom/getElement block-parent-id)
-                      sibling-block (if (:embed? config)
-                                      (util/get-prev-block-non-collapsed
-                                       block-parent
-                                       {:container (util/rec-get-blocks-container block-parent)})
-                                      (util/get-prev-block-non-collapsed-non-embed block-parent))
-                      {:keys [prev-block new-content edit-block-f]} (move-to-prev-block repo sibling-block format value)
+                      sibling-or-parent-block
+                      (if (:embed? config)
+                        (util/get-prev-block-non-collapsed
+                         block-parent
+                         {:container (util/rec-get-blocks-container block-parent)})
+                        (util/get-prev-block-non-collapsed-non-embed block-parent))
+                      {:keys [prev-block new-content edit-block-f]}
+                      (move-to-prev-block repo sibling-or-parent-block format value)
                       concat-prev-block? (boolean (and prev-block new-content))
                       transact-opts {:outliner-op :delete-blocks}]
                   (cond
@@ -817,7 +819,9 @@
                     concat-prev-block?
                     (let [children (:block/_parent (db/entity (:db/id block)))
                           db-based? (config/db-based-graph? repo)
+                          prev-block-is-not-parent? (not= (:block/uuid (:block/parent block)) (:block/uuid prev-block))
                           delete-prev-block? (and db-based?
+                                                  prev-block-is-not-parent?
                                                   (empty? (:block/tags block))
                                                   (not (:logseq.property.node/display-type block))
                                                   (seq (:block/properties block))
