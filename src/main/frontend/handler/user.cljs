@@ -9,6 +9,7 @@
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.debug :as debug]
+            [frontend.flows :as flows]
             [frontend.handler.config :as config-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -200,6 +201,7 @@
    (:jwtToken (:idToken session))
    (:jwtToken (:accessToken session))
    (:token (:refreshToken session)))
+  (reset! flows/*current-login-user (parse-jwt (state/get-auth-id-token)))
   (state/pub-event! [:user/fetch-info-and-graphs]))
 
 (defn ^:export login-with-username-password-e2e
@@ -231,7 +233,8 @@
 (defn logout []
   (clear-tokens)
   (state/clear-user-info!)
-  (state/pub-event! [:user/logout]))
+  (state/pub-event! [:user/logout])
+  (reset! flows/*current-login-user :logout))
 
 (defn upgrade []
   (let [base-upgrade-url "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"

@@ -1,6 +1,7 @@
 (ns frontend.handler.db-based.rtc-flows
   "Flows related to RTC"
   (:require [frontend.common.missionary :as c.m]
+            [frontend.flows :as flows]
             [frontend.state :as state]
             [logseq.common.util :as common-util]
             [missionary.core :as m]))
@@ -51,17 +52,22 @@
 (def rtc-try-restart-flow
   "emit an event when it's time to restart rtc loop.
 conditions:
-1. no rtc loop running now
-2. last rtc stop-reason is websocket message timeout
-3. current js/navigator.onLine=true
-5. throttle 5000ms"
+- user logged in
+- no rtc loop running now
+- last rtc stop-reason is websocket message timeout
+- current js/navigator.onLine=true
+- throttle 5000ms"
   (->> (m/latest
-        (fn [rtc-state _] rtc-state)
-        (c.m/continue-flow rtc-state-flow) (c.m/continue-flow network-online-change-flow))
+        (fn [rtc-state _ login-user]
+          (assoc rtc-state :login-user login-user))
+        (c.m/continue-flow rtc-state-flow)
+        (c.m/continue-flow network-online-change-flow)
+        flows/current-login-user-flow)
        (m/eduction
         (keep (fn [m]
-                (let [{:keys [rtc-lock last-stop-exception-ex-data graph-uuid]} m]
-                  (when (and (some? graph-uuid)
+                (let [{:keys [rtc-lock last-stop-exception-ex-data graph-uuid login-user]} m]
+                  (when (and (some? (:email login-user))
+                             (some? graph-uuid)
                              (not rtc-lock) ; no rtc loop now
                              (= :rtc.exception/ws-timeout (:type last-stop-exception-ex-data))
                              (true? js/navigator.onLine))
