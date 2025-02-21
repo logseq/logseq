@@ -469,7 +469,7 @@
              (map #(hash-map :page {:block/title %})))]
     (when (seq new-pages-from-refs)
       (println "Building additional pages from content refs:" (pr-str (mapv #(get-in % [:page :block/title]) new-pages-from-refs))))
-    (concat pages-and-blocks new-pages-from-refs)))
+    (concat new-pages-from-refs pages-and-blocks)))
 
 (defn- add-new-pages-from-properties
   [properties pages-and-blocks]
@@ -485,7 +485,8 @@
     (when (seq new-pages)
       (println "Building additional pages from property values:"
                (pr-str (mapv #(or (get-in % [:page :block/title]) (get-in % [:page :build/journal])) new-pages))))
-    (concat pages-and-blocks new-pages)))
+    ;; new-pages must come first because they are referenced by pages-and-blocks
+    (concat new-pages pages-and-blocks)))
 
 (defn- expand-build-children
   "Expands any blocks with :build/children to return a flattened vec with
