@@ -1056,6 +1056,7 @@
         (contains? config/audio-formats asset-type)
         (contains? config/video-formats asset-type))))
 
+(declare block-positioned-properties)
 (rum/defc page-reference < rum/reactive
   "Component for page reference"
   [html-export? uuid-or-title* {:keys [nested-link? show-brackets? id] :as config} label]
@@ -1082,6 +1083,10 @@
                     (not html-export?)
                     (not contents-page?))
            [:span.text-gray-500.bracket page-ref/left-brackets])
+         (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
+           [:div.inline-block {:style {:margin-right 1}
+                               :on-pointer-down (fn [e]
+                                                  (util/stop e))} (block-positioned-properties config block :block-left)])
          (page-cp config' (if (uuid? uuid-or-title)
                             {:block/uuid uuid-or-title}
                             {:block/name uuid-or-title}))
@@ -1573,7 +1578,7 @@
                          {:builder (query-builder-component/builder build-option {})
                           :query query}))])
 
-(defn- macro-function-cp
+(rum/defc macro-function-cp < rum/reactive
   [config arguments]
   (or
    (some-> (:query-result config) rum/react (block-macros/function-macro arguments))
@@ -3425,7 +3430,7 @@
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
-        selected? (contains? (set (state/get-selection-block-ids)) (:block/uuid block))
+        selected? (when (uuid? (:block/uuid block)) (contains? (set (state/get-selection-block-ids)) (:block/uuid block)))
         db-based? (config/db-based-graph? repo)
         page-icon (when (:page-title? config)
                     (let [icon' (get block (pu/get-pid :logseq.property/icon))]

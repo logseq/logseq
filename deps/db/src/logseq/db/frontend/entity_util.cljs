@@ -7,10 +7,11 @@
 
 (defn- has-tag?
   [entity tag-ident]
-  (some (fn [t]
-          (or (keyword-identical? (:db/ident t) tag-ident)
-              (keyword-identical? t tag-ident)))
-        (:block/tags entity)))
+  (when (or (map? entity) (de/entity? entity))
+    (some (fn [t]
+            (or (keyword-identical? (:db/ident t) tag-ident)
+                (keyword-identical? t tag-ident)))
+          (:block/tags entity))))
 
 (comment
   (require '[logseq.common.profile :as c.p])

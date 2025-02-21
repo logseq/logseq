@@ -30,6 +30,7 @@
             [goog.dom :as gdom]
             [goog.string :as gstring]
             [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.graph-parser.property :as gp-property]
@@ -338,7 +339,17 @@
            (when (>= (count edit-content) current-pos)
              (subs edit-content pos current-pos)))]
     (when input
-      (block-search-auto-complete edit-block input id q format selected-text))))
+      (let [db? (config/db-based-graph? (state/get-current-repo))
+            embed? (and db? (= @commands/*current-command "Block embed"))
+            page (when embed? (page-ref/get-page-name edit-content))
+            embed-block-id (when (and embed? page (common-util/uuid-string? page))
+                             (uuid page))]
+        (if embed-block-id
+          (let [f (block-on-chosen-handler true input id q format nil)
+                block (db/entity embed-block-id)]
+            (when block (f block))
+            nil)
+          (block-search-auto-complete edit-block input id q format selected-text))))))
 
 (rum/defc template-search-aux
   [id q]
@@ -372,26 +383,30 @@
 (rum/defc property-search
   [id]
   (let [input (gdom/getElement id)
-        [matched-properties set-matched-properties!] (rum/use-state nil)]
+        [matched-properties set-matched-properties!] (rum/use-state nil)
+        [q set-q!] (rum/use-state "")]
     (when input
-      (let [q (or (:searching-property (editor-handler/get-searching-property input))
-                  "")]
-        (hooks/use-effect!
-         (fn []
-           (p/let [matched-properties (editor-handler/<get-matched-properties q)]
-             (set-matched-properties! matched-properties)))
-         [q])
-        (let [q-property (string/replace (string/lower-case q) #"\s+" "-")
-              non-exist-handler (fn [_state]
-                                  ((editor-handler/property-on-chosen-handler id q-property) nil))]
-          (ui/auto-complete
-           matched-properties
-           {:on-chosen (editor-handler/property-on-chosen-handler id q-property)
-            :on-enter non-exist-handler
-            :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property: " q-property)]
-            :header [:div.px-4.py-2.text-sm.font-medium "Matched properties: "]
-            :item-render (fn [property] property)
-            :class       "black"}))))))
+      (hooks/use-effect!
+       (fn []
+         (.addEventListener input "input" (fn [_e]
+                                            (set-q! (or (:searching-property (editor-handler/get-searching-property input)) "")))))
+       [])
+      (hooks/use-effect!
+       (fn []
+         (p/let [matched-properties (editor-handler/<get-matched-properties q)]
+           (set-matched-properties! matched-properties)))
+       [q])
+      (let [q-property (string/replace (string/lower-case q) #"\s+" "-")
+            non-exist-handler (fn [_state]
+                                ((editor-handler/property-on-chosen-handler id q-property) nil))]
+        (ui/auto-complete
+         matched-properties
+         {:on-chosen (editor-handler/property-on-chosen-handler id q-property)
+          :on-enter non-exist-handler
+          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property: " q-property)]
+          :header [:div.px-4.py-2.text-sm.font-medium "Matched properties: "]
+          :item-render (fn [property] property)
+          :class       "black"})))))
 
 (rum/defc property-value-search-aux
   [id property q]

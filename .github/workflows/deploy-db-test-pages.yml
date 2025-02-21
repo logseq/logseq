@@ -37,11 +37,12 @@ jobs:
 
       - name: Set Build Environment Variables
         run: |
-          echo "ENABLE_FILE_SYNC_PRODUCTION=false" >> $GITHUB_ENV
+          echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+          echo "ENABLE_RTC_SYNC_PRODUCTION=true" >> $GITHUB_ENV
 
       - name: Build Released-Web
         run: |
-          yarn gulp:build && clojure -M:cljs release app  --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content false :source-map-detail-level :symbols}}'
+          yarn gulp:build && clojure -M:cljs release app  --config-merge '{:compiler-options {:source-map true}}'
           rsync -avz --exclude node_modules --exclude android --exclude ios ./static/ ./public/static/
           ls -lR ./public
         env:

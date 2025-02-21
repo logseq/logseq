@@ -5,7 +5,13 @@
             [clojure.core.async :as a]
             [lambdaisland.glogi :as log]
             [missionary.core :as m]
-            [promesa.protocols :as pt]))
+            [promesa.protocols :as pt])
+  (:import [missionary Cancelled]))
+
+(extend-type Cancelled
+  IPrintWithWriter
+  (-pr-writer [o w _opts]
+    (write-all w "#missionary.Cancelled \"" (.-message o) "\"")))
 
 (defn continue-flow
   "ensure f is a continuous flow"

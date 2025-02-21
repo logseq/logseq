@@ -190,7 +190,7 @@
   [input text e html]
   (util/stop e)
   (->
-   (p/let [{:keys [graph blocks]} (get-copied-blocks)]
+   (p/let [{:keys [graph blocks embed-block?]} (get-copied-blocks)]
      (if (and (seq blocks) (= graph (state/get-current-repo)))
        ;; Handle internal paste
        (let [revert-cut-txs (get-revert-cut-txs blocks)
@@ -198,8 +198,18 @@
              blocks (if (config/db-based-graph? (state/get-current-repo))
                       (map (fn [b] (dissoc b :block/properties)) blocks)
                       blocks)]
-         (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
-                                              :keep-uuid? keep-uuid?}))
+         (if embed-block?
+           (when-let [block-id (:block/uuid (first blocks))]
+             (when-let [current-block (state/get-edit-block)]
+               (p/do!
+                (editor-handler/api-insert-new-block! ""
+                                                      {:block-uuid (:block/uuid current-block)
+                                                       :sibling? true
+                                                       :replace-empty-target? true
+                                                       :other-attrs {:block/link (:db/id (db/entity [:block/uuid block-id]))}})
+                (state/clear-edit!))))
+           (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
+                                                :keep-uuid? keep-uuid?})))
        (paste-copied-text input text html)))
    (p/catch (fn [error]
               (log/error :msg "Paste failed" :exception error)
