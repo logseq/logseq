@@ -3,9 +3,8 @@
   (:require ["better-sqlite3" :as sqlite3]
             ["fs" :as fs]
             ["path" :as node-path]
-            ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
-            #_:clj-kondo/ignore
             [cljs-bean.core :as bean]
+            ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
             [datascript.core]
             [datascript.storage :refer [IStorage]]
             [logseq.db.common.sqlite :as sqlite-common-db]
