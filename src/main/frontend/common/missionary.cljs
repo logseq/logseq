@@ -151,5 +151,8 @@
     (fn? chan-or-promise-or-task)
     chan-or-promise-or-task
 
+    (nil? chan-or-promise-or-task)
+    (m/sp)
+
     :else
     (throw (ex-info "Unsupported arg" {:type (type chan-or-promise-or-task)}))))

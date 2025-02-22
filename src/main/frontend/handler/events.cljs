@@ -14,8 +14,8 @@
             [frontend.components.cmdk.core :as cmdk]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
-            [frontend.components.file-sync :as file-sync]
             [frontend.components.file-based.git :as git-component]
+            [frontend.components.file-sync :as file-sync]
             [frontend.components.plugins :as plugin]
             [frontend.components.property.dialog :as property-dialog]
             [frontend.components.repo :as repo]
@@ -44,6 +44,7 @@
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export]
             [frontend.handler.file-based.file :as file-handler]
@@ -175,8 +176,9 @@
          (repo-config-handler/restore-repo-config! graph)
          (when-not (= :draw (state/get-current-route))
            (route-handler/redirect-to-home!))
-         (if db-based?
-           (rtc-handler/<rtc-start! graph)
+         (when-not db-based?
+           ;; graph-switch will trigger a rtc-start automatically
+           ;; (rtc-handler/<rtc-start! graph)
            (file-sync-restart!))
          (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
            (fs/watch-dir! dir-name))
@@ -723,7 +725,7 @@
 (defmethod handle :graph/restored [[_ graph]]
   (when graph (assets-handler/ensure-assets-dir! graph))
   (mobile/init!)
-  (rtc-handler/<rtc-start! graph)
+  (rtc-flows/trigger-rtc-start graph)
   (fsrs/update-due-cards-count)
   (when-not (mobile-util/native-ios?)
     (state/pub-event! [:graph/ready graph])))

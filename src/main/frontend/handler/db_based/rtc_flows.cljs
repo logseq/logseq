@@ -73,3 +73,30 @@ conditions:
                              (true? js/navigator.onLine))
                     {:graph-uuid graph-uuid :t (common-util/time-ms)})))))
        (c.m/throttle 5000)))
+
+(def logout-or-graph-switch-flow
+  (c.m/mix
+   (m/eduction
+    (filter #(= :logout %))
+    flows/current-login-user-flow)
+   (m/eduction
+    (keep (fn [repo] (when repo :graph-switch)))
+    flows/current-repo-flow)))
+
+(def ^:private *rtc-start-trigger (atom nil))
+(defn trigger-rtc-start
+  [repo]
+  (assert (some? repo))
+  (reset! *rtc-start-trigger repo))
+
+(def trigger-start-rtc-flow
+  (c.m/mix
+   (m/eduction
+    (keep (fn [user] (when (:email user) [:login user])))
+    flows/current-login-user-flow)
+   (m/eduction
+    (keep (fn [repo] (when repo [:graph-switch repo])))
+    flows/current-repo-flow)
+   (m/eduction
+    (keep (fn [repo] (when repo [:trigger-rtc repo])))
+    (m/watch *rtc-start-trigger))))

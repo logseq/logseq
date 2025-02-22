@@ -6,6 +6,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.graph :as graph]
@@ -20,6 +21,7 @@
             [frontend.util.fs :as fs-util]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -482,12 +484,11 @@
                                 (state/set-state! :rtc/uploading? true)
                                 (rtc-handler/<rtc-create-graph! repo)
                                 (state/set-state! :rtc/uploading? false)
-                                (rtc-handler/<rtc-start! repo))
+                                (rtc-flows/trigger-rtc-start repo))
                               (p/catch (fn [error]
                                          (reset! *creating-db? false)
                                          (state/set-state! :rtc/uploading? false)
-                                         (prn :debug :create-db-failed)
-                                         (js/console.error error)))))
+                                         (log/error :create-db-failed error)))))
                            (reset! *creating-db? false)
                            (shui/dialog-close!))))))
         submit! (fn [^js e click?]

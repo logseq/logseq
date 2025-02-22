@@ -4,7 +4,6 @@
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.flows :as flows]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.notification :as notification]
@@ -22,7 +21,7 @@
 (run-background-task-when-not-publishing
  ;; try to restart rtc-loop when possible,
  ;; triggered by `rtc-flows/rtc-try-restart-flow`
- ::restart-rtc-task
+ ::restart-rtc-to-reconnect
  (m/reduce
   (constantly nil)
   (m/ap
@@ -51,21 +50,22 @@
          "The server has a graph with a higher schema version, the client may need to upgrade."
          :warning))))))
 
-(def ^:private logout-or-graph-switch-flow
-  (c.m/mix
-   (m/eduction
-    (filter #(= :logout %))
-    flows/current-login-user-flow)
-   (m/eduction
-    (keep (fn [x] (when x :graph-switch)))
-    flows/current-repo-flow)))
-
 (run-background-task-when-not-publishing
  ;; stop rtc when [graph-switch user-logout]
  ::stop-rtc-if-needed
  (m/reduce
   (constantly nil)
   (m/ap
-    (let [logout-or-graph-switch (m/?> logout-or-graph-switch-flow)]
+    (let [logout-or-graph-switch (m/?> rtc-flows/logout-or-graph-switch-flow)]
       (log/info :try-to-stop-rtc-if-needed logout-or-graph-switch)
       (c.m/<? (rtc-handler/<rtc-stop!))))))
+
+(run-background-task-when-not-publishing
+ ;; auto-start rtc when [user-login graph-switch]
+ ::auto-start-rtc-if-possible
+ (m/reduce
+  (constantly nil)
+  (m/ap
+    (let [start-reason (m/?> rtc-flows/trigger-start-rtc-flow)]
+      (log/info :try-to-start-rtc (first start-reason))
+      (c.m/<? (rtc-handler/<rtc-start! (state/get-current-repo)))))))
