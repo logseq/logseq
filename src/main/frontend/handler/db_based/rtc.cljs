@@ -1,22 +1,15 @@
 (ns frontend.handler.db-based.rtc
   "RTC handler"
-  (:require [cljs-time.core :as t]
-            [clojure.pprint :as pp]
-            [frontend.common.missionary :as c.m]
+  (:require [clojure.pprint :as pp]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.flows :as flows]
-            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defn <rtc-create-graph!
@@ -75,7 +68,7 @@
       (when-let [ex-data* (:ex-data start-ex)]
         (throw (ex-info (:ex-message start-ex) ex-data*))))))
 
-(defn- notification-download-higher-schema-graph!
+(defn notification-download-higher-schema-graph!
   [graph-name graph-uuid schema-version]
   (let [graph-name* (str graph-name "-" schema-version)]
     (notification/show!
@@ -180,50 +173,7 @@
         (.rtc-grant-graph-access worker token (str graph-uuid)
                                  (ldb/write-transit-str [])
                                  (ldb/write-transit-str [email]))
-        (notification/show! (str "Invitation sent!") :success))
+        (notification/show! "Invitation sent!" :success))
        (p/catch (fn [e]
-                  (notification/show! (str "Something wrong, please try again.") :error)
+                  (notification/show! "Something wrong, please try again." :error)
                   (js/console.error e)))))))
-
-(when-not config/publishing?
-  (c.m/run-background-task
-   ;;; background task: try to restart rtc-loop when possible,
-   ;;; triggered by `rtc-flows/rtc-try-restart-flow`
-   ::restart-rtc-task
-   (m/reduce
-    (constantly nil)
-    (m/ap
-      (let [{:keys [graph-uuid t]} (m/?> rtc-flows/rtc-try-restart-flow)]
-        (when (and graph-uuid t
-                   (= graph-uuid (ldb/get-graph-rtc-uuid (db/get-db)))
-                   (> 5000 (- (common-util/time-ms) t)))
-          (prn :trying-to-restart-rtc graph-uuid (t/now))
-          (c.m/<? (<rtc-start! (state/get-current-repo) :stop-before-start? false)))))))
-
-  (c.m/run-background-task
-   ::notify-client-need-upgrade-when-larger-remote-schema-version-exists
-   (m/reduce
-    (constantly nil)
-    (m/ap
-      (let [{:keys [repo graph-uuid remote-schema-version sub-type]}
-            (m/?>
-             (m/eduction
-              (filter #(keyword-identical? :rtc.log/higher-remote-schema-version-exists (:type %)))
-              rtc-flows/rtc-log-flow))]
-        (case sub-type
-          :download
-          (notification-download-higher-schema-graph! repo graph-uuid remote-schema-version)
-          ;; else
-          (notification/show!
-           "The server has a graph with a higher schema version, the client may need to upgrade."
-           :warning))))))
-
-  (c.m/run-background-task
-   ::stop-rtc-when-user-logout
-   (m/reduce
-    (constantly nil)
-    (m/ap
-      (let [login-user (m/?> flows/current-login-user-flow)]
-        (when (= :logout login-user)
-          (log/info :try-to-stop-rtc-when-user-logout nil)
-          (c.m/<? (<rtc-stop!))))))))
