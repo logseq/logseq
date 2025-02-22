@@ -7,6 +7,7 @@
             [frontend.config :as config]
             [frontend.fs.sync :as sync]
             [frontend.handler :as handler]
+            [frontend.handler.db-based.rtc-background-tasks]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.log]
