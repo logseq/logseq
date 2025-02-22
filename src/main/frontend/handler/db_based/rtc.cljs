@@ -3,10 +3,12 @@
   (:require [clojure.pprint :as pp]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.shui.ui :as shui]
@@ -91,7 +93,7 @@
       (fn [e]
         (util/stop e)
         (p/do! (<rtc-branch-graph! repo)
-               (<rtc-start! repo)))}
+               (rtc-flows/trigger-rtc-start repo)))}
      "Upload to server")]
    :warning false))
 
@@ -117,8 +119,8 @@
                        (notification-download-higher-schema-graph! repo graph-uuid (:remote ex-data*))
                        :create-branch
                        (notification-upload-higher-schema-graph! repo)
-                       ;; else
-                       (do (prn start-ex)
+                        ;; else
+                       (do (log/info :start-ex start-ex)
                            (notification/show! [:div
                                                 [:div (:ex-message start-ex)]
                                                 [:div (-> ex-data*
