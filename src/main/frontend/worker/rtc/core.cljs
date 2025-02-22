@@ -250,6 +250,7 @@
             (add-log-fn :rtc.log/cancelled {})
             (throw e))
           (finally
+            (started-dfv :final) ;; ensure started-dfv can recv a value(values except the first one will be disregarded)
             (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))))))}))
 
 (def ^:private empty-rtc-loop-metadata
