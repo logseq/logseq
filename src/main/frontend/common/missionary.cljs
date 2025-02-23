@@ -71,14 +71,13 @@
     (let [v (m/?> par flow)]
       (m/? (f v)))))
 
-(comment
-  (defn debounce
-    [duration-ms flow]
-    (m/ap
-      (let [x (m/?< flow)]
-        (try (m/? (m/sleep duration-ms x))
-             (catch Cancelled _
-               (m/amb)))))))
+(defn debounce
+  [duration-ms flow]
+  (m/ap
+    (let [x (m/?< flow)]
+      (try (m/? (m/sleep duration-ms x))
+           (catch Cancelled _
+             (m/amb))))))
 
 (defn throttle
   [dur-ms >in]

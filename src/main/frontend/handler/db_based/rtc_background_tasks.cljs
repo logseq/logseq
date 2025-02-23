@@ -66,6 +66,6 @@
  (m/reduce
   (constantly nil)
   (m/ap
-    (let [start-reason (m/?> rtc-flows/trigger-start-rtc-flow)]
-      (log/info :try-to-start-rtc (first start-reason))
-      (c.m/<? (rtc-handler/<rtc-start! (state/get-current-repo)))))))
+    (let [[start-reason repo] (m/?> rtc-flows/trigger-start-rtc-flow)]
+      (log/info :try-to-start-rtc [start-reason repo])
+      (c.m/<? (rtc-handler/<rtc-start! (or repo (state/get-current-repo))))))))
