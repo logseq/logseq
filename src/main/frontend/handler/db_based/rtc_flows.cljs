@@ -90,13 +90,15 @@ conditions:
   (reset! *rtc-start-trigger repo))
 
 (def trigger-start-rtc-flow
-  (c.m/mix
-   (m/eduction
-    (keep (fn [user] (when (:email user) [:login user])))
-    flows/current-login-user-flow)
-   (m/eduction
-    (keep (fn [repo] (when repo [:graph-switch repo])))
-    flows/current-repo-flow)
-   (m/eduction
-    (keep (fn [repo] (when repo [:trigger-rtc repo])))
-    (m/watch *rtc-start-trigger))))
+  (->>
+   [(m/eduction
+     (keep (fn [user] (when (:email user) [:login])))
+     flows/current-login-user-flow)
+    (m/eduction
+     (keep (fn [repo] (when repo [:graph-switch repo])))
+     flows/current-repo-flow)
+    (m/eduction
+     (keep (fn [repo] (when repo [:trigger-rtc repo])))
+     (m/watch *rtc-start-trigger))]
+   (apply c.m/mix)
+   (c.m/debounce 200)))
