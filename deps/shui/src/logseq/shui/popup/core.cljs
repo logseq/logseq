@@ -76,7 +76,8 @@
 (defn show!
   [^js event content & {:keys [id as-dropdown? as-content? align root-props content-props
                                on-before-hide on-after-hide trigger-id] :as opts}]
-  (let [*target (volatile! nil)
+  (let [id (or id (gen-id))
+        *target (volatile! nil)
         position (cond
                    (vector? event) event
 
@@ -100,9 +101,12 @@
                    :else [0 0])]
     (reset! *last-show-target @*target)
     (js/setTimeout #(reset! *last-show-target nil) 64)
+    (some-> @*target
+      (d/set-attr! "data-popup-active"
+        (if (keyword? id) (name id) (str id))))
     (upsert-popup!
      (merge opts
-            {:id (or id (gen-id)) :target (deref *target)
+            {:id id :target (deref *target)
              :trigger-id trigger-id
              :open? true :content content :position position
              :as-dropdown? as-dropdown?
@@ -121,11 +125,13 @@
   ([id delay {:keys [all?]}]
    (when-let [popup (get-popup id)]
      (let [config (last popup)
+           target (:target config)
            f #(if all?
                 (reset! *popups [])
                 (do (detach-popup! id)
                   (some-> (:on-after-hide config) (apply []))))]
        (some-> (:on-before-hide config) (apply []))
+       (some-> target (d/remove-attr! "data-popup-active"))
        (if (and (number? delay) (> delay 0))
          (js/setTimeout f delay)
          (f))))))
