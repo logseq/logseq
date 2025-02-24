@@ -4231,7 +4231,8 @@
      (when (:breadcrumb-show? config)
        (breadcrumb config (state/get-current-repo) (or navigating-block (:block/uuid (first blocks)))
                    {:show-page? false
-                    :navigating-block *navigating-block}))
+                    :navigating-block *navigating-block
+                    :indent? true}))
      (let [config' (assoc config
                           :breadcrumb-show? false
                           :navigating-block *navigating-block
