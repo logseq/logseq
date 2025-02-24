@@ -549,14 +549,14 @@
   [property-pair-values]
   ;; Infer from first property pair is good enough for now
   (let [prop-value (some #(when (not= ::no-value %) %) property-pair-values)
-        prop-value' (if (coll? prop-value) (first prop-value) prop-value)
+        prop-value' (if (set? prop-value) (first prop-value) prop-value)
         prop-type (if prop-value'
                     (if (page-prop-value? prop-value')
-                      :node
+                      (if (:build/journal (second prop-value)) :date :node)
                       (db-property-type/infer-property-type-from-value prop-value'))
                     :default)]
     (cond-> {:logseq.property/type prop-type}
-      (coll? prop-value)
+      (set? prop-value)
       (assoc :db/cardinality :many))))
 
 (defn- auto-create-ontology
