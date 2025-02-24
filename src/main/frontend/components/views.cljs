@@ -655,14 +655,14 @@
    (contains? #{:block/created-at :block/updated-at} (:db/ident property))))
 
 (def timestamp-options
-  [{:value "in 1 week"
-    :label "in 1 week"}
-   {:value "in 1 month"
-    :label "in 1 month"}
-   {:value "in 3 months"
-    :label "in 3 months"}
-   {:value "in 1 year"
-    :label "in 1 year"}
+  [{:value "1 week ago"
+    :label "1 week ago"}
+   {:value "1 month ago"
+    :label "1 month ago"}
+   {:value "3 months ago"
+    :label "3 months ago"}
+   {:value "1 year ago"
+    :label "1 year ago"}
    ;; TODO: support date picker
    ;; {:value "Custom time"
    ;;  :label "Custom time"}
@@ -673,13 +673,13 @@
   (let [now (t/now)
         f t/minus]
     (case value
-      "in 1 week"
+      "1 week ago"
       (tc/to-long (f now (t/weeks 1)))
-      "in 1 month"
+      "1 month ago"
       (tc/to-long (f now (t/months 1)))
-      "in 3 months"
+      "3 months ago"
       (tc/to-long (f now (t/months 3)))
-      "in 1 year"
+      "1 year ago"
       (tc/to-long (f now (t/years 1)))
       nil)))
 
@@ -1380,9 +1380,8 @@
                      (set-sorting! nil)
                      (f nil)
                      (shui/popup-hide!)))}
-      [:div.ml-1.items-center.flex.flex-row
-       (ui/icon "trash" {:size 15})
-       [:span.ml-2 "Delete sort"]])]))
+      (ui/icon "trash" {:size 15})
+      [:span.ml-1 "Delete sort"])]))
 
 (rum/defc view-sorting
   [table columns sorting]
