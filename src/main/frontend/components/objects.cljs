@@ -98,6 +98,7 @@
                                                           (shui/dialog-close!)))})]))
                                       (add-new-class-object! class set-data! properties)))
                  :show-add-property? true
+                 :show-items-count? true
                  :add-property! (fn []
                                   (state/pub-event! [:editor/new-property {:block class
                                                                            :class-schema? true}]))
