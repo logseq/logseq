@@ -198,7 +198,7 @@
                                     get-ws-create-task graph-uuid major-schema-version
                                     repo conn *last-calibrate-t *online-users add-log-fn)
         {:keys [assets-sync-loop-task]}
-        (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid conn *auto-push?)
+        (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid major-schema-version conn *auto-push?)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push? *online-users)]
     (assert (some? *current-ws))
     {:rtc-state-flow       (create-rtc-state-flow (create-ws-state-flow *current-ws))
