@@ -3,6 +3,7 @@
   (:require [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
+            [cljs-time.format :as tf]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
@@ -667,29 +668,29 @@
     :label "3 months ago"}
    {:value "1 year ago"
     :label "1 year ago"}
-   ;; TODO: support date picker
-   ;; {:value "Custom time"
-   ;;  :label "Custom time"}
-   ])
+   {:value "Custom date"
+    :label "Custom date"}])
 
 (defn- get-timestamp
   [value]
   (let [now (t/now)
         f t/minus]
-    (case value
-      "1 day ago"
-      (tc/to-long (f now (t/days 1)))
-      "3 days ago"
-      (tc/to-long (f now (t/days 3)))
-      "1 week ago"
-      (tc/to-long (f now (t/weeks 1)))
-      "1 month ago"
-      (tc/to-long (f now (t/months 1)))
-      "3 months ago"
-      (tc/to-long (f now (t/months 3)))
-      "1 year ago"
-      (tc/to-long (f now (t/years 1)))
-      nil)))
+    (if (string? value)
+      (case value
+        "1 day ago"
+        (tc/to-long (f now (t/days 1)))
+        "3 days ago"
+        (tc/to-long (f now (t/days 3)))
+        "1 week ago"
+        (tc/to-long (f now (t/weeks 1)))
+        "1 month ago"
+        (tc/to-long (f now (t/months 1)))
+        "3 months ago"
+        (tc/to-long (f now (t/months 3)))
+        "1 year ago"
+        (tc/to-long (f now (t/years 1)))
+        nil)
+      (tc/to-long (tc/to-date value)))))
 
 (rum/defc filter-property < rum/static
   [columns {:keys [data-fns] :as table}]
@@ -732,11 +733,23 @@
                  (merge option
                         {:items timestamp-options
                          :input-default-placeholder (if property (:block/title property) "Select")
-                         :on-chosen (fn [value]
+                         :on-chosen (fn [value _ _ e]
                                       (shui/popup-hide!)
-                                      (let [filters' (conj (:filters filters) [(:db/ident property) :after value])]
-                                        (set-filters! {:or? (:or? filters)
-                                                       :filters filters'})))})
+                                      (let [set-filter-fn (fn [value]
+                                                            (let [filters' (conj (:filters filters) [(:db/ident property) :after value])]
+                                                              (set-filters! {:or? (:or? filters)
+                                                                             :filters filters'})))]
+                                        (if (= value "Custom date")
+                                          (shui/popup-show!
+                                           (.-target e)
+                                           (ui/nlp-calendar
+                                            {:initial-focus true
+                                             :datetime? false
+                                             :on-day-click (fn [value]
+                                                             (set-filter-fn value)
+                                                             (shui/popup-hide!))})
+                                           {})
+                                          (set-filter-fn value))))})
                  property
                  (if (= :checkbox (:logseq.property/type property))
                    (let [items [{:value true :label "true"}
@@ -925,16 +938,28 @@
                  :items items
                  :extract-fn :label
                  :extract-chosen-fn :value
-                 :on-chosen (fn [value _selected? selected]
+                 :on-chosen (fn [value _selected? selected e]
                               (when-not many?
                                 (shui/popup-hide!))
                               (let [value' (if many? selected value)
-                                    new-filters (update filters :filters
-                                                        (fn [col]
-                                                          (update col idx
-                                                                  (fn [[property operator _value]]
-                                                                    [property operator value']))))]
-                                (set-filters! new-filters)))}
+                                    set-filters-fn (fn [value']
+                                                     (let [new-filters (update filters :filters
+                                                                               (fn [col]
+                                                                                 (update col idx
+                                                                                         (fn [[property operator _value]]
+                                                                                           [property operator value']))))]
+                                                       (set-filters! new-filters)))]
+                                (if (= value "Custom date")
+                                  (shui/popup-show!
+                                   (.-target e)
+                                   (ui/nlp-calendar
+                                    {:initial-focus true
+                                     :datetime? false
+                                     :on-day-click (fn [value]
+                                                     (set-filters-fn value)
+                                                     (shui/popup-hide!))})
+                                   {})
+                                  (set-filters-fn value'))))}
                  many?
                  (assoc
                   :multiple-choices? true
@@ -949,6 +974,10 @@
        (let [value (cond
                      (uuid? value)
                      (db/entity [:block/uuid value])
+                     (instance? js/Date value)
+                     (some->> (tc/to-date value)
+                              (t/to-default-time-zone)
+                              (tf/unparse (tf/formatter "yyyy-MM-dd")))
                      (and (coll? value) (every? uuid? value))
                      (set (map #(db/entity [:block/uuid %]) value))
                      :else
