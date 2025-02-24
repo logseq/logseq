@@ -1,8 +1,8 @@
 (ns electron.db
   "Provides SQLite dbs for electron and manages files of those dbs"
-  (:require ["path" :as node-path]
+  (:require ["electron" :refer [app]]
             ["fs-extra" :as fs]
-            ["electron" :refer [app]]
+            ["path" :as node-path]
             [logseq.db.common.sqlite :as sqlite-common-db]))
 
 (defn get-graphs-dir

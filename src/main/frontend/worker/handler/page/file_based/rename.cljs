@@ -1,20 +1,19 @@
 (ns frontend.worker.handler.page.file-based.rename
   "File based page rename"
-  (:require [frontend.common.file-based.db :as common-file-db]
-            [frontend.worker.handler.page :as worker-page]
-            [datascript.core :as d]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            [logseq.common.util.page-ref :as page-ref]
+            [datascript.core :as d]
             [frontend.common.file.util :as wfu]
-            [logseq.db :as ldb]
-            [logseq.common.util :as common-util]
+            [frontend.common.file-based.db :as common-file-db]
+            [frontend.worker.handler.page :as worker-page]
             [logseq.common.config :as common-config]
-            [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.property :as gp-property]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
-            [logseq.db.file-based.entity-util :as file-entity-util]))
-
+            [logseq.db.file-based.entity-util :as file-entity-util]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.text :as text]))
 
 (defn- replace-page-ref-aux
   "Unsanitized names"
@@ -104,10 +103,10 @@
   [refs from-id to-id]
   (if to-id
     (->> refs
-        (remove #{{:db/id from-id}})
-        (cons {:db/id to-id})
-        (distinct)
-        (vec))
+         (remove #{{:db/id from-id}})
+         (cons {:db/id to-id})
+         (distinct)
+         (vec))
     ;; New page not exists so that we keep using the old page's block as a ref
     refs))
 

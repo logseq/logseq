@@ -2,8 +2,8 @@
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
-            [logseq.db.file-based.schema :as file-schema]))
+            [logseq.db.file-based.schema :as file-schema]
+            [logseq.db.test.helper :as db-test]))
 
 ;;; datoms
 ;;; - 1 <----+

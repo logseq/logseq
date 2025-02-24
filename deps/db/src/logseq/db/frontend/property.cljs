@@ -271,25 +271,7 @@
                :cardinality :many
                :hide? true}
       :queryable? false}
-   ;; Task props
-     :logseq.task/priority
-     {:title "Priority"
-      :schema
-      {:type :default
-       :public? true
-       :ui-position :block-left}
-      :closed-values
-      (mapv (fn [[db-ident value icon]]
-              {:db-ident db-ident
-               :value value
-               :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)
-               :icon {:type :tabler-icon :id icon}})
-            [[:logseq.task/priority.low "Low" "priorityLvlLow"]
-             [:logseq.task/priority.medium "Medium" "priorityLvlMedium"]
-             [:logseq.task/priority.high "High" "priorityLvlHigh"]
-             [:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]])
-      :properties {:logseq.property/hide-empty-value true
-                   :logseq.property/enable-history? true}}
+     ;; Task props
      :logseq.task/status
      {:title "Status"
       :schema
@@ -314,6 +296,24 @@
                    :logseq.property/default-value :logseq.task/status.todo
                    :logseq.property/enable-history? true}
       :queryable? true}
+     :logseq.task/priority
+     {:title "Priority"
+      :schema
+      {:type :default
+       :public? true
+       :ui-position :block-left}
+      :closed-values
+      (mapv (fn [[db-ident value icon]]
+              {:db-ident db-ident
+               :value value
+               :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)
+               :icon {:type :tabler-icon :id icon}})
+            [[:logseq.task/priority.low "Low" "priorityLvlLow"]
+             [:logseq.task/priority.medium "Medium" "priorityLvlMedium"]
+             [:logseq.task/priority.high "High" "priorityLvlHigh"]
+             [:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]])
+      :properties {:logseq.property/hide-empty-value true
+                   :logseq.property/enable-history? true}}
      :logseq.task/deadline
      {:title "Deadline"
       :schema {:type :datetime
@@ -403,6 +403,17 @@
              [:logseq.property.view/type.gallery "Gallery View" "layout-grid"]])
       :properties {:logseq.property/default-value :logseq.property.view/type.table}
       :queryable? true
+      :rtc {:rtc/ignore-attr-when-init-upload true
+            :rtc/ignore-attr-when-init-download true
+            :rtc/ignore-attr-when-syncing true}}
+
+     :logseq.property.view/feature-type
+     {:title "View Feature Type"
+      :schema
+      {:type :keyword
+       :public? false
+       :hide? true}
+      :queryable? false
       :rtc {:rtc/ignore-attr-when-init-upload true
             :rtc/ignore-attr-when-init-download true
             :rtc/ignore-attr-when-syncing true}}

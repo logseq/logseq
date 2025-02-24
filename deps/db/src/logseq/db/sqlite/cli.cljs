@@ -1,17 +1,16 @@
 (ns ^:node-only logseq.db.sqlite.cli
   "Primary ns to interact with DB files for DB and file graphs with node.js based CLIs"
   (:require ["better-sqlite3" :as sqlite3]
-            [logseq.db.common.sqlite :as sqlite-common-db]
-            ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
-            #_:clj-kondo/ignore
-            [datascript.core :as d]
-            [datascript.storage :refer [IStorage]]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.file-based.schema :as file-schema]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [cljs-bean.core :as bean]
             ["fs" :as fs]
-            ["path" :as node-path]))
+            ["path" :as node-path]
+            [cljs-bean.core :as bean]
+            ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
+            [datascript.core]
+            [datascript.storage :refer [IStorage]]
+            [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.file-based.schema :as file-schema]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Should this check directory name instead if file graphs also
 ;; have this file?
@@ -44,7 +43,7 @@
     (insert-many data)))
 
 (defn- restore-data-from-addr
-"Should be functionally equivalent to db-worker/restore-data-from-addr"
+  "Should be functionally equivalent to db-worker/restore-data-from-addr"
   [db addr]
   (when-let [result (-> (query db (str "select content, addresses from kvs where addr = " addr))
                         first)]
@@ -62,24 +61,24 @@
   (reify IStorage
     (-store [_ addr+data-seq delete-addrs]
             ;; Only difference from db-worker impl is that js data maps don't start with '$' e.g. :$addr -> :addr
-            (let [used-addrs (set (mapcat
-                                   (fn [[addr data]]
-                                     (cons addr
-                                           (when (map? data)
-                                             (:addresses data))))
-                                   addr+data-seq))
-                  delete-addrs (remove used-addrs delete-addrs)
-                  data (map
-                        (fn [[addr data]]
-                          (let [data' (if (map? data) (dissoc data :addresses) data)
-                                addresses (when (map? data)
-                                            (when-let [addresses (:addresses data)]
-                                              (js/JSON.stringify (bean/->js addresses))))]
-                            #js {:addr addr
-                                 :content (sqlite-util/transit-write data')
-                                 :addresses addresses}))
-                        addr+data-seq)]
-              (upsert-addr-content! db data delete-addrs)))
+      (let [used-addrs (set (mapcat
+                             (fn [[addr data]]
+                               (cons addr
+                                     (when (map? data)
+                                       (:addresses data))))
+                             addr+data-seq))
+            delete-addrs (remove used-addrs delete-addrs)
+            data (map
+                  (fn [[addr data]]
+                    (let [data' (if (map? data) (dissoc data :addresses) data)
+                          addresses (when (map? data)
+                                      (when-let [addresses (:addresses data)]
+                                        (js/JSON.stringify (bean/->js addresses))))]
+                      #js {:addr addr
+                           :content (sqlite-util/transit-write data')
+                           :addresses addresses}))
+                  addr+data-seq)]
+        (upsert-addr-content! db data delete-addrs)))
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
 

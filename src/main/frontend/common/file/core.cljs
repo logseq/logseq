@@ -98,8 +98,8 @@
               content (if page? nil (transform-content repo db f level opts context))
               new-content
               (if-let [children (seq (:block/children f))]
-                     (cons content (tree->file-content-aux repo db children {:init-level (inc level)} context))
-                     [content])]
+                (cons content (tree->file-content-aux repo db children {:init-level (inc level)} context))
+                [content])]
           (conj! block-contents new-content)
           (recur r level))))))
 

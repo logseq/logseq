@@ -1,8 +1,8 @@
 (ns frontend.db.utils
   "Some utils are required by other namespace in frontend.db package."
   (:require [datascript.core :as d]
-            [frontend.state :as state]
             [frontend.db.conn :as conn]
+            [frontend.state :as state]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-plus :as entity-plus]))
 
@@ -37,11 +37,11 @@
      (let [eid (if (uuid? eid) [:block/uuid eid] eid)]
        (when-let [db (if (string? repo-or-db)
                      ;; repo
-                      (let [repo (or repo-or-db (state/get-current-repo))]
-                        (conn/get-db repo))
+                       (let [repo (or repo-or-db (state/get-current-repo))]
+                         (conn/get-db repo))
                      ;; db
-                      repo-or-db)]
-        (d/entity db eid))))))
+                       repo-or-db)]
+         (d/entity db eid))))))
 
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"

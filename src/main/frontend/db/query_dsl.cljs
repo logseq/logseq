@@ -18,9 +18,9 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.file-based.rules :as file-rules]
             [logseq.db.frontend.rules :as rules]
-            [logseq.graph-parser.text :as text]
-            [logseq.db.file-based.rules :as file-rules]))
+            [logseq.graph-parser.text :as text]))
 
 ;; Query fields:
 

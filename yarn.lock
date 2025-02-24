@@ -7035,10 +7035,10 @@ react-transition-group@4.3.0:
     loose-envify "^1.4.0"
     prop-types "^15.6.2"
 
-react-virtuoso@^4.7.11:
-  version "4.7.11"
-  resolved "https://registry.yarnpkg.com/react-virtuoso/-/react-virtuoso-4.7.11.tgz#1bf97885aae6f140f53487b48ebe87c37c57def3"
-  integrity sha512-Kdn9qEtQI2ulEuBMzW2BTkDsfijB05QUd6lpZ1K36oyA3k65Cz4lG4EKrh2pCfUafX4C2uMSZOwzMOhbrMOTFA==
+react-virtuoso@4.12.5:
+  version "4.12.5"
+  resolved "https://registry.yarnpkg.com/react-virtuoso/-/react-virtuoso-4.12.5.tgz#cf92efc2527e56d6df1d4d63c6e4dd3fac5a4030"
+  integrity sha512-YeCbRRsC9CLf0buD0Rct7WsDbzf+yBU1wGbo05/XjbcN2nJuhgh040m3y3+6HVogTZxEqVm45ac9Fpae4/MxRQ==
 
 react@17.0.2:
   version "17.0.2"
