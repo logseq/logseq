@@ -1410,7 +1410,7 @@
   (let [entity (db/entity (:db/id ent))
         views (->> (:logseq.property/_view-for entity)
                    (filter (fn [view]
-                             (= view-identity (:logseq.property.view/identity view)))))]
+                             (= view-identity (:logseq.property.view/feature-type view)))))]
     (ldb/sort-by-order views)))
 
 (defn- create-view!
@@ -1418,7 +1418,7 @@
   (when-let [page (db/get-case-page common-config/views-page-name)]
     (p/let [properties (cond->
                         {:logseq.property/view-for (:db/id view-parent)
-                         :logseq.property.view/identity view-identity}
+                         :logseq.property.view/feature-type view-identity}
                          (contains? #{:linked-references :unlinked-references} view-identity)
                          (assoc :logseq.property.view/type (:db/id (db/entity :logseq.property.view/type.list))))
             view-exists? (seq (get-views view-parent view-identity))

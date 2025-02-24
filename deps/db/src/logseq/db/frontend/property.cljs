@@ -407,8 +407,8 @@
             :rtc/ignore-attr-when-init-download true
             :rtc/ignore-attr-when-syncing true}}
 
-     :logseq.property.view/identity
-     {:title "View Identity"
+     :logseq.property.view/feature-type
+     {:title "View Feature Type"
       :schema
       {:type :keyword
        :public? false
