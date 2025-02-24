@@ -176,9 +176,7 @@
                           auto-side? (assoc :side (auto-side-fn)))
           hide (fn [] (hide! id 1))]
       (popup-root
-        (merge root-props {:open open?
-                           :on-open-change (fn [o?]
-                                             (prn "==>>> o?" o?))})
+        (merge root-props {:open open?})
         (popup-trigger
           {:as-child true}
           (button {:class "overflow-hidden fixed p-0 opacity-0"
