@@ -445,8 +445,10 @@
   "Splits a vec of maps tx into maps that can immediately be transacted,
   :init-tx, and maps that need to be transacted after :init-tx, :block-props-tx, in order to use
    the correct schema e.g. user properties with :db/cardinality"
-  [blocks-tx]
-  (let [property-idents (keep #(when (:db/cardinality %) (:db/ident %)) blocks-tx)
+  [blocks-tx properties]
+  (let [property-idents (concat (keep #(when (:db/cardinality %) (:db/ident %)) blocks-tx)
+                                ;; add properties for :build-existing-tx? since they aren't in blocks-tx
+                                (keys properties))
         [init-tx block-props-tx]
         (reduce (fn [[init-tx* block-props-tx*] m]
                   (let [props (select-keys m property-idents)]
@@ -620,7 +622,8 @@
     ;; Properties first b/c they have schema and are referenced by all. Then classes b/c they can be referenced by pages. Then pages
     (split-blocks-tx (concat properties-tx'
                              classes-tx
-                             pages-and-blocks-tx))))
+                             pages-and-blocks-tx)
+                     properties)))
 
 ;; Public API
 ;; ==========
@@ -719,7 +722,8 @@
   [conn options]
   (let [options' (merge {:auto-create-ontology? true}
                         (if (vector? options) {:pages-and-blocks options} options))
-        {:keys [init-tx block-props-tx]} (build-blocks-tx options')]
+        {:keys [init-tx block-props-tx] :as _txs} (build-blocks-tx options')]
+    ;; (cljs.pprint/pprint _txs)
     (d/transact! conn init-tx)
     (when (seq block-props-tx)
       (d/transact! conn block-props-tx))))
