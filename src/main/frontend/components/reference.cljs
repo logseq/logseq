@@ -3,10 +3,10 @@
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
             [frontend.components.reference-filters :as filters]
+            [frontend.components.views :as views]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [logseq.db :as ldb]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.utils :as db-utils]
@@ -17,6 +17,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -57,50 +58,97 @@
                                       {})]
        (content/content (str (:block/uuid page-entity)) {:hiccup ref-hiccup}))]))
 
+(defn- columns
+  [config result]
+  (->> (mapcat :block.temp/property-keys result)
+       distinct
+       (map db/entity)
+       (ldb/sort-by-order)
+       ((fn [cs] (views/build-columns config cs {:add-tags-column? false})))))
+
 (rum/defc references-cp
   [page-entity *filters total filter-n filtered-ref-blocks *ref-pages]
   (let [filters @*filters
-        threshold (state/get-linked-references-collapsed-threshold)
-        default-collapsed? (or (>= total threshold) (ldb/class? page-entity))
-        *collapsed? (atom nil)]
-    (ui/foldable
-     [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:div.font-medium.opacity-50
-       (t :linked-references/reference-count (when (or (seq (:included filters))
-                                                       (seq (:excluded filters))) filter-n) total)]
-      [:a.filter.fade-link
-       {:title (t :linked-references/filter-heading)
-        :on-mouse-over (fn [_e]
-                         (when @*collapsed? ; collapsed
+        *collapsed? (atom nil)
+        db-based? (config/db-based-graph?)
+        reference-filter (if db-based?
+                           (shui/button
+                            {:title "Page filter"
+                             :variant "ghost"
+                             :class "text-muted-foreground !px-1"
+                             :size :sm
+                             :on-click (fn [e]
+                                         (shui/popup-show! (.-target e)
+                                                           (fn []
+                                                             [:div.p-4
+                                                              (filters/filter-dialog page-entity *filters *ref-pages)])
+                                                           {:align "end"}))}
+                            (ui/icon "filter-cog"
+                                     {:class (cond
+                                               (and (empty? (:included filters)) (empty? (:excluded filters)))
+                                               ""
+
+                                               (and (seq (:included filters)) (empty? (:excluded filters)))
+                                               "text-success"
+
+                                               (and (empty? (:included filters)) (seq (:excluded filters)))
+                                               "text-error"
+                                               :else
+                                               "text-warning")}))
+                           [:a.filter.fade-link
+                            {:title (t :linked-references/filter-heading)
+                             :on-mouse-over (fn [_e]
+                                              (when @*collapsed? ; collapsed
                            ;; expand
-                           (reset! @*collapsed? false)))
-        :on-pointer-down (fn [e]
-                           (util/stop-propagation e)
-                           (shui/popup-show! (.-target e)
-                                             (fn []
-                                               [:div.p-4
-                                                (filters/filter-dialog page-entity *filters *ref-pages)])
-                                             {:align "end"}))}
-       (ui/icon "filter" {:class (cond
-                                   (and (empty? (:included filters)) (empty? (:excluded filters)))
-                                   "opacity-60 hover:opacity-100"
+                                                (reset! @*collapsed? false)))
+                             :on-pointer-down (fn [e]
+                                                (util/stop-propagation e)
+                                                (shui/popup-show! (.-target e)
+                                                                  (fn []
+                                                                    [:div.p-4
+                                                                     (filters/filter-dialog page-entity *filters *ref-pages)])
+                                                                  {:align "end"}))}
+                            (ui/icon "filter" {:class (cond
+                                                        (and (empty? (:included filters)) (empty? (:excluded filters)))
+                                                        "opacity-60 hover:opacity-100"
 
-                                   (and (seq (:included filters)) (empty? (:excluded filters)))
-                                   "text-success"
+                                                        (and (seq (:included filters)) (empty? (:excluded filters)))
+                                                        "text-success"
 
-                                   (and (empty? (:included filters)) (seq (:excluded filters)))
-                                   "text-error"
-                                   :else
-                                   "text-warning")
-                          :size  22})]]
+                                                        (and (empty? (:included filters)) (seq (:excluded filters)))
+                                                        "text-error"
+                                                        :else
+                                                        "text-warning")
+                                               :size  22})])]
+    (if db-based?
+      (let [blocks (->> (mapcat second filtered-ref-blocks)
+                        (map (fn [b] (assoc (db/entity (:db/id b)) :id (:db/id b)))))
+            columns' (columns {} blocks)]
+        (when (or (seq blocks)
+                  (seq (:included filters))
+                  (seq (:excluded filters)))
+          (views/view
+           {:view-parent page-entity
+            :view-feature-type :linked-references
+            :additional-actions [reference-filter]
+            :data blocks
+            :columns columns'})))
+      (let [threshold (state/get-linked-references-collapsed-threshold)
+            default-collapsed? (or (>= total threshold) (ldb/class? page-entity))]
+        (ui/foldable
+         [:div.flex.flex-row.flex-1.justify-between.items-center
+          [:div.font-medium.opacity-50
+           (t :linked-references/reference-count (when (or (seq (:included filters))
+                                                           (seq (:excluded filters))) filter-n) total)]
+          reference-filter]
 
-     (fn []
-       (references-inner page-entity filters filtered-ref-blocks))
+         (fn []
+           (references-inner page-entity filters filtered-ref-blocks))
 
-     {:default-collapsed? default-collapsed?
-      :title-trigger? true
-      :init-collapsed (fn [collapsed-atom]
-                        (reset! *collapsed? collapsed-atom))})))
+         {:default-collapsed? default-collapsed?
+          :title-trigger? true
+          :init-collapsed (fn [collapsed-atom]
+                            (reset! *collapsed? collapsed-atom))})))))
 
 (defn- get-filtered-children
   [block parent->blocks]

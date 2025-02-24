@@ -163,7 +163,7 @@
         "react-textarea-autosize": "8.3.3",
         "react-tippy": "1.4.0",
         "react-transition-group": "4.3.0",
-        "react-virtuoso": "^4.7.11",
+        "react-virtuoso": "4.12.5",
         "remove-accents": "0.4.2",
         "reveal.js": "^4.5.0",
         "sanitize-filename": "1.6.3",

@@ -9,7 +9,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.hooks :as hooks]
             [frontend.state :as state]
-            [frontend.ui :as ui]
+            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -44,13 +44,10 @@
 
 (rum/defc all-pages < rum/static
   []
-  (let [db (db/get-db)
-        [data set-data!] (rum/use-state nil)
-        [loading? set-loading!] (rum/use-state true)
+  (let [[data set-data!] (rum/use-state nil)
         columns' (views/build-columns {} (columns)
                                       {:with-object-name? false
-                                       :with-id? false})
-        view-entity (first (ldb/get-all-pages-views db))]
+                                       :with-id? false})]
     (hooks/use-effect!
      (fn []
        (when-let [^js worker @state/*db-worker]
@@ -58,21 +55,20 @@
                  result (ldb/read-transit-str result-str)
                  data (get-all-pages)
                  data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
-           (set-data! data)
-           (set-loading! false))))
+           (set-data! data))))
      [])
     [:div.ls-all-pages.w-full.mx-auto
-     (if loading?
-       (ui/skeleton)
-       (views/view view-entity {:data data
-                                :set-data! set-data!
-                                :title-key :all-pages/table-title
-                                :columns columns'
-                                :on-delete-rows (fn [table selected-rows]
-                                                  (shui/dialog-open!
-                                                   (component-page/batch-delete-dialog
-                                                    selected-rows false
-                                                    (fn []
-                                                      (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                                        (f {}))
-                                                      (set-data! (get-all-pages))))))}))]))
+     (views/view {:data data
+                  :set-data! set-data!
+                  :view-parent (db/get-page common-config/views-page-name)
+                  :view-feature-type :all-pages
+                  :show-items-count? true
+                  :columns columns'
+                  :on-delete-rows (fn [table selected-rows]
+                                    (shui/dialog-open!
+                                     (component-page/batch-delete-dialog
+                                      selected-rows false
+                                      (fn []
+                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                          (f {}))
+                                        (set-data! (get-all-pages))))))})]))

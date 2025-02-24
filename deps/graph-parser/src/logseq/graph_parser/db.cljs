@@ -1,8 +1,8 @@
 (ns logseq.graph-parser.db
   "File graph specific db fns"
-  (:require [datascript.core :as d]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.file-based.schema :as file-schema]))

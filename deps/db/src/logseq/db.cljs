@@ -6,19 +6,18 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
-            [logseq.db.frontend.class :as db-class]
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
+            [logseq.db.common.entity-util :as common-entity-util]
+            [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.common.entity-util :as common-entity-util]
-            [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
 
@@ -578,12 +577,6 @@
      (contains? tags-ids (:db/id class))
      (let [class-parent-ids (set (map :db/id (get-classes-parents tags)))]
        (contains? (set/union class-parent-ids tags-ids) (:db/id class))))))
-
-(defn get-all-pages-views
-  [db]
-  (when (db-based-graph? db)
-    (when-let [page (get-page db common-config/views-page-name)]
-      (:logseq.property/_view-for page))))
 
 (defn inline-tag?
   [block-raw-title tag]
