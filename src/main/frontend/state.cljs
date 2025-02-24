@@ -925,11 +925,6 @@ Similar to re-frame subscriptions"
   []
   (:rtc/graphs @state))
 
-(defn rtc-graph?
-  [graph]
-  (some (fn [rtc-graph]
-          (= (:url rtc-graph) graph)) (get-rtc-graphs)))
-
 (defn get-remote-graph-info-by-uuid
   [uuid]
   (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]

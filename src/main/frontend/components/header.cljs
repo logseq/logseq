@@ -376,7 +376,7 @@
 
      [:div.r.flex.drag-region
       (when (and current-repo
-                 (state/rtc-graph? current-repo)
+                 (ldb/get-graph-rtc-uuid (db/get-db))
                  (user-handler/logged-in?)
                  (config/db-based-graph? current-repo)
                  (user-handler/team-member?))
