@@ -1,11 +1,11 @@
 (ns logseq.db.sqlite.build-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.test.helper :as db-test]
-            [logseq.db :as ldb]
-            [logseq.common.util.page-ref :as page-ref]))
+            [logseq.db.test.helper :as db-test]))
 
 (deftest build-tags
   (let [conn (db-test/create-conn)
@@ -67,6 +67,25 @@
                 :logseq.property/background-image
                 db-property/property-value-content))
         "built-in :default property is created and correctly associated to a block")))
+
+(deftest build-properties-with-build-page
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"
+                       :build/properties
+                       {:date [:build/page {:build/journal 20250223}]
+                        :page #{[:build/page {:block/title "page object"
+                                              :build/properties {:p1 "foo"
+                                                                 :date [:build/page {:build/journal 20250224}]}}]}}}}])]
+    (is (= "foo"
+           (->> (db-test/find-page-by-title @conn "page object")
+                :user.property/p1
+                db-property/property-value-content))
+        ":build/page page can have a :default property")
+    (is (= 20250224
+           (->> (db-test/find-page-by-title @conn "page object")
+                :user.property/date
+                :block/journal-day))
+        ":build/page page can have a :date property defined by another :build/page")))
 
 (deftest build-for-existing-blocks
   (let [conn (db-test/create-conn)
