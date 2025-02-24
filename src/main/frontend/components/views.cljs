@@ -655,7 +655,11 @@
    (contains? #{:block/created-at :block/updated-at} (:db/ident property))))
 
 (def timestamp-options
-  [{:value "1 week ago"
+  [{:value "1 day ago"
+    :label "1 day ago"}
+   {:value "3 days ago"
+    :label "3 days ago"}
+   {:value "1 week ago"
     :label "1 week ago"}
    {:value "1 month ago"
     :label "1 month ago"}
@@ -673,6 +677,10 @@
   (let [now (t/now)
         f t/minus]
     (case value
+      "1 day ago"
+      (tc/to-long (f now (t/days 1)))
+      "3 days ago"
+      (tc/to-long (f now (t/days 3)))
       "1 week ago"
       (tc/to-long (f now (t/weeks 1)))
       "1 month ago"
@@ -696,7 +704,7 @@
                      {:label (:name column)
                       :value column}) columns)
         option {:input-default-placeholder "Filter"
-                :input-opts {:class "!px-3 !py-1"}
+                :input-opts {:class "!px-2 !py-1"}
                 :items items
                 :extract-fn :label
                 :extract-chosen-fn :value
