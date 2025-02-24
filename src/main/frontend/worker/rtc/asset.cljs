@@ -168,7 +168,7 @@
        (m/reduce (constantly nil))))
 
 (defn- new-task--push-local-asset-updates
-  [repo get-ws-create-task conn graph-uuid schema-version add-log-fn]
+  [repo get-ws-create-task conn graph-uuid major-schema-version add-log-fn]
   (m/sp
     (when-let [asset-ops (not-empty (client-op/get-all-asset-ops repo))]
       (let [upload-asset-uuids (keep
@@ -209,7 +209,7 @@
           (m/? (ws-util/send&recv get-ws-create-task
                                   {:action "delete-assets"
                                    :graph-uuid graph-uuid
-                                   :schema-version (str schema-version)
+                                   :schema-version (str major-schema-version)
                                    :asset-uuids remove-asset-uuids}))
           (doseq [asset-uuid remove-asset-uuids]
             (client-op/remove-asset-op repo asset-uuid)))
@@ -276,7 +276,7 @@
               repo get-ws-create-task conn graph-uuid add-log-fn asset-update-ops))))))
 
 (defn create-assets-sync-loop
-  [repo get-ws-create-task graph-uuid schema-version conn *auto-push?]
+  [repo get-ws-create-task graph-uuid major-schema-version conn *auto-push?]
   (let [started-dfv         (m/dfv)
         add-log-fn (fn [type message]
                      (assert (map? message) message)
@@ -299,7 +299,7 @@
                        repo get-ws-create-task conn graph-uuid add-log-fn asset-update-ops)))
                :local-update-check
                (m/? (new-task--push-local-asset-updates
-                     repo get-ws-create-task conn graph-uuid schema-version add-log-fn))))
+                     repo get-ws-create-task conn graph-uuid major-schema-version add-log-fn))))
            m/ap
            (m/reduce {} nil)
            m/?)
