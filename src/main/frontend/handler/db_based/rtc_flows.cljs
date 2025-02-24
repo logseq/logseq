@@ -101,4 +101,5 @@ conditions:
      (keep (fn [repo] (when repo [:trigger-rtc repo])))
      (m/watch *rtc-start-trigger))]
    (apply c.m/mix)
+   (m/eduction (filter (fn [_] (some? (state/get-auth-id-token)))))
    (c.m/debounce 200)))
