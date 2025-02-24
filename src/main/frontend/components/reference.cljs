@@ -129,7 +129,7 @@
                   (seq (:excluded filters)))
           (views/view
            {:view-parent page-entity
-            :view-identity :linked-references
+            :view-feature-type :linked-references
             :additional-actions [reference-filter]
             :data blocks
             :columns columns'})))

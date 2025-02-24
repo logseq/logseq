@@ -50,9 +50,10 @@
         set-data! (fn [data] (reset! *result data))]
     [:div.query-result.w-full
      (views/view
-      {:title-key :views.table/live-query-title
+      {:config {:custom-query? true}
+       :title-key :views.table/live-query-title
        :view-entity view-entity
-       :view-identity :query-result
+       :view-feature-type :query-result
        :data result'
        :set-data! set-data!
        :columns columns'

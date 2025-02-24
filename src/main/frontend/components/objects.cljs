@@ -82,7 +82,7 @@
                  :data data
                  :set-data! set-data!
                  :view-parent class
-                 :view-identity :class-objects
+                 :view-feature-type :class-objects
                  :columns columns
                  :add-new-object! (fn [{:keys [properties]}]
                                     (if (= :logseq.class/Asset (:db/ident class))
@@ -168,7 +168,7 @@
     (views/view {:config config
                  :data data
                  :view-parent property
-                 :view-identity :property-objects
+                 :view-feature-type :property-objects
                  :set-data! set-data!
                  :columns columns
                  :add-new-object! (fn [{:keys [properties]}]

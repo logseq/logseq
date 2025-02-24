@@ -1246,20 +1246,21 @@
            (shui/table-footer (add-new-row table)))]]))))
 
 (rum/defc list-view < rum/static
-  [config view-entity result]
+  [{:keys [config view-feature-type]} view-entity result]
   (when-let [->hiccup (state/get-component :block/->hiccup)]
     (let [group-by-page? (not (every? db/page? result))
           result (if group-by-page?
                    (group-by :block/page result)
-                   result)]
-      (->hiccup result
-                (assoc config
-                       :custom-query? true
-                       :current-block (:db/id view-entity)
-                       :query (:block/title view-entity)
-                       :breadcrumb-show? (if group-by-page? true false)
-                       :group-by-page? group-by-page?
-                       :ref? true)))))
+                   result)
+          config' (cond-> (assoc config
+                                 :current-block (:db/id view-entity)
+                                 :query (:block/title view-entity)
+                                 :breadcrumb-show? (if group-by-page? true false)
+                                 :group-by-page? group-by-page?
+                                 :ref? true)
+                    (= view-feature-type :query-result)
+                    (assoc :query (:block/title view-entity)))]
+      (->hiccup result config'))))
 
 (rum/defc gallery-card-item
   [table view-entity block config]
@@ -1398,7 +1399,7 @@
   [view-entity table option {:keys [*scroller-ref display-type row-selection]}]
   (case display-type
     :logseq.property.view/type.list
-    (list-view (:config option) view-entity (:rows table))
+    (list-view option view-entity (:rows table))
 
     :logseq.property.view/type.gallery
     (gallery-view (:config option) table view-entity (:rows table) *scroller-ref)
@@ -1406,25 +1407,25 @@
     (table-view table option row-selection *scroller-ref)))
 
 (defn- get-views
-  [ent view-identity]
+  [ent view-feature-type]
   (let [entity (db/entity (:db/id ent))
         views (->> (:logseq.property/_view-for entity)
                    (filter (fn [view]
-                             (= view-identity (:logseq.property.view/feature-type view)))))]
+                             (= view-feature-type (:logseq.property.view/feature-type view)))))]
     (ldb/sort-by-order views)))
 
 (defn- create-view!
-  [view-parent view-identity]
+  [view-parent view-feature-type]
   (when-let [page (db/get-case-page common-config/views-page-name)]
     (p/let [properties (cond->
                         {:logseq.property/view-for (:db/id view-parent)
-                         :logseq.property.view/feature-type view-identity}
-                         (contains? #{:linked-references :unlinked-references} view-identity)
+                         :logseq.property.view/feature-type view-feature-type}
+                         (contains? #{:linked-references :unlinked-references} view-feature-type)
                          (assoc :logseq.property.view/type (:db/id (db/entity :logseq.property.view/type.list))))
-            view-exists? (seq (get-views view-parent view-identity))
+            view-exists? (seq (get-views view-parent view-feature-type))
             view-title (if view-exists?
                          ""
-                         (case view-identity
+                         (case view-feature-type
                            :linked-references
                            "Linked references"
                            :unlinked-references
@@ -1442,7 +1443,7 @@
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
-  [view-parent current-view data {:keys [views set-view-entity! set-views! view-identity show-items-count?]} hover?]
+  [view-parent current-view data {:keys [views set-view-entity! set-views! view-feature-type show-items-count?]} hover?]
   [:div.views.flex.flex-row.items-center.flex-wrap.gap-2
    (for [view* views]
      (let [view (db/sub-block (:db/id view*))
@@ -1497,21 +1498,21 @@
      :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 "
                  (if hover? "opacity-100" "opacity-75"))
      :on-click (fn []
-                 (p/let [view (create-view! view-parent view-identity)]
+                 (p/let [view (create-view! view-parent view-feature-type)]
                    (set-views! (concat views [view]))))}
     (ui/icon "plus" {:size 15}))])
 
 (rum/defc view-head < rum/static
   [view-parent view-entity table columns input sorting
    set-input! add-new-object!
-   {:keys [view-identity title-key additional-actions]
+   {:keys [view-feature-type title-key additional-actions]
     :as option}]
   (let [[hover? set-hover?] (hooks/use-state nil)]
     [:div.flex.flex-1.flex-wrap.items-center.justify-between.gap-1
      {:on-mouse-over #(set-hover? true)
       :on-mouse-out #(set-hover? false)}
      [:div.flex.flex-row.items-center.gap-2
-      (if (= view-identity :query-result)
+      (if (= view-feature-type :query-result)
         [:div.font-medium.opacity-50.text-sm
          (t (or title-key :views.table/default-title)
             (count (:rows table)))]
@@ -1686,20 +1687,20 @@
       (str "view-" (:db/id view-entity')))))
 
 (rum/defc view < rum/static
-  [{:keys [view-parent view-identity view-entity] :as option}]
+  [{:keys [view-parent view-feature-type view-entity] :as option}]
   (let [[view-entity set-view-entity!] (hooks/use-state view-entity)
         [views set-views!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
        (let [repo (state/get-current-repo)]
-         (p/let [_result (db-async/<get-views repo (:db/id view-parent) view-identity)
-                 views (get-views view-parent view-identity)]
+         (p/let [_result (db-async/<get-views repo (:db/id view-parent) view-feature-type)
+                 views (get-views view-parent view-feature-type)]
            (if-let [v (first views)]
              (do
                (when-not view-entity (set-view-entity! v))
                (set-views! views))
-             (when (and view-parent view-identity (not view-entity))
-               (p/let [new-view (create-view! view-parent view-identity)]
+             (when (and view-parent view-feature-type (not view-entity))
+               (p/let [new-view (create-view! view-parent view-feature-type)]
                  (set-view-entity! new-view)
                  (set-views! (concat views [new-view]))))))))
      [])
