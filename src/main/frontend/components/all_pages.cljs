@@ -62,6 +62,7 @@
                   :set-data! set-data!
                   :view-parent (db/get-page common-config/views-page-name)
                   :view-identity :all-pages
+                  :show-items-count? true
                   :columns columns'
                   :on-delete-rows (fn [table selected-rows]
                                     (shui/dialog-open!
