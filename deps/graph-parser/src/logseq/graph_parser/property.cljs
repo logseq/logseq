@@ -1,12 +1,12 @@
 (ns logseq.graph-parser.property
   "For file graphs, core vars and util fns for properties"
-  (:require [logseq.common.util :as common-util]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
-            [clojure.set :as set]
             [goog.string :as gstring]
             [goog.string.format]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.common.util.page-ref :as page-ref]))
+            [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (def colons "Property delimiter for markdown mode" "::")
 (defn colons-org
@@ -114,7 +114,6 @@
                   ;; All these should be parsed by gp-text/parse-non-string-property-value
                   (set (keys built-in-property-types))))
 
-
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")
 (defonce properties-end-pattern
@@ -187,7 +186,7 @@
                                                  (mapv (fn [text]
                                                          (let [[k v] (common-util/split-first sym text)]
                                                            (if (and k v)
-                                                             (let [key-exists? (= k key)
+                                                             (let [key-exists? (= k key*)
                                                                    _ (when key-exists? (reset! exists? true))
                                                                    v (if key-exists? value v)]
                                                                (str k sym  (string/trim v)))
