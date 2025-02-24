@@ -340,7 +340,18 @@
   [{:keys [pages-and-blocks properties classes]}]
   (let [page-block-properties (->> pages-and-blocks
                                    (map #(-> (:blocks %) vec (conj (:page %))))
-                                   (mapcat (fn [m] (mapcat #(into (:build/properties %)) m)))
+                                   (mapcat (fn build-node-props-vec [nodes]
+                                             (mapcat (fn [m]
+                                                       (if-let [pvalue-pages
+                                                                (->> (vals (:build/properties m))
+                                                                     (mapcat #(if (set? %) % [%]) )
+                                                                     (filter page-prop-value?)
+                                                                     (map second)
+                                                                     seq)]
+                                                         (into (vec (:build/properties m))
+                                                               (build-node-props-vec pvalue-pages))
+                                                         (:build/properties m)))
+                                                     nodes)))
                                    set)
         property-properties (->> (vals properties)
                                  (mapcat #(into [] (:build/properties %))))
