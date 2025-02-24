@@ -322,6 +322,7 @@
       ["delete-assets"
        [:map
         [:graph-uuid :uuid]
+        [:schema-version db-schema/major-schema-version-string-schema]
         [:asset-uuids [:sequential :uuid]]]]
       ["get-user-devices"
        [:map]]
