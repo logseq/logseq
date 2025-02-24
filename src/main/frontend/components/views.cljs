@@ -1307,7 +1307,7 @@
              new-data (map get-latest-entity data)
              ;; TODO: db support native order-by, limit, offset, 350ms for 40k pages
              data' (table-core/table-sort-rows new-data sorting columns)]
-         (when (not= data' data)
+         (when (and (not= data' data) set-data!)
            (set-data! data'))
          (when (and (:current-page? (:config option)) (seq data) (map? (first data)) (:block/uuid (first data)))
            (ui-handler/scroll-to-anchor-block @*scroller-ref data' gallery?)
