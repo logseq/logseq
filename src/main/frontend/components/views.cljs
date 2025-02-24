@@ -1442,7 +1442,7 @@
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
-  [view-parent current-view {:keys [views set-view-entity! set-views! view-identity]} hover?]
+  [view-parent current-view data {:keys [views set-view-entity! set-views! view-identity show-items-count?]} hover?]
   [:div.views.flex.flex-row.items-center.flex-wrap.gap-2
    (for [view* views]
      (let [view (db/sub-block (:db/id view*))
@@ -1485,7 +1485,11 @@
         (let [title (:block/title view)]
           (if (= title "")
             "New view"
-            title)))))
+            title))
+        (when show-items-count?
+          [:span.text-muted-foreground.text-xs
+           (count data)]))))
+
    (shui/button
     {:variant :text
      :size :sm
@@ -1511,7 +1515,7 @@
         [:div.font-medium.opacity-50.text-sm
          (t (or title-key :views.table/default-title)
             (count (:rows table)))]
-        (views-tab view-parent view-entity option hover?))]
+        (views-tab view-parent view-entity (:rows table) option hover?))]
      [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
       {:class (if hover? "opacity-100" "opacity-75")}
 
