@@ -326,12 +326,12 @@
                                        :button-opts {:title "Set Icon"}})
      [:strong {:on-click (fn [^js e]
                            (shui/popup-show! (.-target e)
-                                             (fn [] (choice-base-edit-form property block))
-                                             {:id :ls-base-edit-form
-                                              :align "start"}))}
+                             (fn [] (choice-base-edit-form property block))
+                             {:id :ls-base-edit-form
+                              :align "start"}))}
       value]
      (shui/dropdown-menu
-      (shui/dropdown-menu-trigger
+       (shui/dropdown-menu-trigger
        {:as-child true
         :disabled disabled?}
        (shui/button

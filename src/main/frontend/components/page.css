@@ -91,6 +91,12 @@
       @apply !h-auto pb-[1.5px];
     }
   }
+
+  .db-page-title-actions {
+    &:has(button[data-popup-active]) {
+      @apply opacity-100;
+    }
+  }
 }
 
 a.page-title {
