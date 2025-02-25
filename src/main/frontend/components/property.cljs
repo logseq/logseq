@@ -126,7 +126,7 @@
                    (and block
                         (contains? #{:default :url} type)
                         (not (seq (:property/closed-values property))))
-                   (pv/<create-new-block! block property "")))))))}
+                   (pv/<create-new-block! block property "" {:batch-op? true})))))))}
 
         ;; only set when in property configure modal
         (and *property-name (:logseq.property/type property-schema))
