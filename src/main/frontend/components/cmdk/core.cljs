@@ -47,7 +47,11 @@
         desc
         desc-i18n))))
 
-(def GROUP-LIMIT 5)
+(defn- get-group-limit
+  [group]
+  (if (= group :nodes)
+    10
+    5))
 
 (defn filters
   []
@@ -63,7 +67,8 @@
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
 (def default-results
-  {:commands       {:status :success :show :less :items nil}
+  {:recently-updated-pages {:status :success :show :less :items nil}
+   :commands       {:status :success :show :less :items nil}
    :favorites      {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
    :nodes         {:status :success :show :less :items nil}
@@ -104,7 +109,7 @@
                             items
 
                             :else
-                            (take 5 items))))
+                            (take (get-group-limit group) items))))
         node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
                        (when-not (string/blank? input)
                          (or (some-> (text/get-namespace-last-part input)
@@ -116,6 +121,7 @@
                                       (= input (util/page-name-sanity-lc (:block/title block))))) blocks-result))))
         include-slash? (or (string/includes? input "/")
                            (string/starts-with? input "/"))
+        db-based? (config/db-based-graph?)
         order* (cond
                  (= search-mode :graph)
                  []
@@ -142,11 +148,13 @@
                  (->>
                   [(when-not node-exists?
                      ["Create"         :create       (create-items input)])
-                   ["Current page"   :current-page   (visible-items :current-page)]
-                   ["Nodes"         :nodes         (visible-items :nodes)]
-                   ["Commands"       :commands       (visible-items :commands)]
-                   ["Files"          :files          (visible-items :files)]
-                   ["Filters"        :filters        (visible-items :filters)]]
+                   ["Current page"     :current-page   (visible-items :current-page)]
+                   ["Nodes"            :nodes         (visible-items :nodes)]
+                   (when (and db-based? (string/blank? input))
+                     ["Recently updated" :recently-updated-pages (visible-items :recently-updated-pages)])
+                   ["Commands"         :commands       (visible-items :commands)]
+                   ["Files"            :files          (visible-items :files)]
+                   ["Filters"          :filters        (visible-items :filters)]]
                   (remove nil?)))
         order (remove nil? order*)]
     (for [[group-name group-key group-items] order]
@@ -178,16 +186,31 @@
 ;; Each result group has it's own load-results function
 (defmulti load-results (fn [group _state] group))
 
+(defn- get-page-icon
+  [entity]
+  (cond
+    (ldb/class? entity)
+    "hash"
+    (ldb/property? entity)
+    "letter-p"
+    (ldb/whiteboard? entity)
+    "whiteboard"
+    :else
+    "page"))
+
 (defmethod load-results :initial [_ state]
-  (let [!results (::results state)
-        command-items (->> (cp-handler/top-commands 100)
-                           (remove (fn [c] (= :window/close (:id c))))
-                           (map #(hash-map :icon "command"
-                                           :icon-theme :gray
-                                           :text (translate t %)
-                                           :shortcut (:shortcut %)
-                                           :source-command %)))]
-    (reset! !results (assoc-in default-results [:commands :items] command-items))))
+  (let [!results (::results state)]
+    (if (config/db-based-graph?)
+      (let [recent-pages (map (fn [block]
+                                (let [text (block-handler/block-unique-title block)
+                                      icon (get-page-icon block)]
+                                  {:icon icon
+                                   :icon-theme :gray
+                                   :text text
+                                   :source-block block}))
+                              (ldb/get-recent-updated-pages (db/get-db)))]
+        (reset! !results (assoc-in default-results [:recently-updated-pages :items] recent-pages)))
+      !results)))
 
 ;; The commands search uses the command-palette handler
 (defmethod load-results :commands [group state]
@@ -227,15 +250,7 @@
   [repo page]
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
         source-page (model/get-alias-source-page repo (:db/id entity))
-        icon (cond
-               (ldb/class? entity)
-               "hash"
-               (ldb/property? entity)
-               "letter-p"
-               (ldb/whiteboard? entity)
-               "whiteboard"
-               :else
-               "page")
+        icon (get-page-icon entity)
         title (block-handler/block-unique-title page)
         title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
     (hash-map :icon icon
@@ -566,7 +581,7 @@
         highlighted-group @(::highlighted-group state)
         *mouse-active? (::mouse-active? state')
         filter' @(::filter state)
-        can-show-less? (< GROUP-LIMIT (count visible-items))
+        can-show-less? (< (get-group-limit group) (count visible-items))
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
         show-more #(swap! (::results state) assoc-in [group :show] :more)]

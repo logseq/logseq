@@ -337,7 +337,10 @@ DROP TRIGGER IF EXISTS blocks_au;
   (when db
     (->> (d/datoms db :avet :block/uuid)
          (map :v)
-         (keep #(d/entity db [:block/uuid %])))))
+         (keep #(d/entity db [:block/uuid %]))
+         (remove (fn [e]
+                   (or (ldb/hidden? e)
+                       (ldb/hidden? (:block/page e))))))))
 
 (defn build-blocks-indice
   [repo db]
