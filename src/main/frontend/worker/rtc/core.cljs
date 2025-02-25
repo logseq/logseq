@@ -188,15 +188,16 @@
         *last-calibrate-t          (atom nil)
         *online-users              (atom nil)
         *assets-sync-loop-canceler (atom nil)
+        *server-schema-version     (atom nil)
         started-dfv                (m/dfv)
         add-log-fn                 (fn [type message]
                                      (assert (map? message) message)
                                      (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))
         {:keys [*current-ws get-ws-create-task]}
         (gen-get-ws-create-map--memoized ws-url)
-        get-ws-create-task         (r.client/ensure-register-graph-updates
-                                    get-ws-create-task graph-uuid major-schema-version
-                                    repo conn *last-calibrate-t *online-users add-log-fn)
+        get-ws-create-task (r.client/ensure-register-graph-updates
+                            get-ws-create-task graph-uuid major-schema-version
+                            repo conn *last-calibrate-t *online-users *server-schema-version add-log-fn)
         {:keys [assets-sync-loop-task]}
         (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid major-schema-version conn *auto-push?)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push? *online-users)]
