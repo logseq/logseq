@@ -12,6 +12,7 @@
             [frontend.worker.rtc.skeleton :as r.skeleton]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util]
+            [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [missionary.core :as m]))
 
@@ -36,7 +37,8 @@
   "Return a task: get or create a mws(missionary wrapped websocket).
   see also `ws/get-mws-create`.
   But ensure `register-graph-updates` and `calibrate-graph-skeleton` has been sent"
-  [get-ws-create-task graph-uuid major-schema-version repo conn *last-calibrate-t *online-users add-log-fn]
+  [get-ws-create-task graph-uuid major-schema-version repo conn
+   *last-calibrate-t *online-users *server-schema-version add-log-fn]
   (assert (some? graph-uuid))
   (let [*sent (atom {}) ;; ws->bool
         ]
@@ -75,8 +77,10 @@
           (let [t (client-op/get-local-tx repo)]
             (when (or (nil? @*last-calibrate-t)
                       (< 500 (- t @*last-calibrate-t)))
-              ;; (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid conn t))
-              (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid major-schema-version @conn))
+              (let [{:keys [server-schema-version _server-builtin-db-idents]}
+                    (m/? (r.skeleton/new-task--calibrate-graph-skeleton
+                          get-ws-create-task graph-uuid major-schema-version @conn))]
+                (reset! *server-schema-version server-schema-version))
               (reset! *last-calibrate-t t)))
           (swap! *sent assoc ws true))
         ws))))
@@ -142,16 +146,14 @@
 (defn- schema-av-coll->update-schema-op
   [db block-uuid db-ident schema-av-coll]
   (when (and (seq schema-av-coll) db-ident)
-    (let [db-ident-ns (namespace db-ident)]
-      (when (and (string/ends-with? db-ident-ns ".property")
-                 (not= db-ident-ns "logseq.property"))
-        (when-let [ent (d/entity db db-ident)]
-          [:update-schema
-           (cond-> {:block-uuid block-uuid
-                    :db/ident db-ident
-                    :db/valueType (or (:db/valueType ent) :db.type/string)}
-             (:db/cardinality ent) (assoc :db/cardinality (:db/cardinality ent))
-             (:db/index ent) (assoc :db/index (:db/index ent)))])))))
+    (when-let [ent (d/entity db db-ident)]
+      (when (ldb/property? ent)
+        [:update-schema
+         (cond-> {:block-uuid block-uuid
+                  :db/ident db-ident
+                  :db/valueType (or (:db/valueType ent) :db.type/string)}
+           (:db/cardinality ent) (assoc :db/cardinality (:db/cardinality ent))
+           (:db/index ent) (assoc :db/index (:db/index ent)))]))))
 
 (defn- av-coll->card-one-attrs
   [db-schema av-coll]
