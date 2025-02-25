@@ -164,7 +164,7 @@ jobs:
           mv android/app-signed.apk ./builds/Logseq-android-${{ steps.ref.outputs.version }}.apk
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-android-builds
           path: builds
