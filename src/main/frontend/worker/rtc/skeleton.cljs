@@ -51,4 +51,5 @@
                                            (conj [:p (str :client-only-db-idents client-only)])
                                            (seq server-only)
                                            (conj [:p (str :server-only-db-idents server-only)]))
-                                         :error]))))))))
+                                         :error])))
+          r)))))

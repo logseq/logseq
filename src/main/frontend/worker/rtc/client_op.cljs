@@ -1,10 +1,12 @@
 (ns frontend.worker.rtc.client-op
   "Store client-ops in a persisted datascript"
   (:require [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [frontend.common.missionary :as c.m]
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
             [malli.core :as ma]
             [malli.transform :as mt]
@@ -362,3 +364,18 @@
                                (d/datoms @conn :avet :block/uuid))
                        (map (fn [datom] [:db/retractEntity (:e datom)])))]
       (d/transact! conn tx-data))))
+
+(defn property-entity->ops
+  [property-entity]
+  (assert (and (de/entity? property-entity) (ldb/property? property-entity)))
+  [[:update-schema
+    (cond-> {:block-uuid (:block/uuid property-entity)
+             :db/ident (:db/ident property-entity)
+             :db/valueType (or (:db/valueType property-entity) :db.type/string)}
+      (:db/cardinality property-entity) (assoc :db/cardinality (:db/cardinality property-entity))
+      (:db/index property-entity) (assoc :db/index (:db/index property-entity)))]
+
+   [:update
+    ;; todo
+    ]
+   ])
