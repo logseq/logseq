@@ -34,7 +34,6 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [react-draggable]
@@ -635,11 +634,6 @@
          [:span {:id (str "mock-text_" idx)
                  :key idx} c])))])
 
-(defn- exist-editor-commands-popup?
-  []
-  (some->> (shui-popup/get-popups)
-           (some #(some-> % (:id) (str) (string/starts-with? ":editor.commands")))))
-
 (defn- open-editor-popup!
   [id content opts]
   (let [input (state/get-input)
@@ -735,7 +729,7 @@
   (let [action (state/get-editor-action)
         [_id config] (:rum/args state)]
     (cond
-      (and (= type :esc) (exist-editor-commands-popup?))
+      (and (= type :esc) (editor-handler/editor-commands-popup-exists?))
       nil
 
       (or (contains?

@@ -138,7 +138,10 @@
       (shui/select-content
        (shui/select-group
         (for [{:keys [label value disabled]} schema-types]
-          (shui/select-item {:key label :value value :disabled disabled} label)))))
+          (shui/select-item {:key label :value value :disabled disabled
+                             :on-key-down (fn [e]
+                                            (when (= "Enter" (.-key e))
+                                              (util/stop-propagation e)))} label)))))
      (when show-type-change-hints?
        (ui/tippy {:html        "Changing the property type clears some property configurations."
                   :class       "tippy-hover ml-2"
