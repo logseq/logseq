@@ -601,3 +601,13 @@
     :logseq.class/Math-block :math
     :logseq.class/Quote-block :quote
     nil))
+
+(defn get-recent-updated-pages
+  [db]
+  (->> (d/datoms db :avet :block/updated-at)
+       (reverse)
+       (keep (fn [datom]
+               (let [e (d/entity db (:e datom))]
+                 (when (and (page? e) (not (hidden? e)))
+                   e))))
+       (take 30)))
