@@ -65,6 +65,7 @@
             [logseq.graph-parser.utf8 :as utf8]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
+            [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -3393,6 +3394,11 @@
           ;; simulate text selection
           (cursor/select-up-down input direction anchor cursor-rect)))
       (select-block-up-down direction))))
+
+(defn editor-commands-popup-exists?
+  []
+  (some->> (shui-popup/get-popups)
+           (some #(some-> % (:id) (str) (string/starts-with? ":editor.commands")))))
 
 (defn open-selected-block!
   [direction e]
