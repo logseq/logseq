@@ -505,15 +505,19 @@
                          :datetime? datetime?
                          :multiple-values? multiple-values?
                          :on-change (fn [value]
-                                      (property-handler/set-block-property! repo (:block/uuid block)
-                                                                            (:db/ident property)
-                                                                            (if datetime?
-                                                                              value
-                                                                              (:db/id value))))
+                                      (let [blocks (get-operating-blocks block)]
+                                        (property-handler/batch-set-block-property! repo (map :block/uuid blocks)
+                                                                                    (:db/ident property)
+                                                                                    (if datetime?
+                                                                                      value
+                                                                                      (:db/id value)))))
                          :del-btn? (some? value)
-                         :on-delete (fn []
-                                      (property-handler/set-block-property! repo (:block/uuid block)
-                                                                            (:db/ident property) nil)
+                         :on-delete (fn [e]
+                                      (util/stop-propagation e)
+                                      (let [blocks (get-operating-blocks block)]
+                                        (property-handler/batch-set-block-property! repo (map :block/uuid blocks)
+                                                                                    (:db/ident property)
+                                                                                    nil))
                                       (shui/popup-hide!))}))))
 
 (defn- <create-page-if-not-exists!
