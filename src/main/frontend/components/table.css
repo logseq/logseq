@@ -53,7 +53,8 @@
       @apply fixed overflow-hidden;
 
       min-width: unset;
-      top: 40px !important;
+      /* default app head height */
+      top: 48px !important;
     }
 
     .ls-table-header-cell {
@@ -127,9 +128,7 @@ html.is-resizing-buf {
 }
 
 .sticky-columns {
-    @apply sticky left-0;
-    z-index: 99;
-    background-color: var(--lx-gray-01, var(--ls-primary-background-color, hsl(var(--background))));
+    @apply sticky left-0 z-[8] bg-gray-01;
 }
 
 .table-action-bar {
