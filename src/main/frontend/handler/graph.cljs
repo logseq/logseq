@@ -8,6 +8,21 @@
             [frontend.state :as state]
             [frontend.util :as util]))
 
+;; Graph View Alias Handling
+;;
+;; The graph view can either show or hide alias nodes based on user preference.
+;; When alias nodes are hidden:
+;; 1. Alias pages are removed from the graph
+;; 2. Any links to/from alias pages are redirected to their source pages
+;; 3. Links are deduplicated after redirection
+;;
+;; Example:
+;; If page A has an alias B, and page C links to B:
+;; - With alias nodes shown: C -> B -> A
+;; - With alias nodes hidden: C -> A
+;;
+;; This is controlled by the :alias-nodes? setting in the graph UI.
+
 (defn- build-links
   [links]
   (map (fn [[from to]]
@@ -68,6 +83,17 @@
    nodes))
 
 (defn- normalize-page-name
+  "Normalizes page names and handles alias node filtering in the graph.
+  
+  When alias nodes are hidden:
+  - Removes alias nodes from the graph
+  - Redirects links that involve alias pages to their source pages
+  - Deduplicates any resulting duplicate links
+  
+  Args:
+    nodes: Collection of graph nodes with :id and :label
+    links: Collection of graph links with :source and :target
+    page-name->original-name: Map of normalized page names to original names"
   [{:keys [nodes links page-name->original-name]}]
   (let [repo (state/get-current-repo)
         ;; Get map of alias pages to their main pages
@@ -106,6 +132,16 @@
      :links links}))
 
 (defn build-global-graph
+  "Builds the global graph visualization data structure.
+  
+  Args:
+    theme: Current theme ('light' or 'dark')
+    settings: Map of graph settings including:
+      :journal? - Show journal pages
+      :alias-nodes? - Show alias nodes (when false, merges aliases with source pages)
+      :orphan-pages? - Show orphaned pages
+      :builtin-pages? - Show built-in pages
+      :excluded-pages? - Show explicitly excluded pages"
   [theme {:keys [journal? alias-nodes? orphan-pages? builtin-pages? excluded-pages?]}]
   (let [dark? (= "dark" theme)
         current-page (or (:block/name (db/get-current-page)) "")]
