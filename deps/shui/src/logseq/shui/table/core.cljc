@@ -193,64 +193,66 @@
    (fn []
      (let [^js target (rum/deref target-ref)
            ^js container (or (.closest target ".sidebar-item-list") (get-main-scroll-container))
-           ^js target-cls (.-classList target)
            ^js table (.closest target ".ls-table-rows")
-           ^js table-footer (some-> table (.querySelector ".ls-table-footer"))
-           ^js page-el (.closest target ".page-inner")
-           *ticking? (volatile! false)
-           *el-top (volatile! (-> target (.getBoundingClientRect) (.-top)))
-           head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
-           update-target-top! (fn []
-                                (when (not (.contains target-cls "ls-fixed"))
-                                  (vreset! *el-top (+ (-> target (.getBoundingClientRect) (.-top))
-                                                      (.-scrollTop container)))))
-           update-footer! (fn []
-                            (let [tw (.-scrollWidth table)]
-                              (when (and table-footer (number? tw) (> tw 0))
-                                (set! (. (.-style table-footer) -width) (str tw "px")))))
-           update-target! (fn []
-                            (if (.contains target-cls "ls-fixed")
-                              (let [^js rect (-> table (.getBoundingClientRect))
-                                    width (.-clientWidth table)
-                                    left (.-left rect)]
-                                (set! (. (.-style target) -width) (str width "px"))
-                                (set! (. (.-style target) -left) (str left "px")))
-                              (do
-                                (set! (. (.-style target) -width) "auto")
-                                (set! (. (.-style target) -left) "0px")))
-                             ;; update scroll
-                            (set! (. target -scrollLeft) (.-scrollLeft table)))
-            ;; target observer
-           target-observe! (fn []
-                             (let [scroll-top (js/parseInt (.-scrollTop container))
-                                   table-in-top (+ scroll-top head-top)
-                                   table-bottom (.-bottom (.getBoundingClientRect table))
-                                   fixed? (and (> table-bottom (+ head-top 90))
-                                               (> table-in-top @*el-top))]
-                               (if fixed?
-                                 (.add target-cls "ls-fixed")
-                                 (.remove target-cls "ls-fixed"))
-                               (update-target!)))
-           target-observe-handle! (fn [^js _e]
-                                    (when (not @*ticking?)
-                                      (js/window.requestAnimationFrame
-                                       #(do (target-observe!) (vreset! *ticking? false)))
-                                      (vreset! *ticking? true)))
-           resize-observer (js/ResizeObserver. update-target!)
-           page-resize-observer (js/ResizeObserver. (fn [] (update-target-top!)))]
-        ;; events
-       (.observe resize-observer container)
-       (.observe resize-observer table)
-       (some->> page-el (.observe page-resize-observer))
-       (.addEventListener container "scroll" target-observe-handle!)
-       (.addEventListener table "scroll" update-target!)
-       (.addEventListener table "resize" update-target!)
-       (update-footer!)
+           refs-table? (.closest table ".references")]
+       (when (not refs-table?)
+         (let [^js target-cls (.-classList target)
+               ^js table-footer (some-> table (.querySelector ".ls-table-footer"))
+               ^js page-el (.closest target ".page-inner")
+               *ticking? (volatile! false)
+               *el-top (volatile! (-> target (.getBoundingClientRect) (.-top)))
+               head-height (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
+               update-target-top! (fn []
+                                    (when (not (.contains target-cls "ls-fixed"))
+                                      (vreset! *el-top (+ (-> target (.getBoundingClientRect) (.-top))
+                                                         (.-scrollTop container)))))
+               update-footer! (fn []
+                                (let [tw (.-scrollWidth table)]
+                                  (when (and table-footer (number? tw) (> tw 0))
+                                    (set! (. (.-style table-footer) -width) (str tw "px")))))
+               update-target! (fn []
+                                (if (.contains target-cls "ls-fixed")
+                                  (let [^js rect (-> table (.getBoundingClientRect))
+                                        width (.-clientWidth table)
+                                        left (.-left rect)]
+                                    (set! (. (.-style target) -width) (str width "px"))
+                                    (set! (. (.-style target) -left) (str left "px")))
+                                  (do
+                                    (set! (. (.-style target) -width) "auto")
+                                    (set! (. (.-style target) -left) "0px")))
+                                ;; update scroll
+                                (set! (. target -scrollLeft) (.-scrollLeft table)))
+               ;; target observer
+               target-observe! (fn []
+                                 (let [scroll-top (js/parseInt (.-scrollTop container))
+                                       table-in-top (+ scroll-top head-height)
+                                       table-bottom (.-bottom (.getBoundingClientRect table))
+                                       fixed? (and (> table-bottom (+ head-height 90))
+                                                (> table-in-top @*el-top))]
+                                   (if fixed?
+                                     (.add target-cls "ls-fixed")
+                                     (.remove target-cls "ls-fixed"))
+                                   (update-target!)))
+               target-observe-handle! (fn [^js _e]
+                                        (when (not @*ticking?)
+                                          (js/window.requestAnimationFrame
+                                            #(do (target-observe!) (vreset! *ticking? false)))
+                                          (vreset! *ticking? true)))
+               resize-observer (js/ResizeObserver. update-target!)
+               page-resize-observer (js/ResizeObserver. (fn [] (update-target-top!)))]
+           ;; events
+           (.observe resize-observer container)
+           (.observe resize-observer table)
+           (some->> page-el (.observe page-resize-observer))
+           (.addEventListener container "scroll" target-observe-handle!)
+           (.addEventListener table "scroll" update-target!)
+           (.addEventListener table "resize" update-target!)
+           (update-footer!)
 
-        ;; teardown
-       #(do (.removeEventListener container "scroll" target-observe!)
-            (.disconnect resize-observer)
-            (.disconnect page-resize-observer))))
+           ;; teardown
+           #(do (.removeEventListener container "scroll" target-observe!)
+              (.disconnect resize-observer)
+              (.disconnect page-resize-observer))))))
    []))
 
 (rum/defc table-header < rum/static
