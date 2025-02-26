@@ -41,9 +41,10 @@ jobs:
 
       - name: Build Released-Web
         run: |
-          yarn gulp:build && clojure -M:cljs release app  --config-merge '{:compiler-options {:source-map-include-sources-content false :source-map-detail-level :symbols}}'
+          yarn gulp:build && clojure -M:cljs release app  --config-merge '{:compiler-options {:source-map-include-sources-content true :source-map-detail-level :symbols}}'
           rsync -avz --exclude node_modules --exclude android --exclude ios ./static/ ./public/static/
-          ls -lR ./public
+          ls -lR ./public && mkdir r2 && mv ./public/static/js/main.js.map ./r2/db-demo.main.js.map
+          sed -i 's/=main.js.map/=https:\/\/assets.logseq.io\/db-demo.main.js.map/g' ./public/static/js/main.js
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
@@ -55,7 +56,7 @@ jobs:
           r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           r2-bucket: ${{ secrets.R2_ASSETS_BUCKET }}
-          source-dir: public
+          source-dir: r2
           destination-dir: ./
 
       - name: Publish to Cloudflare Pages
