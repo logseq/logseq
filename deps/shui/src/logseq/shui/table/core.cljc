@@ -201,7 +201,7 @@
                ^js page-el (.closest target ".page-inner")
                *ticking? (volatile! false)
                *el-top (volatile! (-> target (.getBoundingClientRect) (.-top)))
-               head-height (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
+               head-height (-> (get-head-container) (.-offsetHeight))
                update-target-top! (fn []
                                     (when (not (.contains target-cls "ls-fixed"))
                                       (vreset! *el-top (+ (-> target (.getBoundingClientRect) (.-top))
