@@ -1,21 +1,22 @@
 (ns logseq.shui.ui
-  (:require [logseq.shui.util :as util]
+  (:require [logseq.shui.base.core :as base-core]
+            [logseq.shui.dialog.core :as dialog-core]
+            [logseq.shui.form.core :as form-core]
             [logseq.shui.icon.v2 :as icon-v2]
-            [logseq.shui.shortcut.v1 :as shui.shortcut.v1]
-            [logseq.shui.toaster.core :as toaster-core]
+            [logseq.shui.popup.core :as popup-core]
             [logseq.shui.select.core :as select-core]
             [logseq.shui.select.multi :as select-multi]
-            [logseq.shui.dialog.core :as dialog-core]
-            [logseq.shui.popup.core :as popup-core]
-            [logseq.shui.base.core :as base-core]
-            [logseq.shui.form.core :as form-core]
-            [logseq.shui.table.core :as table-core]))
+            [logseq.shui.shortcut.v1 :as shui.shortcut.v1]
+            [logseq.shui.table.core :as table-core]
+            [logseq.shui.toaster.core :as toaster-core]
+            [logseq.shui.util :as util]))
 
 (def button base-core/button)
 (def button-icon base-core/button-icon)
 (def button-ghost-icon base-core/button-ghost-icon)
 (def button-outline-icon base-core/button-outline-icon)
 (def button-secondary-icon base-core/button-secondary-icon)
+(def button-group (util/lsui-wrap "ButtonGroup"))
 (def link base-core/link)
 (def trigger-as base-core/trigger-as)
 (def trigger-child-wrap base-core/trigger-child-wrap)

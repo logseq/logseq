@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { ButtonGroup } from '@/components/ui/button-group'
 import { Slider, SliderTrack, SliderRange, SliderThumb } from '@/components/ui/slider'
 import {
   DropdownMenu,
@@ -99,7 +100,7 @@ declare global {
 }
 
 const shadui = {
-  Link, Button,
+  Link, Button, ButtonGroup,
   Slider, SliderTrack, SliderRange, SliderThumb,
   DropdownMenu,
   DropdownMenuContent,
