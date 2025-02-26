@@ -93,6 +93,10 @@
 
 (defmulti ^:private local-block-ops->remote-ops-aux (fn [tp & _] tp))
 
+(defmethod local-block-ops->remote-ops-aux :update-kv-value-op
+  [_ & {:keys [db-ident value *remote-ops]}]
+  (swap! *remote-ops conj [:update-kv-value {:db-ident db-ident :value value}]))
+
 (defmethod local-block-ops->remote-ops-aux :move-op
   [_ & {:keys [parent-uuid block-order block-uuid *remote-ops *depend-on-block-uuid-set]}]
   (when parent-uuid
