@@ -11,6 +11,13 @@
 
 ;; Test helpers
 ;; ============
+(defn- validate-db
+  "Validate db, usually after transacting an import"
+  [db]
+  (let [validation (db-validate/validate-db! db)]
+    (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
+    (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")))
+
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
    exports the 2nd block. The two blocks do not have to be in the same graph"
@@ -23,10 +30,8 @@
             (sqlite-export/build-import @import-conn {:current-block import-block}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)
-        validation (db-validate/validate-db! @import-conn)
-        _ (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
-        _  (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")]
+        _ (d/transact! import-conn block-props-tx)]
+    (validate-db @import-conn)
     (sqlite-export/build-export @import-conn {:export-type :block
                                               :block-id (:db/id import-block)})))
 
@@ -79,7 +84,7 @@
           [{:page {:build/journal 20250220}
             :blocks [{:block/title "b1"}]}
            {:page {:build/journal 20250221}}]}
-       (#'sqlite-export/merge-export-maps
+         (#'sqlite-export/merge-export-maps
           {:pages-and-blocks
            [{:page {:build/journal 20250220}
              :blocks [{:block/title "b1"}]}]}
@@ -180,9 +185,7 @@
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! import-conn init-tx)
         _ (d/transact! import-conn block-props-tx)
-        validation (db-validate/validate-db! @import-conn)
-        _ (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
-        _  (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")
+        _ (validate-db @import-conn)
         page2 (db-test/find-page-by-title @import-conn page-title)]
     (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
 
@@ -442,7 +445,43 @@
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! conn2 init-tx)
         _ (d/transact! conn2 block-props-tx)
+        _ (validate-db @conn2)
         imported-ontology (sqlite-export/build-export @conn2 {:export-type :graph-ontology})]
 
     (is (= (expand-properties (:properties original-data)) (:properties imported-ontology)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-ontology)))))
+
+(deftest import-view-blocks
+  (let [original-data
+        ;; Test a mix of page and block types
+        {:properties {:user.property/p1 {:logseq.property/type :default}
+                      :user.property/p2 {:logseq.property/type :default}}
+         :classes {:user.class/class1 {}}
+         :pages-and-blocks [{:page {:block/title "page1"}}
+                            {:page {:build/journal 20250226}}
+                            {:page {:block/title "page2"}
+                             :blocks [{:block/title "b1"
+                                       :build/properties {:user.property/p2 "ok"}}]}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        get-node-ids (fn [db]
+                       (->> [(d/entity db :user.property/p1)
+                             (d/entity db :user.class/class1)
+                             (db-test/find-page-by-title db "page1")
+                             (db-test/find-journal-by-journal-day db 20250226)
+                             (db-test/find-block-by-content db "b1")]
+                            (remove nil?)
+                            (mapv #(vector :block/uuid (:block/uuid %)))))
+        conn2 (db-test/create-conn)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (-> (sqlite-export/build-export @conn {:export-type :view-nodes :node-ids (get-node-ids @conn)})
+            (sqlite-export/build-import @conn2 {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! conn2 init-tx)
+        _ (d/transact! conn2 block-props-tx)
+        _ (validate-db @conn2)
+        imported-nodes (sqlite-export/build-export @conn2 {:export-type :view-nodes
+                                                           :node-ids (get-node-ids @conn2)})]
+
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-nodes)))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))

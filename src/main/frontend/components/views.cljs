@@ -19,6 +19,7 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
+            [frontend.handler.db-based.export :as db-export-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
@@ -315,7 +316,7 @@
     columns))
 
 (rum/defc more-actions
-  [view-entity columns {:keys [column-visible? column-toggle-visibility]}]
+  [view-entity columns {:keys [column-visible? rows column-toggle-visibility]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
         table? (= display-type :logseq.property.view/type.table)
         columns' (filter (fn [column]
@@ -366,7 +367,11 @@
                                                                                (:db/id (db/entity (:id column))))
                                       (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/group-by-property)))
                  :onSelect (fn [e] (.preventDefault e))}
-                (:name column))))))))))))
+                (:name column))))))
+         (shui/dropdown-menu-item
+          {:key "export-edn"
+           :on-click #(db-export-handler/export-view-nodes-data rows)}
+          "Export EDN")))))))
 
 (defn- get-column-size
   [column sized-columns]
