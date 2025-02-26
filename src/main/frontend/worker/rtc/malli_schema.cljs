@@ -25,6 +25,11 @@
 
 (def to-ws-op-schema
   [:multi {:dispatch first :decode/string #(update % 0 keyword)}
+   [:update-kv-value
+    [:cat :keyword
+     [:map
+      [:db-ident :keyword]
+      [:value :string]]]]
    [:move
     [:cat :keyword
      [:map
