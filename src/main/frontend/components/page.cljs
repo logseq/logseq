@@ -528,16 +528,16 @@
 ;; scrollHeight
 (rum/defcs graph-filter-section < (rum/local false ::open?)
   [state title content {:keys [search-filters]}]
-  (let [open? (get state ::open?)]
-    (when (and (seq search-filters) (not @open?))
-      (reset! open? true))
-    [:li.relative
-     [:div
-      [:button.w-full.px-4.py-2.text-left.focus:outline-none {:on-click #(swap! open? not)}
-       [:div.flex.items-center.justify-between
-        title
-        (if @open? (svg/caret-down) (svg/caret-right))]]
-      (content open?)]]))
+   (let [open? (get state ::open?)]
+     (when (and (seq search-filters) (not @open?))
+       (reset! open? true))
+     [:li.relative
+      [:div
+       [:button.w-full.px-4.py-2.text-left.focus:outline-none {:on-click #(swap! open? not)}
+        [:div.flex.items-center.justify-between
+         title
+         (if @open? (svg/caret-down) (svg/caret-right))]]
+       (content open?)]]))
 
 (rum/defc filter-expand-area
   [open? content]
@@ -550,7 +550,7 @@
 (defonce *graph-reset? (atom false))
 (defonce *graph-forcereset? (atom false))
 (defonce *journal? (atom nil))
-(defonce *hide-alias-nodes? (atom true))
+(defonce *alias-nodes? (atom false))
 (defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
 (defonce *excluded-pages? (atom true))
@@ -576,11 +576,11 @@
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings forcesettings n-hops]
-  (let [{:keys [journal? hide-alias-nodes? orphan-pages? builtin-pages? excluded-pages?]
+  (let [{:keys [journal? alias-nodes? orphan-pages? builtin-pages? excluded-pages?]
          :or {orphan-pages? true}} settings
         {:keys [link-dist charge-strength charge-range]} forcesettings
         journal?' (rum/react *journal?)
-        hide-alias-nodes?' (rum/react *hide-alias-nodes?)
+        alias-nodes?' (rum/react *alias-nodes?)
         orphan-pages?' (rum/react *orphan-pages?)
         builtin-pages?' (rum/react *builtin-pages?)
         excluded-pages?' (rum/react *excluded-pages?)
@@ -588,7 +588,7 @@
         charge-strength'  (rum/react *charge-strength)
         charge-range'  (rum/react *charge-range)
         journal? (if (nil? journal?') journal? journal?')
-        hide-alias-nodes? (if (nil? hide-alias-nodes?') hide-alias-nodes? hide-alias-nodes?')
+        alias-nodes? (if (nil? alias-nodes?') alias-nodes? alias-nodes?')
         orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
@@ -623,13 +623,13 @@
                 (util/format "%d page%s" c1 s1))]
              [:div.p-6
               [:div.flex.items-center.justify-between.mb-2
-               [:span "Hide alias nodes"]
+               [:span "Alias nodes"]
                [:div.mt-1
-                (ui/toggle hide-alias-nodes?
+                (ui/toggle alias-nodes?
                           (fn []
-                            (let [value (not hide-alias-nodes?)]
-                              (reset! *hide-alias-nodes? value)
-                              (set-setting! :hide-alias-nodes? value)))
+                            (let [value (not alias-nodes?)]
+                              (reset! *alias-nodes? value)
+                              (set-setting! :alias-nodes? value)))
                           true)]]
               [:div.flex.items-center.justify-between.mb-2
                [:span (t :settings-page/enable-journals)]
