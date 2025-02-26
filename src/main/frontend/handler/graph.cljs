@@ -3,6 +3,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.db :as db]
+            [frontend.db.utils :as db-utils]
             [logseq.db.default :as default-db]
             [frontend.state :as state]
             [frontend.util :as util]))
@@ -13,6 +14,12 @@
          {:source from
           :target to})
        links))
+
+(defn- get-main-page
+  [repo page-name]
+  (when-let [page-entity (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
+    (when (:block/alias? page-entity)
+      (-> page-entity :block/alias first :block/name))))
 
 (defn- build-nodes
   [dark? current-page page-links tags nodes namespaces]
@@ -82,7 +89,7 @@
      :links links}))
 
 (defn build-global-graph
-  [theme {:keys [journal? orphan-pages? builtin-pages? excluded-pages?]}]
+  [theme {:keys [journal? hide-alias-nodes? orphan-pages? builtin-pages? excluded-pages?]}]
   (let [dark? (= "dark" theme)
         current-page (or (:block/name (db/get-current-page)) "")]
     (when-let [repo (state/get-current-repo)]
@@ -100,15 +107,18 @@
            pages-after-exclude-filter (cond->> pages-after-journal-filter
                                         (not excluded-pages?)
                                         (remove (fn [p] (=  true (:exclude-from-graph-view (:block/properties p))))))
+            pages-after-alias-filter (cond->> pages-after-exclude-filter
+                                      (not hide-alias-nodes?)
+                                      (remove #(get-main-page repo %)))
 
             links (concat (seq relation)
                           (seq tagged-pages)
                           (seq namespaces))
             linked (set (flatten links))
-            build-in-pages (set (map string/lower-case default-db/built-in-pages-names))
+            built-in-pages (set (map string/lower-case default-db/built-in-pages-names))
             nodes (cond->> (map :block/name pages-after-exclude-filter)
                     (not builtin-pages?)
-                    (remove (fn [p] (contains? build-in-pages (string/lower-case p))))
+                    (remove (fn [p] (contains? built-in-pages (string/lower-case p))))
                     (not orphan-pages?)
                     (filter #(contains? linked (string/lower-case %))))
             page-links (reduce (fn [m [k v]] (-> (update m k inc)
