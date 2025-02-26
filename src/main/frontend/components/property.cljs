@@ -352,7 +352,7 @@
                        (edit-original-block {:editing-default-property? editing-default-property?})))
                    (state/set-editor-action! nil)
                    state)}
-  [state block *property-key {:keys [class-schema?]
+  [state block *property-key {:keys [class-schema? hide-property-key?]
                               :as opts}]
   (let [*ref (::ref state)
         *property (::property state)
@@ -379,11 +379,12 @@
      {:ref #(reset! *ref %)}
      (if property-key
        [:div.ls-property-add.gap-1.flex.flex-1.flex-row.items-center
-        [:div.flex.flex-row.items-center.property-key.gap-1
-         (when-not (:db/id property) (property-icon property (:logseq.property/type @*property-schema)))
-         (if (:db/id property)                              ; property exists already
-           (property-key-cp block property opts)
-           [:div property-key])]
+        (when-not hide-property-key?
+          [:div.flex.flex-row.items-center.property-key.gap-1
+           (when-not (:db/id property) (property-icon property (:logseq.property/type @*property-schema)))
+           (if (:db/id property)                              ; property exists already
+             (property-key-cp block property opts)
+             [:div property-key])])
         [:div.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
          (when (not= @*show-new-property-config? :adding-property)
            (cond

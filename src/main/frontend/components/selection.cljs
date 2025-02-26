@@ -20,7 +20,9 @@
               :on-pointer-down (fn [e]
                                  (util/stop e)
                                  (state/pub-event! [:editor/new-property {:target (.-target e)
-                                                                          :property-key "Tags"}])))
+                                                                          :property-key "Tags"
+                                                                          :show-select-only? true
+                                                                          :hide-property-key? true}])))
        (ui/icon "hash" {:size 14}))
      ;; set propertyo
       (shui/button
