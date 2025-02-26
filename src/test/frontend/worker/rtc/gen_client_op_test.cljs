@@ -1,4 +1,4 @@
-(ns frontend.worker.rtc.db-listener-test
+(ns frontend.worker.rtc.gen-client-op-test
   (:require [cljs.test :as t :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
@@ -6,8 +6,8 @@
             [frontend.test.helper :as test-helper]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.rtc.client-op :as client-op]
-            [frontend.worker.rtc.db-listener :as subject]
             [frontend.worker.rtc.fixture :as r.fixture]
+            [frontend.worker.rtc.gen-client-op :as subject]
             [frontend.worker.state :as worker-state]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.batch-tx :as batch-tx]
@@ -156,3 +156,9 @@
         (is (=
              {block-uuid1 #{:remove}}
              (ops-coll=>block-uuid->op-types (client-op/get&remove-all-block-ops repo))))))))
+
+(deftest generate-rtc-ops-from-property-entity-test
+  (let [repo (state/get-current-repo)
+        db (conn/get-db repo true)
+        ent (d/entity db :logseq.property.view/feature-type)]
+    (is (= #{:move :update-page :update} (set (map first (subject/generate-rtc-ops-from-property-entity ent)))))))
