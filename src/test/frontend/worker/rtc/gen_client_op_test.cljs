@@ -161,4 +161,5 @@
   (let [repo (state/get-current-repo)
         db (conn/get-db repo true)
         ent (d/entity db :logseq.property.view/feature-type)]
-    (is (= #{:move :update-page :update} (set (map first (subject/generate-rtc-ops-from-property-entity ent)))))))
+    (is (= #{:move :update-page :update}
+           (set (map first (subject/generate-rtc-ops-from-property-entities [ent])))))))

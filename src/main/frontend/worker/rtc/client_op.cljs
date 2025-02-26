@@ -12,6 +12,14 @@
 
 (def op-schema
   [:multi {:dispatch first}
+   [:update-kv-value
+    ;; update :logseq.kv/xxx entities
+    [:catn
+     [:op :keyword]
+     [:t :int]
+     [:value [:map
+              [:db-ident :keyword]
+              [:value :any]]]]]
    [:move
     [:catn
      [:op :keyword]
@@ -69,6 +77,7 @@
   "TODO: rename this db-name from client-op to client-metadata+op.
   and move it to its own namespace."
   {:block/uuid {:db/unique :db.unique/identity}
+   :db-ident {:db/unique :db.unique/identity}
    :local-tx {:db/index true}
    :graph-uuid {:db/index true}
    :aes-key-jwk {:db/index true}
@@ -190,12 +199,64 @@
            (cons [:db/add tmpid :block/uuid block-uuid] tx-data))))
      block-uuid->op-type->op)))
 
+(defn- generate-ident-kv-ops-tx-data
+  [client-ops-db ops]
+  (let [sorted-ops (sort-by second ops)
+        db-idents (map (fn [[_op-type _t value]] (:db-ident value)) sorted-ops)
+        ents (d/pull-many client-ops-db '[*] (map (fn [db-ident] [:db-ident db-ident]) db-idents))
+        op-types [:update-kv-value]
+        init-db-ident->op-type->op
+        (into {}
+              (map (fn [ent]
+                     [(:db-ident ent)
+                      (into {}
+                            (keep
+                             (fn [op-type]
+                               (when-let [op (get ent op-type)]
+                                 [op-type op])))
+                            op-types)]))
+              ents)
+        db-ident->op-type->op
+        (reduce
+         (fn [r op]
+           (let [[op-type _t value] op
+                 db-ident (:db-ident value)]
+             (case op-type
+               :update-kv-value
+               (assoc-in r [db-ident :update-kv-value] op))))
+         init-db-ident->op-type->op sorted-ops)]
+    (mapcat
+     (fn [[db-ident op-type->op]]
+       (let [tmpid (str db-ident)]
+         (when-let [tx-data (not-empty
+                             (keep
+                              (fn [[op-type op]]
+                                (when op [:db/add tmpid op-type op]))
+                              op-type->op))]
+           (cons [:db/add tmpid :db-ident db-ident] tx-data))))
+     db-ident->op-type->op)))
+
+(defn- partition-ops
+  "Return [db-ident-kv-ops block-ops]"
+  [ops]
+  ((juxt :db-ident :block-uuid)
+   (group-by
+    (fn [[_op-type _t value :as op]]
+      (cond
+        (:block-uuid value) :block-uuid
+        (:db-ident value) :db-ident
+        :else (throw (ex-info "invalid op" {:op op}))))
+    ops)))
+
 (defn add-ops
   [repo ops]
   (let [conn (worker-state/get-client-ops-conn repo)
-        ops (ops-coercer ops)]
-    (assert (some? conn) repo)
-    (when-let [tx-data (not-empty (generate-block-ops-tx-data @conn ops))]
+        ops (ops-coercer ops)
+        _ (assert (some? conn) repo)
+        [db-ident-kv-ops block-ops] (partition-ops ops)
+        tx-data1 (when (seq block-ops) (generate-block-ops-tx-data @conn block-ops))
+        tx-data2 (when (seq db-ident-kv-ops) (generate-ident-kv-ops-tx-data @conn db-ident-kv-ops))]
+    (when-let [tx-data (not-empty (concat tx-data1 tx-data2))]
       (d/transact! conn tx-data))))
 
 (defn- get-all-block-ops*

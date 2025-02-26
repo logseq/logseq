@@ -11,6 +11,7 @@
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
+            [frontend.worker.rtc.migrate :as r.migrate]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton]
             [frontend.worker.rtc.ws :as ws]
@@ -215,6 +216,13 @@
           ;; init run to open a ws
           (m/? get-ws-create-task)
           (started-dfv true)
+          (when @*server-schema-version
+            (let [client-schema-version (ldb/get-graph-schema-version @conn)]
+              (log/info :add-migration-client-ops
+                        {:repo repo
+                         :server-schema-version @*server-schema-version
+                         :client-schema-version client-schema-version})
+              (r.migrate/add-migration-client-ops! repo @conn @*server-schema-version client-schema-version)))
           (reset! *assets-sync-loop-canceler
                   (c.m/run-task assets-sync-loop-task :assets-sync-loop-task))
           (->>
