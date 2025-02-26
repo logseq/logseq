@@ -134,12 +134,17 @@
             db-before db-after e->a->v->add?->t rtc-const/ignore-attrs-when-syncing)
    same-entity-datoms-coll))
 
-(defn generate-rtc-ops-from-property-entity
-  [property-entity]
-  (assert (ldb/property? property-entity))
-  (let [db (d/entity-db property-entity)
-        e (:db/id property-entity)
-        datoms (d/datoms db :eavt e)
-        id->same-entity-datoms {e datoms}
-        e->a->v->add?->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
-    (generate-rtc-ops db db [datoms] e->a->v->add?->t)))
+(defn generate-rtc-ops-from-property-entities
+  [property-entities]
+  (when (seq property-entities)
+    (assert (every? ldb/property? property-entities))
+    (let [db (d/entity-db (first property-entities))
+          id->same-entity-datoms
+          (into {}
+                (map (fn [prop-ent]
+                       (let [e (:db/id prop-ent)
+                             datoms (d/datoms db :eavt e)]
+                         [e datoms])))
+                property-entities)
+          e->a->v->add?->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
+      (generate-rtc-ops db db (vals id->same-entity-datoms) e->a->v->add?->t))))

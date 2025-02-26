@@ -344,6 +344,8 @@
                                         (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type)))))]
         (swap! *datascript-conns assoc repo conn)
         (swap! *client-ops-conns assoc repo client-ops-conn)
+        (when (not= client-op/schema-in-db (d/schema client-ops-conn))
+          (d/reset-schema! client-ops-conn client-op/schema-in-db))
         (when (and db-based? (not initial-data-exists?) (not datoms))
           (let [config (or config "")
                 initial-data (sqlite-create-graph/build-db-initial-data config
