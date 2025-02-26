@@ -1549,16 +1549,21 @@
    set-input! add-new-object!
    {:keys [view-feature-type title-key additional-actions]
     :as option}]
-  (let [[hover? set-hover?] (hooks/use-state nil)]
+  (let [[hover? set-hover?] (hooks/use-state nil)
+        db-based? (config/db-based-graph? (state/get-current-repo))]
     [:div.flex.flex-1.flex-wrap.items-center.justify-between.gap-1
      {:on-mouse-over #(set-hover? true)
       :on-mouse-out #(set-hover? false)}
      [:div.flex.flex-row.items-center.gap-2
-      (if (= view-feature-type :query-result)
+      (if db-based?
+        (if (= view-feature-type :query-result)
+          [:div.font-medium.opacity-50.text-sm
+           (t (or title-key :views.table/default-title)
+              (count (:rows table)))]
+          (views-tab view-parent view-entity (:rows table) option hover?))
         [:div.font-medium.opacity-50.text-sm
          (t (or title-key :views.table/default-title)
-            (count (:rows table)))]
-        (views-tab view-parent view-entity (:rows table) option hover?))]
+            (count (:rows table)))])]
      [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
       {:class (if hover? "opacity-100" "opacity-75")}
 
@@ -1576,7 +1581,7 @@
       [:div.text-muted-foreground.text-sm
        (pv/property-value view-entity (db/entity :logseq.property.view/type) {})]
 
-      (more-actions view-entity columns table)
+      (when db-based? (more-actions view-entity columns table))
 
       (when add-new-object! (new-record-button table view-entity))]]))
 

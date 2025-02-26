@@ -64,6 +64,7 @@
                   :view-feature-type :all-pages
                   :show-items-count? true
                   :columns columns'
+                  :title-key :all-pages/table-title
                   :on-delete-rows (fn [table selected-rows]
                                     (shui/dialog-open!
                                      (component-page/batch-delete-dialog
