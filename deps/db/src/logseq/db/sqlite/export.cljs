@@ -231,6 +231,21 @@
       (seq classes)
       (assoc :classes classes))))
 
+(defn- build-mixed-properties-and-classes-export
+  "Builds an export of properties and classes from a mixed group of nodes that may both"
+  [db ents export-opts]
+  (let [properties
+        (when-let [prop-ids (seq (map :db/ident (filter entity-util/property? ents)))]
+          (build-export-properties db prop-ids export-opts))
+        classes
+        (when-let [class-ents (seq (filter ldb/class? ents))]
+          (->> class-ents
+               (map #(vector (:db/ident %) (build-export-class % export-opts)))
+               (into {})))]
+    (cond-> {}
+      properties (assoc :properties properties)
+      classes (assoc :classes classes))))
+
 (defn- build-content-ref-export
   "Builds an export config (and additional info) for refs in the given blocks. All the exported
    entities found in block refs include their uuid in order to preserve the relationship to the blocks"
@@ -239,20 +254,13 @@
         blocks (remove :logseq.property/value blocks*)
         content-ref-uuids (set (mapcat (comp db-content/get-matched-ids block-title) blocks))
         content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)
-        content-ref-pages (filter #(or (ldb/internal-page? %) (entity-util/journal? %)) content-ref-ents)
-        content-ref-properties (when-let [prop-ids (seq (map :db/ident (filter ldb/property? content-ref-ents)))]
-                                 (update-vals (build-export-properties db prop-ids {:include-uuid? true :shallow-copy? true})
-                                              #(merge % {:build/keep-uuid? true})))
-        content-ref-classes (when-let [class-ents (seq (filter ldb/class? content-ref-ents))]
-                              (->> class-ents
-                                   (map #(vector (:db/ident %)
-                                                 (assoc (build-export-class % {:include-uuid? true :shallow-copy? true})
-                                                        :build/keep-uuid? true)))
-                                   (into {})))]
+        content-ref-pages (filter #(or (entity-util/internal-page? %) (entity-util/journal? %)) content-ref-ents)
+        {:keys [properties classes]}
+        (build-mixed-properties-and-classes-export db content-ref-ents {:include-uuid? true :shallow-copy? true})]
     {:content-ref-uuids content-ref-uuids
      :content-ref-ents content-ref-ents
-     :properties content-ref-properties
-     :classes content-ref-classes
+     :properties (update-vals properties #(merge % {:build/keep-uuid? true}))
+     :classes (update-vals classes #(merge % {:build/keep-uuid? true}))
      :pages-and-blocks (mapv #(hash-map :page (merge (shallow-copy-page %)
                                                      {:block/uuid (:block/uuid %) :build/keep-uuid? true}))
                              content-ref-pages)}))
@@ -278,14 +286,14 @@
      :properties properties}))
 
 (defn- build-blocks-export
-  "Given a page's block entities, returns the blocks in a sqlite.build EDN format
+  "Given a vec of block entities, returns the blocks in a sqlite.build EDN format
    and all properties and classes used in these blocks"
-  [db blocks opts]
+  [db blocks {:keys [include-children?] :or {include-children? true} :as opts}]
   (let [*properties (atom {})
         *classes (atom {})
         *pvalue-uuids (atom #{})
         id-map (into {} (map (juxt :db/id identity)) blocks)
-        children (group-by #(get-in % [:block/parent :db/id]) blocks)
+        children (if include-children? (group-by #(get-in % [:block/parent :db/id]) blocks) {})
         build-block (fn build-block [block*]
                       (let [child-nodes (mapv build-block (get children (:db/id block*) []))
                             {:keys [node properties classes]}
@@ -377,6 +385,46 @@
         page-export (finalize-export-maps db page-blocks-export uuid-block-export content-ref-export)]
     page-export))
 
+(defn build-view-nodes-export* [db nodes opts]
+  (let [node-pages (filter entity-util/page? nodes)
+        pages-export
+        (merge
+         (build-mixed-properties-and-classes-export db node-pages {:shallow-copy? true})
+         {:pages-and-blocks (mapv #(hash-map :page (shallow-copy-page %))
+                                  (filter #(or (entity-util/internal-page? %) (entity-util/journal? %)) node-pages))})
+        node-blocks (remove entity-util/page? nodes)
+        ;; Similar to build-uuid-block-export
+        pages-to-blocks
+        (->> node-blocks
+             (group-by :block/parent)
+             (map (fn [[parent-page-ent blocks]]
+                    (merge (build-blocks-export db
+                                                (sort-by :block/order blocks)
+                                                (merge opts {:include-children? false}))
+                           {:page (shallow-copy-page parent-page-ent)}))))
+        pages-to-blocks-export
+        {:properties (apply merge (map :properties pages-to-blocks))
+         :classes (apply merge (map :classes pages-to-blocks))
+         :pages-and-blocks (mapv #(select-keys % [:page :blocks]) pages-to-blocks)}]
+    (merge (merge-export-maps pages-export pages-to-blocks-export)
+           {:pvalue-uuids (apply set/union (map :pvalue-uuids pages-to-blocks))})))
+
+(defn- build-view-nodes-export
+  "Exports given nodes from a view. Nodes are a random mix of blocks and pages"
+  [db eids]
+  (let [nodes (map #(d/entity db %) eids)
+        property-value-ents (mapcat #(->> (dissoc (db-property/properties %) :block/tags)
+                                          vals
+                                          (filter de/entity?))
+                                    nodes)
+        {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
+        (build-content-ref-export db (into nodes property-value-ents))
+        {:keys [pvalue-uuids] :as nodes-export}
+        (build-view-nodes-export* db nodes {:include-uuid-fn content-ref-uuids})
+        uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {})
+        view-nodes-export (finalize-export-maps db nodes-export uuid-block-export content-ref-export)]
+    view-nodes-export))
+
 (defn- build-graph-ontology-export
   "Exports a graph's tags and properties"
   [db]
@@ -467,6 +515,8 @@
           (build-block-export db (:block-id options))
           :page
           (build-page-export db (:page-id options))
+          :view-nodes
+          (build-view-nodes-export db (:node-ids options))
           :graph-ontology
           (build-graph-ontology-export db))]
     (ensure-export-is-valid (dissoc export-map ::block))
