@@ -17,9 +17,9 @@
                          (util/stop e))
       :on-click (fn [^js e]
                   (shui/popup-show! (.-target e)
-                                    (fn []
-                                      (property-config/dropdown-editor page nil {:debug? (.-altKey e)}))
-                                    {:content-props {:class "ls-property-dropdown-editor as-root"}
-                                     :align "start"
-                                     :as-dropdown? true}))}
-     "Configure property")))
+                    (fn []
+                      (property-config/dropdown-editor page nil {:debug? (.-altKey e)}))
+                    {:content-props {:class "ls-property-dropdown-editor as-root"}
+                     :align "start"
+                     :as-dropdown? true}))}
+      "Configure property")))
