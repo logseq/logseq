@@ -241,9 +241,8 @@
               @apply flex items-center;
             }
 
-            &:hover {
-              background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
-              opacity: 1;
+            &:hover, &:has([data-popup-active]) {
+              @apply bg-gray-04 opacity-100;
             }
           }
         }
