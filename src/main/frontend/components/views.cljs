@@ -1586,7 +1586,7 @@
       (when add-new-object! (new-record-button table view-entity))]]))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
-  [view-entity {:keys [view-parent data set-data! columns add-new-object!] :as option}
+  [view-entity {:keys [view-parent data set-data! columns add-new-object! foldable-options] :as option}
    *scroller-ref]
   (let [[input set-input!] (rum/use-state "")
         sorting* (:logseq.property.table/sorting view-entity)
@@ -1707,7 +1707,7 @@
                     (view-cp view-entity (assoc table' :rows group) option view-opts)]
                    {:title-trigger? false})))])
            (view-cp view-entity table option view-opts)))]
-      {:title-trigger? false})]))
+      (merge {:title-trigger? false} foldable-options))]))
 
 (rum/defcs view-container
   "Provides a view for data like query results and tagged objects, multiple
