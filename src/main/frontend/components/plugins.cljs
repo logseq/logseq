@@ -202,8 +202,8 @@
 
 (rum/defc remote-readme-display
   [{:keys [repo]} _content]
-
-  (let [src (str "./marketplace.html?repo=" repo)]
+  (let [src (str (if (string/includes? js/location.href "logseq")
+                   "./static/" "./") "marketplace.html?repo=" repo)]
     [:iframe.lsp-frame-readme {:src src}]))
 
 (defn security-warning
