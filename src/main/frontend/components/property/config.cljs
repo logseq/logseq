@@ -290,7 +290,7 @@
       [:div.property-setting-title
        (some-> icon (name) (shui/tabler-icon {:size 14
                                               :style {:margin-top "-1"}}))
-       [:span title]]
+       [:span {:title title} title]]
       (cond
         (fn? desc)
         (desc)
@@ -462,13 +462,14 @@
   [choices]
   (let [select-cp (fn [opts]
                     (shui/select
-                     opts
-                     (shui/select-trigger
-                      (shui/select-value {:placeholder "Select a choice"}))
-                     (shui/select-content
-                      (map (fn [choice]
-                             (shui/select-item {:key (str (:db/id choice))
-                                                :value (:db/id choice)} (:block/title choice))) choices))))
+                      opts
+                      (shui/select-trigger
+                        {:class "h-8"}
+                        (shui/select-value {:placeholder "Select a choice"}))
+                      (shui/select-content
+                        (map (fn [choice]
+                               (shui/select-item {:key (str (:db/id choice))
+                                                  :value (:db/id choice)} (:block/title choice))) choices))))
         checked-choice (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) choices)
         unchecked-choice (some (fn [choice] (when (false? (:logseq.property/choice-checkbox-state choice)) choice)) choices)]
     [:div.flex.flex-col.gap-4.text-sm.p-2
