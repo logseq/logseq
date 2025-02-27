@@ -24,7 +24,7 @@
 (def file-graph-ns
   "Namespaces or parent namespaces _only_ for file graphs"
   (mapv escape-shell-regex
-        ["logseq.graph-parser.db" "logseq.graph-parser.property"
+        ["logseq.graph-parser.db" "logseq.graph-parser.property" "logseq.graph-parser.extract"
          "frontend.handler.file-based" "frontend.handler.file-sync"
          "frontend.db.file-based"
          "frontend.util.file-based"
@@ -62,7 +62,9 @@
 (def file-graph-paths
   "Paths _only_ for file graphs"
   ["deps/graph-parser/src/logseq/graph_parser/db.cljs"
+   "deps/graph-parser/src/logseq/graph_parser/extract.cljc"
    "deps/graph-parser/src/logseq/graph_parser/property.cljs"
+   "deps/graph-parser/src/logseq/graph_parser.cljs"
    "src/main/frontend/handler/file_based" "src/main/frontend/handler/file_sync.cljs" "src/main/frontend/db/file_based"
    "src/main/frontend/util/file_based" "src/main/frontend/worker/handler/page/file_based" "src/main/frontend/worker/file.cljs"
    "src/main/frontend/common/file_based"

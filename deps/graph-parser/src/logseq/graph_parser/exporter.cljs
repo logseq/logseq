@@ -891,7 +891,7 @@
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
-                   ;; old whiteboards may have this
+                   ;; old whiteboards may have :block/left
                    (dissoc :block/left :block/format)
                    ;; ((fn [x] (prn :block-out x) x))
                    )]
@@ -1242,6 +1242,7 @@
         extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
                                  :date-formatter "MMM do, yyyy"
                                  :uri-encoded? false
+                                 ;; Alters behavior in gp-block
                                  :export-to-db-graph? true
                                  :filename-format :legacy}
                                 extract-options

@@ -192,15 +192,13 @@
       blocks))
 
 (defn- build-pages-aux
-  [db db-based? options page-map ref-pages date-formatter format]
-  (let [namespace-pages (when (or (not db-based?) (:export-to-db-graph? options))
-                          (let [page (:block/title page-map)]
-                            (when (text/namespace-page? page)
-                              (->> (common-util/split-namespace-pages page)
-                                   (map (fn [page]
-                                          (cond-> (gp-block/page-name->map page db true date-formatter)
-                                            (not db-based?)
-                                            (assoc :block/format format))))))))
+  [db page-map ref-pages date-formatter format]
+  (let [namespace-pages (let [page (:block/title page-map)]
+                          (when (text/namespace-page? page)
+                            (->> (common-util/split-namespace-pages page)
+                                 (map (fn [page]
+                                        (-> (gp-block/page-name->map page db true date-formatter)
+                                            (assoc :block/format format)))))))
         pages (->> (concat
                     [page-map]
                     @ref-pages
@@ -234,8 +232,7 @@
                                        :as options}]
   (assert db "Datascript DB is required")
   (try
-    (let [db-based? (ldb/db-based-graph? db)
-          page (get-page-name file ast false filename-format)
+    (let [page (get-page-name file ast false filename-format)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           options' (assoc options :page-name page-name)
           ;; In case of diff-merge (2way) triggered, use the uuids to override the ones extracted from the AST
@@ -253,15 +250,11 @@
                           (let [block-ref-pages (seq (:block/refs block))]
                             (when block-ref-pages
                               (swap! ref-pages set/union (set block-ref-pages)))
-                            (cond->
-                             (-> block
-                                 (dissoc :ref-pages)
-                                 (assoc :block/page [:block/name page-name]
-                                        :block/refs block-ref-pages))
-                              (not db-based?)
-                              (assoc :block/format format)
-                              db-based?
-                              (dissoc :block/format)))))
+                            (-> block
+                                (dissoc :ref-pages)
+                                (assoc :block/page [:block/name page-name]
+                                       :block/refs block-ref-pages
+                                       :block/format format)))))
                       blocks)
           [properties invalid-properties properties-text-values]
           (if (:block/pre-block? (first blocks))
@@ -270,7 +263,7 @@
              (:block/properties-text-values (first blocks))]
             [properties [] {}])
           page-map (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
-          pages (build-pages-aux db db-based? options page-map ref-pages date-formatter format)
+          pages (build-pages-aux db page-map ref-pages date-formatter format)
           blocks (->> (remove nil? blocks)
                       (map (fn [b] (dissoc b :block.temp/ast-title :block.temp/ast-body :block/level :block/children :block/meta))))]
       [pages blocks])
