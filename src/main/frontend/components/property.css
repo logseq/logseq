@@ -417,7 +417,7 @@ a.control-link {
   @apply w-[220px] p-0;
 
   > ul.choices-list {
-    @apply m-0 px-1.5 pt-1 pb-1;
+    @apply m-0 px-1.5 pt-1 pb-[1px];
 
     li {
       @apply flex items-center gap-1 relative;
