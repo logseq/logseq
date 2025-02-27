@@ -249,15 +249,25 @@
   [state page _n-ref]
   (let [ref-blocks (rum/react (::result state))]
     (when (seq ref-blocks)
-      [:div.references-blocks
-       (let [ref-hiccup (block/->hiccup ref-blocks
-                                        {:id (str (:block/title page) "-unlinked-")
-                                         :ref? true
-                                         :group-by-page? true
-                                         :editor-box editor/box}
-                                        {})]
-         (content/content (:block/name page)
-                          {:hiccup ref-hiccup}))])))
+      (if (config/db-based-graph?)
+        (let [blocks (->> (mapcat val ref-blocks)
+                          (map (fn [b] (assoc (db/entity (:db/id b)) :id (:db/id b)))))
+              columns' (columns {} blocks)]
+          (views/view
+           {:view-parent page
+            :view-feature-type :unlinked-references
+            :data blocks
+            :columns columns'
+            :foldable-options {:default-collapsed? true}}))
+        [:div.references-blocks
+         (let [ref-hiccup (block/->hiccup ref-blocks
+                                          {:id (str (:block/title page) "-unlinked-")
+                                           :ref? true
+                                           :group-by-page? true
+                                           :editor-box editor/box}
+                                          {})]
+           (content/content (:block/name page)
+                            {:hiccup ref-hiccup}))]))))
 
 (rum/defcs unlinked-references < rum/reactive
   (rum/local nil ::n-ref)
@@ -266,9 +276,11 @@
     (when page
       [:div.references.page-unlinked.mt-6.flex-1.flex-row.faster.fade-in
        [:div.content.flex-1
-        (ui/foldable
-         [:div.font-medium.opacity-50
-          (t :unlinked-references/reference-count @n-ref)]
-         (fn [] (unlinked-references-aux page n-ref))
-         {:default-collapsed? true
-          :title-trigger? true})]])))
+        (if (config/db-based-graph?)
+          (unlinked-references-aux page n-ref)
+          (ui/foldable
+           [:div.font-medium.opacity-50
+            (t :unlinked-references/reference-count @n-ref)]
+           (fn [] (unlinked-references-aux page n-ref))
+           {:default-collapsed? true
+            :title-trigger? true}))]])))
