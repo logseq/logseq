@@ -354,10 +354,14 @@ a.control-link {
   }
 
   .inner-wrap {
-    @apply flex items-center w-full justify-between gap-1 flex-wrap;
+    @apply flex items-center w-full justify-between gap-1 flex-nowrap;
 
     > .property-setting-title {
-      @apply flex items-center gap-1 font-normal opacity-90;
+      @apply flex items-center gap-1 font-normal opacity-90 overflow-hidden;
+
+      > span {
+        @apply whitespace-nowrap text-ellipsis overflow-hidden;
+      }
     }
 
     > label {

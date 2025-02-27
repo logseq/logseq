@@ -72,6 +72,7 @@
 (def select-group select-core/select-group)
 (def select-value select-core/select-value)
 (def select-trigger select-core/select-trigger)
+(def select-icon select-core/select-icon)
 (def select-content select-core/select-content)
 (def select-label select-core/select-label)
 (def select-item select-core/select-item)
