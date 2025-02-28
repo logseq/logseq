@@ -41,4 +41,4 @@
   (when-let [ops (not-empty
                   (some->> (server-client-schema-verion->migrations server-schema-version client-schema-version)
                            (migration-updates->client-ops db client-schema-version)))]
-    (client-op/add-ops repo ops)))
+    (client-op/add-ops! repo ops)))
