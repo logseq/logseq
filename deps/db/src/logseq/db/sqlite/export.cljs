@@ -364,8 +364,8 @@
     (merge {::block (:node node-export)}
            block-export)))
 
-(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks]}]
-  (let [page-ent-export (build-node-export db page-entity {:properties properties})
+(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks] :as opts}]
+  (let [page-ent-export (build-node-export db page-entity (select-keys opts [:properties :include-uuid-fn]))
         page (merge (dissoc (:node page-ent-export) :block/title)
                     (shallow-copy-page page-entity))
         page-blocks-export {:pages-and-blocks [{:page page :blocks blocks}]
@@ -373,23 +373,33 @@
                             :classes classes}]
     (merge-export-maps page-blocks-export page-ent-export)))
 
-(defn- build-page-export
-  "Exports page for given page eid"
-  [db eid]
+(defn- get-page-blocks [db eid]
+  (->> (d/datoms db :avet :block/page eid)
+       (map :e)
+       (map #(d/entity db %))))
+
+(defn- build-page-export*
+  [db eid page-blocks* content-ref-uuids]
   (let [page-entity (d/entity db eid)
-        datoms (d/datoms db :avet :block/page eid)
-        block-eids (mapv :e datoms)
-        page-blocks* (map #(d/entity db %) block-eids)
-        {:keys [content-ref-uuids content-ref-ents] :as content-ref-export} (build-content-ref-export db page-blocks*)
         page-blocks (->> page-blocks*
                          (sort-by :block/order)
                          ;; Remove property value blocks as they are exported in a block's :build/properties
                          (remove #(:logseq.property/created-from-property %)))
         {:keys [pvalue-uuids] :as blocks-export}
         (build-blocks-export db page-blocks {:include-uuid-fn content-ref-uuids})
+        page-blocks-export (build-page-blocks-export db page-entity (assoc blocks-export :include-uuid-fn content-ref-uuids))
+        page-export (assoc page-blocks-export :pvalue-uuids pvalue-uuids)]
+    page-export))
+
+(defn- build-page-export
+  "Exports page for given page eid"
+  [db eid]
+  (let [page-blocks* (get-page-blocks db eid)
+        {:keys [content-ref-ents] :as content-ref-export} (build-content-ref-export db page-blocks*)
+        {:keys [pvalue-uuids] :as page-export*} (build-page-export* db eid page-blocks* (:content-ref-uuids content-ref-export))
+        page-entity (d/entity db eid)
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:page-entity page-entity})
-        page-blocks-export (build-page-blocks-export db page-entity blocks-export)
-        page-export (finalize-export-maps db page-blocks-export uuid-block-export content-ref-export)]
+        page-export (finalize-export-maps db page-export* uuid-block-export content-ref-export)]
     page-export))
 
 (defn build-view-nodes-export* [db nodes opts]
@@ -461,6 +471,37 @@
       (seq classes)
       (assoc :classes classes))))
 
+(defn- build-graph-content-ref-export
+  [db]
+  (let [block-titles (map :v (d/datoms db :avet :block/title))
+        content-ref-uuids (->> block-titles
+                               (filter string?)
+                               (mapcat db-content/get-matched-ids)
+                               set)
+        content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)]
+    {:content-ref-uuids content-ref-uuids
+     :content-ref-ents content-ref-ents}))
+
+(defn- build-graph-pages-export
+  "Handles pages, journals and their blocks"
+  [db _options]
+  (let [page-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Page))
+                         (map :e (d/datoms db :avet :block/tags :logseq.class/Journal)))
+        ;; TODO: content-ref-uuids
+        {:keys [content-ref-uuids]} (build-graph-content-ref-export db)
+        page-exports (mapv (fn [eid]
+                             (let [page-blocks* (get-page-blocks db eid)]
+                               (build-page-export* db eid page-blocks* content-ref-uuids)))
+                           page-ids)
+        pages-export (apply merge-export-maps page-exports)]
+    pages-export))
+
+(defn- build-graph-export [db options]
+  (let [ontology-export (build-graph-ontology-export db)
+        pages-export (build-graph-pages-export db options)
+        graph-export (merge-export-maps ontology-export pages-export)]
+    graph-export))
+
 (defn- find-undefined-classes-and-properties [{:keys [classes properties pages-and-blocks]}]
   (let [referenced-classes
         (->> (concat (mapcat :build/property-classes (vals properties))
@@ -526,7 +567,9 @@
           :view-nodes
           (build-view-nodes-export db (:node-ids options))
           :graph-ontology
-          (build-graph-ontology-export db))]
+          (build-graph-ontology-export db)
+          :graph
+          (build-graph-export db (:graph-options options)))]
     (ensure-export-is-valid (dissoc export-map ::block))
     export-map))
 
