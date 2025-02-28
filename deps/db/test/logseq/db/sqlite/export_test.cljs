@@ -243,7 +243,7 @@
 
     (import-second-time-assertions conn conn2 "page1" original-data)))
 
-(deftest import-page-with-different-ref-types
+(deftest ^:focus2 import-page-with-different-ref-types
   (let [block-uuid (random-uuid)
         internal-block-uuid (random-uuid)
         class-uuid (random-uuid)
@@ -507,3 +507,51 @@
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-nodes)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
+
+(deftest ^:focus import-graph
+  (let [internal-block-uuid (random-uuid)
+        original-data
+        {:properties
+         {:user.property/num {:logseq.property/type :number}
+          :user.property/checkbox {:logseq.property/type :checkbox}
+          :user.property/url {:logseq.property/type :url
+                              :build/properties {:logseq.property/description "desc for url"}}
+          :user.property/node {:logseq.property/type :node
+                               :db/cardinality :db.cardinality/many
+                               :build/property-classes [:user.class/MyClass]}}
+         :classes
+         {:user.class/MyClass {:build/properties {:user.property/url "https://example.com/MyClass"}}
+          :user.class/MyClass2 {:build/class-parent :user.class/MyClass
+                                :build/properties {:logseq.property/description "tests child class"}}}
+         :pages-and-blocks
+         [{:page {:block/title "page1" :build/properties {:user.property/checkbox false}}
+           :blocks [{:block/title "b1" :build/properties {:user.property/num 1}}]}
+          {:page {:block/title "page2" :build/tags [:user.class/MyClass2]}
+           :blocks [{:block/title "hola" :block/uuid internal-block-uuid :build/keep-uuid? true}
+                    {:block/title (str "internal block ref to " (page-ref/->page-ref internal-block-uuid))}]}
+          {:page {:block/title "Contents" :build/properties {:logseq.property/built-in? true}}
+           :blocks [{:block/title "right sidebar"}]}
+          {:page {:build/journal 20250228 :build/properties {:user.property/num 1}}
+           :blocks [{:block/title "journal block"}]}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        conn2 (db-test/create-conn)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (-> (sqlite-export/build-export @conn {:export-type :graph})
+            (sqlite-export/build-import @conn2 {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! conn2 init-tx)
+        _ (d/transact! conn2 block-props-tx)
+        _ (validate-db @conn2)
+        imported-graph (sqlite-export/build-export @conn2 {:export-type :graph})]
+
+    ;; (cljs.pprint/pprint (set (:pages-and-blocks original-data)))
+    ;; (cljs.pprint/pprint (->> (:pages-and-blocks imported-graph)
+    ;;                          (remove #(get-in % [:page :build/properties :logseq.property/hide?]))
+    ;;                          set))
+    (is (= (set (:pages-and-blocks original-data))
+           ;; TODO: hidden built-in pages
+           (->> (:pages-and-blocks imported-graph)
+                (remove #(get-in % [:page :build/properties :logseq.property/hide?]))
+                set)))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))))
