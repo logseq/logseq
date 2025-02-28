@@ -13,6 +13,7 @@
             [frontend.components.property.config :as property-config]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
+            [frontend.components.selection :as selection]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -408,13 +409,9 @@
      :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
      :disabled true}
     (str (count selected-rows) " selected"))
-   (when (fn? on-delete-rows)
-     (shui/button
-      {:variant "ghost"
-       :class "h-8 !pl-0 !px-2 !py-0 text-muted-foreground hover:text-foreground w-full justify-start"
-       :on-click (fn []
-                   (on-delete-rows table selected-rows))}
-      (ui/icon "trash")))))
+   (selection/action-bar
+    {:on-cut #(on-delete-rows table selected-rows)
+     :selected-blocks selected-rows})))
 
 (rum/defc column-resizer
   [_column on-sized!]
