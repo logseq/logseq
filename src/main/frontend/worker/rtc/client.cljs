@@ -93,10 +93,6 @@
 
 (defmulti ^:private local-block-ops->remote-ops-aux (fn [tp & _] tp))
 
-(defmethod local-block-ops->remote-ops-aux :update-kv-value-op
-  [_ & {:keys [db-ident value *remote-ops]}]
-  (swap! *remote-ops conj [:update-kv-value {:db-ident db-ident :value value}]))
-
 (defmethod local-block-ops->remote-ops-aux :move-op
   [_ & {:keys [parent-uuid block-order block-uuid *remote-ops *depend-on-block-uuid-set]}]
   (when parent-uuid
@@ -274,6 +270,30 @@
             (:remote-ops (local-block-ops->remote-ops db block-ops-map))]))
         block-ops-map-coll))
 
+(defmulti ^:private local-db-ident-kv-ops->remote-ops-aux (fn [op-type & _] op-type))
+(defmethod local-db-ident-kv-ops->remote-ops-aux :update-kv-value
+  [_ op]
+  (let [op-value (last op)
+        db-ident (:db-ident op-value)
+        value (:value op-value)]
+    [:update-kv-value {:db-ident db-ident :value (ldb/write-transit-str value)}]))
+
+(defmethod local-db-ident-kv-ops->remote-ops-aux :db-ident
+  [_ _op]
+  ;; ignore
+  )
+
+(defn- local-db-ident-kv-ops->remote-ops
+  [db-ident-kv-ops-map]
+  (keep
+   (fn [[op-type op]]
+     (local-db-ident-kv-ops->remote-ops-aux op-type op))
+   db-ident-kv-ops-map))
+
+(defn- gen-db-ident-kv-remote-ops
+  [db-ident-kv-ops-map-coll]
+  (mapcat local-db-ident-kv-ops->remote-ops db-ident-kv-ops-map-coll))
+
 (defn- merge-remove-remove-ops
   [remote-remove-ops]
   (when-let [block-uuids (->> remote-remove-ops
@@ -332,61 +352,73 @@
     (concat update-schema-ops update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
 
 (defn- rollback
-  [repo block-ops-map-coll]
-  (let [ops (mapcat
-             (fn [m]
-               (keep (fn [[k op]]
-                       (when (not= :block/uuid k)
-                         op))
-                     m))
-             block-ops-map-coll)]
-    (client-op/add-ops repo ops)
+  [repo block-ops-map-coll db-ident-kv-ops-map-coll]
+  (let [block-ops
+        (mapcat
+         (fn [m]
+           (keep (fn [[k op]]
+                   (when-not (keyword-identical? :block/uuid k)
+                     op))
+                 m))
+         block-ops-map-coll)
+        db-ident-kv-ops
+        (mapcat
+         (fn [m]
+           (keep (fn [[k op]]
+                   (when-not (keyword-identical? :db-ident k)
+                     op))
+                 m))
+         db-ident-kv-ops-map-coll)]
+    (client-op/add-ops! repo block-ops)
+    (client-op/add-ops! repo db-ident-kv-ops)
     nil))
 
 (defn new-task--push-local-ops
   "Return a task: push local updates"
   [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task *remote-profile? add-log-fn]
   (m/sp
-    (let [block-ops-map-coll (client-op/get&remove-all-block-ops repo)]
-      (when-let [block-uuid->remote-ops (not-empty (gen-block-uuid->remote-ops @conn block-ops-map-coll))]
-        (when-let [ops-for-remote (rtc-schema/to-ws-ops-decoder
-                                   (sort-remote-ops
-                                    block-uuid->remote-ops))]
-          (let [local-tx (client-op/get-local-tx repo)
-                r (try
-                    (m/? (ws-util/send&recv get-ws-create-task
-                                            (cond-> {:action "apply-ops"
-                                                     :graph-uuid graph-uuid :schema-version (str major-schema-version)
-                                                     :ops ops-for-remote :t-before (or local-tx 1)}
-                                              (true? @*remote-profile?) (assoc :profile true))))
-                    (catch :default e
-                      (rollback repo block-ops-map-coll)
-                      (throw e)))]
-            (if-let [remote-ex (:ex-data r)]
-              (do (add-log-fn :rtc.log/push-local-update remote-ex)
-                  (case (:type remote-ex)
-                    ;; - :graph-lock-failed
-                    ;;   conflict-update remote-graph, keep these local-pending-ops
-                    ;;   and try to send ops later
-                    :graph-lock-failed
-                    (rollback repo block-ops-map-coll)
-                    ;; - :graph-lock-missing
-                    ;;   this case means something wrong in remote-graph data,
-                    ;;   nothing to do at client-side
-                    :graph-lock-missing
-                    (do (rollback repo block-ops-map-coll)
-                        (throw r.ex/ex-remote-graph-lock-missing))
+    (let [block-ops-map-coll (client-op/get&remove-all-block-ops repo)
+          db-ident-kv-ops-map-coll (client-op/get&remove-all-db-ident-kv-ops repo)
+          block-uuid->remote-ops (not-empty (gen-block-uuid->remote-ops @conn block-ops-map-coll))
+          other-remote-ops (gen-db-ident-kv-remote-ops db-ident-kv-ops-map-coll)
+          remote-ops (concat (when block-uuid->remote-ops (sort-remote-ops block-uuid->remote-ops))
+                             other-remote-ops)]
+      (when-let [ops-for-remote (rtc-schema/to-ws-ops-decoder remote-ops)]
+        (let [local-tx (client-op/get-local-tx repo)
+              r (try
+                  (m/? (ws-util/send&recv get-ws-create-task
+                                          (cond-> {:action "apply-ops"
+                                                   :graph-uuid graph-uuid :schema-version (str major-schema-version)
+                                                   :ops ops-for-remote :t-before (or local-tx 1)}
+                                            (true? @*remote-profile?) (assoc :profile true))))
+                  (catch :default e
+                    (rollback repo block-ops-map-coll db-ident-kv-ops-map-coll)
+                    (throw e)))]
+          (if-let [remote-ex (:ex-data r)]
+            (do (add-log-fn :rtc.log/push-local-update remote-ex)
+                (case (:type remote-ex)
+                  ;; - :graph-lock-failed
+                  ;;   conflict-update remote-graph, keep these local-pending-ops
+                  ;;   and try to send ops later
+                  :graph-lock-failed
+                  (rollback repo block-ops-map-coll db-ident-kv-ops-map-coll)
+                  ;; - :graph-lock-missing
+                  ;;   this case means something wrong in remote-graph data,
+                  ;;   nothing to do at client-side
+                  :graph-lock-missing
+                  (do (rollback repo block-ops-map-coll db-ident-kv-ops-map-coll)
+                      (throw r.ex/ex-remote-graph-lock-missing))
 
-                    :rtc.exception/get-s3-object-failed
-                    (rollback repo block-ops-map-coll)
-                    ;; else
-                    (do (rollback repo block-ops-map-coll)
-                        (throw (ex-info "Unavailable1" {:remote-ex remote-ex})))))
+                  :rtc.exception/get-s3-object-failed
+                  (rollback repo block-ops-map-coll db-ident-kv-ops-map-coll)
+                  ;; else
+                  (do (rollback repo block-ops-map-coll db-ident-kv-ops-map-coll)
+                      (throw (ex-info "Unavailable1" {:remote-ex remote-ex})))))
 
-              (do (assert (pos? (:t r)) r)
-                  (r.remote-update/apply-remote-update
-                   graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn)
-                  (add-log-fn :rtc.log/push-local-update {:remote-t (:t r)})))))))))
+            (do (assert (pos? (:t r)) r)
+                (r.remote-update/apply-remote-update
+                 graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn)
+                (add-log-fn :rtc.log/push-local-update {:remote-t (:t r)}))))))))
 
 (defn new-task--pull-remote-data
   [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn]

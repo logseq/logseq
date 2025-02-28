@@ -361,4 +361,4 @@
 (def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer nil
                                    #(do
                                       (log/error ::data-to-ws-schema %)
-                                      (m/-fail! ::data-to-ws-schema %))))
+                                      (m/-fail! ::data-to-ws-schema (select-keys % [:value])))))
