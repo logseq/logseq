@@ -9,6 +9,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
@@ -358,7 +359,7 @@
                                               (fn [value]
                                                 (and
                                                  (:logseq.property/created-from-property value)
-                                                 (not (or (ldb/page? value) (ldb/closed-value? value)))
+                                                 (not (or (entity-util/page? value) (ldb/closed-value? value)))
                                                  (empty? (set/difference (set (map :e (d/datoms @conn :avet (:db/ident property) (:db/id value)))) block-id-set))))
                                               entities)
                            ;; Delete property value block if it's no longer used by other blocks

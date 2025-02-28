@@ -20,6 +20,7 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
+            [frontend.handler.db-based.export :as db-export-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
@@ -316,7 +317,7 @@
     columns))
 
 (rum/defc more-actions
-  [view-entity columns {:keys [column-visible? column-toggle-visibility]}]
+  [view-entity columns {:keys [column-visible? rows column-toggle-visibility]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
         table? (= display-type :logseq.property.view/type.table)
         columns' (filter (fn [column]
@@ -367,7 +368,11 @@
                                                                                (:db/id (db/entity (:id column))))
                                       (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/group-by-property)))
                  :onSelect (fn [e] (.preventDefault e))}
-                (:name column))))))))))))
+                (:name column))))))
+         (shui/dropdown-menu-item
+          {:key "export-edn"
+           :on-click #(db-export-handler/export-view-nodes-data rows)}
+          "Export EDN")))))))
 
 (defn- get-column-size
   [column sized-columns]
@@ -1542,16 +1547,21 @@
    set-input! add-new-object!
    {:keys [view-feature-type title-key additional-actions]
     :as option}]
-  (let [[hover? set-hover?] (hooks/use-state nil)]
+  (let [[hover? set-hover?] (hooks/use-state nil)
+        db-based? (config/db-based-graph? (state/get-current-repo))]
     [:div.flex.flex-1.flex-wrap.items-center.justify-between.gap-1
      {:on-mouse-over #(set-hover? true)
       :on-mouse-out #(set-hover? false)}
      [:div.flex.flex-row.items-center.gap-2
-      (if (= view-feature-type :query-result)
+      (if db-based?
+        (if (= view-feature-type :query-result)
+          [:div.font-medium.opacity-50.text-sm
+           (t (or title-key :views.table/default-title)
+              (count (:rows table)))]
+          (views-tab view-parent view-entity (:rows table) option hover?))
         [:div.font-medium.opacity-50.text-sm
          (t (or title-key :views.table/default-title)
-            (count (:rows table)))]
-        (views-tab view-parent view-entity (:rows table) option hover?))]
+            (count (:rows table)))])]
      [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
       {:class (if hover? "opacity-100" "opacity-75")}
 
@@ -1569,12 +1579,12 @@
       [:div.text-muted-foreground.text-sm
        (pv/property-value view-entity (db/entity :logseq.property.view/type) {})]
 
-      (more-actions view-entity columns table)
+      (when db-based? (more-actions view-entity columns table))
 
       (when add-new-object! (new-record-button table view-entity))]]))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
-  [view-entity {:keys [view-parent data set-data! columns add-new-object!] :as option}
+  [view-entity {:keys [view-parent data set-data! columns add-new-object! foldable-options] :as option}
    *scroller-ref]
   (let [[input set-input!] (rum/use-state "")
         sorting* (:logseq.property.table/sorting view-entity)
@@ -1695,7 +1705,7 @@
                     (view-cp view-entity (assoc table' :rows group) option view-opts)]
                    {:title-trigger? false})))])
            (view-cp view-entity table option view-opts)))]
-      {:title-trigger? false})]))
+      (merge {:title-trigger? false} foldable-options))]))
 
 (rum/defcs view-container
   "Provides a view for data like query results and tagged objects, multiple

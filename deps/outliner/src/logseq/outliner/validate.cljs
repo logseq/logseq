@@ -4,6 +4,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db :as ldb]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.common.date :as common-date]
             [logseq.common.util.namespace :as ns-util]
             [clojure.set :as set]
@@ -110,13 +111,13 @@
    - Page names are unique for a tag e.g. their can be Apple #Company and Apple #Fruit
    - Page names are unique for a :logseq.property/parent"
   [db new-title entity]
-  (when (ldb/page? entity)
+  (when (entity-util/page? entity)
     (validate-unique-for-page db new-title entity)))
 
 (defn ^:api validate-disallow-page-with-journal-name
   "Validates a non-journal page renamed to journal format"
   [new-title entity]
-  (when (and (ldb/page? entity) (not (ldb/journal? entity))
+  (when (and (entity-util/page? entity) (not (entity-util/journal? entity))
              (common-date/normalize-date new-title nil))
     (throw (ex-info "Page can't be renamed to a journal"
                     {:type :notification
