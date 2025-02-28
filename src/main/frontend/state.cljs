@@ -258,6 +258,7 @@
       :command-palette/commands              (atom [])
 
       :view/components                       {}
+      :view/selected-blocks                  nil
 
       :srs/mode?                             false
 

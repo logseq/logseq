@@ -8,7 +8,7 @@
             [rum.core :as rum]))
 
 (rum/defc action-bar
-  [& {:keys [on-cut on-copy selected-blocks]
+  [& {:keys [on-cut on-copy selected-blocks hide-dots?]
       :or {on-cut #(editor-handler/cut-selection-blocks true)}}]
   (let [on-copy (if (and selected-blocks (nil? on-copy))
                   #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks})
@@ -54,16 +54,17 @@
                                  (on-cut)
                                  (state/pub-event! [:editor/hide-action-bar])))
        "Cut")
-      (shui/button
-       (assoc button-opts
-              :on-pointer-down (fn [e]
-                                 (util/stop e)
-                                 (shui/popup-hide!)
-                                 (shui/popup-show! e
-                                                   (fn []
-                                                     (state/get-component :selection/context-menu))
-                                                   {:on-before-hide state/dom-clear-selection!
-                                                    :on-after-hide state/state-clear-selection!
-                                                    :content-props {:class "w-[280px] ls-context-menu-content"}
-                                                    :as-dropdown? true})))
-       (ui/icon "dots" {:size 13})))]))
+      (when-not hide-dots?
+        (shui/button
+         (assoc button-opts
+                :on-pointer-down (fn [e]
+                                   (util/stop e)
+                                   (shui/popup-hide!)
+                                   (shui/popup-show! e
+                                                     (fn []
+                                                       ((state/get-component :selection/context-menu)))
+                                                     {:on-before-hide state/dom-clear-selection!
+                                                      :on-after-hide state/state-clear-selection!
+                                                      :content-props {:class "w-[280px] ls-context-menu-content"}
+                                                      :as-dropdown? true})))
+         (ui/icon "dots" {:size 13}))))]))
