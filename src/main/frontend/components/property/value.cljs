@@ -122,8 +122,11 @@
                                  (map (fn [id] (db/entity [:block/uuid id])))
                                  (seq)
                                  block-handler/get-top-level-blocks
-                                 (remove ldb/property?))]
-    (or (seq selected-blocks) [block])))
+                                 (remove ldb/property?))
+        view-selected-blocks (:view/selected-blocks @state/state)]
+    (or (seq selected-blocks)
+        (seq view-selected-blocks)
+        [block])))
 
 (defn <create-new-block!
   [block property value & {:keys [edit-block? batch-op?]

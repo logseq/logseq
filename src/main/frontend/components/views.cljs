@@ -411,7 +411,8 @@
     (str (count selected-rows) " selected"))
    (selection/action-bar
     {:on-cut #(on-delete-rows table selected-rows)
-     :selected-blocks selected-rows})))
+     :selected-blocks selected-rows
+     :hide-dots? true})))
 
 (rum/defc column-resizer
   [_column on-sized!]
