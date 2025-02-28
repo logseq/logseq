@@ -20,6 +20,7 @@
             [frontend.components.property.dialog :as property-dialog]
             [frontend.components.repo :as repo]
             [frontend.components.select :as select]
+            [frontend.components.selection :as selection]
             [frontend.components.settings :as settings]
             [frontend.components.shell :as shell]
             [frontend.components.user.login :as login]
@@ -1068,6 +1069,21 @@
 
 (defmethod handle :editor/run-query-command [_]
   (editor-handler/run-query-command!))
+
+(defmethod handle :editor/show-action-bar []
+  (let [selection (state/get-selection-blocks)
+        first-visible-block (first selection)]
+    (when first-visible-block
+      (shui/popup-hide! :selection-action-bar)
+      (shui/popup-show!
+       first-visible-block
+       (fn []
+         (selection/action-bar))
+       {:id :selection-action-bar
+        :align :start}))))
+
+(defmethod handle :editor/hide-action-bar []
+  (shui/popup-hide! :selection-action-bar))
 
 (defn run!
   []

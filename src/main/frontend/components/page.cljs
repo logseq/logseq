@@ -13,7 +13,6 @@
             [frontend.components.query :as query]
             [frontend.components.reference :as reference]
             [frontend.components.scheduled-deadlines :as scheduled]
-            [frontend.components.selection :as selection]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -247,7 +246,6 @@
                                        (string/blank? (:block/title (or link block'))))))]
             [:div.relative
              {:class (when add-button? "show-add-button")}
-             (selection/action-bar)
              (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
              (let [args (if block-id
                           {:block-uuid block-id}

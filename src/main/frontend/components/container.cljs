@@ -904,11 +904,11 @@
                                   (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
                                   (state/set-state! :block-ref/context nil))
 
-                      ;; block selection
+                                ;; block selection
                                 (and (state/selection?) (not (d/has-class? target "bullet")))
                                 (show! (cp-content/custom-context-menu-content))
 
-                      ;; block bullet
+                                ;; block bullet
                                 (and block-id (parse-uuid block-id))
                                 (let [block (.closest target ".ls-block")
                                       property-default-value? (when block
@@ -924,6 +924,15 @@
                             (util/stop e))))))))
   []
   nil)
+
+(defonce *action-bar-timeout (atom nil))
+
+(defn- on-mouse-up
+  [_e]
+  (when-let [timeout @*action-bar-timeout]
+    (js/clearTimeout timeout))
+  (let [timeout (js/setTimeout #(state/pub-event! [:editor/show-action-bar]) 200)]
+    (reset! *action-bar-timeout timeout)))
 
 (rum/defcs ^:large-vars/cleanup-todo root-container < rum/reactive
   (mixins/event-mixin
@@ -1017,6 +1026,7 @@
                        (ui/focus-element (ui/main-node))))}
        (t :accessibility/skip-to-main-content)]
       [:div.#app-container
+       {:on-mouse-up on-mouse-up}
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
         (header/header {:light? light?
