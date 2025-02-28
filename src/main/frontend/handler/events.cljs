@@ -928,11 +928,15 @@
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
-(defn- editor-new-property [block target opts]
+(defn- editor-new-property [block target {:keys [selected-blocks] :as opts}]
   (let [editing-block (state/get-edit-block)
         pos (state/get-edit-pos)
-        edit-block-or-selected (if editing-block
+        edit-block-or-selected (cond
+                                 editing-block
                                  [editing-block]
+                                 (seq selected-blocks)
+                                 selected-blocks
+                                 :else
                                  (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
         current-block (when-let [s (state/get-current-page)]
                         (when (util/uuid-string? s)

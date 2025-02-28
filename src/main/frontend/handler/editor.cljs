@@ -947,35 +947,37 @@
       result)))
 
 (defn copy-selection-blocks
-  [html?]
-  (when-let [blocks (seq (state/get-selection-blocks))]
-    (let [repo (state/get-current-repo)
-          ids (distinct (keep #(when-let [id (dom/attr % "blockid")]
+  [html? & {:keys [selected-blocks]}]
+  (let [repo (state/get-current-repo)
+        blocks (seq (state/get-selection-blocks))
+        ids (if blocks
+              (distinct (keep #(when-let [id (dom/attr % "blockid")]
                                  (uuid id)) blocks))
-          [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
-          block (db/entity [:block/uuid (first ids)])
-          db-based? (config/db-based-graph? repo)]
-      (when block
-        (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
-              copied-blocks (cond->> (get-all-blocks-by-ids repo top-level-block-uuids)
-                              db-based?
-                              (map (fn [block]
-                                     (let [b (db/entity (:db/id block))]
-                                       (->
-                                        (->> (map (fn [[k v]]
-                                                    (let [v' (cond
-                                                               (and (map? v) (:db/id v))
-                                                               [:block/uuid (:block/uuid (db/entity (:db/id v)))]
-                                                               (and (coll? v) (every? #(and (map? %) (:db/id %)) v))
-                                                               (set (map (fn [i] [:block/uuid (:block/uuid (db/entity (:db/id i)))]) v))
-                                                               :else
-                                                               v)]
-                                                      [k v'])) b)
-                                             (into {}))
-                                        (assoc :db/id (:db/id b)))))))]
-          (common-handler/copy-to-clipboard-without-id-property! repo (get block :block/format :markdown) content (when html? html) copied-blocks))
-        (state/set-block-op-type! :copy)
-        (notification/show! "Copied!" :success)))))
+              (map :block/uuid selected-blocks))
+        [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
+        block (db/entity [:block/uuid (first ids)])
+        db-based? (config/db-based-graph? repo)]
+    (when block
+      (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
+            copied-blocks (cond->> (get-all-blocks-by-ids repo top-level-block-uuids)
+                            db-based?
+                            (map (fn [block]
+                                   (let [b (db/entity (:db/id block))]
+                                     (->
+                                      (->> (map (fn [[k v]]
+                                                  (let [v' (cond
+                                                             (and (map? v) (:db/id v))
+                                                             [:block/uuid (:block/uuid (db/entity (:db/id v)))]
+                                                             (and (coll? v) (every? #(and (map? %) (:db/id %)) v))
+                                                             (set (map (fn [i] [:block/uuid (:block/uuid (db/entity (:db/id i)))]) v))
+                                                             :else
+                                                             v)]
+                                                    [k v'])) b)
+                                           (into {}))
+                                      (assoc :db/id (:db/id b)))))))]
+        (common-handler/copy-to-clipboard-without-id-property! repo (get block :block/format :markdown) content (when html? html) copied-blocks))
+      (state/set-block-op-type! :copy)
+      (notification/show! "Copied!" :success))))
 
 (defn copy-block-refs
   []

@@ -1,7 +1,6 @@
 (ns frontend.components.selection
   "Block selection"
-  (:require [frontend.components.content :as cp-content]
-            [frontend.handler.editor :as editor-handler]
+  (:require [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -9,8 +8,12 @@
             [rum.core :as rum]))
 
 (rum/defc action-bar
-  []
-  (let [button-opts {:variant :outline
+  [& {:keys [on-cut on-copy selected-blocks]
+      :or {on-cut #(editor-handler/cut-selection-blocks true)}}]
+  (let [on-copy (if (and selected-blocks (nil? on-copy))
+                  #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks})
+                  (or on-copy #(editor-handler/copy-selection-blocks true)))
+        button-opts {:variant :outline
                      :size :sm
                      :class "px-2 py-0 text-xs text-muted-foreground"}]
     [:div.selection-action-bar
@@ -22,6 +25,7 @@
                :on-pointer-down (fn [e]
                                   (util/stop e)
                                   (state/pub-event! [:editor/new-property {:target (.-target e)
+                                                                           :selected-blocks selected-blocks
                                                                            :property-key "Tags"
                                                                            :show-select-only? true
                                                                            :hide-property-key? true
@@ -33,20 +37,21 @@
               :on-pointer-down (fn [e]
                                  (util/stop e)
                                  (state/pub-event! [:editor/new-property {:target (.-target e)
+                                                                          :selected-blocks selected-blocks
                                                                           :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
        "Set property")
       (shui/button
        (assoc button-opts
               :on-pointer-down (fn [e]
                                  (util/stop e)
-                                 (editor-handler/copy-selection-blocks true)
+                                 (on-copy)
                                  (state/pub-event! [:editor/hide-action-bar])))
        "Copy")
       (shui/button
        (assoc button-opts
               :on-pointer-down (fn [e]
                                  (util/stop e)
-                                 (editor-handler/cut-selection-blocks true)
+                                 (on-cut)
                                  (state/pub-event! [:editor/hide-action-bar])))
        "Cut")
       (shui/button
@@ -56,7 +61,7 @@
                                  (shui/popup-hide!)
                                  (shui/popup-show! e
                                                    (fn []
-                                                     (cp-content/custom-context-menu-content))
+                                                     (state/get-component :selection/context-menu))
                                                    {:on-before-hide state/dom-clear-selection!
                                                     :on-after-hide state/state-clear-selection!
                                                     :content-props {:class "w-[280px] ls-context-menu-content"}
