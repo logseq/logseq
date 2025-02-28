@@ -20,4 +20,4 @@
                             gen-client-op/entity-datoms=>a->add?->v->t)
           ops (gen-client-op/generate-rtc-ops db-before db-after same-entity-datoms-coll e->a->add?->v->t)]
       (when (seq ops)
-        (client-op/add-ops repo ops)))))
+        (client-op/add-ops! repo ops)))))
