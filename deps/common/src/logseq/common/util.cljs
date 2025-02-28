@@ -20,7 +20,7 @@
 
 (defn path-normalize
   "Normalize file path (for reading paths from FS, not required by writing)
-   Keep capitalization senstivity"
+   Keep capitalization sensitivity"
   [s]
   (.normalize s "NFC"))
 

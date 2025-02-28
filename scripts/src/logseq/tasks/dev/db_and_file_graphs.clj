@@ -14,6 +14,7 @@
   "Namespaces or parent namespaces _only_ for DB graphs. Use a '.' at end of a namespace for parent namespaces"
   (mapv escape-shell-regex
         ["logseq.db.sqlite." "logseq.db.frontend."
+         "logseq.outliner.property" "logseq.outliner.validate" "logseq.outliner.cli" "logseq.outliner.db-pipeline"
          "electron.db"
          "frontend.handler.db-based."
          "frontend.worker.handler.page.db-based"
@@ -23,7 +24,8 @@
 (def file-graph-ns
   "Namespaces or parent namespaces _only_ for file graphs"
   (mapv escape-shell-regex
-        ["frontend.handler.file-based" "frontend.handler.file-sync"
+        ["logseq.graph-parser.db" "logseq.graph-parser.property" "logseq.graph-parser.extract"
+         "frontend.handler.file-based" "frontend.handler.file-sync"
          "frontend.db.file-based"
          "frontend.util.file-based"
          "frontend.common.file-based"
@@ -39,12 +41,16 @@
   "DB graph paths with :block/name"
   ["deps/db/src/logseq/db/frontend"
    "deps/db/src/logseq/db/sqlite"
+   "deps/outliner/src/logseq/outliner/property.cljs"
    "src/main/frontend/worker/handler/page/db_based"])
 
 (def db-graph-paths
   "Paths _only_ for DB graphs"
   (into block-name-db-graph-paths
-        ["src/main/frontend/handler/db_based"
+        ["deps/outliner/src/logseq/outliner/cli.cljs"
+         "deps/outliner/src/logseq/outliner/db_pipeline.cljs"
+         "deps/outliner/src/logseq/outliner/validate.cljs"
+         "src/main/frontend/handler/db_based"
          "src/main/frontend/components/class.cljs"
          "src/main/frontend/components/property.cljs"
          "src/main/frontend/components/property"
@@ -55,7 +61,11 @@
 
 (def file-graph-paths
   "Paths _only_ for file graphs"
-  ["src/main/frontend/handler/file_based" "src/main/frontend/handler/file_sync.cljs" "src/main/frontend/db/file_based"
+  ["deps/graph-parser/src/logseq/graph_parser/db.cljs"
+   "deps/graph-parser/src/logseq/graph_parser/extract.cljc"
+   "deps/graph-parser/src/logseq/graph_parser/property.cljs"
+   "deps/graph-parser/src/logseq/graph_parser.cljs"
+   "src/main/frontend/handler/file_based" "src/main/frontend/handler/file_sync.cljs" "src/main/frontend/db/file_based"
    "src/main/frontend/util/file_based" "src/main/frontend/worker/handler/page/file_based" "src/main/frontend/worker/file.cljs"
    "src/main/frontend/common/file_based"
    "src/main/frontend/fs"
@@ -131,7 +141,7 @@
             (System/exit 1))
 
         ;; :block/name isn't used in db graphs except for fns with journal or internal-page
-        block-name-file-concepts #{"block/name" "/page-name-sanity-lc" "db/get-page"}
+        block-name-file-concepts #{"block/name" "/page-name-sanity-lc" "db/get-page "}
         no-block-name-db-graph-paths (set/difference (set db-graph-paths) (set block-name-db-graph-paths))
         block-name-res (grep-many block-name-file-concepts no-block-name-db-graph-paths)
         block-name-invalid-lines (when (= 0 (:exit block-name-res))

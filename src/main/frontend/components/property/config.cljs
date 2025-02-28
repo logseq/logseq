@@ -290,7 +290,7 @@
       [:div.property-setting-title
        (some-> icon (name) (shui/tabler-icon {:size 14
                                               :style {:margin-top "-1"}}))
-       [:span title]]
+       [:span {:title title} title]]
       (cond
         (fn? desc)
         (desc)
@@ -403,30 +403,31 @@
                            :value id
                            :content (choice-item-content property block opts)}))
                       choices)]
+
     [:div.ls-property-dropdown-editor.ls-property-choices-sub-pane
      (when (seq choices)
-       [:ul.choices-list
-        (dnd/items choice-items
-                   {:sort-by-inner-element? false
-                    :on-drag-end (fn [_ {:keys [active-id over-id direction]}]
-                                   (let [move-down? (= direction :down)
-                                         over (db/entity [:block/uuid (uuid over-id)])
-                                         active (db/entity [:block/uuid (uuid active-id)])
-                                         over-order (:block/order over)
-                                         new-order (if move-down?
-                                                     (let [next-order (db-order/get-next-order (db/get-db) property (:db/id over))]
-                                                       (db-order/gen-key over-order next-order))
-                                                     (let [prev-order (db-order/get-prev-order (db/get-db) property (:db/id over))]
-                                                       (db-order/gen-key prev-order over-order)))]
+       [:<>
+        [:ul.choices-list
+         (dnd/items choice-items
+           {:sort-by-inner-element? false
+            :on-drag-end (fn [_ {:keys [active-id over-id direction]}]
+                           (let [move-down? (= direction :down)
+                                 over (db/entity [:block/uuid (uuid over-id)])
+                                 active (db/entity [:block/uuid (uuid active-id)])
+                                 over-order (:block/order over)
+                                 new-order (if move-down?
+                                             (let [next-order (db-order/get-next-order (db/get-db) property (:db/id over))]
+                                               (db-order/gen-key over-order next-order))
+                                             (let [prev-order (db-order/get-prev-order (db/get-db) property (:db/id over))]
+                                               (db-order/gen-key prev-order over-order)))]
 
-                                     (db/transact! (state/get-current-repo)
-                                                   [{:db/id (:db/id active)
-                                                     :block/order new-order}
-                                                    (outliner-core/block-with-updated-at
-                                                     {:db/id (:db/id property)})]
-                                                   {:outliner-op :save-block})))})])
-
-     (shui/dropdown-menu-separator)
+                             (db/transact! (state/get-current-repo)
+                               [{:db/id (:db/id active)
+                                 :block/order new-order}
+                                (outliner-core/block-with-updated-at
+                                  {:db/id (:db/id property)})]
+                               {:outliner-op :save-block})))})]
+        (shui/dropdown-menu-separator)])
 
      ;; add choice
      (when-not disabled?
@@ -462,13 +463,14 @@
   [choices]
   (let [select-cp (fn [opts]
                     (shui/select
-                     opts
-                     (shui/select-trigger
-                      (shui/select-value {:placeholder "Select a choice"}))
-                     (shui/select-content
-                      (map (fn [choice]
-                             (shui/select-item {:key (str (:db/id choice))
-                                                :value (:db/id choice)} (:block/title choice))) choices))))
+                      opts
+                      (shui/select-trigger
+                        {:class "h-8"}
+                        (shui/select-value {:placeholder "Select a choice"}))
+                      (shui/select-content
+                        (map (fn [choice]
+                               (shui/select-item {:key (str (:db/id choice))
+                                                  :value (:db/id choice)} (:block/title choice))) choices))))
         checked-choice (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) choices)
         unchecked-choice (some (fn [choice] (when (false? (:logseq.property/choice-checkbox-state choice)) choice)) choices)]
     [:div.flex.flex-col.gap-4.text-sm.p-2
@@ -603,6 +605,8 @@
         built-in? (ldb/built-in? property)
         disabled? (or built-in? config/publishing?)]
     [:<>
+     [:h3.font-medium.px-2.pt-2.pb-2.opacity-90.flex.items-center.gap-1
+      (shui/tabler-icon "adjustments-alt") [:span "Configure property"]]
      (dropdown-editor-menuitem {:icon :pencil :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
                                 :submenu-content (fn [ops] (name-edit-pane property (assoc ops :disabled? disabled?)))})
      (let [disabled?' (or disabled? (and property-type (seq values)))]

@@ -370,10 +370,7 @@
       (for [page pages]
         [:li.recent-item.select-none.font-medium
          {:key (str "recent-" (:db/id page))
-          :title (block-handler/block-unique-title page)
-          :draggable true
-          :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
-          :data-ref (str name)}
+          :title (block-handler/block-unique-title page)}
          (page-name page (icon/get-node-icon-cp page {:size 16}) true)])])))
 
 (defn get-default-home-if-valid

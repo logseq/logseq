@@ -27,6 +27,18 @@
         (notification/show! "Copied block's data!" :success)))
     (notification/show! "No block found" :warning)))
 
+(defn export-view-nodes-data [nodes]
+  (let [block-uuids (mapv #(vector :block/uuid (:block/uuid %)) nodes)]
+    (when-let [^Object worker @state/*db-worker]
+      (p/let [result* (.export-edn worker
+                                   (state/get-current-repo)
+                                   (ldb/write-transit-str {:export-type :view-nodes :node-ids block-uuids}))
+              result (ldb/read-transit-str result*)
+              pull-data (with-out-str (pprint/pprint result))]
+        (.writeText js/navigator.clipboard pull-data)
+        (println pull-data)
+        (notification/show! "Copied block's data!" :success)))))
+
 (defn ^:export export-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
     (when-let [^Object worker @state/*db-worker]
