@@ -161,6 +161,13 @@ const app: Partial<IAppProxy> = {
     )
   },
 
+  invokeGoogleAuth () {
+    this.caller?.call(`api:call`, {
+      method: 'invoke-google-auth',
+      args: [],
+    })
+  },
+
   registerCommandShortcut (
     keybinding: SimpleCommandKeybinding | string,
     action: SimpleCommandCallback,

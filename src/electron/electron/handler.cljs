@@ -25,6 +25,7 @@
             [electron.plugin :as plugin]
             [electron.search :as search]
             [electron.server :as server]
+            [electron.gauth :as gauth]
             [electron.shell :as shell]
             [electron.state :as state]
             [electron.utils :as utils]
@@ -375,6 +376,9 @@
 
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
+
+(defmethod handle :invokeGoogleAuth []
+  (gauth/init))
 
 (defmethod handle :getSystemProxy [^js window]
   (if-let [sess (.. window -webContents -session)]

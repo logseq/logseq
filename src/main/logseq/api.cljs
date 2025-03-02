@@ -405,6 +405,10 @@
   [pid]
   (plugin-handler/unregister-plugin-search-services pid))
 
+(defn ^:export invoke_google_auth
+  []
+  (plugin-handler/invoke-google-auth))
+
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]
     (when-let [opts (bean/->clj opts)]

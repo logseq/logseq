@@ -320,6 +320,9 @@
   [pid]
   (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
 
+(defn invoke-google-auth []
+  (ipc/ipc "invokeGoogleAuth"))
+
 (defn register-plugin-ui-item
   [pid {:keys [key type] :as opts}]
   (when-let [pid (keyword pid)]
