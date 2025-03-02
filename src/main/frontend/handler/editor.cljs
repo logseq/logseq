@@ -2621,7 +2621,7 @@
           (keydown-new-line))))))
 
 (defn- select-first-last
-  "Select first or last block in viewpoint"
+  "Select first or last block in viewport"
   [direction]
   (let [f (case direction :up last :down first)
         container (if (some-> js/document.activeElement
