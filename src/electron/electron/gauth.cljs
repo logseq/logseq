@@ -15,6 +15,7 @@
 (def openIdConnectUrl "https://accounts.google.com")
 
 (def clientId "769164351182-a12kqumvlqo1t7ffvjoinsttlv40tvn6.apps.googleusercontent.com")
+(def clientSecret "CLIENT_SECRET")
 (def redirectUri "http://127.0.0.1:8000")
 (def scope "openid profile email")
 
@@ -52,6 +53,7 @@
     (do (js/console.log "Unknown service configuration") (js/Promise.resolve))
     (let [extras (clj->js (when code-verifier {:code_verifier code-verifier}))
           request (TokenRequest. (clj->js {:client_id clientId,
+                                           :client_secret clientSecret,
                                            :redirect_uri redirectUri,
                                            :grant_type
                                              GRANT_TYPE_AUTHORIZATION_CODE,
@@ -81,6 +83,7 @@
           ;(js/console.log (str "Access Token is " access-token))
           access-token)
         (let [request (TokenRequest. (clj->js {:client_id clientId,
+                                               :client_secret clientSecret,
                                                :redirect_uri redirectUri,
                                                :grant_type
                                                  GRANT_TYPE_REFRESH_TOKEN,

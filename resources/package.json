@@ -15,7 +15,7 @@
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
     "rebuild:all": "electron-rebuild -v 28.3.1 -f",
-    "postinstall": "install-app-deps"
+    "postinstall": "yarn patch-package; yarn install-app-deps"
   },
   "config": {
     "forge": "./forge.config.js"
