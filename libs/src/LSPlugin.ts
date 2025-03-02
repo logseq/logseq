@@ -484,7 +484,7 @@ export interface IAppProxy {
   setRightSidebarVisible: (flag: boolean | 'toggle') => void
   clearRightSidebarBlocks: (opts?: { close: boolean }) => void
 
-  invokeGoogleAuth: () => void
+  invokeGoogleAuth: (clientId: string, clientSecret: string, scope: string) => void
 
   registerUIItem: (
     type: 'toolbar' | 'pagebar',

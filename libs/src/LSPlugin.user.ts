@@ -161,10 +161,14 @@ const app: Partial<IAppProxy> = {
     )
   },
 
-  invokeGoogleAuth () {
+  invokeGoogleAuth (
+    clientId: string,
+    clientSecret: string,
+    scope: string
+  ) {
     this.caller?.call(`api:call`, {
       method: 'invoke-google-auth',
-      args: [],
+      args: [clientId, clientSecret, scope],
     })
   },
 

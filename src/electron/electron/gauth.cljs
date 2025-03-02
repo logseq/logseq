@@ -14,10 +14,7 @@
 
 (def openIdConnectUrl "https://accounts.google.com")
 
-(def clientId "769164351182-a12kqumvlqo1t7ffvjoinsttlv40tvn6.apps.googleusercontent.com")
-(def clientSecret "CLIENT_SECRET")
 (def redirectUri "http://127.0.0.1:8000")
-(def scope "openid profile email")
 
 (def auth-state-emitter (events/EventEmitter.))
 
@@ -28,7 +25,7 @@
                     requestor))
 
 (defn make-authorization-request
-  [configuration ^js authorization-handler]
+  [clientId scope configuration ^js authorization-handler]
   (if (nil? configuration)
     (js/console.log "Unknown service configuration")
     (let [extras (clj->js {:prompt "consent", :access_type "offline"})
@@ -48,7 +45,7 @@
                                     request))))
 
 (defn make-refresh-token-request
-  [configuration code code-verifier]
+  [clientId clientSecret configuration code code-verifier]
   (if (nil? configuration)
     (do (js/console.log "Unknown service configuration") (js/Promise.resolve))
     (let [extras (clj->js (when code-verifier {:code_verifier code-verifier}))
@@ -71,7 +68,7 @@
                response)))))
 
 (defn perform-with-fresh-tokens
-  [configuration refresh-token access-token-response]
+  [clientId clientSecret configuration refresh-token access-token-response]
   (if (nil? configuration)
     (do (js/console.log "Unknown service configuration")
         (js/Promise.reject "Unknown service configuration"))
@@ -99,7 +96,7 @@
                      access-token))))))))
 
 (defn init
-  []
+  [clientId clientSecret scope]
   (.then
     (fetch-service-configuration)
     (fn [configuration]
@@ -113,6 +110,8 @@
               (let [code-verifier (.-code_verifier (.-internal ^js request))
                     code (.-code ^js response)]
                 (.then (make-refresh-token-request
+                         clientId
+                         clientSecret
                          configuration
                          code
                          code-verifier)
@@ -120,6 +119,8 @@
                          (let [refresh-token (.-refreshToken
                                                ^js access-token-response)]
                            (let [access-token (perform-with-fresh-tokens
+                                                clientId
+                                                clientSecret
                                                 configuration
                                                 refresh-token
                                                 access-token-response)]
@@ -128,5 +129,7 @@
                              (js/console.log "All Done.")))))))))
         (.setAuthorizationNotifier authorization-handler notifier)
         (make-authorization-request
+          clientId
+          scope
           configuration
           authorization-handler)))))
