@@ -18,7 +18,6 @@
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
-            [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.block :as gp-block]
             [promesa.core :as p]))
