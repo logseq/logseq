@@ -280,12 +280,12 @@
     ;; only value-ref-property types should call this
     (find-or-create-property-value conn property-id v)))
 
-(defn throw-error-if-self-value
+(defn- throw-error-if-self-value
   [block value ref?]
   (when (and ref? (= value (:db/id block)))
-    (throw (ex-info "Can't set this block ifself as own property value"
+    (throw (ex-info "Can't set this block itself as own property value"
                     {:type :notification
-                     :payload {:message "Can't set this block ifself as own property value"
+                     :payload {:message "Can't set this block itself as own property value"
                                :type :error}}))))
 
 (defn set-block-property!
