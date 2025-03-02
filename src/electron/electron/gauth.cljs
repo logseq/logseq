@@ -8,15 +8,13 @@
     ["@openid/appauth/built/node_support/node_requestor" :refer [NodeRequestor]]
     ["@openid/appauth/built/token_request" :refer [GRANT_TYPE_AUTHORIZATION_CODE GRANT_TYPE_REFRESH_TOKEN TokenRequest]]
     ["@openid/appauth/built/token_request_handler" :refer [BaseTokenRequestHandler]]
-    ["events" :as events]))
+    [electron.utils :as utils]))
 
 (def requestor (NodeRequestor.))
 
 (def openIdConnectUrl "https://accounts.google.com")
 
 (def redirectUri "http://127.0.0.1:8000")
-
-(def auth-state-emitter (events/EventEmitter.))
 
 (defn fetch-service-configuration
   []
@@ -96,7 +94,7 @@
                      access-token))))))))
 
 (defn init
-  [clientId clientSecret scope]
+  [window clientId clientSecret scope]
   (.then
     (fetch-service-configuration)
     (fn [configuration]
@@ -124,7 +122,7 @@
                                                 configuration
                                                 refresh-token
                                                 access-token-response)]
-                             (.emit auth-state-emitter "on_token_response")
+                             (utils/send-to-renderer window "GAuthTokenPluginCallback" {:plugin-name "logseq-google-tasks" :payload {:access_token access-token :refresh_token refresh-token}})
                              ;(js/console.log "Access Token and Refresh Token are" access-token refresh-token)
                              (js/console.log "All Done.")))))))))
         (.setAuthorizationNotifier authorization-handler notifier)

@@ -378,7 +378,7 @@
   (utils/get-ls-dotdir-root))
 
 (defmethod handle :invokeGoogleAuth [window [_ clientId clientSecret scope]]
-  (gauth/init clientId clientSecret scope))
+  (gauth/init window clientId clientSecret scope))
 
 (defmethod handle :getSystemProxy [^js window]
   (if-let [sess (.. window -webContents -session)]

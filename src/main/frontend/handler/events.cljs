@@ -943,6 +943,12 @@
 (defmethod handle :whiteboard/redo [[_ e]]
   (whiteboard-handler/redo! e))
 
+(defmethod handle :plugin/gauth-token-plugin-callback [[_ data]]
+  (let [{:keys [plugin-name payload]} (bean/->clj data)]
+    ;(js/console.log "Plugin:" plugin-name)
+    ;(js/console.log "Payload:" payload.obj)
+    (plugin-handler/hook-plugin-app :google-auth-token-received payload.obj plugin-name)))
+
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))
 
