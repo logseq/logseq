@@ -435,10 +435,9 @@
           "Upload file types like image, pdf, docx, etc.)"
           :icon/upload])
 
-       (when-not db?
-         ["Template" [[:editor/input command-trigger nil]
-                      [:editor/search-template]] "Insert a created template here"
-          :icon/template])
+       ["Template" [[:editor/input command-trigger nil]
+                    [:editor/search-template]] "Insert a created template here"
+        :icon/template]
 
        ["Embed HTML " (->inline "html") "" :icon/htmlEmbed]
 

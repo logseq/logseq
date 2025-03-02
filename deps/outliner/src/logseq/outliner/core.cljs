@@ -5,6 +5,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
             [logseq.common.util :as common-util]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.file-based.schema :as file-schema]
@@ -503,7 +504,7 @@
         uuids (zipmap block-uuids
                       (if keep-uuid?
                         block-uuids
-                        (repeatedly random-uuid)))
+                        (repeatedly common-uuid/gen-uuid)))
         uuids (if (and (not keep-uuid?) replace-empty-target?)
                 (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
                 uuids)
