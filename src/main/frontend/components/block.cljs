@@ -2613,9 +2613,10 @@
      {:key (str "tag-" (:db/id tag))
       :on-mouse-over #(reset! *hover-container? true)
       :on-mouse-out #(reset! *hover-container? false)}
-     (when (and @*hover-container? (not (ldb/private-tags (:db/ident tag))))
-       [:div.absolute.-left-5.bg-gray-01
-        {:style {:top -2}}
+     (when (not (ldb/private-tags (:db/ident tag)))
+       [:div.absolute.-left-5.bg-gray-01.transition-opacity.duration-300.ease-in-out
+        {:class (if @*hover-container? "!opacity-100" "!opacity-0")
+         :style {:top -2}}
         (shui/button
          {:size :sm
           :variant :ghost
