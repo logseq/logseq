@@ -158,6 +158,24 @@
        ws-state (assoc :ws-state ws-state)))
    (m/reductions {} nil ws-state-flow)))
 
+(defn- add-migration-client-ops!
+  [repo db server-schema-version]
+  (when server-schema-version
+    (let [client-schema-version (ldb/get-graph-schema-version db)
+          added-ops (r.migrate/add-migration-client-ops! repo db server-schema-version client-schema-version)]
+      (when (seq added-ops)
+        (log/info :add-migration-client-ops
+                  {:repo repo
+                   :server-schema-version server-schema-version
+                   :client-schema-version client-schema-version})))))
+
+(defn- update-remote-schema-version!
+  [conn server-schema-version]
+  (when server-schema-version
+    (d/transact! conn [(ldb/kv :logseq.kv/remote-schema-version server-schema-version)]
+                 {:gen-undo-ops? false
+                  :persist-op? false})))
+
 (defonce ^:private *rtc-lock (atom nil))
 (defn- holding-rtc-lock
   "Use this fn to prevent multiple rtc-loops at same time.
@@ -216,13 +234,8 @@
           ;; init run to open a ws
           (m/? get-ws-create-task)
           (started-dfv true)
-          (when @*server-schema-version
-            (let [client-schema-version (ldb/get-graph-schema-version @conn)]
-              (log/info :add-migration-client-ops
-                        {:repo repo
-                         :server-schema-version @*server-schema-version
-                         :client-schema-version client-schema-version})
-              (r.migrate/add-migration-client-ops! repo @conn @*server-schema-version client-schema-version)))
+          (update-remote-schema-version! conn @*server-schema-version)
+          (add-migration-client-ops! repo @conn @*server-schema-version)
           (reset! *assets-sync-loop-canceler
                   (c.m/run-task assets-sync-loop-task :assets-sync-loop-task))
           (->>
