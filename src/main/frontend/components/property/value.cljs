@@ -1260,55 +1260,72 @@
              (first v)
              :else
              v)
-         empty-value? (when (coll? v) (= :logseq.property/empty-placeholder (:db/ident (first v))))
-         closed-values? (seq (:property/closed-values property))
-         property-ident (:db/ident property)
-         value-cp [:div.property-value-inner
-                   {:data-type type
-                    :class (str (when empty-value? "empty-value")
-                                (when-not (:other-position? opts) " w-full"))}
-                   (cond
-                     (= property-ident :logseq.property.class/properties)
-                     (properties-cp {} block {:selected? false
-                                              :class-schema? true})
+         self-value-or-embedded? (fn [v]
+                                   (or (= (:db/id v) (:db/id block))
+                                       ;; property value self embedded
+                                       (= (:db/id (:block/link v)) (:db/id block))))]
+     (if (or (and (de/entity? v) (self-value-or-embedded? v))
+             (and (coll? v) (every? de/entity? v)
+                  (some self-value-or-embedded? v)))
+       [:div.flex.flex-row.items-center.gap-1
+        [:div.warning "Self reference"]
+        (shui/button {:variant :outline
+                      :size :sm
+                      :class "h-5"
+                      :on-click (fn []
+                                  (db-property-handler/remove-block-property!
+                                   (:db/id block)
+                                   (:db/ident property)))}
+                     "Fix it!")]
+       (let [empty-value? (when (coll? v) (= :logseq.property/empty-placeholder (:db/ident (first v))))
+             closed-values? (seq (:property/closed-values property))
+             property-ident (:db/ident property)
+             value-cp [:div.property-value-inner
+                       {:data-type type
+                        :class (str (when empty-value? "empty-value")
+                                    (when-not (:other-position? opts) " w-full"))}
+                       (cond
+                         (= property-ident :logseq.property.class/properties)
+                         (properties-cp {} block {:selected? false
+                                                  :class-schema? true})
 
-                     (and multiple-values? (contains? #{:default :url} type) (not closed-values?))
-                     (property-normal-block-value block property v)
+                         (and multiple-values? (contains? #{:default :url} type) (not closed-values?))
+                         (property-normal-block-value block property v)
 
-                     multiple-values?
-                     (multiple-values block property opts)
+                         multiple-values?
+                         (multiple-values block property opts)
 
-                     :else
-                     (let [parent? (= property-ident :logseq.property/parent)
-                           value-cp (property-scalar-value block property v
-                                                           (merge
-                                                            opts
-                                                            {:editor-id editor-id
-                                                             :dom-id dom-id}))
-                           page-ancestors (when parent?
-                                            (let [ancestor-pages (loop [parents [block]]
-                                                                   (if-let [parent (:logseq.property/parent (last parents))]
-                                                                     (when-not (contains? (set parents) parent)
-                                                                       (recur (conj parents parent)))
-                                                                     parents))]
-                                              (->> (reverse ancestor-pages)
-                                                   (remove (fn [e] (= (:db/id block) (:db/id e))))
-                                                   butlast)))]
-                       (if (seq page-ancestors)
-                         [:div.flex.flex-1.items-center.gap-1
-                          (interpose [:span.opacity-50.text-sm " > "]
-                                     (concat
-                                      (map (fn [{title :block/title :as ancestor}]
-                                             [:a.whitespace-nowrap {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} title])
-                                           page-ancestors)
-                                      [value-cp]))]
-                         value-cp)))]]
-     (if show-tooltip?
-       (shui/tooltip-provider
-        (shui/tooltip
-         {:delayDuration 1200}
-         (shui/tooltip-trigger
-          {:onFocusCapture #(util/stop-propagation %)} value-cp)
-         (shui/tooltip-content
-          (str "Change " (:block/title property)))))
-       value-cp))))
+                         :else
+                         (let [parent? (= property-ident :logseq.property/parent)
+                               value-cp (property-scalar-value block property v
+                                                               (merge
+                                                                opts
+                                                                {:editor-id editor-id
+                                                                 :dom-id dom-id}))
+                               page-ancestors (when parent?
+                                                (let [ancestor-pages (loop [parents [block]]
+                                                                       (if-let [parent (:logseq.property/parent (last parents))]
+                                                                         (when-not (contains? (set parents) parent)
+                                                                           (recur (conj parents parent)))
+                                                                         parents))]
+                                                  (->> (reverse ancestor-pages)
+                                                       (remove (fn [e] (= (:db/id block) (:db/id e))))
+                                                       butlast)))]
+                           (if (seq page-ancestors)
+                             [:div.flex.flex-1.items-center.gap-1
+                              (interpose [:span.opacity-50.text-sm " > "]
+                                         (concat
+                                          (map (fn [{title :block/title :as ancestor}]
+                                                 [:a.whitespace-nowrap {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} title])
+                                               page-ancestors)
+                                          [value-cp]))]
+                             value-cp)))]]
+         (if show-tooltip?
+           (shui/tooltip-provider
+            (shui/tooltip
+             {:delayDuration 1200}
+             (shui/tooltip-trigger
+              {:onFocusCapture #(util/stop-propagation %)} value-cp)
+             (shui/tooltip-content
+              (str "Change " (:block/title property)))))
+           value-cp))))))
