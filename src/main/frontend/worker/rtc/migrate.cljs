@@ -28,7 +28,7 @@
   (let [property-ks (mapcat :properties migrate-updates)
         new-property-entites (keep (fn [k] (d/entity db k)) property-ks)
         client-ops (vec (gen-client-op/generate-rtc-ops-from-property-entities new-property-entites))
-        max-t (apply max (map second client-ops))]
+        max-t (apply max 0 (map second client-ops))]
     (conj client-ops
           [:update-kv-value
            max-t
@@ -41,4 +41,5 @@
   (when-let [ops (not-empty
                   (some->> (server-client-schema-verion->migrations server-schema-version client-schema-version)
                            (migration-updates->client-ops db client-schema-version)))]
-    (client-op/add-ops! repo ops)))
+    (client-op/add-ops! repo ops)
+    ops))
