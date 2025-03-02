@@ -926,11 +926,14 @@
                      :property-block? true
                      :on-block-content-pointer-down (when default-value?
                                                       (fn [_e]
-                                                        (<create-new-block! block property (or (:block/title default-value) ""))))}]
+                                                        (<create-new-block! block property (or (:block/title default-value) ""))))
+                     :p-block (:db/id block)
+                     :p-property (:db/id property)}]
          (if (set? value-block)
            (blocks-container config (ldb/sort-by-order value-block))
            (rum/with-key
-             (block-container (assoc config :property-default-value? default-value?) value-block)
+             (block-container (assoc config
+                                     :property-default-value? default-value?) value-block)
              (str (:db/id property) "-" (:block/uuid value-block)))))]
       [:div
        {:tabIndex 0
@@ -1233,7 +1236,7 @@
     (multiple-values-inner block property value' opts)))
 
 (rum/defcs property-value < rum/reactive db-mixins/query
-  [state block property {:keys [show-tooltip?]
+  [state block property {:keys [show-tooltip? p-block p-property]
                          :as opts}]
   (ui/catch-error
    (ui/block-error "Something wrong" {})
@@ -1266,7 +1269,8 @@
                                        (= (:db/id (:block/link v)) (:db/id block))))]
      (if (or (and (de/entity? v) (self-value-or-embedded? v))
              (and (coll? v) (every? de/entity? v)
-                  (some self-value-or-embedded? v)))
+                  (some self-value-or-embedded? v))
+             (and (= p-block (:db/id block)) (= p-property (:db/id property))))
        [:div.flex.flex-row.items-center.gap-1
         [:div.warning "Self reference"]
         (shui/button {:variant :outline
