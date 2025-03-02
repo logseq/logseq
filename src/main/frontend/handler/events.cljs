@@ -1078,7 +1078,7 @@
 
 (defmethod handle :editor/show-action-bar []
   (let [selection (state/get-selection-blocks)
-        first-visible-block (first selection)]
+        first-visible-block (some #(when (util/el-visible-in-viewport? % true) %) selection)]
     (when first-visible-block
       (shui/popup-hide! :selection-action-bar)
       (shui/popup-show!
