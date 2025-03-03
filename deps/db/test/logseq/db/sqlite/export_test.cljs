@@ -4,10 +4,12 @@
             [datascript.core :as d]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [logseq.common.config :as common-config]))
 
 ;; Test helpers
 ;; ============
@@ -510,6 +512,7 @@
 
 (deftest ^:focus import-graph
   (let [internal-block-uuid (random-uuid)
+        favorited-uuid (random-uuid)
         original-data
         {:properties
          {:user.property/num {:logseq.property/type :number}
@@ -524,15 +527,26 @@
           :user.class/MyClass2 {:build/class-parent :user.class/MyClass
                                 :build/properties {:logseq.property/description "tests child class"}}}
          :pages-and-blocks
-         [{:page {:block/title "page1" :build/properties {:user.property/checkbox false}}
+         [{:page {:block/title "page1"
+                  :block/uuid favorited-uuid :build/keep-uuid? true
+                  :build/properties {:user.property/checkbox false}}
            :blocks [{:block/title "b1" :build/properties {:user.property/num 1}}]}
           {:page {:block/title "page2" :build/tags [:user.class/MyClass2]}
            :blocks [{:block/title "hola" :block/uuid internal-block-uuid :build/keep-uuid? true}
                     {:block/title (str "internal block ref to " (page-ref/->page-ref internal-block-uuid))}]}
+          {:page {:build/journal 20250228 :build/properties {:user.property/num 1}}
+           :blocks [{:block/title "journal block"}]}
+          ;; built-in pages
           {:page {:block/title "Contents" :build/properties {:logseq.property/built-in? true}}
            :blocks [{:block/title "right sidebar"}]}
-          {:page {:build/journal 20250228 :build/properties {:user.property/num 1}}
-           :blocks [{:block/title "journal block"}]}]}
+          {:page {:block/title common-config/favorites-page-name
+                  :build/properties {:logseq.property/built-in? true, :logseq.property/hide? true}}
+           :blocks [(ldb/build-favorite-tx favorited-uuid)]}
+          {:page {:block/title common-config/views-page-name
+                  :build/properties {:logseq.property/built-in? true, :logseq.property/hide? true}}
+           :blocks [{:block/title "All"
+                     :build/properties {:logseq.property/view-for :logseq.class/Task
+                                        :logseq.property.view/feature-type :class-objects}}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         {:keys [init-tx block-props-tx] :as _txs}
@@ -545,13 +559,8 @@
         imported-graph (sqlite-export/build-export @conn2 {:export-type :graph})]
 
     ;; (cljs.pprint/pprint (set (:pages-and-blocks original-data)))
-    ;; (cljs.pprint/pprint (->> (:pages-and-blocks imported-graph)
-    ;;                          (remove #(get-in % [:page :build/properties :logseq.property/hide?]))
-    ;;                          set))
+    ;; (cljs.pprint/pprint (set (:pages-and-blocks imported-graph)))
     (is (= (set (:pages-and-blocks original-data))
-           ;; TODO: hidden built-in pages
-           (->> (:pages-and-blocks imported-graph)
-                (remove #(get-in % [:page :build/properties :logseq.property/hide?]))
-                set)))
+           (set (:pages-and-blocks imported-graph))))
     (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))))
