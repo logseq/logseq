@@ -428,13 +428,13 @@
 
 (rum/defc db-page-title-actions
   [page]
-  [:div.absolute.-top-3.left-0.opacity-0.db-page-title-actions
+  [:div.absolute.-top-4.left-0.opacity-0.db-page-title-actions
    [:div.flex.flex-row.items-center.gap-2
     (when-not (:logseq.property/icon (db/entity (:db/id page)))
       (shui/button
        {:variant :outline
         :size :sm
-        :class "px-2 py-0 h-4 text-xs text-muted-foreground"
+        :class "px-2 py-0 h-6 text-xs text-muted-foreground"
         :on-click (fn [e]
                     (state/pub-event! [:editor/new-property {:property-key "Icon"
                                                              :block page
@@ -444,11 +444,11 @@
     (shui/button
      {:variant :outline
       :size :sm
-      :class "px-2 py-0 h-4 text-xs text-muted-foreground"
+      :class "px-2 py-0 h-6 text-xs text-muted-foreground"
       :on-click (fn [e]
                   (state/pub-event! [:editor/new-property {:block page
                                                            :target (.-target e)}]))}
-     "Set page property")]])
+     "Set property")]])
 
 (rum/defc db-page-title
   [page whiteboard-page? sidebar? container-id]
