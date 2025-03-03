@@ -2232,15 +2232,23 @@
                template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
                blocks (db/get-block-and-children repo block-uuid)
                sorted-blocks (if db?
-                               blocks
+                               (let [blocks' (rest blocks)]
+                                 (cons
+                                  (-> (first blocks')
+                                      (assoc :logseq.property/used-template (:db/id block)))
+                                  (rest blocks')))
                                (cons
                                 (-> (first blocks)
                                     (update :block/properties-text-values dissoc :template)
                                     (update :block/properties-order (fn [keys]
                                                                       (vec (remove #{:template} keys)))))
                                 (rest blocks)))
-               blocks (if (and (not db?) template-including-parent?)
+               blocks (cond
+                        db?
                         sorted-blocks
+                        template-including-parent?
+                        sorted-blocks
+                        :else
                         (drop 1 sorted-blocks))]
            (when element-id
              (insert-command! element-id "" format {:end-pattern commands/command-trigger}))
