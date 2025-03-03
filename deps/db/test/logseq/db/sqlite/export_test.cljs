@@ -311,6 +311,27 @@
                                       (into (vec (remove #(= "hola" (:block/title %)) bs))
                                             bs))})))
 
+(deftest import-page-with-block-links
+  (let [block-uuid (random-uuid)
+        original-data
+        {:pages-and-blocks
+         [{:page {:block/title "page1"}
+           :blocks [{:block/title "b1" :block/uuid block-uuid :build/keep-uuid? true}
+                    {:block/title "" :block/link [:block/uuid block-uuid]}]}]}
+        ;; add option to test out of order uuids
+        conn (db-test/create-conn-with-blocks (assoc original-data :build-existing-tx? true))
+        conn2 (db-test/create-conn)
+        imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
+        "Page's blocks are imported")
+
+    (import-second-time-assertions conn conn2 "page1" original-data
+                                   {:transform-expected-blocks
+                                    (fn [bs]
+                                      ;; internal referenced block doesn't get copied b/c it already exists
+                                      (into (vec (remove #(= "b1" (:block/title %)) bs))
+                                            bs))})))
+
 (deftest import-page-with-different-page-and-classes
   (let [original-data
         {:properties {:user.property/p1 {:logseq.property/type :default}

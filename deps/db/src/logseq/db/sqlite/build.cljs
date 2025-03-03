@@ -618,12 +618,18 @@
                                  m))
                              properties-tx)
         pages-and-blocks-tx (build-pages-and-blocks-tx pages-and-blocks' all-idents page-uuids
-                                                       (assoc options :properties properties))]
-    ;; Properties first b/c they have schema and are referenced by all. Then classes b/c they can be referenced by pages. Then pages
-    (split-blocks-tx (concat properties-tx'
-                             classes-tx
-                             pages-and-blocks-tx)
-                     properties)))
+                                                       (assoc options :properties properties))
+        ;; Properties first b/c they have schema and are referenced by all. Then
+        ;; classes b/c they can be referenced by pages. Then pages
+        split-txs (split-blocks-tx (concat properties-tx' classes-tx pages-and-blocks-tx)
+                                   properties)]
+    (cond-> split-txs
+      ;; Just add indices option as there are too many out of order uuid cases with importing user content
+      (:build-existing-tx? options)
+      (update :init-tx
+              (fn [init-tx]
+                (let [indices (mapv #(select-keys % [:block/uuid]) (filter :block/uuid init-tx))]
+                  (into indices init-tx)))))))
 
 ;; Public API
 ;; ==========

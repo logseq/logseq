@@ -183,6 +183,8 @@
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
         new-properties (when-not shallow-copy? (build-node-properties db entity ent-properties properties))
         build-node (cond-> {:block/title (block-title entity)}
+                     (:block/link entity)
+                     (assoc :block/link [:block/uuid (:block/uuid (:block/link entity))])
                      (include-uuid-fn (:block/uuid entity))
                      (assoc :block/uuid (:block/uuid entity) :build/keep-uuid? true)
                      (and (not shallow-copy?) (seq build-tags))
@@ -245,12 +247,16 @@
       classes (assoc :classes classes))))
 
 (defn- build-content-ref-export
-  "Builds an export config (and additional info) for refs in the given blocks. All the exported
+  "Builds an export config (and additional info) for refs in the given blocks. Refs are detected
+   if they are a :block/link or if a `[[UUID]]` ref in the content. All the exported
    entities found in block refs include their uuid in order to preserve the relationship to the blocks"
   [db blocks*]
   (let [;; Remove property value blocks that can't have content refs
         blocks (remove :logseq.property/value blocks*)
-        content-ref-uuids (set (mapcat (comp db-content/get-matched-ids block-title) blocks))
+        block-links (->> (filter :block/link blocks)
+                         (map #(:block/uuid (:block/link %))))
+        content-ref-uuids (into (set (mapcat (comp db-content/get-matched-ids block-title) blocks))
+                                block-links)
         content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)
         content-ref-pages (filter #(or (entity-util/internal-page? %) (entity-util/journal? %)) content-ref-ents)
         {:keys [properties classes]}
