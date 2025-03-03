@@ -2966,7 +2966,7 @@
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)
         refs-count (if (seq (:block/_refs block))
-                     (count (:block/_refs block))
+                     (count (remove :logseq.property/view-for (:block/_refs block)))
                      (rum/react *refs-count))
         table? (:table? config)
         raw-mode-block (state/sub :editor/raw-mode-block)

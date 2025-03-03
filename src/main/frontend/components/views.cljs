@@ -1292,7 +1292,8 @@
   (when-let [->hiccup (state/get-component :block/->hiccup)]
     (let [group-by-page? (not (every? db/page? result))
           result (if group-by-page?
-                   (group-by :block/page result)
+                   (-> (group-by :block/page result)
+                       (update-vals ldb/sort-by-order))
                    result)
           config' (cond-> (assoc config
                                  :current-block (:db/id view-entity)

@@ -51,7 +51,8 @@
 (defn- insert-tag-templates
   [repo conn tx-report]
   (let [db (:db-after tx-report)
-        tx-data (some->> (filter (fn [d] (and (= (:a d) :block/tags) (:added d))) (:tx-data tx-report))
+        tx-data (some->> (:tx-data tx-report)
+                         (filter (fn [d] (and (= (:a d) :block/tags) (:added d))))
                          (group-by :e)
                          (mapcat (fn [[e datoms]]
                                    (let [object (d/entity db e)
@@ -62,6 +63,7 @@
                                                                           templates))
                                                                       (set (map :v datoms)))
                                                               distinct
+                                                              (sort-by :block/created-at)
                                                               (mapcat (fn [template]
                                                                         (let [template-blocks (rest (ldb/get-block-and-children db (:block/uuid template)))
                                                                               blocks (->>
@@ -156,9 +158,12 @@
           commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
                         (commands/run-commands tx-report))
           ;; :block/refs relies on those changes
-          tx-before-refs (concat display-blocks-tx-data commands-tx)
+          ;; idea: implement insert-templates using a command?
+          insert-templates-tx (insert-tag-templates repo conn tx-report)
+          tx-before-refs (concat display-blocks-tx-data commands-tx insert-templates-tx)
           tx-report* (if (seq tx-before-refs)
-                       (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true})]
+                       (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
+                                                                        :outliner-op :pre-hook-invoke})]
                          (assoc tx-report
                                 :tx-data (concat (:tx-data tx-report) (:tx-data result))
                                 :db-after (:db-after result)))
@@ -178,11 +183,9 @@
                                      {:block/uuid (:block/uuid e)
                                       :ext (:logseq.property.asset/type e)}))) deleted-block-ids)
           blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
-          insert-templates-tx (when (seq blocks')
-                                (insert-tag-templates repo conn tx-report))
           block-refs (when (seq blocks')
                        (rebuild-block-refs repo tx-report* blocks'))
-          refs-tx-report (when (or (seq block-refs) (seq insert-templates-tx))
+          refs-tx-report (when (seq block-refs)
                            (ldb/transact! conn (concat insert-templates-tx block-refs) {:pipeline-replace? true}))
           replace-tx (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))]
                        (concat
