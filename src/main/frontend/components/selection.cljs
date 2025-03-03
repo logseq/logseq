@@ -19,19 +19,18 @@
     [:div.selection-action-bar
      (shui/button-group
       ;; set tag
-      (ui/tooltip
        (shui/button
-        (assoc button-opts
-               :on-pointer-down (fn [e]
-                                  (util/stop e)
-                                  (state/pub-event! [:editor/new-property {:target (.-target e)
-                                                                           :selected-blocks selected-blocks
-                                                                           :property-key "Tags"
-                                                                           :show-select-only? true
-                                                                           :hide-property-key? true
-                                                                           :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
-        (ui/icon "hash" {:size 13}))
-       "Set tag")
+         (assoc button-opts
+           :on-pointer-down (fn [e]
+                              (util/stop e)
+                              (state/pub-event! [:editor/new-property {:target (.-target e)
+                                                                       :selected-blocks selected-blocks
+                                                                       :property-key "Tags"
+                                                                       :show-select-only? true
+                                                                       :hide-property-key? true
+                                                                       :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
+         (ui/tooltip (ui/icon "hash" {:size 13}) "Set tag"
+           {:trigger-props {:class "flex"}}))
       (shui/button
        (assoc button-opts
               :on-pointer-down (fn [e]
