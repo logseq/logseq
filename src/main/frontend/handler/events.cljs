@@ -1086,6 +1086,8 @@
        (fn []
          (selection/action-bar))
        {:id :selection-action-bar
+        :content-props {:side "top"}
+        :auto-side? false
         :align :start}))))
 
 (defmethod handle :editor/hide-action-bar []
