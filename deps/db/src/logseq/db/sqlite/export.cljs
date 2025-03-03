@@ -177,7 +177,7 @@
 (defn- build-node-export
   "Given a block/page entity and optional existing properties, build an export map of its
    tags and properties"
-  [db entity {:keys [properties include-uuid-fn keep-uuid? shallow-copy?]
+  [db entity {:keys [properties include-uuid-fn shallow-copy?]
               :or {include-uuid-fn (constantly false)}}]
   (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
@@ -185,8 +185,6 @@
         build-node (cond-> {:block/title (block-title entity)}
                      (include-uuid-fn (:block/uuid entity))
                      (assoc :block/uuid (:block/uuid entity) :build/keep-uuid? true)
-                     keep-uuid?
-                     (assoc :build/keep-uuid? true)
                      (and (not shallow-copy?) (seq build-tags))
                      (assoc :build/tags build-tags)
                      (and (not shallow-copy?) (seq ent-properties))
@@ -326,7 +324,6 @@
                       (merge (build-blocks-export db
                                                   (sort-by :block/order blocks)
                                                   {:include-uuid-fn (constantly true)
-                                                   :keep-uuid? true
                                                    ;; shallow copy to disallow failing pvalues
                                                    :shallow-copy? true})
                              {:page (shallow-copy-page parent-page-ent)})))))]
