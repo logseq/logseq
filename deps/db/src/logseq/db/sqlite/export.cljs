@@ -474,10 +474,13 @@
 (defn- build-graph-content-ref-export
   [db]
   (let [block-titles (map :v (d/datoms db :avet :block/title))
-        content-ref-uuids (->> block-titles
-                               (filter string?)
-                               (mapcat db-content/get-matched-ids)
-                               set)
+        block-links (->> (d/datoms db :avet :block/link)
+                         (map #(:block/uuid (d/entity db (:v %)))))
+        content-ref-uuids (into (->> block-titles
+                                     (filter string?)
+                                     (mapcat db-content/get-matched-ids)
+                                     set)
+                                block-links)
         content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)]
     {:content-ref-uuids content-ref-uuids
      :content-ref-ents content-ref-ents}))
@@ -487,7 +490,7 @@
   [db _options]
   (let [page-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Page))
                          (map :e (d/datoms db :avet :block/tags :logseq.class/Journal)))
-        ;; TODO: content-ref-uuids
+        ;; TODO: content-ref-ents
         {:keys [content-ref-uuids]} (build-graph-content-ref-export db)
         page-exports (mapv (fn [eid]
                              (let [page-blocks* (get-page-blocks db eid)]
