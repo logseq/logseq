@@ -1,6 +1,8 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
-  (:require [datascript.core :as d]
+  (:require [clojure.walk :as walk]
+            [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [frontend.worker.commands :as commands]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
@@ -45,6 +47,38 @@
                     (conj {:db/id (:db/id block)
                            :block/refs refs})))))
             blocks)))
+
+(defn- insert-tag-templates
+  [repo conn tx-report]
+  (let [db (:db-after tx-report)
+        tx-data (->> (filter (fn [d] (and (= (:a d) :block/tags) (:added d))) (:tx-data tx-report))
+                     (group-by :e)
+                     (mapcat (fn [[e datoms]]
+                               (let [object (d/entity db e)
+                                     template-blocks (->> (mapcat (fn [id]
+                                                                    (let [tag (d/entity db id)
+                                                                          parents (ldb/get-page-parents tag {:node-class? true})
+                                                                          templates (mapcat :logseq.property/_template-applied-to (conj parents tag))]
+                                                                      templates))
+                                                                  (set (map :v datoms)))
+                                                          distinct
+                                                          (mapcat (fn [template]
+                                                                    (let [template-blocks (rest (ldb/get-block-and-children db (:block/uuid template)))
+                                                                          blocks (->>
+                                                                                  (cons (assoc (first template-blocks) :logseq.property/used-template (:db/id template))
+                                                                                        (rest template-blocks))
+                                                                                  (map (fn [e] (assoc (into {} e) :db/id (:db/id e)))))]
+                                                                      blocks))))
+                                     result (outliner-core/insert-blocks repo conn template-blocks object {:sibling? false})
+                                     tx-data (:tx-data result)]
+                                 ;; Replace entities with eid because Datascript doesn't support entity transaction
+                                 (walk/prewalk
+                                  (fn [f]
+                                    (if (de/entity? f)
+                                      (:db/id f)
+                                      f))
+                                  tx-data)))))]
+    tx-data))
 
 (defkeywords
   ::skip-validate-db? {:doc "tx-meta option, default = false"}
@@ -143,10 +177,12 @@
                                      {:block/uuid (:block/uuid e)
                                       :ext (:logseq.property.asset/type e)}))) deleted-block-ids)
           blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
+          insert-templates-tx (when (seq blocks')
+                                (insert-tag-templates repo conn tx-report))
           block-refs (when (seq blocks')
                        (rebuild-block-refs repo tx-report* blocks'))
-          refs-tx-report (when (seq block-refs)
-                           (ldb/transact! conn block-refs {:pipeline-replace? true}))
+          refs-tx-report (when (or (seq block-refs) (seq insert-templates-tx))
+                           (ldb/transact! conn (concat insert-templates-tx block-refs) {:pipeline-replace? true}))
           replace-tx (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))]
                        (concat
                       ;; block path refs

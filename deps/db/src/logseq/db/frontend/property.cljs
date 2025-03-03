@@ -572,7 +572,13 @@
                                      :schema {:type :node
                                               :public? false
                                               :hide? true
-                                              :classes #{:logseq.class/Template}}})))
+                                              :classes #{:logseq.class/Template}}}
+     :logseq.property/template-applied-to {:title "Apply to tags"
+                                           :schema {:type :class
+                                                    :cardinality :many
+                                                    :public? true
+                                                    :classes #{:logseq.class/Root}}
+                                           :queryable? true})))
 
 (def built-in-properties
   (->> built-in-properties*
