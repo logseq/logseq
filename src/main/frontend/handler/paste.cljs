@@ -8,6 +8,7 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -189,32 +190,38 @@
   ;; todo: logseq/whiteboard-shapes is now text/html
   [input text e html]
   (util/stop e)
-  (->
-   (p/let [{:keys [graph blocks embed-block?]} (get-copied-blocks)]
-     (if (and (seq blocks) (= graph (state/get-current-repo)))
+  (let [repo (state/get-current-repo)]
+    (->
+     (p/let [{:keys [graph blocks embed-block?]} (get-copied-blocks)]
+       (if (and (seq blocks) (= graph repo))
        ;; Handle internal paste
-       (let [revert-cut-txs (get-revert-cut-txs blocks)
-             keep-uuid? (= (state/get-block-op-type) :cut)
-             blocks (if (config/db-based-graph? (state/get-current-repo))
-                      (map (fn [b] (dissoc b :block/properties)) blocks)
-                      blocks)]
-         (if embed-block?
-           (when-let [block-id (:block/uuid (first blocks))]
-             (when-let [current-block (state/get-edit-block)]
-               (p/do!
-                (editor-handler/api-insert-new-block! ""
-                                                      {:block-uuid (:block/uuid current-block)
-                                                       :sibling? true
-                                                       :replace-empty-target? true
-                                                       :other-attrs {:block/link (:db/id (db/entity [:block/uuid block-id]))}})
-                (state/clear-edit!))))
-           (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
-                                                :keep-uuid? keep-uuid?})))
-       (paste-copied-text input text html)))
-   (p/catch (fn [error]
-              (log/error :msg "Paste failed" :exception error)
-              (state/pub-event! [:capture-error {:error error
-                                                 :payload {:type ::paste-copied-blocks-or-text}}])))))
+         (let [revert-cut-txs (get-revert-cut-txs blocks)
+               keep-uuid? (= (state/get-block-op-type) :cut)
+               blocks (if (config/db-based-graph? (state/get-current-repo))
+                        (map (fn [b] (dissoc b :block/properties)) blocks)
+                        blocks)]
+           (if embed-block?
+             (when-let [block-id (:block/uuid (first blocks))]
+               (when-let [current-block (state/get-edit-block)]
+                 (cond
+                   (some #(= block-id (:block/uuid %)) (db/get-block-parents repo (:block/uuid current-block) {}))
+                   (notification/show! "Can't embed parent block as its own property" :error)
+
+                   :else
+                   (p/do!
+                    (editor-handler/api-insert-new-block! ""
+                                                          {:block-uuid (:block/uuid current-block)
+                                                           :sibling? true
+                                                           :replace-empty-target? true
+                                                           :other-attrs {:block/link (:db/id (db/entity [:block/uuid block-id]))}})
+                    (state/clear-edit!)))))
+             (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
+                                                  :keep-uuid? keep-uuid?})))
+         (paste-copied-text input text html)))
+     (p/catch (fn [error]
+                (log/error :msg "Paste failed" :exception error)
+                (state/pub-event! [:capture-error {:error error
+                                                   :payload {:type ::paste-copied-blocks-or-text}}]))))))
 
 (defn paste-text-in-one-block-at-point
   []

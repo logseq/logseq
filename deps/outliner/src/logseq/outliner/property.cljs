@@ -280,6 +280,14 @@
     ;; only value-ref-property types should call this
     (find-or-create-property-value conn property-id v)))
 
+(defn- throw-error-if-self-value
+  [block value ref?]
+  (when (and ref? (= value (:db/id block)))
+    (throw (ex-info "Can't set this block itself as own property value"
+                    {:type :notification
+                     :payload {:message "Can't set this block itself as own property value"
+                               :type :error}}))))
+
 (defn set-block-property!
   "Updates a block property's value for an existing property-id and block.  If
   property is a ref type, automatically handles a raw property value i.e. you
@@ -304,10 +312,12 @@
       (let [property (d/entity @conn property-id)
             _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
             property-type (get property :logseq.property/type :default)
-            new-value (if (db-property-type/all-ref-property-types property-type)
+            ref? (db-property-type/all-ref-property-types property-type)
+            new-value (if ref?
                         (convert-ref-property-value conn property-id v property-type)
                         v)
             existing-value (get block property-id)]
+        (throw-error-if-self-value block new-value ref?)
         (when-not (= existing-value new-value)
           (raw-set-block-property! conn block property property-type new-value))))))
 
@@ -328,17 +338,21 @@
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
         property-type (get property :logseq.property/type :default)
         _ (assert (some? v) "Can't set a nil property value must be not nil")
-        v' (if (db-property-type/value-ref-property-types property-type)
+        ref? (db-property-type/value-ref-property-types property-type)
+        v' (if ref?
              (convert-ref-property-value conn property-id v property-type)
-             v)
-        txs (mapcat
-             (fn [eid]
-               (if-let [block (d/entity @conn eid)]
-                 (build-property-value-tx-data conn block property-id v')
-                 (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
-             block-eids)]
-    (when (seq txs)
-      (ldb/transact! conn txs {:outliner-op :save-block}))))
+             v)]
+    (doseq [eid block-eids]
+      (let [block (d/entity @conn eid)]
+        (throw-error-if-self-value block v' ref?)))
+    (let [txs (mapcat
+               (fn [eid]
+                 (if-let [block (d/entity @conn eid)]
+                   (build-property-value-tx-data conn block property-id v')
+                   (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
+               block-eids)]
+      (when (seq txs)
+        (ldb/transact! conn txs {:outliner-op :save-block})))))
 
 (defn batch-remove-property!
   [conn block-ids property-id]
