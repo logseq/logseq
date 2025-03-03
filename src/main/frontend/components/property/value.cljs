@@ -659,7 +659,8 @@
             (mapcat
              (fn [class]
                (if (= :logseq.class/Root (:db/ident class))
-                 (model/get-all-classes repo {:except-root-class? true})
+                 (model/get-all-classes repo {:except-root-class? true
+                                              :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})
                  (model/get-class-objects repo (:db/id class))))
              classes)
             distinct)

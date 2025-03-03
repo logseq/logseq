@@ -51,33 +51,34 @@
 (defn- insert-tag-templates
   [repo conn tx-report]
   (let [db (:db-after tx-report)
-        tx-data (->> (filter (fn [d] (and (= (:a d) :block/tags) (:added d))) (:tx-data tx-report))
-                     (group-by :e)
-                     (mapcat (fn [[e datoms]]
-                               (let [object (d/entity db e)
-                                     template-blocks (->> (mapcat (fn [id]
-                                                                    (let [tag (d/entity db id)
-                                                                          parents (ldb/get-page-parents tag {:node-class? true})
-                                                                          templates (mapcat :logseq.property/_template-applied-to (conj parents tag))]
-                                                                      templates))
-                                                                  (set (map :v datoms)))
-                                                          distinct
-                                                          (mapcat (fn [template]
-                                                                    (let [template-blocks (rest (ldb/get-block-and-children db (:block/uuid template)))
-                                                                          blocks (->>
-                                                                                  (cons (assoc (first template-blocks) :logseq.property/used-template (:db/id template))
-                                                                                        (rest template-blocks))
-                                                                                  (map (fn [e] (assoc (into {} e) :db/id (:db/id e)))))]
-                                                                      blocks))))
-                                     result (outliner-core/insert-blocks repo conn template-blocks object {:sibling? false})
-                                     tx-data (:tx-data result)]
-                                 ;; Replace entities with eid because Datascript doesn't support entity transaction
-                                 (walk/prewalk
-                                  (fn [f]
-                                    (if (de/entity? f)
-                                      (:db/id f)
-                                      f))
-                                  tx-data)))))]
+        tx-data (some->> (filter (fn [d] (and (= (:a d) :block/tags) (:added d))) (:tx-data tx-report))
+                         (group-by :e)
+                         (mapcat (fn [[e datoms]]
+                                   (let [object (d/entity db e)
+                                         template-blocks (->> (mapcat (fn [id]
+                                                                        (let [tag (d/entity db id)
+                                                                              parents (ldb/get-page-parents tag {:node-class? true})
+                                                                              templates (mapcat :logseq.property/_template-applied-to (conj parents tag))]
+                                                                          templates))
+                                                                      (set (map :v datoms)))
+                                                              distinct
+                                                              (mapcat (fn [template]
+                                                                        (let [template-blocks (rest (ldb/get-block-and-children db (:block/uuid template)))
+                                                                              blocks (->>
+                                                                                      (cons (assoc (first template-blocks) :logseq.property/used-template (:db/id template))
+                                                                                            (rest template-blocks))
+                                                                                      (map (fn [e] (assoc (into {} e) :db/id (:db/id e)))))]
+                                                                          blocks))))]
+                                     (when (seq template-blocks)
+                                       (let [result (outliner-core/insert-blocks repo conn template-blocks object {:sibling? false})
+                                             tx-data (:tx-data result)]
+                                         ;; Replace entities with eid because Datascript doesn't support entity transaction
+                                         (walk/prewalk
+                                          (fn [f]
+                                            (if (de/entity? f)
+                                              (:db/id f)
+                                              f))
+                                          tx-data)))))))]
     tx-data))
 
 (defkeywords
