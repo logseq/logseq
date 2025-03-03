@@ -567,7 +567,12 @@
                                            ;; - avoid losing this attr when the user-block is deleted
                                            ;; - related user-block maybe not exists yet in graph
                                            :type :string
-                                           :hide? true}})))
+                                           :hide? true}}
+     :logseq.property/used-template {:title "Used template"
+                                     :schema {:type :node
+                                              :public? false
+                                              :hide? true
+                                              :classes #{:logseq.class/Template}}})))
 
 (def built-in-properties
   (->> built-in-properties*

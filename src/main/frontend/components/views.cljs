@@ -1529,7 +1529,7 @@
           (if (= title "")
             "New view"
             title))
-        (when show-items-count?
+        (when (and show-items-count? (> (count data) 0))
           [:span.text-muted-foreground.text-xs
            (count data)]))))
 

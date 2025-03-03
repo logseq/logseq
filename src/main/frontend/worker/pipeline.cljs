@@ -9,8 +9,8 @@
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
@@ -134,13 +134,15 @@
                 (doseq [page-id page-ids]
                   (when (d/entity @conn page-id)
                     (file/sync-to-file repo page-id tx-meta)))))
-          deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*)))
+          deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*))
+          deleted-block-ids (set (map :db/id deleted-blocks))
+          deleted-block-uuids (set (map :block/uuid deleted-blocks))
           deleted-assets (keep (fn [id]
-                                 (let [e (d/entity (:db-before tx-report*) [:block/uuid id])]
+                                 (let [e (d/entity (:db-before tx-report*) id)]
                                    (when (ldb/asset? e)
                                      {:block/uuid (:block/uuid e)
-                                      :ext (:logseq.property.asset/type e)}))) deleted-block-uuids)
-          blocks' (remove (fn [b] (deleted-block-uuids (:block/uuid b))) blocks)
+                                      :ext (:logseq.property.asset/type e)}))) deleted-block-ids)
+          blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
           block-refs (when (seq blocks')
                        (rebuild-block-refs repo tx-report* blocks'))
           refs-tx-report (when (seq block-refs)
@@ -153,7 +155,7 @@
                             (compute-block-path-refs-tx tx-report* blocks')))
 
                        ;; update block/tx-id
-                        (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
+                        (let [updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
                                                      (concat pages blocks))
                               tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
                           (keep (fn [b]
