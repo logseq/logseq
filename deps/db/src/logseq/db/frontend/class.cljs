@@ -82,7 +82,8 @@
                                      :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value]}}
 
      :logseq.class/Template
-     {:title "Template"}
+     {:title "Template"
+      :schema {:properties [:logseq.property/template-applied-to]}}
 
      ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project)
      )))
