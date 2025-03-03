@@ -11,7 +11,8 @@
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]))
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]))
 
 ;; Export fns
 ;; ==========
@@ -48,8 +49,11 @@
         [:build/page {:build/journal (:block/journal-day pvalue)}]
         :else
         (if (= :node (:logseq.property/type property-ent))
-          ;; Have to distinguish from block references that don't exist like closed values
-          ^::existing-property-value? [:block/uuid (:block/uuid pvalue)]
+          ;; Internal idents take precedence over uuid because they are keep data graph-agnostic
+          (if (some-> pvalue :db/ident db-malli-schema/internal-ident?)
+            (:db/ident pvalue)
+            ;; Use metadata distinguish from block references that don't exist like closed values
+            ^::existing-property-value? [:block/uuid (:block/uuid pvalue)])
           (or (:db/ident pvalue)
               ;; nbb-compatible version of db-property/property-value-content
               (or (block-title pvalue)

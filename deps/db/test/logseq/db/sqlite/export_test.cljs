@@ -413,7 +413,8 @@
                     {:block/title "node block"
                      :build/properties {:user.property/node #{[:build/page {:block/title "page object"
                                                                             :build/tags [:user.class/MyClass]}]
-                                                              [:block/uuid block-object-uuid]}}}]}
+                                                              [:block/uuid block-object-uuid]
+                                                              :logseq.class/Task}}}]}
           {:page {:block/title "Blocks"}
            :blocks [{:block/title "myclass object"
                      :build/tags [:user.class/MyClass]
