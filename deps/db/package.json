@@ -9,6 +9,7 @@
     "better-sqlite3": "9.3.0"
   },
   "scripts": {
-    "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"
+    "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner",
+    "test-v": "yarn nbb-logseq -cp test -m logseq.db.test-runner"
   }
 }
