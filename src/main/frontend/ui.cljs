@@ -1015,13 +1015,11 @@
       :small? true)]]))
 
 (rum/defc tooltip
-  [trigger tooltip-content]
+  [trigger tooltip-content & {:keys [trigger-props]}]
   (shui/tooltip-provider
-   (shui/tooltip
-    (shui/tooltip-trigger
-     trigger)
-    (shui/tooltip-content
-     tooltip-content))))
+    (shui/tooltip
+      (shui/tooltip-trigger trigger-props trigger)
+      (shui/tooltip-content tooltip-content))))
 
 (rum/defc DelDateButton
   [on-delete]
