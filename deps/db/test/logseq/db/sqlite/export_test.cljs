@@ -547,14 +547,23 @@
            :blocks [{:block/title "All"
                      :build/properties {:logseq.property/view-for :logseq.class/Task
                                         :logseq.property.view/feature-type :class-objects}}]}]}
+        original-files
+        [{:file/path "logseq/config.edn"
+          :file/content "{:foo :bar}"}
+         {:file/path "logseq/custom.css"
+          :file/content ".foo {background-color: blue}"}
+         {:file/path "logseq/custom.js"
+          :file/content "// comment"}]
         conn (db-test/create-conn-with-blocks original-data)
+        _ (d/transact! conn original-files)
         conn2 (db-test/create-conn)
-        {:keys [init-tx block-props-tx] :as _txs}
+        {:keys [init-tx block-props-tx misc-tx] :as _txs}
         (-> (sqlite-export/build-export @conn {:export-type :graph})
             (sqlite-export/build-import @conn2 {}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! conn2 init-tx)
         _ (d/transact! conn2 block-props-tx)
+        _ (d/transact! conn2 misc-tx)
         _ (validate-db @conn2)
         imported-graph (sqlite-export/build-export @conn2 {:export-type :graph})]
 
@@ -563,4 +572,6 @@
     (is (= (set (:pages-and-blocks original-data))
            (set (:pages-and-blocks imported-graph))))
     (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
-    (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))
+    (is (= original-files (::sqlite-export/graph-files imported-graph))
+        "All :file/path entities are imported")))

@@ -499,10 +499,17 @@
         pages-export (apply merge-export-maps page-exports)]
     pages-export))
 
+(defn- build-graph-files
+  [db]
+  (->> (d/q '[:find [(pull ?b [*]) ...] :where [?b :file/path]] db)
+       (mapv #(select-keys % [:file/path :file/content]))))
+
 (defn- build-graph-export [db options]
   (let [ontology-export (build-graph-ontology-export db)
         pages-export (build-graph-pages-export db options)
-        graph-export (merge-export-maps ontology-export pages-export)]
+        files (build-graph-files db)
+        graph-export (merge (merge-export-maps ontology-export pages-export)
+                            {::graph-files files})]
     graph-export))
 
 (defn- find-undefined-classes-and-properties [{:keys [classes properties pages-and-blocks]}]
@@ -573,7 +580,7 @@
           (build-graph-ontology-export db)
           :graph
           (build-graph-export db (:graph-options options)))]
-    (ensure-export-is-valid (dissoc export-map ::block))
+    (ensure-export-is-valid (dissoc export-map ::block ::graph-files))
     export-map))
 
 ;; Import fns
@@ -594,7 +601,7 @@
 (defn- check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
-  [db {:keys [pages-and-blocks classes properties]} property-conflicts]
+  [db {:keys [pages-and-blocks classes properties] ::keys [graph-files]} property-conflicts]
   (let [export-map
         (cond-> {:build-existing-tx? true}
           (seq pages-and-blocks)
@@ -624,7 +631,10 @@
                                            :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
                                  [k (assoc v :block/uuid (:block/uuid ent))])
                                [k v])))
-                      (into {}))))
+                      (into {})))
+          ;; Currently all files are created by app so no need to distinguish between user and built-in ones yet
+          (seq graph-files)
+          (assoc ::graph-files graph-files))
         export-map'
         (walk/postwalk (fn [f]
                          (if (and (vector? f) (= :build/page (first f)))
@@ -645,7 +655,11 @@
     (merge-export-maps export-map {:pages-and-blocks pages-and-blocks})))
 
 (defn build-import
-  "Given an entity's export map, build the import tx to create it"
+  "Given an entity's export map, build the import tx to create it. Returns a map
+   of txs to transact with the following keys:
+   * :init-tx - Txs that must be transacted first, usually because they define new properties
+   * :block-props-tx - Txs to transact after :init-tx, usually because they use newly defined properties
+   * :misc-tx - Txs to transact unrelated to other txs"
   [export-map* db {:keys [current-block]}]
   (let [export-map (if (and (::block export-map*) current-block)
                      (build-block-import-options current-block export-map*)
@@ -657,4 +671,6 @@
         (js/console.error :property-conflicts @property-conflicts)
         {:error (str "The following imported properties conflict with the current graph: "
                      (pr-str (mapv :property-id @property-conflicts)))})
-      (sqlite-build/build-blocks-tx export-map'))))
+      (cond-> (sqlite-build/build-blocks-tx (dissoc export-map' ::graph-files))
+        (seq (::graph-files export-map'))
+        (assoc :misc-tx (::graph-files export-map'))))))
