@@ -645,6 +645,16 @@
                   (mapcat #(apply-to-block-and-all-children % f) children))))]
     (mapcat #(apply-to-block-and-all-children % f) blocks)))
 
+(defn update-each-block
+  "Calls fn f on each block including all children under :build/children"
+  [blocks f]
+  (mapv (fn [m]
+          (let [updated-m (f m)]
+            (if (:build/children m)
+              (assoc updated-m :build/children (update-each-block (:build/children m) f))
+              updated-m)))
+        blocks))
+
 (defn validate-options
   [{:keys [properties] :as options}]
   (when-let [errors (->> options (m/explain Options) me/humanize)]

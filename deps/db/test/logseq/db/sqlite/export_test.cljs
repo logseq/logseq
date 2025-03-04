@@ -513,6 +513,7 @@
 (deftest ^:focus import-graph
   (let [internal-block-uuid (random-uuid)
         favorited-uuid (random-uuid)
+        block-object-uuid (random-uuid)
         original-data
         {:properties
          {:user.property/num {:logseq.property/type :number}
@@ -533,7 +534,15 @@
            :blocks [{:block/title "b1" :build/properties {:user.property/num 1}}]}
           {:page {:block/title "page2" :build/tags [:user.class/MyClass2]}
            :blocks [{:block/title "hola" :block/uuid internal-block-uuid :build/keep-uuid? true}
-                    {:block/title (str "internal block ref to " (page-ref/->page-ref internal-block-uuid))}]}
+                    {:block/title "myclass object"
+                     :build/tags [:user.class/MyClass]
+                     :block/uuid block-object-uuid
+                     :build/keep-uuid? true}
+                    {:block/title "ref blocks"
+                     :build/children
+                     [{:block/title (str "internal block ref to " (page-ref/->page-ref internal-block-uuid))}
+                      {:block/title "node block"
+                       :build/properties {:user.property/node #{[:block/uuid block-object-uuid]}}}]}]}
           {:page {:build/journal 20250228 :build/properties {:user.property/num 1}}
            :blocks [{:block/title "journal block"}]}
           ;; built-in pages

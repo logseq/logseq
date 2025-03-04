@@ -379,15 +379,15 @@
        (map #(d/entity db %))))
 
 (defn- build-page-export*
-  [db eid page-blocks* content-ref-uuids]
+  [db eid page-blocks* include-uuid-fn]
   (let [page-entity (d/entity db eid)
         page-blocks (->> page-blocks*
                          (sort-by :block/order)
                          ;; Remove property value blocks as they are exported in a block's :build/properties
                          (remove #(:logseq.property/created-from-property %)))
         {:keys [pvalue-uuids] :as blocks-export}
-        (build-blocks-export db page-blocks {:include-uuid-fn content-ref-uuids})
-        page-blocks-export (build-page-blocks-export db page-entity (assoc blocks-export :include-uuid-fn content-ref-uuids))
+        (build-blocks-export db page-blocks {:include-uuid-fn include-uuid-fn})
+        page-blocks-export (build-page-blocks-export db page-entity (assoc blocks-export :include-uuid-fn include-uuid-fn))
         page-export (assoc page-blocks-export :pvalue-uuids pvalue-uuids)]
     page-export))
 
@@ -471,33 +471,40 @@
       (seq classes)
       (assoc :classes classes))))
 
-(defn- build-graph-content-ref-export
+(defn- get-graph-content-ref-uuids
   [db]
   (let [block-titles (map :v (d/datoms db :avet :block/title))
         block-links (->> (d/datoms db :avet :block/link)
                          (map #(:block/uuid (d/entity db (:v %)))))
-        content-ref-uuids (into (->> block-titles
-                                     (filter string?)
-                                     (mapcat db-content/get-matched-ids)
-                                     set)
-                                block-links)
-        content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)]
-    {:content-ref-uuids content-ref-uuids
-     :content-ref-ents content-ref-ents}))
+        content-ref-uuids (concat (->> block-titles
+                                       (filter string?)
+                                       (mapcat db-content/get-matched-ids))
+                                  block-links)]
+    (set content-ref-uuids)))
 
 (defn- build-graph-pages-export
   "Handles pages, journals and their blocks"
   [db _options]
   (let [page-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Page))
                          (map :e (d/datoms db :avet :block/tags :logseq.class/Journal)))
-        ;; TODO: content-ref-ents
-        {:keys [content-ref-uuids]} (build-graph-content-ref-export db)
+        content-ref-uuids (get-graph-content-ref-uuids db)
         page-exports (mapv (fn [eid]
                              (let [page-blocks* (get-page-blocks db eid)]
-                               (build-page-export* db eid page-blocks* content-ref-uuids)))
+                               (build-page-export* db eid page-blocks* (constantly true))))
                            page-ids)
-        pages-export (apply merge-export-maps page-exports)]
-    pages-export))
+        all-ref-uuids (set/union content-ref-uuids (set (mapcat :pvalue-uuids page-exports)))
+        pages-export (apply merge-export-maps page-exports)
+        ;; Only way to ensure all pvalue-uuids present is to remove all non-ref uuids after
+        remove-uuid-if-not-ref (fn [m] (if (contains? all-ref-uuids (:block/uuid m))
+                                         m
+                                         (dissoc m :block/uuid :build/keep-uuid? true)))
+        pages-export' (update pages-export :pages-and-blocks
+                              (fn [pages-and-blocks]
+                                (mapv (fn [{:keys [page blocks]}]
+                                        {:page (remove-uuid-if-not-ref page)
+                                         :blocks (sqlite-build/update-each-block blocks remove-uuid-if-not-ref)})
+                                      pages-and-blocks)))]
+    pages-export'))
 
 (defn- build-graph-files
   [db]
