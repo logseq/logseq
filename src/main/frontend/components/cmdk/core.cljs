@@ -409,8 +409,9 @@
 
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]
-    (let [page (db/get-page page-name)]
-      (route-handler/redirect-to-page! (:block/uuid page)))
+    (let [page-uuid (get (db/get-page page-name) :block/uuid
+                         (when (uuid? page-name) page-name))]
+      (route-handler/redirect-to-page! page-uuid))
     (shui/dialog-close! :ls-dialog-cmdk)))
 
 (defmethod handle-action :open-block [_ state _event]
