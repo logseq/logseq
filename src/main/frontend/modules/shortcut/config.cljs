@@ -625,6 +625,10 @@
                                      :db-graph? true
                                      :fn :frontend.handler.db-based.export/export-graph-ontology-data}
 
+   :misc/export-graph-data {:binding []
+                            :db-graph? true
+                            :fn :frontend.handler.db-based.export/export-graph-data}
+
    :misc/import-edn-data {:binding []
                           :db-graph? true
                           :fn :frontend.handler.db-based.export/import-edn-data}
@@ -851,6 +855,7 @@
           :sidebar/close-top
           :misc/export-block-data
           :misc/export-page-data
+          :misc/export-graph-data
           :misc/export-graph-ontology-data
           :misc/import-edn-data
           :dev/show-block-data
@@ -1043,6 +1048,7 @@
      :git/commit
      :misc/export-block-data
      :misc/export-page-data
+     :misc/export-graph-data
      :misc/export-graph-ontology-data
      :misc/import-edn-data
      :dev/show-block-data

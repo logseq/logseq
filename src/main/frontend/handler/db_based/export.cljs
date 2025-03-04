@@ -61,6 +61,15 @@
                            (count (:properties result)) " properties"))
       (notification/show! "Copied graphs's ontology data!" :success))))
 
+(defn ^:export export-graph-data []
+  (when-let [^Object worker @state/*db-worker]
+    (p/let [result* (.export-edn worker (state/get-current-repo) (ldb/write-transit-str {:export-type :graph}))
+            result (ldb/read-transit-str result*)
+            pull-data (with-out-str (pprint/pprint result))]
+      (.writeText js/navigator.clipboard pull-data)
+      (println pull-data)
+      (notification/show! "Copied graphs's data!" :success))))
+
 (defn- import-submit [import-inputs _e]
   (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))
         import-block? (::sqlite-export/block export-map)
