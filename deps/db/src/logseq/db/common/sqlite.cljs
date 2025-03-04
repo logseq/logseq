@@ -8,10 +8,10 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.db.frontend.entity-plus :as entity-plus]
-            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- get-pages-by-name
@@ -199,20 +199,21 @@
      (mapcat (fn [p]
                (d/datoms db :eavt (:db/id p)))))))
 
-(defn get-all-pages
-  "Get all pages including property page's default value"
-  [db]
-  (let [datoms (d/datoms db :avet :block/name)]
-    (mapcat (fn [d]
-              (let [datoms (d/datoms db :eavt (:e d))]
-                (mapcat
-                 (fn [d]
-                   (if (keyword-identical? (:a d) :logseq.property/default-value)
-                     (concat
-                      (d/datoms db :eavt (:v d))
-                      datoms)
-                     datoms))
-                 datoms))) datoms)))
+(comment
+  (defn get-all-pages
+    "Get all pages including property page's default value"
+    [db]
+    (let [datoms (d/datoms db :avet :block/name)]
+      (mapcat (fn [d]
+                (let [datoms (d/datoms db :eavt (:e d))]
+                  (mapcat
+                   (fn [d]
+                     (if (keyword-identical? (:a d) :logseq.property/default-value)
+                       (concat
+                        (d/datoms db :eavt (:v d))
+                        datoms)
+                       datoms))
+                   datoms))) datoms))))
 
 (defn get-page->refs-count
   [db]
@@ -225,7 +226,10 @@
 
 (defn get-structured-datoms
   [db]
-  (->> (d/datoms db :avet :block/closed-value-property)
+  (->> (concat
+        (d/datoms db :avet :block/tags :logseq.class/Tag)
+        (d/datoms db :avet :block/tags :logseq.class/Property)
+        (d/datoms db :avet :block/closed-value-property))
        (mapcat (fn [d]
                  (d/datoms db :eavt (:e d))))))
 
@@ -248,8 +252,10 @@
   (let [page-id (get-first-page-by-name db common-config/views-page-name)
         children (when page-id (:block/_parent (d/entity db page-id)))]
     (when (seq children)
-      (mapcat (fn [b] (d/datoms db :eavt (:db/id b)))
-              children))))
+      (into
+       (mapcat (fn [b] (d/datoms db :eavt (:db/id b)))
+               children)
+       (d/datoms db :eavt page-id)))))
 
 (defn get-initial-data
   "Returns current database schema and initial data.
@@ -272,12 +278,10 @@
         views (when db-graph? (get-views-data db))
         latest-journals (get-latest-journals db 1)
         all-files (get-all-files db)
-        all-pages (get-all-pages db)
         structured-datoms (when db-graph?
                             (get-structured-datoms db))
         data (distinct
               (concat idents
-                      all-pages
                       structured-datoms
                       favorites
                       views
