@@ -199,21 +199,16 @@
      (mapcat (fn [p]
                (d/datoms db :eavt (:db/id p)))))))
 
-(comment
-  (defn get-all-pages
-    "Get all pages including property page's default value"
-    [db]
-    (let [datoms (d/datoms db :avet :block/name)]
-      (mapcat (fn [d]
-                (let [datoms (d/datoms db :eavt (:e d))]
-                  (mapcat
-                   (fn [d]
-                     (if (keyword-identical? (:a d) :logseq.property/default-value)
-                       (concat
-                        (d/datoms db :eavt (:v d))
-                        datoms)
-                       datoms))
-                   datoms))) datoms))))
+(defn get-all-pages
+  "Get all pages datoms"
+  [db]
+  (let [datoms (d/datoms db :avet :block/name)]
+    (map (fn [d]
+           (let [f (fn [attr] (d/datoms db :eavt (:e d) attr))
+                 attrs [:block/uuid :block/title :block/tags :block/created-at :block/updated-at]
+                 result (mapcat f attrs)]
+             (cons d result)))
+         datoms)))
 
 (defn get-page->refs-count
   [db]

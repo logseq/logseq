@@ -6,6 +6,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.handler.page :as page-handler]
             [frontend.hooks :as hooks]
             [frontend.state :as state]
@@ -51,7 +52,8 @@
     (hooks/use-effect!
      (fn []
        (when-let [^js worker @state/*db-worker]
-         (p/let [result-str (.get-page-refs-count worker (state/get-current-repo))
+         (p/let [repo (state/get-current-repo)
+                 result-str (.get-page-refs-count worker repo)
                  result (ldb/read-transit-str result-str)
                  data (get-all-pages)
                  data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
