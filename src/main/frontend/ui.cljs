@@ -908,8 +908,9 @@
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
   [shortcut-key position content]
-  (let [tooltip? (state/sub :ui/shortcut-tooltip?)]
-    (if tooltip?
+  (let [shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
+        enabled-tooltip? (state/enable-tooltip?)]
+    (if (and enabled-tooltip? shortcut-tooltip?)
       (tippy
        {:html [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
         :interactive true

@@ -354,7 +354,7 @@
                              (mobile-util/native-platform?)
                              (util/scroll-to-top true))))
       :style           {:fontSize 50}}
-     [:div.l.flex.drag-region
+     [:div.l.flex.items-center.drag-region
       [left-menu
        (if (mobile-util/native-platform?)
          ;; back button for mobile
