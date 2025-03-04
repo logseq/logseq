@@ -492,11 +492,12 @@
                      (mapcat #(sqlite-build/extract-from-blocks (:blocks %) (fn [m] (some-> m :block/uuid vector)))
                              pages-and-blocks))
              set)
+        ;; only looks one-level deep in properties e.g. not inside :build/page
         ref-uuids
-        (->> (concat (mapcat (comp get-pvalue-uuids :build/properties) (vals classes))
-                     (mapcat (comp get-pvalue-uuids :build/properties) (vals properties))
-                     (mapcat (comp get-pvalue-uuids :build/properties :page) pages-and-blocks)
-                     (mapcat #(sqlite-build/extract-from-blocks (:blocks %) (comp get-pvalue-uuids :build/properties)) pages-and-blocks))
+        (->> (concat (mapcat get-pvalue-uuids (vals classes))
+                     (mapcat get-pvalue-uuids (vals properties))
+                     (mapcat (comp get-pvalue-uuids :page) pages-and-blocks)
+                     (mapcat #(sqlite-build/extract-from-blocks (:blocks %) get-pvalue-uuids) pages-and-blocks))
              set)]
     (set/difference ref-uuids known-uuids)))
 
