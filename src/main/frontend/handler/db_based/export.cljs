@@ -70,7 +70,7 @@
                   (notification/show! "No block found" :warning)))]
     (if (= ::invalid-import export-map)
       (notification/show! "The submitted EDN data is invalid! Fix and try again." :warning)
-      (let [{:keys [init-tx block-props-tx error] :as txs}
+      (let [{:keys [init-tx block-props-tx misc-tx error] :as txs}
             (try
               (sqlite-export/build-import export-map
                                           (db/get-db)
@@ -88,6 +88,9 @@
 
             (when (seq block-props-tx)
               (db/transact! (state/get-current-repo) block-props-tx
+                            (if import-block? {:save-block true} {::sqlite-export/imported-data? true})))
+            (when (seq misc-tx)
+              (db/transact! (state/get-current-repo) misc-tx
                             (if import-block? {:save-block true} {::sqlite-export/imported-data? true})))
 
             (when-not import-block?
