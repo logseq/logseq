@@ -2,6 +2,7 @@
   "Provides the primary outliner operations and fns"
   (:require [clojure.set :as set]
             [clojure.string :as string]
+            [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
             [logseq.common.util :as common-util]
@@ -527,26 +528,28 @@
 
                        :else
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))
-        orders (get-block-orders blocks target-block sibling? keep-block-order?)]
-    (map-indexed (fn [idx {:block/keys [parent] :as block}]
-                   (when-let [uuid' (get uuids (:block/uuid block))]
-                     (let [top-level? (= (:block/level block) 1)
-                           parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
+        orders (get-block-orders blocks target-block sibling? keep-block-order?)
+        blocks-tx (map-indexed (fn [idx {:block/keys [parent] :as block}]
+                                 (when-let [uuid' (get uuids (:block/uuid block))]
+                                   (let [top-level? (= (:block/level block) 1)
+                                         parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
 
-                           order (nth orders idx)
-                           _ (assert (and parent order) (str "Parent or order is nil: " {:parent parent :order order}))
-                           m {:db/id (:db/id block)
-                              :block/uuid uuid'
-                              :block/page target-page
-                              :block/parent parent
-                              :block/order order}
-                           result (->
-                                   (if (de/entity? block)
-                                     (assoc m :block/level (:block/level block))
-                                     (merge block m))
-                                   (dissoc :db/id))]
-                       (update-property-ref-when-paste result uuids))))
-                 blocks)))
+                                         order (nth orders idx)
+                                         _ (assert (and parent order) (str "Parent or order is nil: " {:parent parent :order order}))
+                                         m {:db/id (:db/id block)
+                                            :block/uuid uuid'
+                                            :block/page target-page
+                                            :block/parent parent
+                                            :block/order order}
+                                         result (->
+                                                 (if (de/entity? block)
+                                                   (assoc m :block/level (:block/level block))
+                                                   (merge block m))
+                                                 (dissoc :db/id))]
+                                     (update-property-ref-when-paste result uuids))))
+                               blocks)]
+    {:blocks-tx blocks-tx
+     :id->new-uuid id->new-uuid}))
 
 (defn- get-target-block
   [db blocks target-block {:keys [outliner-op indent? sibling? up?]}]
@@ -640,7 +643,8 @@
                                   :or {update-timestamps? true}}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
-  (let [[target-block sibling?] (get-target-block @conn blocks target-block opts)
+  (let [blocks (map (fn [b] (dissoc b :block/tx-id :block/refs :block/path-refs :logseq.property/created-by)) blocks)
+        [target-block sibling?] (get-target-block @conn blocks target-block opts)
         _ (assert (some? target-block) (str "Invalid target: " target-block))
         sibling? (if (ldb/page? target-block) false sibling?)
         replace-empty-target? (if (and (some? replace-empty-target?)
@@ -667,17 +671,17 @@
                      :keep-uuid? keep-uuid?
                      :keep-block-order? keep-block-order?
                      :outliner-op outliner-op}
-        tx' (insert-blocks-aux blocks' target-block insert-opts)]
-    (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) tx')
+        {:keys [id->new-uuid blocks-tx]} (insert-blocks-aux blocks' target-block insert-opts)]
+    (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) blocks-tx)
       (throw (ex-info "Invalid outliner data"
                       {:opts insert-opts
-                       :tx (vec tx')
+                       :tx (vec blocks-tx)
                        :blocks (vec blocks)
                        :target-block target-block}))
-      (let [uuids-tx (->> (map :block/uuid tx')
+      (let [uuids-tx (->> (map :block/uuid blocks-tx)
                           (remove nil?)
                           (map (fn [uuid'] {:block/uuid uuid'})))
-            tx (assign-temp-id tx' replace-empty-target? target-block)
+            tx (assign-temp-id blocks-tx replace-empty-target? target-block)
             from-property (:logseq.property/created-from-property target-block)
             property-values-tx (when (and sibling? from-property)
                                  (let [top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
@@ -690,8 +694,25 @@
                                                [:block/uuid (:block/uuid block)]]]) top-level-blocks)))
             full-tx (common-util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
                                                     tx
-                                                    property-values-tx)]
-        {:tx-data full-tx
+                                                    property-values-tx)
+            ;; Replace entities with eid because Datascript doesn't support entity transaction
+            full-tx' (let [->new-id (fn [e]
+                                      (if-let [new-uuid (id->new-uuid (:db/id e))]
+                                        [:block/uuid new-uuid]
+                                        (:db/id e)))]
+                       (walk/prewalk
+                        (fn [f]
+                          (cond
+                            (and (coll? f) (every? de/entity? f))
+                            (map ->new-id f)
+
+                            (de/entity? f)
+                            (->new-id f)
+
+                            :else
+                            f))
+                        full-tx))]
+        {:tx-data full-tx'
          :blocks  tx}))))
 
 (defn- sort-non-consecutive-blocks

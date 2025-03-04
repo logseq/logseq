@@ -65,22 +65,16 @@
                                                               distinct
                                                               (sort-by :block/created-at)
                                                               (mapcat (fn [template]
-                                                                        (let [template-blocks (rest (ldb/get-block-and-children db (:block/uuid template)))
+                                                                        (let [template-blocks (rest (ldb/get-block-and-children db (:block/uuid template)
+                                                                                                                                {:include-property-block? true}))
                                                                               blocks (->>
                                                                                       (cons (assoc (first template-blocks) :logseq.property/used-template (:db/id template))
                                                                                             (rest template-blocks))
                                                                                       (map (fn [e] (assoc (into {} e) :db/id (:db/id e)))))]
                                                                           blocks))))]
                                      (when (seq template-blocks)
-                                       (let [result (outliner-core/insert-blocks repo conn template-blocks object {:sibling? false})
-                                             tx-data (:tx-data result)]
-                                         ;; Replace entities with eid because Datascript doesn't support entity transaction
-                                         (walk/prewalk
-                                          (fn [f]
-                                            (if (de/entity? f)
-                                              (:db/id f)
-                                              f))
-                                          tx-data)))))))]
+                                       (let [result (outliner-core/insert-blocks repo conn template-blocks object {:sibling? false})]
+                                         (:tx-data result)))))))]
     tx-data))
 
 (defkeywords
