@@ -1,8 +1,6 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
-  (:require [clojure.walk :as walk]
-            [datascript.core :as d]
-            [datascript.impl.entity :as de]
+  (:require [datascript.core :as d]
             [frontend.worker.commands :as commands]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
