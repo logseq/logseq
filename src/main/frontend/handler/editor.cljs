@@ -1738,12 +1738,17 @@
   (p/let [block (state/get-edit-block)
           nodes (search/block-search (state/get-current-repo) q {:built-in? false
                                                                  :enable-snippet? false})
-          matched (keep (fn [b]
-                          (when-let [id (:block/uuid b)]
-                            (when-not (= id (:block/uuid block)) ; avoid block self-reference
-                              (assoc (db/entity [:block/uuid id])
-                                     :block/title (:block/title b)))))
-                        nodes)]
+          matched (p/all
+                   (keep (fn [b]
+                           (when-let [id (:block/uuid b)]
+                             (when-not (= id (:block/uuid block)) ; avoid block self-reference
+                               (p/let [e (db/entity [:block/uuid id])
+                                       e' (or e
+                                              (p/let [result (db-async/<get-block (state/get-current-repo) id {:children? false})]
+                                                (:block result)))]
+                                 (when e'
+                                   (assoc e' :block/title (:block/title b)))))))
+                         nodes))]
     (-> (concat matched
                 (when nlp-pages?
                   (map (fn [title] {:block/title title :nlp-date? true})
