@@ -643,7 +643,18 @@
                                   :or {update-timestamps? true}}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
-  (let [blocks (map (fn [b] (dissoc b :block/tx-id :block/refs :block/path-refs :logseq.property/created-by)) blocks)
+  (let [blocks (keep (fn [b]
+                       (when-let [eid (or (:db/id b)
+                                          (when-let [id (:block/uuid b)]
+                                            [:block/uuid id]))]
+                         (->
+                          (if-let [e (d/entity @conn eid)]
+                            (assoc (into {} e)
+                                   :db/id (:db/id e)
+                                   :block/title (or (:block/raw-title e) (:block/title e)))
+                            b)
+                          (dissoc :block/tx-id :block/refs :block/path-refs))))
+                     blocks)
         [target-block sibling?] (get-target-block @conn blocks target-block opts)
         _ (assert (some? target-block) (str "Invalid target: " target-block))
         sibling? (if (ldb/page? target-block) false sibling?)
@@ -702,15 +713,7 @@
                                         (:db/id e)))]
                        (walk/prewalk
                         (fn [f]
-                          (cond
-                            (and (coll? f) (every? de/entity? f))
-                            (map ->new-id f)
-
-                            (de/entity? f)
-                            (->new-id f)
-
-                            :else
-                            f))
+                          (if (de/entity? f) (->new-id f) f))
                         full-tx))]
         {:tx-data full-tx'
          :blocks  tx}))))

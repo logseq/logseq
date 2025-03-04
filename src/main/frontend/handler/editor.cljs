@@ -2230,7 +2230,7 @@
                format (get block :block/format :markdown)
                block-uuid (:block/uuid block)
                template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
-               blocks (db/get-block-and-children repo block-uuid)
+               blocks (db/get-block-and-children repo block-uuid {:include-property-block? true})
                sorted-blocks (if db?
                                (let [blocks' (rest blocks)]
                                  (cons
@@ -2260,9 +2260,11 @@
                                           template/resolve-dynamic-template!))
                  page (if (:block/name block) block
                           (when target (:block/page (db/entity (:db/id target)))))
-                 blocks' (map (fn [block]
-                                (paste-block-cleanup repo block page exclude-properties format content-update-fn false))
-                              blocks)
+                 blocks' (if (config/db-based-graph?)
+                           blocks
+                           (map (fn [block]
+                                  (paste-block-cleanup repo block page exclude-properties format content-update-fn false))
+                                blocks))
                  sibling? (:sibling? opts)
                  sibling?' (cond
                              (some? sibling?)
@@ -2280,7 +2282,7 @@
                                   :created-from-journal-template? journal?}
                                  (when-not (string/blank? (state/get-edit-content))
                                    (save-current-block!))
-                                 (outliner-op/insert-blocks! (map #(assoc (into {} %) :db/id (:db/id %)) blocks') target
+                                 (outliner-op/insert-blocks! blocks' target
                                                              (assoc opts :sibling? sibling?')))]
                    (when result (edit-last-block-after-inserted! (ldb/read-transit-str result))))
 

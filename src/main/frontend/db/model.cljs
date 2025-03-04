@@ -424,9 +424,9 @@ independent of format as format specific heading characters are stripped"
           (db-utils/pull-many repo '[*] ids'))))))
 
 (defn get-block-and-children
-  [repo block-uuid]
+  [repo block-uuid & {:as opts}]
   (let [db (conn/get-db repo)]
-    (ldb/get-block-and-children db block-uuid)))
+    (ldb/get-block-and-children db block-uuid opts)))
 
 (defn get-file-page
   ([file-path]
