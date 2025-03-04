@@ -666,57 +666,58 @@
                                      (:block/title target-block)
                                      (string/blank? (:block/title target-block))
                                      (> (count blocks) 1)))
-        db-based? (sqlite-util/db-based-graph? repo)
-        blocks' (let [blocks' (blocks-with-level blocks)]
-                  (cond->> (blocks-with-ordered-list-props repo blocks' target-block sibling?)
-                    update-timestamps?
-                    (mapv #(dissoc % :block/created-at :block/updated-at))
-                    true
-                    (mapv block-with-timestamps)
-                    db-based?
-                    (mapv #(-> %
-                               (dissoc :block/properties)
-                               (update-property-created-by created-by)))))
-        insert-opts {:sibling? sibling?
-                     :replace-empty-target? replace-empty-target?
-                     :keep-uuid? keep-uuid?
-                     :keep-block-order? keep-block-order?
-                     :outliner-op outliner-op}
-        {:keys [id->new-uuid blocks-tx]} (insert-blocks-aux blocks' target-block insert-opts)]
-    (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) blocks-tx)
-      (throw (ex-info "Invalid outliner data"
-                      {:opts insert-opts
-                       :tx (vec blocks-tx)
-                       :blocks (vec blocks)
-                       :target-block target-block}))
-      (let [uuids-tx (->> (map :block/uuid blocks-tx)
-                          (remove nil?)
-                          (map (fn [uuid'] {:block/uuid uuid'})))
-            tx (assign-temp-id blocks-tx replace-empty-target? target-block)
-            from-property (:logseq.property/created-from-property target-block)
-            property-values-tx (when (and sibling? from-property)
-                                 (let [top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
-                                   (mapcat (fn [block]
-                                             [{:block/uuid (:block/uuid block)
-                                               :logseq.property/created-from-property (:db/id from-property)}
-                                              [:db/add
-                                               (:db/id (:block/parent target-block))
-                                               (:db/ident (d/entity @conn (:db/id from-property)))
-                                               [:block/uuid (:block/uuid block)]]]) top-level-blocks)))
-            full-tx (common-util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
-                                                    tx
-                                                    property-values-tx)
+        db-based? (sqlite-util/db-based-graph? repo)]
+    (when (seq blocks)
+      (let [blocks' (let [blocks' (blocks-with-level blocks)]
+                      (cond->> (blocks-with-ordered-list-props repo blocks' target-block sibling?)
+                        update-timestamps?
+                        (mapv #(dissoc % :block/created-at :block/updated-at))
+                        true
+                        (mapv block-with-timestamps)
+                        db-based?
+                        (mapv #(-> %
+                                   (dissoc :block/properties)
+                                   (update-property-created-by created-by)))))
+            insert-opts {:sibling? sibling?
+                         :replace-empty-target? replace-empty-target?
+                         :keep-uuid? keep-uuid?
+                         :keep-block-order? keep-block-order?
+                         :outliner-op outliner-op}
+            {:keys [id->new-uuid blocks-tx]} (insert-blocks-aux blocks' target-block insert-opts)]
+        (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) blocks-tx)
+          (throw (ex-info "Invalid outliner data"
+                          {:opts insert-opts
+                           :tx (vec blocks-tx)
+                           :blocks (vec blocks)
+                           :target-block target-block}))
+          (let [uuids-tx (->> (map :block/uuid blocks-tx)
+                              (remove nil?)
+                              (map (fn [uuid'] {:block/uuid uuid'})))
+                tx (assign-temp-id blocks-tx replace-empty-target? target-block)
+                from-property (:logseq.property/created-from-property target-block)
+                property-values-tx (when (and sibling? from-property)
+                                     (let [top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
+                                       (mapcat (fn [block]
+                                                 [{:block/uuid (:block/uuid block)
+                                                   :logseq.property/created-from-property (:db/id from-property)}
+                                                  [:db/add
+                                                   (:db/id (:block/parent target-block))
+                                                   (:db/ident (d/entity @conn (:db/id from-property)))
+                                                   [:block/uuid (:block/uuid block)]]]) top-level-blocks)))
+                full-tx (common-util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
+                                                        tx
+                                                        property-values-tx)
             ;; Replace entities with eid because Datascript doesn't support entity transaction
-            full-tx' (let [->new-id (fn [e]
-                                      (if-let [new-uuid (id->new-uuid (:db/id e))]
-                                        [:block/uuid new-uuid]
-                                        (:db/id e)))]
-                       (walk/prewalk
-                        (fn [f]
-                          (if (de/entity? f) (->new-id f) f))
-                        full-tx))]
-        {:tx-data full-tx'
-         :blocks  tx}))))
+                full-tx' (let [->new-id (fn [e]
+                                          (if-let [new-uuid (id->new-uuid (:db/id e))]
+                                            [:block/uuid new-uuid]
+                                            (:db/id e)))]
+                           (walk/prewalk
+                            (fn [f]
+                              (if (de/entity? f) (->new-id f) f))
+                            full-tx))]
+            {:tx-data full-tx'
+             :blocks  tx}))))))
 
 (defn- sort-non-consecutive-blocks
   [db blocks]
