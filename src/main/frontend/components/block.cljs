@@ -2443,7 +2443,7 @@
       :else
       nil)))
 
-(rum/defcs db-properties-cp <
+(rum/defcs db-properties-cp < rum/static
   {:init (fn [state]
            (let [container-id (or (:container-id (first (:rum/args state)))
                                   (state/get-next-container-id))]
@@ -3612,9 +3612,22 @@
   [old-block new-block]
   (not= (:block/tx-id old-block) (:block/tx-id new-block)))
 
+(defn- config-block-should-update?
+  [old-state new-state]
+  (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet?]
+        b1                  (second (:rum/args old-state))
+        b2                  (second (:rum/args new-state))
+        result              (or
+                             (block-changed? b1 b2)
+                                               ;; config changed
+                             (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                                   (select-keys (first (:rum/args new-state)) config-compare-keys)))]
+    (boolean result)))
+
 (rum/defcs block-container < rum/reactive db-mixins/query
   (rum/local false ::show-block-left-menu?)
   (rum/local false ::show-block-right-menu?)
+  {:should-update config-block-should-update?}
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)
@@ -4106,16 +4119,7 @@
   (map #(markup-element-cp config %) col))
 
 (rum/defc block-item <
-  {:should-update (fn [old-state new-state]
-                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet?]
-                          b1                  (second (:rum/args old-state))
-                          b2                  (second (:rum/args new-state))
-                          result              (or
-                                               (block-changed? b1 b2)
-                                               ;; config changed
-                                               (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
-                                                     (select-keys (first (:rum/args new-state)) config-compare-keys)))]
-                      (boolean result)))}
+  {:should-update config-block-should-update?}
   [config item {:keys [top? bottom?]}]
   (let [original-block item
         linked-block (:block/link item)
