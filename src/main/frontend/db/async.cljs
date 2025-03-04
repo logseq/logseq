@@ -382,12 +382,7 @@
                      (quot time 1000)))]
         [status-history time]))))
 
-(comment
-  (defn <fetch-all-pages
-    [graph]
-    (when-let [^Object worker @db-browser/*worker]
-      (let [db (db/get-db graph)
-            exclude-ids (->> (d/datoms db :avet :block/name)
-                             (map :db/id)
-                             (ldb/write-transit-str))]
-        (.fetch-all-pages worker graph exclude-ids)))))
+(defn <fetch-all-pages
+  [graph]
+  (when-let [^Object worker @db-browser/*worker]
+    (.fetch-all-pages worker graph)))

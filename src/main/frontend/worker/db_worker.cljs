@@ -3,6 +3,7 @@
   (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [cljs-bean.core :as bean]
+            [clojure.core.async :as async]
             [clojure.edn :as edn]
             [clojure.set]
             [clojure.string :as string]
@@ -619,19 +620,20 @@
      (ldb/write-transit-str (sqlite-common-db/get-page->refs-count @conn))))
 
   (fetch-all-pages
-   [_this repo exclude-page-ids-str]
-   ;; (when-let [conn (worker-state/get-datascript-conn repo)]
-   ;;   (async/go
-   ;;     (let [all-pages (sqlite-common-db/get-all-pages @conn (ldb/read-transit-str exclude-page-ids-str))
-   ;;           partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 all-pages))]
-   ;;       (doseq [[idx tx-data] partitioned-data]
-   ;;         (worker-util/post-message :sync-db-changes {:repo repo
-   ;;                                                     :tx-data tx-data
-   ;;                                                     :tx-meta {:initial-pages? true
-   ;;                                                               :end? (= idx (dec (count partitioned-data)))}})
-   ;;         (async/<! (async/timeout 100)))))
-   ;;   nil)
-   )
+   [_this repo]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (async/go
+       (let [all-pages (sqlite-common-db/get-all-pages @conn)
+             partitioned-data (->>
+                               (partition-all 5000 all-pages)
+                               (map-indexed (fn [idx p] [idx (apply concat p)])))]
+         (doseq [[idx tx-data] partitioned-data]
+           (worker-util/post-message :sync-db-changes {:repo repo
+                                                       :tx-data tx-data
+                                                       :tx-meta {:initial-pages? true
+                                                                 :end? (= idx (dec (count partitioned-data)))}})
+           (async/<! (async/timeout 100)))))
+     nil))
 
   (closeDB
    [_this repo]

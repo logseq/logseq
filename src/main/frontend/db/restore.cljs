@@ -1,7 +1,9 @@
 (ns frontend.db.restore
   "Fns for DB restore(from text or sqlite)"
   (:require [cljs-time.core :as t]
+            [clojure.core.async :as async]
             [datascript.transit :as dt]
+            [frontend.db.async :as db-async]
             [frontend.db.conn :as db-conn]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
@@ -31,7 +33,6 @@
     (state/set-state! :graph/loading? false)
     (state/pub-event! [:ui/re-render-root])
 
-    ;; (async/go
-    ;;   (async/<! (async/timeout 100))
-    ;;   (db-async/<fetch-all-pages repo))
-    ))
+    (async/go
+      (async/<! (async/timeout 100))
+      (db-async/<fetch-all-pages repo))))
