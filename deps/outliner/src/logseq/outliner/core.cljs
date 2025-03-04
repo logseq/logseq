@@ -615,7 +615,7 @@
               m' (vec (conj m block))]
           (recur m' (rest blocks)))))))
 
-(defn ^:api insert-blocks
+(defn ^:api ^:large-vars/cleanup-todo insert-blocks
   "Insert blocks as children (or siblings) of target-node.
   Args:
     `conn`: db connection.
