@@ -563,6 +563,9 @@
            :blocks [{:block/title "All"
                      :build/properties {:logseq.property/view-for :logseq.class/Task
                                         :logseq.property.view/feature-type :class-objects}}
+                    {:block/title "All"
+                     :build/properties {:logseq.property/view-for :user.class/MyClass
+                                        :logseq.property.view/feature-type :class-objects}}
                     {:block/title "Linked references",
                      :build/properties
                      {:logseq.property.view/type :logseq.property.view/type.list,
