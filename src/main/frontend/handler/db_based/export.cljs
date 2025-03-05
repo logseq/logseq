@@ -5,6 +5,8 @@
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.ui :as ui-handler]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
@@ -90,22 +92,22 @@
         (pprint/pprint txs)
         (if error
           (notification/show! error :error)
-          (p/do
-            ;; TODO: Use metadata that supports undo
-            (db/transact! (state/get-current-repo) init-tx
-                          (if import-block? {:save-block true} {::sqlite-export/imported-data? true}))
-
-            (when (seq block-props-tx)
-              (db/transact! (state/get-current-repo) block-props-tx
-                            (if import-block? {:save-block true} {::sqlite-export/imported-data? true})))
-            (when (seq misc-tx)
-              (db/transact! (state/get-current-repo) misc-tx
-                            (if import-block? {:save-block true} {::sqlite-export/imported-data? true})))
-
-            (when-not import-block?
-              (state/clear-async-query-state!)
-              (ui-handler/re-render-root!)
-              (notification/show! "Import successful!" :success))))
+          ;; TODO: When not import-block, use metadata that supports undo
+          (let [tx-meta (if import-block? {:outliner-op :save-block} {::sqlite-export/imported-data? true})
+                repo (state/get-current-repo)]
+            (-> (p/do
+                  (db/transact! repo init-tx tx-meta)
+                  (when (seq block-props-tx)
+                    (db/transact! repo block-props-tx tx-meta))
+                  (when (seq misc-tx)
+                    (db/transact! repo misc-tx tx-meta))
+                  (when-not import-block?
+                    (state/clear-async-query-state!)
+                    (ui-handler/re-render-root!)
+                    (notification/show! "Import successful!" :success)))
+                (p/catch (fn [e]
+                           (js/console.error "Import EDN error: " e)
+                           (notification/show! "An unexpected error occurred during import. See the javascript console for details." :error))))))
         ;; Also close cmd-k
         (shui/dialog-close-all!)))))
 
