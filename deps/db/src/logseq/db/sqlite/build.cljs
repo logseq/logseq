@@ -8,6 +8,7 @@
   (:require [cljs.pprint :as pprint]
             [clojure.set :as set]
             [clojure.string :as string]
+            [clojure.walk :as walk]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
@@ -597,6 +598,23 @@
     ;; (when (seq new-classes) (prn :new-classes new-classes))
     {:classes classes' :properties properties'}))
 
+(defn get-possible-referenced-uuids
+  "Gets all possible ref uuids from either [:block/uuid X] or {:build/journal X}. Uuid scraping
+   is aggressive so some uuids may not be referenced"
+  [input-map]
+  (let [uuids (atom #{})
+        _ (walk/postwalk (fn [f]
+                           ;; This does get a few uuids that aren't :build/keep-uuid? but
+                           ;; that's ok because it consistently gets pvalue uuids
+                           (when (and (vector? f) (= :block/uuid (first f)))
+                             (swap! uuids conj (second f)))
+                           ;; All journals that don't have uuid and could be referenced
+                           (when (and (map? f) (:build/journal f) (not (:block/uuid f)))
+                             (swap! uuids conj (common-uuid/gen-uuid :journal-page-uuid (:build/journal f))))
+                           f)
+                         input-map)]
+    @uuids))
+
 (defn- build-blocks-tx*
   [{:keys [pages-and-blocks properties graph-namespace auto-create-ontology?]
     :as options}]
@@ -628,7 +646,9 @@
       (:build-existing-tx? options)
       (update :init-tx
               (fn [init-tx]
-                (let [indices (mapv #(select-keys % [:block/uuid]) (filter :block/uuid init-tx))]
+                (let [indices
+                      (mapv #(hash-map :block/uuid %)
+                            (get-possible-referenced-uuids {:classes classes :properties properties :pages-and-blocks pages-and-blocks}))]
                   (into indices init-tx)))))))
 
 ;; Public API
