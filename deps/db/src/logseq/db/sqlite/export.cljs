@@ -100,7 +100,8 @@
                          (assoc :build/property-classes (mapv :db/ident (:logseq.property/classes property)))
                          (seq closed-values)
                          (assoc :build/closed-values
-                                (mapv #(cond-> {:value (db-property/property-value-content %) :uuid (random-uuid)}
+                                (mapv #(cond-> {:value (db-property/property-value-content %)
+                                                :uuid (:block/uuid %)}
                                          (:logseq.property/icon %)
                                          (assoc :icon (:logseq.property/icon %)))
                                       closed-values)))])))

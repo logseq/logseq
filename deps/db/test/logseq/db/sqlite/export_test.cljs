@@ -514,9 +514,14 @@
   (let [internal-block-uuid (random-uuid)
         favorited-uuid (random-uuid)
         block-object-uuid (random-uuid)
+        closed-value-uuid (random-uuid)
         original-data
         {:properties
          {:user.property/num {:logseq.property/type :number}
+          :user.property/default-closed
+          {:logseq.property/type :default
+           :build/closed-values [{:value "joy" :uuid closed-value-uuid}
+                                 {:value "sad" :uuid (random-uuid)}]}
           :user.property/checkbox {:logseq.property/type :checkbox}
           :user.property/url {:logseq.property/type :url
                               :build/properties {:logseq.property/description "desc for url"}}
@@ -531,7 +536,8 @@
          [{:page {:block/title "page1"
                   :block/uuid favorited-uuid :build/keep-uuid? true
                   :build/properties {:user.property/checkbox false}}
-           :blocks [{:block/title "b1" :build/properties {:user.property/num 1}}]}
+           :blocks [{:block/title "b1" :build/properties {:user.property/num 1
+                                                          :user.property/default-closed [:block/uuid closed-value-uuid]}}]}
           {:page {:block/title "page2" :build/tags [:user.class/MyClass2]}
            :blocks [{:block/title "hola" :block/uuid internal-block-uuid :build/keep-uuid? true}
                     {:block/title "myclass object"
