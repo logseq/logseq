@@ -551,6 +551,7 @@
                        :build/properties {:user.property/node #{[:block/uuid block-object-uuid]}}}]}]}
           {:page {:build/journal 20250228 :build/properties {:user.property/num 1}}
            :blocks [{:block/title "journal block"}]}
+          {:page {:build/journal 19650201}, :blocks []}
           ;; built-in pages
           {:page {:block/title "Contents" :build/properties {:logseq.property/built-in? true}}
            :blocks [{:block/title "right sidebar"}]}
@@ -561,7 +562,13 @@
                   :build/properties {:logseq.property/built-in? true, :logseq.property/hide? true}}
            :blocks [{:block/title "All"
                      :build/properties {:logseq.property/view-for :logseq.class/Task
-                                        :logseq.property.view/feature-type :class-objects}}]}]}
+                                        :logseq.property.view/feature-type :class-objects}}
+                    {:block/title "Linked references",
+                     :build/properties
+                     {:logseq.property.view/type :logseq.property.view/type.list,
+                      :logseq.property.view/feature-type :linked-references,
+                      :logseq.property/view-for
+                      [:build/page {:build/journal 19650201}]}}]}]}
         original-files
         [{:file/path "logseq/config.edn"
           :file/content "{:foo :bar}"}
