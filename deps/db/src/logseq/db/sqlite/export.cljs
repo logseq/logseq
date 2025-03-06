@@ -94,7 +94,7 @@
                                             (-> (disj db-property/schema-properties :logseq.property/classes)
                                                 (conj :block/title)))
                          include-uuid?
-                         (assoc :block/uuid (:block/uuid property))
+                         (assoc :block/uuid (:block/uuid property) :build/keep-uuid? true)
                          include-timestamps?
                          (merge (select-keys property [:block/created-at :block/updated-at]))
                          (and (not shallow-copy?) (:logseq.property/classes property))
@@ -129,7 +129,7 @@
               :or {include-parents? true}}]
   (cond-> (select-keys class-ent [:block/title])
     include-uuid?
-    (assoc :block/uuid (:block/uuid class-ent))
+    (assoc :block/uuid (:block/uuid class-ent) :build/keep-uuid? true)
     include-timestamps?
     (merge (select-keys class-ent [:block/created-at :block/updated-at]))
     (and (:logseq.property.class/properties class-ent) (not shallow-copy?))
@@ -496,23 +496,12 @@
   [db options]
   (let [page-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Page))
                          (map :e (d/datoms db :avet :block/tags :logseq.class/Journal)))
-        content-ref-uuids (get-graph-content-ref-uuids db)
         page-exports (mapv (fn [eid]
                              (let [page-blocks* (get-page-blocks db eid)]
                                (build-page-export* db eid page-blocks* (merge options {:include-uuid-fn (constantly true)}))))
                            page-ids)
-        all-ref-uuids (set/union content-ref-uuids (set (mapcat :pvalue-uuids page-exports)))
         pages-export (apply merge-export-maps page-exports)
-        ;; Only way to ensure all pvalue-uuids present is to remove all non-ref uuids after
-        remove-uuid-if-not-ref (fn [m] (if (contains? all-ref-uuids (:block/uuid m))
-                                         m
-                                         (dissoc m :block/uuid :build/keep-uuid? true)))
-        pages-export' (update pages-export :pages-and-blocks
-                              (fn [pages-and-blocks]
-                                (mapv (fn [{:keys [page blocks]}]
-                                        {:page (remove-uuid-if-not-ref page)
-                                         :blocks (sqlite-build/update-each-block blocks remove-uuid-if-not-ref)})
-                                      pages-and-blocks)))]
+        pages-export' (assoc pages-export :pvalue-uuids (set (mapcat :pvalue-uuids page-exports)))]
     pages-export'))
 
 (defn- build-graph-files
@@ -523,16 +512,38 @@
                 (select-keys % [:file/path :file/content :file/created-at :file/last-modified-at])
                 (select-keys % [:file/path :file/content])))))
 
+(defn remove-uuids-if-not-ref [export-map all-ref-uuids]
+  (let [remove-uuid-if-not-ref (fn [m] (if (contains? all-ref-uuids (:block/uuid m))
+                                         m
+                                         (dissoc m :block/uuid :build/keep-uuid?)))]
+    (-> export-map
+        (update :classes update-vals remove-uuid-if-not-ref)
+        (update :properties update-vals remove-uuid-if-not-ref)
+        (update :pages-and-blocks
+                (fn [pages-and-blocks]
+                  (mapv (fn [{:keys [page blocks]}]
+                          {:page (remove-uuid-if-not-ref page)
+                           :blocks (sqlite-build/update-each-block blocks remove-uuid-if-not-ref)})
+                        pages-and-blocks))))))
+
 (defn- build-graph-export
   "Exports whole graph. Has the following options:
    * :include-timestamps? - When set timestamps are included on all blocks"
   [db options]
-  (let [ontology-export (build-graph-ontology-export db (select-keys options [:include-timestamps?]))
-        pages-export (build-graph-pages-export db (select-keys options [:include-timestamps?]))
+  (let [content-ref-uuids (get-graph-content-ref-uuids db)
+        ontology-options (merge (select-keys options [:include-timestamps?]) {:include-uuid? true})
+        ontology-export (build-graph-ontology-export db ontology-options)
+        ontology-pvalue-uuids (set (concat (mapcat get-pvalue-uuids (vals (:properties ontology-export)))
+                                           (mapcat get-pvalue-uuids (vals (:classes ontology-export)))))
+        pages-export (build-graph-pages-export db options)
+        all-ref-uuids (set/union content-ref-uuids ontology-pvalue-uuids (:pvalue-uuids pages-export))
         files (build-graph-files db options)
-        graph-export (merge (merge-export-maps ontology-export pages-export)
-                            {::graph-files files})]
-    graph-export))
+        graph-export (merge-export-maps ontology-export pages-export)
+        ;; Remove all non-ref uuids after all nodes are built.
+        ;; Only way to ensure all pvalue uuids present across block types
+        graph-export' (remove-uuids-if-not-ref graph-export all-ref-uuids)]
+    (merge graph-export'
+           {::graph-files files})))
 
 (defn- find-undefined-classes-and-properties [{:keys [classes properties pages-and-blocks]}]
   (let [referenced-classes

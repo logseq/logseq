@@ -598,7 +598,7 @@
     ;; (when (seq new-classes) (prn :new-classes new-classes))
     {:classes classes' :properties properties'}))
 
-(defn get-possible-referenced-uuids
+(defn- get-possible-referenced-uuids
   "Gets all possible ref uuids from either [:block/uuid X] or {:build/journal X}. Uuid scraping
    is aggressive so some uuids may not be referenced"
   [input-map]
