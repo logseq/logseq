@@ -39,6 +39,54 @@
     (sqlite-export/build-export @import-conn {:export-type :block
                                               :block-id (:db/id import-block)})))
 
+(defn- export-page-and-import-to-another-graph
+  "Exports given page from one graph/conn, imports it to a 2nd graph, validates
+  it and then exports the page from the 2nd graph"
+  [export-conn import-conn page-title]
+  (let [page (db-test/find-page-by-title @export-conn page-title)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (-> (sqlite-export/build-export @export-conn {:export-type :page :page-id (:db/id page)})
+            ;; ((fn [x] (cljs.pprint/pprint {:export x}) x))
+            (sqlite-export/build-import @import-conn {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! import-conn init-tx)
+        _ (d/transact! import-conn block-props-tx)
+        _ (validate-db @import-conn)
+        page2 (db-test/find-page-by-title @import-conn page-title)]
+    (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
+
+(defn- import-second-time-assertions [conn conn2 page-title original-data
+                                      & {:keys [transform-expected-blocks]
+                                         :or {transform-expected-blocks (fn [bs] (into bs bs))}}]
+  (let [page (db-test/find-page-by-title @conn2 page-title)
+        imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
+        updated-page (db-test/find-page-by-title @conn2 page-title)
+        expected-page-and-blocks
+        (update-in (:pages-and-blocks original-data) [0 :blocks] transform-expected-blocks)]
+
+    ;; Assume first page is one being imported for now
+    (is (= (first expected-page-and-blocks)
+           (first (:pages-and-blocks imported-page)))
+        "Blocks are appended to existing page")
+    (is (= (:block/created-at page) (:block/created-at updated-page))
+        "Existing page didn't get re-created")
+    (is (= (:block/updated-at page) (:block/updated-at updated-page))
+        "Existing page didn't get updated")))
+
+(defn- export-graph-and-import-to-another-graph
+  "Exports graph and imports it to a 2nd graph, validates it and then exports the 2nd graph"
+  [export-conn import-conn export-options]
+  (let [{:keys [init-tx block-props-tx misc-tx] :as _txs}
+        (-> (sqlite-export/build-export @export-conn {:export-type :graph :graph-options export-options})
+            (sqlite-export/build-import @import-conn {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! import-conn init-tx)
+        _ (d/transact! import-conn block-props-tx)
+        _ (d/transact! import-conn misc-tx)
+        _ (validate-db @import-conn)
+        imported-graph (sqlite-export/build-export @import-conn {:export-type :graph :graph-options export-options})]
+    imported-graph))
+
 (defn- expand-properties
   "Add default values to properties of an input export map to test against a
   db-based export map"
@@ -176,40 +224,6 @@
     (is (= (second (:pages-and-blocks original-data))
            (first (:pages-and-blocks imported-block)))
         "Imported page equals exported page of page ref")))
-
-(defn- export-page-and-import-to-another-graph
-  "Exports given page from one graph/conn, imports it to a 2nd graph, validates
-  it and then exports the page from the 2nd graph"
-  [export-conn import-conn page-title]
-  (let [page (db-test/find-page-by-title @export-conn page-title)
-        {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-export @export-conn {:export-type :page :page-id (:db/id page)})
-            ;; ((fn [x] (cljs.pprint/pprint {:export x}) x))
-            (sqlite-export/build-import @import-conn {}))
-        ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)
-        _ (validate-db @import-conn)
-        page2 (db-test/find-page-by-title @import-conn page-title)]
-    (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
-
-(defn- import-second-time-assertions [conn conn2 page-title original-data
-                                      & {:keys [transform-expected-blocks]
-                                         :or {transform-expected-blocks (fn [bs] (into bs bs))}}]
-  (let [page (db-test/find-page-by-title @conn2 page-title)
-        imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
-        updated-page (db-test/find-page-by-title @conn2 page-title)
-        expected-page-and-blocks
-        (update-in (:pages-and-blocks original-data) [0 :blocks] transform-expected-blocks)]
-
-    ;; Assume first page is one being imported for now
-    (is (= (first expected-page-and-blocks)
-           (first (:pages-and-blocks imported-page)))
-        "Blocks are appended to existing page")
-    (is (= (:block/created-at page) (:block/created-at updated-page))
-        "Existing page didn't get re-created")
-    (is (= (:block/updated-at page) (:block/updated-at updated-page))
-        "Existing page didn't get updated")))
 
 ;; Tests a variety of blocks including block children with new properties, blocks with users classes
 ;; and blocks with built-in properties and classes
@@ -517,10 +531,16 @@
   (let [internal-block-uuid (random-uuid)
         favorited-uuid (random-uuid)
         block-object-uuid (random-uuid)
+        block-object-uuid2 (random-uuid)
         closed-value-uuid (random-uuid)
+        property-uuid (random-uuid)
+        class-uuid (random-uuid)
         original-data
         {:properties
-         {:user.property/num {:logseq.property/type :number}
+         {:user.property/num {:logseq.property/type :number
+                              :block/uuid property-uuid
+                              :build/keep-uuid? true
+                              :build/properties {:user.property/node #{[:block/uuid block-object-uuid2]}}}
           :user.property/default-closed
           {:logseq.property/type :default
            :build/closed-values [{:value "joy" :uuid closed-value-uuid}
@@ -532,7 +552,9 @@
                                :db/cardinality :db.cardinality/many
                                :build/property-classes [:user.class/MyClass]}}
          :classes
-         {:user.class/MyClass {:build/properties {:user.property/url "https://example.com/MyClass"}}
+         {:user.class/MyClass {:build/properties {:user.property/url "https://example.com/MyClass"}
+                               :block/uuid class-uuid
+                               :build/keep-uuid? true}
           :user.class/MyClass2 {:build/class-parent :user.class/MyClass
                                 :build/properties {:logseq.property/description "tests child class"}}}
          :pages-and-blocks
@@ -547,11 +569,17 @@
                      :build/tags [:user.class/MyClass]
                      :block/uuid block-object-uuid
                      :build/keep-uuid? true}
+                    {:block/title "myclass object 2"
+                     :build/tags [:user.class/MyClass]
+                     :block/uuid block-object-uuid2
+                     :build/keep-uuid? true}
                     {:block/title "ref blocks"
                      :build/children
                      [{:block/title (str "internal block ref to " (page-ref/->page-ref internal-block-uuid))}
                       {:block/title "node block"
-                       :build/properties {:user.property/node #{[:block/uuid block-object-uuid]}}}]}]}
+                       :build/properties {:user.property/node #{[:block/uuid block-object-uuid]}}}
+                      {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}
+                      {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}]}]}
           {:page {:build/journal 20250228 :build/properties {:user.property/num 1}}
            :blocks [{:block/title "journal block"}]}
           {:page {:build/journal 19650201}, :blocks []}
@@ -584,20 +612,6 @@
            :file/content "// comment"}]}]
     original-data))
 
-(defn- export-graph-and-import-to-another-graph
-  "Exports graph and imports it to a 2nd graph, validates it and then exports the 2nd graph"
-  [export-conn import-conn export-options]
-  (let [{:keys [init-tx block-props-tx misc-tx] :as _txs}
-        (-> (sqlite-export/build-export @export-conn {:export-type :graph :graph-options export-options})
-            (sqlite-export/build-import @import-conn {}))
-        ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)
-        _ (d/transact! import-conn misc-tx)
-        _ (validate-db @import-conn)
-        imported-graph (sqlite-export/build-export @import-conn {:export-type :graph :graph-options export-options})]
-    imported-graph))
-
 (deftest ^:focus import-graph
   (let [original-data (build-original-graph-data)
         conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
@@ -607,6 +621,8 @@
 
     ;; (cljs.pprint/pprint (set (:pages-and-blocks original-data)))
     ;; (cljs.pprint/pprint (set (:pages-and-blocks imported-graph)))
+    ;; (cljs.pprint/pprint (butlast (clojure.data/diff (set (:pages-and-blocks original-data))
+    ;;                                                 (set (:pages-and-blocks imported-graph)))))
     (is (= (set (:pages-and-blocks original-data)) (set (:pages-and-blocks imported-graph))))
     (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))
