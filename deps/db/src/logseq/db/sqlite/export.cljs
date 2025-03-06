@@ -83,7 +83,7 @@
 
 (defn- build-export-properties
   "The caller of this fn is responsible for building :build/:property-classes unless shallow-copy?"
-  [db user-property-idents {:keys [include-properties? include-uuid? shallow-copy?]}]
+  [db user-property-idents {:keys [include-properties? include-timestamps? include-uuid? shallow-copy?]}]
   (let [properties-config-by-ent
         (->> user-property-idents
              (map (fn [ident]
@@ -95,6 +95,8 @@
                                                 (conj :block/title)))
                          include-uuid?
                          (assoc :block/uuid (:block/uuid property))
+                         include-timestamps?
+                         (merge (select-keys property [:block/created-at :block/updated-at]))
                          (and (not shallow-copy?) (:logseq.property/classes property))
                          (assoc :build/property-classes (mapv :db/ident (:logseq.property/classes property)))
                          (seq closed-values)
@@ -123,11 +125,13 @@
 (defn- build-export-class
   "The caller of this fn is responsible for building any classes or properties from this fn
    unless shallow-copy?"
-  [class-ent {:keys [include-parents? include-uuid? shallow-copy?]
+  [class-ent {:keys [include-parents? include-uuid? shallow-copy? include-timestamps?]
               :or {include-parents? true}}]
   (cond-> (select-keys class-ent [:block/title])
     include-uuid?
     (assoc :block/uuid (:block/uuid class-ent))
+    include-timestamps?
+    (merge (select-keys class-ent [:block/created-at :block/updated-at]))
     (and (:logseq.property.class/properties class-ent) (not shallow-copy?))
     (assoc :build/class-properties
            (mapv :db/ident (:logseq.property.class/properties class-ent)))
@@ -167,7 +171,7 @@
           (into {})))))
 
 (defn- build-node-properties
-  [db entity ent-properties properties]
+  [db entity ent-properties {:keys [properties] :as options}]
   (let [new-user-property-ids (->> (keys ent-properties)
                                    (concat (->> (:block/tags entity)
                                                 (mapcat :logseq.property.class/properties)
@@ -175,22 +179,26 @@
                                    ;; Built-in properties and any possible modifications are not exported
                                    (remove db-property/logseq-property?)
                                    (remove #(get properties %)))]
-    ;; Classes from hare are built in build-node-classes
-    (build-export-properties db new-user-property-ids {})))
+    ;; Classes from here are built in build-node-classes
+    (build-export-properties db new-user-property-ids options)))
 
 (defn- build-node-export
   "Given a block/page entity and optional existing properties, build an export map of its
    tags and properties"
-  [db entity {:keys [properties include-uuid-fn shallow-copy?]
-              :or {include-uuid-fn (constantly false)}}]
+  [db entity {:keys [properties include-uuid-fn shallow-copy? include-timestamps?]
+              :or {include-uuid-fn (constantly false)}
+              :as options}]
   (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
-        new-properties (when-not shallow-copy? (build-node-properties db entity ent-properties properties))
+        new-properties (when-not shallow-copy?
+                         (build-node-properties db entity ent-properties (select-keys options [:properties :include-timestamps?])))
         build-node (cond-> {:block/title (block-title entity)}
                      (:block/link entity)
                      (assoc :block/link [:block/uuid (:block/uuid (:block/link entity))])
                      (include-uuid-fn (:block/uuid entity))
                      (assoc :block/uuid (:block/uuid entity) :build/keep-uuid? true)
+                     include-timestamps?
+                     (merge (select-keys entity [:block/created-at :block/updated-at]))
                      (and (not shallow-copy?) (seq build-tags))
                      (assoc :build/tags build-tags)
                      (and (not shallow-copy?) (seq ent-properties))
@@ -365,7 +373,7 @@
            block-export)))
 
 (defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks] :as opts}]
-  (let [page-ent-export (build-node-export db page-entity (select-keys opts [:properties :include-uuid-fn]))
+  (let [page-ent-export (build-node-export db page-entity (select-keys opts [:properties :include-uuid-fn :include-timestamps?]))
         page (merge (dissoc (:node page-ent-export) :block/title)
                     (shallow-copy-page page-entity))
         page-blocks-export {:pages-and-blocks [{:page page :blocks blocks}]
@@ -379,15 +387,15 @@
        (map #(d/entity db %))))
 
 (defn- build-page-export*
-  [db eid page-blocks* include-uuid-fn]
+  [db eid page-blocks* options]
   (let [page-entity (d/entity db eid)
         page-blocks (->> page-blocks*
                          (sort-by :block/order)
                          ;; Remove property value blocks as they are exported in a block's :build/properties
                          (remove #(:logseq.property/created-from-property %)))
         {:keys [pvalue-uuids] :as blocks-export}
-        (build-blocks-export db page-blocks {:include-uuid-fn include-uuid-fn})
-        page-blocks-export (build-page-blocks-export db page-entity (assoc blocks-export :include-uuid-fn include-uuid-fn))
+        (build-blocks-export db page-blocks options)
+        page-blocks-export (build-page-blocks-export db page-entity (merge blocks-export options))
         page-export (assoc page-blocks-export :pvalue-uuids pvalue-uuids)]
     page-export))
 
@@ -396,7 +404,8 @@
   [db eid]
   (let [page-blocks* (get-page-blocks db eid)
         {:keys [content-ref-ents] :as content-ref-export} (build-content-ref-export db page-blocks*)
-        {:keys [pvalue-uuids] :as page-export*} (build-page-export* db eid page-blocks* (:content-ref-uuids content-ref-export))
+        {:keys [pvalue-uuids] :as page-export*}
+        (build-page-export* db eid page-blocks* {:include-uuid-fn (:content-ref-uuids content-ref-export)})
         page-entity (d/entity db eid)
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:page-entity page-entity})
         page-export (finalize-export-maps db page-export* uuid-block-export content-ref-export)]
@@ -444,13 +453,13 @@
 
 (defn- build-graph-ontology-export
   "Exports a graph's tags and properties"
-  [db]
+  [db options]
   (let [user-property-idents (d/q '[:find [?db-ident ...]
                                     :where [?p :db/ident ?db-ident]
                                     [?p :block/tags :logseq.class/Property]
                                     (not [?p :logseq.property/built-in?])]
                                   db)
-        properties (build-export-properties db user-property-idents {:include-properties? true})
+        properties (build-export-properties db user-property-idents (merge options {:include-properties? true}))
         class-ents (->> (d/q '[:find [?class ...]
                                :where [?class :block/tags :logseq.class/Tag]
                                (not [?class :logseq.property/built-in?])]
@@ -461,7 +470,7 @@
              (map (fn [ent]
                     (let [ent-properties (dissoc (db-property/properties ent) :block/tags :logseq.property/parent)]
                       (vector (:db/ident ent)
-                              (cond-> (build-export-class ent {})
+                              (cond-> (build-export-class ent options)
                                 (seq ent-properties)
                                 (assoc :build/properties (buildable-properties db ent-properties properties)))))))
              (into {}))]
@@ -484,13 +493,13 @@
 
 (defn- build-graph-pages-export
   "Handles pages, journals and their blocks"
-  [db _options]
+  [db options]
   (let [page-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Page))
                          (map :e (d/datoms db :avet :block/tags :logseq.class/Journal)))
         content-ref-uuids (get-graph-content-ref-uuids db)
         page-exports (mapv (fn [eid]
                              (let [page-blocks* (get-page-blocks db eid)]
-                               (build-page-export* db eid page-blocks* (constantly true))))
+                               (build-page-export* db eid page-blocks* (merge options {:include-uuid-fn (constantly true)}))))
                            page-ids)
         all-ref-uuids (set/union content-ref-uuids (set (mapcat :pvalue-uuids page-exports)))
         pages-export (apply merge-export-maps page-exports)
@@ -507,14 +516,20 @@
     pages-export'))
 
 (defn- build-graph-files
-  [db]
-  (->> (d/q '[:find [(pull ?b [*]) ...] :where [?b :file/path]] db)
-       (mapv #(select-keys % [:file/path :file/content]))))
+  [db {:keys [include-timestamps?]}]
+  (->> (d/q '[:find [(pull ?b [:file/path :file/content :file/created-at :file/last-modified-at]) ...]
+              :where [?b :file/path]] db)
+       (mapv #(if include-timestamps?
+                (select-keys % [:file/path :file/content :file/created-at :file/last-modified-at])
+                (select-keys % [:file/path :file/content])))))
 
-(defn- build-graph-export [db options]
-  (let [ontology-export (build-graph-ontology-export db)
-        pages-export (build-graph-pages-export db options)
-        files (build-graph-files db)
+(defn- build-graph-export
+  "Exports whole graph. Has the following options:
+   * :include-timestamps? - When set timestamps are included on all blocks"
+  [db options]
+  (let [ontology-export (build-graph-ontology-export db (select-keys options [:include-timestamps?]))
+        pages-export (build-graph-pages-export db (select-keys options [:include-timestamps?]))
+        files (build-graph-files db options)
         graph-export (merge (merge-export-maps ontology-export pages-export)
                             {::graph-files files})]
     graph-export))
@@ -585,7 +600,7 @@
           :view-nodes
           (build-view-nodes-export db (:node-ids options))
           :graph-ontology
-          (build-graph-ontology-export db)
+          (build-graph-ontology-export db {})
           :graph
           (build-graph-export db (:graph-options options)))]
     (ensure-export-is-valid (dissoc export-map ::block ::graph-files))
