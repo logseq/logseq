@@ -183,14 +183,14 @@
              {:property-attributes
               (merge {:db/id (or (property-db-ids prop-name)
                                  (throw (ex-info "No :db/id for property" {:property prop-name})))}
-                     (select-keys prop-m [:build/properties-ref-types]))}))
+                     (select-keys prop-m [:build/properties-ref-types :block/created-at :block/updated-at]))}))
           [(merge (sqlite-util/build-new-property (get-ident all-idents prop-name)
                                                   (db-property/get-property-schema prop-m)
                                                   {:block-uuid (:block/uuid prop-m)
                                                    :title (:block/title prop-m)})
                   {:db/id (or (property-db-ids prop-name)
                               (throw (ex-info "No :db/id for property" {:property prop-name})))}
-                  (select-keys prop-m [:build/properties-ref-types]))])
+                  (select-keys prop-m [:build/properties-ref-types :block/created-at :block/updated-at]))])
         pvalue-tx-m
         (->property-value-tx-m new-block (:build/properties prop-m) properties all-idents)]
     (cond-> []
