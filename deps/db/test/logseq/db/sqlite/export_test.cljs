@@ -2,6 +2,7 @@
   (:require [cljs.pprint]
             [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [logseq.common.config :as common-config]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -9,7 +10,8 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
             [medley.core :as medley]
-            [logseq.common.config :as common-config]))
+            [clojure.walk :as walk]
+            [logseq.common.util :as common-util]))
 
 ;; Test helpers
 ;; ============
@@ -245,7 +247,7 @@
 
     (import-second-time-assertions conn conn2 "page1" original-data)))
 
-(deftest ^:focus2 import-page-with-different-ref-types
+(deftest ^:focus3 import-page-with-different-ref-types
   (let [block-uuid (random-uuid)
         internal-block-uuid (random-uuid)
         class-uuid (random-uuid)
@@ -510,7 +512,8 @@
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
 
-(deftest ^:focus import-graph
+(defn- build-original-graph-data
+  []
   (let [internal-block-uuid (random-uuid)
         favorited-uuid (random-uuid)
         block-object-uuid (random-uuid)
@@ -571,32 +574,84 @@
                      {:logseq.property.view/type :logseq.property.view/type.list,
                       :logseq.property.view/feature-type :linked-references,
                       :logseq.property/view-for
-                      [:build/page {:build/journal 19650201}]}}]}]}
-        original-files
-        [{:file/path "logseq/config.edn"
-          :file/content "{:foo :bar}"}
-         {:file/path "logseq/custom.css"
-          :file/content ".foo {background-color: blue}"}
-         {:file/path "logseq/custom.js"
-          :file/content "// comment"}]
-        conn (db-test/create-conn-with-blocks original-data)
-        _ (d/transact! conn original-files)
-        conn2 (db-test/create-conn)
-        {:keys [init-tx block-props-tx misc-tx] :as _txs}
-        (-> (sqlite-export/build-export @conn {:export-type :graph})
-            (sqlite-export/build-import @conn2 {}))
+                      [:build/page {:build/journal 19650201}]}}]}]
+         ::sqlite-export/graph-files
+         [{:file/path "logseq/config.edn"
+           :file/content "{:foo :bar}"}
+          {:file/path "logseq/custom.css"
+           :file/content ".foo {background-color: blue}"}
+          {:file/path "logseq/custom.js"
+           :file/content "// comment"}]}]
+    original-data))
+
+(defn- export-graph-and-import-to-another-graph
+  "Exports graph and imports it to a 2nd graph, validates it and then exports the 2nd graph"
+  [export-conn import-conn export-options]
+  (let [{:keys [init-tx block-props-tx misc-tx] :as _txs}
+        (-> (sqlite-export/build-export @export-conn {:export-type :graph :graph-options export-options})
+            (sqlite-export/build-import @import-conn {}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 init-tx)
-        _ (d/transact! conn2 block-props-tx)
-        _ (d/transact! conn2 misc-tx)
-        _ (validate-db @conn2)
-        imported-graph (sqlite-export/build-export @conn2 {:export-type :graph})]
+        _ (d/transact! import-conn init-tx)
+        _ (d/transact! import-conn block-props-tx)
+        _ (d/transact! import-conn misc-tx)
+        _ (validate-db @import-conn)
+        imported-graph (sqlite-export/build-export @import-conn {:export-type :graph :graph-options export-options})]
+    imported-graph))
+
+(deftest ^:focus import-graph
+  (let [original-data (build-original-graph-data)
+        conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
+        _ (d/transact! conn (::sqlite-export/graph-files original-data))
+        conn2 (db-test/create-conn)
+        imported-graph (export-graph-and-import-to-another-graph conn conn2 {})]
 
     ;; (cljs.pprint/pprint (set (:pages-and-blocks original-data)))
     ;; (cljs.pprint/pprint (set (:pages-and-blocks imported-graph)))
-    (is (= (set (:pages-and-blocks original-data))
-           (set (:pages-and-blocks imported-graph))))
+    (is (= (set (:pages-and-blocks original-data)) (set (:pages-and-blocks imported-graph))))
     (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))
-    (is (= original-files (::sqlite-export/graph-files imported-graph))
+    (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
+        "All :file/path entities are imported")))
+
+(deftest ^:focus2 import-graph-with-timestamps
+  (let [original-data* (build-original-graph-data)
+        original-data (-> original-data*
+                          (update :pages-and-blocks
+                                  (fn [pages-and-blocks]
+                                    (walk/postwalk (fn [e]
+                                                     (cond
+                                                       (and (map? e) (or (:block/title e) (:build/journal e)))
+                                                       (common-util/block-with-timestamps e)
+                                                       ;; Don't add timestamps to pvalues
+                                                       (and (vector? e) (= :build/page (first e)))
+                                                       [(first e) (dissoc (second e) :block/updated-at :block/created-at)]
+                                                       :else
+                                                       e))
+                                                   pages-and-blocks)))
+                          (update :classes update-vals common-util/block-with-timestamps)
+                          (update :properties update-vals common-util/block-with-timestamps)
+                          (update ::sqlite-export/graph-files
+                                  (fn [files]
+                                    (mapv #(let [now (js/Date.)]
+                                             (merge % {:file/created-at now :file/last-modified-at now}))
+                                          files))))
+        conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
+        _ (d/transact! conn (::sqlite-export/graph-files original-data))
+        conn2 (db-test/create-conn)
+        imported-graph (export-graph-and-import-to-another-graph conn conn2 {:include-timestamps? true})
+        ignore-timestamps-if-built-in
+        (fn [m]
+          (if (get-in m [:page :build/properties :logseq.property/built-in?])
+            (update m :page dissoc :block/created-at :block/updated-at)
+            m))]
+
+    ;; (cljs.pprint/pprint (set (:pages-and-blocks original-data)))
+    ;; (cljs.pprint/pprint (set (:pages-and-blocks imported-graph)))
+    ;; (cljs.pprint/pprint (butlast (clojure.data/diff (set (map ignore-timestamps-if-built-in (:pages-and-blocks original-data)))
+    ;;                                                 (set (map ignore-timestamps-if-built-in (:pages-and-blocks imported-graph))))))
+    (is (= (set (map ignore-timestamps-if-built-in (:pages-and-blocks original-data)))
+           (set (map ignore-timestamps-if-built-in (:pages-and-blocks imported-graph)))))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))
+    (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
         "All :file/path entities are imported")))
