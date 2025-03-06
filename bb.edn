@@ -64,7 +64,7 @@
   {:doc "Validate a DB graph's datascript schema"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq script/validate_client_db.cljs"
+                "yarn -s nbb-logseq script/validate_db.cljs"
                 *command-line-args*)}
 
   dev:db-query

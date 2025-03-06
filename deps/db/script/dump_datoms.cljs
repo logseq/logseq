@@ -1,5 +1,5 @@
   (ns dump-datoms
-    "An example script that dumps all eavt datoms to a specified edn file
+    "A script that dumps all eavt datoms to a specified edn file
 
      $ yarn -s nbb-logseq script/dump_datoms.cljs db-name datoms.edn"
     (:require [datascript.core :as d]

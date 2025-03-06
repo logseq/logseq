@@ -1,4 +1,4 @@
-(ns validate-client-db
+(ns validate-db
   "Script that validates the datascript db of a DB graph
    NOTE: This script is also used in CI to confirm our db's schema is up to date"
   (:require ["os" :as os]
@@ -14,7 +14,7 @@
             [malli.error :as me]
             [nbb.core :as nbb]))
 
-(defn validate-client-db
+(defn validate-db
   "Validate datascript db as a vec of entity maps"
   [db ent-maps* {:keys [verbose group-errors humanize closed-maps]}]
   (let [ent-maps (db-malli-schema/update-properties-in-ents db ent-maps*)
@@ -81,7 +81,7 @@
     (println "Read graph" (str db-name " with counts: "
                                (pr-str (assoc (db-validate/graph-counts @conn ent-maps)
                                               :datoms (count datoms)))))
-    (validate-client-db @conn ent-maps options)))
+    (validate-db @conn ent-maps options)))
 
 (defn -main [argv]
   (let [{:keys [args opts]} (cli/parse-args argv {:spec spec})
