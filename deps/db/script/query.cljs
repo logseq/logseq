@@ -71,5 +71,5 @@
         (sh ["puget"] {:input (pr-str results) :stdio ["pipe" "inherit" "inherit"]})
         (pprint/pprint results)))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

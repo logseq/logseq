@@ -222,5 +222,5 @@
     (d/transact! conn block-props-tx)
     (println "Created graph" (str db-name " with " (count (d/datoms @conn :eavt)) " datoms!"))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

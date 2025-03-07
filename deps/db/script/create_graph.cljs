@@ -50,5 +50,5 @@
     (when (:validate options)
       (validate-db/validate-db @conn db-name {:group-errors true :closed-maps true :humanize true}))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))
