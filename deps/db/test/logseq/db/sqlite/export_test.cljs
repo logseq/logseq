@@ -11,7 +11,8 @@
             [logseq.db.test.helper :as db-test]
             [medley.core :as medley]
             [clojure.walk :as walk]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.common.uuid :as common-uuid]))
 
 ;; Test helpers
 ;; ============
@@ -532,9 +533,11 @@
         favorited-uuid (random-uuid)
         block-object-uuid (random-uuid)
         block-object-uuid2 (random-uuid)
+        page-object-uuid (random-uuid)
         closed-value-uuid (random-uuid)
         property-uuid (random-uuid)
         class-uuid (random-uuid)
+        journal-uuid (common-uuid/gen-uuid :journal-page-uuid 19650201)
         original-data
         {:properties
          {:user.property/num {:logseq.property/type :number
@@ -546,6 +549,7 @@
            :build/closed-values [{:value "joy" :uuid closed-value-uuid}
                                  {:value "sad" :uuid (random-uuid)}]}
           :user.property/checkbox {:logseq.property/type :checkbox}
+          :user.property/date {:logseq.property/type :date}
           :user.property/url {:logseq.property/type :url
                               :build/properties {:logseq.property/description "desc for url"}}
           :user.property/node {:logseq.property/type :node
@@ -561,8 +565,16 @@
          [{:page {:block/title "page1"
                   :block/uuid favorited-uuid :build/keep-uuid? true
                   :build/properties {:user.property/checkbox false}}
-           :blocks [{:block/title "b1" :build/properties {:user.property/num 1
-                                                          :user.property/default-closed [:block/uuid closed-value-uuid]}}]}
+           :blocks [{:block/title "b1"
+                     :build/properties {:user.property/num 1
+                                        :user.property/default-closed [:block/uuid closed-value-uuid]
+                                        :user.property/date [:block/uuid journal-uuid]}}
+                    {:block/title "b2" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}
+                    {:block/title "b3" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}]}
+          {:page {:block/title "page object"
+                  :block/uuid page-object-uuid
+                  :build/keep-uuid? true}
+           :blocks []}
           {:page {:block/title "page2" :build/tags [:user.class/MyClass2]}
            :blocks [{:block/title "hola" :block/uuid internal-block-uuid :build/keep-uuid? true}
                     {:block/title "myclass object"
@@ -582,7 +594,10 @@
                       {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}]}]}
           {:page {:build/journal 20250228 :build/properties {:user.property/num 1}}
            :blocks [{:block/title "journal block"}]}
-          {:page {:build/journal 19650201}, :blocks []}
+          {:page {:build/journal 19650201
+                  :block/uuid journal-uuid
+                  :build/keep-uuid? true}
+           :blocks []}
           ;; built-in pages
           {:page {:block/title "Contents" :build/properties {:logseq.property/built-in? true}}
            :blocks [{:block/title "right sidebar"}]}
@@ -601,8 +616,7 @@
                      :build/properties
                      {:logseq.property.view/type :logseq.property.view/type.list,
                       :logseq.property.view/feature-type :linked-references,
-                      :logseq.property/view-for
-                      [:build/page {:build/journal 19650201}]}}]}]
+                      :logseq.property/view-for [:block/uuid journal-uuid]}}]}]
          ::sqlite-export/graph-files
          [{:file/path "logseq/config.edn"
            :file/content "{:foo :bar}"}
@@ -624,6 +638,8 @@
     ;; (cljs.pprint/pprint (butlast (clojure.data/diff (set (:pages-and-blocks original-data))
     ;;                                                 (set (:pages-and-blocks imported-graph)))))
     (is (= (set (:pages-and-blocks original-data)) (set (:pages-and-blocks imported-graph))))
+    (is (= 1 (count (d/datoms @conn2 :avet :block/title "page object")))
+        "No duplicate pages for pvalue uuids used more than once")
     (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))
     (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))

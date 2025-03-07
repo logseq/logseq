@@ -38,16 +38,16 @@
 
 (defn- buildable-property-value-entity
   "Converts property value to a buildable version"
-  [property-ent pvalue]
-  (cond (ldb/internal-page? pvalue)
+  [property-ent pvalue {:keys [property-value-uuids?]}]
+  (cond (and (not property-value-uuids?) (ldb/internal-page? pvalue))
         ;; Should page properties be pulled here?
         [:build/page (cond-> (shallow-copy-page pvalue)
                        (seq (:block/tags pvalue))
                        (assoc :build/tags (->build-tags (:block/tags pvalue))))]
-        (entity-util/journal? pvalue)
+        (and (not property-value-uuids?) (entity-util/journal? pvalue))
         [:build/page {:build/journal (:block/journal-day pvalue)}]
         :else
-        (if (= :node (:logseq.property/type property-ent))
+        (if (contains? #{:node :date} (:logseq.property/type property-ent))
           ;; Idents take precedence over uuid because they are keep data graph-agnostic
           (if (:db/ident pvalue)
             (:db/ident pvalue)
@@ -61,7 +61,7 @@
 (defn- buildable-properties
   "Originally copied from db-test/readable-properties. Modified so that property values are
    valid sqlite.build EDN"
-  [db ent-properties properties-config]
+  [db ent-properties properties-config options]
   (->> ent-properties
        (map (fn [[k v]]
               [k
@@ -73,17 +73,17 @@
                    (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content v))) {:properties properties-config})))
                  (cond
                    (de/entity? v)
-                   (buildable-property-value-entity (d/entity db k) v)
+                   (buildable-property-value-entity (d/entity db k) v options)
                    (and (set? v) (every? de/entity? v))
                    (let [property-ent (d/entity db k)]
-                     (set (map (partial buildable-property-value-entity property-ent) v)))
+                     (set (map #(buildable-property-value-entity property-ent % options) v)))
                    :else
                    v))]))
        (into {})))
 
 (defn- build-export-properties
   "The caller of this fn is responsible for building :build/:property-classes unless shallow-copy?"
-  [db user-property-idents {:keys [include-properties? include-timestamps? include-uuid? shallow-copy?]}]
+  [db user-property-idents {:keys [include-properties? include-timestamps? include-uuid? shallow-copy?] :as options}]
   (let [properties-config-by-ent
         (->> user-property-idents
              (map (fn [ident]
@@ -118,7 +118,7 @@
                     [(:db/ident ent)
                      (cond-> build-property
                        (seq ent-properties)
-                       (assoc :build/properties (buildable-properties db ent-properties properties-config)))])))
+                       (assoc :build/properties (buildable-properties db ent-properties properties-config options)))])))
            (into {}))
       properties-config)))
 
@@ -191,7 +191,7 @@
   (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
         new-properties (when-not shallow-copy?
-                         (build-node-properties db entity ent-properties (select-keys options [:properties :include-timestamps?])))
+                         (build-node-properties db entity ent-properties (dissoc options :shallow-copy? :include-uuid-fn)))
         build-node (cond-> {:block/title (block-title entity)}
                      (:block/link entity)
                      (assoc :block/link [:block/uuid (:block/uuid (:block/link entity))])
@@ -203,7 +203,7 @@
                      (assoc :build/tags build-tags)
                      (and (not shallow-copy?) (seq ent-properties))
                      (assoc :build/properties
-                            (buildable-properties db ent-properties (merge properties new-properties))))
+                            (buildable-properties db ent-properties (merge properties new-properties) options)))
         new-classes (when-not shallow-copy? (build-node-classes db build-node (:block/tags entity) new-properties))]
     (cond-> {:node build-node}
       (seq new-classes)
@@ -372,8 +372,8 @@
     (merge {::block (:node node-export)}
            block-export)))
 
-(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks] :as opts}]
-  (let [page-ent-export (build-node-export db page-entity (select-keys opts [:properties :include-uuid-fn :include-timestamps?]))
+(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks] :as options}]
+  (let [page-ent-export (build-node-export db page-entity (dissoc options :classes :blocks))
         page (merge (dissoc (:node page-ent-export) :block/title)
                     (shallow-copy-page page-entity))
         page-blocks-export {:pages-and-blocks [{:page page :blocks blocks}]
@@ -472,7 +472,7 @@
                       (vector (:db/ident ent)
                               (cond-> (build-export-class ent options)
                                 (seq ent-properties)
-                                (assoc :build/properties (buildable-properties db ent-properties properties)))))))
+                                (assoc :build/properties (buildable-properties db ent-properties properties options)))))))
              (into {}))]
     (cond-> {}
       (seq properties)
@@ -529,16 +529,17 @@
 (defn- build-graph-export
   "Exports whole graph. Has the following options:
    * :include-timestamps? - When set timestamps are included on all blocks"
-  [db options]
-  (let [content-ref-uuids (get-graph-content-ref-uuids db)
-        ontology-options (merge (select-keys options [:include-timestamps?]) {:include-uuid? true})
+  [db options*]
+  (let [options (merge options* {:property-value-uuids? true})
+        content-ref-uuids (get-graph-content-ref-uuids db)
+        ontology-options (merge options {:include-uuid? true})
         ontology-export (build-graph-ontology-export db ontology-options)
         ontology-pvalue-uuids (set (concat (mapcat get-pvalue-uuids (vals (:properties ontology-export)))
                                            (mapcat get-pvalue-uuids (vals (:classes ontology-export)))))
         pages-export (build-graph-pages-export db options)
+        graph-export (merge-export-maps ontology-export pages-export)
         all-ref-uuids (set/union content-ref-uuids ontology-pvalue-uuids (:pvalue-uuids pages-export))
         files (build-graph-files db options)
-        graph-export (merge-export-maps ontology-export pages-export)
         ;; Remove all non-ref uuids after all nodes are built.
         ;; Only way to ensure all pvalue uuids present across block types
         graph-export' (remove-uuids-if-not-ref graph-export all-ref-uuids)]
