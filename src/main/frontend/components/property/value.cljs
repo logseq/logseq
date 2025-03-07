@@ -92,12 +92,14 @@
             (fn []
               (when-let [^js target (some-> (.querySelector container (str "#ls-block-" (str (:block/uuid block))))
                                             (.querySelector ".block-main-container"))]
+                (state/set-editor-action! :property-icon-picker)
                 (shui/popup-show! target
                                   #(icon-component/icon-search
                                     {:on-chosen on-chosen!
                                      :icon-value icon
                                      :del-btn? (some? icon)})
                                   {:id :ls-icon-picker
+                                   :on-after-hide #(state/set-editor-action! nil)
                                    :align :start})))))))
      [editing?])
 
