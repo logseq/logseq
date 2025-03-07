@@ -14,7 +14,7 @@
             [malli.error :as me]
             [nbb.core :as nbb]))
 
-(defn validate-db
+(defn validate-db*
   "Validate datascript db as a vec of entity maps"
   [db ent-maps* {:keys [verbose group-errors humanize closed-maps]}]
   (let [ent-maps (db-malli-schema/update-properties-in-ents db ent-maps*)
@@ -66,6 +66,14 @@
                   :default true
                   :desc "Groups errors by their entity id"}})
 
+(defn validate-db [db db-name options]
+  (let [datoms (d/datoms db :eavt)
+        ent-maps (db-malli-schema/datoms->entities datoms)]
+    (println "Read graph" (str db-name " with counts: "
+                               (pr-str (assoc (db-validate/graph-counts db ent-maps)
+                                              :datoms (count datoms)))))
+    (validate-db* db ent-maps options)))
+
 (defn- validate-graph [graph-dir options]
   (let [[dir db-name] (if (string/includes? graph-dir "/")
                         (let [graph-dir'
@@ -75,13 +83,8 @@
         conn (try (sqlite-cli/open-db! dir db-name)
                   (catch :default e
                     (println "Error: For graph" (str (pr-str graph-dir) ":") (str e))
-                    (js/process.exit 1)))
-        datoms (d/datoms @conn :eavt)
-        ent-maps (db-malli-schema/datoms->entities datoms)]
-    (println "Read graph" (str db-name " with counts: "
-                               (pr-str (assoc (db-validate/graph-counts @conn ent-maps)
-                                              :datoms (count datoms)))))
-    (validate-db @conn ent-maps options)))
+                    (js/process.exit 1)))]
+    (validate-db @conn db-name options)))
 
 (defn -main [argv]
   (let [{:keys [args opts]} (cli/parse-args argv {:spec spec})
@@ -92,5 +95,5 @@
     (doseq [graph-dir args]
       (validate-graph graph-dir opts))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))
