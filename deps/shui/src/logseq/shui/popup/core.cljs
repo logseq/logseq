@@ -122,14 +122,13 @@
   ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id 0)))
   ([id] (hide! id 0 {}))
   ([id delay] (hide! id delay {}))
-  ([id delay {:keys [all?]}]
+  ([id delay {:keys [_all?]}]
    (when-let [popup (get-popup id)]
      (let [config (last popup)
            target (:target config)
-           f #(if all?
-                (reset! *popups [])
-                (do (detach-popup! id)
-                  (some-> (:on-after-hide config) (apply []))))]
+           f (fn []
+               (detach-popup! id)
+               (some-> (:on-after-hide config) (apply [])))]
        (some-> (:on-before-hide config) (apply []))
        (some-> target (d/remove-attr! "data-popup-active"))
        (if (and (number? delay) (> delay 0))
