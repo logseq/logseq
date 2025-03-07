@@ -658,16 +658,14 @@
                  excluded-options (remove (fn [e] (contains? exclude-ids (:block/uuid e))) options)]
              excluded-options)
 
-           (and (= property-type :class) (nil? classes))
+           (= property-type :class)
            (get-all-classes-f)
 
            (seq classes)
            (->>
             (mapcat
              (fn [class]
-               (if (= :logseq.class/Root (:db/ident class))
-                 (get-all-classes-f)
-                 (model/get-class-objects repo (:db/id class))))
+               (model/get-class-objects repo (:db/id class)))
              classes)
             distinct)
 
