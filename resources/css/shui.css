@@ -284,11 +284,11 @@ div[data-radix-popper-content-wrapper] {
   @apply overflow-y-auto;
 
   &[data-side=top] {
-    max-height: calc(var(--radix-dropdown-menu-content-available-height) - 40px);
+    max-height: calc(var(--radix-dropdown-menu-content-available-height) - 20px);
   }
 
   &[data-side=bottom] {
-    max-height: calc(var(--radix-dropdown-menu-content-available-height) - 20px);
+    max-height: calc(var(--radix-dropdown-menu-content-available-height) - 10px);
   }
 
   &.text-popover-foreground {

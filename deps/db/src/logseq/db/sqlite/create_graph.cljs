@@ -105,7 +105,9 @@
   as built-in?. Returns their tx data as well as data needed for subsequent build steps"
   []
   ;; bootstrap-idents must either be necessary to define a property or be used on every property
-  (let [bootstrap-idents #{:logseq.property/type :logseq.property/hide? :logseq.property/built-in?}
+  (let [bootstrap-idents #{:logseq.property/type :logseq.property/hide? :logseq.property/built-in?
+                           ;; Required to define :properties on a property
+                           :logseq.property/created-from-property}
         bootstrap-properties (map build-bootstrap-property bootstrap-idents)
         ;; First tx bootstrap properties so they can take affect. Then tx the bootstrap properties on themselves
         bootstrap-properties-tx (into (mapv #(apply dissoc % bootstrap-idents) bootstrap-properties)

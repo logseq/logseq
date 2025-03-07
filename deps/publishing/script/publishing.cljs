@@ -60,5 +60,5 @@
       (publish-db-graph static-dir graph-dir output-path options)
       (publish-file-graph static-dir graph-dir output-path options))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))
