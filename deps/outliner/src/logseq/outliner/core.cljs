@@ -648,10 +648,12 @@
                                         (when-let [id (:block/uuid b)]
                                           [:block/uuid id]))]
                          (->
-                          (if-let [e (d/entity @conn eid)]
-                            (assoc (into {} e)
-                                   :db/id (:db/id e)
-                                   :block/title (or (:block/raw-title e) (:block/title e)))
+                          (if-let [e (if (de/entity? b) b (d/entity @conn eid))]
+                            (merge
+                             (into {} e)
+                             {:db/id (:db/id e)
+                              :block/title (or (:block/raw-title e) (:block/title e))}
+                             b)
                             b)
                           (dissoc :block/tx-id :block/refs :block/path-refs))
                          b))
