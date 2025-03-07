@@ -417,7 +417,8 @@
    (selection/action-bar
     {:on-cut #(on-delete-rows table selected-rows)
      :selected-blocks selected-rows
-     :hide-dots? true})))
+     :hide-dots? true
+     :button-border? true})))
 
 (rum/defc column-resizer
   [_column on-sized!]
