@@ -500,8 +500,51 @@
      {}
      block)))
 
+(defn- build-insert-blocks-tx
+  [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
+  (let [block-ids (set (map :block/uuid blocks))
+        target-page (or (:db/id (:block/page target-block))
+                        ;; target block is a page itself
+                        (:db/id target-block))
+        orders (get-block-orders blocks target-block sibling? keep-block-order?)]
+    (map-indexed (fn [idx {:block/keys [parent] :as block}]
+                   (when-let [uuid' (get uuids (:block/uuid block))]
+                     (let [top-level? (= (:block/level block) 1)
+                           parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
+
+                           order (nth orders idx)
+                           _ (assert (and parent order) (str "Parent or order is nil: " {:parent parent :order order}))
+                           template-ref-block-ids (when insert-template?
+                                                    (when-let [block (d/entity db (:db/id block))]
+                                                      (let [ref-ids (set (map :block/uuid (:block/refs block)))]
+                                                        (->> (set/intersection block-ids ref-ids)
+                                                             (remove #{(:block/uuid block)})))))
+                           m {:db/id (:db/id block)
+                              :block/uuid uuid'
+                              :block/page target-page
+                              :block/parent parent
+                              :block/order order}
+                           result (->
+                                   (if (de/entity? block)
+                                     (assoc m :block/level (:block/level block))
+                                     (merge block m))
+                                   (update :block/title (fn [value]
+                                                          (if (seq template-ref-block-ids)
+                                                            (reduce
+                                                             (fn [value id]
+                                                               (string/replace value
+                                                                               (page-ref/->page-ref id)
+                                                                               (page-ref/->page-ref (uuids id))))
+                                                             value
+                                                             template-ref-block-ids)
+                                                            value)))
+                                   (dissoc :db/id))]
+                       (update-property-ref-when-paste result uuids))))
+                 blocks)))
+
 (defn- insert-blocks-aux
-  [db blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? keep-block-order? outliner-op insert-template?]}]
+  [db blocks target-block {:keys [replace-empty-target? keep-uuid?]
+                           :as opts}]
   (let [block-uuids (map :block/uuid blocks)
         uuids (zipmap block-uuids
                       (if keep-uuid?
@@ -513,9 +556,6 @@
         id->new-uuid (->> (map (fn [block] (when-let [id (:db/id block)]
                                              [id (get uuids (:block/uuid block))])) blocks)
                           (into {}))
-        target-page (or (:db/id (:block/page target-block))
-                        ;; target block is a page itself
-                        (:db/id target-block))
         get-new-id (fn [block lookup]
                      (cond
                        (or (map? lookup) (vector? lookup) (de/entity? lookup))
@@ -529,42 +569,7 @@
 
                        :else
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))
-        orders (get-block-orders blocks target-block sibling? keep-block-order?)
-        block-ids (set (map :block/uuid blocks))
-        blocks-tx (map-indexed (fn [idx {:block/keys [parent] :as block}]
-                                 (when-let [uuid' (get uuids (:block/uuid block))]
-                                   (let [top-level? (= (:block/level block) 1)
-                                         parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
-
-                                         order (nth orders idx)
-                                         _ (assert (and parent order) (str "Parent or order is nil: " {:parent parent :order order}))
-                                         template-ref-block-ids (when insert-template?
-                                                                  (when-let [block (d/entity db (:db/id block))]
-                                                                    (let [ref-ids (set (map :block/uuid (:block/refs block)))]
-                                                                      (->> (set/intersection block-ids ref-ids)
-                                                                           (remove #{(:block/uuid block)})))))
-                                         m {:db/id (:db/id block)
-                                            :block/uuid uuid'
-                                            :block/page target-page
-                                            :block/parent parent
-                                            :block/order order}
-                                         result (->
-                                                 (if (de/entity? block)
-                                                   (assoc m :block/level (:block/level block))
-                                                   (merge block m))
-                                                 (update :block/title (fn [value]
-                                                                        (if (seq template-ref-block-ids)
-                                                                          (reduce
-                                                                           (fn [value id]
-                                                                             (string/replace value
-                                                                                             (page-ref/->page-ref id)
-                                                                                             (page-ref/->page-ref (uuids id))))
-                                                                           value
-                                                                           template-ref-block-ids)
-                                                                          value)))
-                                                 (dissoc :db/id))]
-                                     (update-property-ref-when-paste result uuids))))
-                               blocks)]
+        blocks-tx (build-insert-blocks-tx db target-block blocks uuids get-new-id opts)]
     {:blocks-tx blocks-tx
      :id->new-uuid id->new-uuid}))
 
