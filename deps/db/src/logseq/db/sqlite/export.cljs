@@ -526,6 +526,14 @@
                            :blocks (sqlite-build/update-each-block blocks remove-uuid-if-not-ref)})
                         pages-and-blocks))))))
 
+(defn sort-pages-and-blocks
+  "Provide a reliable sort order since this tends to be large. Helps with diffing
+   and readability"
+  [pages-and-blocks]
+  (vec
+   (sort-by #(or (get-in % [:page :block/title]) (get-in % [:page :block/title]))
+            pages-and-blocks)))
+
 (defn- build-graph-export
   "Exports whole graph. Has the following options:
    * :include-timestamps? - When set timestamps are included on all blocks"
@@ -542,7 +550,8 @@
         files (build-graph-files db options)
         ;; Remove all non-ref uuids after all nodes are built.
         ;; Only way to ensure all pvalue uuids present across block types
-        graph-export' (remove-uuids-if-not-ref graph-export all-ref-uuids)]
+        graph-export' (-> (remove-uuids-if-not-ref graph-export all-ref-uuids)
+                          (update :pages-and-blocks sort-pages-and-blocks))]
     (merge graph-export'
            {::graph-files files})))
 
