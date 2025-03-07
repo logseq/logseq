@@ -644,16 +644,17 @@
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
   (let [blocks (keep (fn [b]
-                       (when-let [eid (or (:db/id b)
-                                          (when-let [id (:block/uuid b)]
-                                            [:block/uuid id]))]
+                       (if-let [eid (or (:db/id b)
+                                        (when-let [id (:block/uuid b)]
+                                          [:block/uuid id]))]
                          (->
                           (if-let [e (d/entity @conn eid)]
                             (assoc (into {} e)
                                    :db/id (:db/id e)
                                    :block/title (or (:block/raw-title e) (:block/title e)))
                             b)
-                          (dissoc :block/tx-id :block/refs :block/path-refs))))
+                          (dissoc :block/tx-id :block/refs :block/path-refs))
+                         b))
                      blocks)
         [target-block sibling?] (get-target-block @conn blocks target-block opts)
         _ (assert (some? target-block) (str "Invalid target: " target-block))
