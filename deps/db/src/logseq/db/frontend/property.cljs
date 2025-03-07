@@ -573,7 +573,7 @@
                                               :public? false
                                               :hide? true
                                               :classes #{:logseq.class/Template}}}
-     :logseq.property/template-applied-to {:title "Apply to tags"
+     :logseq.property/template-applied-to {:title "Apply template to tags"
                                            :schema {:type :class
                                                     :cardinality :many
                                                     :public? true
