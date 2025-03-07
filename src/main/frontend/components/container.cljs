@@ -878,16 +878,18 @@
                             {:keys [page page-entity]} (state/sub :page-title/context)]
 
                         (let [show!
-                              (fn [content]
+                              (fn [content & {:as option}]
                                 (shui/popup-show! e
                                                   (fn [{:keys [id]}]
                                                     [:div {:on-click #(shui/popup-hide! id)
                                                            :data-keep-selection true}
                                                      content])
-                                                  {:on-before-hide state/dom-clear-selection!
-                                                   :on-after-hide state/state-clear-selection!
-                                                   :content-props {:class "w-[280px] ls-context-menu-content"}
-                                                   :as-dropdown? true}))
+                                                  (merge
+                                                   {:on-before-hide state/dom-clear-selection!
+                                                    :on-after-hide state/state-clear-selection!
+                                                    :content-props {:class "w-[280px] ls-context-menu-content"}
+                                                    :as-dropdown? true}
+                                                   option)))
 
                               handled
                               (cond
@@ -903,7 +905,8 @@
 
                                 ;; block selection
                                 (and (state/selection?) (not (d/has-class? target "bullet")))
-                                (show! (cp-content/custom-context-menu-content))
+                                (show! (cp-content/custom-context-menu-content)
+                                       {:id "blocks-selection-context-menu"})
 
                                 ;; block bullet
                                 (and block-id (parse-uuid block-id))
