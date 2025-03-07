@@ -637,6 +637,10 @@
                                [(:db/id v)])))
         parent-property? (= (:db/ident property) :logseq.property/parent)
         children-pages (when parent-property? (model/get-structured-children repo (:db/id block)))
+        property-type (:logseq.property/type property)
+        get-all-classes-f (fn []
+                            (model/get-all-classes repo {:except-root-class? true
+                                                         :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))}))
         nodes
         (->>
          (cond
@@ -654,34 +658,35 @@
                  excluded-options (remove (fn [e] (contains? exclude-ids (:block/uuid e))) options)]
              excluded-options)
 
+           (and (= property-type :class) (nil? classes))
+           (get-all-classes-f)
+
            (seq classes)
            (->>
             (mapcat
              (fn [class]
                (if (= :logseq.class/Root (:db/ident class))
-                 (model/get-all-classes repo {:except-root-class? true
-                                              :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})
+                 (get-all-classes-f)
                  (model/get-class-objects repo (:db/id class))))
              classes)
             distinct)
 
            :else
-           (let [property-type (:logseq.property/type property)]
-             (if (empty? result)
-               (let [v (get block (:db/ident property))]
-                 (remove #(= :logseq.property/empty-placeholder (:db/ident %))
-                         (if (every? de/entity? v) v [v])))
-               (remove (fn [node]
-                         (or (= (:db/id block) (:db/id node))
+           (if (empty? result)
+             (let [v (get block (:db/ident property))]
+               (remove #(= :logseq.property/empty-placeholder (:db/ident %))
+                       (if (every? de/entity? v) v [v])))
+             (remove (fn [node]
+                       (or (= (:db/id block) (:db/id node))
                              ;; A page's alias can't be itself
-                             (and alias? (= (or (:db/id (:block/page block))
-                                                (:db/id block))
-                                            (:db/id node)))
-                             (when (and property-type (not= property-type :node))
-                               (if (= property-type :page)
-                                 (not (db/page? node))
-                                 (not (contains? (ldb/get-entity-types node) property-type))))))
-                       result)))))
+                           (and alias? (= (or (:db/id (:block/page block))
+                                              (:db/id block))
+                                          (:db/id node)))
+                           (when (and property-type (not= property-type :node))
+                             (if (= property-type :page)
+                               (not (db/page? node))
+                               (not (contains? (ldb/get-entity-types node) property-type))))))
+                     result))))
 
         options (map (fn [node]
                        (let [id (or (:value node) (:db/id node))

@@ -74,8 +74,7 @@
                             :attribute :block/tags
                             :schema {:type :class
                                      :cardinality :many
-                                     :public? true
-                                     :classes #{:logseq.class/Root}}
+                                     :public? true}
                             :queryable? true}
      :block/parent         {:title "Node parent"
                             :attribute :block/parent
@@ -576,8 +575,7 @@
      :logseq.property/template-applied-to {:title "Apply template to tags"
                                            :schema {:type :class
                                                     :cardinality :many
-                                                    :public? true
-                                                    :classes #{:logseq.class/Root}}
+                                                    :public? true}
                                            :queryable? true})))
 
 (def built-in-properties
