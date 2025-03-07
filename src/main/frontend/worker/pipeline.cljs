@@ -9,8 +9,8 @@
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
@@ -45,6 +45,35 @@
                     (conj {:db/id (:db/id block)
                            :block/refs refs})))))
             blocks)))
+
+(defn- insert-tag-templates
+  [repo conn tx-report]
+  (let [db (:db-after tx-report)
+        tx-data (some->> (:tx-data tx-report)
+                         (filter (fn [d] (and (= (:a d) :block/tags) (:added d))))
+                         (group-by :e)
+                         (mapcat (fn [[e datoms]]
+                                   (let [object (d/entity db e)
+                                         template-blocks (->> (mapcat (fn [id]
+                                                                        (let [tag (d/entity db id)
+                                                                              parents (ldb/get-page-parents tag {:node-class? true})
+                                                                              templates (mapcat :logseq.property/_template-applied-to (conj parents tag))]
+                                                                          templates))
+                                                                      (set (map :v datoms)))
+                                                              distinct
+                                                              (sort-by :block/created-at)
+                                                              (mapcat (fn [template]
+                                                                        (let [template-blocks (rest (ldb/get-block-and-children db (:block/uuid template)
+                                                                                                                                {:include-property-block? true}))
+                                                                              blocks (->>
+                                                                                      (cons (assoc (first template-blocks) :logseq.property/used-template (:db/id template))
+                                                                                            (rest template-blocks))
+                                                                                      (map (fn [e] (assoc (into {} e) :db/id (:db/id e)))))]
+                                                                          blocks))))]
+                                     (when (seq template-blocks)
+                                       (let [result (outliner-core/insert-blocks repo conn template-blocks object {:sibling? false})]
+                                         (:tx-data result)))))))]
+    tx-data))
 
 (defkeywords
   ::skip-validate-db? {:doc "tx-meta option, default = false"}
@@ -121,9 +150,12 @@
           commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
                         (commands/run-commands tx-report))
           ;; :block/refs relies on those changes
-          tx-before-refs (concat display-blocks-tx-data commands-tx)
+          ;; idea: implement insert-templates using a command?
+          insert-templates-tx (insert-tag-templates repo conn tx-report)
+          tx-before-refs (concat display-blocks-tx-data commands-tx insert-templates-tx)
           tx-report* (if (seq tx-before-refs)
-                       (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true})]
+                       (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
+                                                                        :outliner-op :pre-hook-invoke})]
                          (assoc tx-report
                                 :tx-data (concat (:tx-data tx-report) (:tx-data result))
                                 :db-after (:db-after result)))
@@ -134,17 +166,19 @@
                 (doseq [page-id page-ids]
                   (when (d/entity @conn page-id)
                     (file/sync-to-file repo page-id tx-meta)))))
-          deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*)))
+          deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*))
+          deleted-block-ids (set (map :db/id deleted-blocks))
+          deleted-block-uuids (set (map :block/uuid deleted-blocks))
           deleted-assets (keep (fn [id]
-                                 (let [e (d/entity (:db-before tx-report*) [:block/uuid id])]
+                                 (let [e (d/entity (:db-before tx-report*) id)]
                                    (when (ldb/asset? e)
                                      {:block/uuid (:block/uuid e)
-                                      :ext (:logseq.property.asset/type e)}))) deleted-block-uuids)
-          blocks' (remove (fn [b] (deleted-block-uuids (:block/uuid b))) blocks)
+                                      :ext (:logseq.property.asset/type e)}))) deleted-block-ids)
+          blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
           block-refs (when (seq blocks')
                        (rebuild-block-refs repo tx-report* blocks'))
           refs-tx-report (when (seq block-refs)
-                           (ldb/transact! conn block-refs {:pipeline-replace? true}))
+                           (ldb/transact! conn (concat insert-templates-tx block-refs) {:pipeline-replace? true}))
           replace-tx (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))]
                        (concat
                       ;; block path refs
@@ -153,7 +187,7 @@
                             (compute-block-path-refs-tx tx-report* blocks')))
 
                        ;; update block/tx-id
-                        (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
+                        (let [updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
                                                      (concat pages blocks))
                               tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
                           (keep (fn [b]

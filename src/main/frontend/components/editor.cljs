@@ -352,7 +352,8 @@
 
 (rum/defc template-search-aux
   [id q]
-  (let [[matched-templates set-matched-templates!] (rum/use-state nil)]
+  (let [db-based? (config/db-based-graph?)
+        [matched-templates set-matched-templates!] (rum/use-state nil)]
     (hooks/use-effect! (fn []
                          (p/let [result (editor-handler/<get-matched-templates q)]
                            (set-matched-templates! result)))
@@ -362,8 +363,8 @@
      {:on-chosen   (editor-handler/template-on-chosen-handler id)
       :on-enter    (fn [_state] (state/clear-editor-action!))
       :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
-      :item-render (fn [[template _block-db-id]]
-                     template)
+      :item-render (fn [template]
+                     (if db-based? (:block/title template) (:template template)))
       :class       "black"})))
 
 (rum/defc template-search < rum/reactive

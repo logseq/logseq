@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.file-based.schema :as file-schema]))
 
@@ -23,7 +24,7 @@
   [title]
   {:block/name (string/lower-case title)
    :block/title title
-   :block/uuid (random-uuid)
+   :block/uuid (common-uuid/gen-uuid)
    :block/type "page"})
 
 (def built-in-pages

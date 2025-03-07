@@ -2223,73 +2223,86 @@
   ([element-id db-id {:keys [target] :as opts}]
    (let [repo (state/get-current-repo)
          db? (config/db-based-graph? repo)]
-     (when-not db?
-       (p/let [block (if (integer? db-id)
-                       (db-async/<pull repo db-id)
-                       (db-async/<get-template-by-name (name db-id)))
-               block (when (:block/uuid block)
-                       (db-async/<get-block repo (:block/uuid block)
-                                            {:children? true
-                                             :nested-children? true}))]
-         (when (:db/id block)
-           (let [journal? (ldb/journal? target)
-                 target (or target (state/get-edit-block))
-                 format (get block :block/format :markdown)
-                 block-uuid (:block/uuid block)
-                 template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
-                 blocks (db/get-block-and-children repo block-uuid)
-                 sorted-blocks (cons
+     (p/let [block (if (integer? db-id)
+                     (db-async/<pull repo db-id)
+                     (db-async/<get-template-by-name (name db-id)))
+             block (when (:block/uuid block)
+                     (db-async/<get-block repo (:block/uuid block)
+                                          {:children? true
+                                           :nested-children? true}))]
+       (when (:db/id block)
+         (let [journal? (ldb/journal? target)
+               target (or target (state/get-edit-block))
+               format (get block :block/format :markdown)
+               block-uuid (:block/uuid block)
+               template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
+               blocks (db/get-block-and-children repo block-uuid {:include-property-block? true})
+               sorted-blocks (if db?
+                               (let [blocks' (rest blocks)]
+                                 (cons
+                                  (-> (first blocks')
+                                      (assoc :logseq.property/used-template (:db/id block)))
+                                  (rest blocks')))
+                               (cons
                                 (-> (first blocks)
                                     (update :block/properties-text-values dissoc :template)
                                     (update :block/properties-order (fn [keys]
                                                                       (vec (remove #{:template} keys)))))
-                                (rest blocks))
-                 blocks (if template-including-parent?
-                          sorted-blocks
-                          (drop 1 sorted-blocks))]
-             (when element-id
-               (insert-command! element-id "" format {:end-pattern commands/command-trigger}))
-             (let [exclude-properties [:id :template :template-including-parent]
-                   content-update-fn (fn [content]
-                                       (->> content
-                                            (property-file/remove-property-when-file-based repo format "template")
-                                            (property-file/remove-property-when-file-based repo format "template-including-parent")
-                                            template/resolve-dynamic-template!))
-                   page (if (:block/name block) block
-                            (when target (:block/page (db/entity (:db/id target)))))
-                   blocks' (map (fn [block]
+                                (rest blocks)))
+               blocks (cond
+                        db?
+                        sorted-blocks
+                        template-including-parent?
+                        sorted-blocks
+                        :else
+                        (drop 1 sorted-blocks))]
+           (when element-id
+             (insert-command! element-id "" format {:end-pattern commands/command-trigger}))
+           (let [exclude-properties [:id :template :template-including-parent]
+                 content-update-fn (fn [content]
+                                     (->> content
+                                          (property-file/remove-property-when-file-based repo format "template")
+                                          (property-file/remove-property-when-file-based repo format "template-including-parent")
+                                          template/resolve-dynamic-template!))
+                 page (if (:block/name block) block
+                          (when target (:block/page (db/entity (:db/id target)))))
+                 blocks' (if (config/db-based-graph?)
+                           blocks
+                           (map (fn [block]
                                   (paste-block-cleanup repo block page exclude-properties format content-update-fn false))
-                                blocks)
-                   sibling? (:sibling? opts)
-                   sibling?' (cond
-                               (some? sibling?)
-                               sibling?
+                                blocks))
+                 sibling? (:sibling? opts)
+                 sibling?' (cond
+                             (some? sibling?)
+                             sibling?
 
-                               (db/has-children? (:block/uuid target))
-                               false
+                             (db/has-children? (:block/uuid target))
+                             false
 
-                               :else
-                               true)]
-               (when (seq blocks')
-                 (try
-                   (p/let [result (ui-outliner-tx/transact!
-                                   {:outliner-op :insert-blocks
-                                    :created-from-journal-template? journal?}
-                                   (when-not (string/blank? (state/get-edit-content))
-                                     (save-current-block!))
-                                   (outliner-op/insert-blocks! blocks' target
-                                                               (assoc opts :sibling? sibling?')))]
-                     (when result (edit-last-block-after-inserted! (ldb/read-transit-str result))))
+                             :else
+                             true)]
+             (when (seq blocks')
+               (try
+                 (p/let [result (ui-outliner-tx/transact!
+                                 {:outliner-op :insert-blocks
+                                  :created-from-journal-template? journal?}
+                                 (when-not (string/blank? (state/get-edit-content))
+                                   (save-current-block!))
+                                 (outliner-op/insert-blocks! blocks' target
+                                                             (assoc opts
+                                                                    :sibling? sibling?'
+                                                                    :insert-template? true)))]
+                   (when result (edit-last-block-after-inserted! (ldb/read-transit-str result))))
 
-                   (catch :default ^js/Error e
-                     (notification/show!
-                      [:p.content
-                       (util/format "Template insert error: %s" (.-message e))]
-                      :error))))))))))))
+                 (catch :default ^js/Error e
+                   (notification/show!
+                    [:p.content
+                     (util/format "Template insert error: %s" (.-message e))]
+                    :error)))))))))))
 
 (defn template-on-chosen-handler
   [element-id]
-  (fn [[_template template-block] _click?]
+  (fn [template-block]
     (when-let [db-id (:db/id template-block)]
       (insert-template! element-id db-id
                         {:replace-empty-target? true}))))
