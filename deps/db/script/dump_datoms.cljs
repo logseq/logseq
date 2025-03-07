@@ -28,5 +28,5 @@
     (println "Writing" (count datoms) "datoms to" file)
     (fs/writeFileSync file (with-out-str (pprint/pprint datoms)))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

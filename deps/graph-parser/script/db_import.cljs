@@ -189,5 +189,5 @@
       (when (:verbose options') (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
       (println "Created graph" (str db-name "!")))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))
