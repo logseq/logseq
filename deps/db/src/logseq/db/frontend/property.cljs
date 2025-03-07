@@ -153,7 +153,9 @@
                               :schema {:type :node
                                        :public? true
                                        :view-context :page}
-                              :queryable? true}
+                              :queryable? true
+                              :properties
+                              {:logseq.property/description "Provides parent-child relationships between nodes. For tags this enables inheritance and for pages this enables namespaces."}}
      :logseq.property/default-value {:title "Default value"
                                      :schema {:type :entity
                                               :public? false
@@ -172,7 +174,9 @@
      :logseq.property/hide-empty-value {:title "Hide empty value"
                                         :schema {:type :checkbox
                                                  :public? true
-                                                 :view-context :property}}
+                                                 :view-context :property}
+                                        :properties
+                                        {:logseq.property/description "Hides a property's value on any node when empty e.g. when a property appears on a node through a tag."}}
      :logseq.property.class/hide-from-node {:title "Hide from Node"
                                             :schema {:type :checkbox
                                                      :public? true
@@ -186,7 +190,9 @@
                                  :schema {:type :page
                                           :public? true
                                           :view-context :page
-                                          :cardinality :many}}
+                                          :cardinality :many}
+                                 :properties
+                                 {:logseq.property/description "Provides a way for a page to associate to another page i.e. backward compatible tagging."}}
      :logseq.property/background-color {:title "Background color"
                                         :schema {:type :default :hide? true}}
      :logseq.property/background-image {:title "Background image"
@@ -548,7 +554,9 @@
      :logseq.property/enable-history? {:title "Enable property history"
                                        :schema {:type :checkbox
                                                 :public? true
-                                                :view-context :property}}
+                                                :view-context :property}
+                                       :properties
+                                       {:logseq.property/description "Records history anytime a property's value changes on a node."}}
      :logseq.property.history/block {:title "History block"
                                      :schema {:type :entity
                                               :hide? true}}
