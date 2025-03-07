@@ -3397,10 +3397,14 @@
           (cursor/select-up-down input direction anchor cursor-rect)))
       (select-block-up-down direction))))
 
+(defn popup-exists?
+  [id]
+  (some->> (shui-popup/get-popups)
+           (some #(some-> % (:id) (str) (string/includes? (str id))))))
+
 (defn editor-commands-popup-exists?
   []
-  (some->> (shui-popup/get-popups)
-           (some #(some-> % (:id) (str) (string/starts-with? ":editor.commands")))))
+  (popup-exists? "editor.commands"))
 
 (defn open-selected-block!
   [direction e]
