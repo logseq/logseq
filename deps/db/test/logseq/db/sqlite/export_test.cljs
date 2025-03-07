@@ -1,18 +1,18 @@
 (ns logseq.db.sqlite.export-test
   (:require [cljs.pprint]
             [cljs.test :refer [deftest is testing]]
+            [clojure.walk :as walk]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
-            [medley.core :as medley]
-            [clojure.walk :as walk]
-            [logseq.common.util :as common-util]
-            [logseq.common.uuid :as common-uuid]))
+            [medley.core :as medley]))
 
 ;; Test helpers
 ;; ============
@@ -113,6 +113,8 @@
                  (not (:block/title m))
                  (assoc :block/title (name k)))]))
        (into {})))
+
+(def sort-pages-and-blocks sqlite-export/sort-pages-and-blocks)
 
 ;; Tests
 ;; =====
@@ -635,9 +637,9 @@
 
     ;; (cljs.pprint/pprint (set (:pages-and-blocks original-data)))
     ;; (cljs.pprint/pprint (set (:pages-and-blocks imported-graph)))
-    ;; (cljs.pprint/pprint (butlast (clojure.data/diff (set (:pages-and-blocks original-data))
-    ;;                                                 (set (:pages-and-blocks imported-graph)))))
-    (is (= (set (:pages-and-blocks original-data)) (set (:pages-and-blocks imported-graph))))
+    ;; (cljs.pprint/pprint (butlast (clojure.data/diff (sort-pages-and-blocks (:pages-and-blocks original-data))
+    ;;                                                 (:pages-and-blocks imported-graph))))
+    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
     (is (= 1 (count (d/datoms @conn2 :avet :block/title "page object")))
         "No duplicate pages for pvalue uuids used more than once")
     (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
@@ -670,19 +672,13 @@
         conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
         _ (d/transact! conn (::sqlite-export/graph-files original-data))
         conn2 (db-test/create-conn)
-        imported-graph (export-graph-and-import-to-another-graph conn conn2 {:include-timestamps? true})
-        ignore-timestamps-if-built-in
-        (fn [m]
-          (if (get-in m [:page :build/properties :logseq.property/built-in?])
-            (update m :page dissoc :block/created-at :block/updated-at)
-            m))]
+        imported-graph (export-graph-and-import-to-another-graph conn conn2 {:include-timestamps? true})]
 
     ;; (cljs.pprint/pprint (set (:pages-and-blocks original-data)))
     ;; (cljs.pprint/pprint (set (:pages-and-blocks imported-graph)))
-    ;; (cljs.pprint/pprint (butlast (clojure.data/diff (set (map ignore-timestamps-if-built-in (:pages-and-blocks original-data)))
-    ;;                                                 (set (map ignore-timestamps-if-built-in (:pages-and-blocks imported-graph))))))
-    (is (= (set (map ignore-timestamps-if-built-in (:pages-and-blocks original-data)))
-           (set (map ignore-timestamps-if-built-in (:pages-and-blocks imported-graph)))))
+    ;; (cljs.pprint/pprint (butlast (clojure.data/diff (sort-pages-and-blocks (:pages-and-blocks original-data))
+    ;;                                                 (:pages-and-blocks imported-graph))))
+    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))
     (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
