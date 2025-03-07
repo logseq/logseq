@@ -8,6 +8,7 @@
             [clojure.edn :as edn]
             [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
@@ -36,7 +37,9 @@
   {:help {:alias :h
           :desc "Print help"}
    :validate {:alias :v
-              :desc "Validate db after creation"}})
+              :desc "Validate db after creation"}
+   :import {:alias :i
+            :desc "Import edn file using sqlite-export"}})
 
 (defn -main [args]
   (let [{options :opts args' :args} (cli/parse-args args {:spec spec})
@@ -46,15 +49,19 @@
                           (cli/format-opts {:spec spec})))
             (js/process.exit 1))
         [dir db-name] (get-dir-and-db-name graph-dir)
-        sqlite-build-edn (merge {:auto-create-ontology? true}
+        sqlite-build-edn (merge (if (:import options) {} {:auto-create-ontology? true})
                                 (-> (resolve-path edn-path) fs/readFileSync str edn/read-string))
         conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath) :import-type :cli/create-graph})
-        {:keys [init-tx block-props-tx] :as _txs} (outliner-cli/build-blocks-tx sqlite-build-edn)]
+        {:keys [init-tx block-props-tx misc-tx] :as _txs}
+        (if (:import options)
+          (sqlite-export/build-import sqlite-build-edn @conn {})
+          (outliner-cli/build-blocks-tx sqlite-build-edn))]
     (println "Generating" (count (filter :block/name init-tx)) "pages and"
              (count (filter :block/title init-tx)) "blocks ...")
     ;; (cljs.pprint/pprint _txs)
     (d/transact! conn init-tx)
-    (d/transact! conn block-props-tx)
+    (when (seq block-props-tx) (d/transact! conn block-props-tx))
+    (when (seq misc-tx) (d/transact! conn misc-tx))
     (println "Created graph" (str db-name "!"))
     (when (:validate options)
       (validate-db/validate-db @conn db-name {:group-errors true :closed-maps true :humanize true}))))
