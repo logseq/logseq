@@ -6,6 +6,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
             [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
@@ -500,7 +501,7 @@
      block)))
 
 (defn- insert-blocks-aux
-  [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? keep-block-order? outliner-op]}]
+  [db blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? keep-block-order? outliner-op insert-template?]}]
   (let [block-uuids (map :block/uuid blocks)
         uuids (zipmap block-uuids
                       (if keep-uuid?
@@ -529,6 +530,7 @@
                        :else
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))
         orders (get-block-orders blocks target-block sibling? keep-block-order?)
+        block-ids (set (map :block/uuid blocks))
         blocks-tx (map-indexed (fn [idx {:block/keys [parent] :as block}]
                                  (when-let [uuid' (get uuids (:block/uuid block))]
                                    (let [top-level? (= (:block/level block) 1)
@@ -536,6 +538,11 @@
 
                                          order (nth orders idx)
                                          _ (assert (and parent order) (str "Parent or order is nil: " {:parent parent :order order}))
+                                         template-ref-block-ids (when insert-template?
+                                                                  (when-let [block (d/entity db (:db/id block))]
+                                                                    (let [ref-ids (set (map :block/uuid (:block/refs block)))]
+                                                                      (->> (set/intersection block-ids ref-ids)
+                                                                           (remove #{(:block/uuid block)})))))
                                          m {:db/id (:db/id block)
                                             :block/uuid uuid'
                                             :block/page target-page
@@ -545,6 +552,16 @@
                                                  (if (de/entity? block)
                                                    (assoc m :block/level (:block/level block))
                                                    (merge block m))
+                                                 (update :block/title (fn [value]
+                                                                        (if (seq template-ref-block-ids)
+                                                                          (reduce
+                                                                           (fn [value id]
+                                                                             (string/replace value
+                                                                                             (page-ref/->page-ref id)
+                                                                                             (page-ref/->page-ref (uuids id))))
+                                                                           value
+                                                                           template-ref-block-ids)
+                                                                          value)))
                                                  (dissoc :db/id))]
                                      (update-property-ref-when-paste result uuids))))
                                blocks)]
@@ -638,7 +655,7 @@
     ``"
   [repo conn blocks target-block {:keys [_sibling? keep-uuid? keep-block-order?
                                          outliner-op replace-empty-target? update-timestamps?
-                                         created-by]
+                                         created-by insert-template?]
                                   :as opts
                                   :or {update-timestamps? true}}]
   {:pre [(seq blocks)
@@ -685,8 +702,9 @@
                          :replace-empty-target? replace-empty-target?
                          :keep-uuid? keep-uuid?
                          :keep-block-order? keep-block-order?
-                         :outliner-op outliner-op}
-            {:keys [id->new-uuid blocks-tx]} (insert-blocks-aux blocks' target-block insert-opts)]
+                         :outliner-op outliner-op
+                         :insert-template? insert-template?}
+            {:keys [id->new-uuid blocks-tx]} (insert-blocks-aux @conn blocks' target-block insert-opts)]
         (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) blocks-tx)
           (throw (ex-info "Invalid outliner data"
                           {:opts insert-opts
