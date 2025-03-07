@@ -73,11 +73,11 @@
                            (outliner-op/create-page! title' options'))
                    [_page-name page-uuid] (ldb/read-transit-str result)]
              (when redirect?
-               (route-handler/redirect-to-page! page-uuid))
-             (let [page (db/get-page (or page-uuid title'))]
-               (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
-                 (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
-               page))))))))
+               (route-handler/redirect-to-page! page-uuid)
+               (let [page (db/get-page (or page-uuid title'))]
+                 (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
+                   (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
+                 page)))))))))
 
 ;; favorite fns
 ;; ============
