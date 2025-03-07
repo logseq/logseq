@@ -701,24 +701,23 @@
                 property-values-tx (when (and sibling? from-property)
                                      (let [top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
                                        (mapcat (fn [block]
-                                                 [{:block/uuid (:block/uuid block)
-                                                   :logseq.property/created-from-property (:db/id from-property)}
-                                                  [:db/add
-                                                   (:db/id (:block/parent target-block))
-                                                   (:db/ident (d/entity @conn (:db/id from-property)))
-                                                   [:block/uuid (:block/uuid block)]]]) top-level-blocks)))
+                                                 (when-let [new-id (or (id->new-uuid (:db/id block)) (:block/uuid block))]
+                                                   [{:block/uuid new-id
+                                                     :logseq.property/created-from-property (:db/id from-property)}
+                                                    [:db/add
+                                                     (:db/id (:block/parent target-block))
+                                                     (:db/ident (d/entity @conn (:db/id from-property)))
+                                                     [:block/uuid new-id]]])) top-level-blocks)))
                 full-tx (common-util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
                                                         tx
                                                         property-values-tx)
-            ;; Replace entities with eid because Datascript doesn't support entity transaction
-                full-tx' (let [->new-id (fn [e]
-                                          (if-let [new-uuid (id->new-uuid (:db/id e))]
-                                            [:block/uuid new-uuid]
-                                            (:db/id e)))]
-                           (walk/prewalk
-                            (fn [f]
-                              (if (de/entity? f) (->new-id f) f))
-                            full-tx))]
+                ;; Replace entities with eid because Datascript doesn't support entity transaction
+                full-tx' (walk/prewalk
+                          (fn [f]
+                            (if (de/entity? f)
+                              (or (id->new-uuid (:db/id f)) (:db/id f))
+                              f))
+                          full-tx)]
             {:tx-data full-tx'
              :blocks  tx}))))))
 
