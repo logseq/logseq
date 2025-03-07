@@ -56,5 +56,5 @@
                         (with-out-str (pprint/pprint export-map))))
     (pprint/pprint export-map)))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

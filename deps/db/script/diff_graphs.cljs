@@ -42,5 +42,5 @@
         diff (butlast (data/diff export-map export-map2))]
     (pprint/pprint diff)))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))
