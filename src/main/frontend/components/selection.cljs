@@ -62,8 +62,10 @@
                                    (util/stop e)
                                    (shui/popup-hide!)
                                    (shui/popup-show! e
-                                                     (fn []
-                                                       ((state/get-component :selection/context-menu)))
+                                                     (fn [{:keys [id]}]
+                                                       [:div {:on-click #(shui/popup-hide! id)
+                                                              :data-keep-selection true}
+                                                        ((state/get-component :selection/context-menu))])
                                                      {:on-before-hide state/dom-clear-selection!
                                                       :on-after-hide state/state-clear-selection!
                                                       :content-props {:class "w-[280px] ls-context-menu-content"}

@@ -40,8 +40,7 @@
   []
   (let [repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)]
-    [:div
-     {:on-pointer-down (fn [e] (.preventDefault e))}
+    [:<>
      (ui/menu-background-color #(property-handler/batch-set-block-property! repo
                                                                             (state/get-selection-block-ids)
                                                                             (pu/get-pid :logseq.property/background-color)

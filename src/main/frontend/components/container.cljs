@@ -750,7 +750,8 @@
                 (state/get-edit-input-id)
                 (= (shui-dialog/get-last-modal-id) :property-dialog)
                 (some-> (.-target e) (.closest ".ls-block"))
-                (some-> (.-target e) (.closest "[data-keep-selection]")))
+                (some-> (.-target e) (.closest "[data-keep-selection]"))
+                (editor-handler/popup-exists? :selection-action-bar))
     (editor-handler/clear-selection!)))
 
 (rum/defc render-custom-context-menu
@@ -906,7 +907,7 @@
                                 ;; block selection
                                 (and (state/selection?) (not (d/has-class? target "bullet")))
                                 (show! (cp-content/custom-context-menu-content)
-                                       {:id "blocks-selection-context-menu"})
+                                       {:id :blocks-selection-context-menu})
 
                                 ;; block bullet
                                 (and block-id (parse-uuid block-id))
