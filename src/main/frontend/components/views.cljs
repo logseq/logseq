@@ -1482,7 +1482,8 @@
                            ""))
             result (editor-handler/api-insert-new-block! view-title
                                                          {:page (:block/uuid page)
-                                                          :properties properties})]
+                                                          :properties properties
+                                                          :edit-block? false})]
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
