@@ -2283,7 +2283,9 @@
                                  (when-not (string/blank? (state/get-edit-content))
                                    (save-current-block!))
                                  (outliner-op/insert-blocks! blocks' target
-                                                             (assoc opts :sibling? sibling?')))]
+                                                             (assoc opts
+                                                                    :sibling? sibling?'
+                                                                    :insert-template? true)))]
                    (when result (edit-last-block-after-inserted! (ldb/read-transit-str result))))
 
                  (catch :default ^js/Error e
