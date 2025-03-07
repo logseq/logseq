@@ -145,20 +145,6 @@
            auto-side? _auto-focus? _target root-props content-props
            _on-before-hide _on-after-hide]
     :as _props}]
-  ;; disableOutsidePointerEvents
-  ;(rum/use-effect!
-  ;  (fn []
-  ;    (when-not as-dropdown?
-  ;      (let [^js style js/document.body.style
-  ;            set-pointer-event! #(set! (. style -pointerEvents) %)
-  ;            try-unset! #(when (nil? (seq @*popups))
-  ;                          (set-pointer-event! nil))]
-  ;        (if open?
-  ;          (set-pointer-event! "none")
-  ;          (try-unset!))
-  ;        #(try-unset!))))
-  ;  [open?])
-
   (when-let [[x y _ height] position]
     (let [popup-root (if (not force-popover?) dropdown-menu popover)
           popup-trigger (if (not force-popover?) dropdown-menu-trigger popover-trigger)
@@ -173,7 +159,12 @@
           auto-side? (if (boolean? auto-side?) auto-side? true)
           content-props (cond-> content-props
                           auto-side? (assoc :side (auto-side-fn)))
-          hide (fn [] (hide! id 1))]
+          handle-key-escape! (fn [^js e]
+                               (when-not (false? (some-> content-props (:onEscapeKeyDown) (apply [e])))
+                                 (hide! id 1)))
+          handle-pointer-outside! (fn [^js e]
+                                    (when-not (false? (some-> content-props (:onPointerDownOutside) (apply [e])))
+                                      (hide! id 1)))]
       (popup-root
         (merge root-props {:open open?})
         (popup-trigger
@@ -185,10 +176,9 @@
                            :width 1
                            :top y
                            :left x}} ""))
-        (let [content-props (cond-> (merge {:onEscapeKeyDown hide
-                                            :disableOutsideScroll false
-                                            :onPointerDownOutside hide}
-                                      content-props)
+        (let [content-props (cond-> (merge content-props {:onEscapeKeyDown handle-key-escape!
+                                                          :disableOutsideScroll false
+                                                          :onPointerDownOutside handle-pointer-outside!})
                               (and (not force-popover?)
                                 (not as-dropdown?))
                               (assoc :on-key-down (fn [^js e]

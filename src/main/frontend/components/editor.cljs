@@ -660,61 +660,63 @@
 (rum/defc shui-editor-popups
   [id format action _data]
   (hooks/use-effect!
-   (fn []
-     (let [pid (case action
-                 :commands
-                 (open-editor-popup! :commands
-                                     (commands id format)
-                                     {:content-props {:withoutAnimation false}})
+    (fn []
+      (let [pid (case action
+                  :commands
+                  (open-editor-popup! :commands
+                    (commands id format)
+                    {:content-props {:withoutAnimation false}})
 
-                 (:block-search :page-search :page-search-hashtag)
-                 (open-editor-popup! action
-                                     (if (= :block-search action)
-                                       (block-search id format)
-                                       (page-search id format))
-                                     {:root-props {:onOpenChange
-                                                   #(when-not %
-                                                      (when (contains?
-                                                             #{:block-search :page-search :page-search-hashtag}
-                                                             (state/get-editor-action))
-                                                        (state/clear-editor-action!)))}})
+                  (:block-search :page-search :page-search-hashtag)
+                  (open-editor-popup! action
+                    (if (= :block-search action)
+                      (block-search id format)
+                      (page-search id format))
+                    {:root-props {:onOpenChange
+                                  #(when-not %
+                                     (when (contains?
+                                             #{:block-search :page-search :page-search-hashtag}
+                                             (state/get-editor-action))
+                                       (state/clear-editor-action!)))}})
 
-                 :datepicker
-                 (open-editor-popup! :datepicker
-                                     (datetime-comp/date-picker id format nil) {})
+                  :datepicker
+                  (open-editor-popup! :datepicker
+                    (datetime-comp/date-picker id format nil) {})
 
-                 :input
-                 (open-editor-popup! :input
-                                     (editor-input id
-                                                   (fn [command m]
-                                                     (editor-handler/handle-command-input command id format m))
-                                                   (fn []
-                                                     (editor-handler/handle-command-input-close id)))
-                                     {:content-props {:onOpenAutoFocus #()}})
+                  :input
+                  (open-editor-popup! :input
+                    (editor-input id
+                      ;; on-submit
+                      (fn [command m]
+                        (editor-handler/handle-command-input command id format m))
+                      ;; on-cancel
+                      (fn []
+                        (editor-handler/handle-command-input-close id)))
+                    {:content-props {:onOpenAutoFocus #()}})
 
-                 :select-code-block-mode
-                 (open-editor-popup! :code-block-mode-picker
-                                     (code-block-mode-picker id format) {})
+                  :select-code-block-mode
+                  (open-editor-popup! :code-block-mode-picker
+                    (code-block-mode-picker id format) {})
 
-                 :template-search
-                 (open-editor-popup! :template-search
-                                     (template-search id format) {})
+                  :template-search
+                  (open-editor-popup! :template-search
+                    (template-search id format) {})
 
-                 (:property-search :property-value-search)
-                 (open-editor-popup! action
-                                     (if (= :property-search action)
-                                       (property-search id) (property-value-search id))
-                                     {})
+                  (:property-search :property-value-search)
+                  (open-editor-popup! action
+                    (if (= :property-search action)
+                      (property-search id) (property-value-search id))
+                    {})
 
-                 :zotero
-                 (open-editor-popup! :zotero
-                                     (zotero/zotero-search id) {})
+                  :zotero
+                  (open-editor-popup! :zotero
+                    (zotero/zotero-search id) {})
 
                   ;; TODO: try remove local model state
-                 false)]
-       #(when pid
-          (shui/popup-hide! pid))))
-   [action])
+                  false)]
+        #(when pid
+           (shui/popup-hide! pid))))
+    [action])
   [:<>])
 
 (rum/defc command-popups <
