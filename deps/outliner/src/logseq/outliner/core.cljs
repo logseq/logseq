@@ -715,7 +715,9 @@
                 full-tx' (walk/prewalk
                           (fn [f]
                             (if (de/entity? f)
-                              (or (id->new-uuid (:db/id f)) (:db/id f))
+                              (if-let [id (id->new-uuid (:db/id f))]
+                                [:block/uuid id]
+                                (:db/id f))
                               f))
                           full-tx)]
             {:tx-data full-tx'
