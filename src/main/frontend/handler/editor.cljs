@@ -1895,6 +1895,12 @@
 
   (handle-command-input-close id))
 
+(defn restore-last-saved-cursor!
+  ([] (restore-last-saved-cursor! (state/get-input)))
+  ([input]
+   (when-let [saved-cursor (and input (state/get-editor-last-pos))]
+     (cursor/move-cursor-to input saved-cursor true))))
+
 (defn- close-autocomplete-if-outside
   [input]
   (when (and input
