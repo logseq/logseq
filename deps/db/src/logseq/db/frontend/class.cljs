@@ -80,6 +80,11 @@
                             :logseq.property.pdf/hl-type :logseq.property.pdf/hl-image]
                :required-properties [:logseq.property/ls-type :logseq.property.pdf/hl-color :logseq.property/asset
                                      :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value]}}
+
+     :logseq.class/Template
+     {:title "Template"
+      :schema {:properties [:logseq.property/template-applied-to]}}
+
      ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project)
      )))
 

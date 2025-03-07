@@ -2614,9 +2614,11 @@
       :on-mouse-over #(reset! *hover-container? true)
       :on-mouse-out #(reset! *hover-container? false)}
      (when (not (ldb/private-tags (:db/ident tag)))
-       [:div.absolute.-left-5.bg-gray-01.transition-opacity.duration-300.ease-in-out
+       [:div.absolute.bg-gray-03.transition-opacity.duration-300.ease-in-out
         {:class (if @*hover-container? "!opacity-100" "!opacity-0")
-         :style {:top -2}}
+         :style {:top -2
+                 :z-index (if @*hover-container? 99 -1)
+                 :left -23}}
         (shui/button
          {:size :sm
           :variant :ghost
@@ -2966,7 +2968,7 @@
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)
         refs-count (if (seq (:block/_refs block))
-                     (count (:block/_refs block))
+                     (count (remove :logseq.property/view-for (:block/_refs block)))
                      (rum/react *refs-count))
         table? (:table? config)
         raw-mode-block (state/sub :editor/raw-mode-block)

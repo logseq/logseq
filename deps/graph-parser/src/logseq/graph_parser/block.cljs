@@ -561,7 +561,7 @@
 (defn- macro->block
   "macro: {:name \"\" arguments [\"\"]}"
   [macro]
-  {:block/uuid (random-uuid)
+  {:block/uuid (common-uuid/gen-uuid)
    :block/type "macro"
    :block/properties {:logseq.macro-name (:name macro)
                       :logseq.macro-arguments (:arguments macro)}})

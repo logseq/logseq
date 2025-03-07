@@ -1292,7 +1292,8 @@
   (when-let [->hiccup (state/get-component :block/->hiccup)]
     (let [group-by-page? (not (every? db/page? result))
           result (if group-by-page?
-                   (group-by :block/page result)
+                   (-> (group-by :block/page result)
+                       (update-vals ldb/sort-by-order))
                    result)
           config' (cond-> (assoc config
                                  :current-block (:db/id view-entity)
@@ -1481,7 +1482,8 @@
                            ""))
             result (editor-handler/api-insert-new-block! view-title
                                                          {:page (:block/uuid page)
-                                                          :properties properties})]
+                                                          :properties properties
+                                                          :edit-block? false})]
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
@@ -1529,7 +1531,7 @@
           (if (= title "")
             "New view"
             title))
-        (when show-items-count?
+        (when (and show-items-count? (> (count data) 0))
           [:span.text-muted-foreground.text-xs
            (count data)]))))
 

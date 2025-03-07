@@ -228,7 +228,7 @@
         hidden-pages (concat (build-initial-views) (build-favorites-page))
         ;; These classes bootstrap our tags and properties as they depend on each other e.g.
         ;; Root <-> Tag, classes-tx depends on logseq.property/parent, properties-tx depends on Property
-        bootstrap-class? (fn [c] (contains? #{:logseq.class/Root :logseq.class/Property :logseq.class/Tag} (:db/ident c)))
+        bootstrap-class? (fn [c] (contains? #{:logseq.class/Root :logseq.class/Property :logseq.class/Tag :logseq.class/Template} (:db/ident c)))
         bootstrap-classes (filter bootstrap-class? default-classes)
         bootstrap-class-ids (map #(select-keys % [:db/ident :block/uuid]) bootstrap-classes)
         classes-tx (concat (map #(dissoc % :db/ident) bootstrap-classes)
