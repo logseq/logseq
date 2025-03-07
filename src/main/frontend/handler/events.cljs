@@ -1086,7 +1086,8 @@
        (fn []
          (selection/action-bar))
        {:id :selection-action-bar
-        :content-props {:side "top"}
+        :content-props {:side "top"
+                        :class "!py-0 !px-0"}
         :auto-side? false
         :align :start}))))
 
