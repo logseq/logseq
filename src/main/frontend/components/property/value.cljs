@@ -671,10 +671,17 @@
                              (and alias? (= (or (:db/id (:block/page block))
                                                 (:db/id block))
                                             (:db/id node)))
-                             (when (and property-type (not= property-type :node))
+                             (cond
+                               (= property-type :class)
+                               (ldb/private-tags (:db/ident node))
+
+                               (and property-type (not= property-type :node))
                                (if (= property-type :page)
                                  (not (db/page? node))
-                                 (not (contains? (ldb/get-entity-types node) property-type))))))
+                                 (not (contains? (ldb/get-entity-types node) property-type)))
+
+                               :else
+                               false)))
                        result)))))
 
         options (map (fn [node]
@@ -785,7 +792,10 @@
                                      (set-result! result)))))
         repo (state/get-current-repo)
         classes (:logseq.property/classes property)
-        non-root-classes (remove (fn [c] (= (:db/ident c) :logseq.class/Root)) classes)
+        class? (= :class (:logseq.property/type property))
+        non-root-classes (cond-> (remove (fn [c] (= (:db/ident c) :logseq.class/Root)) classes)
+                           class?
+                           (conj (frontend.db/entity :logseq.class/Tag)))
         parent-property? (= (:db/ident property) :logseq.property/parent)]
     (when (and (not parent-property?) (seq non-root-classes))
       ;; effect runs once
