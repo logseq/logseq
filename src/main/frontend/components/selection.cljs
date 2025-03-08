@@ -28,8 +28,7 @@
                                  (state/pub-event! [:editor/new-property {:target (.-target e)
                                                                           :selected-blocks selected-blocks
                                                                           :property-key "Tags"
-                                                                          :show-select-only? true
-                                                                          :hide-property-key? true
+                                                                          :hide-property-value? true
                                                                           :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
        (ui/tooltip (ui/icon "hash" {:size 13}) "Set tag"
                    {:trigger-props {:class "flex"}}))

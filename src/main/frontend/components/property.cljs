@@ -352,7 +352,7 @@
                        (edit-original-block {:editing-default-property? editing-default-property?})))
                    (state/set-editor-action! nil)
                    state)}
-  [state block *property-key {:keys [class-schema? hide-property-key?]
+  [state block *property-key {:keys [class-schema?]
                               :as opts}]
   (let [*ref (::ref state)
         *property (::property state)
@@ -374,7 +374,9 @@
                                    (and (not= view-context :all) (not (contains? block-types view-context)))
                                    (and (ldb/built-in? block) (contains? #{:logseq.property/parent} (:db/ident m))))))
         property (rum/react *property)
-        property-key (rum/react *property-key)]
+        property-key (rum/react *property-key)
+        hide-property-key? (or (contains? #{:date :datetime} (:logseq.property/type property))
+                               (contains? #{:block/tags} (:db/ident property)))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      {:ref #(reset! *ref %)}
      (if property-key
