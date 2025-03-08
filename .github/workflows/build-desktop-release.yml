@@ -183,7 +183,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -227,7 +227,7 @@ jobs:
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -273,7 +273,7 @@ jobs:
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -327,7 +327,7 @@ jobs:
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -394,7 +394,7 @@ jobs:
 
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -470,7 +470,7 @@ jobs:
 
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -560,7 +560,7 @@ jobs:
     runs-on: [self-hosted, macos, token]
     steps:
       - name: Download Windows Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-win64-unsigned-builds
           path: ./builds
@@ -584,43 +584,43 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-x64-builds
           path: ./
 
       - name: Download MacOS arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-arm64-builds
           path: ./
 
       - name: Download The Linux x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-x64-builds
           path: ./
 
       - name: Download The Linux arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-arm64-builds
           path: ./
 
       - name: Download The Windows Artifact (Signed)
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-win64-signed-builds
           path: ./
 
       - name: Download The Windows Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-win64-builds
           path: ./
 
       - name: Download Android Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-android-builds
           path: ./
@@ -664,43 +664,43 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-x64-builds
           path: ./
 
       - name: Download MacOS arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-arm64-builds
           path: ./
 
       - name: Download The Linux x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-x64-builds
           path: ./
 
       - name: Download The Linux arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-arm64-builds
           path: ./
 
       - name: Download The Windows Artifact (Signed)
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-win64-signed-builds
           path: ./
 
       - name: Download The Windows Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-win64-builds
           path: ./
 
       - name: Download Android Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
         with:
           name: logseq-android-builds
