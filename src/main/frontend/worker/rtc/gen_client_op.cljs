@@ -134,17 +134,27 @@
             db-before db-after e->a->v->add?->t rtc-const/ignore-attrs-when-syncing)
    same-entity-datoms-coll))
 
+(defn- generate-rtc-ops-from-entities
+  [ents]
+  (let [db (d/entity-db (first ents))
+        id->same-entity-datoms
+        (into {}
+              (map (fn [ent]
+                     (let [e (:db/id ent)
+                           datoms (d/datoms db :eavt e)]
+                       [e datoms])))
+              ents)
+        e->a->v->add?->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
+    (generate-rtc-ops db db (vals id->same-entity-datoms) e->a->v->add?->t)))
+
 (defn generate-rtc-ops-from-property-entities
-  [property-entities]
-  (when (seq property-entities)
-    (assert (every? ldb/property? property-entities))
-    (let [db (d/entity-db (first property-entities))
-          id->same-entity-datoms
-          (into {}
-                (map (fn [prop-ent]
-                       (let [e (:db/id prop-ent)
-                             datoms (d/datoms db :eavt e)]
-                         [e datoms])))
-                property-entities)
-          e->a->v->add?->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
-      (generate-rtc-ops db db (vals id->same-entity-datoms) e->a->v->add?->t))))
+  [property-ents]
+  (when (seq property-ents)
+    (assert (every? ldb/property? property-ents))
+    (generate-rtc-ops-from-entities property-ents)))
+
+(defn generate-rtc-ops-from-class-entities
+  [class-ents]
+  (when (seq class-ents)
+    (assert (every? ldb/class? class-ents))
+    (generate-rtc-ops-from-entities class-ents)))
