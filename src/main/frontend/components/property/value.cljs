@@ -568,8 +568,8 @@
                               (remove nil?)
                               (remove #(= :logseq.property/empty-placeholder %)))
         clear-value (str "No " (:block/title property))
-        clear-value-label [:div.flex.flex-row.items-center.gap-2
-                           (ui/icon "x")
+        clear-value-label [:div.flex.flex-row.items-center.gap-1.text-sm
+                           (ui/icon "x" {:size 14})
                            [:div clear-value]]
         items' (->>
                 (if (and (seq selected-choices)
@@ -717,10 +717,8 @@
                                               "Set tags"
                                               alias?
                                               "Set alias"
-                                              multiple-choices?
-                                              "Choose nodes"
                                               :else
-                                              "Choose node")
+                                              (str "Set " (:block/title property)))
                  :show-new-when-not-exact-match? (if (or (and parent-property? (contains? (set children-pages) (:db/id block)))
                                                          ;; Don't allow creating private tags
                                                          (seq (set/intersection (set (map :db/ident classes))
@@ -877,7 +875,7 @@
                      :selected-choices selected-choices
                      :dropdown? dropdown?
                      :show-new-when-not-exact-match? (not (or closed-values? (= :date type)))
-                     :input-default-placeholder "Select"
+                     :input-default-placeholder (str "Set " (:block/title property))
                      :extract-chosen-fn :value
                      :extract-fn (fn [x] (or (:label-value x) (:label x)))
                      :content-props content-props
@@ -1028,48 +1026,45 @@
 
 (rum/defc single-value-select
   [block property value value-f select-opts opts]
-  (let [*el (rum/use-ref nil)]
-    ;; Open popover initially when editing a property
-    (hooks/use-effect!
-     (fn []
-       (when (:editing? opts)
-         (.click (rum/deref *el))))
-     [(:editing? opts)])
-    (let [type (:logseq.property/type property)
-          select-opts' (assoc select-opts :multiple-choices? false)
-          popup-content (fn content-fn [_]
-                          [:div.property-select
-                           (case type
-                             (:entity :number :default :url)
-                             (select block property select-opts' opts)
+  (let [*el (rum/use-ref nil)
+        editing? (:editing? opts)
+        type (:logseq.property/type property)
+        select-opts' (assoc select-opts :multiple-choices? false)
+        popup-content (fn content-fn [_]
+                        [:div.property-select
+                         (case type
+                           (:entity :number :default :url)
+                           (select block property select-opts' opts)
 
-                             (:node :class :property :page :date)
-                             (property-value-select-node block property select-opts' opts))])
-          trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
-          show! (fn [e]
-                  (let [target (.-target e)]
-                    (when-not (or config/publishing?
-                                  (util/shift-key? e)
-                                  (util/meta-key? e)
-                                  (util/link? target)
-                                  (when-let [node (.closest target "a")]
-                                    (not (or (d/has-class? node "page-ref")
-                                             (d/has-class? node "tag")))))
+                           (:node :class :property :page :date)
+                           (property-value-select-node block property select-opts' opts))])]
+    (if editing?
+      (popup-content nil)
+      (let [trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
+            show! (fn [e]
+                    (let [target (.-target e)]
+                      (when-not (or config/publishing?
+                                    (util/shift-key? e)
+                                    (util/meta-key? e)
+                                    (util/link? target)
+                                    (when-let [node (.closest target "a")]
+                                      (not (or (d/has-class? node "page-ref")
+                                               (d/has-class? node "tag")))))
 
-                      (shui/popup-show! target popup-content
-                                        {:align "start"
-                                         :as-dropdown? true
-                                         :auto-focus? true
-                                         :trigger-id trigger-id}))))]
-      (shui/trigger-as
-       (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full)
-       {:ref *el
-        :id trigger-id
-        :tabIndex 0
-        :on-click show!}
-       (if (string/blank? value)
-         (property-empty-text-value property opts)
-         (value-f))))))
+                        (shui/popup-show! target popup-content
+                                          {:align "start"
+                                           :as-dropdown? true
+                                           :auto-focus? true
+                                           :trigger-id trigger-id}))))]
+        (shui/trigger-as
+         (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full)
+         {:ref *el
+          :id trigger-id
+          :tabIndex 0
+          :on-click show!}
+         (if (string/blank? value)
+           (property-empty-text-value property opts)
+           (value-f)))))))
 
 (defn- property-value-inner
   [block property value {:keys [inline-text page-cp
@@ -1164,64 +1159,58 @@
            (property-value-inner block property value opts)])))))
 
 (rum/defc multiple-values-inner
-  [block property v {:keys [on-chosen editing? hide-property-value?] :as opts}]
+  [block property v {:keys [on-chosen editing?] :as opts}]
   (let [type (:logseq.property/type property)
         date? (= type :date)
         *el (rum/use-ref nil)
         items (cond->> (if (de/entity? v) #{v} v)
                 (= (:db/ident property) :block/tags)
-                (remove (fn [v] (contains? ldb/hidden-tags (:db/ident v)))))]
-    (when-not hide-property-value?
-      (hooks/use-effect!
-       (fn []
-         (when editing?
-           (.click (rum/deref *el))))
-       [editing?]))
-    (let [select-cp (fn [select-opts]
-                      (let [select-opts (merge {:multiple-choices? true
-                                                :on-chosen (fn []
-                                                             (when on-chosen (on-chosen)))}
-                                               select-opts
-                                               (when-not hide-property-value?
-                                                 {:dropdown? false}))]
-                        [:div.property-select
-                         (if (contains? #{:node :page :class :property} type)
-                           (property-value-select-node block property
-                                                       select-opts
-                                                       opts)
-                           (select block property select-opts opts))]))]
-      (if hide-property-value?
-        (select-cp {})
-        (let [toggle-fn shui/popup-hide!
-              content-fn (fn [{:keys [_id content-props]}]
-                           (select-cp {:content-props content-props}))]
-          [:div.multi-values.jtrigger
-           {:tab-index "0"
-            :ref *el
-            :on-click (fn [^js e]
-                        (let [target (.-target e)]
-                          (when-not (or (util/link? target) (.closest target "a") config/publishing?)
-                            (shui/popup-show! (rum/deref *el) content-fn
-                                              {:as-dropdown? true :as-content? false
-                                               :align "start" :auto-focus? true}))))
-            :on-key-down (fn [^js e]
-                           (case (.-key e)
-                             (" " "Enter")
-                             (do (some-> (rum/deref *el) (.click))
-                                 (util/stop e))
-                             :dune))
-            :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2"}
-           (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
-             (if (and (seq items) not-empty-value?)
-               (concat
-                (->> (for [item items]
-                       (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
-                     (interpose [:span.opacity-50.-ml-2 ","]))
-                (when date?
-                  [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
-               (if date?
-                 (property-value-date-picker block property nil {:toggle-fn toggle-fn})
-                 (property-empty-text-value property opts))))])))))
+                (remove (fn [v] (contains? ldb/hidden-tags (:db/ident v)))))
+        select-cp (fn [select-opts]
+                    (let [select-opts (merge {:multiple-choices? true
+                                              :on-chosen (fn []
+                                                           (when on-chosen (on-chosen)))}
+                                             select-opts
+                                             (when-not editing?
+                                               {:dropdown? false}))]
+                      [:div.property-select
+                       (if (contains? #{:node :page :class :property} type)
+                         (property-value-select-node block property
+                                                     select-opts
+                                                     opts)
+                         (select block property select-opts opts))]))]
+    (if editing?
+      (select-cp {})
+      (let [toggle-fn shui/popup-hide!
+            content-fn (fn [{:keys [_id content-props]}]
+                         (select-cp {:content-props content-props}))]
+        [:div.multi-values.jtrigger
+         {:tab-index "0"
+          :ref *el
+          :on-click (fn [^js e]
+                      (let [target (.-target e)]
+                        (when-not (or (util/link? target) (.closest target "a") config/publishing?)
+                          (shui/popup-show! (rum/deref *el) content-fn
+                                            {:as-dropdown? true :as-content? false
+                                             :align "start" :auto-focus? true}))))
+          :on-key-down (fn [^js e]
+                         (case (.-key e)
+                           (" " "Enter")
+                           (do (some-> (rum/deref *el) (.click))
+                               (util/stop e))
+                           :dune))
+          :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2"}
+         (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
+           (if (and (seq items) not-empty-value?)
+             (concat
+              (->> (for [item items]
+                     (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
+                   (interpose [:span.opacity-50.-ml-2 ","]))
+              (when date?
+                [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
+             (if date?
+               (property-value-date-picker block property nil {:toggle-fn toggle-fn})
+               (property-empty-text-value property opts))))]))))
 
 (rum/defc multiple-values < rum/reactive db-mixins/query
   [block property opts]

@@ -376,7 +376,7 @@
         property (rum/react *property)
         property-key (rum/react *property-key)
         hide-property-key? (or (contains? #{:date :datetime} (:logseq.property/type property))
-                               (contains? #{:block/tags} (:db/ident property)))]
+                               (pv/select-type? block property))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      {:ref #(reset! *ref %)}
      (if property-key
