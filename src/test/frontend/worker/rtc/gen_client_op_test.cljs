@@ -1,5 +1,6 @@
 (ns frontend.worker.rtc.gen-client-op-test
   (:require [cljs.test :as t :refer [deftest is testing]]
+            [clojure.set :as set]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.state :as state]
@@ -11,7 +12,8 @@
             [frontend.worker.state :as worker-state]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.batch-tx :as batch-tx]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.outliner.core :as outliner-core]
+            [meander.epsilon :as me]))
 
 (t/use-fixtures :each
   test-helper/db-based-start-and-destroy-db-map-fixture
@@ -160,6 +162,31 @@
 (deftest generate-rtc-ops-from-property-entity-test
   (let [repo (state/get-current-repo)
         db (conn/get-db repo true)
-        ent (d/entity db :logseq.property.view/feature-type)]
-    (is (= #{:move :update-page :update}
-           (set (map first (subject/generate-rtc-ops-from-property-entities [ent])))))))
+        ent (d/entity db :logseq.property.view/feature-type)
+        av-coll-attrs #{:logseq.property/type :logseq.property/built-in?
+                        :logseq.property/public? :logseq.property/hide?
+                        :block/tags :block/title :db/cardinality}]
+    #_{:clj-kondo/ignore [:unresolved-symbol :invalid-arity]}
+    (is (->> (me/find (subject/generate-rtc-ops-from-property-entities [ent])
+               ([:move _ {:block-uuid ?block-uuid}]
+                [:update-page _ {:block-uuid ?block-uuid}]
+                [:update _ {:block-uuid ?block-uuid :av-coll ([!av-coll-attrs . _ ...] ...)}])
+               !av-coll-attrs)
+             set
+             (set/difference av-coll-attrs)
+             empty?))))
+
+(deftest generate-rtc-ops-from-class-entity-test
+  (let [repo (state/get-current-repo)
+        db (conn/get-db repo true)
+        ent (d/entity db :logseq.class/Template)
+        av-coll-attrs #{:logseq.property.class/properties :logseq.property/built-in? :logseq.property/parent
+                        :block/tags :block/title}]
+    #_{:clj-kondo/ignore [:unresolved-symbol :invalid-arity]}
+    (is (->> (me/find (subject/generate-rtc-ops-from-class-entities [ent])
+               ([:update-page _ {:block-uuid ?block-uuid}]
+                [:update _ {:block-uuid ?block-uuid :av-coll ([!av-coll-attrs . _ ...] ...)}])
+               !av-coll-attrs)
+             set
+             (set/difference av-coll-attrs)
+             empty?))))
