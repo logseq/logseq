@@ -64,7 +64,7 @@
   {:doc "Validate a DB graph's datascript schema"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq script/validate_client_db.cljs"
+                "yarn -s nbb-logseq script/validate_db.cljs"
                 *command-line-args*)}
 
   dev:db-query
@@ -81,7 +81,7 @@
   {:doc "Create a DB graph given a sqlite.build EDN file"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq -cp src:../outliner/src script/create_graph.cljs" *command-line-args*)}
+                "yarn -s nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
 
   dev:db-import
   {:doc "Import a file graph to db graph"

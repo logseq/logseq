@@ -1,14 +1,17 @@
 (ns create-graph
-  "An example script that creates a DB graph given a sqlite.build EDN file"
-  (:require [logseq.outliner.cli :as outliner-cli]
-            [clojure.string :as string]
-            [clojure.edn :as edn]
-            [datascript.core :as d]
-            ["path" :as node-path]
+  "A script that creates a DB graph given a sqlite.build EDN file"
+  (:require ["fs" :as fs]
             ["os" :as os]
-            ["fs" :as fs]
+            ["path" :as node-path]
+            #_:clj-kondo/ignore
+            [babashka.cli :as cli]
+            [clojure.edn :as edn]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
-            [nbb.core :as nbb]))
+            [nbb.core :as nbb]
+            [validate-db]))
 
 (defn- resolve-path
   "If relative path, resolve with $ORIGINAL_PWD"
@@ -17,11 +20,20 @@
     path
     (node-path/join (or js/process.env.ORIGINAL_PWD ".") path)))
 
+(def spec
+  "Options spec"
+  {:help {:alias :h
+          :desc "Print help"}
+   :validate {:alias :v
+              :desc "Validate db after creation"}})
+
 (defn -main [args]
-  (when (not= 2 (count args))
-    (println "Usage: $0 GRAPH-DIR EDN-PATH")
-    (js/process.exit 1))
-  (let [[graph-dir edn-path] args
+  (let [{options :opts args' :args} (cli/parse-args args {:spec spec})
+        [graph-dir edn-path] args'
+        _ (when (or (nil? graph-dir) (nil? edn-path) (:help options))
+            (println (str "Usage: $0 GRAPH-NAME EDN-PATH [OPTIONS]\nOptions:\n"
+                          (cli/format-opts {:spec spec})))
+            (js/process.exit 1))
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
@@ -34,7 +46,9 @@
     ;; (cljs.pprint/pprint _txs)
     (d/transact! conn init-tx)
     (d/transact! conn block-props-tx)
-    (println "Created graph" (str db-name "!"))))
+    (println "Created graph" (str db-name "!"))
+    (when (:validate options)
+      (validate-db/validate-db @conn db-name {:group-errors true :closed-maps true :humanize true}))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

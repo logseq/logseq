@@ -1,18 +1,18 @@
 (ns query
-  "An example script that queries any db graph from the commandline e.g.
+  "A script that queries any db graph from the commandline e.g.
 
   $ yarn -s nbb-logseq script/query.cljs db-name '[:find (pull ?b [:block/name :block/title]) :where [?b :block/created-at]]'"
-  (:require [datascript.core :as d]
-            [clojure.edn :as edn]
-            [logseq.db.sqlite.cli :as sqlite-cli]
-            [logseq.db.frontend.rules :as rules]
-            [nbb.core :as nbb]
-            [clojure.string :as string]
-            [clojure.pprint :as pprint]
-            [babashka.cli :as cli]
-            ["child_process" :as child-process]
+  (:require ["child_process" :as child-process]
+            ["os" :as os]
             ["path" :as node-path]
-            ["os" :as os]))
+            [babashka.cli :as cli]
+            [clojure.edn :as edn]
+            [clojure.pprint :as pprint]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [logseq.db.frontend.rules :as rules]
+            [logseq.db.sqlite.cli :as sqlite-cli]
+            [nbb.core :as nbb]))
 
 (defn- sh
   "Run shell cmd synchronously and print to inherited streams by default. Aims
@@ -44,8 +44,8 @@
             :desc "Lookup entities instead of query"}})
 
 (defn -main [args]
-  (let [[graph-dir & args'] args
-        options (cli/parse-opts args' {:spec spec})
+  (let [{options :opts args' :args} (cli/parse-args args {:spec spec})
+        [graph-dir & args''] args'
         _ (when (or (nil? graph-dir) (:help options))
             (println (str "Usage: $0 GRAPH-NAME [& ARGS] [OPTIONS]\nOptions:\n"
                           (cli/format-opts {:spec spec})))
@@ -60,7 +60,7 @@
                             (update :block/properties (fn [props] (map (fn [m] (into {} m)) props)))))
                        (:entity options))
                   ;; assumes no :in are in queries
-                  (let [query (into (edn/read-string (first args')) [:in '$ '%])
+                  (let [query (into (edn/read-string (first args'')) [:in '$ '%])
                         res (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules))]
                     ;; Remove nesting for most queries which just have one :find binding
                     (if (= 1 (count (first res))) (mapv first res) res)))]
@@ -71,5 +71,5 @@
         (sh ["puget"] {:input (pr-str results) :stdio ["pipe" "inherit" "inherit"]})
         (pprint/pprint results)))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

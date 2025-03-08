@@ -175,7 +175,7 @@ jobs:
         run: cd deps/db && yarn install --frozen-lockfile
 
       - name: Validate created DB graphs
-        run: cd deps/db && yarn nbb-logseq script/validate_client_db.cljs ../../scripts/db-graph-with-props ../../scripts/db-graph-with-schema --closed-maps --group-errors
+        run: cd deps/db && yarn nbb-logseq script/validate_db.cljs ../../scripts/db-graph-with-props ../../scripts/db-graph-with-schema --closed-maps --group-errors
 
   e2e-test:
     # TODO: Re-enable when ready to enable tests for file graphs

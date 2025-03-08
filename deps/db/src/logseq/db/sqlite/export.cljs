@@ -10,6 +10,7 @@
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]))
 
@@ -48,8 +49,11 @@
         [:build/page {:build/journal (:block/journal-day pvalue)}]
         :else
         (if (= :node (:logseq.property/type property-ent))
-          ;; Have to distinguish from block references that don't exist like closed values
-          ^::existing-property-value? [:block/uuid (:block/uuid pvalue)]
+          ;; Internal idents take precedence over uuid because they are keep data graph-agnostic
+          (if (some-> pvalue :db/ident db-malli-schema/internal-ident?)
+            (:db/ident pvalue)
+            ;; Use metadata distinguish from block references that don't exist like closed values
+            ^::existing-property-value? [:block/uuid (:block/uuid pvalue)])
           (or (:db/ident pvalue)
               ;; nbb-compatible version of db-property/property-value-content
               (or (block-title pvalue)
@@ -177,16 +181,16 @@
 (defn- build-node-export
   "Given a block/page entity and optional existing properties, build an export map of its
    tags and properties"
-  [db entity {:keys [properties include-uuid-fn keep-uuid? shallow-copy?]
+  [db entity {:keys [properties include-uuid-fn shallow-copy?]
               :or {include-uuid-fn (constantly false)}}]
   (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
         new-properties (when-not shallow-copy? (build-node-properties db entity ent-properties properties))
         build-node (cond-> {:block/title (block-title entity)}
+                     (:block/link entity)
+                     (assoc :block/link [:block/uuid (:block/uuid (:block/link entity))])
                      (include-uuid-fn (:block/uuid entity))
                      (assoc :block/uuid (:block/uuid entity) :build/keep-uuid? true)
-                     keep-uuid?
-                     (assoc :build/keep-uuid? true)
                      (and (not shallow-copy?) (seq build-tags))
                      (assoc :build/tags build-tags)
                      (and (not shallow-copy?) (seq ent-properties))
@@ -247,12 +251,16 @@
       classes (assoc :classes classes))))
 
 (defn- build-content-ref-export
-  "Builds an export config (and additional info) for refs in the given blocks. All the exported
+  "Builds an export config (and additional info) for refs in the given blocks. Refs are detected
+   if they are a :block/link or if a `[[UUID]]` ref in the content. All the exported
    entities found in block refs include their uuid in order to preserve the relationship to the blocks"
   [db blocks*]
   (let [;; Remove property value blocks that can't have content refs
         blocks (remove :logseq.property/value blocks*)
-        content-ref-uuids (set (mapcat (comp db-content/get-matched-ids block-title) blocks))
+        block-links (->> (filter :block/link blocks)
+                         (map #(:block/uuid (:block/link %))))
+        content-ref-uuids (into (set (mapcat (comp db-content/get-matched-ids block-title) blocks))
+                                block-links)
         content-ref-ents (map #(d/entity db [:block/uuid %]) content-ref-uuids)
         content-ref-pages (filter #(or (entity-util/internal-page? %) (entity-util/journal? %)) content-ref-ents)
         {:keys [properties classes]}
@@ -326,7 +334,6 @@
                       (merge (build-blocks-export db
                                                   (sort-by :block/order blocks)
                                                   {:include-uuid-fn (constantly true)
-                                                   :keep-uuid? true
                                                    ;; shallow copy to disallow failing pvalues
                                                    :shallow-copy? true})
                              {:page (shallow-copy-page parent-page-ent)})))))]
@@ -485,11 +492,12 @@
                      (mapcat #(sqlite-build/extract-from-blocks (:blocks %) (fn [m] (some-> m :block/uuid vector)))
                              pages-and-blocks))
              set)
+        ;; only looks one-level deep in properties e.g. not inside :build/page
         ref-uuids
-        (->> (concat (mapcat (comp get-pvalue-uuids :build/properties) (vals classes))
-                     (mapcat (comp get-pvalue-uuids :build/properties) (vals properties))
-                     (mapcat (comp get-pvalue-uuids :build/properties :page) pages-and-blocks)
-                     (mapcat #(sqlite-build/extract-from-blocks (:blocks %) (comp get-pvalue-uuids :build/properties)) pages-and-blocks))
+        (->> (concat (mapcat get-pvalue-uuids (vals classes))
+                     (mapcat get-pvalue-uuids (vals properties))
+                     (mapcat (comp get-pvalue-uuids :page) pages-and-blocks)
+                     (mapcat #(sqlite-build/extract-from-blocks (:blocks %) get-pvalue-uuids) pages-and-blocks))
              set)]
     (set/difference ref-uuids known-uuids)))
 

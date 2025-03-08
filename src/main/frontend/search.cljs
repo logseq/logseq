@@ -2,19 +2,20 @@
   "Provides search functionality for a number of features including Cmd-K
   search. Most of these fns depend on the search protocol"
   (:require [clojure.string :as string]
+            [datascript.core :as d]
+            [frontend.common.search-fuzzy :as fuzzy]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.async :as db-async]
+            [frontend.db.model :as db-model]
+            [frontend.db.utils :as db-utils]
             [frontend.search.agency :as search-agency]
             [frontend.search.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
-            [promesa.core :as p]
-            [frontend.common.search-fuzzy :as fuzzy]
             [logseq.common.config :as common-config]
-            [frontend.db.async :as db-async]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.db.utils :as db-utils]
             [logseq.db :as ldb]
-            [datascript.core :as d]))
+            [promesa.core :as p]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
 
@@ -35,15 +36,15 @@
   ([q limit]
    (when-let [repo (state/get-current-repo)]
      (let [q (fuzzy/clean-str q)]
-      (when-not (string/blank? q)
-        (p/let [mldoc-exts (set (map name common-config/mldoc-support-formats))
-                result (db-async/<get-files repo)
-                files (->> result
-                           (map first)
-                           (remove (fn [file]
-                                     (mldoc-exts (util/get-file-ext file)))))]
-          (when (seq files)
-            (fuzzy/fuzzy-search files q :limit limit))))))))
+       (when-not (string/blank? q)
+         (p/let [mldoc-exts (set (map name common-config/mldoc-support-formats))
+                 result (db-async/<get-files repo)
+                 files (->> result
+                            (map first)
+                            (remove (fn [file]
+                                      (mldoc-exts (util/get-file-ext file)))))]
+           (when (seq files)
+             (fuzzy/fuzzy-search files q :limit limit))))))))
 
 (defn template-search
   ([q]
@@ -51,11 +52,16 @@
   ([q limit]
    (when-let [repo (state/get-current-repo)]
      (when q
-       (p/let [q (fuzzy/clean-str q)
-               templates (db-async/<get-all-templates repo)]
-         (when (seq templates)
-           (let [result (fuzzy/fuzzy-search (keys templates) q {:limit limit})]
-             (vec (select-keys templates result)))))))))
+       (let [db-based? (config/db-based-graph?)]
+         (p/let [q (fuzzy/clean-str q)
+                 templates (if db-based?
+                             (db-async/<get-tag-objects repo (:db/id (db/entity :logseq.class/Template)))
+                             (p/let [result (db-async/<get-all-templates repo)]
+                               (vals result)))]
+           (when (seq templates)
+             (let [extract-fn (if db-based? :block/title :template)]
+               (fuzzy/fuzzy-search templates q {:limit limit
+                                                :extract-fn extract-fn})))))))))
 
 (defn property-search
   ([q]
@@ -78,13 +84,13 @@
   ([property q limit]
    (when-let [repo (state/get-current-repo)]
      (when q
-      (p/let [q (fuzzy/clean-str q)
-              result (db-async/<file-get-property-values repo (keyword property))]
-        (when (seq result)
-          (if (string/blank? q)
-            result
-            (let [result (fuzzy/fuzzy-search result q :limit limit)]
-              (vec result)))))))))
+       (p/let [q (fuzzy/clean-str q)
+               result (db-async/<file-get-property-values repo (keyword property))]
+         (when (seq result)
+           (if (string/blank? q)
+             result
+             (let [result (fuzzy/fuzzy-search result q :limit limit)]
+               (vec result)))))))))
 
 (defn rebuild-indices!
   ([]

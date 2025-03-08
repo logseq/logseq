@@ -1,13 +1,13 @@
 (ns publishing
   "Basic script for publishing from CLI"
-  (:require [logseq.graph-parser.cli :as gp-cli]
-            [logseq.publishing :as publishing]
-            [logseq.db.sqlite.cli :as sqlite-cli]
-            ["fs" :as fs]
+  (:require ["fs" :as fs]
             ["path" :as node-path]
             [clojure.edn :as edn]
             [datascript.core :as d]
+            [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.graph-parser.cli :as gp-cli]
+            [logseq.publishing :as publishing]
             [nbb.core :as nbb]))
 
 (defn- get-db [graph-dir]
@@ -60,5 +60,5 @@
       (publish-db-graph static-dir graph-dir output-path options)
       (publish-file-graph static-dir graph-dir output-path options))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

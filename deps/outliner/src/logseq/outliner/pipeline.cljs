@@ -15,7 +15,8 @@
   (keep
    (fn [d]
      (when (and (= :block/uuid (:a d)) (false? (:added d)))
-       (:v d)))
+       {:db/id (:e d)
+        :block/uuid (:v d)}))
    datoms))
 
 (defn- calculate-children-refs

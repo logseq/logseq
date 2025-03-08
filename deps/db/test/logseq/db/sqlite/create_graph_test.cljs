@@ -163,9 +163,9 @@
                                        :block/order ;; TODO: block/order should be same as well
                                        ))
                      init-data*)))]
-      (let [[first-only second-only common]
+      (let [[first-only second-only _common]
             (data/diff (remove-ignored-attrs&entities (sqlite-create-graph/build-db-initial-data ""))
                        (remove-ignored-attrs&entities (sqlite-create-graph/build-db-initial-data "")))]
+        ;; (pr-str [first-only second-only _common])
         (is (and (every? nil? first-only)
-                 (every? nil? second-only))
-            (pr-str [first-only second-only common]))))))
+                 (every? nil? second-only)))))))

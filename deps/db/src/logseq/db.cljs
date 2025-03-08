@@ -334,7 +334,7 @@
      (sort-by-order (:block/_parent parent)))))
 
 (defn get-block-parents
-  [db block-id {:keys [depth] :or {depth 100}}]
+  [db block-id & {:keys [depth] :or {depth 100}}]
   (loop [block-id block-id
          parents' (list)
          d 1]
