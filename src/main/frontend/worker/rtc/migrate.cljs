@@ -23,11 +23,15 @@
            (map second)))))
 
 (defn- migration-updates->client-ops
-  "TODO: support :classes in migration-updates"
+  "convert :classes, :properties from frontend.worker.db.migrate/schema-version->updates into client-ops"
   [db client-schema-version migrate-updates]
   (let [property-ks (mapcat :properties migrate-updates)
-        new-property-entites (keep (fn [k] (d/entity db k)) property-ks)
-        client-ops (vec (gen-client-op/generate-rtc-ops-from-property-entities new-property-entites))
+        class-ks (mapcat :classes migrate-updates)
+        d-entity-fn (partial d/entity db)
+        new-property-entities (keep d-entity-fn property-ks)
+        new-class-entities (keep d-entity-fn class-ks)
+        client-ops (vec (concat (gen-client-op/generate-rtc-ops-from-property-entities new-property-entities)
+                                (gen-client-op/generate-rtc-ops-from-class-entities new-class-entities)))
         max-t (apply max 0 (map second client-ops))]
     (conj client-ops
           [:update-kv-value
