@@ -750,8 +750,7 @@
                 (state/get-edit-input-id)
                 (= (shui-dialog/get-last-modal-id) :property-dialog)
                 (some-> (.-target e) (.closest ".ls-block"))
-                (some-> (.-target e) (.closest "[data-keep-selection]"))
-                (editor-handler/popup-exists? :selection-action-bar))
+                (some-> (.-target e) (.closest "[data-keep-selection]")))
     (editor-handler/clear-selection!)))
 
 (rum/defc render-custom-context-menu
