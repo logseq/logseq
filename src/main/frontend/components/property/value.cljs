@@ -438,8 +438,7 @@
 
 (rum/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
-  (let [*trigger-ref (rum/use-ref nil)
-        content-fn (fn [{:keys [id]}] (calendar-inner id
+  (let [content-fn (fn [{:keys [id]}] (calendar-inner id
                                                       {:block block
                                                        :property property
                                                        :on-change on-change
@@ -455,52 +454,44 @@
                           (shui/popup-show! (.-target e) content-fn
                                             {:align "start" :auto-focus? true}))))
         repeated-task? (:logseq.task/repeated? block)]
-    (hooks/use-effect!
-     (fn []
-       (when editing?
-         (js/setTimeout
-          #(some-> (rum/deref *trigger-ref)
-                   (.click)) 32)))
-     [editing?])
+    (if editing?
+      (content-fn {:id :date-picker})
+      (if multiple-values?
+        (shui/button
+         {:class "jtrigger h-6 empty-btn"
+          :variant :text
+          :size :sm
+          :on-click open-popup!}
+         (ui/icon "calendar-plus" {:size 16}))
+        (shui/trigger-as
+         :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
+         {:tabIndex 0
+          :class "jtrigger min-h-[24px]"                     ; FIXME: min-h-6 not works
+          :on-click open-popup!}
+         [:div.flex.flex-row.gap-1.items-center
+          (when repeated-task?
+            (ui/icon "repeat" {:size 14 :class "opacity-40"}))
+          (cond
+            (map? value)
+            (let [date (tc/to-date-time (date/journal-day->utc-ms (:block/journal-day value)))
+                  compare-value (some-> date
+                                        (t/plus (t/days 1))
+                                        (t/minus (t/seconds 1)))
+                  content (when-let [page-cp (state/get-component :block/page-cp)]
+                            (rum/with-key
+                              (page-cp {:disable-preview? true
+                                        :meta-click? other-position?
+                                        :label (human-date-label (t/to-default-time-zone date))} value)
+                              (:db/id value)))]
+              (if (or repeated-task? (contains? #{:logseq.task/deadline :logseq.task/scheduled} (:db/id property)))
+                (overdue compare-value content)
+                content))
 
-    (if multiple-values?
-      (shui/button
-       {:class "jtrigger h-6 empty-btn"
-        :ref *trigger-ref
-        :variant :text
-        :size :sm
-        :on-click open-popup!}
-       (ui/icon "calendar-plus" {:size 16}))
-      (shui/trigger-as
-       :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
-       {:tabIndex 0
-        :class "jtrigger min-h-[24px]"                     ; FIXME: min-h-6 not works
-        :ref *trigger-ref
-        :on-click open-popup!}
-       [:div.flex.flex-row.gap-1.items-center
-        (when repeated-task?
-          (ui/icon "repeat" {:size 14 :class "opacity-40"}))
-        (cond
-          (map? value)
-          (let [date (tc/to-date-time (date/journal-day->utc-ms (:block/journal-day value)))
-                compare-value (some-> date
-                                      (t/plus (t/days 1))
-                                      (t/minus (t/seconds 1)))
-                content (when-let [page-cp (state/get-component :block/page-cp)]
-                          (rum/with-key
-                            (page-cp {:disable-preview? true
-                                      :meta-click? other-position?
-                                      :label (human-date-label (t/to-default-time-zone date))} value)
-                            (:db/id value)))]
-            (if (or repeated-task? (contains? #{:logseq.task/deadline :logseq.task/scheduled} (:db/id property)))
-              (overdue compare-value content)
-              content))
+            (number? value)
+            (datetime-value value (:db/ident property) repeated-task?)
 
-          (number? value)
-          (datetime-value value (:db/ident property) repeated-task?)
-
-          :else
-          (property-empty-btn-value nil))]))))
+            :else
+            (property-empty-btn-value nil))])))))
 
 (rum/defc property-value-date-picker
   [block property value opts]
@@ -1173,14 +1164,14 @@
            (property-value-inner block property value opts)])))))
 
 (rum/defc multiple-values-inner
-  [block property v {:keys [on-chosen editing? show-select-only?] :as opts}]
+  [block property v {:keys [on-chosen editing? hide-property-value?] :as opts}]
   (let [type (:logseq.property/type property)
         date? (= type :date)
         *el (rum/use-ref nil)
         items (cond->> (if (de/entity? v) #{v} v)
                 (= (:db/ident property) :block/tags)
                 (remove (fn [v] (contains? ldb/hidden-tags (:db/ident v)))))]
-    (when-not show-select-only?
+    (when-not hide-property-value?
       (hooks/use-effect!
        (fn []
          (when editing?
@@ -1191,7 +1182,7 @@
                                                 :on-chosen (fn []
                                                              (when on-chosen (on-chosen)))}
                                                select-opts
-                                               (when-not show-select-only?
+                                               (when-not hide-property-value?
                                                  {:dropdown? false}))]
                         [:div.property-select
                          (if (contains? #{:node :page :class :property} type)
@@ -1199,7 +1190,7 @@
                                                        select-opts
                                                        opts)
                            (select block property select-opts opts))]))]
-      (if show-select-only?
+      (if hide-property-value?
         (select-cp {})
         (let [toggle-fn shui/popup-hide!
               content-fn (fn [{:keys [_id content-props]}]
