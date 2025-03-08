@@ -424,9 +424,9 @@ independent of format as format specific heading characters are stripped"
           (db-utils/pull-many repo '[*] ids'))))))
 
 (defn get-block-and-children
-  [repo block-uuid]
+  [repo block-uuid & {:as opts}]
   (let [db (conn/get-db repo)]
-    (ldb/get-block-and-children db block-uuid)))
+    (ldb/get-block-and-children db block-uuid opts)))
 
 (defn get-file-page
   ([file-path]
@@ -651,7 +651,7 @@ independent of format as format specific heading characters are stripped"
                    [:frontend.worker.react/refs eid]
                    {:query-fn (fn []
                                 (let [entities (mapcat (fn [id]
-                                                         (:block/_path-refs (db-utils/entity id))) ids)
+                                                         (:block/_refs (db-utils/entity id))) ids)
                                       blocks (map (fn [e]
                                                     {:block/parent (:block/parent e)
                                                      :block/order (:block/order e)

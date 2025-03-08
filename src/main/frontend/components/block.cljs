@@ -2606,51 +2606,61 @@
 
 (rum/defcs block-tag <
   (rum/local false ::hover?)
+  (rum/local false ::hover-container?)
   [state block tag config popup-opts]
   (let [*hover? (::hover? state)
-        hover? @*hover?]
-    [:div.block-tag.items-center
+        *hover-container? (::hover-container? state)]
+    [:div.block-tag.items-center.relative
      {:key (str "tag-" (:db/id tag))
-      :on-mouse-over #(reset! *hover? true)
-      :on-mouse-out #(reset! *hover? false)
-      :on-context-menu
-      (fn [e]
-        (util/stop e)
-        (shui/popup-show! e
-                          (fn []
-                            [:<>
-                             (shui/dropdown-menu-item
-                              {:key "Go to tag"
-                               :on-click #(route-handler/redirect-to-page! (:block/uuid tag))}
-                              (str "Go to #" (:block/title tag))
-                              (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "mod+click")))
-                             (shui/dropdown-menu-item
-                              {:key "Open tag in sidebar"
-                               :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
-                              "Open tag in sidebar"
-                              (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))
-                             (shui/dropdown-menu-item
-                              {:key "Remove tag"
-                               :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
-                              "Remove tag")])
-                          popup-opts))}
-     (if (and hover? (not (ldb/private-tags (:db/ident tag))))
-       [:a.inline.close.flex.transition-opacity.duration-300.ease-in
-        {:class (if @*hover? "!opacity-100" "!opacity-0")
-         :title "Remove this tag"
-         :on-pointer-down
-         (fn [e]
-           (util/stop e)
-           (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
-        (ui/icon "x" {:size 14
-                      :style {:margin-top 1}})]
-       [:a.hash-symbol.select-none {:style {:margin-left 5}}
-        "#"])
-     (page-cp (assoc config
-                     :disable-preview? true
-                     :tag? true
-                     :hide-tag-symbol? true)
-              tag)]))
+      :on-mouse-over #(reset! *hover-container? true)
+      :on-mouse-out #(reset! *hover-container? false)}
+     (when (not (ldb/private-tags (:db/ident tag)))
+       [:div.absolute.bg-gray-03.transition-opacity.duration-300.ease-in-out
+        {:class (if @*hover-container? "!opacity-100" "!opacity-0")
+         :style {:top -2
+                 :z-index (if @*hover-container? 99 -1)
+                 :left -23}}
+        (shui/button
+         {:size :sm
+          :variant :ghost
+          :class "px-1 py-1 h-6 text-muted-foreground"
+          :title "Remove this tag"
+          :on-pointer-down
+          (fn [e]
+            (util/stop e)
+            (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
+         (ui/icon "x" {:size 14}))])
+     [:div.flex.items-center
+      {:on-mouse-over #(reset! *hover? true)
+       :on-mouse-out #(reset! *hover? false)
+       :on-context-menu
+       (fn [e]
+         (util/stop e)
+         (shui/popup-show! e
+                           (fn []
+                             [:<>
+                              (shui/dropdown-menu-item
+                               {:key "Go to tag"
+                                :on-click #(route-handler/redirect-to-page! (:block/uuid tag))}
+                               (str "Go to #" (:block/title tag))
+                               (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "mod+click")))
+                              (shui/dropdown-menu-item
+                               {:key "Open tag in sidebar"
+                                :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
+                               "Open tag in sidebar"
+                               (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))
+                              (shui/dropdown-menu-item
+                               {:key "Remove tag"
+                                :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
+                               "Remove tag")])
+                           popup-opts))}
+      [:a.hash-symbol.select-none.flex
+       "#"]
+      (page-cp (assoc config
+                      :disable-preview? true
+                      :tag? true
+                      :hide-tag-symbol? true)
+               tag)]]))
 
 (rum/defc tags-cp
   "Tags without inline or hidden tags"
@@ -2959,7 +2969,7 @@
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)
         refs-count (if (seq (:block/_refs block))
-                     (count (:block/_refs block))
+                     (count (remove :logseq.property/view-for (:block/_refs block)))
                      (rum/react *refs-count))
         table? (:table? config)
         raw-mode-block (state/sub :editor/raw-mode-block)

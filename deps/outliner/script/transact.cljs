@@ -1,14 +1,14 @@
 (ns transact
   "This script generically runs transactions against the queried blocks"
-  (:require [logseq.outliner.db-pipeline :as db-pipeline]
-            [logseq.db.sqlite.cli :as sqlite-cli]
-            [logseq.db.frontend.rules :as rules]
-            [datascript.core :as d]
+  (:require ["os" :as os]
+            ["path" :as node-path]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [nbb.core :as nbb]
-            ["path" :as node-path]
-            ["os" :as os]))
+            [datascript.core :as d]
+            [logseq.db.frontend.rules :as rules]
+            [logseq.db.sqlite.cli :as sqlite-cli]
+            [logseq.outliner.db-pipeline :as db-pipeline]
+            [nbb.core :as nbb]))
 
 (defn -main [args]
   (when (< (count args) 3)
@@ -37,5 +37,5 @@
         (d/transact! conn update-tx)
         (println "Updated" (count update-tx) "block(s) for graph" (str db-name "!"))))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

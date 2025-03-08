@@ -1,11 +1,11 @@
 (ns logseq.tasks.db-graph.create-graph-with-large-sizes
   "Script that generates graphs at large sizes"
-  (:require [logseq.outliner.cli :as outliner-cli]
+  (:require ["os" :as os]
+            ["path" :as node-path]
+            [babashka.cli :as cli]
             [clojure.string :as string]
             [datascript.core :as d]
-            [babashka.cli :as cli]
-            ["path" :as node-path]
-            ["os" :as os]
+            [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]))
 
@@ -83,5 +83,5 @@
     #_(d/transact! conn blocks-tx)
     (println "Created graph" (str db-name " with " (count (d/datoms @conn :eavt)) " datoms!"))))
 
-(when (= nbb/*file* (:file (meta #'-main)))
+(when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

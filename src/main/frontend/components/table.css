@@ -15,12 +15,8 @@
     @apply w-full py-0;
   }
 
-  .block-control, .block-control-wrap {
-    @apply h-5 min-h-[20px];
-  }
-
-  .block-main-container, .block-content {
-    @apply min-h-[20px];
+  .block-main-content, .block-head-wrap {
+    @apply min-h-[24px];
   }
 
   .property-value-inner {

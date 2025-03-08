@@ -245,7 +245,11 @@
   @apply w-full inline;
 
   > .ui__checkbox {
-    @apply relative top-[2px];
+    @apply relative top-0.5;
+
+    &.checked {
+      @apply top-1;
+    }
 
     > span {
       @apply h-full;

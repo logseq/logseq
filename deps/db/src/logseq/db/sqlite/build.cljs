@@ -183,14 +183,14 @@
              {:property-attributes
               (merge {:db/id (or (property-db-ids prop-name)
                                  (throw (ex-info "No :db/id for property" {:property prop-name})))}
-                     (select-keys prop-m [:build/properties-ref-types]))}))
+                     (select-keys prop-m [:build/properties-ref-types :block/created-at :block/updated-at]))}))
           [(merge (sqlite-util/build-new-property (get-ident all-idents prop-name)
                                                   (db-property/get-property-schema prop-m)
                                                   {:block-uuid (:block/uuid prop-m)
                                                    :title (:block/title prop-m)})
                   {:db/id (or (property-db-ids prop-name)
                               (throw (ex-info "No :db/id for property" {:property prop-name})))}
-                  (select-keys prop-m [:build/properties-ref-types]))])
+                  (select-keys prop-m [:build/properties-ref-types :block/created-at :block/updated-at]))])
         pvalue-tx-m
         (->property-value-tx-m new-block (:build/properties prop-m) properties all-idents)]
     (cond-> []
@@ -344,7 +344,7 @@
                                              (mapcat (fn [m]
                                                        (if-let [pvalue-pages
                                                                 (->> (vals (:build/properties m))
-                                                                     (mapcat #(if (set? %) % [%]) )
+                                                                     (mapcat #(if (set? %) % [%]))
                                                                      (filter page-prop-value?)
                                                                      (map second)
                                                                      seq)]
@@ -415,8 +415,8 @@
   (vec
    (mapcat
     (fn [{:keys [page blocks]}]
-      (let [ignore-page-tx? (and build-existing-tx? (not (::new-page? (meta page))) (not (:build/keep-uuid? page)))
-            page' (if ignore-page-tx?
+      (let [build-existing-tx?' (and build-existing-tx? (not (::new-page? (meta page))) (not (:build/keep-uuid? page)))
+            page' (if build-existing-tx?'
                     page
                     (merge
                      ;; TODO: Use sqlite-util/build-new-page
@@ -430,8 +430,8 @@
                           page-id-fn)]
         (into
          ;; page tx
-         (if ignore-page-tx?
-           []
+         (if build-existing-tx?'
+           [(select-keys page [:block/uuid :block/created-at :block/updated-at])]
            (build-page-tx page' all-idents page-uuids properties))
          ;; blocks tx
          (reduce (fn [acc m]
@@ -618,12 +618,18 @@
                                  m))
                              properties-tx)
         pages-and-blocks-tx (build-pages-and-blocks-tx pages-and-blocks' all-idents page-uuids
-                                                       (assoc options :properties properties))]
-    ;; Properties first b/c they have schema and are referenced by all. Then classes b/c they can be referenced by pages. Then pages
-    (split-blocks-tx (concat properties-tx'
-                             classes-tx
-                             pages-and-blocks-tx)
-                     properties)))
+                                                       (assoc options :properties properties))
+        ;; Properties first b/c they have schema and are referenced by all. Then
+        ;; classes b/c they can be referenced by pages. Then pages
+        split-txs (split-blocks-tx (concat properties-tx' classes-tx pages-and-blocks-tx)
+                                   properties)]
+    (cond-> split-txs
+      ;; Just add indices option as there are too many out of order uuid cases with importing user content
+      (:build-existing-tx? options)
+      (update :init-tx
+              (fn [init-tx]
+                (let [indices (mapv #(select-keys % [:block/uuid]) (filter :block/uuid init-tx))]
+                  (into indices init-tx)))))))
 
 ;; Public API
 ;; ==========
@@ -701,8 +707,8 @@
     See auto-create-ontology for more details
   * :build-existing-tx? - When set to true, blocks, pages, properties and classes with :block/uuid are treated as
      existing in DB and are skipped for creation. This is useful for building tx on existing DBs e.g. for importing.
-     Blocks are updated with any attributes passed to it while all other node types are ignored for update unless
-     :build/keep-uuid? is set.
+     Blocks and pages are updated with any attributes passed to it while all other node types are ignored for update
+     unless :build/keep-uuid? is set.
   * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
     Default is :db/id
 
