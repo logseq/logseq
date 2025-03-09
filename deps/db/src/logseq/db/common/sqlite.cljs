@@ -252,6 +252,16 @@
                children)
        (d/datoms db :eavt page-id)))))
 
+(defn get-recent-updated-pages
+  [db]
+  (->> (d/datoms db :avet :block/updated-at)
+       (reverse)
+       (keep (fn [datom]
+               (let [e (d/entity db (:e datom))]
+                 (when (and (common-entity-util/page? e) (not (entity-util/hidden? e)))
+                   e))))
+       (take 30)))
+
 (defn get-initial-data
   "Returns current database schema and initial data.
    NOTE: This fn is called by DB and file graphs"
@@ -275,10 +285,13 @@
         all-files (get-all-files db)
         structured-datoms (when db-graph?
                             (get-structured-datoms db))
+        recent-updated-pages (let [pages (get-recent-updated-pages db)]
+                               (mapcat (fn [p] (d/datoms db :eavt (:db/id p))) pages))
         data (distinct
               (concat idents
                       structured-datoms
                       favorites
+                      recent-updated-pages
                       views
                       latest-journals
                       all-files))]
