@@ -205,7 +205,7 @@
                update-target-top! (fn []
                                     (when (not (.contains target-cls "ls-fixed"))
                                       (vreset! *el-top (+ (-> target (.getBoundingClientRect) (.-top))
-                                                         (.-scrollTop container)))))
+                                                          (.-scrollTop container)))))
                update-footer! (fn []
                                 (let [tw (.-scrollWidth table)]
                                   (when (and table-footer (number? tw) (> tw 0))
@@ -228,7 +228,7 @@
                                        table-in-top (+ scroll-top head-height)
                                        table-bottom (.-bottom (.getBoundingClientRect table))
                                        fixed? (and (> table-bottom (+ head-height 90))
-                                                (> table-in-top @*el-top))]
+                                                   (> table-in-top @*el-top))]
                                    (if fixed?
                                      (.add target-cls "ls-fixed")
                                      (.remove target-cls "ls-fixed"))
@@ -236,7 +236,7 @@
                target-observe-handle! (fn [^js _e]
                                         (when (not @*ticking?)
                                           (js/window.requestAnimationFrame
-                                            #(do (target-observe!) (vreset! *ticking? false)))
+                                           #(do (target-observe!) (vreset! *ticking? false)))
                                           (vreset! *ticking? true)))
                resize-observer (js/ResizeObserver. update-target!)
                page-resize-observer (js/ResizeObserver. (fn [] (update-target-top!)))]
@@ -251,8 +251,8 @@
 
            ;; teardown
            #(do (.removeEventListener container "scroll" target-observe!)
-              (.disconnect resize-observer)
-              (.disconnect page-resize-observer))))))
+                (.disconnect resize-observer)
+                (.disconnect page-resize-observer))))))
    []))
 
 (rum/defc table-header < rum/static
@@ -304,5 +304,3 @@
              :style {:z-index 101}}
             prop)
      children]))
-
-(def table-sort-rows impl/sort-rows)

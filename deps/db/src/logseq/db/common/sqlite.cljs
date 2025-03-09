@@ -199,17 +199,6 @@
      (mapcat (fn [p]
                (d/datoms db :eavt (:db/id p)))))))
 
-(defn get-all-pages
-  "Get all pages datoms"
-  [db]
-  (let [datoms (d/datoms db :avet :block/name)]
-    (map (fn [d]
-           (let [f (fn [attr] (d/datoms db :eavt (:e d) attr))
-                 attrs [:block/uuid :block/title :block/tags :block/created-at :block/updated-at]
-                 result (mapcat f attrs)]
-             (cons d result)))
-         datoms)))
-
 (defn get-page->refs-count
   [db]
   (let [datoms (d/datoms db :avet :block/name)]
