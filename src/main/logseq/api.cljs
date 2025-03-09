@@ -406,8 +406,8 @@
   (plugin-handler/unregister-plugin-search-services pid))
 
 (defn ^:export invoke_google_auth
-  [client-id client-secret scope]
-  (plugin-handler/invoke-google-auth client-id client-secret scope))
+  [pid client-id client-secret scope]
+  (plugin-handler/invoke-google-auth pid client-id client-secret scope))
 
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]

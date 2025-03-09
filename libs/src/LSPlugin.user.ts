@@ -166,9 +166,11 @@ const app: Partial<IAppProxy> = {
     clientSecret: string,
     scope: string
   ) {
+    const pid = this.baseInfo.id
+
     this.caller?.call(`api:call`, {
       method: 'invoke-google-auth',
-      args: [clientId, clientSecret, scope],
+      args: [pid, clientId, clientSecret, scope],
     })
   },
 

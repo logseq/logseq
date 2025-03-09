@@ -94,7 +94,7 @@
                      access-token))))))))
 
 (defn init
-  [window clientId clientSecret scope]
+  [window pluginId clientId clientSecret scope]
   (.then
     (fetch-service-configuration)
     (fn [configuration]
@@ -122,7 +122,7 @@
                                                 configuration
                                                 refresh-token
                                                 access-token-response)]
-                             (utils/send-to-renderer window "GAuthTokenPluginCallback" {:plugin-name "logseq-google-tasks" :payload {:access_token access-token :refresh_token refresh-token}})
+                             (utils/send-to-renderer window "GAuthTokenPluginCallback" {:plugin-name pluginId :payload {:access_token access-token :refresh_token refresh-token}})
                              ;(js/console.log "Access Token and Refresh Token are" access-token refresh-token)
                              (js/console.log "All Done.")))))))))
         (.setAuthorizationNotifier authorization-handler notifier)
