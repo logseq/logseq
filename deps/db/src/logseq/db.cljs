@@ -18,6 +18,7 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
+            [logseq.db.frontend.view :as db-view]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
 
@@ -467,13 +468,15 @@
     (when (seq eids)
       (d/pull-many db '[*] eids))))
 
+(def hidden-or-internal-tag? db-view/hidden-or-internal-tag?)
+
 (defn get-all-pages
   [db]
   (->>
    (d/datoms db :avet :block/name)
    (keep (fn [d]
            (let [e (d/entity db (:e d))]
-             (when-not (or (hidden? e) (internal-tags (:db/ident e)))
+             (when-not (hidden-or-internal-tag? e)
                e))))))
 
 (defn built-in?
@@ -603,3 +606,5 @@
     nil))
 
 (def get-recent-updated-pages sqlite-common-db/get-recent-updated-pages)
+
+(def get-view-data db-view/get-view-data)
