@@ -6,7 +6,7 @@
             [frontend.worker.rtc.gen-client-op :as gen-client-op]
             [logseq.db.frontend.schema :as db-schema]))
 
-(defn- server-client-schema-verion->migrations
+(defn- server-client-schema-version->migrations
   [server-schema-version client-schema-version]
   (when (neg? (db-schema/compare-schema-version server-schema-version client-schema-version))
     (let [sorted-schema-version->updates
@@ -43,7 +43,7 @@
   [repo db server-schema-version client-schema-version]
   (assert (and server-schema-version client-schema-version))
   (when-let [ops (not-empty
-                  (some->> (server-client-schema-verion->migrations server-schema-version client-schema-version)
+                  (some->> (server-client-schema-version->migrations server-schema-version client-schema-version)
                            (migration-updates->client-ops db client-schema-version)))]
     (client-op/add-ops! repo ops)
     ops))
