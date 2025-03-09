@@ -174,6 +174,19 @@ const app: Partial<IAppProxy> = {
     })
   },
 
+  refreshGoogleAuth (
+    clientId: string,
+    clientSecret: string,
+    refreshToken: string
+  ) {
+    const pid = this.baseInfo.id
+
+    this.caller?.call(`api:call`, {
+      method: 'refresh-google-auth',
+      args: [pid, clientId, clientSecret, refreshToken],
+    })
+  },
+
   registerCommandShortcut (
     keybinding: SimpleCommandKeybinding | string,
     action: SimpleCommandCallback,

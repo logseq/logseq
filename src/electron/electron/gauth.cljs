@@ -131,3 +131,18 @@
           scope
           configuration
           authorization-handler)))))
+
+(defn refresh
+  [window pluginId clientId clientSecret refreshToken]
+  ;(js/console.log "Plugin Id: " pluginId)
+  ;(js/console.log "Client Id: " clientId)
+  ;(js/console.log "Client Secret: " clientSecret)
+  ;(js/console.log "Refresh Token: " refreshToken)
+  (.then
+    (fetch-service-configuration)
+    (fn [configuration]
+      (.then
+        (perform-with-fresh-tokens clientId clientSecret configuration refreshToken nil)
+        (fn [access-token]
+          (utils/send-to-renderer window "GAuthTokenPluginCallback" {:plugin-name pluginId :payload {:access_token access-token}})
+          (js/console.log "All Done."))))))

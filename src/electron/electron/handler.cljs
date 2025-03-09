@@ -380,6 +380,9 @@
 (defmethod handle :invokeGoogleAuth [window [_ pluginId clientId clientSecret scope]]
   (gauth/init window pluginId clientId clientSecret scope))
 
+(defmethod handle :refreshGoogleAuth [window [_ pluginId clientId clientSecret refreshToken]]
+  (gauth/refresh window pluginId clientId clientSecret refreshToken))
+
 (defmethod handle :getSystemProxy [^js window]
   (if-let [sess (.. window -webContents -session)]
     (p/let [proxy (.resolveProxy sess "https://www.google.com")]
