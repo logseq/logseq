@@ -16,7 +16,8 @@
   (->> [{:id :block/title
          :name (t :block/name)
          :cell (fn [_table row _column]
-                 (component-block/page-cp {} row))
+                 (component-block/page-cp {:show-non-exists-page? true
+                                           :skip-async-load? true} row))
          :type :string}
         (when (not (config/db-based-graph? (state/get-current-repo)))
           {:id :block/type

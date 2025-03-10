@@ -1176,9 +1176,9 @@
          :end-reached end-reached}))]))
 
 (defn- run-effects!
-  [option {:keys [data columns state data-fns]} input input-filters set-input-filters! *scroller-ref gallery?]
-  (let [{:keys [filters sorting]} state
-        {:keys [set-row-filter! set-data!]} data-fns]
+  [option {:keys [data state data-fns]} input input-filters set-input-filters! *scroller-ref gallery?]
+  (let [{:keys [filters]} state
+        {:keys [set-row-filter!]} data-fns]
     (hooks/use-effect!
      (fn []
        (let [new-input-filters [input filters]]
@@ -1194,19 +1194,8 @@
      (fn []
        (when (and (:current-page? (:config option)) (seq data) (map? (first data)) (:block/uuid (first data)))
          (ui-handler/scroll-to-anchor-block @*scroller-ref data gallery?)
-         (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data gallery?)))
-
-       ;; Entities might be outdated
-       ;; (let [;; TODO: should avoid this for better performance, 300ms for 40k pages
-       ;;       data' (map get-latest-entity data)
-       ;;       ]
-       ;;   (when (and (not= data' data) set-data!)
-       ;;     (set-data! data'))
-       ;;   )
-       )
-     []
-     ;; [sorting data]
-     )))
+         (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data gallery?))))
+     [])))
 
 (rum/defc view-sorting-item
   [table sorting id name asc? set-sorting!]
@@ -1588,8 +1577,9 @@
 (defn- <load-view-data
   [view offset]
   (p/let [data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view)
-                                   (ldb/write-transit-str {:offset offset :limit 100}))]
-    (ldb/read-transit-str data-str)))
+                                   (ldb/write-transit-str {:offset offset :limit 100}))
+          data (ldb/read-transit-str data-str)]
+    data))
 
 (rum/defc view < rum/static
   [{:keys [view-parent view-feature-type view-entity] :as option}]
