@@ -3,10 +3,14 @@ const webpack = require('webpack');
 
 module.exports = {
   mode: "development",
-  entry: './target/index.js',
+  entry: {
+    main : "./target/main.js",
+    workers : "./target/workers.js"
+  },
+
   output: {
     path: path.resolve(__dirname, 'static/js/libs'),
-    filename: 'bundle.js',
+    filename: '[name]-bundle.js',
     clean: true,
     chunkLoading: false,
   },

@@ -12,7 +12,7 @@
  {:app {:target        :browser
         :module-loader true
         :js-options    {:js-provider    :external
-                        :external-index "target/index.js"
+                        :external-index "target/main.js"
                         :external-index-format :esm
                         :entry-keys ["module" "browser" "main"]
                         :export-conditions ["module" "import", "browser" "require" "default"]
@@ -34,17 +34,7 @@
                          :depends-on #{:main}}
                         :tldraw
                         {:entries [frontend.extensions.tldraw]
-                         :depends-on #{:main}}
-                        :db-worker
-                        {:init-fn frontend.worker.db-worker/init
-                         :depends-on #{:shared}
-                         :web-worker true
-                         :prepend "importScripts('libs/bundle.js');\n"}
-                        :inference-worker
-                        {:init-fn frontend.inference-worker.inference-worker/init
-                         :depends-on #{:shared}
-                         :web-worker true
-                         :prepend "importScripts('libs/bundle.js');\n"}}
+                         :depends-on #{:main}}}
 
         :output-dir       "./static/js"
         :asset-path       "/static/js"
@@ -76,6 +66,49 @@
                    :watch-path "/static"
                    :preloads [devtools.preload
                               shadow.remote.runtime.cljs.browser]}}
+
+  :workers {:target        :browser
+            :module-loader true
+            :js-options    {:js-provider    :external
+                            :external-index "target/workers.js"
+                            :external-index-format :esm
+                            :entry-keys ["module" "browser" "main"]
+                            :export-conditions ["module" "import", "browser" "require" "default"]}
+            :modules       {:shared
+                            {:entries []}
+                            :db-worker
+                            {:init-fn frontend.worker.db-worker/init
+                             :depends-on #{:shared}
+                             :web-worker true
+                             :prepend "importScripts('libs/workers-bundle.js');\n"}
+                            :inference-worker
+                            {:init-fn frontend.inference-worker.inference-worker/init
+                             :depends-on #{:shared}
+                             :web-worker true
+                             :prepend "importScripts('libs/workers-bundle.js');\n"}}
+
+            :output-dir       "./static/js"
+            :asset-path       "/static/js"
+            :release          {:asset-path "https://asset.logseq.com/static/js"}
+            :compiler-options {:infer-externs      :auto
+                               :output-feature-set :es-next-in
+                               :source-map true
+                               :externs ["datascript/externs.js"
+                                         "externs.js"]
+                               :warnings {:fn-deprecated false
+                                          :redef false}
+                               :cross-chunk-method-motion false}
+            :closure-defines {goog.debug.LOGGING_ENABLED true}
+
+        ;; NOTE: electron, browser/mobile-app use different asset-paths.
+        ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
+        ;;   For electron devs, assets are located in ./js(via relative path).
+        ;; :dev      {:asset-path "./js"}
+            :devtools {:before-load frontend.core/stop          ;; before live-reloading any code call this function
+                       :after-load frontend.core/start          ;; after live-reloading finishes call this function
+                       :watch-path "/static"
+                       :preloads [devtools.preload
+                                  shadow.remote.runtime.cljs.browser]}}
 
   :electron {:target :node-script
              :output-to "static/electron.js"
@@ -137,11 +170,7 @@
                                 :depends-on #{:main}}
                                :tldraw
                                {:entries    [frontend.extensions.tldraw]
-                                :depends-on #{:main}}
-                               :db-worker
-                               {:init-fn   frontend.worker.db-worker/init
-                                :depends-on #{:shared}
-                                :web-worker true}}
+                                :depends-on #{:main}}}
 
                :output-dir       "./static/js/publishing"
                :asset-path       "static/js"
