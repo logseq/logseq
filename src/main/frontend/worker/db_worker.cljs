@@ -909,9 +909,10 @@
                                     :error])))))
 
   (get-view-data
-   [_this repo view-id]
+   [_this repo view-id opts-str]
    (let [conn (worker-state/get-datascript-conn repo)
-         data (ldb/get-view-data @conn view-id)]
+         opts (ldb/read-transit-str opts-str)
+         data (ldb/get-view-data repo @conn view-id opts)]
      (ldb/write-transit-str data)))
 
   (dangerousRemoveAllDbs

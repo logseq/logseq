@@ -239,8 +239,10 @@
        (keep (fn [id] (non-hidden-e id))))
       nil)))
 
+(defonce *view-cache (atom {}))
 (defn get-view-data
-  [db view-id]
+  [repo db view-id {:keys [offset limit]
+                    :or {limit 50}}]
   (time
    (let [view (d/entity db view-id)
          feat-type (:logseq.property.view/feature-type view)
@@ -256,28 +258,35 @@
          all-pages? (= feat-type :all-pages)
          filters (:logseq.property.table/filters view)]
      (when index-attr
-       (let [entities (get-entities db view feat-type index-attr)
-             sorting (let [sorting* (:logseq.property.table/sorting view)]
-                       (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
-                         [{:id :block/updated-at, :asc? false}]
-                         sorting*))
-             data (->>
-                   ;; filter
-                   (cond->> entities
-                     (seq filters)
-                     (filter (fn [row] (row-matched? db row filters))))
-                   ;; sort
-                   (sort-rows db sorting)
-                   ;; pagination
-                   (take 100)
-                   ;; convert entity to map for serialization
-                   (map (fn [e]
-                          (cond->
-                           (-> (into {} e)
-                               (assoc
-                                :id (:db/id e)
-                                :db/id (:db/id e)))
-                            all-pages?
-                            (assoc :block.temp/refs-count (count (:block/_refs e)))))))]
-         {:count (count entities)
+       (let [data* (if-let [cache (get-in @*view-cache [repo view-id])]
+                     cache
+                     (let [entities (get-entities db view feat-type index-attr)
+                           sorting (let [sorting* (:logseq.property.table/sorting view)]
+                                     (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
+                                       [{:id :block/updated-at, :asc? false}]
+                                       sorting*))
+
+                           result (->>
+                                   ;; filter
+                                   (cond->> entities
+                                     (seq filters)
+                                     (filter (fn [row] (row-matched? db row filters))))
+                                   ;; sort
+                                   (sort-rows db sorting))]
+                       (swap! *view-cache assoc-in [repo view-id] result)
+                       result))
+             data (->> data*
+                       ;; pagination
+                       (drop offset)
+                       (take limit)
+                       ;; convert entity to map for serialization
+                       (map (fn [e]
+                              (cond->
+                               (-> (into {} e)
+                                   (assoc
+                                    :id (:db/id e)
+                                    :db/id (:db/id e)))
+                                all-pages?
+                                (assoc :block.temp/refs-count (count (:block/_refs e)))))))]
+         {:count (count data*)
           :data (vec data)})))))
