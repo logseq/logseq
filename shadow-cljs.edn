@@ -13,6 +13,9 @@
         :module-loader true
         :js-options    {:js-provider    :external
                         :external-index "target/index.js"
+                        :external-index-format :esm
+                        :entry-keys ["module" "browser" "main"]
+                        :export-conditions ["module" "import", "browser" "require" "default"]
                         :ignore-asset-requires true
                         :resolve {"react" {:target :global
                                            :global "React"}
@@ -35,11 +38,13 @@
                         :db-worker
                         {:init-fn frontend.worker.db-worker/init
                          :depends-on #{:shared}
-                         :web-worker true}
+                         :web-worker true
+                         :prepend "importScripts('libs/bundle.js');\n"}
                         :inference-worker
                         {:init-fn frontend.inference-worker.inference-worker/init
                          :depends-on #{:shared}
-                         :web-worker true}}
+                         :web-worker true
+                         :prepend "importScripts('libs/bundle.js');\n"}}
 
         :output-dir       "./static/js"
         :asset-path       "/static/js"

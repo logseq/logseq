@@ -8,6 +8,7 @@ module.exports = {
     path: path.resolve(__dirname, 'static/js/libs'),
     filename: 'bundle.js',
     clean: true,
+    chunkLoading: false,
   },
   module: {
     rules: [
