@@ -14,7 +14,7 @@
 ;; Get the runtime id from http://localhost:9630/runtimes, pick the one which shows `browser-worker`
 (defn worker-repl
   ([]
-   (when-let [runtime-id (->> (api/repl-runtimes :app)
+   (when-let [runtime-id (->> (api/repl-runtimes :workers)
                               (filter (fn [runtime] (= :browser-worker (:host runtime))))
                               (map :client-id)
                               (apply max))]
@@ -24,8 +24,8 @@
    (if
     (number? runtime-id-or-which)
      (do (prn :worker-runtime-id runtime-id-or-which)
-         (api/repl :app {:runtime-id runtime-id-or-which}))
-     (let [runtime-ids (->> (api/repl-runtimes :app)
+         (api/repl :workers {:runtime-id runtime-id-or-which}))
+     (let [runtime-ids (->> (api/repl-runtimes :workers)
                             (filter (fn [runtime] (= :browser-worker (:host runtime))))
                             (map :client-id))
            runtime-id (apply (if (= :old runtime-id-or-which) min max) runtime-ids)]
@@ -33,6 +33,6 @@
 
 (defn runtime-id-list
   []
-  (->> (api/repl-runtimes :app)
+  (->> (api/repl-runtimes :workers)
        (filter (fn [runtime] (= :browser-worker (:host runtime))))
        (map :client-id)))
