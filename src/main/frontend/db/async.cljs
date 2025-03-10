@@ -109,22 +109,6 @@
         (concat [default-value-id] result)
         result))))
 
-(comment
-  (defn <get-block-property-value-entity
-    [graph property-id value]
-    (p/let [result (<q graph {}
-                       '[:find [(pull ?vid [*]) ...]
-                         :in $ ?property-id ?value
-                         :where
-                         [?b ?property-id ?vid]
-                         [(not= ?vid :logseq.property/empty-placeholder)]
-                         (or
-                          [?vid :logseq.property/value ?value]
-                          [?vid :block/title ?value])]
-                       property-id
-                       value)]
-      (db/entity (:db/id (first result))))))
-
 ;; TODO: batch queries for better performance and UX
 (defn <get-block
   [graph name-or-uuid & {:keys [children? nested-children?]
@@ -369,8 +353,3 @@
                            (recur (cons item others) time'))))
                      (quot time 1000)))]
         [status-history time]))))
-
-(defn <fetch-all-pages
-  [graph]
-  (when-let [^Object worker @db-browser/*worker]
-    (.fetch-all-pages worker graph)))
