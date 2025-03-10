@@ -44,12 +44,11 @@
    :disable-hide? true})
 
 (rum/defc class-objects-inner < rum/static
-  [config class objects properties]
-  (let [[data set-data!] (rum/use-state objects)
+  [config class properties]
+  (let [[data set-data!] (rum/use-state nil)
         ;; Properties can be nil for published private graphs
         properties' (remove nil? properties)
-        columns* (views/build-columns config properties' {:add-tags-column? (or (= (:db/ident class) :logseq.class/Root)
-                                                                                (> (count (distinct (mapcat :block/tags objects))) 1))})
+        columns* (views/build-columns config properties' {:add-tags-column? true})
         columns (cond
                   (= (:db/ident class) :logseq.class/Pdf-annotation)
                   (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
@@ -101,8 +100,7 @@
                                        (let [page-ids (map :db/id pages)
                                              tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id class)]) page-ids)]
                                          (when (seq tx-data)
-                                           (outliner-op/transact! tx-data {:outliner-op :save-block}))))
-                                      (set-data! (get-class-objects class)))))})))
+                                           (outliner-op/transact! tx-data {:outliner-op :save-block})))))))})))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class {:keys [current-page? sidebar?]}]
@@ -111,12 +109,9 @@
           config {:container-id (:container-id state)
                   :current-page? current-page?
                   :sidebar? sidebar?}
-          properties (outliner-property/get-class-properties class)
-          repo (state/get-current-repo)
-          objects (->> (db-model/sub-class-objects repo (:db/id class))
-                       (map (fn [row] (assoc row :id (:db/id row)))))]
+          properties (outliner-property/get-class-properties class)]
       [:div.ml-1
-       (class-objects-inner config class objects properties)])))
+       (class-objects-inner config class properties)])))
 
 (defn- get-property-related-objects [repo property]
   (->> (db-model/get-property-related-objects repo (:db/id property))
@@ -135,8 +130,8 @@
     block))
 
 (rum/defc property-related-objects-inner < rum/static
-  [config property objects properties]
-  (let [[data set-data!] (rum/use-state objects)
+  [config property properties]
+  (let [[data set-data!] (rum/use-state nil)
         columns (views/build-columns config properties)]
     (views/view {:config config
                  :data data
@@ -174,8 +169,6 @@
           config {:container-id (:container-id state)
                   :current-page? current-page?}
           ;; Show tags to help differentiate property rows
-          properties [property' (db/entity :block/tags)]
-          repo (state/get-current-repo)
-          objects (get-property-related-objects repo property)]
+          properties [property' (db/entity :block/tags)]]
       [:div.ml-1
-       (property-related-objects-inner config property' objects properties)])))
+       (property-related-objects-inner config property' properties)])))
