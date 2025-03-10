@@ -484,6 +484,9 @@ export interface IAppProxy {
   setRightSidebarVisible: (flag: boolean | 'toggle') => void
   clearRightSidebarBlocks: (opts?: { close: boolean }) => void
 
+  invokeGoogleAuth: (clientId: string, clientSecret: string, scope: string) => void
+  refreshGoogleAuth: (clientId: string, clientSecret: string, refreshToken: string) => void
+
   registerUIItem: (
     type: 'toolbar' | 'pagebar',
     opts: { key: string; template: string }
@@ -503,6 +506,7 @@ export interface IAppProxy {
   onTodayJournalCreated: IUserHook<{ title: string }>
   onBeforeCommandInvoked: (condition: ExternalCommandType | string, callback: (e: IHookEvent) => void) => IUserOffHook
   onAfterCommandInvoked: (condition: ExternalCommandType | string, callback: (e: IHookEvent) => void) => IUserOffHook
+  onGoogleAuthTokenReceived: IUserHook<{ payload: any }>
 
   /**
    * provide ui slot to specific block with UUID

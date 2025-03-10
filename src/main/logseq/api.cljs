@@ -405,6 +405,14 @@
   [pid]
   (plugin-handler/unregister-plugin-search-services pid))
 
+(defn ^:export invoke_google_auth
+  [pid client-id client-secret scope]
+  (plugin-handler/invoke-google-auth pid client-id client-secret scope))
+
+(defn ^:export refresh_google_auth
+  [pid client-id client-secret refresh-token]
+  (plugin-handler/refresh-google-auth pid client-id client-secret refresh-token))
+
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]
     (when-let [opts (bean/->clj opts)]

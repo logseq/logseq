@@ -320,6 +320,12 @@
   [pid]
   (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
 
+(defn invoke-google-auth [pid client-id client-secret scope]
+  (ipc/ipc "invokeGoogleAuth" pid client-id client-secret scope))
+
+(defn refresh-google-auth [pid client-id client-secret refresh-token]
+  (ipc/ipc "refreshGoogleAuth" pid client-id client-secret refresh-token))
+
 (defn register-plugin-ui-item
   [pid {:keys [key type] :as opts}]
   (when-let [pid (keyword pid)]

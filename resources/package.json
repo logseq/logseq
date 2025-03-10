@@ -15,7 +15,7 @@
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
     "rebuild:all": "electron-rebuild -v 28.3.1 -f",
-    "postinstall": "install-app-deps"
+    "postinstall": "yarn patch-package; yarn install-app-deps"
   },
   "config": {
     "forge": "./forge.config.js"
@@ -23,6 +23,7 @@
   "dependencies": {
     "@fastify/cors": "8.2.0",
     "@logseq/rsapi": "0.0.91",
+    "@openid/appauth": "^1.3.2",
     "@sentry/electron": "2.5.1",
     "abort-controller": "3.0.0",
     "better-sqlite3": "^11.7.0",
@@ -50,14 +51,16 @@
     "@electron-forge/cli": "^7.3.1",
     "@electron-forge/maker-deb": "^7.3.1",
     "@electron-forge/maker-dmg": "^7.3.1",
-    "@electron-forge/maker-wix": "^7.3.1",
     "@electron-forge/maker-rpm": "^7.3.1",
     "@electron-forge/maker-squirrel": "^7.3.1",
+    "@electron-forge/maker-wix": "^7.3.1",
     "@electron-forge/maker-zip": "^7.3.1",
     "@electron/rebuild": "3.2.10",
     "electron": "31.7.5",
     "electron-builder": "25.1.8",
-    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git"
+    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git",
+    "patch-package": "^8.0.0",
+    "postinstall-postinstall": "^2.1.0"
   },
   "resolutions": {
     "**/electron": "31.7.5",

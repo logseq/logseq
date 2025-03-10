@@ -1,0 +1,28 @@
+diff --git a/node_modules/@openid/appauth/built/token_request.js b/node_modules/@openid/appauth/built/token_request.js
+index a21867a..a7e025c 100644
+--- a/node_modules/@openid/appauth/built/token_request.js
++++ b/node_modules/@openid/appauth/built/token_request.js
+@@ -24,6 +24,7 @@ exports.GRANT_TYPE_REFRESH_TOKEN = 'refresh_token';
+ var TokenRequest = /** @class */ (function () {
+     function TokenRequest(request) {
+         this.clientId = request.client_id;
++        this.clientSecret = request.client_secret;
+         this.redirectUri = request.redirect_uri;
+         this.grantType = request.grant_type;
+         this.code = request.code;
+@@ -40,6 +41,7 @@ var TokenRequest = /** @class */ (function () {
+             refresh_token: this.refreshToken,
+             redirect_uri: this.redirectUri,
+             client_id: this.clientId,
++            client_id: this.clientSecret,
+             extras: this.extras
+         };
+     };
+@@ -47,6 +49,7 @@ var TokenRequest = /** @class */ (function () {
+         var map = {
+             grant_type: this.grantType,
+             client_id: this.clientId,
++            client_secret: this.clientSecret,
+             redirect_uri: this.redirectUri
+         };
+         if (this.code) {
