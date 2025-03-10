@@ -374,12 +374,14 @@
 
 (defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks] :as options}]
   (let [page-ent-export (build-node-export db page-entity (dissoc options :classes :blocks))
+        page-pvalue-uuids (get-pvalue-uuids (:node page-ent-export))
         page (merge (dissoc (:node page-ent-export) :block/title)
                     (shallow-copy-page page-entity))
         page-blocks-export {:pages-and-blocks [{:page page :blocks blocks}]
                             :properties properties
                             :classes classes}]
-    (merge-export-maps page-blocks-export page-ent-export)))
+    (assoc (merge-export-maps page-blocks-export page-ent-export)
+           :pvalue-uuids page-pvalue-uuids)))
 
 (defn- get-page-blocks [db eid]
   (->> (d/datoms db :avet :block/page eid)
@@ -396,7 +398,8 @@
         {:keys [pvalue-uuids] :as blocks-export}
         (build-blocks-export db page-blocks options)
         page-blocks-export (build-page-blocks-export db page-entity (merge blocks-export options))
-        page-export (assoc page-blocks-export :pvalue-uuids pvalue-uuids)]
+        page-block-uuids (set/union pvalue-uuids (:pvalue-uuids page-blocks-export))
+        page-export (assoc page-blocks-export :pvalue-uuids page-block-uuids)]
     page-export))
 
 (defn- build-page-export

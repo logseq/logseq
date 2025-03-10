@@ -533,8 +533,9 @@
   []
   (let [internal-block-uuid (random-uuid)
         favorited-uuid (random-uuid)
-        block-object-uuid (random-uuid)
-        block-object-uuid2 (random-uuid)
+        block-pvalue-uuid (random-uuid)
+        property-pvalue-uuid (random-uuid)
+        page-pvalue-uuid (random-uuid)
         page-object-uuid (random-uuid)
         closed-value-uuid (random-uuid)
         property-uuid (random-uuid)
@@ -545,7 +546,7 @@
          {:user.property/num {:logseq.property/type :number
                               :block/uuid property-uuid
                               :build/keep-uuid? true
-                              :build/properties {:user.property/node #{[:block/uuid block-object-uuid2]}}}
+                              :build/properties {:user.property/node #{[:block/uuid property-pvalue-uuid]}}}
           :user.property/default-closed
           {:logseq.property/type :default
            :build/closed-values [{:value "joy" :uuid closed-value-uuid}
@@ -566,7 +567,8 @@
          :pages-and-blocks
          [{:page {:block/title "page1"
                   :block/uuid favorited-uuid :build/keep-uuid? true
-                  :build/properties {:user.property/checkbox false}}
+                  :build/properties {:user.property/checkbox false
+                                     :user.property/node #{[:block/uuid page-pvalue-uuid]}}}
            :blocks [{:block/title "b1"
                      :build/properties {:user.property/num 1
                                         :user.property/default-closed [:block/uuid closed-value-uuid]
@@ -579,19 +581,23 @@
            :blocks []}
           {:page {:block/title "page2" :build/tags [:user.class/MyClass2]}
            :blocks [{:block/title "hola" :block/uuid internal-block-uuid :build/keep-uuid? true}
-                    {:block/title "myclass object"
+                    {:block/title "myclass object 1"
                      :build/tags [:user.class/MyClass]
-                     :block/uuid block-object-uuid
+                     :block/uuid block-pvalue-uuid
                      :build/keep-uuid? true}
                     {:block/title "myclass object 2"
                      :build/tags [:user.class/MyClass]
-                     :block/uuid block-object-uuid2
+                     :block/uuid property-pvalue-uuid
+                     :build/keep-uuid? true}
+                    {:block/title "myclass object 3"
+                     :build/tags [:user.class/MyClass]
+                     :block/uuid page-pvalue-uuid
                      :build/keep-uuid? true}
                     {:block/title "ref blocks"
                      :build/children
                      [{:block/title (str "internal block ref to " (page-ref/->page-ref internal-block-uuid))}
                       {:block/title "node block"
-                       :build/properties {:user.property/node #{[:block/uuid block-object-uuid]}}}
+                       :build/properties {:user.property/node #{[:block/uuid block-pvalue-uuid]}}}
                       {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}
                       {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}]}]}
           {:page {:build/journal 20250228 :build/properties {:user.property/num 1}}
