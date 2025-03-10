@@ -32,24 +32,12 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.view :as db-view]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
-
-(defn- get-latest-entity
-  [e]
-  (let [transacted-ids (:updated-ids @(:db/latest-transacted-entity-uuids @state/state))]
-    (if (and transacted-ids
-             (contains? transacted-ids (:block/uuid e))
-             (de/entity? e))
-      (assoc (db/entity (:db/id e))
-             :id (:id e)
-             :block.temp/refs-count (:block.temp/refs-count e))
-      e)))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!] :as table}]
@@ -567,10 +555,9 @@
 
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
-  (let [row' (or (db/sub-block (:id row)) row)
-        ;; merge entity temporal attributes
-        row (reduce (fn [e [k v]] (assoc e k v)) row' (.-kv ^js row))]
-    (table-row-inner table row props option)))
+  (let [row' (merge (db/sub-block (:id row))
+                    row)]
+    (table-row-inner table row' props option)))
 
 (rum/defc search
   [input {:keys [on-change set-input!]}]
@@ -1030,102 +1017,13 @@
              (shui/select-item {:value "or"} "Match any filter"))))])])))
 
 (defn- row-matched?
-  [row input filters]
-  (let [row (get-latest-entity row)
-        or? (:or? filters)
-        check-f (if or? some every?)]
-    (and
-     ;; full-text-search match
-     (if (string/blank? input)
-       true
-       (when row
+  [row input]
+  ;; full-text-search match
+  (if (not (string/blank? input))
+    (when row
        ;; fuzzy search is too slow
-         (string/includes? (string/lower-case (:block/title row)) (string/lower-case input))))
-     ;; filters check
-     (check-f
-      (fn [[property-ident operator match]]
-        (if (nil? match)
-          true
-          (let [value (get row property-ident)
-                value' (cond
-                         (set? value) value
-                         (nil? value) #{}
-                         :else #{value})
-                entity? (de/entity? (first value'))
-                result
-                (case operator
-                  :is
-                  (if (boolean? match)
-                    (= (boolean (get-property-value-content (get row property-ident))) match)
-                    (cond
-                      (empty? match)
-                      true
-                      (and (empty? match) (empty? value'))
-                      true
-                      :else
-                      (if entity?
-                        (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
-                        (boolean (seq (set/intersection (set value') match))))))
-
-                  :is-not
-                  (if (boolean? match)
-                    (not= (boolean (get-property-value-content (get row property-ident))) match)
-                    (cond
-                      (and (empty? match) (seq value'))
-                      true
-                      (and (seq match) (empty? value'))
-                      true
-                      :else
-                      (if entity?
-                        (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
-                        (boolean (empty? (set/intersection (set value') match))))))
-
-                  :text-contains
-                  (some (fn [v]
-                          (if-let [property-value (get-property-value-content v)]
-                            (string/includes? (string/lower-case property-value) (string/lower-case match))
-                            false))
-                        value')
-
-                  :text-not-contains
-                  (not-any? #(string/includes? (str (get-property-value-content %)) match) value')
-
-                  :number-gt
-                  (if match (some #(> (get-property-value-content %) match) value') true)
-                  :number-gte
-                  (if match (some #(>= (get-property-value-content %) match) value') true)
-                  :number-lt
-                  (if match (some #(< (get-property-value-content %) match) value') true)
-                  :number-lte
-                  (if match (some #(<= (get-property-value-content %) match) value') true)
-
-                  :between
-                  (if (seq match)
-                    (some (fn [value-entity]
-                            (let [[start end] match
-                                  value (get-property-value-content value-entity)
-                                  conditions [(if start (<= start value) true)
-                                              (if end (<= value end) true)]]
-                              (if (seq match) (every? true? conditions) true))) value')
-                    true)
-
-                  :date-before
-                  (if match (some #(< (:block/journal-day %) (:block/journal-day match)) value') true)
-
-                  :date-after
-                  (if match (some #(> (:block/journal-day %) (:block/journal-day match)) value') true)
-
-                  :before
-                  (let [search-value (common-util/get-timestamp match)]
-                    (if search-value (<= (get row property-ident) search-value) true))
-
-                  :after
-                  (let [search-value (common-util/get-timestamp match)]
-                    (if search-value (>= (get row property-ident) search-value) true))
-
-                  true)]
-            result)))
-      (:filters filters)))))
+      (string/includes? (string/lower-case (:block/title row)) (string/lower-case input)))
+    true))
 
 (rum/defc new-record-button < rum/static
   [table view-entity]
@@ -1289,7 +1187,7 @@
            (set-row-filter!
             (fn []
               (fn [row]
-                (row-matched? row input filters)))))))
+                (row-matched? row input)))))))
      [input filters])
 
     (hooks/use-effect!
@@ -1572,7 +1470,7 @@
                                           :set-ordered-columns! set-ordered-columns!})
         row-filter-fn (fn []
                         (fn [row]
-                          (row-matched? row input filters)))
+                          (row-matched? row input)))
         [row-filter set-row-filter!] (rum/use-state row-filter-fn)
         [input-filters set-input-filters!] (rum/use-state [input filters])
         [row-selection set-row-selection!] (rum/use-state {})

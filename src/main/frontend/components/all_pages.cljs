@@ -6,7 +6,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [logseq.common.config :as common-config]
             [logseq.shui.ui :as shui]
@@ -28,15 +27,11 @@
            :type :string})
         {:id :block.temp/refs-count
          :name (t :page/backlinks)
-         :cell (fn [_table row _column] (:block.temp/refs-count row))
+         :cell (fn [_table row _column]
+                 (:block.temp/refs-count row))
          :type :number}]
        (remove nil?)
        vec))
-
-(defn- get-all-pages
-  []
-  (->> (page-handler/get-all-pages (state/get-current-repo))
-       (map (fn [p] (assoc p :id (:db/id p))))))
 
 (rum/defc all-pages < rum/static
   []
@@ -58,5 +53,4 @@
                                       selected-rows false
                                       (fn []
                                         (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                          (f {}))
-                                        (set-data! (get-all-pages))))))})]))
+                                          (f {}))))))})]))
