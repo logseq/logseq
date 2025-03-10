@@ -33,6 +33,10 @@
                         :db-worker
                         {:init-fn frontend.worker.db-worker/init
                          :depends-on #{:shared}
+                         :web-worker true}
+                        :inference-worker
+                        {:init-fn frontend.inference-worker.inference-worker/init
+                         :depends-on #{:shared}
                          :web-worker true}}
 
         :output-dir       "./static/js"

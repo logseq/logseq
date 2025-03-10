@@ -167,6 +167,7 @@
    (when (mobile-util/native-platform?)
      (mobile/mobile-preinit))
    (-> (p/let [_ (db-browser/start-db-worker!)
+               _ (db-browser/start-inference-worker!)
                repos (repo-handler/get-repos)
                _ (state/set-repos! repos)
                _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
