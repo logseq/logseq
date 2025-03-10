@@ -52,7 +52,7 @@
                                  (util/stop e)
                                  (on-cut)
                                  (state/pub-event! [:editor/hide-action-bar])))
-       "Cut")
+       (ui/icon "trash" {:size 13}))
       (when-not hide-dots?
         (shui/button
          (assoc button-opts
