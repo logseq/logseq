@@ -32,10 +32,10 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.view :as db-view]
-            [logseq.shui.table.core :as table-core]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -172,16 +172,7 @@
 
 (defn- get-property-value-content
   [entity]
-  (when entity
-    (cond
-      (uuid? entity)
-      (db-property/property-value-content (db/entity [:block/uuid entity]))
-      (de/entity? entity)
-      (db-property/property-value-content entity)
-      (keyword? entity)
-      (str entity)
-      :else
-      entity)))
+  (db-view/get-property-value-content (db/get-db) entity))
 
 (rum/defcs block-container < (rum/local false ::deleted?)
   [state config row table]
@@ -650,27 +641,6 @@
     :label "1 year ago"}
    {:value "Custom date"
     :label "Custom date"}])
-
-(defn- get-timestamp
-  [value]
-  (let [now (t/now)
-        f t/minus]
-    (if (string? value)
-      (case value
-        "1 day ago"
-        (tc/to-long (f now (t/days 1)))
-        "3 days ago"
-        (tc/to-long (f now (t/days 3)))
-        "1 week ago"
-        (tc/to-long (f now (t/weeks 1)))
-        "1 month ago"
-        (tc/to-long (f now (t/months 1)))
-        "3 months ago"
-        (tc/to-long (f now (t/months 3)))
-        "1 year ago"
-        (tc/to-long (f now (t/years 1)))
-        nil)
-      (tc/to-long (tc/to-date value)))))
 
 (rum/defc filter-property < rum/static
   [columns {:keys [data-fns] :as table}]
@@ -1146,11 +1116,11 @@
                   (if match (some #(> (:block/journal-day %) (:block/journal-day match)) value') true)
 
                   :before
-                  (let [search-value (get-timestamp match)]
+                  (let [search-value (common-util/get-timestamp match)]
                     (if search-value (<= (get row property-ident) search-value) true))
 
                   :after
-                  (let [search-value (get-timestamp match)]
+                  (let [search-value (common-util/get-timestamp match)]
                     (if search-value (>= (get row property-ident) search-value) true))
 
                   true)]
