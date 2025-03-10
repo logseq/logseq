@@ -1580,8 +1580,9 @@
       (search input {:on-change set-input!
                      :set-input! set-input!})
 
-      [:div.text-muted-foreground.text-sm
-       (pv/property-value view-entity (db/entity :logseq.property.view/type) {})]
+      (when db-based?
+        [:div.text-muted-foreground.text-sm
+         (pv/property-value view-entity (db/entity :logseq.property.view/type) {})])
 
       (when db-based? (more-actions view-entity columns table))
 
