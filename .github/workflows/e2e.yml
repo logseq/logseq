@@ -88,7 +88,7 @@ jobs:
         run: tar czf static.tar.gz static
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-e2e-artifact
           path: static.tar.gz
@@ -157,7 +157,7 @@ jobs:
 
       - name: Save e2e artifacts
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: e2e-repeat-report-${{ matrix.shard}}-${{ matrix.repeat }}
           path: e2e-dump/*
