@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.common.util :as common-util]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
@@ -49,23 +50,57 @@
   [e]
   (or (entity-util/hidden? e) (db-class/internal-tags (:db/ident e))))
 
+(defn by [sorting]
+  (fn [a b]
+    (loop [[{:keys [asc? get-value]} & orderings] sorting]
+      (let [;; non-entity property such as Backlinks
+            v1 (get-value a)
+            v2 (get-value b)
+            ordering (if (and (number? v1) (number? v2))
+                       (if asc? < >)
+                       (if asc? compare #(compare %2 %1)))
+            order (ordering)]
+        (if (and (zero? order) orderings)
+          (recur orderings)
+          order)))))
+
+(defn- sort-by-single-property
+  [db {:keys [id asc?]} rows]
+  (let [datoms (cond->> (d/datoms db :avet id)
+                 true
+                 (common-util/distinct-by :e)
+                 (not asc?)
+                 reverse)
+        row-ids (set (map :db/id rows))
+        id->row (zipmap (map :db/id rows) rows)]
+    (keep
+     (fn [d]
+       (when (row-ids (:e d))
+         (id->row (:e d))))
+     datoms)))
+
+(defn- sort-by-multiple-properties
+  [db sorting rows]
+  (let [sorting' (map (fn [{:keys [id asc?]}]
+                        (let [property (or (d/entity db id) {:id id})]
+                          {:asc? asc?
+                           :get-value (fn [row] ((get-value-for-sort property) row))})) sorting)]
+    (sort (by sorting') rows)))
+
 (defn sort-rows
   "Support multiple sorts"
   [db sorting rows]
-  (time
-   (loop [[sorting-item & other-sorting] (reverse sorting)
-          rows rows]
-     (if sorting-item
-       (let [{:keys [id asc?]} sorting-item
-             ;; non-entity property such as Backlinks
-             property (or (d/entity db id) {:id id})
-             rows' (sort-by
-                    (fn [row]
-                      ((get-value-for-sort property) row))
-                    (if asc? compare #(compare %2 %1))
-                    rows)]
-         (recur other-sorting rows'))
-       rows))))
+  (let [[single-property asc?] (case (count sorting)
+                                 0
+                                 [:block/updated-at false]
+                                 1
+                                 (let [{:keys [id asc?]} (first sorting)]
+                                   (when-let [property (d/entity db id)]
+                                     [(:db/ident property) asc?]))
+                                 nil)]
+    (if single-property
+      (sort-by-single-property db {:id single-property :asc? asc?} rows)
+      (sort-by-multiple-properties db sorting rows))))
 
 (defn get-view-data
   [db view-id]
