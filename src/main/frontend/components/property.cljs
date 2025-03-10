@@ -215,19 +215,25 @@
   [block *property *property-key *show-new-property-config? {:keys [class-schema?]}]
   (fn [{:keys [value label]}]
     (reset! *property-key (if (uuid? value) label value))
-    (let [property (when (uuid? value) (db/entity [:block/uuid value]))]
+    (let [property (when (uuid? value) (db/entity [:block/uuid value]))
+          batch? (pv/batch-operation?)]
       (when (and *show-new-property-config? (not (ldb/property? property)))
         (reset! *show-new-property-config? true))
       (reset! *property property)
       (when property
         (let [add-class-property? (and (ldb/class? block) class-schema?)
-              type (:logseq.property/type property)]
+              type (:logseq.property/type property)
+              default-or-url? (and (contains? #{:default :url} type)
+                                   (not (seq (:property/closed-values property))))]
           (cond
             add-class-property?
             (p/do!
              (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?})
              (shui/popup-hide!)
              (shui/dialog-close!))
+
+            (and batch? (or (= :checkbox type) (and batch? default-or-url?)))
+            nil
 
             (= :checkbox type)
             (p/do!
@@ -239,8 +245,7 @@
                            false)]
                (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
 
-            (and (contains? #{:default :url} type)
-                 (not (seq (:property/closed-values property))))
+            default-or-url?
             (pv/<create-new-block! block property "" {:batch-op? true})
 
             ;; using class as property
@@ -375,8 +380,13 @@
                                    (and (ldb/built-in? block) (contains? #{:logseq.property/parent} (:db/ident m))))))
         property (rum/react *property)
         property-key (rum/react *property-key)
+        batch? (pv/batch-operation?)
         hide-property-key? (or (contains? #{:date :datetime} (:logseq.property/type property))
-                               (pv/select-type? block property))]
+                               (pv/select-type? block property)
+                               (and
+                                batch?
+                                (contains? #{:default :url} (:logseq.property/type property))
+                                (not (seq (:property/closed-values property)))))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      {:ref #(reset! *ref %)}
      (if property-key

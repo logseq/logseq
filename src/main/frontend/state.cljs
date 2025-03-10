@@ -1200,6 +1200,7 @@ Similar to re-frame subscriptions"
 
 (defn- set-selection-blocks-aux!
   [blocks]
+  (set-state! :view/selected-blocks nil)
   (let [selected-ids (set (get-selected-block-ids @(:selection/blocks @state)))
         _ (set-state! :selection/blocks blocks)
         new-ids (set (get-selection-block-ids))
@@ -1380,7 +1381,8 @@ Similar to re-frame subscriptions"
   (set-state! :editor/content {})
   (set-state! :ui/select-query-cache {})
   (set-state! :editor/block-refs #{})
-  (set-state! :editor/action-data nil))
+  (set-state! :editor/action-data nil)
+  (set-state! :view/selected-blocks nil))
 
 (defn into-code-editor-mode!
   []
