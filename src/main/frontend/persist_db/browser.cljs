@@ -148,6 +148,14 @@
                      (js/console.error error)
                      (notification/show! "It seems that OPFS is not supported on this browser, please upgrade this browser to the latest version or use another browser." :error)))))))
 
+(defn start-inference-worker!
+  []
+  (when-not util/node-test?
+    (let [worker-url (if (util/electron?)
+                       "js/inference-worker.js"
+                       "static/js/inference-worker.js")
+          _worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))])))
+
 (defn <export-db!
   [repo data]
   (cond
