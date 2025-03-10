@@ -18,7 +18,6 @@
             [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.rules :as rules]
             [promesa.core :as p]))
 
 (def <q db-async-util/<q)
@@ -286,17 +285,6 @@
         [?page :block/tags ?tag-id]
         [?page :block/name]]
       tag-id))
-
-(defn <get-property-objects
-  [graph property-ident]
-  (<q graph {:transact-db? true}
-      '[:find [(pull ?b [*]) ...]
-        :in $ % ?prop
-        :where
-        (has-property-or-default-value? ?b ?prop)]
-      (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
-                           {:deps rules/rules-dependencies})
-      property-ident))
 
 (defn <get-tag-objects
   [graph class-id]

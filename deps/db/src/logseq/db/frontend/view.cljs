@@ -8,7 +8,8 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.rules :as rules]))
 
 (defn get-property-value-for-search
   [block property]
@@ -89,7 +90,7 @@
     (sort (by sorting') rows)))
 
 (defn sort-rows
-  "Support multiple sorts"
+  "Support multiple properties sort"
   [db sorting rows]
   (let [[single-property asc?] (case (count sorting)
                                  0
@@ -205,47 +206,78 @@
            result)))
      (:filters filters))))
 
+(defn- get-entities
+  [db view feat-type property-ident]
+  (let [view-for (:logseq.property/view-for view)
+        non-hidden-e (fn [id] (let [e (d/entity db id)]
+                                (when-not (entity-util/hidden? e)
+                                  e)))]
+    (case feat-type
+      :all-pages
+      (keep (fn [d]
+              (let [e (d/entity db (:e d))]
+                (when-not (hidden-or-internal-tag? e)
+                  e)))
+            (d/datoms db :avet property-ident))
+      :class-objects
+      (let [class-id (:db/id view-for)
+            class-children (db-class/get-structured-children db class-id)
+            class-ids (distinct (conj class-children class-id))
+            datoms (mapcat (fn [id] (d/datoms db :avet :block/tags id)) class-ids)]
+        (keep (fn [d] (non-hidden-e (:e d))) datoms))
+      :property-objects
+      (->>
+       (d/q
+        '[:find [?b ...]
+          :in $ % ?prop
+          :where
+          (has-property-or-default-value? ?b ?prop)]
+        db
+        (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
+                             {:deps rules/rules-dependencies})
+        property-ident)
+       (keep (fn [id] (non-hidden-e id))))
+      nil)))
+
 (defn get-view-data
   [db view-id]
-  (let [view (d/entity db view-id)
-        feat-type (:logseq.property.view/feature-type view)
-        index-attr (case feat-type
-                     :all-pages
-                     :block/name
-                     :class-objects
-                     :block/tags
-                     :property-objects
-                     (let [view-for (:logseq.property/view-for view)]
-                       (:db/ident view-for))
-                     nil)
-        all-pages? (= feat-type :all-pages)
-        filters (:logseq.property.table/filters view)]
-    (when index-attr
-      (let [datoms (d/datoms db :avet index-attr)
-            entities (->> datoms
-                          (keep (fn [d]
-                                  (let [e (d/entity db (:e d))]
-                                    (when-not (and all-pages? (hidden-or-internal-tag? e))
-                                      e)))))
-            sorting (let [sorting* (:logseq.property.table/sorting view)]
-                      (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
-                        [{:id :block/updated-at, :asc? false}]
-                        sorting*))
-            data (->>
-                  ;; filter
-                  (cond->> entities
-                    (seq filters)
-                    (filter (fn [row] (row-matched? db row filters))))
-                  ;; sort
-                  (sort-rows db sorting)
-                  ;; pagination
-                  (take 100)
-                  ;; convert entity to map for serialization
-                  (map (fn [e]
-                         (cond->
-                          (-> (into {} e)
-                              (assoc :db/id (:db/id e)))
-                           all-pages?
-                           (assoc :block.temp/refs-count (count (:block/_refs e)))))))]
-        {:count (count entities)
-         :data (vec data)}))))
+  (time
+   (let [view (d/entity db view-id)
+         feat-type (:logseq.property.view/feature-type view)
+         index-attr (case feat-type
+                      :all-pages
+                      :block/name
+                      :class-objects
+                      :block/tags
+                      :property-objects
+                      (let [view-for (:logseq.property/view-for view)]
+                        (:db/ident view-for))
+                      nil)
+         all-pages? (= feat-type :all-pages)
+         filters (:logseq.property.table/filters view)]
+     (when index-attr
+       (let [entities (get-entities db view feat-type index-attr)
+             sorting (let [sorting* (:logseq.property.table/sorting view)]
+                       (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
+                         [{:id :block/updated-at, :asc? false}]
+                         sorting*))
+             data (->>
+                   ;; filter
+                   (cond->> entities
+                     (seq filters)
+                     (filter (fn [row] (row-matched? db row filters))))
+                   ;; sort
+                   (sort-rows db sorting)
+                   ;; pagination
+                   (take 100)
+                   ;; convert entity to map for serialization
+                   (map (fn [e]
+                          (cond->
+                           (-> (into {} e)
+                               (assoc
+                                :id (:db/id e)
+                                :db/id (:db/id e)))
+                            all-pages?
+                            (assoc :block.temp/refs-count (count (:block/_refs e)))))))]
+         {:count (count entities)
+          :data (vec data)})))))
