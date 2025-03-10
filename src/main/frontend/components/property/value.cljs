@@ -64,6 +64,18 @@
        (ui/icon "line-dashed"))
      "Empty")])
 
+(defn- get-operating-blocks
+  [block]
+  (let [selected-blocks (some->> (state/get-selection-block-ids)
+                                 (map (fn [id] (db/entity [:block/uuid id])))
+                                 (seq)
+                                 block-handler/get-top-level-blocks
+                                 (remove ldb/property?))
+        view-selected-blocks (:view/selected-blocks @state/state)]
+    (or (seq selected-blocks)
+        (seq view-selected-blocks)
+        [block])))
+
 (rum/defc icon-row
   [block editing?]
   (let [icon-value (:logseq.property/icon block)
@@ -71,14 +83,13 @@
                          (shui/dialog-close!)
                          (shui/popup-hide-all!))
         on-chosen! (fn [_e icon]
-                     (if icon
-                       (db-property-handler/set-block-property!
-                        (:db/id block)
+                     (let [repo (state/get-current-repo)
+                           blocks (get-operating-blocks block)]
+                       (property-handler/batch-set-block-property!
+                        repo
+                        (map :db/id blocks)
                         :logseq.property/icon
-                        (select-keys icon [:type :id :color]))
-                       (db-property-handler/remove-block-property!
-                        (:db/id block)
-                        :logseq.property/icon))
+                        (when icon (select-keys icon [:type :id :color]))))
                      (clear-overlay!)
                      (when editing?
                        (editor-handler/restore-last-saved-cursor!)))]
@@ -120,18 +131,6 @@
         (seq (:property/closed-values property))
         (and (= (:db/ident property) :logseq.property/default-value)
              (= (:logseq.property/type block) :number)))))
-
-(defn- get-operating-blocks
-  [block]
-  (let [selected-blocks (some->> (state/get-selection-block-ids)
-                                 (map (fn [id] (db/entity [:block/uuid id])))
-                                 (seq)
-                                 block-handler/get-top-level-blocks
-                                 (remove ldb/property?))
-        view-selected-blocks (:view/selected-blocks @state/state)]
-    (or (seq selected-blocks)
-        (seq view-selected-blocks)
-        [block])))
 
 (defn <create-new-block!
   [block property value & {:keys [edit-block? batch-op?]
