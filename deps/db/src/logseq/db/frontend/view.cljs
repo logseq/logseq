@@ -12,12 +12,12 @@
 
 (defn get-property-value-for-search
   [block property]
-  (let [type (:logseq.property/type property)
+  (let [typ (:logseq.property/type property)
         many? (= :db.cardinality/many (get property :db/cardinality))
-        number-type? (= :number type)
+        number-type? (= :number typ)
         v (get block (:db/ident property))
         v' (if many? v [v])
-        col (->> (if (db-property-type/all-ref-property-types type) (map db-property/property-value-content v') v')
+        col (->> (if (db-property-type/all-ref-property-types typ) (map db-property/property-value-content v') v')
                  (remove nil?))]
     (if number-type?
       (reduce + (filter number? col))
