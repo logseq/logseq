@@ -209,7 +209,7 @@ jobs:
 
       - name: Save test artifacts
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: e2e-test-report
           path: e2e-dump/*
