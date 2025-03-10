@@ -905,14 +905,19 @@
 
 (rum/defcs page-cp-inner < db-mixins/query rum/reactive
   {:init (fn [state]
-           (let [page (last (:rum/args state))
+           (let [args (:rum/args state)
+                 page (last args)
                  *result (atom nil)
                  page-name (or (:block/uuid page)
                                (when-let [s (:block/name page)]
                                  (string/trim s)))
                  page-entity (if (e/entity? page) page (db/get-page page-name))]
-             (if page-entity
+             (cond
+               page-entity
                (reset! *result page-entity)
+               (:skip-async-load? (first args))
+               (reset! *result page)
+               :else
                (p/let [query-result (db-async/<get-block (state/get-current-repo) page-name {:children? false})
                        result (if (e/entity? query-result)
                                 query-result
@@ -923,7 +928,7 @@
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [state {:keys [label children preview? disable-preview? show-non-exists-page? tag?] :as config} page]
+  [state {:keys [label children preview? disable-preview? show-non-exists-page? tag? _skip-async-load?] :as config} page]
   (when-let [entity' (rum/react (:*entity state))]
     (let [entity (db/sub-block (:db/id entity'))]
       (cond
@@ -953,8 +958,10 @@
         (invalid-node-ref (:block/name page))
 
         (and (:block/name page) show-non-exists-page?)
-        (page-inner config {:block/title (:block/name page)
-                            :block/name (:block/name page)} children label)
+        (page-inner config (merge
+                            {:block/title (:block/name page)
+                             :block/name (:block/name page)}
+                            page) children label)
 
         (:block/name page)
         [:span (str (when tag? "#")
