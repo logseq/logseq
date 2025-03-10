@@ -3,7 +3,6 @@
   (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [cljs-bean.core :as bean]
-            [clojure.core.async :as async]
             [clojure.edn :as edn]
             [clojure.set]
             [clojure.string :as string]
