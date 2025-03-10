@@ -17,6 +17,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.rules :as rules]
             [logseq.graph-parser.db :as gp-db]))
@@ -822,15 +823,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-structured-children
   [repo eid]
-  (->>
-   (d/q '[:find [?children ...]
-          :in $ ?parent %
-          :where
-          (parent ?parent ?children)]
-        (conn/get-db repo)
-        eid
-        (:parent rules/rules))
-   (remove #{eid})))
+  (db-class/get-structured-children (conn/get-db repo) eid))
 
 (defn get-class-objects
   [repo class-id]

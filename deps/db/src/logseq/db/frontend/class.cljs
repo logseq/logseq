@@ -1,9 +1,11 @@
 (ns logseq.db.frontend.class
   "Class related fns for DB graphs and frontend/datascript usage"
   (:require [clojure.set :as set]
+            [datascript.core :as d]
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Main class vars
@@ -114,6 +116,18 @@
 (def hidden-tags
   "Built-in classes that are hidden in a few contexts like property values"
   #{:logseq.class/Page :logseq.class/Root :logseq.class/Asset})
+
+(defn get-structured-children
+  [db eid]
+  (->>
+   (d/q '[:find [?children ...]
+          :in $ ?parent %
+          :where
+          (parent ?parent ?children)]
+        db
+        eid
+        (:parent rules/rules))
+   (remove #{eid})))
 
 ;; Helper fns
 ;; ==========

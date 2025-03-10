@@ -4,11 +4,8 @@
             [frontend.components.views :as views]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
-            [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
-            [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
-            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
@@ -48,8 +45,7 @@
 
 (rum/defc class-objects-inner < rum/static
   [config class objects properties]
-  (let [[loading? set-loading?] (rum/use-state nil)
-        [data set-data!] (rum/use-state objects)
+  (let [[data set-data!] (rum/use-state objects)
         ;; Properties can be nil for published private graphs
         properties' (remove nil? properties)
         columns* (views/build-columns config properties' {:add-tags-column? (or (= (:db/ident class) :logseq.class/Root)
@@ -66,17 +62,6 @@
                   (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)]
                     (concat before-cols [(build-asset-file-column config)] after-cols))
                   columns)]
-
-    (hooks/use-effect!
-     (fn []
-       (when (nil? loading?)
-         (set-loading? true)
-         (p/let [_result (db-async/<get-tag-objects (state/get-current-repo) (:db/id class))]
-           (react/refresh! (state/get-current-repo)
-                           [[:frontend.worker.react/objects (:db/id class)]])
-           (set-data! (get-class-objects class))
-           (set-loading? false))))
-     [])
 
     (views/view {:config config
                  :data data
@@ -151,21 +136,8 @@
 
 (rum/defc property-related-objects-inner < rum/static
   [config property objects properties]
-  (let [[loading? set-loading?] (rum/use-state nil)
-        [data set-data!] (rum/use-state objects)
+  (let [[data set-data!] (rum/use-state objects)
         columns (views/build-columns config properties)]
-
-    (hooks/use-effect!
-     (fn []
-       (when (nil? loading?)
-         (set-loading? true)
-         (p/let [result (db-async/<get-property-objects (state/get-current-repo) (:db/ident property))]
-           (set-data! (mapv (fn [m]
-                              (let [e (db/entity (:db/id m))]
-                                (assoc e :id (:db/id m)))) result))
-           (set-loading? false))))
-     [])
-
     (views/view {:config config
                  :data data
                  :view-parent property
