@@ -1688,15 +1688,16 @@
       (str "view-" (:db/id view-entity')))))
 
 (defn- <load-view-data
-  [view]
-  (p/let [data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view))]
+  [view offset]
+  (p/let [data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view)
+                                   (ldb/write-transit-str {:offset offset :limit 100}))]
     (ldb/read-transit-str data-str)))
 
 (rum/defc view < rum/static
   [{:keys [view-parent view-feature-type view-entity] :as option}]
   (let [[view-entity set-view-entity!] (hooks/use-state view-entity)
         [views set-views!] (hooks/use-state nil)
-        [count set-count!] (hooks/use-state (count (:data option)))]
+        [items-count set-count!] (hooks/use-state (count (:data option)))]
     (hooks/use-effect!
      (fn []
        (let [repo (state/get-current-repo)]
@@ -1714,15 +1715,19 @@
                                     new-view)))]
            (when (and current-view
                       (nil? (:data option)))
-             (p/let [{:keys [count data]} (<load-view-data current-view)
+             (p/let [{:keys [count data]} (<load-view-data current-view 0)
                      set-data! (:set-data! option)]
                (set-data! data)
                (set-count! count))))))
      [])
     (view-container view-entity (assoc option
-                                       :items-count count
+                                       :items-count items-count
                                        :views views
                                        :set-views! set-views!
                                        :set-view-entity! set-view-entity!
                                        :end-reached (fn []
-                                                      (prn :debug :end-reached))))))
+                                                      (when view-entity
+                                                        (p/let [prev-data (:data option)
+                                                                {:keys [_count data]} (<load-view-data view-entity (count prev-data))
+                                                                set-data! (:set-data! option)]
+                                                          (set-data! (into prev-data data)))))))))
