@@ -1,10 +1,8 @@
 (ns frontend.inference-worker.inference-worker
   "Worker used for text embedding and vector-db"
-  (:require
-            [lambdaisland.glogi.console :as glogi-console]
-            [lambdaisland.glogi :as log]))
-
-
+  (:require ["@huggingface/transformers" :refer [AutoTokenizer]]
+            [lambdaisland.glogi :as log]
+            [lambdaisland.glogi.console :as glogi-console]))
 
 (defn init
   []
