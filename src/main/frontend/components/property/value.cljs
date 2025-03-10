@@ -64,17 +64,28 @@
        (ui/icon "line-dashed"))
      "Empty")])
 
-(defn- get-operating-blocks
+(defn- get-selected-blocks
+  []
+  (some->> (state/get-selection-block-ids)
+           (map (fn [id] (db/entity [:block/uuid id])))
+           (seq)
+           block-handler/get-top-level-blocks
+           (remove ldb/property?)))
+
+(defn get-operating-blocks
   [block]
-  (let [selected-blocks (some->> (state/get-selection-block-ids)
-                                 (map (fn [id] (db/entity [:block/uuid id])))
-                                 (seq)
-                                 block-handler/get-top-level-blocks
-                                 (remove ldb/property?))
+  (let [selected-blocks (get-selected-blocks)
         view-selected-blocks (:view/selected-blocks @state/state)]
     (or (seq selected-blocks)
         (seq view-selected-blocks)
         [block])))
+
+(defn batch-operation?
+  []
+  (let [selected-blocks (get-selected-blocks)
+        view-selected-blocks (:view/selected-blocks @state/state)]
+    (or (> (count selected-blocks) 1)
+        (seq view-selected-blocks))))
 
 (rum/defc icon-row
   [block editing?]
@@ -142,22 +153,17 @@
   (let [<create-block (fn [block]
                         (if (and (contains? #{:default :url} (:logseq.property/type property))
                                  (not (db-property/many? property)))
-                          (p/let [existing-value (get block (:db/ident property))
-                                  default-value (:logseq.property/default-value property)
-                                  existing-value? (and (some? existing-value)
-                                                       (not= (:db/ident existing-value) :logseq.property/empty-placeholder)
-                                                       (not= (:db/id existing-value) (:db/id default-value)))
-                                  new-block-id (when-not existing-value? (db/new-block-id))
-                                  _ (when-not existing-value?
-                                      (let [value' (if (and default-value (string? value) (string/blank? value))
-                                                     (db-property/property-value-content default-value)
-                                                     value)]
-                                        (db-property-handler/create-property-text-block!
-                                         (:db/id block)
-                                         (:db/id property)
-                                         value'
-                                         {:new-block-id new-block-id})))]
-                            (if existing-value? existing-value (db/entity [:block/uuid new-block-id])))
+                          (p/let [default-value (:logseq.property/default-value property)
+                                  new-block-id (db/new-block-id)
+                                  _ (let [value' (if (and default-value (string? value) (string/blank? value))
+                                                   (db-property/property-value-content default-value)
+                                                   value)]
+                                      (db-property-handler/create-property-text-block!
+                                       (:db/id block)
+                                       (:db/id property)
+                                       value'
+                                       {:new-block-id new-block-id}))]
+                            (db/entity [:block/uuid new-block-id]))
                           (p/let [new-block-id (db/new-block-id)
                                   _ (db-property-handler/create-property-text-block!
                                      (:db/id block)
@@ -190,7 +196,7 @@
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
   Otherwise, add a block's property and its value"
-  ([block property-key property-value] (<add-property! block property-key property-value {}))
+  ([block property-id property-value] (<add-property! block property-id property-value {}))
   ([block property-id property-value {:keys [selected? exit-edit? class-schema?]
                                       :or {exit-edit? true}}]
    (let [repo (state/get-current-repo)
@@ -210,8 +216,7 @@
           (if (and (db-property-type/all-ref-property-types (:logseq.property/type property))
                    (string? property-value))
             (p/let [new-block (<create-new-block! block (db/entity property-id) property-value {:edit-block? false})]
-              (when (seq (remove #{(:db/id block)} (map :db/id block)))
-                (property-handler/batch-set-block-property! repo block-ids property-id (:db/id new-block)))
+              (property-handler/batch-set-block-property! repo block-ids property-id (:db/id new-block))
               new-block)
             (property-handler/batch-set-block-property! repo block-ids property-id property-value))))
       (cond
@@ -736,7 +741,7 @@
                                               (str "Set " (:block/title property)))
                  :show-new-when-not-exact-match? (if (or (and parent-property? (contains? (set children-pages) (:db/id block)))
                                                          ;; Don't allow creating private tags
-                                                         (seq (set/intersection (set (map :db/ident classes))
+                                                         (seq (set/intersection (set (map :db/ident classes'))
                                                                                 ldb/private-tags)))
                                                    false
                                                    true)
@@ -1046,7 +1051,7 @@
        (inline-text-cp (str value)))]))
 
 (rum/defc single-value-select
-  [block property value value-f select-opts opts]
+  [block property value select-opts {:keys [value-render] :as opts}]
   (let [*el (rum/use-ref nil)
         editing? (:editing? opts)
         type (:logseq.property/type property)
@@ -1085,7 +1090,7 @@
           :on-click show!}
          (if (string/blank? value)
            (property-empty-text-value property opts)
-           (value-f)))))))
+           (value-render)))))))
 
 (defn- property-value-inner
   [block property value {:keys [inline-text page-cp
@@ -1124,8 +1129,10 @@
         editing? (or editing?
                      (and (state/sub-editing? [container-id (:block/uuid block)])
                           (= (:db/id property) (:db/id (:property (state/get-editor-action-data))))))
-        select-type?' (select-type? block property)
+        batch? (batch-operation?)
         closed-values? (seq (:property/closed-values property))
+        select-type?' (or (select-type? block property)
+                          (and editing? batch? (contains? #{:default :url} type) (not closed-values?)))
         select-opts {:on-chosen on-chosen}
         value (if (and (de/entity? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
                 nil
@@ -1153,9 +1160,10 @@
                                                      (when choice
                                                        (db-property-handler/set-block-property! (:db/id block) (:db/ident property) (:db/id choice)))))}))
             (single-value-select block property value
-                                 (fn [] (select-item property type value opts))
                                  select-opts
-                                 (assoc opts :editing? editing?))))
+                                 (assoc opts
+                                        :editing? editing?
+                                        :value-render (fn [] (select-item property type value opts))))))
         (case type
           (:date :datetime)
           (property-value-date-picker block property value (merge opts {:editing? editing?}))
