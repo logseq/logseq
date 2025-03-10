@@ -24,7 +24,7 @@ env:
 jobs:
   e2e-test-build:
     name: Build Test Artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
@@ -97,7 +97,7 @@ jobs:
   e2e-test-run:
     needs: [ e2e-test-build ]
     name: Test Shard ${{ matrix.shard }} Repeat ${{ matrix.repeat }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         repeat: [1, 2]
