@@ -242,7 +242,7 @@
 (defonce *view-cache (atom {}))
 (defn get-view-data
   [repo db view-id {:keys [offset limit]
-                    :or {limit 50}}]
+                    :or {limit 100}}]
   (time
    (let [view (d/entity db view-id)
          feat-type (:logseq.property.view/feature-type view)
