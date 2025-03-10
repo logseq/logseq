@@ -241,7 +241,7 @@
 
             (and (contains? #{:default :url} type)
                  (not (seq (:property/closed-values property))))
-            (pv/<create-new-block! block property "")
+            (pv/<create-new-block! block property "" {:batch-op? true})
 
             ;; using class as property
             (and property (ldb/class? property))
