@@ -270,25 +270,23 @@
                          (route-handler/redirect-to-page! (:block/uuid property))
                          (.preventDefault e)))
     :on-click (fn [^js/MouseEvent e]
-                (if (state/editing?)
-                  (editor-handler/escape-editing {:select? true})
-                  (shui/popup-show! (.-target e)
-                                    (fn []
-                                      (property-config/dropdown-editor property block {:debug? (.-altKey e)
-                                                                                       :class-schema? class-schema?}))
-                                    {:content-props
-                                     {:class "ls-property-dropdown-editor as-root"
-                                      :onEscapeKeyDown (fn [e]
-                                                         (util/stop e)
-                                                         (shui/popup-hide!)
-                                                         (when-let [input (state/get-input)]
-                                                           (.focus input)))}
-                                     :align "start"
-                                     :as-dropdown? true})))}
+                (shui/popup-show! (.-target e)
+                                  (fn []
+                                    (property-config/dropdown-editor property block {:debug? (.-altKey e)
+                                                                                     :class-schema? class-schema?}))
+                                  {:content-props
+                                   {:class "ls-property-dropdown-editor as-root"
+                                    :onEscapeKeyDown (fn [e]
+                                                       (util/stop e)
+                                                       (shui/popup-hide!)
+                                                       (when-let [input (state/get-input)]
+                                                         (.focus input)))}
+                                   :align "start"
+                                   :as-dropdown? true}))}
    (:block/title property)))
 
 (rum/defc property-key-cp < rum/static
-  [block property {:keys [other-position? class-schema? property-position]}]
+  [block property {:keys [other-position? class-schema?]}]
   (let [icon (:logseq.property/icon property)]
     [:div.property-key-inner.jtrigger-view
      ;; icon picker
