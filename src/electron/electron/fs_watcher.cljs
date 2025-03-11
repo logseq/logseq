@@ -52,7 +52,7 @@
                   (utils/read-file path))
         stat (when (and (not= event "unlink")
                         (not dir-path?))
-               (fs/statSync path))]
+               (utils/fs-stat->clj path))]
     (send-file-watcher! dir event (merge {:dir (utils/fix-win-path! dir)
                                           :path (utils/fix-win-path! path)
                                           :content content
