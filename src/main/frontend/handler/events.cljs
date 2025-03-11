@@ -986,10 +986,8 @@
                              {:id :property-dialog
                               :align "start"}))))))
 
-(defmethod handle :editor/new-property [[_ {:keys [block target selected-blocks] :as opts}]]
+(defmethod handle :editor/new-property [[_ {:keys [block target] :as opts}]]
   (when-not config/publishing?
-    (when (seq selected-blocks)
-      (state/set-state! :view/selected-blocks selected-blocks))
     (p/do!
      (editor-handler/save-current-block!)
      (editor-new-property block target opts))))
