@@ -517,20 +517,20 @@
   (let [*current-idx (get state ::current-idx)
         *groups (atom #{})
         render-f (fn [matched]
-                   (for [[idx item] (medley/indexed matched)]
+                   (for [[idx item] matched]
                      (let [react-key (str idx)
                            item-cp
                            [:div.menu-link-wrap
                             {:key react-key
-                   ;; mouse-move event to indicate that cursor moved by user
+                             ;; mouse-move event to indicate that cursor moved by user
                              :on-mouse-move  #(reset! *current-idx idx)}
                             (let [chosen? (= @*current-idx idx)]
                               (menu-link
                                {:id (str "ac-" react-key)
                                 :tab-index "0"
                                 :class (when chosen? "chosen")
-                       ;; TODO: should have more tests on touch devices
-                       ;:on-pointer-down #(util/stop %)
+                                ;; TODO: should have more tests on touch devices
+                                        ;:on-pointer-down #(util/stop %)
                                 :on-click (fn [e]
                                             (util/stop e)
                                             (when-not (:disabled? item)
@@ -552,13 +552,16 @@
        [:div#ui__ac-inner.hide-scrollbar
         (when header header)
         (if grouped?
-          (for [[group matched] (group-by :group matched)]
-            (if group
-              [:div
-               [:div.ui__ac-group-name group]
-               (render-f matched)]
-              (render-f matched)))
-          (render-f matched))]
+          (let [*idx (atom -1)
+                inc-idx #(swap! *idx inc)]
+            (for [[group matched] (group-by :group matched)]
+              (let [matched' (doall (map (fn [item] [(inc-idx) item]) matched))]
+                (if group
+                  [:div
+                   [:div.ui__ac-group-name group]
+                   (render-f matched')]
+                  (render-f matched')))))
+          (render-f (medley/indexed matched)))]
        (when empty-placeholder
          empty-placeholder))]))
 
