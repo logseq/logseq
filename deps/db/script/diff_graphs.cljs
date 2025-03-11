@@ -6,6 +6,7 @@
             [clojure.data :as data]
             [clojure.pprint :as pprint]
             [clojure.string :as string]
+            [logseq.common.config :as common-config]
             #_:clj-kondo/ignore
             [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -24,8 +25,11 @@
   "Options spec"
   {:help {:alias :h
           :desc "Print help"}
-   :timestamps {:alias :t
-                :desc "Include timestamps in export"}})
+   :exclude-namespaces {:alias :e
+                        :coerce #{}
+                        :desc "Namespaces to exclude from properties and classes"}
+   :include-timestamps? {:alias :t
+                         :desc "Include timestamps in export"}})
 
 (defn -main [args]
   (let [{options :opts args' :args} (cli/parse-args args {:spec spec})
@@ -36,10 +40,19 @@
             (js/process.exit 1))
         conn (apply sqlite-cli/open-db! (get-dir-and-db-name graph-dir))
         conn2 (apply sqlite-cli/open-db! (get-dir-and-db-name graph-dir2))
-        export-options {:include-timestamps? (:timestamps options)}
+        export-options (select-keys options [:include-timestamps? :exclude-namespaces])
         export-map (sqlite-export/build-export @conn {:export-type :graph :graph-options export-options})
         export-map2 (sqlite-export/build-export @conn2 {:export-type :graph :graph-options export-options})
-        diff (butlast (data/diff export-map export-map2))]
+        prepare-export-to-diff
+        (fn [m]
+          (-> m
+              (update :classes update-vals (fn [m]
+                                             (update m :build/class-properties sort)))
+              ;; TODO: fix built-in views
+              (update :pages-and-blocks (fn [pbs]
+                                          (vec (remove #(= (:block/title (:page %)) common-config/views-page-name) pbs))))))
+        diff (->> (data/diff (prepare-export-to-diff export-map) (prepare-export-to-diff export-map2))
+                  butlast)]
     (pprint/pprint diff)))
 
 (when (= nbb/*file* (nbb/invoked-file))

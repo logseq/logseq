@@ -1,5 +1,6 @@
 (ns create-graph
-  "A script that creates a DB graph given a sqlite.build EDN file"
+  "A script that creates or updates a DB graph given a sqlite.build EDN file.
+   If the given graph already exists, the EDN file updates the graph."
   (:require ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
@@ -51,6 +52,7 @@
         [dir db-name] (get-dir-and-db-name graph-dir)
         sqlite-build-edn (merge (if (:import options) {} {:auto-create-ontology? true})
                                 (-> (resolve-path edn-path) fs/readFileSync str edn/read-string))
+        graph-exists? (fs/existsSync (node-path/join dir db-name))
         conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath) :import-type :cli/create-graph})
         {:keys [init-tx block-props-tx misc-tx] :as _txs}
         (if (:import options)
@@ -62,7 +64,7 @@
     (d/transact! conn init-tx)
     (when (seq block-props-tx) (d/transact! conn block-props-tx))
     (when (seq misc-tx) (d/transact! conn misc-tx))
-    (println "Created graph" (str db-name "!"))
+    (println (if graph-exists? "Updated graph" "Created graph") (str db-name "!"))
     (when (:validate options)
       (validate-db/validate-db @conn db-name {:group-errors true :closed-maps true :humanize true}))))
 

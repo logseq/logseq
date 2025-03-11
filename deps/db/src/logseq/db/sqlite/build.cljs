@@ -334,7 +334,7 @@
    [:auto-create-ontology? {:optional true} :boolean]
    [:build-existing-tx? {:optional true} :boolean]])
 
-(defn- get-used-properties-from-options
+(defn get-used-properties-from-options
   "Extracts all used properties as a map of properties to their property values. Looks at properties
    from :build/properties and :build/class-properties. Properties from :build/class-properties have
    a ::no-value value"
