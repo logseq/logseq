@@ -8,6 +8,11 @@ module.exports = {
     workers : "./target/workers.js"
   },
 
+  externals: {
+    'react': 'React',
+    'react-dom': 'ReactDOM',
+  },
+
   output: {
     path: path.resolve(__dirname, 'static/js'),
     filename: '[name]-bundle.js',
