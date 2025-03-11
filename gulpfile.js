@@ -66,7 +66,6 @@ const common = {
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'packages/amplify/dist/amplify.js',
         'packages/ui/dist/ui.js',
-        'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
         'node_modules/react/umd/react.production.min.js',
         'node_modules/react/umd/react.development.js',
         'node_modules/react-dom/umd/react-dom.production.min.js',

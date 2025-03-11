@@ -1,6 +1,6 @@
 (ns frontend.worker.db-worker
   "Worker used for browser DB implementation"
-  (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
+  (:require ["@sqlite.org/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [cljs-bean.core :as bean]
             [clojure.edn :as edn]
@@ -68,17 +68,7 @@
 (defn- init-sqlite-module!
   []
   (when-not @*sqlite
-    (p/let [href (.. js/location -href)
-            electron? (string/includes? href "electron=true")
-            publishing? (string/includes? href "publishing=true")
-
-            _ (reset! *publishing? publishing?)
-            base-url (str js/self.location.protocol "//" js/self.location.host)
-            sqlite-wasm-url (if electron?
-                              (js/URL. "sqlite3.wasm" (.. js/location -href))
-                              (str base-url (string/replace js/self.location.pathname "db-worker.js" "")))
-            sqlite (sqlite3InitModule (clj->js {:url sqlite-wasm-url
-                                                :print js/console.log
+    (p/let [sqlite (sqlite3InitModule (clj->js {:print js/console.log
                                                 :printErr js/console.error}))]
       (reset! *sqlite sqlite)
       nil)))

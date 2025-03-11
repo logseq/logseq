@@ -80,12 +80,12 @@
                             {:init-fn frontend.worker.db-worker/init
                              :depends-on #{:shared}
                              :web-worker true
-                             :prepend "importScripts('libs/workers-bundle.js');\n"}
+                             :prepend "importScripts('workers-bundle.js');\n"}
                             :inference-worker
                             {:init-fn frontend.inference-worker.inference-worker/init
                              :depends-on #{:shared}
                              :web-worker true
-                             :prepend "importScripts('libs/workers-bundle.js');\n"}}
+                             :prepend "importScripts('workers-bundle.js');\n"}}
 
             :output-dir       "./static/js"
             :asset-path       "/static/js"

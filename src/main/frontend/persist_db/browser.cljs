@@ -1,5 +1,5 @@
 (ns frontend.persist-db.browser
-  "Browser db persist support, using @logseq/sqlite-wasm.
+  "Browser db persist support, using sqlite-wasm.
 
    This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
