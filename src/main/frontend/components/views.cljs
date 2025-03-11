@@ -1326,7 +1326,7 @@
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
-  [view-parent current-view data {:keys [views items-count set-view-entity! set-views! view-feature-type show-items-count?]} hover?]
+  [view-parent current-view {:keys [views items-count set-view-entity! set-views! view-feature-type show-items-count?]} hover?]
   [:div.views.flex.flex-row.items-center.flex-wrap.gap-2
    (for [view* views]
      (let [view (db/sub-block (:db/id view*))
@@ -1401,7 +1401,7 @@
           [:div.font-medium.opacity-50.text-sm
            (t (or title-key :views.table/default-title)
               (count (:rows table)))]
-          (views-tab view-parent view-entity (:rows table) option hover?))
+          (views-tab view-parent view-entity option hover?))
         [:div.font-medium.opacity-50.text-sm
          (t (or title-key :views.table/default-title)
             (count (:rows table)))])]

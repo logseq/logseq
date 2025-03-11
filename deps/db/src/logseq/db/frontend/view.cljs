@@ -117,7 +117,7 @@
       :else
       entity)))
 
-(defn- row-matched?
+(defn- ^:large-vars/cleanup-todo row-matched?
   [db row filters]
   (let [or? (:or? filters)
         check-f (if or? some every?)]
