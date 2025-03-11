@@ -3390,6 +3390,7 @@
 
 (defn shortcut-up-down [direction]
   (fn [e]
+    (state/pub-event! [:editor/hide-action-bar])
     (when (and (not (auto-complete?))
                (or (in-page-preview?)
                    (not (in-shui-popup?)))

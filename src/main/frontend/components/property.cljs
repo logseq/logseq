@@ -322,7 +322,7 @@
         (:block/title property)]
        (property-key-title block property class-schema?))]))
 
-(rum/defcs property-input < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo property-input < rum/reactive
   (rum/local nil ::ref)
   (rum/local false ::show-new-property-config?)
   (rum/local false ::show-class-select?)
