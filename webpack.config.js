@@ -9,9 +9,9 @@ module.exports = {
   },
 
   output: {
-    path: path.resolve(__dirname, 'static/js/libs'),
+    path: path.resolve(__dirname, 'static/js'),
     filename: '[name]-bundle.js',
-    clean: true,
+    clean: false,
     chunkLoading: false,
   },
   module: {
