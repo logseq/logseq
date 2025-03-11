@@ -116,6 +116,8 @@
                    (do
                      (shui/popup-hide!)
                      (shui/dialog-close!))
+                   (pv/batch-operation?)
+                   nil
                    (and block (= type :checkbox))
                    (p/do!
                     (ui/hide-popups-until-preview-popup!)
@@ -257,36 +259,33 @@
             (reset! *show-new-property-config? false)))))))
 
 (rum/defc property-key-title
-  [block property class-schema? property-position]
-  (let [block-container (state/get-component :block/container)]
-    (shui/trigger-as
-     :a
-     {:tabIndex 0
-      :title (:block/title property)
-      :class "property-k flex select-none jtrigger w-full"
-      :on-pointer-down (fn [^js e]
-                         (when (util/meta-key? e)
-                           (route-handler/redirect-to-page! (:block/uuid property))
-                           (.preventDefault e)))
-      :on-click (fn [^js/MouseEvent e]
-                  (if (state/editing?)
-                    (editor-handler/escape-editing {:select? true})
-                    (shui/popup-show! (.-target e)
-                                      (fn []
-                                        (property-config/dropdown-editor property block {:debug? (.-altKey e)
-                                                                                         :class-schema? class-schema?}))
-                                      {:content-props
-                                       {:class "ls-property-dropdown-editor as-root"
-                                        :onEscapeKeyDown (fn [e]
-                                                           (util/stop e)
-                                                           (shui/popup-hide!)
-                                                           (when-let [input (state/get-input)]
-                                                             (.focus input)))}
-                                       :align "start"
-                                       :as-dropdown? true})))}
-     (if (= :block-below property-position)
-       (:block/title property)
-       (block-container {:property? true} property)))))
+  [block property class-schema?]
+  (shui/trigger-as
+   :a
+   {:tabIndex 0
+    :title (:block/title property)
+    :class "property-k flex select-none jtrigger w-full"
+    :on-pointer-down (fn [^js e]
+                       (when (util/meta-key? e)
+                         (route-handler/redirect-to-page! (:block/uuid property))
+                         (.preventDefault e)))
+    :on-click (fn [^js/MouseEvent e]
+                (if (state/editing?)
+                  (editor-handler/escape-editing {:select? true})
+                  (shui/popup-show! (.-target e)
+                                    (fn []
+                                      (property-config/dropdown-editor property block {:debug? (.-altKey e)
+                                                                                       :class-schema? class-schema?}))
+                                    {:content-props
+                                     {:class "ls-property-dropdown-editor as-root"
+                                      :onEscapeKeyDown (fn [e]
+                                                         (util/stop e)
+                                                         (shui/popup-hide!)
+                                                         (when-let [input (state/get-input)]
+                                                           (.focus input)))}
+                                     :align "start"
+                                     :as-dropdown? true})))}
+   (:block/title property)))
 
 (rum/defc property-key-cp < rum/static
   [block property {:keys [other-position? class-schema? property-position]}]
@@ -324,7 +323,7 @@
        [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
         (:block/title property)]
-       (property-key-title block property class-schema? property-position))]))
+       (property-key-title block property class-schema?))]))
 
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)
