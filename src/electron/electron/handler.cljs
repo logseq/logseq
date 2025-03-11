@@ -123,7 +123,7 @@
       (when (and (chmod-enabled?) (fs/existsSync path) (not (writable? path)))
         (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
-      (fs/statSync path)
+      (utils/fs-stat->clj path)
       (catch :default e
         (logger/warn ::write-file path e)
         (let [backup-path (try
@@ -144,7 +144,7 @@
   (fs/renameSync old-path new-path))
 
 (defmethod handle :stat [_window [_ path]]
-  (fs/statSync path))
+  (utils/fs-stat->clj path))
 
 (defn- get-files
   "Returns vec of file-objs"
@@ -505,7 +505,6 @@
 (defmethod handle :setGitAutoCommit []
   (debounced-configure-auto-commit!)
   nil)
-
 
 (defmethod handle :installMarketPlugin [_ [_ mft]]
   (plugin/install-or-update! mft))
