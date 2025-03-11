@@ -1238,6 +1238,18 @@
                     (state/conj-selection-block! blocks direction)))
               (state/exit-editing-and-set-selected-blocks! blocks direction))))))))
 
+(defonce *action-bar-timeout (atom nil))
+
+(defn show-action-bar!
+  [& {:keys [delay]
+      :or {delay 200}}]
+  (when (config/db-based-graph?)
+    (when-let [timeout @*action-bar-timeout]
+      (js/clearTimeout timeout))
+    (state/pub-event! [:editor/hide-action-bar])
+    (let [timeout (js/setTimeout #(state/pub-event! [:editor/show-action-bar]) delay)]
+      (reset! *action-bar-timeout timeout))))
+
 (defn- select-block-up-down
   [direction]
   (cond
@@ -1275,6 +1287,7 @@
       (when element
         (util/scroll-to-block element)
         (state/drop-last-selection-block!))))
+  (show-action-bar! {:delay 500})
   nil)
 
 (defn on-select-block

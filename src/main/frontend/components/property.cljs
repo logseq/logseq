@@ -14,7 +14,6 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
@@ -271,9 +270,9 @@
                          (.preventDefault e)))
     :on-click (fn [^js/MouseEvent e]
                 (shui/popup-show! (.-target e)
-                                  (fn []
-                                    (property-config/dropdown-editor property block {:debug? (.-altKey e)
-                                                                                     :class-schema? class-schema?}))
+                                  (Fn []
+                                      (property-config/dropdown-editor property block {:debug? (.-altKey e)
+                                                                                       :class-schema? class-schema?}))
                                   {:content-props
                                    {:class "ls-property-dropdown-editor as-root"
                                     :onEscapeKeyDown (fn [e]

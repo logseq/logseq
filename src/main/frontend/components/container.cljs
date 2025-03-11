@@ -925,14 +925,9 @@
   []
   nil)
 
-(defonce *action-bar-timeout (atom nil))
-
 (defn- on-mouse-up
   [_e]
-  (when-let [timeout @*action-bar-timeout]
-    (js/clearTimeout timeout))
-  (let [timeout (js/setTimeout #(state/pub-event! [:editor/show-action-bar]) 200)]
-    (reset! *action-bar-timeout timeout)))
+  (editor-handler/show-action-bar!))
 
 (rum/defcs ^:large-vars/cleanup-todo root-container < rum/reactive
   (mixins/event-mixin
