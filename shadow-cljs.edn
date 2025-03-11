@@ -21,11 +21,8 @@
                                            :global "React"}
                                   "react-dom" {:target :global
                                                :global "ReactDOM"}}} ;; handle `require(xxx.css)`
-        :modules       {:shared
-                        {:entries []}
-                        :main
-                        {:init-fn frontend.core/init
-                         :depends-on #{:shared}}
+        :modules       {:main
+                        {:init-fn frontend.core/init}
                         :code-editor
                         {:entries [frontend.extensions.code]
                          :depends-on #{:main}}
@@ -74,16 +71,12 @@
                             :external-index-format :esm
                             :entry-keys ["module" "browser" "main"]
                             :export-conditions ["module" "import", "browser" "require" "default"]}
-            :modules       {:shared
-                            {:entries []}
-                            :db-worker
+            :modules       {:db-worker
                             {:init-fn frontend.worker.db-worker/init
-                             :depends-on #{:shared}
                              :web-worker true
                              :prepend "importScripts('workers-bundle.js');\n"}
                             :inference-worker
                             {:init-fn frontend.inference-worker.inference-worker/init
-                             :depends-on #{:shared}
                              :web-worker true
                              :prepend "importScripts('workers-bundle.js');\n"}}
 
@@ -157,11 +150,8 @@
                                                   :global "React"}
                                          "react-dom" {:target :global
                                                       :global "ReactDOM"}}}
-               :modules       {:shared
-                               {:entries []}
-                               :main
-                               {:init-fn    frontend.publishing/init
-                                :depends-on #{:shared}}
+               :modules       {:main
+                               {:init-fn    frontend.publishing/init}
                                :code-editor
                                {:entries    [frontend.extensions.code]
                                 :depends-on #{:main}}
