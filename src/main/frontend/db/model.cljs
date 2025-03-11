@@ -838,14 +838,6 @@ independent of format as format specific heading characters are stripped"
        (:block/_tags class))
      (remove ldb/hidden?))))
 
-(defn sub-class-objects
-  [repo class-id]
-  (when class-id
-    (-> (react/q repo [:frontend.worker.react/objects class-id]
-                 {:query-fn (fn [_] (get-class-objects repo class-id))}
-                 nil)
-        react)))
-
 (defn get-property-related-objects
   [repo property-id]
   (when-let [property (db-utils/entity repo property-id)]

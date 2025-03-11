@@ -479,10 +479,7 @@
              (when-not (hidden-or-internal-tag? e)
                e))))))
 
-(defn built-in?
-  "Built-in page or block"
-  [entity]
-  (:logseq.property/built-in? entity))
+(def built-in? entity-util/built-in?)
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
