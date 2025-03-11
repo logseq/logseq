@@ -2047,11 +2047,6 @@ base@^0.11.1:
     mixin-deep "^1.2.0"
     pascalcase "^0.1.1"
 
-batch-processor@1.0.0:
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/batch-processor/-/batch-processor-1.0.0.tgz#75c95c32b748e0850d10c2b168f6bdbe9891ace8"
-  integrity sha512-xoLQD8gmmR32MeuBHgH0Tzd5PuSZx71ZsbhVxOCRbgktZEPe4SQy7s9Z50uPp0F/f7iw2XmkHN2xkgbMfckMDA==
-
 big-integer@1.6.x:
   version "1.6.51"
   resolved "https://registry.yarnpkg.com/big-integer/-/big-integer-1.6.51.tgz#0df92a5d9880560d3ff2d5fd20245c889d130686"
@@ -3518,13 +3513,6 @@ electron@31.7.5:
     "@types/node" "^20.9.0"
     extract-zip "^2.0.1"
 
-element-resize-detector@^1.1.14:
-  version "1.2.4"
-  resolved "https://registry.yarnpkg.com/element-resize-detector/-/element-resize-detector-1.2.4.tgz#3e6c5982dd77508b5fa7e6d5c02170e26325c9b1"
-  integrity sha512-Fl5Ftk6WwXE0wqCgNoseKWndjzZlDCwuPTcoVZfCP9R3EHQF8qUtr3YUPNETegRBOKqQKPW3n4kiIWngGi8tKg==
-  dependencies:
-    batch-processor "1.0.0"
-
 elementtree@^0.1.7:
   version "0.1.7"
   resolved "https://registry.yarnpkg.com/elementtree/-/elementtree-0.1.7.tgz#9ac91be6e52fb6e6244c4e54a4ac3ed8ae8e29c0"
@@ -4022,13 +4010,6 @@ fast-uri@^3.0.1:
   version "3.0.6"
   resolved "https://registry.yarnpkg.com/fast-uri/-/fast-uri-3.0.6.tgz#88f130b77cfaea2378d56bf970dea21257a68748"
   integrity sha512-Atfo14OibSv5wAp4VWNsFYE1AchQRTv9cBGWET4pZWHzYshFSS9NQI6I57rdKn9croWVMbYFbLhJ+yJvmZIIHw==
-
-fastdom@^1.0.9:
-  version "1.0.11"
-  resolved "https://registry.yarnpkg.com/fastdom/-/fastdom-1.0.11.tgz#f22984f9df6b9a6081e5ce2e49cfb5525daf198a"
-  integrity sha512-jl9MwXDFxhg354W4E3s1UMsLh3HWFuVMQiRUlXpHckcHRXQvUe76yzBf1Z7b+x5Ci4TUJ1KmynI9alGUXG95IQ==
-  dependencies:
-    strictdom "^1.0.1"
 
 fastest-levenshtein@^1.0.12:
   version "1.0.16"
@@ -5966,7 +5947,7 @@ lodash.uniq@^4.5.0:
   resolved "https://registry.yarnpkg.com/lodash.uniq/-/lodash.uniq-4.5.0.tgz#d0225373aeb652adc1bc82e4945339a842754773"
   integrity sha512-xfBaXQd9ryd9dlSDvnvI0lvxfLJlYAZzXomUYzLKtUeOQvOP5piqAWuGtrhWeqaXK9hhoM/iyJc5AV+XfsX3HQ==
 
-lodash@^4.17.10, lodash@^4.17.21:
+lodash@^4.17.21:
   version "4.17.21"
   resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz#679591c564c3bffaae8454cf0b3df370c3d6911c"
   integrity sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==
@@ -7994,16 +7975,6 @@ react-resizable@1.x:
     prop-types "15.x"
     react-draggable "^4.0.3"
 
-react-resize-context@3.0.0:
-  version "3.0.0"
-  resolved "https://registry.yarnpkg.com/react-resize-context/-/react-resize-context-3.0.0.tgz#fb3c3d24a8c1cbe86d3e1b1da72a9952e462a031"
-  integrity sha512-ocDhYfPgFxaPvKdtouwIxNwGBWbCTTrzjY/wK941ng3XyfWd/wQOh/GnJRTMZpcjrKSnK7OgIVTbJZJRxM/QAA==
-  dependencies:
-    element-resize-detector "^1.1.14"
-    fastdom "^1.0.9"
-    lodash "^4.17.10"
-    shallowequal "^1.1.0"
-
 react-textarea-autosize@8.3.3:
   version "8.3.3"
   resolved "https://registry.yarnpkg.com/react-textarea-autosize/-/react-textarea-autosize-8.3.3.tgz#f70913945369da453fd554c168f6baacd1fa04d8"
@@ -8672,11 +8643,6 @@ shallow-clone@^3.0.0:
   dependencies:
     kind-of "^6.0.2"
 
-shallowequal@^1.1.0:
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/shallowequal/-/shallowequal-1.1.0.tgz#188d521de95b9087404fd4dcb68b13df0ae4e7f8"
-  integrity sha512-y0m1JoUZSlPAjXVtPPW70aZWfIL/dSP7AFkRnniLCrK/8MDKog3TySTBmckD+RObVxH0v4Tox67+F14PdED2oQ==
-
 sharp@^0.33.5:
   version "0.33.5"
   resolved "https://registry.yarnpkg.com/sharp/-/sharp-0.33.5.tgz#13e0e4130cc309d6a9497596715240b2ec0c594e"
@@ -9055,11 +9021,6 @@ streamroller@^3.1.5:
     date-format "^4.0.14"
     debug "^4.3.4"
     fs-extra "^8.1.0"
-
-strictdom@^1.0.1:
-  version "1.0.1"
-  resolved "https://registry.yarnpkg.com/strictdom/-/strictdom-1.0.1.tgz#189de91649f73d44d59b8432efa68ef9d2659460"
-  integrity sha512-cEmp9QeXXRmjj/rVp9oyiqcvyocWab/HaoN4+bwFeZ7QzykJD6L3yD4v12K1x0tHpqRqVpJevN3gW7kyM39Bqg==
 
 "string-width-cjs@npm:string-width@^4.2.0":
   version "4.2.3"

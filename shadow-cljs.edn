@@ -71,14 +71,17 @@
                             :external-index-format :esm
                             :entry-keys ["module" "browser" "main"]
                             :export-conditions ["module" "import", "browser" "require" "default"]}
-            :modules       {:db-worker
+            :modules       {:shared {:entries []}
+                            :db-worker
                             {:init-fn frontend.worker.db-worker/init
                              :web-worker true
-                             :prepend "importScripts('workers-bundle.js');\n"}
+                             :prepend "importScripts('workers-bundle.js');\n"
+                             :depends-on #{:shared}}
                             :inference-worker
                             {:init-fn frontend.inference-worker.inference-worker/init
                              :web-worker true
-                             :prepend "importScripts('workers-bundle.js');\n"}}
+                             :prepend "importScripts('workers-bundle.js');\n"
+                             :depends-on #{:shared}}}
 
             :output-dir       "./static/js"
             :asset-path       "/static/js"
