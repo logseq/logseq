@@ -216,7 +216,9 @@
       :all-pages
       (keep (fn [d]
               (let [e (d/entity db (:e d))]
-                (when-not (hidden-or-internal-tag? e)
+                (when-not (or (hidden-or-internal-tag? e)
+                              (entity-util/property? e)
+                              (entity-util/built-in? e))
                   e)))
             (d/datoms db :avet property-ident))
       :class-objects
