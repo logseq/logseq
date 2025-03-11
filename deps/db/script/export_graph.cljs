@@ -32,11 +32,14 @@
   "Options spec"
   {:help {:alias :h
           :desc "Print help"}
-   :timestamps {:alias :t
-                :desc "Include timestamps in export"}
+   :include-timestamps? {:alias :t
+                         :desc "Include timestamps in export"}
    :file {:alias :f
           :desc "Saves edn to file"}
-   :export-options {:alias :e
+   :exclude-namespaces {:alias :e
+                        :coerce #{}
+                        :desc "Namespaces to exclude from properties and classes"}
+   :export-options {:alias :E
                     :desc "Raw options map to pass to export"}})
 
 (defn -main [args]
@@ -48,7 +51,7 @@
             (js/process.exit 1))
         [dir db-name] (get-dir-and-db-name graph-dir)
         conn (sqlite-cli/open-db! dir db-name)
-        export-options (merge {:include-timestamps? (:timestamps options)}
+        export-options (merge (select-keys options [:include-timestamps? :exclude-namespaces])
                               (edn/read-string (:export-options options)))
         export-map (sqlite-export/build-export @conn {:export-type :graph :graph-options export-options})]
     (when (:file options)

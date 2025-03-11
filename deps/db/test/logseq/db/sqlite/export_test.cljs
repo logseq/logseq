@@ -530,7 +530,7 @@
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
 
 (defn- build-original-graph-data
-  []
+  [& {:keys [exclude-namespaces?]}]
   (let [internal-block-uuid (random-uuid)
         favorited-uuid (random-uuid)
         block-pvalue-uuid (random-uuid)
@@ -546,7 +546,9 @@
          {:user.property/num {:logseq.property/type :number
                               :block/uuid property-uuid
                               :build/keep-uuid? true
-                              :build/properties {:user.property/node #{[:block/uuid property-pvalue-uuid]}}}
+                              :build/properties (if exclude-namespaces?
+                                                  {}
+                                                  {:user.property/node #{[:block/uuid property-pvalue-uuid]}})}
           :user.property/default-closed
           {:logseq.property/type :default
            :build/closed-values [{:value "joy" :uuid closed-value-uuid}
@@ -585,10 +587,11 @@
                      :build/tags [:user.class/MyClass]
                      :block/uuid block-pvalue-uuid
                      :build/keep-uuid? true}
-                    {:block/title "myclass object 2"
-                     :build/tags [:user.class/MyClass]
-                     :block/uuid property-pvalue-uuid
-                     :build/keep-uuid? true}
+                    (cond-> {:block/title "myclass object 2"
+                             :build/tags [:user.class/MyClass]}
+                      (not exclude-namespaces?)
+                      (merge {:block/uuid property-pvalue-uuid
+                              :build/keep-uuid? true}))
                     {:block/title "myclass object 3"
                      :build/tags [:user.class/MyClass]
                      :block/uuid page-pvalue-uuid
@@ -653,7 +656,7 @@
     (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
         "All :file/path entities are imported")))
 
-(deftest ^:focus2 import-graph-with-timestamps
+(deftest import-graph-with-timestamps
   (let [original-data* (build-original-graph-data)
         original-data (-> original-data*
                           (update :pages-and-blocks
@@ -687,5 +690,20 @@
     (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))
+    (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
+        "All :file/path entities are imported")))
+
+(deftest ^:focus2 import-graph-with-exclude-namespaces
+  (let [original-data (build-original-graph-data {:exclude-namespaces? true})
+        conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
+        _ (d/transact! conn (::sqlite-export/graph-files original-data))
+        conn2 (db-test/create-conn-with-blocks
+               {:properties (update-vals (:properties original-data) #(dissoc % :build/properties))
+                :classes (update-vals (:classes original-data) #(dissoc % :build/properties))})
+        imported-graph (export-graph-and-import-to-another-graph conn conn2 {:exclude-namespaces #{:user}})]
+
+    ;; (cljs.pprint/pprint (butlast (clojure.data/diff (sort-pages-and-blocks (:pages-and-blocks original-data))
+    ;;                                                 (:pages-and-blocks imported-graph))))
+    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
     (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
         "All :file/path entities are imported")))

@@ -2,6 +2,7 @@
   "Builds sqlite.build EDN to represent nodes in a graph-agnostic way.
    Useful for exporting and importing across DB graphs"
   (:require [clojure.set :as set]
+            [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
@@ -456,18 +457,26 @@
 
 (defn- build-graph-ontology-export
   "Exports a graph's tags and properties"
-  [db options]
-  (let [user-property-idents (d/q '[:find [?db-ident ...]
+  [db {:keys [exclude-namespaces] :as options}]
+  (let [exclude-regex (when (seq exclude-namespaces)
+                        (re-pattern (str "^("
+                                         (string/join "|" (map name exclude-namespaces))
+                                         ")(\\.|$)")))
+        user-property-idents (d/q '[:find [?db-ident ...]
                                     :where [?p :db/ident ?db-ident]
                                     [?p :block/tags :logseq.class/Property]
                                     (not [?p :logseq.property/built-in?])]
                                   db)
+        user-property-idents (if (seq exclude-namespaces)
+                               (remove #(re-find exclude-regex (namespace %)) user-property-idents)
+                               user-property-idents)
         properties (build-export-properties db user-property-idents (merge options {:include-properties? true}))
         class-ents (->> (d/q '[:find [?class ...]
                                :where [?class :block/tags :logseq.class/Tag]
                                (not [?class :logseq.property/built-in?])]
                              db)
-                        (map #(d/entity db %)))
+                        (map #(d/entity db %))
+                        (remove #(and (seq exclude-namespaces) (re-find exclude-regex (namespace (:db/ident %))))))
         classes
         (->> class-ents
              (map (fn [ent]
@@ -504,7 +513,10 @@
                                (build-page-export* db eid page-blocks* (merge options {:include-uuid-fn (constantly true)}))))
                            page-ids)
         pages-export (apply merge-export-maps page-exports)
-        pages-export' (assoc pages-export :pvalue-uuids (set (mapcat :pvalue-uuids page-exports)))]
+        pages-export' (-> pages-export
+                          (assoc :pvalue-uuids (set (mapcat :pvalue-uuids page-exports)))
+                          ;; TODO: Remove when exports in this fn no longer generate any ontologies
+                          (dissoc :classes :properties))]
     pages-export'))
 
 (defn- build-graph-files
@@ -537,9 +549,28 @@
    (sort-by #(or (get-in % [:page :block/title]) (get-in % [:page :block/title]))
             pages-and-blocks)))
 
+(defn- add-ontology-for-include-namespaces
+  "Adds :properties to export for given namespace parents. Current use case is for :exclude-namespaces
+   so no need to add :classes yet"
+  [db {::keys [auto-include-namespaces] :as graph-export}]
+  (let [include-regex (re-pattern (str "^("
+                                       (string/join "|" (map name auto-include-namespaces))
+                                       ")(\\.|$)"))
+        used-properties
+        (->> (sqlite-build/get-used-properties-from-options graph-export)
+             keys
+             (remove db-property/logseq-property?)
+             (filter #(re-find include-regex (namespace %)))
+             (map #(vector % (select-keys (d/entity db %) [:logseq.property/type :db/cardinality])))
+             (into {}))]
+    (merge-export-maps graph-export {:properties used-properties})))
+
 (defn- build-graph-export
   "Exports whole graph. Has the following options:
-   * :include-timestamps? - When set timestamps are included on all blocks"
+   * :include-timestamps? - When set timestamps are included on all blocks
+   * :exclude-namespaces - A set of parent namespaces to exclude from properties and classes.
+     This is useful for graphs seeded with an ontology e.g. schema.org as it eliminates noisy and needless
+     export+import"
   [db options*]
   (let [options (merge options* {:property-value-uuids? true})
         content-ref-uuids (get-graph-content-ref-uuids db)
@@ -548,7 +579,10 @@
         ontology-pvalue-uuids (set (concat (mapcat get-pvalue-uuids (vals (:properties ontology-export)))
                                            (mapcat get-pvalue-uuids (vals (:classes ontology-export)))))
         pages-export (build-graph-pages-export db options)
-        graph-export (merge-export-maps ontology-export pages-export)
+        graph-export* (merge-export-maps ontology-export pages-export)
+        graph-export (if (seq (:exclude-namespaces options))
+                         (assoc graph-export* ::auto-include-namespaces (:exclude-namespaces options))
+                         graph-export*)
         all-ref-uuids (set/union content-ref-uuids ontology-pvalue-uuids (:pvalue-uuids pages-export))
         files (build-graph-files db options)
         ;; Remove all non-ref uuids after all nodes are built.
@@ -601,11 +635,14 @@
 
 (defn- ensure-export-is-valid
   "Checks that export map is usable by sqlite.build including checking that
-   all referenced properties and classes are defined"
-  [export-map]
-  (sqlite-build/validate-options export-map)
+   all referenced properties and classes are defined. Checks related to properties and
+   classes are disabled when :exclude-namespaces is set because those checks can't be done"
+  [export-map {:keys [graph-options]}]
+  (when-not (seq (:exclude-namespaces graph-options)) (sqlite-build/validate-options export-map))
   (let [undefined-uuids (find-undefined-uuids export-map)
-        undefined (cond-> (find-undefined-classes-and-properties export-map)
+        undefined (cond-> {}
+                    (empty? (:exclude-namespaces graph-options))
+                    (merge (find-undefined-classes-and-properties export-map))
                     (seq undefined-uuids)
                     (assoc :uuids undefined-uuids))]
     (when (seq undefined)
@@ -627,7 +664,7 @@
           (build-graph-ontology-export db {})
           :graph
           (build-graph-export db (:graph-options options)))]
-    (ensure-export-is-valid (dissoc export-map ::block ::graph-files))
+    (ensure-export-is-valid (dissoc export-map ::block ::graph-files) options)
     export-map))
 
 ;; Import fns
@@ -711,13 +748,17 @@
   (let [export-map (if (and (::block export-map*) current-block)
                      (build-block-import-options current-block export-map*)
                      export-map*)
+        export-map' (if (seq (::auto-include-namespaces export-map*))
+                      (merge (select-keys export-map [::graph-files])
+                             (add-ontology-for-include-namespaces db export-map))
+                      export-map)
         property-conflicts (atom [])
-        export-map' (check-for-existing-entities db export-map property-conflicts)]
+        export-map'' (check-for-existing-entities db export-map' property-conflicts)]
     (if (seq @property-conflicts)
       (do
         (js/console.error :property-conflicts @property-conflicts)
         {:error (str "The following imported properties conflict with the current graph: "
                      (pr-str (mapv :property-id @property-conflicts)))})
-      (cond-> (sqlite-build/build-blocks-tx (dissoc export-map' ::graph-files))
-        (seq (::graph-files export-map'))
-        (assoc :misc-tx (::graph-files export-map'))))))
+      (cond-> (sqlite-build/build-blocks-tx (dissoc export-map'' ::graph-files))
+        (seq (::graph-files export-map''))
+        (assoc :misc-tx (::graph-files export-map''))))))
