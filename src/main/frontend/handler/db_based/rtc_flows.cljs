@@ -99,7 +99,10 @@ conditions:
      flows/current-repo-flow)
     (m/eduction
      (keep (fn [repo] (when repo [:trigger-rtc repo])))
-     (m/watch *rtc-start-trigger))]
+     (m/watch *rtc-start-trigger))
+    (m/eduction
+     (keep (fn [visibility] (when (= "visible" visibility) [:document-visible])))
+     flows/document-visibility-state-flow)]
    (apply c.m/mix)
    (m/eduction (filter (fn [_] (some? (state/get-auth-id-token)))))
    (c.m/debounce 200)))
