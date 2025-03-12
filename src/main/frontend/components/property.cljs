@@ -178,6 +178,7 @@
                          :value (:block/uuid x)
                          :group "Tags"}) classes))]
       [:div.ls-property-add.flex.flex-row.items-center.property-key
+       {:data-keep-selection true}
        [:div.ls-property-key
         (select/select (merge
                         {:items items

@@ -357,6 +357,7 @@
                          (.focus input))
                        (util/scroll-to (rum/deref *result-ref) 0 false))))]
     [:div.cp__emoji-icon-picker
+     {:data-keep-selection true}
      ;; header
      [:div.hd.bg-popover
       (tab-observer @*tab {:reset-q! reset-q!})
