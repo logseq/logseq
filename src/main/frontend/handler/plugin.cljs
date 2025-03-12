@@ -666,9 +666,10 @@
   (when (and type (fn? f))
     (when config/lsp-enabled?
       (hook-plugin-app (str :before-command-invoked type) nil))
-    (apply f args)
-    (when config/lsp-enabled?
-      (hook-plugin-app (str :after-command-invoked type) nil))))
+    (let [result (apply f args)]
+      (when config/lsp-enabled?
+        (hook-plugin-app (str :after-command-invoked type) nil))
+      result)))
 
 ;; components
 (rum/defc lsp-indicator < rum/reactive
