@@ -151,7 +151,6 @@
         (logger/warn "Unknown PAC rule:" line)
         nil))))
 
-
 (defn <get-system-proxy
   "Get system proxy for url, requires proxy to be set to system"
   ([] (<get-system-proxy "https://www.google.com"))
@@ -295,3 +294,10 @@
     (catch :default _
       (println "decodeURIComponent failed: " uri)
       uri)))
+
+(defn fs-stat->clj
+  [path]
+  (let [stat (fs/statSync path)]
+    {:size (.-size stat)
+     :mtime (.-mtime stat)
+     :ctime (.-ctime stat)}))

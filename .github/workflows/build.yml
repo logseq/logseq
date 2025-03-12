@@ -20,7 +20,7 @@ env:
 jobs:
   typos:
     name: Spell Check with Typos
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout Actions Repository
         uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
   test:
     strategy:
       matrix:
-        operating-system: [ubuntu-latest]
+        operating-system: [ubuntu-22.04]
 
     runs-on: ${{ matrix.operating-system }}
 
@@ -90,7 +90,7 @@ jobs:
         run: node static/tests.js -e fix-me
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
@@ -180,7 +180,7 @@ jobs:
   e2e-test:
     # TODO: Re-enable when ready to enable tests for file graphs
     if: false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
