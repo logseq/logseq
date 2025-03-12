@@ -25,6 +25,11 @@
 
 (def to-ws-op-schema
   [:multi {:dispatch first :decode/string #(update % 0 keyword)}
+   [:update-kv-value
+    [:cat :keyword
+     [:map
+      [:db-ident :keyword]
+      [:value :string]]]]
    [:move
     [:cat :keyword
      [:map
@@ -356,4 +361,4 @@
 (def data-to-ws-coercer (m/coercer data-to-ws-schema mt/string-transformer nil
                                    #(do
                                       (log/error ::data-to-ws-schema %)
-                                      (m/-fail! ::data-to-ws-schema %))))
+                                      (m/-fail! ::data-to-ws-schema (select-keys % [:value])))))

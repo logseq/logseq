@@ -11,6 +11,7 @@
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
+            [frontend.worker.rtc.migrate :as r.migrate]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton]
             [frontend.worker.rtc.ws :as ws]
@@ -157,6 +158,24 @@
        ws-state (assoc :ws-state ws-state)))
    (m/reductions {} nil ws-state-flow)))
 
+(defn- add-migration-client-ops!
+  [repo db server-schema-version]
+  (when server-schema-version
+    (let [client-schema-version (ldb/get-graph-schema-version db)
+          added-ops (r.migrate/add-migration-client-ops! repo db server-schema-version client-schema-version)]
+      (when (seq added-ops)
+        (log/info :add-migration-client-ops
+                  {:repo repo
+                   :server-schema-version server-schema-version
+                   :client-schema-version client-schema-version})))))
+
+(defn- update-remote-schema-version!
+  [conn server-schema-version]
+  (when server-schema-version
+    (d/transact! conn [(ldb/kv :logseq.kv/remote-schema-version server-schema-version)]
+                 {:gen-undo-ops? false
+                  :persist-op? false})))
+
 (defonce ^:private *rtc-lock (atom nil))
 (defn- holding-rtc-lock
   "Use this fn to prevent multiple rtc-loops at same time.
@@ -188,15 +207,16 @@
         *last-calibrate-t          (atom nil)
         *online-users              (atom nil)
         *assets-sync-loop-canceler (atom nil)
+        *server-schema-version     (atom nil)
         started-dfv                (m/dfv)
         add-log-fn                 (fn [type message]
                                      (assert (map? message) message)
                                      (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))
         {:keys [*current-ws get-ws-create-task]}
         (gen-get-ws-create-map--memoized ws-url)
-        get-ws-create-task         (r.client/ensure-register-graph-updates
-                                    get-ws-create-task graph-uuid major-schema-version
-                                    repo conn *last-calibrate-t *online-users add-log-fn)
+        get-ws-create-task (r.client/ensure-register-graph-updates
+                            get-ws-create-task graph-uuid major-schema-version
+                            repo conn *last-calibrate-t *online-users *server-schema-version add-log-fn)
         {:keys [assets-sync-loop-task]}
         (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid major-schema-version conn *auto-push?)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push? *online-users)]
@@ -214,6 +234,8 @@
           ;; init run to open a ws
           (m/? get-ws-create-task)
           (started-dfv true)
+          (update-remote-schema-version! conn @*server-schema-version)
+          (add-migration-client-ops! repo @conn @*server-schema-version)
           (reset! *assets-sync-loop-canceler
                   (c.m/run-task assets-sync-loop-task :assets-sync-loop-task))
           (->>
