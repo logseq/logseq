@@ -1,12 +1,12 @@
 (ns frontend.components.selection
   "Block selection"
-  (:require [frontend.handler.editor :as editor-handler]
+  (:require [frontend.config :as config]
+            [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]
-            [frontend.config :as config]))
+            [rum.core :as rum]))
 
 (rum/defc action-bar
   [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border?]
@@ -17,9 +17,9 @@
                   (or on-copy #(editor-handler/copy-selection-blocks true)))
         button-opts {:variant :outline
                      :size :sm
-                     :class (str "px-2 py-1 text-xs text-muted-foreground"
+                     :class (str "p-2 text-xs h-8"
                                  (when-not button-border?
-                                   "border-y-0"))}
+                                   " !border-b-0"))}
         db-graph? (config/db-based-graph?)]
     [:div.selection-action-bar
      (shui/button-group
