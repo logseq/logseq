@@ -2,13 +2,13 @@
     "A script that dumps all eavt datoms to a specified edn file
 
      $ yarn -s nbb-logseq script/dump_datoms.cljs db-name datoms.edn"
-    (:require [datascript.core :as d]
-              [clojure.pprint :as pprint]
-              [logseq.db.sqlite.cli :as sqlite-cli]
-              [nbb.core :as nbb]
-              ["path" :as path]
+    (:require ["fs" :as fs]
               ["os" :as os]
-              ["fs" :as fs]))
+              ["path" :as path]
+              [clojure.pprint :as pprint]
+              [datascript.core :as d]
+              [logseq.db.sqlite.cli :as sqlite-cli]
+              [nbb.core :as nbb]))
 
 (defn read-graph
   "The db graph bare version of gp-cli/parse-graph"

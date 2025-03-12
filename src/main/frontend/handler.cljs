@@ -5,6 +5,7 @@
             [electron.ipc :as ipc]
             [electron.listener :as el]
             [frontend.components.block :as block]
+            [frontend.components.content :as cp-content]
             [frontend.components.editor :as editor]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
@@ -16,8 +17,8 @@
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.events :as events]
-            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.file-based.events]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -127,6 +128,7 @@
   (state/set-component! :block/inline-text block/inline-text)
   (state/set-component! :block/asset-cp block/asset-cp)
   (state/set-component! :editor/box editor/box)
+  (state/set-component! :selection/context-menu cp-content/custom-context-menu-content)
   (command-palette/register-global-shortcut-commands))
 
 (defn- get-system-info

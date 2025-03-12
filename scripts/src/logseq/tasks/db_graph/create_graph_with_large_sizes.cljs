@@ -1,11 +1,11 @@
 (ns logseq.tasks.db-graph.create-graph-with-large-sizes
   "Script that generates graphs at large sizes"
-  (:require [logseq.outliner.cli :as outliner-cli]
+  (:require ["os" :as os]
+            ["path" :as node-path]
+            [babashka.cli :as cli]
             [clojure.string :as string]
             [datascript.core :as d]
-            [babashka.cli :as cli]
-            ["path" :as node-path]
-            ["os" :as os]
+            [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]))
 
