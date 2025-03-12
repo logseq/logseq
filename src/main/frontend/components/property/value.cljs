@@ -217,13 +217,14 @@
           (property-handler/batch-set-block-property! repo block-ids property-id property-value)))
       (when (seq (:view/selected-blocks @state/state))
         (notification/show! "Property updated!" :success))
-      (cond
-        exit-edit?
-        (do
-          (ui/hide-popups-until-preview-popup!)
-          (shui/dialog-close!))
-        selected?
-        (shui/popup-hide!))
+      (when-not many?
+        (cond
+          exit-edit?
+          (do
+            (ui/hide-popups-until-preview-popup!)
+            (shui/dialog-close!))
+          selected?
+          (shui/popup-hide!)))
       (when-not (or many? checkbox?)
         (when-let [input (state/get-input)]
           (.focus input)))
@@ -1226,7 +1227,7 @@
                            (do (some-> (rum/deref *el) (.click))
                                (util/stop e))
                            :dune))
-          :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2"}
+          :class "flex flex-1 flex-row items-center flex-wrap gap-1"}
          (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
            (if (and (seq items) not-empty-value?)
              (concat

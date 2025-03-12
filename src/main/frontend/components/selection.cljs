@@ -36,17 +36,17 @@
        (assoc button-opts
               :on-pointer-down (fn [e]
                                  (util/stop e)
-                                 (state/pub-event! [:editor/new-property {:target (.-target e)
-                                                                          :selected-blocks selected-blocks
-                                                                          :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
-       "Set property")
+                                 (on-copy)
+                                 (state/pub-event! [:editor/hide-action-bar])))
+       "Copy")
       (shui/button
        (assoc button-opts
               :on-pointer-down (fn [e]
                                  (util/stop e)
-                                 (on-copy)
-                                 (state/pub-event! [:editor/hide-action-bar])))
-       "Copy")
+                                 (state/pub-event! [:editor/new-property {:target (.-target e)
+                                                                          :selected-blocks selected-blocks
+                                                                          :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
+       "Set property")
       (shui/button
        (assoc button-opts
               :on-pointer-down (fn [e]
