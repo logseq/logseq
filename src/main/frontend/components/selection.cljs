@@ -59,6 +59,7 @@
                                    (state/pub-event! [:editor/new-property {:target (.-target e)
                                                                             :selected-blocks selected-blocks
                                                                             :remove-property? true
+                                                                            :select-opts {:show-new-when-not-exact-match? false}
                                                                             :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
          "Unset property"))
       (shui/button
