@@ -270,9 +270,9 @@
                          (.preventDefault e)))
     :on-click (fn [^js/MouseEvent e]
                 (shui/popup-show! (.-target e)
-                                  (Fn []
-                                      (property-config/dropdown-editor property block {:debug? (.-altKey e)
-                                                                                       :class-schema? class-schema?}))
+                                  (fn []
+                                    (property-config/dropdown-editor property block {:debug? (.-altKey e)
+                                                                                     :class-schema? class-schema?}))
                                   {:content-props
                                    {:class "ls-property-dropdown-editor as-root"
                                     :onEscapeKeyDown (fn [e]
