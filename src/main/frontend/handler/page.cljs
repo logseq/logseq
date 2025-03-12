@@ -14,12 +14,13 @@
             [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.fs :as fs]
-            [frontend.handler.common :as common-handler]
+            ;; [frontend.handler.common :as common-handler]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -44,8 +45,7 @@
             [logseq.db :as ldb]
             [logseq.graph-parser.db :as gp-db]
             [logseq.graph-parser.text :as text]
-            [promesa.core :as p]
-            [frontend.handler.file-based.page-property :as file-page-property]))
+            [promesa.core :as p]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
@@ -229,20 +229,21 @@
       (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)}))
     opts)))
 
-(defn get-all-pages
-  [repo]
-  (let [db-based? (config/db-based-graph? repo)
-        graph-specific-hidden?
-        (if db-based?
-          (fn [p]
-            (and (ldb/property? p) (ldb/built-in? p)))
-          (fn [p]
-            (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
-    (cond->>
-     (->> (db/get-all-pages repo)
-          (remove graph-specific-hidden?))
-      (not db-based?)
-      (common-handler/fix-pages-timestamps))))
+(comment
+  (defn get-all-pages
+    [repo]
+    (let [db-based? (config/db-based-graph? repo)
+          graph-specific-hidden?
+          (if db-based?
+            (fn [p]
+              (and (ldb/property? p) (ldb/built-in? p)))
+            (fn [p]
+              (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
+      (cond->>
+       (->> (db/get-all-pages repo)
+            (remove graph-specific-hidden?))
+        (not db-based?)
+        (common-handler/fix-pages-timestamps)))))
 
 (defn get-filters
   [page]
