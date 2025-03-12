@@ -11,7 +11,8 @@
   [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border?]
       :or {on-cut #(editor-handler/cut-selection-blocks true)}}]
   (let [on-copy (if (and selected-blocks (nil? on-copy))
-                  #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks})
+                  #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks
+                                                               :page-title-only? true})
                   (or on-copy #(editor-handler/copy-selection-blocks true)))
         button-opts {:variant :outline
                      :size :sm

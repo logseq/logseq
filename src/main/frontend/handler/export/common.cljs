@@ -5,6 +5,7 @@
   (:refer-clojure :exclude [map filter mapcat concat remove])
   (:require [cljs.core.match :refer [match]]
             [clojure.string :as string]
+            [frontend.common.file.core :as common-file]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
             [frontend.modules.file.core :as outliner-file]
@@ -12,11 +13,10 @@
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
-            [frontend.common.file.core :as common-file]
+            [logseq.db :as ldb]
             [malli.core :as m]
             [malli.util :as mu]
-            [promesa.core :as p]
-            [logseq.db :as ldb]))
+            [promesa.core :as p]))
 
 ;;; TODO: split frontend.handler.export.text related states
 (def ^:dynamic *state*
@@ -64,8 +64,14 @@
       (outliner-file/tree->file-content {:init-level init-level})))
 
 (defn root-block-uuids->content
-  [repo root-block-uuids]
-  (let [contents (mapv #(get-blocks-contents repo %) root-block-uuids)]
+  [repo root-block-uuids & {:keys [page-title-only?]}]
+  (let [contents (mapv (fn [id]
+                         (if-let [page (and page-title-only?
+                                            (let [e (db/entity [:block/uuid id])]
+                                              (when (:block/name e)
+                                                e)))]
+                           (:block/title page)
+                           (get-blocks-contents repo id))) root-block-uuids)]
     (string/join "\n" (mapv string/trim-newline contents))))
 
 (declare remove-block-ast-pos Properties-block-ast?)
