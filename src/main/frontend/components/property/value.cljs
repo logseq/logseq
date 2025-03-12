@@ -214,12 +214,7 @@
            (<set-class-as-property! repo property))
          (db-property-handler/class-add-property! (:db/id block) property-id))
         (let [block-ids (map :block/uuid blocks)]
-          (if (and (db-property-type/all-ref-property-types (:logseq.property/type property))
-                   (string? property-value))
-            (p/let [new-block (<create-new-block! block (db/entity property-id) property-value {:edit-block? false})]
-              (property-handler/batch-set-block-property! repo block-ids property-id (:db/id new-block))
-              new-block)
-            (property-handler/batch-set-block-property! repo block-ids property-id property-value))))
+          (property-handler/batch-set-block-property! repo block-ids property-id property-value)))
       (when (seq (:view/selected-blocks @state/state))
         (notification/show! "Property updated!" :success))
       (cond
