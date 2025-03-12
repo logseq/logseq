@@ -1085,7 +1085,7 @@
          (selection/action-bar))
        {:id :selection-action-bar
         :content-props {:side "top"
-                        :class "!py-0 !px-0"}
+                        :class "!py-0 !px-0 !border-none"}
         :auto-side? false
         :align :start}))))
 

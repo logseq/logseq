@@ -409,11 +409,7 @@
   [table selected-rows {:keys [on-delete-rows]}]
   (shui/table-actions
    {}
-   (shui/button
-    {:variant "ghost"
-     :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
-     :disabled true}
-    (str (count selected-rows) " selected"))
+   [:div (str (count selected-rows) " selected")]
    (selection/action-bar
     {:on-cut #(on-delete-rows table selected-rows)
      :selected-blocks selected-rows
