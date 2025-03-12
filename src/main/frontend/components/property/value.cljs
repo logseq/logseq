@@ -1253,7 +1253,7 @@
     (multiple-values-inner block property value' opts)))
 
 (rum/defcs property-value < rum/reactive db-mixins/query
-  [state block property {:keys [show-tooltip? p-block p-property]
+  [state block property {:keys [show-tooltip? p-block p-property editing?]
                          :as opts}]
   (ui/catch-error
    (ui/block-error "Something wrong" {})
@@ -1311,7 +1311,7 @@
                          (properties-cp {} block {:selected? false
                                                   :class-schema? true})
 
-                         (and multiple-values? (contains? #{:default :url} type) (not closed-values?))
+                         (and multiple-values? (contains? #{:default :url} type) (not closed-values?) (not editing?))
                          (property-normal-block-value block property v)
 
                          multiple-values?
