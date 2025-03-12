@@ -15,6 +15,7 @@
             [frontend.db.model :as db-model]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
             [frontend.hooks :as hooks]
@@ -213,49 +214,55 @@
                    :size 15})))
 
 (defn- property-input-on-chosen
-  [block *property *property-key *show-new-property-config? {:keys [class-schema?]}]
+  [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property?]}]
   (fn [{:keys [value label]}]
     (reset! *property-key (if (uuid? value) label value))
     (let [property (when (uuid? value) (db/entity [:block/uuid value]))
-          batch? (pv/batch-operation?)]
-      (when (and *show-new-property-config? (not (ldb/property? property)))
-        (reset! *show-new-property-config? true))
-      (reset! *property property)
-      (when property
-        (let [add-class-property? (and (ldb/class? block) class-schema?)
-              type (:logseq.property/type property)
-              default-or-url? (and (contains? #{:default :url} type)
-                                   (not (seq (:property/closed-values property))))]
-          (cond
-            add-class-property?
-            (p/do!
-             (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?})
-             (shui/popup-hide!)
-             (shui/dialog-close!))
+          batch? (pv/batch-operation?)
+          repo (state/get-current-repo)]
+      (if (and property remove-property?)
+        (let [block-ids (map :block/uuid (pv/get-operating-blocks block))]
+          (property-handler/batch-remove-block-property! repo block-ids (:db/ident property))
+          (shui/popup-hide!))
+        (do
+          (when (and *show-new-property-config? (not (ldb/property? property)))
+            (reset! *show-new-property-config? true))
+          (reset! *property property)
+          (when property
+            (let [add-class-property? (and (ldb/class? block) class-schema?)
+                  type (:logseq.property/type property)
+                  default-or-url? (and (contains? #{:default :url} type)
+                                       (not (seq (:property/closed-values property))))]
+              (cond
+                add-class-property?
+                (p/do!
+                 (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?})
+                 (shui/popup-hide!)
+                 (shui/dialog-close!))
 
-            (and batch? (or (= :checkbox type) (and batch? default-or-url?)))
-            nil
+                (and batch? (or (= :checkbox type) (and batch? default-or-url?)))
+                nil
 
-            (= :checkbox type)
-            (p/do!
-             (ui/hide-popups-until-preview-popup!)
-             (shui/popup-hide!)
-             (shui/dialog-close!)
-             (let [value (if-some [value (:logseq.property/scalar-default-value property)]
-                           value
-                           false)]
-               (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
+                (= :checkbox type)
+                (p/do!
+                 (ui/hide-popups-until-preview-popup!)
+                 (shui/popup-hide!)
+                 (shui/dialog-close!)
+                 (let [value (if-some [value (:logseq.property/scalar-default-value property)]
+                               value
+                               false)]
+                   (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
 
-            default-or-url?
-            (pv/<create-new-block! block property "" {:batch-op? true})
+                default-or-url?
+                (pv/<create-new-block! block property "" {:batch-op? true})
 
             ;; using class as property
-            (and property (ldb/class? property))
-            (pv/<set-class-as-property! (state/get-current-repo) property)
+                (and property (ldb/class? property))
+                (pv/<set-class-as-property! (state/get-current-repo) property)
 
-            (or (not= :default type)
-                (and (= :default type) (seq (:property/closed-values property))))
-            (reset! *show-new-property-config? false)))))))
+                (or (not= :default type)
+                    (and (= :default type) (seq (:property/closed-values property))))
+                (reset! *show-new-property-config? false)))))))))
 
 (rum/defc property-key-title
   [block property class-schema?]

@@ -51,6 +51,15 @@
        (assoc button-opts
               :on-pointer-down (fn [e]
                                  (util/stop e)
+                                 (state/pub-event! [:editor/new-property {:target (.-target e)
+                                                                          :selected-blocks selected-blocks
+                                                                          :remove-property? true
+                                                                          :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
+       "Unset property")
+      (shui/button
+       (assoc button-opts
+              :on-pointer-down (fn [e]
+                                 (util/stop e)
                                  (on-cut)
                                  (state/pub-event! [:editor/hide-action-bar])))
        (ui/icon "trash" {:size 13}))
