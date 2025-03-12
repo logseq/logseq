@@ -535,7 +535,7 @@ class PluginLocal extends EventEmitter<
     const localRoot = (this._localRoot = safetyPathNormalize(url))
     const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
 
-      // Pick legal attrs
+    // Pick legal attrs
     ;[
       'name',
       'author',
@@ -643,10 +643,10 @@ class PluginLocal extends EventEmitter<
     <meta charset="UTF-8">
     <title>logseq plugin entry</title>
     ${
-        IS_DEV
-          ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
-          : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
-      }
+      IS_DEV
+        ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
+        : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
+    }
     
   </head>
   <body>
@@ -1104,7 +1104,8 @@ class LSPluginCore
     | 'beforereload'
     | 'reloaded'
   >
-  implements ILSPluginThemeManager {
+  implements ILSPluginThemeManager
+{
   private _isRegistering = false
   private _readyIndicator?: DeferredActor
   private readonly _hostMountedActor: DeferredActor = deferred()
@@ -1566,12 +1567,12 @@ class LSPluginCore
       await this.saveUserPreferences(
         theme.mode
           ? {
-            themes: {
-              ...this._userPreferences.themes,
-              mode: theme.mode,
-              [theme.mode]: theme,
-            },
-          }
+              themes: {
+                ...this._userPreferences.themes,
+                mode: theme.mode,
+                [theme.mode]: theme,
+              },
+            }
           : { theme: theme }
       )
     }
