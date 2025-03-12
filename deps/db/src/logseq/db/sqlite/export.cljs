@@ -572,7 +572,8 @@
      This is useful for graphs seeded with an ontology e.g. schema.org as it eliminates noisy and needless
      export+import"
   [db options*]
-  (let [options (merge options* {:property-value-uuids? true})
+  (let [options (merge options* {:property-value-uuids? true
+                                 :extract-content-refs? false})
         content-ref-uuids (get-graph-content-ref-uuids db)
         ontology-options (merge options {:include-uuid? true})
         ontology-export (build-graph-ontology-export db ontology-options)
