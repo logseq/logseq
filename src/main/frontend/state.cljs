@@ -258,6 +258,7 @@
       :command-palette/commands              (atom [])
 
       :view/components                       {}
+      :view/selected-blocks                  nil
 
       :srs/mode?                             false
 
@@ -1185,8 +1186,21 @@ Similar to re-frame subscriptions"
   (doseq [node nodes]
     (dom/add-class! node "selected")))
 
+(defn get-events-chan
+  []
+  (:system/events @state))
+
+(defn pub-event!
+  {:malli/schema [:=> [:cat vector?] :any]}
+  [payload]
+  (let [d (p/deferred)
+        chan (get-events-chan)]
+    (async/put! chan [payload d])
+    d))
+
 (defn- set-selection-blocks-aux!
   [blocks]
+  (set-state! :view/selected-blocks nil)
   (let [selected-ids (set (get-selected-block-ids @(:selection/blocks @state)))
         _ (set-state! :selection/blocks blocks)
         new-ids (set (get-selection-block-ids))
@@ -1210,7 +1224,8 @@ Similar to re-frame subscriptions"
   (set-state! :selection/blocks nil)
   (set-state! :selection/direction nil)
   (set-state! :selection/start-block nil)
-  (set-state! :selection/selected-all? false))
+  (set-state! :selection/selected-all? false)
+  (pub-event! [:editor/hide-action-bar]))
 
 (defn clear-selection!
   []
@@ -1366,7 +1381,8 @@ Similar to re-frame subscriptions"
   (set-state! :editor/content {})
   (set-state! :ui/select-query-cache {})
   (set-state! :editor/block-refs #{})
-  (set-state! :editor/action-data nil))
+  (set-state! :editor/action-data nil)
+  (set-state! :view/selected-blocks nil))
 
 (defn into-code-editor-mode!
   []
@@ -1828,18 +1844,6 @@ Similar to re-frame subscriptions"
 (defn open-settings!
   ([] (open-settings! true))
   ([active-tab] (set-state! :ui/settings-open? active-tab)))
-
-(defn get-events-chan
-  []
-  (:system/events @state))
-
-(defn pub-event!
-  {:malli/schema [:=> [:cat vector?] :any]}
-  [payload]
-  (let [d (p/deferred)
-        chan (get-events-chan)]
-    (async/put! chan [payload d])
-    d))
 
 (defn sidebar-add-block!
   [repo db-id block-type]

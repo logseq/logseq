@@ -71,7 +71,7 @@
 
      (shui/dropdown-menu-item
       {:key "copy"
-       :on-click editor-handler/copy-selection-blocks}
+       :on-click #(editor-handler/copy-selection-blocks true)}
       (t :editor/copy)
       (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/copy)))
 

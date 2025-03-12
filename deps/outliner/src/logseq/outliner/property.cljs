@@ -250,12 +250,12 @@
   [conn property-id v]
   (let [property (d/entity @conn property-id)
         closed-values? (seq (:property/closed-values property))
-        default-type? (= :default (:logseq.property/type property))]
+        default-or-url? (contains? #{:default :url} (:logseq.property/type property))]
     (cond
       closed-values?
       (get-property-value-eid @conn property-id v)
 
-      (and default-type?
+      (and default-or-url?
            ;; FIXME: remove this when :logseq.property/order-list-type updated to closed values
            (not= property-id :logseq.property/order-list-type))
       (let [v-uuid (create-property-text-block! conn nil property-id v {})]
@@ -339,20 +339,25 @@
         property-type (get property :logseq.property/type :default)
         _ (assert (some? v) "Can't set a nil property value must be not nil")
         ref? (db-property-type/value-ref-property-types property-type)
+        default-url-not-closed? (and (contains? #{:default :url} property-type)
+                                     (not (seq (:property/closed-values property))))
         v' (if ref?
              (convert-ref-property-value conn property-id v property-type)
-             v)]
-    (doseq [eid block-eids]
-      (let [block (d/entity @conn eid)]
-        (throw-error-if-self-value block v' ref?)))
-    (let [txs (mapcat
-               (fn [eid]
-                 (if-let [block (d/entity @conn eid)]
-                   (build-property-value-tx-data conn block property-id v')
-                   (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
-               block-eids)]
-      (when (seq txs)
-        (ldb/transact! conn txs {:outliner-op :save-block})))))
+             v)
+        txs (doall
+             (mapcat
+              (fn [eid]
+                (if-let [block (d/entity @conn eid)]
+                  (let [v' (if default-url-not-closed?
+                             (let [v (if (number? v) (:block/title (d/entity @conn v)) v)]
+                               (convert-ref-property-value conn property-id v property-type))
+                             v')]
+                    (throw-error-if-self-value block v' ref?)
+                    (build-property-value-tx-data conn block property-id v'))
+                  (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
+              block-eids))]
+    (when (seq txs)
+      (ldb/transact! conn txs {:outliner-op :save-block}))))
 
 (defn batch-remove-property!
   [conn block-ids property-id]

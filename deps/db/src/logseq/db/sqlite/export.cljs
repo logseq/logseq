@@ -10,9 +10,9 @@
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]))
+            [logseq.db.sqlite.build :as sqlite-build]))
 
 ;; Export fns
 ;; ==========
