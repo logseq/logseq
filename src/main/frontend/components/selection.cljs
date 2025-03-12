@@ -5,7 +5,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.config :as config]))
 
 (rum/defc action-bar
   [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border?]
@@ -18,20 +19,22 @@
                      :size :sm
                      :class (str "px-2 py-1 text-xs text-muted-foreground"
                                  (when-not button-border?
-                                   "border-y-0"))}]
+                                   "border-y-0"))}
+        db-graph? (config/db-based-graph?)]
     [:div.selection-action-bar
      (shui/button-group
       ;; set tag
-      (shui/button
-       (assoc button-opts
-              :on-pointer-down (fn [e]
-                                 (util/stop e)
-                                 (state/pub-event! [:editor/new-property {:target (.-target e)
-                                                                          :selected-blocks selected-blocks
-                                                                          :property-key "Tags"
-                                                                          :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
-       (ui/tooltip (ui/icon "hash" {:size 13}) "Set tag"
-                   {:trigger-props {:class "flex"}}))
+      (when db-graph?
+        (shui/button
+         (assoc button-opts
+                :on-pointer-down (fn [e]
+                                   (util/stop e)
+                                   (state/pub-event! [:editor/new-property {:target (.-target e)
+                                                                            :selected-blocks selected-blocks
+                                                                            :property-key "Tags"
+                                                                            :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
+         (ui/tooltip (ui/icon "hash" {:size 13}) "Set tag"
+                     {:trigger-props {:class "flex"}})))
       (shui/button
        (assoc button-opts
               :on-pointer-down (fn [e]
@@ -39,23 +42,25 @@
                                  (on-copy)
                                  (state/pub-event! [:editor/hide-action-bar])))
        "Copy")
-      (shui/button
-       (assoc button-opts
-              :on-pointer-down (fn [e]
-                                 (util/stop e)
-                                 (state/pub-event! [:editor/new-property {:target (.-target e)
-                                                                          :selected-blocks selected-blocks
-                                                                          :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
-       "Set property")
-      (shui/button
-       (assoc button-opts
-              :on-pointer-down (fn [e]
-                                 (util/stop e)
-                                 (state/pub-event! [:editor/new-property {:target (.-target e)
-                                                                          :selected-blocks selected-blocks
-                                                                          :remove-property? true
-                                                                          :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
-       "Unset property")
+      (when db-graph?
+        (shui/button
+         (assoc button-opts
+                :on-pointer-down (fn [e]
+                                   (util/stop e)
+                                   (state/pub-event! [:editor/new-property {:target (.-target e)
+                                                                            :selected-blocks selected-blocks
+                                                                            :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
+         "Set property"))
+      (when db-graph?
+        (shui/button
+         (assoc button-opts
+                :on-pointer-down (fn [e]
+                                   (util/stop e)
+                                   (state/pub-event! [:editor/new-property {:target (.-target e)
+                                                                            :selected-blocks selected-blocks
+                                                                            :remove-property? true
+                                                                            :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
+         "Unset property"))
       (shui/button
        (assoc button-opts
               :on-pointer-down (fn [e]
