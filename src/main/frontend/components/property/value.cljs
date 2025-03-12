@@ -18,6 +18,7 @@
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
@@ -219,6 +220,8 @@
               (property-handler/batch-set-block-property! repo block-ids property-id (:db/id new-block))
               new-block)
             (property-handler/batch-set-block-property! repo block-ids property-id property-value))))
+      (when (seq (:view/selected-blocks @state/state))
+        (notification/show! "Property updated!" :success))
       (cond
         exit-edit?
         (do
