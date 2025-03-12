@@ -432,8 +432,9 @@
                                       (= "" (.-value (.-target e))))
                              (util/stop e)
                              (shui/popup-hide!)))}]
-         (property-select exclude-properties {:on-chosen on-chosen
-                                              :input-opts input-opts})))]))
+         (property-select exclude-properties
+                          (merge (:select-opts opts) {:on-chosen on-chosen
+                                                      :input-opts input-opts}))))]))
 
 (rum/defcs new-property < rum/reactive
   [state block opts]
