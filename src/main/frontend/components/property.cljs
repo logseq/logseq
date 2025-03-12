@@ -14,8 +14,8 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
             [frontend.hooks :as hooks]
@@ -116,6 +116,8 @@
                    (do
                      (shui/popup-hide!)
                      (shui/dialog-close!))
+                   (pv/batch-operation?)
+                   nil
                    (and block (= type :checkbox))
                    (p/do!
                     (ui/hide-popups-until-preview-popup!)
@@ -176,6 +178,7 @@
                          :value (:block/uuid x)
                          :group "Tags"}) classes))]
       [:div.ls-property-add.flex.flex-row.items-center.property-key
+       {:data-keep-selection true}
        [:div.ls-property-key
         (select/select (merge
                         {:items items
@@ -212,79 +215,85 @@
                    :size 15})))
 
 (defn- property-input-on-chosen
-  [block *property *property-key *show-new-property-config? {:keys [class-schema?]}]
+  [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property?]}]
   (fn [{:keys [value label]}]
     (reset! *property-key (if (uuid? value) label value))
-    (let [property (when (uuid? value) (db/entity [:block/uuid value]))]
-      (when (and *show-new-property-config? (not (ldb/property? property)))
-        (reset! *show-new-property-config? true))
-      (reset! *property property)
-      (when property
-        (let [add-class-property? (and (ldb/class? block) class-schema?)
-              type (:logseq.property/type property)]
-          (cond
-            add-class-property?
-            (p/do!
-             (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?})
-             (shui/popup-hide!)
-             (shui/dialog-close!))
+    (let [property (when (uuid? value) (db/entity [:block/uuid value]))
+          batch? (pv/batch-operation?)
+          repo (state/get-current-repo)]
+      (if (and property remove-property?)
+        (let [block-ids (map :block/uuid (pv/get-operating-blocks block))]
+          (property-handler/batch-remove-block-property! repo block-ids (:db/ident property))
+          (shui/popup-hide!))
+        (do
+          (when (and *show-new-property-config? (not (ldb/property? property)))
+            (reset! *show-new-property-config? true))
+          (reset! *property property)
+          (when property
+            (let [add-class-property? (and (ldb/class? block) class-schema?)
+                  type (:logseq.property/type property)
+                  default-or-url? (and (contains? #{:default :url} type)
+                                       (not (seq (:property/closed-values property))))]
+              (cond
+                add-class-property?
+                (p/do!
+                 (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?})
+                 (shui/popup-hide!)
+                 (shui/dialog-close!))
 
-            (= :checkbox type)
-            (p/do!
-             (ui/hide-popups-until-preview-popup!)
-             (shui/popup-hide!)
-             (shui/dialog-close!)
-             (let [value (if-some [value (:logseq.property/scalar-default-value property)]
-                           value
-                           false)]
-               (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
+                (and batch? (or (= :checkbox type) (and batch? default-or-url?)))
+                nil
 
-            (and (contains? #{:default :url} type)
-                 (not (seq (:property/closed-values property))))
-            (pv/<create-new-block! block property "")
+                (= :checkbox type)
+                (p/do!
+                 (ui/hide-popups-until-preview-popup!)
+                 (shui/popup-hide!)
+                 (shui/dialog-close!)
+                 (let [value (if-some [value (:logseq.property/scalar-default-value property)]
+                               value
+                               false)]
+                   (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
+
+                default-or-url?
+                (pv/<create-new-block! block property "" {:batch-op? true})
 
             ;; using class as property
-            (and property (ldb/class? property))
-            (pv/<set-class-as-property! (state/get-current-repo) property)
+                (and property (ldb/class? property))
+                (pv/<set-class-as-property! (state/get-current-repo) property)
 
-            (or (not= :default type)
-                (and (= :default type) (seq (:property/closed-values property))))
-            (reset! *show-new-property-config? false)))))))
+                (or (not= :default type)
+                    (and (= :default type) (seq (:property/closed-values property))))
+                (reset! *show-new-property-config? false)))))))))
 
 (rum/defc property-key-title
-  [block property class-schema? property-position]
-  (let [block-container (state/get-component :block/container)]
-    (shui/trigger-as
-     :a
-     {:tabIndex 0
-      :title (:block/title property)
-      :class "property-k flex select-none jtrigger w-full"
-      :on-pointer-down (fn [^js e]
-                         (when (util/meta-key? e)
-                           (route-handler/redirect-to-page! (:block/uuid property))
-                           (.preventDefault e)))
-      :on-click (fn [^js/MouseEvent e]
-                  (if (state/editing?)
-                    (editor-handler/escape-editing {:select? true})
-                    (shui/popup-show! (.-target e)
-                                      (fn []
-                                        (property-config/dropdown-editor property block {:debug? (.-altKey e)
-                                                                                         :class-schema? class-schema?}))
-                                      {:content-props
-                                       {:class "ls-property-dropdown-editor as-root"
-                                        :onEscapeKeyDown (fn [e]
-                                                           (util/stop e)
-                                                           (shui/popup-hide!)
-                                                           (when-let [input (state/get-input)]
-                                                             (.focus input)))}
-                                       :align "start"
-                                       :as-dropdown? true})))}
-     (if (= :block-below property-position)
-       (:block/title property)
-       (block-container {:property? true} property)))))
+  [block property class-schema?]
+  (shui/trigger-as
+   :a
+   {:tabIndex 0
+    :title (:block/title property)
+    :class "property-k flex select-none jtrigger w-full"
+    :on-pointer-down (fn [^js e]
+                       (when (util/meta-key? e)
+                         (route-handler/redirect-to-page! (:block/uuid property))
+                         (.preventDefault e)))
+    :on-click (fn [^js/MouseEvent e]
+                (shui/popup-show! (.-target e)
+                                  (fn []
+                                    (property-config/dropdown-editor property block {:debug? (.-altKey e)
+                                                                                     :class-schema? class-schema?}))
+                                  {:content-props
+                                   {:class "ls-property-dropdown-editor as-root"
+                                    :onEscapeKeyDown (fn [e]
+                                                       (util/stop e)
+                                                       (shui/popup-hide!)
+                                                       (when-let [input (state/get-input)]
+                                                         (.focus input)))}
+                                   :align "start"
+                                   :as-dropdown? true}))}
+   (:block/title property)))
 
 (rum/defc property-key-cp < rum/static
-  [block property {:keys [other-position? class-schema? property-position]}]
+  [block property {:keys [other-position? class-schema?]}]
   (let [icon (:logseq.property/icon property)]
     [:div.property-key-inner.jtrigger-view
      ;; icon picker
@@ -319,9 +328,9 @@
        [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
         (:block/title property)]
-       (property-key-title block property class-schema? property-position))]))
+       (property-key-title block property class-schema?))]))
 
-(rum/defcs property-input < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo property-input < rum/reactive
   (rum/local nil ::ref)
   (rum/local false ::show-new-property-config?)
   (rum/local false ::show-class-select?)
@@ -374,16 +383,24 @@
                                    (and (not= view-context :all) (not (contains? block-types view-context)))
                                    (and (ldb/built-in? block) (contains? #{:logseq.property/parent} (:db/ident m))))))
         property (rum/react *property)
-        property-key (rum/react *property-key)]
+        property-key (rum/react *property-key)
+        batch? (pv/batch-operation?)
+        hide-property-key? (or (contains? #{:date :datetime} (:logseq.property/type property))
+                               (pv/select-type? block property)
+                               (and
+                                batch?
+                                (contains? #{:default :url} (:logseq.property/type property))
+                                (not (seq (:property/closed-values property)))))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      {:ref #(reset! *ref %)}
      (if property-key
        [:div.ls-property-add.gap-1.flex.flex-1.flex-row.items-center
-        [:div.flex.flex-row.items-center.property-key.gap-1
-         (when-not (:db/id property) (property-icon property (:logseq.property/type @*property-schema)))
-         (if (:db/id property)                              ; property exists already
-           (property-key-cp block property opts)
-           [:div property-key])]
+        (when-not hide-property-key?
+          [:div.flex.flex-row.items-center.property-key.gap-1
+           (when-not (:db/id property) (property-icon property (:logseq.property/type @*property-schema)))
+           (if (:db/id property)                              ; property exists already
+             (property-key-cp block property opts)
+             [:div property-key])])
         [:div.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
          (when (not= @*show-new-property-config? :adding-property)
            (cond
@@ -416,8 +433,9 @@
                                       (= "" (.-value (.-target e))))
                              (util/stop e)
                              (shui/popup-hide!)))}]
-         (property-select exclude-properties {:on-chosen on-chosen
-                                              :input-opts input-opts})))]))
+         (property-select exclude-properties
+                          (merge (:select-opts opts) {:on-chosen on-chosen
+                                                      :input-opts input-opts}))))]))
 
 (rum/defcs new-property < rum/reactive
   [state block opts]

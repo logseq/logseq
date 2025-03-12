@@ -344,7 +344,7 @@
                                              (mapcat (fn [m]
                                                        (if-let [pvalue-pages
                                                                 (->> (vals (:build/properties m))
-                                                                     (mapcat #(if (set? %) % [%]) )
+                                                                     (mapcat #(if (set? %) % [%]))
                                                                      (filter page-prop-value?)
                                                                      (map second)
                                                                      seq)]

@@ -506,7 +506,8 @@
   "options:
   :indent-style \"dashes\" | \"spaces\" | \"no-indent\"
   :remove-options [:emphasis :page-ref :tag :property]
-  :other-options {:keep-only-level<=N int :newline-after-block bool}"
+  :other-options {:keep-only-level<=N int :newline-after-block bool}
+  :page-title-only? boolean"
   [repo root-block-uuids-or-page-uuid options]
   {:pre [(or (coll? root-block-uuids-or-page-uuid)
              (uuid? root-block-uuids-or-page-uuid))]}
@@ -517,7 +518,7 @@
            (if (uuid? root-block-uuids-or-page-uuid)
              ;; page
              (common/get-page-content root-block-uuids-or-page-uuid)
-             (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+             (common/root-block-uuids->content repo root-block-uuids-or-page-uuid options))
            first-block (and (coll? root-block-uuids-or-page-uuid)
                             (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
            format (get first-block :block/format :markdown)]

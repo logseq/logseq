@@ -2,17 +2,17 @@
   "A script that queries any db graph from the commandline e.g.
 
   $ yarn -s nbb-logseq script/query.cljs db-name '[:find (pull ?b [:block/name :block/title]) :where [?b :block/created-at]]'"
-  (:require [datascript.core :as d]
-            [clojure.edn :as edn]
-            [logseq.db.sqlite.cli :as sqlite-cli]
-            [logseq.db.frontend.rules :as rules]
-            [nbb.core :as nbb]
-            [clojure.string :as string]
-            [clojure.pprint :as pprint]
-            [babashka.cli :as cli]
-            ["child_process" :as child-process]
+  (:require ["child_process" :as child-process]
+            ["os" :as os]
             ["path" :as node-path]
-            ["os" :as os]))
+            [babashka.cli :as cli]
+            [clojure.edn :as edn]
+            [clojure.pprint :as pprint]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [logseq.db.frontend.rules :as rules]
+            [logseq.db.sqlite.cli :as sqlite-cli]
+            [nbb.core :as nbb]))
 
 (defn- sh
   "Run shell cmd synchronously and print to inherited streams by default. Aims

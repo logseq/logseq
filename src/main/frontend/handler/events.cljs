@@ -20,6 +20,7 @@
             [frontend.components.property.dialog :as property-dialog]
             [frontend.components.repo :as repo]
             [frontend.components.select :as select]
+            [frontend.components.selection :as selection]
             [frontend.components.settings :as settings]
             [frontend.components.shell :as shell]
             [frontend.components.user.login :as login]
@@ -927,11 +928,15 @@
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
-(defn- editor-new-property [block target opts]
+(defn- editor-new-property [block target {:keys [selected-blocks] :as opts}]
   (let [editing-block (state/get-edit-block)
         pos (state/get-edit-pos)
-        edit-block-or-selected (if editing-block
+        edit-block-or-selected (cond
+                                 editing-block
                                  [editing-block]
+                                 (seq selected-blocks)
+                                 selected-blocks
+                                 :else
                                  (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
         current-block (when-let [s (state/get-current-page)]
                         (when (util/uuid-string? s)
@@ -1068,6 +1073,24 @@
 
 (defmethod handle :editor/run-query-command [_]
   (editor-handler/run-query-command!))
+
+(defmethod handle :editor/show-action-bar []
+  (let [selection (state/get-selection-blocks)
+        first-visible-block (some #(when (util/el-visible-in-viewport? % true) %) selection)]
+    (when first-visible-block
+      (shui/popup-hide! :selection-action-bar)
+      (shui/popup-show!
+       first-visible-block
+       (fn []
+         (selection/action-bar))
+       {:id :selection-action-bar
+        :content-props {:side "top"
+                        :class "!py-0 !px-0 !border-none"}
+        :auto-side? false
+        :align :start}))))
+
+(defmethod handle :editor/hide-action-bar []
+  (shui/popup-hide! :selection-action-bar))
 
 (defn run!
   []

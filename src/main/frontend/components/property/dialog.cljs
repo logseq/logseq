@@ -1,18 +1,27 @@
 (ns frontend.components.property.dialog
   "Property && value choose"
   (:require [frontend.components.property :as property-component]
-            [rum.core :as rum]
+            [frontend.db :as db]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.db :as db]))
+            [frontend.state :as state]
+            [rum.core :as rum]))
 
 (rum/defcs dialog <
   shortcut/disable-all-shortcuts
   (rum/local nil ::property-value)
   {:init (fn [state]
-           (let [k (:property-key (last (:rum/args state)))]
+           (let [opts (last (:rum/args state))
+                 k (:property-key opts)]
+             (when-let [view-selected-blocks (:selected-blocks opts)]
+               (state/set-state! :view/selected-blocks view-selected-blocks))
              (assoc state
                     ::property-key (atom k)
-                    ::property (atom (when k (db/get-case-page k))))))}
+                    ::property (atom (when k (db/get-case-page k))))))
+   :will-unmount (fn [state]
+                   (when-let [close-fn (:on-dialog-close (last (:rum/args state)))]
+                     (close-fn))
+                   (state/set-state! :view/selected-blocks nil)
+                   state)}
   [state blocks opts]
   (when (seq blocks)
     (let [*property-key (::property-key state)
