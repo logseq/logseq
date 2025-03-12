@@ -18,6 +18,7 @@
             [malli.core :as m]
             [medley.core :as medley]
             [promesa.core :as p]
+            ["@aparajita/capacitor-dark-mode" :refer [DarkMode]]
             [rum.core :as rum]))
 
 ;; Stores main application state
@@ -1247,7 +1248,8 @@ Similar to re-frame subscriptions"
 
 (defn sync-system-theme!
   []
-  (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
+  (p/let [system-dark? (-> (.isDarkMode DarkMode)
+                           (.then #(.-dark %)))]
     (set-theme-mode! (if system-dark? "dark" "light"))
     (set-state! :ui/system-theme? true)
     (storage/set :ui/system-theme? true)))
