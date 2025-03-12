@@ -2169,7 +2169,8 @@
                  (not edit?)
                  (not (:block.temp/top? block))
                  (not (:block.temp/bottom? block))
-                 (not (util/react *control-show?)))
+                 (not (util/react *control-show?))
+                 (not (:logseq.property/created-from-property  block)))
             (and doc-mode?
                  (not collapsed?)
                  (not (util/react *control-show?))))

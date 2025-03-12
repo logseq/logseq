@@ -83,58 +83,54 @@
 (rum/defc class-select
   [property {:keys [multiple-choices? disabled? default-open? no-class? on-hide]
              :or {multiple-choices? true}}]
-  (let [*ref (rum/use-ref nil)]
-    (hooks/use-effect!
-     (fn []
-       (when default-open?
-         (some-> (rum/deref *ref)
-                 (.click))))
-     [default-open?])
-    (let [schema-classes (:logseq.property/classes property)]
-      [:div.flex.flex-1.col-span-3
-       (let [content-fn
-             (fn [{:keys [id]}]
-               (let [toggle-fn #(do
-                                  (when (fn? on-hide) (on-hide))
-                                  (shui/popup-hide! id))
-                     classes (model/get-all-readable-classes (state/get-current-repo) {:except-root-class? true})
-                     options (map (fn [class]
-                                    {:label (:block/title class)
-                                     :value (:block/uuid class)})
-                                  classes)
-                     options (if no-class?
-                               (cons {:label "Skip choosing tag"
-                                      :value :no-tag}
-                                     options)
-                               options)
-                     opts {:items options
-                           :input-default-placeholder (if multiple-choices? "Choose tags" "Choose tag")
-                           :dropdown? false
-                           :close-modal? false
-                           :multiple-choices? multiple-choices?
-                           :selected-choices (map :block/uuid schema-classes)
-                           :extract-fn :label
-                           :extract-chosen-fn :value
-                           :show-new-when-not-exact-match? true
-                           :input-opts {:on-key-down
-                                        (fn [e]
-                                          (case (util/ekey e)
-                                            "Escape"
-                                            (do
-                                              (util/stop e)
-                                              (toggle-fn))
-                                            nil))}
-                           :on-chosen (fn [value select?]
-                                        (if (= value :no-tag)
-                                          (toggle-fn)
-                                          (p/let [result (<create-class-if-not-exists! value)
-                                                  value' (or result value)
-                                                  tx-data [[(if select? :db/add :db/retract) (:db/id property) :logseq.property/classes [:block/uuid value']]]
-                                                  _ (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})]
-                                            (when-not multiple-choices? (toggle-fn)))))}]
+  (let [*ref (rum/use-ref nil)
+        schema-classes (:logseq.property/classes property)]
+    [:div.flex.flex-1.col-span-3
+     (let [content-fn
+           (fn [{:keys [id]}]
+             (let [toggle-fn #(do
+                                (when (fn? on-hide) (on-hide))
+                                (shui/popup-hide! id))
+                   classes (model/get-all-readable-classes (state/get-current-repo) {:except-root-class? true})
+                   options (map (fn [class]
+                                  {:label (:block/title class)
+                                   :value (:block/uuid class)})
+                                classes)
+                   options (if no-class?
+                             (cons {:label "Skip choosing tag"
+                                    :value :no-tag}
+                                   options)
+                             options)
+                   opts {:items options
+                         :input-default-placeholder (if multiple-choices? "Choose tags" "Choose tag")
+                         :dropdown? false
+                         :close-modal? false
+                         :multiple-choices? multiple-choices?
+                         :selected-choices (map :block/uuid schema-classes)
+                         :extract-fn :label
+                         :extract-chosen-fn :value
+                         :show-new-when-not-exact-match? true
+                         :input-opts {:on-key-down
+                                      (fn [e]
+                                        (case (util/ekey e)
+                                          "Escape"
+                                          (do
+                                            (util/stop e)
+                                            (toggle-fn))
+                                          nil))}
+                         :on-chosen (fn [value select?]
+                                      (if (= value :no-tag)
+                                        (toggle-fn)
+                                        (p/let [result (<create-class-if-not-exists! value)
+                                                value' (or result value)
+                                                tx-data [[(if select? :db/add :db/retract) (:db/id property) :logseq.property/classes [:block/uuid value']]]
+                                                _ (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})]
+                                          (when-not multiple-choices? (toggle-fn)))))}]
 
-                 (select/select opts)))]
+               (select/select opts)))]
 
+       (if default-open?
+         (content-fn nil)
          [:div.flex.flex-1.cursor-pointer
           {:ref *ref
            :on-click (if disabled?
@@ -147,7 +143,7 @@
                [:a.text-sm (str "#" (:block/title class))])
              [:span.opacity-60.pl-1.top-1.relative.hover:opacity-80.active:opacity-60
               (shui/tabler-icon "edit")]]
-            (pv/property-empty-btn-value property))])])))
+            (pv/property-empty-btn-value property))]))]))
 
 (rum/defc name-edit-pane
   [property {:keys [set-sub-open! disabled?]}]
@@ -326,12 +322,12 @@
                                        :button-opts {:title "Set Icon"}})
      [:strong {:on-click (fn [^js e]
                            (shui/popup-show! (.-target e)
-                             (fn [] (choice-base-edit-form property block))
-                             {:id :ls-base-edit-form
-                              :align "start"}))}
+                                             (fn [] (choice-base-edit-form property block))
+                                             {:id :ls-base-edit-form
+                                              :align "start"}))}
       value]
      (shui/dropdown-menu
-       (shui/dropdown-menu-trigger
+      (shui/dropdown-menu-trigger
        {:as-child true
         :disabled disabled?}
        (shui/button
@@ -409,24 +405,24 @@
        [:<>
         [:ul.choices-list
          (dnd/items choice-items
-           {:sort-by-inner-element? false
-            :on-drag-end (fn [_ {:keys [active-id over-id direction]}]
-                           (let [move-down? (= direction :down)
-                                 over (db/entity [:block/uuid (uuid over-id)])
-                                 active (db/entity [:block/uuid (uuid active-id)])
-                                 over-order (:block/order over)
-                                 new-order (if move-down?
-                                             (let [next-order (db-order/get-next-order (db/get-db) property (:db/id over))]
-                                               (db-order/gen-key over-order next-order))
-                                             (let [prev-order (db-order/get-prev-order (db/get-db) property (:db/id over))]
-                                               (db-order/gen-key prev-order over-order)))]
+                    {:sort-by-inner-element? false
+                     :on-drag-end (fn [_ {:keys [active-id over-id direction]}]
+                                    (let [move-down? (= direction :down)
+                                          over (db/entity [:block/uuid (uuid over-id)])
+                                          active (db/entity [:block/uuid (uuid active-id)])
+                                          over-order (:block/order over)
+                                          new-order (if move-down?
+                                                      (let [next-order (db-order/get-next-order (db/get-db) property (:db/id over))]
+                                                        (db-order/gen-key over-order next-order))
+                                                      (let [prev-order (db-order/get-prev-order (db/get-db) property (:db/id over))]
+                                                        (db-order/gen-key prev-order over-order)))]
 
-                             (db/transact! (state/get-current-repo)
-                               [{:db/id (:db/id active)
-                                 :block/order new-order}
-                                (outliner-core/block-with-updated-at
-                                  {:db/id (:db/id property)})]
-                               {:outliner-op :save-block})))})]
+                                      (db/transact! (state/get-current-repo)
+                                                    [{:db/id (:db/id active)
+                                                      :block/order new-order}
+                                                     (outliner-core/block-with-updated-at
+                                                      {:db/id (:db/id property)})]
+                                                    {:outliner-op :save-block})))})]
         (shui/dropdown-menu-separator)])
 
      ;; add choice
@@ -463,14 +459,14 @@
   [choices]
   (let [select-cp (fn [opts]
                     (shui/select
-                      opts
-                      (shui/select-trigger
-                        {:class "h-8"}
-                        (shui/select-value {:placeholder "Select a choice"}))
-                      (shui/select-content
-                        (map (fn [choice]
-                               (shui/select-item {:key (str (:db/id choice))
-                                                  :value (:db/id choice)} (:block/title choice))) choices))))
+                     opts
+                     (shui/select-trigger
+                      {:class "h-8"}
+                      (shui/select-value {:placeholder "Select a choice"}))
+                     (shui/select-content
+                      (map (fn [choice]
+                             (shui/select-item {:key (str (:db/id choice))
+                                                :value (:db/id choice)} (:block/title choice))) choices))))
         checked-choice (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) choices)
         unchecked-choice (some (fn [choice] (when (false? (:logseq.property/choice-checkbox-state choice)) choice)) choices)]
     [:div.flex.flex-col.gap-4.text-sm.p-2
