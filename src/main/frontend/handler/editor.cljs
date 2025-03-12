@@ -924,14 +924,16 @@
   (block-handler/select-block! block-uuid))
 
 (defn- compose-copied-blocks-contents
-  [repo block-ids]
+  [repo block-ids & {:as opts}]
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         top-level-block-uuids (->> (block-handler/get-top-level-blocks blocks)
                                    (map :block/uuid))
         content (export-text/export-blocks-as-markdown
                  repo top-level-block-uuids
-                 {:indent-style (state/get-export-block-text-indent-style)
-                  :remove-options (set (state/get-export-block-text-remove-options))})]
+                 (merge
+                  opts
+                  {:indent-style (state/get-export-block-text-indent-style)
+                   :remove-options (set (state/get-export-block-text-remove-options))}))]
     [top-level-block-uuids content]))
 
 (defn- get-all-blocks-by-ids
@@ -947,14 +949,14 @@
       result)))
 
 (defn copy-selection-blocks
-  [html? & {:keys [selected-blocks]}]
+  [html? & {:keys [selected-blocks] :as opts}]
   (let [repo (state/get-current-repo)
         blocks (seq (state/get-selection-blocks))
         ids (if blocks
               (distinct (keep #(when-let [id (dom/attr % "blockid")]
                                  (uuid id)) blocks))
               (map :block/uuid selected-blocks))
-        [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
+        [top-level-block-uuids content] (compose-copied-blocks-contents repo ids opts)
         block (db/entity [:block/uuid (first ids)])
         db-based? (config/db-based-graph? repo)]
     (when block
