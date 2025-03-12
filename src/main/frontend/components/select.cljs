@@ -3,20 +3,20 @@
   select-config to add a new use or select-type for this component. To use the
   new select-type, create an event that calls `select/dialog-select!` with the
   select-type. See the :graph/open command for a full example."
-  (:require [frontend.modules.shortcut.core :as shortcut]
+  (:require [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
-            [rum.core :as rum]
-            [frontend.config :as config]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.handler.common.developer :as dev-common-handler]
+            [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
-            [clojure.string :as string]))
+            [rum.core :as rum]))
 
 (rum/defc render-item < rum/reactive
   [result chosen? multiple-choices? *selected-choices]
@@ -24,7 +24,9 @@
                                     (:value result)) result)
         header (:header result)
         selected-choices (rum/react *selected-choices)
-        row [:div.flex.flex-row.justify-between.w-full {:class (when chosen? "chosen")}
+        row [:div.flex.flex-row.justify-between.w-full
+             {:class (when chosen? "chosen")
+              :on-pointer-down util/stop-propagation}
              [:div.flex.flex-row.items-center.gap-1
               (when multiple-choices?
                 (ui/checkbox {:checked (boolean (selected-choices (:value result)))
