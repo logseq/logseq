@@ -51,7 +51,7 @@
                                         :local-tx (:local-tx state)
                                         :remote-tx (:remote-tx state)
                                         :rtc-state (if (:rtc-lock state) :open :close)))
-                               rtc-flows/rtc-state-flow))
+                               rtc-flows/rtc-state-stream-flow))
                     ::update-detail-info)]
       (reset! *update-detail-info-canceler canceler))))
 (run-task--update-detail-info)

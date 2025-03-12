@@ -36,8 +36,9 @@
 (def document-visibility-state-flow
   (->> (m/observe
         (fn ctor [emit!]
-          (let [callback-fn (fn [] (emit! js/document.visibilityState))]
+          (let [callback-fn #(emit! js/document.visibilityState)]
             (.addEventListener ^js js/document "visibilitychange" callback-fn)
             (callback-fn)
             (fn dtor [] (.removeEventListener ^js js/document "visibilitychange" callback-fn)))))
-       (m/eduction (dedupe))))
+       (m/eduction (dedupe))
+       (m/relieve)))
