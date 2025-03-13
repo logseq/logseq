@@ -4,12 +4,12 @@
   (:require ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
-            #_:clj-kondo/ignore
             [babashka.cli :as cli]
             [clojure.edn :as edn]
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.sqlite.export :as sqlite-export]
+            #_:clj-kondo/ignore
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]

@@ -490,7 +490,9 @@
                       (vector (:db/ident ent)
                               (cond-> (build-export-class ent options)
                                 (seq ent-properties)
-                                (assoc :build/properties (buildable-properties db ent-properties properties options)))))))
+                                (assoc :build/properties
+                                       (-> (buildable-properties db ent-properties properties options)
+                                           (dissoc :logseq.property.class/properties))))))))
              (into {}))]
     (cond-> {}
       (seq properties)
