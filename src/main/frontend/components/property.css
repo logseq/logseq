@@ -188,6 +188,10 @@
     @apply flex items-center shrink;
   }
 
+  &[data-type] {
+    @apply flex items-center;
+  }
+
   &[data-type="datetime"] {
     @apply whitespace-nowrap;
   }

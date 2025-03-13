@@ -1340,10 +1340,12 @@
                              value-cp)))]]
          (if show-tooltip?
            (shui/tooltip-provider
-            (shui/tooltip
-             {:delayDuration 1200}
-             (shui/tooltip-trigger
-              {:onFocusCapture #(util/stop-propagation %)} value-cp)
-             (shui/tooltip-content
-              (str "Change " (:block/title property)))))
+             (shui/tooltip
+               {:delayDuration 1200}
+               (shui/tooltip-trigger
+                 {:onFocusCapture #(util/stop-propagation %)
+                  :as-child true}
+                 value-cp)
+               (shui/tooltip-content
+                 (str "Change " (:block/title property)))))
            value-cp))))))
