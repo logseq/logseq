@@ -1,6 +1,6 @@
 (ns frontend.worker.db.validate
   "Validate db"
-  (:require [frontend.worker.util :as worker-util]
+  (:require [frontend.worker-common.util :as worker-util]
             [logseq.db.frontend.validate :as db-validate]))
 
 (defn validate-db

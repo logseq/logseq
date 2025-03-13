@@ -13,6 +13,7 @@
             [frontend.persist-db.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -154,7 +155,13 @@
     (let [worker-url (if (util/electron?)
                        "js/inference-worker.js"
                        "static/js/inference-worker.js")
-          _worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))])))
+          worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
+          wrapped-worker (Comlink/wrap worker)
+          t1 (util/time-ms)]
+      (reset! state/*infer-worker wrapped-worker)
+      (p/do!
+       (.init wrapped-worker)
+       (log/info "init infer-worker spent:" (str  (- (util/time-ms) t1) "ms"))))))
 
 (defn <export-db!
   [repo data]

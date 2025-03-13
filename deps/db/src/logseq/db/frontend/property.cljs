@@ -584,7 +584,14 @@
                                            :schema {:type :class
                                                     :cardinality :many
                                                     :public? true}
-                                           :queryable? true})))
+                                           :queryable? true}
+     :logseq.property.search/hnsw-label {:title "HNSW label"
+                                         :schema {:type :raw-number
+                                                  :public? false
+                                                  :hide? true}
+                                         :rtc {:rtc/ignore-attr-when-init-upload true
+                                               :rtc/ignore-attr-when-init-download true
+                                               :rtc/ignore-attr-when-syncing true}})))
 
 (def built-in-properties
   (->> built-in-properties*
@@ -647,7 +654,7 @@
     "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table" "logseq.property.node"
     "logseq.property.code"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
-    "logseq.property.user" "logseq.property.history"})
+    "logseq.property.user" "logseq.property.history" "logseq.property.search"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"

@@ -33,6 +33,8 @@
 
 (defonce *db-worker (atom nil))
 
+(defonce *infer-worker (atom nil))
+
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
@@ -52,7 +54,7 @@
       :nfs/user-granted?                     {}
       :nfs/refreshing?                       nil
       :instrument/disabled?                  (storage/get "instrument-disabled")
-     ;; TODO: how to detect the network reliably?
+      ;; TODO: how to detect the network reliably?
       :network/online?         true
       :indexeddb/support?      true
       :me                      nil
@@ -80,7 +82,7 @@
       :ui/navigation-item-collapsed?         {}
       :ui/recent-pages                       (or (storage/get :ui/recent-pages) {})
 
-     ;; right sidebar
+      ;; right sidebar
       :ui/handbooks-open?                    false
       :ui/help-open?                         false
       :ui/fullscreen?                        false
@@ -142,7 +144,7 @@
       :editor/on-paste?                      (atom false)
       :editor/last-key-code                  (atom nil)
       :ui/global-last-key-code               (atom nil)
-      :editor/block-op-type                  nil             ;; :cut, :copy
+      :editor/block-op-type                  nil ;; :cut, :copy
       :editor/block-refs                     (atom #{})
 
       ;; Stores deleted refed blocks, indexed by repo
@@ -231,7 +233,7 @@
       :plugin/navs-settings?                 true
       :plugin/focused-settings               nil ;; plugin id
 
-     ;; pdf
+      ;; pdf
       :pdf/system-win?                       false
       :pdf/current                           nil
       :pdf/ref-highlight                     nil

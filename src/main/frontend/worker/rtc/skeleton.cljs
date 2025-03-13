@@ -2,8 +2,8 @@
   "Validate skeleton data between server and client"
   (:require [clojure.data :as data]
             [datascript.core :as d]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.rtc.ws-util :as ws-util]
-            [frontend.worker.util :as worker-util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]

@@ -1,6 +1,6 @@
 (ns frontend.worker.db-metadata
   "Fns to read/write metadata.edn file for db-based."
-  (:require [frontend.worker.util :as worker-util]
+  (:require [frontend.worker-common.util :as worker-util]
             [promesa.core :as p]))
 
 (defn <store
