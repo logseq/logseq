@@ -540,7 +540,8 @@
                                       :style {:width width
                                               :min-width width}}]
                        (when render
-                         (row-cell table row column render cell-opts))))]
+                         (row-cell table row column render cell-opts))))
+        pin-count (count pinned-columns)]
     (shui/table-row
      (merge
       props
@@ -549,7 +550,12 @@
      [:div.sticky-columns.flex.flex-row
       (map row-cell-f pinned-columns)]
      [:div.flex.flex-row
-      (map row-cell-f unpinned-columns)])))
+      (map-indexed (fn [idx column]
+                     (let [lazy? (> (+ pin-count idx) 5)]
+                       (if lazy?
+                         (ui/lazy-visible
+                          (fn [] (row-cell-f column)))
+                         (row-cell-f column)))) unpinned-columns)])))
 
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
@@ -1095,23 +1101,22 @@
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
   (ui/virtualized-list
-   (assoc
-    {:ref #(reset! *scroller-ref %)
-     :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
-                               (gdom/getElement "main-content-container"))
-     :increase-viewport-by {:top 300 :bottom 300}
-     :compute-item-key (fn [idx]
-                         (let [block (nth rows idx)]
-                           (str "table-row-" (:db/id block))))
-     :skipAnimationFrameInResizeObserver true
-     :total-count (count rows)
-     :item-content (fn [idx]
-                     (let [row (nth rows idx)]
-                       (table-row table row {} option)))
-     :items-rendered (fn [props]
-                       (when (seq props)
-                         (set-items-rendered! true)))}
-    :end-reached (:end-reached option))))
+   {:ref #(reset! *scroller-ref %)
+    :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
+                              (gdom/getElement "main-content-container"))
+    :increase-viewport-by {:top 300 :bottom 300}
+    :compute-item-key (fn [idx]
+                        (let [block (nth rows idx)]
+                          (str "table-row-" (:db/id block))))
+    :skipAnimationFrameInResizeObserver true
+    :total-count (count rows)
+    :item-content (fn [idx]
+                    (let [row (nth rows idx)]
+                      (table-row table row {} option)))
+    :items-rendered (fn [props]
+                      (when (seq props)
+                        (set-items-rendered! true)))
+    :end-reached (:end-reached option)}))
 
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]
