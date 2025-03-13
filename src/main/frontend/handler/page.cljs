@@ -14,7 +14,6 @@
             [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.fs :as fs]
-            ;; [frontend.handler.common :as common-handler]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -43,7 +42,6 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
-            [logseq.graph-parser.db :as gp-db]
             [logseq.graph-parser.text :as text]
             [promesa.core :as p]))
 
