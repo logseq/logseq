@@ -513,13 +513,8 @@
        [:div.table-action-bar.absolute.top-0.left-8
         (action-bar table selected-rows option)]))))
 
-(rum/defc row-cell < rum/static
-  [table row column render cell-opts]
-  (shui/table-cell cell-opts
-                   (render table row column)))
-
 (rum/defc table-row-inner < rum/static
-  [{:keys [row-selected?] :as table} row props {:keys [show-add-property?]}]
+  [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
   (let [pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (if show-add-property?
@@ -528,34 +523,34 @@
                                   :cell (fn [_table _row _column])})
                            unpinned)
         sized-columns (get-in table [:state :sized-columns])
-        row-cell-f (fn [column]
+        row-cell-f (fn [column {:keys [hide?]}]
                      (let [id (str (:id row) "-" (:id column))
                            render (get column :cell)
                            width (get-column-size column sized-columns)
                            select? (= (:id column) :select)
                            add-property? (= (:id column) :add-property)
+                           style {:width width :min-width width}
                            cell-opts {:key id
                                       :select? select?
                                       :add-property? add-property?
-                                      :style {:width width
-                                              :min-width width}}]
-                       (when render
-                         (row-cell table row column render cell-opts))))
-        pin-count (count pinned-columns)]
+                                      :style style}]
+                       (if hide?
+                         [:div.h-8 {:style style}]
+                         (when render
+                           (shui/table-cell cell-opts (render table row column))))))]
     (shui/table-row
      (merge
       props
       {:key (str (:id row))
        :data-state (when (row-selected? row) "selected")})
      [:div.sticky-columns.flex.flex-row
-      (map row-cell-f pinned-columns)]
+      (map #(row-cell-f % {}) pinned-columns)]
      [:div.flex.flex-row
-      (map-indexed (fn [idx column]
-                     (let [lazy? (> (+ pin-count idx) 5)]
-                       (if lazy?
-                         (ui/lazy-visible
-                          (fn [] (row-cell-f column)))
-                         (row-cell-f column)))) unpinned-columns)])))
+      (let [pin-count (count pinned-columns)]
+        (map-indexed (fn [idx column]
+                       (if (and (> (+ pin-count idx) 5) scrolling?)
+                         (row-cell-f column {:hide? true})
+                         (row-cell-f column {}))) unpinned-columns))])))
 
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
@@ -1100,23 +1095,27 @@
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
-  (ui/virtualized-list
-   {:ref #(reset! *scroller-ref %)
-    :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
-                              (gdom/getElement "main-content-container"))
-    :increase-viewport-by {:top 300 :bottom 300}
-    :compute-item-key (fn [idx]
-                        (let [block (nth rows idx)]
-                          (str "table-row-" (:db/id block))))
-    :skipAnimationFrameInResizeObserver true
-    :total-count (count rows)
-    :item-content (fn [idx]
-                    (let [row (nth rows idx)]
-                      (table-row table row {} option)))
-    :items-rendered (fn [props]
-                      (when (seq props)
-                        (set-items-rendered! true)))
-    :end-reached (:end-reached option)}))
+  (let [[scrolling? set-scrolling!] (rum/use-state false)]
+    (ui/virtualized-list
+     {:ref #(reset! *scroller-ref %)
+      :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
+                                (gdom/getElement "main-content-container"))
+      :increase-viewport-by {:top 300 :bottom 300}
+      :compute-item-key (fn [idx]
+                          (let [block (nth rows idx)]
+                            (str "table-row-" (:db/id block))))
+      :skipAnimationFrameInResizeObserver true
+      :total-count (count rows)
+      :item-content (fn [idx _user ^js context]
+                      (let [scrolling? (.-scrolling context)
+                            row (nth rows idx)]
+                        (table-row table row {} (assoc option :scrolling? scrolling?))))
+      :items-rendered (fn [props]
+                        (when (seq props)
+                          (set-items-rendered! true)))
+      :context {:scrolling scrolling?}
+      :is-scrolling set-scrolling!
+      :end-reached (:end-reached option)})))
 
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]
@@ -1579,10 +1578,10 @@
       (str "view-" (:db/id view-entity')))))
 
 (defn- <load-view-data
-  [view offset]
+  [view offset limit]
   (p/let [feature-type (:logseq.property.view/feature-type view)
           data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view)
-                                   (ldb/write-transit-str {:offset offset :limit 50}))
+                                   (ldb/write-transit-str {:offset offset :limit limit}))
           {:keys [count data]} (ldb/read-transit-str data-str)
           blocks (mapv :block data)
           property-values (mapcat :properties data)]
@@ -1600,7 +1599,9 @@
   (let [[view-entity set-view-entity!] (hooks/use-state view-entity)
         [views set-views!] (hooks/use-state nil)
         [items-count set-count!] (hooks/use-state (count (:data option)))
-        [loading? set-loading!] (hooks/use-state true)]
+        [loading? set-loading!] (hooks/use-state true)
+        ;; [loading-more? set-loading-more!] (hooks/use-state nil)
+        ]
     (hooks/use-effect!
      (fn []
        (let [repo (state/get-current-repo)]
@@ -1619,7 +1620,7 @@
                                      new-view)))]
             (if (and current-view
                      (nil? (:data option)))
-              (p/let [{:keys [count data]} (<load-view-data current-view 0)
+              (p/let [{:keys [count data]} (<load-view-data current-view 0 25)
                       set-data! (:set-data! option)]
                 (set-data! data)
                 (set-count! count)
@@ -1631,15 +1632,24 @@
      [])
     (if loading?
       [:div.flex.flex-col.space-2.gap-2.my-2
-       (repeat 25 (shui/skeleton {:class "h-6 w-full"}))]
-      (view-container view-entity (assoc option
-                                         :items-count items-count
-                                         :views views
-                                         :set-views! set-views!
-                                         :set-view-entity! set-view-entity!
-                                         :end-reached (fn []
-                                                        (when view-entity
-                                                          (p/let [prev-data (:data option)
-                                                                  {:keys [_count data]} (<load-view-data view-entity (count prev-data))
-                                                                  set-data! (:set-data! option)]
-                                                            (set-data! (into prev-data data))))))))))
+       (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
+      [:div.flex.flex-col.gap-2
+       (view-container view-entity (assoc option
+                                          :items-count items-count
+                                          :views views
+                                          :set-views! set-views!
+                                          :set-view-entity! set-view-entity!
+                                          :end-reached (fn []
+                                                         (when view-entity
+                                                           (let [prev-data (:data option)
+                                                                 finished? (= (count prev-data) items-count)]
+                                                             (when-not finished?
+                                                               ;; (set-loading-more! true)
+                                                               (p/let [{:keys [_count data]} (<load-view-data view-entity (count prev-data) 100)
+                                                                       set-data! (:set-data! option)]
+                                                                 ;; (set-loading-more! false)
+                                                                 (set-data! (into prev-data data)))))))))
+       ;; (when loading-more?
+       ;;   [:div.text-sm.text-muted-foreground
+       ;;    (util/format "Loading more (%d left)..." (- items-count (count (:data option))))])
+       ])))
