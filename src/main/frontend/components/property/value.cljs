@@ -956,11 +956,6 @@
        (property-empty-btn-value property)])))
 
 (rum/defcs property-block-value < rum/reactive db-mixins/query
-  {:init (fn [state]
-           (let [block (first (:rum/args state))]
-             (when-let [block-id (or (:db/id block) (:block/uuid block))]
-               (db-async/<get-block (state/get-current-repo) block-id :children? true)))
-           state)}
   [state value block property page-cp]
   (when value
     (if (state/sub-async-query-loading (:block/uuid value))

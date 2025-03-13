@@ -6,6 +6,7 @@
             [cljs-time.format :as tf]
             [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.components.dnd :as dnd]
@@ -212,7 +213,9 @@
               :cell (fn [table row _column]
                       (block-container (assoc config
                                               :raw-title? (ldb/asset? row)
-                                              :table? true)
+                                              ;; TODO: remove this
+                                              :table? true
+                                              :table-view? true)
                                        row
                                        table))
               :disable-hide? true})]
@@ -1572,10 +1575,20 @@
 
 (defn- <load-view-data
   [view offset]
-  (p/let [data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view)
-                                   (ldb/write-transit-str {:offset offset :limit 100}))
-          data (ldb/read-transit-str data-str)]
-    data))
+  (p/let [feature-type (:logseq.property.view/feature-type view)
+          data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view)
+                                   (ldb/write-transit-str {:offset offset :limit 50}))
+          {:keys [count data]} (ldb/read-transit-str data-str)
+          blocks (mapv :block data)
+          property-values (mapcat :properties data)]
+    (when-not (= feature-type :all-pages)
+      (let [blocks' (->> (concat property-values blocks)
+                         (remove (fn [b]
+                                   (:block.temp/fully-loaded? (db/entity (:db/id b))))))]
+        (when (seq blocks')
+          (d/transact! (db/get-db false) blocks'))))
+    {:count count
+     :data blocks}))
 
 (rum/defc view < rum/static
   [{:keys [view-parent view-feature-type view-entity] :as option}]
