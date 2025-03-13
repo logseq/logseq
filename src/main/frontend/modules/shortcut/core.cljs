@@ -24,7 +24,8 @@
         [KeyCodes/TAB
          KeyCodes/ENTER
          KeyCodes/BACKSPACE KeyCodes/DELETE
-         KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
+         KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT
+         KeyCodes/PAGE_UP KeyCodes/PAGE_DOWN])
 
 (def key-names (js->clj KeyNames))
 
