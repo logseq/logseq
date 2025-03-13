@@ -202,7 +202,7 @@
       true
       (conj
        (merge
-        new-block
+        (dissoc new-block :build/properties-ref-types)
         (when-let [props (not-empty (:build/properties prop-m))]
           (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) page-uuids all-idents))
         (when (seq property-classes)
