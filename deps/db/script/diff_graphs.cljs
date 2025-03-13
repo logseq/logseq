@@ -48,12 +48,15 @@
           (-> m
               (update :classes update-vals (fn [m]
                                              (update m :build/class-properties sort)))
-              ;; TODO: fix built-in views
+              ;; TODO: fix built-in views for schema export
               (update :pages-and-blocks (fn [pbs]
                                           (vec (remove #(= (:block/title (:page %)) common-config/views-page-name) pbs))))))
         diff (->> (data/diff (prepare-export-to-diff export-map) (prepare-export-to-diff export-map2))
                   butlast)]
-    (pprint/pprint diff)))
+    (if (= diff [nil nil])
+      (println "The two graphs are equal!")
+      (do (pprint/pprint diff)
+          (js/process.exit 1)))))
 
 (when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))
