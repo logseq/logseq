@@ -227,7 +227,10 @@
                        (if (set? val-or-vals) val-or-vals [val-or-vals]))))
        set))
 
-(defn- merge-export-maps [& export-maps]
+(defn- merge-export-maps
+  "Merge export maps for partial graph exports. *Do not* use for a full graph
+  export because it makes assumptions about page identity"
+  [& export-maps]
   (let [pages-and-blocks
         (->> (mapcat :pages-and-blocks export-maps)
              ;; TODO: Group by more correct identity for title, same as check-for-existing-entities
@@ -513,14 +516,12 @@
                          (map :e (d/datoms db :avet :block/tags :logseq.class/Journal)))
         page-exports (mapv (fn [eid]
                              (let [page-blocks* (get-page-blocks db eid)]
+                               ;; TODO: Configure so that no ontologies are exported
                                (build-page-export* db eid page-blocks* (merge options {:include-uuid-fn (constantly true)}))))
                            page-ids)
-        pages-export (apply merge-export-maps page-exports)
-        pages-export' (-> pages-export
-                          (assoc :pvalue-uuids (set (mapcat :pvalue-uuids page-exports)))
-                          ;; TODO: Remove when exports in this fn no longer generate any ontologies
-                          (dissoc :classes :properties))]
-    pages-export'))
+        pages-export {:pages-and-blocks (mapcat :pages-and-blocks page-exports)
+                      :pvalue-uuids (set (mapcat :pvalue-uuids page-exports))}]
+    pages-export))
 
 (defn- build-graph-files
   [db {:keys [include-timestamps?]}]
@@ -582,7 +583,7 @@
         ontology-pvalue-uuids (set (concat (mapcat get-pvalue-uuids (vals (:properties ontology-export)))
                                            (mapcat get-pvalue-uuids (vals (:classes ontology-export)))))
         pages-export (build-graph-pages-export db options)
-        graph-export* (merge-export-maps ontology-export pages-export)
+        graph-export* (-> (merge ontology-export pages-export) (dissoc :pvalue-uuids))
         graph-export (if (seq (:exclude-namespaces options))
                          (assoc graph-export* ::auto-include-namespaces (:exclude-namespaces options))
                          graph-export*)
