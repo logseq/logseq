@@ -3,6 +3,7 @@
   (:require ["@huggingface/transformers" :refer [pipeline]]
             ["hnswlib-wasm" :refer [loadHnswlib]]
             [frontend.inference-worker.state :as infer-worker.state]
+            [frontend.worker-common.util :as worker-util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
@@ -43,6 +44,15 @@
      :dims (.-dims r)
      :size (.-size r)}))
 
+(defn- add-items
+  [^js hnsw data-coll]
+  (try (.addItems hnsw data-coll true)
+       (catch js/WebAssembly.Exception _
+         (let [current-count (.getCurrentCount hnsw)
+               new-size (+ current-count (max (* 2 (alength data-coll)) current-count))]
+           (.resizeIndex hnsw new-size)
+           (.addItems hnsw data-coll true)))))
+
 (defn <text-embedding&store!
   "return labels"
   [repo text-coll delete-labels]
@@ -51,7 +61,7 @@
           _ (assert (= (count text-coll) (count data-coll)))
           ^js hnsw (ensure-hnsw-index! repo)]
     (when (seq delete-labels) (.markDeleteItems hnsw (into-array delete-labels)))
-    (.addItems hnsw data-coll true)))
+    (worker-util/profile (keyword "add-items" (str (alength data-coll))) (add-items hnsw data-coll))))
 
 (defn- search-knn
   [repo query-point num-neighbors]
@@ -72,6 +82,25 @@
      (reset! infer-worker.state/*hnswlib hnswlib)
      (.setDebugLogs (.-EmscriptenFileSystemManager ^js @infer-worker.state/*hnswlib) true)
      (log/info :loaded :hnswlib))
-   (p/let [extractor (pipeline "feature-extraction" "Xenova/all-MiniLM-L6-v2" #js{"device" "webgpu"})]
+   (p/let [extractor (pipeline "feature-extraction" "Xenova/all-MiniLM-L6-v2" #js{"device" "webgpu" "dtype" "fp32"})]
      (reset! infer-worker.state/*extractor extractor)
      (log/info :loaded :extractor))))
+
+(comment
+  (def repo "repo-1")
+  (def hnsw (ensure-hnsw-index! repo))
+  (def text-coll-100
+    (apply concat (repeatedly
+                   10
+                   (fn []
+                     ["The universe is constantly expanding, revealing new mysteries every day."
+                      "She decided to take a walk in the park to clear her mind."
+                      "Black holes are among the most fascinating and enigmatic objects in the cosmos."
+                      "The cat curled up on the windowsill, basking in the afternoon sun."
+                      "Scientists believe dark matter makes up a significant portion of the universe."
+                      "He practiced the piano diligently, hoping to master the piece by next week."
+                      "The stars twinkled brightly in the clear night sky, each one a distant sun."
+                      "They laughed together, sharing stories from their childhood."
+                      "The Milky Way is just one of billions of galaxies in the vast universe."
+                      "She opened the book and began reading, losing herself in the stor"]))))
+  (<text-embedding&store! repo text-coll-100 nil))
