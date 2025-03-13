@@ -178,7 +178,7 @@
           (let [db-ident (get-ident all-idents prop-name)]
             (db-property-build/build-closed-values
              db-ident
-             prop-name
+             (:block/title prop-m)
              (assoc prop-m :db/ident db-ident :closed-values closed-values)
              {:property-attributes
               (merge {:db/id (or (property-db-ids prop-name)
