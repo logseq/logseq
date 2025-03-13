@@ -1,6 +1,6 @@
 (ns frontend.worker.db-worker
   "Worker used for browser DB implementation"
-  (:require ["@sqlite.org/sqlite-wasm" :default sqlite3InitModule]
+  (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [cljs-bean.core :as bean]
             [clojure.edn :as edn]

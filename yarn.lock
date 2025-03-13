@@ -771,6 +771,11 @@
   resolved "https://registry.yarnpkg.com/@logseq/react-tweet-embed/-/react-tweet-embed-1.3.1-1.tgz#119d22be8234de006fc35c3fa2a36f85634c5be6"
   integrity sha512-9O0oHs5depCvh6ZQvwtl1xb7B80YG5rUfY10uSUat5itOlcE3IWaYYpe6p/tcHErqHWnWgkXHitAB9M29FMbQg==
 
+"@logseq/sqlite-wasm@=0.1.1":
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/@logseq/sqlite-wasm/-/sqlite-wasm-0.1.1.tgz#0645307b78da637e01aced6b3f04b318639dc538"
+  integrity sha512-cdUYfMgBYO2JrwNqsLGZZ1T0RAZe7SzlplLqlDWN/Wn7hXQbMteWcXTRxPGXSS0yx/4e91VeqRtmC+qexL4gKw==
+
 "@mapbox/node-pre-gyp@^1.0.0":
   version "1.0.11"
   resolved "https://registry.yarnpkg.com/@mapbox/node-pre-gyp/-/node-pre-gyp-1.0.11.tgz#417db42b7f5323d79e93b34a6d7a2a12c0df43fa"
@@ -1161,11 +1166,6 @@
   version "3.1.2"
   resolved "https://registry.yarnpkg.com/@socket.io/component-emitter/-/component-emitter-3.1.2.tgz#821f8442f4175d8f0467b9daf26e3a18e2d02af2"
   integrity sha512-9BCxFwvbGg/RsZK9tjXd8s4UcwR0MWeFQ1XEKIQVVvAGJyINdrqKMcTRyLoK8Rse1GjzLV9cwjWV1olXRWEXVA==
-
-"@sqlite.org/sqlite-wasm@^3.49.1-build2":
-  version "3.49.1-build2"
-  resolved "https://registry.yarnpkg.com/@sqlite.org/sqlite-wasm/-/sqlite-wasm-3.49.1-build2.tgz#dba6fc58f9e68b20812872e6a27b07a267b2f1de"
-  integrity sha512-pZi8OSjNDZEYkvefsTOFKNRRN0GG9S5mtB6qBmrFZ5sraF5vxElPnTOl0DbJgiz9twlsOF5OzVkOce6Uc1TXsw==
 
 "@stylelint/postcss-css-in-js@^0.37.2":
   version "0.37.3"
