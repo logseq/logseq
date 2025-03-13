@@ -438,10 +438,21 @@
 
 (defn get-block-refs
   [db id]
-  (let [alias (->> (get-block-alias db id)
+  (let [entity (d/entity db id)
+        alias (->> (get-block-alias db id)
                    (cons id)
                    distinct)
-        refs (->> (mapcat (fn [id] (:block/_path-refs (d/entity db id))) alias)
+        refs (->> (mapcat (fn [id]
+                            (->> (:block/_refs (d/entity db id))
+                                 (remove (fn [ref]
+                                           ;; remove refs that have the block as either tag or property
+                                           (or (and
+                                                (class? entity)
+                                                (d/datom db :eavt (:db/id ref) :block/tags (:db/id entity)))
+                                               (and
+                                                (property? entity)
+                                                (d/datom db :eavt (:db/id ref) (:db/ident entity))))))))
+                          alias)
                   distinct)]
     (when (seq refs)
       (d/pull-many db '[*] (map :db/id refs)))))

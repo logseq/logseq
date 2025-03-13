@@ -5,6 +5,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
+            [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
@@ -283,12 +284,12 @@
                        (take limit)
                        ;; convert entity to map for serialization
                        (map (fn [e]
-                              (cond->
-                               (-> (into {} e)
-                                   (assoc
-                                    :id (:db/id e)
-                                    :db/id (:db/id e)))
-                                all-pages?
-                                (assoc :block.temp/refs-count (count (:block/_refs e)))))))]
+                              (if all-pages?
+                                {:block
+                                 (-> (into {} e)
+                                     (assoc
+                                      :db/id (:db/id e)
+                                      :block.temp/refs-count (count (:block/_refs e))))}
+                                (sqlite-common-db/get-block-and-children db (:db/id e) {})))))]
          {:count (count data*)
           :data (vec data)})))))

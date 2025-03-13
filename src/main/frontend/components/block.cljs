@@ -3391,10 +3391,12 @@
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [*ref (atom nil)
-                 block (nth (:rum/args state) 3)
+                 args (:rum/args state)
+                 [_state _ config block] args
                  block-id (:db/id block)
                  repo (state/get-current-repo)]
-             (db-async/<get-block repo block-id :children? true)
+             (when-not (or (:table-view? config) (:property-block? config))
+               (db-async/<get-block repo block-id :children? true))
              (assoc state ::ref *ref)))}
   [state container-state repo config* block {:keys [navigating-block navigated?]}]
   (let [*ref (::ref state)
