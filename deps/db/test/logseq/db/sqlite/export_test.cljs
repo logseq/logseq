@@ -546,9 +546,11 @@
          {:user.property/num {:logseq.property/type :number
                               :block/uuid property-uuid
                               :build/keep-uuid? true
+                              :build/properties-ref-types {:entity :number}
                               :build/properties (if exclude-namespaces?
                                                   {}
-                                                  {:user.property/node #{[:block/uuid property-pvalue-uuid]}})}
+                                                  {:user.property/node #{[:block/uuid property-pvalue-uuid]}
+                                                   :logseq.property/default-value 42})}
           :user.property/default-closed
           {:logseq.property/type :default
            :build/closed-values [{:value "joy" :uuid closed-value-uuid}
