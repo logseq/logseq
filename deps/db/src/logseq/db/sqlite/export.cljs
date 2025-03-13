@@ -519,7 +519,12 @@
                                ;; TODO: Configure so that no ontologies are exported
                                (build-page-export* db eid page-blocks* (merge options {:include-uuid-fn (constantly true)}))))
                            page-ids)
-        pages-export {:pages-and-blocks (mapcat :pages-and-blocks page-exports)
+        pages-and-blocks* (mapcat :pages-and-blocks page-exports)
+        pages-and-blocks (if (:ignore-built-ins? options)
+                           (vec (remove #(get-in % [:page :build/properties :logseq.property/built-in?])
+                                        pages-and-blocks*))
+                           pages-and-blocks*)
+        pages-export {:pages-and-blocks pages-and-blocks
                       :pvalue-uuids (set (mapcat :pvalue-uuids page-exports))}]
     pages-export))
 
