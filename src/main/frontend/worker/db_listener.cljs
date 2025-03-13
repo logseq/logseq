@@ -2,10 +2,10 @@
   "Db listeners for worker-db."
   (:require [cljs-bean.core :as bean]
             [datascript.core :as d]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.util :as worker-util]
             [logseq.common.util :as common-util]
             [logseq.outliner.batch-tx :as batch-tx]
             [promesa.core :as p]))

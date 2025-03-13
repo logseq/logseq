@@ -1,11 +1,11 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
   (:require [datascript.core :as d]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.commands :as commands]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.util :as worker-util]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]

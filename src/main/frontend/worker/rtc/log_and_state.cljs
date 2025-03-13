@@ -1,7 +1,7 @@
 (ns frontend.worker.rtc.log-and-state
   "Fns to generate rtc related logs"
   (:require [frontend.common.missionary :as c.m]
-            [frontend.worker.util :as worker-util]
+            [frontend.worker-common.util :as worker-util]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [malli.core :as ma]

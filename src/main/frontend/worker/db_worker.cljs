@@ -9,6 +9,7 @@
             [datascript.core :as d]
             [datascript.storage :refer [IStorage] :as storage]
             [frontend.common.file.core :as common-file]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.crypt :as worker-crypt]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
@@ -26,8 +27,8 @@
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state] ;; [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.undo-redo2 :as undo-redo]
-            [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -60,8 +61,8 @@
   [graph]
   (when-not @*publishing?
     (or (worker-state/get-opfs-pool graph)
-        (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (worker-util/get-pool-name graph)
-                                                               :initialCapacity 20})]
+        (p/let [^js pool (.installOpfsSAHPoolVfs ^js @*sqlite #js {:name (worker-util/get-pool-name graph)
+                                                                   :initialCapacity 20})]
           (swap! *opfs-pools assoc graph pool)
           pool))))
 
@@ -396,9 +397,7 @@
             db-dirs (filter (fn [file]
                               (string/starts-with? (.-name file) ".logseq-pool-"))
                             current-dir-dirs)]
-      (prn :debug
-           :db-dirs (map #(.-name %) db-dirs)
-           :all-dirs (map #(.-name %) current-dir-dirs))
+      (log/info :db-dirs (map #(.-name %) db-dirs) :all-dirs (map #(.-name %) current-dir-dirs))
       (p/all (map (fn [dir]
                     (p/let [graph-name (-> (.-name dir)
                                            (string/replace-first ".logseq-pool-" "")
