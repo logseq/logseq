@@ -1248,7 +1248,7 @@
                    (when (some? value) #{value}))]
     (multiple-values-inner block property value' opts)))
 
-(rum/defcs property-value < rum/reactive db-mixins/query
+(rum/defcs ^:large-vars/cleanup-todo property-value < rum/reactive db-mixins/query
   [state block property {:keys [show-tooltip? p-block p-property editing?]
                          :as opts}]
   (ui/catch-error
