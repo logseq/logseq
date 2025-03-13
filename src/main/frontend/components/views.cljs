@@ -1625,10 +1625,8 @@
                      (set-loading! false))))))
      [])
     (if loading?
-      [:div.flex.flex-col.space-2.gap-2
-       (shui/skeleton {:class "h-6 w-full"})
-       [:div.flex.flex-col.space-2.gap-2
-        (repeat 25 (shui/skeleton {:class "h-6 w-full"}))]]
+      [:div.flex.flex-col.space-2.gap-2.my-2
+       (repeat 25 (shui/skeleton {:class "h-6 w-full"}))]
       (view-container view-entity (assoc option
                                          :items-count items-count
                                          :views views

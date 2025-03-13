@@ -1827,6 +1827,7 @@
   [up?]
   (fn [event]
     (util/stop event)
+    (state/pub-event! [:editor/hide-action-bar])
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
@@ -2972,6 +2973,7 @@
       (state/selection?)
       (do
         (util/stop e)
+        (state/pub-event! [:editor/hide-action-bar])
         (on-tab direction)))
     nil))
 
