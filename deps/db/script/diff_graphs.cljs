@@ -28,6 +28,8 @@
    :exclude-namespaces {:alias :e
                         :coerce #{}
                         :desc "Namespaces to exclude from properties and classes"}
+   :ignore-built-ins? {:alias :i
+                       :desc "Ignore built-in pages"}
    :include-timestamps? {:alias :t
                          :desc "Include timestamps in export"}})
 
@@ -40,7 +42,7 @@
             (js/process.exit 1))
         conn (apply sqlite-cli/open-db! (get-dir-and-db-name graph-dir))
         conn2 (apply sqlite-cli/open-db! (get-dir-and-db-name graph-dir2))
-        export-options (select-keys options [:include-timestamps? :exclude-namespaces])
+        export-options (select-keys options [:include-timestamps? :exclude-namespaces :ignore-built-ins?])
         export-map (sqlite-export/build-export @conn {:export-type :graph :graph-options export-options})
         export-map2 (sqlite-export/build-export @conn2 {:export-type :graph :graph-options export-options})
         prepare-export-to-diff
