@@ -1594,37 +1594,49 @@
   [{:keys [view-parent view-feature-type view-entity] :as option}]
   (let [[view-entity set-view-entity!] (hooks/use-state view-entity)
         [views set-views!] (hooks/use-state nil)
-        [items-count set-count!] (hooks/use-state (count (:data option)))]
+        [items-count set-count!] (hooks/use-state (count (:data option)))
+        [loading? set-loading!] (hooks/use-state true)]
     (hooks/use-effect!
      (fn []
        (let [repo (state/get-current-repo)]
-         (p/let [_result (db-async/<get-views repo (:db/id view-parent) view-feature-type)
-                 views (get-views view-parent view-feature-type)
-                 current-view (if-let [v (first views)]
-                                (do
-                                  (when-not view-entity (set-view-entity! v))
-                                  (set-views! views)
-                                  v)
-                                (when (and view-parent view-feature-type (not view-entity))
-                                  (p/let [new-view (create-view! view-parent view-feature-type)]
-                                    (set-view-entity! new-view)
-                                    (set-views! (concat views [new-view]))
-                                    new-view)))]
-           (when (and current-view
-                      (nil? (:data option)))
-             (p/let [{:keys [count data]} (<load-view-data current-view 0)
-                     set-data! (:set-data! option)]
-               (set-data! data)
-               (set-count! count))))))
+         (->
+          (p/let [_result (db-async/<get-views repo (:db/id view-parent) view-feature-type)
+                  views (get-views view-parent view-feature-type)
+                  current-view (if-let [v (first views)]
+                                 (do
+                                   (when-not view-entity (set-view-entity! v))
+                                   (set-views! views)
+                                   v)
+                                 (when (and view-parent view-feature-type (not view-entity))
+                                   (p/let [new-view (create-view! view-parent view-feature-type)]
+                                     (set-view-entity! new-view)
+                                     (set-views! (concat views [new-view]))
+                                     new-view)))]
+            (if (and current-view
+                     (nil? (:data option)))
+              (p/let [{:keys [count data]} (<load-view-data current-view 0)
+                      set-data! (:set-data! option)]
+                (set-data! data)
+                (set-count! count)
+                (set-loading! false))
+              (set-loading! false)))
+          (p/catch (fn [e]
+                     (js/console.error e)
+                     (set-loading! false))))))
      [])
-    (view-container view-entity (assoc option
-                                       :items-count items-count
-                                       :views views
-                                       :set-views! set-views!
-                                       :set-view-entity! set-view-entity!
-                                       :end-reached (fn []
-                                                      (when view-entity
-                                                        (p/let [prev-data (:data option)
-                                                                {:keys [_count data]} (<load-view-data view-entity (count prev-data))
-                                                                set-data! (:set-data! option)]
-                                                          (set-data! (into prev-data data)))))))))
+    (if loading?
+      [:div.flex.flex-col.space-2.gap-2
+       (shui/skeleton {:class "h-6 w-full"})
+       [:div.flex.flex-col.space-2.gap-2
+        (repeat 25 (shui/skeleton {:class "h-6 w-full"}))]]
+      (view-container view-entity (assoc option
+                                         :items-count items-count
+                                         :views views
+                                         :set-views! set-views!
+                                         :set-view-entity! set-view-entity!
+                                         :end-reached (fn []
+                                                        (when view-entity
+                                                          (p/let [prev-data (:data option)
+                                                                  {:keys [_count data]} (<load-view-data view-entity (count prev-data))
+                                                                  set-data! (:set-data! option)]
+                                                            (set-data! (into prev-data data))))))))))
