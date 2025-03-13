@@ -331,7 +331,6 @@
        (property-key-title block property class-schema?))]))
 
 (rum/defcs ^:large-vars/cleanup-todo property-input < rum/reactive
-  (rum/local nil ::ref)
   (rum/local false ::show-new-property-config?)
   (rum/local false ::show-class-select?)
   (rum/local {} ::property-schema)
@@ -363,8 +362,7 @@
                    state)}
   [state block *property-key {:keys [class-schema?]
                               :as opts}]
-  (let [*ref (::ref state)
-        *property (::property state)
+  (let [*property (::property state)
         *show-new-property-config? (::show-new-property-config? state)
         *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
@@ -392,7 +390,6 @@
                                 (contains? #{:default :url} (:logseq.property/type property))
                                 (not (seq (:property/closed-values property)))))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
-     {:ref #(reset! *ref %)}
      (if property-key
        [:div.ls-property-add.gap-1.flex.flex-1.flex-row.items-center
         (when-not hide-property-key?
