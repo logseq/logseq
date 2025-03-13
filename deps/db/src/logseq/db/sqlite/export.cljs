@@ -575,8 +575,7 @@
      This is useful for graphs seeded with an ontology e.g. schema.org as it eliminates noisy and needless
      export+import"
   [db options*]
-  (let [options (merge options* {:property-value-uuids? true
-                                 :extract-content-refs? false})
+  (let [options (merge options* {:property-value-uuids? true})
         content-ref-uuids (get-graph-content-ref-uuids db)
         ontology-options (merge options {:include-uuid? true})
         ontology-export (build-graph-ontology-export db ontology-options)
@@ -691,7 +690,8 @@
    Also checks for property conflicts between existing properties and properties to be imported"
   [db {:keys [pages-and-blocks classes properties] ::keys [graph-files]} property-conflicts]
   (let [export-map
-        (cond-> {:build-existing-tx? true}
+        (cond-> {:build-existing-tx? true
+                 :extract-content-refs? false}
           (seq pages-and-blocks)
           (assoc :pages-and-blocks
                  (mapv (fn [m]

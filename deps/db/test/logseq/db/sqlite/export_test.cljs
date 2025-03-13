@@ -283,9 +283,11 @@
                        :build/property-classes [:user.class/NodeClass]}
                       :user.property/p2
                       {:logseq.property/type :default}}
+         :extract-content-refs? false
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}
+                    {:block/title (str "not a page ref `" (page-ref/->page-ref "foo") "`")}
                     {:block/title (str "block ref to " (page-ref/->page-ref block-uuid))}
                     {:block/title "ref in properties"
                      :build/properties {:user.property/p2 (str "pvalue ref to " (page-ref/->page-ref pvalue-page-uuid))}}
@@ -695,7 +697,7 @@
     (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
         "All :file/path entities are imported")))
 
-(deftest ^:focus2 import-graph-with-exclude-namespaces
+(deftest import-graph-with-exclude-namespaces
   (let [original-data (build-original-graph-data {:exclude-namespaces? true})
         conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
         _ (d/transact! conn (::sqlite-export/graph-files original-data))
