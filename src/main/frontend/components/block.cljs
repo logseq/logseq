@@ -1084,9 +1084,13 @@
                     (not contents-page?))
            [:span.text-gray-500.bracket page-ref/left-brackets])
          (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
-           [:div.inline-block {:style {:margin-right 1}
-                               :on-pointer-down (fn [e]
-                                                  (util/stop e))} (block-positioned-properties config block :block-left)])
+           [:div.inline-block
+            {:style {:margin-right 1
+                     :margin-top -2
+                     :vertical-align "middle"}
+             :on-pointer-down (fn [e]
+                                (util/stop e))}
+            (block-positioned-properties config block :block-left)])
          (page-cp config' (if (uuid? uuid-or-title)
                             {:block/uuid uuid-or-title}
                             {:block/name uuid-or-title}))
