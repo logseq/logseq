@@ -12,7 +12,7 @@ on:
       - '.github/workflows/graph-parser.yml'
       - '!deps/graph-parser/**.md'
   pull_request:
-    branches: [master]
+    branches: [master, "feat/db"]
     paths:
       - 'deps/graph-parser/**'
       - 'deps/db/**'

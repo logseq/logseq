@@ -12,8 +12,10 @@ BA = "BA"
 fo = "fo"
 aks = "aks"
 Mannor = "Mannor"
+nd = "nd"
 deleteable = "deleteable"
 fom = "fom"
 tne = "tne"
+Damon = "Damon"
 [files]
-extend-exclude = ["resources/*", "src/resources/*"]
+extend-exclude = ["resources/*", "src/resources/*", "scripts/resources/*", "e2e-tests/plugin/lsplugin.user.js"]

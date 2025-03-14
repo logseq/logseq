@@ -5,16 +5,18 @@
   (:refer-clojure :exclude [map filter mapcat concat remove])
   (:require [cljs.core.match :refer [match]]
             [clojure.string :as string]
-            [datascript.core :as d]
+            [frontend.common.file.core :as common-file]
             [frontend.db :as db]
+            [frontend.format.mldoc :as mldoc]
             [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.db :as ldb]
             [malli.core :as m]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [promesa.core :as p]))
 
 ;;; TODO: split frontend.handler.export.text related states
 (def ^:dynamic *state*
@@ -55,22 +57,21 @@
 
 ;;; internal utils
 (defn- get-blocks-contents
-  [repo root-block-uuid]
-  (->
-   (db/get-block-and-children repo root-block-uuid)
-   (outliner-tree/blocks->vec-tree (str root-block-uuid))
-   (outliner-file/tree->file-content {:init-level 1})))
-
-(defn get-page-content
-  [page]
-  (-> page
-      db/get-page
-      :block/file
-      :file/content))
+  [repo root-block-uuid & {:keys [init-level]
+                           :or {init-level 1}}]
+  (-> (db/pull-many (keep :db/id (db/get-block-and-children repo root-block-uuid)))
+      (outliner-tree/blocks->vec-tree (str root-block-uuid))
+      (outliner-file/tree->file-content {:init-level init-level})))
 
 (defn root-block-uuids->content
-  [repo root-block-uuids]
-  (let [contents (mapv #(get-blocks-contents repo %) root-block-uuids)]
+  [repo root-block-uuids & {:keys [page-title-only?]}]
+  (let [contents (mapv (fn [id]
+                         (if-let [page (and page-title-only?
+                                            (let [e (db/entity [:block/uuid id])]
+                                              (when (:block/name e)
+                                                e)))]
+                           (:block/title page)
+                           (get-blocks-contents repo id))) root-block-uuids)]
     (string/join "\n" (mapv string/trim-newline contents))))
 
 (declare remove-block-ast-pos Properties-block-ast?)
@@ -83,7 +84,7 @@
     (when content
       (removev Properties-block-ast?
                (mapv remove-block-ast-pos
-                     (gp-mldoc/->edn content (gp-mldoc/default-config format)))))))
+                     (mldoc/->edn content format))))))
 
 (defn- block-uuid->ast-with-children
   [block-uuid]
@@ -92,16 +93,25 @@
     (when content
       (removev Properties-block-ast?
                (mapv remove-block-ast-pos
-                     (gp-mldoc/->edn content (gp-mldoc/default-config format)))))))
+                     (mldoc/->edn content format))))))
+
+(defn get-page-content
+  [page-uuid]
+  (let [repo (state/get-current-repo)
+        db (db/get-db repo)]
+    (common-file/block->content repo db page-uuid
+                                nil
+                                {:export-bullet-indentation (state/get-export-bullet-indentation)})))
 
 (defn- page-name->ast
   [page-name]
-  (let [content (get-page-content page-name)
-        format :markdown]
-    (when content
-      (removev Properties-block-ast?
-               (mapv remove-block-ast-pos
-                     (gp-mldoc/->edn content (gp-mldoc/default-config format)))))))
+  (let [page (db/get-page page-name)]
+    (when-let [content (get-page-content (:block/uuid page))]
+      (when content
+        (let [format :markdown]
+          (removev Properties-block-ast?
+                   (mapv remove-block-ast-pos
+                         (mldoc/->edn content format))))))))
 
 (defn- update-level-in-block-ast-coll
   [block-ast-coll origin-level]
@@ -178,38 +188,32 @@
                  ast-content)))
            inline-coll)))
 
-(defn- get-file-contents
+(defn <get-all-pages
   [repo]
-  (let [db (db/get-db repo)]
-    (->> (d/q '[:find ?fp
-                :where
-                [?e :block/file ?f]
-                [?f :file/path ?fp]] db)
-         (mapv (fn [[file-path]]
-                 [file-path
-                  (db/get-file file-path)])))))
+  (when-let [^object worker @db-browser/*worker]
+    (p/let [result (.get-all-pages worker repo)]
+      (ldb/read-transit-str result))))
 
-(defn- get-md-file-contents
+(defn <get-debug-datoms
   [repo]
-  (filterv (fn [[path _]]
-             (let [path (string/lower-case path)]
-               (re-find #"\.(?:md|markdown)$" path)))
-           (get-file-contents repo)))
+  (when-let [^object worker @db-browser/*worker]
+    (.get-debug-datoms worker repo)))
 
-(defn get-file-contents-with-suffix
+(defn <get-all-page->content
   [repo]
-  (let [db (db/get-db repo)
-        md-files (get-md-file-contents repo)]
-    (->>
-     md-files
-     (mapv (fn [[path content]] {:path path :content content
-                                 :names (d/q '[:find [?n ?n2]
-                                               :in $ ?p
-                                               :where [?e :file/path ?p]
-                                               [?e2 :block/file ?e]
-                                               [?e2 :block/name ?n]
-                                               [?e2 :block/original-name ?n2]] db path)
-                                 :format (gp-util/get-format path)})))))
+  (when-let [^object worker @db-browser/*worker]
+    (p/let [result (.get-all-page->content worker repo)]
+      (ldb/read-transit-str result))))
+
+(defn <get-file-contents
+  [repo suffix]
+  (p/let [page->content (<get-all-page->content repo)]
+    (clojure.core/map (fn [[page-title content]]
+                        {:path (str page-title "." suffix)
+                         :content content
+                         :title page-title
+                         :format :markdown})
+                      page->content)))
 
 ;;; utils (ends)
 
@@ -528,7 +532,6 @@
   [[tp _]]
   (= tp "Properties"))
 
-
 (defn replace-Heading-with-Paragraph
   "works on block-ast
   replace all heading with paragraph when indent-style is no-indent"
@@ -566,7 +569,6 @@
        block-ast-coll)
       :result-ast-tcoll
       persistent!))
-
 
 ;;; inline transformers
 
@@ -829,11 +831,9 @@
 
 ;;; simple ast (ends)
 
-
 ;;; TODO: walk the hiccup tree,
 ;;; and call escape-html on all its contents
 ;;;
-
 
 ;;; walk the hiccup tree,
 ;;; and call escape-html on all its contents (ends)
