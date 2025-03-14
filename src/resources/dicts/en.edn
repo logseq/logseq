@@ -795,6 +795,7 @@
   :git/commit "Create git commit with message"
   :misc/export-block-data "Export block EDN data"
   :misc/export-page-data "Export page EDN data"
+  :misc/export-graph-data "Export graph's EDN data"
   :misc/export-graph-ontology-data "Export graph's tags and properties EDN data"
   :misc/import-edn-data "Import EDN data"
   :dev/show-block-data "(Dev) Show block data"

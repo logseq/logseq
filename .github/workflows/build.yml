@@ -165,17 +165,23 @@ jobs:
         run: cd scripts && yarn install --frozen-lockfile
 
       - name: Create DB graph with properties
-        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./db-graph-with-props
+        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./properties-graph
 
       # TODO: Use a smaller, test-focused graph to test classes
       - name: Create DB graph with classes
-        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./db-graph-with-schema
+        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./schema-graph
 
       - name: Fetch deps/db yarn deps
         run: cd deps/db && yarn install --frozen-lockfile
 
       - name: Validate created DB graphs
-        run: cd deps/db && yarn nbb-logseq script/validate_db.cljs ../../scripts/db-graph-with-props ../../scripts/db-graph-with-schema --closed-maps --group-errors
+        run: cd deps/db && yarn nbb-logseq script/validate_db.cljs ../../scripts/properties-graph ../../scripts/schema-graph --closed-maps --group-errors
+
+      - name: Export a created DB graph
+        run: cd deps/db && yarn nbb-logseq script/export_graph.cljs ../../scripts/properties-graph -f properties.edn -t
+
+      - name: Create graph from the export and diff the two graphs
+        run: cd deps/db && yarn nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs ./properties-graph2 properties.edn -iv && yarn nbb-logseq script/diff_graphs.cljs ../../scripts/properties-graph ./properties-graph2 -t
 
   e2e-test:
     # TODO: Re-enable when ready to enable tests for file graphs

@@ -8,6 +8,7 @@
   (:require [cljs.pprint :as pprint]
             [clojure.set :as set]
             [clojure.string :as string]
+            [clojure.walk :as walk]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
@@ -46,6 +47,8 @@
           [:block/uuid page-uuid]
           (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)}))))
       :block/uuid
+      val
+      ;; Allow through :coll properties like
       val)
     val))
 
@@ -122,7 +125,7 @@
                      [property-map v])))))
        (db-property-build/build-property-values-tx-m new-block)))
 
-(defn- extract-content-refs
+(defn- extract-basic-content-refs
   "Extracts basic refs from :block/title like `[[foo]]` or `[[UUID]]`. Can't
   use db-content/get-matched-ids because of named ref support.  Adding more ref
   support would require parsing each block with mldoc and extracting with
@@ -134,7 +137,7 @@
     (map second (re-seq page-ref/page-ref-re s))))
 
 (defn- ->block-tx [{:keys [build/properties] :as m} page-uuids all-idents page-id
-                   {properties-config :properties :keys [build-existing-tx?]}]
+                   {properties-config :properties :keys [build-existing-tx? extract-content-refs?]}]
   (let [build-existing-tx?' (and build-existing-tx? (::existing-block? (meta m)) (not (:build/keep-uuid? m)))
         block (if build-existing-tx?'
                 (select-keys m [:block/uuid])
@@ -143,7 +146,7 @@
                  :block/order (db-order/gen-key nil)
                  :block/parent (or (:block/parent m) {:db/id page-id})})
         pvalue-tx-m (->property-value-tx-m block properties properties-config all-idents)
-        ref-strings (extract-content-refs (:block/title m))]
+        ref-strings (when extract-content-refs? (extract-basic-content-refs (:block/title m)))]
     (cond-> []
       ;; Place property values first since they are referenced by block
       (seq pvalue-tx-m)
@@ -199,7 +202,7 @@
       true
       (conj
        (merge
-        new-block
+        (dissoc new-block :build/properties-ref-types)
         (when-let [props (not-empty (:build/properties prop-m))]
           (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) page-uuids all-idents))
         (when (seq property-classes)
@@ -331,9 +334,10 @@
    [:graph-namespace {:optional true} :keyword]
    [:page-id-fn {:optional true} :any]
    [:auto-create-ontology? {:optional true} :boolean]
-   [:build-existing-tx? {:optional true} :boolean]])
+   [:build-existing-tx? {:optional true} :boolean]
+   [:extract-content-refs? {:optional true} :boolean]])
 
-(defn- get-used-properties-from-options
+(defn get-used-properties-from-options
   "Extracts all used properties as a map of properties to their property values. Looks at properties
    from :build/properties and :build/class-properties. Properties from :build/class-properties have
    a ::no-value value"
@@ -475,7 +479,7 @@
              (mapcat
               (fn [{:keys [blocks]}]
                 (->> blocks
-                     (mapcat #(extract-content-refs (:block/title %)))
+                     (mapcat #(extract-basic-content-refs (:block/title %)))
                      (remove common-util/uuid-string?)
                      (remove existing-pages))))
              distinct
@@ -524,7 +528,7 @@
 
 (defn- pre-build-pages-and-blocks
   "Pre builds :pages-and-blocks before any indexes like page-uuids are made"
-  [pages-and-blocks properties]
+  [pages-and-blocks properties {:keys [:extract-content-refs?]}]
   (let [ensure-page-uuids (fn [m]
                             (if (get-in m [:page :block/uuid])
                               m
@@ -546,16 +550,20 @@
                                                    (or (:block/uuid page) (common-uuid/gen-uuid :journal-page-uuid date-int))
                                                    :block/tags :logseq.class/Journal})
                                            (with-meta {::new-page? (not (:block/uuid page))})))))
-                           m))]
-    ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
-    (->> pages-and-blocks
-         (add-new-pages-from-properties properties)
-         (map expand-journal)
-         (map expand-block-children)
-         add-new-pages-from-refs
-         ;; This needs to be last to ensure page metadata
-         (map ensure-page-uuids)
-         vec)))
+                           m))
+        ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
+        pages (->> pages-and-blocks
+                   (add-new-pages-from-properties properties)
+                   (map expand-journal)
+                   (map expand-block-children))]
+    (cond->> pages
+      extract-content-refs?
+      add-new-pages-from-refs
+      true
+      ;; This needs to be last to ensure page metadata
+      (map ensure-page-uuids)
+      true
+      vec)))
 
 (defn- infer-property-schema
   "Infers a property schema given a collection of its a property pair values"
@@ -597,10 +605,27 @@
     ;; (when (seq new-classes) (prn :new-classes new-classes))
     {:classes classes' :properties properties'}))
 
+(defn- get-possible-referenced-uuids
+  "Gets all possible ref uuids from either [:block/uuid X] or {:build/journal X}. Uuid scraping
+   is aggressive so some uuids may not be referenced"
+  [input-map]
+  (let [uuids (atom #{})
+        _ (walk/postwalk (fn [f]
+                           ;; This does get a few uuids that aren't :build/keep-uuid? but
+                           ;; that's ok because it consistently gets pvalue uuids
+                           (when (and (vector? f) (= :block/uuid (first f)))
+                             (swap! uuids conj (second f)))
+                           ;; All journals that don't have uuid and could be referenced
+                           (when (and (map? f) (:build/journal f) (not (:block/uuid f)))
+                             (swap! uuids conj (common-uuid/gen-uuid :journal-page-uuid (:build/journal f))))
+                           f)
+                         input-map)]
+    @uuids))
+
 (defn- build-blocks-tx*
   [{:keys [pages-and-blocks properties graph-namespace auto-create-ontology?]
     :as options}]
-  (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks properties)
+  (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks properties (dissoc options :pages-and-blocks :properties))
         page-uuids (create-page-uuids pages-and-blocks')
         {:keys [classes properties]} (if auto-create-ontology? (auto-create-ontology options) options)
         all-idents (create-all-idents properties classes graph-namespace)
@@ -628,7 +653,9 @@
       (:build-existing-tx? options)
       (update :init-tx
               (fn [init-tx]
-                (let [indices (mapv #(select-keys % [:block/uuid]) (filter :block/uuid init-tx))]
+                (let [indices
+                      (mapv #(hash-map :block/uuid %)
+                            (get-possible-referenced-uuids {:classes classes :properties properties :pages-and-blocks pages-and-blocks}))]
                   (into indices init-tx)))))))
 
 ;; Public API
@@ -644,6 +671,16 @@
                 (when-let [children (seq (:build/children m))]
                   (mapcat #(apply-to-block-and-all-children % f) children))))]
     (mapcat #(apply-to-block-and-all-children % f) blocks)))
+
+(defn update-each-block
+  "Calls fn f on each block including all children under :build/children"
+  [blocks f]
+  (mapv (fn [m]
+          (let [updated-m (f m)]
+            (if (:build/children m)
+              (assoc updated-m :build/children (update-each-block (:build/children m) f))
+              updated-m)))
+        blocks))
 
 (defn validate-options
   [{:keys [properties] :as options}]
@@ -709,6 +746,9 @@
      existing in DB and are skipped for creation. This is useful for building tx on existing DBs e.g. for importing.
      Blocks and pages are updated with any attributes passed to it while all other node types are ignored for update
      unless :build/keep-uuid? is set.
+  * :extract-content-refs? - When set to true, plain text refs e.g. `[[foo]]` are automatically extracted to create pages
+    and to create refs in blocks. This is useful for testing but since it only partially works, not useful for exporting.
+    Default is true
   * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
     Default is :db/id
 
@@ -718,9 +758,10 @@
    supported: :default, :url, :checkbox, :number, :node and :date. :checkbox and
    :number values are written as booleans and integers/floats. :node references
    are written as vectors e.g. `[:build/page {:block/title \"PAGE NAME\"}]`"
-  [options]
-  (validate-options options)
-  (build-blocks-tx* options))
+  [options*]
+  (let [options (merge {:extract-content-refs? true} options*)]
+    (validate-options options)
+    (build-blocks-tx* options)))
 
 (defn create-blocks
   "Builds txs with build-blocks-tx and transacts them. Also provides a shorthand

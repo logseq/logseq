@@ -10,6 +10,7 @@
             [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.string :as string]
+            [cljs.pprint :as pprint]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
@@ -190,6 +191,8 @@
   "Options spec"
   {:help {:alias :h
           :desc "Print help"}
+   :file {:alias :f
+          :desc "File to save generated sqlite.build EDN"}
    :config {:alias :c
             :coerce edn/read-string
             :desc "EDN map to add to config.edn"}})
@@ -209,7 +212,9 @@
             (fse/removeSync db-path))
         conn (outliner-cli/init-conn dir db-name {:additional-config (:config options)
                                                   :classpath (cp/get-classpath)})
-        {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx (create-init-data))
+        init-data (create-init-data)
+        _ (when (:file options) (fs/writeFileSync (:file options) (with-out-str (pprint/pprint init-data))))
+        {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx init-data)
         existing-names (set (map :v (d/datoms @conn :avet :block/title)))
         conflicting-names (set/intersection existing-names (set (keep :block/title init-tx)))]
     (when (seq conflicting-names)
