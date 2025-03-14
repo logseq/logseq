@@ -18,7 +18,6 @@
             [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.rules :as rules]
             [promesa.core :as p]))
 
 (def <q db-async-util/<q)
@@ -109,22 +108,6 @@
         ;; put default value the first
         (concat [default-value-id] result)
         result))))
-
-(comment
-  (defn <get-block-property-value-entity
-    [graph property-id value]
-    (p/let [result (<q graph {}
-                       '[:find [(pull ?vid [*]) ...]
-                         :in $ ?property-id ?value
-                         :where
-                         [?b ?property-id ?vid]
-                         [(not= ?vid :logseq.property/empty-placeholder)]
-                         (or
-                          [?vid :logseq.property/value ?value]
-                          [?vid :block/title ?value])]
-                       property-id
-                       value)]
-      (db/entity (:db/id (first result))))))
 
 ;; TODO: batch queries for better performance and UX
 (defn <get-block
@@ -287,17 +270,6 @@
         [?page :block/name]]
       tag-id))
 
-(defn <get-property-objects
-  [graph property-ident]
-  (<q graph {:transact-db? true}
-      '[:find [(pull ?b [*]) ...]
-        :in $ % ?prop
-        :where
-        (has-property-or-default-value? ?b ?prop)]
-      (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
-                           {:deps rules/rules-dependencies})
-      property-ident))
-
 (defn <get-tag-objects
   [graph class-id]
   (let [class-children (db-model/get-structured-children graph class-id)
@@ -381,13 +353,3 @@
                            (recur (cons item others) time'))))
                      (quot time 1000)))]
         [status-history time]))))
-
-(comment
-  (defn <fetch-all-pages
-    [graph]
-    (when-let [^Object worker @db-browser/*worker]
-      (let [db (db/get-db graph)
-            exclude-ids (->> (d/datoms db :avet :block/name)
-                             (map :db/id)
-                             (ldb/write-transit-str))]
-        (.fetch-all-pages worker graph exclude-ids)))))

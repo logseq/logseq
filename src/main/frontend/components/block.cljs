@@ -905,14 +905,19 @@
 
 (rum/defcs page-cp-inner < db-mixins/query rum/reactive
   {:init (fn [state]
-           (let [page (last (:rum/args state))
+           (let [args (:rum/args state)
+                 page (last args)
                  *result (atom nil)
                  page-name (or (:block/uuid page)
                                (when-let [s (:block/name page)]
                                  (string/trim s)))
                  page-entity (if (e/entity? page) page (db/get-page page-name))]
-             (if page-entity
+             (cond
+               page-entity
                (reset! *result page-entity)
+               (:skip-async-load? (first args))
+               (reset! *result page)
+               :else
                (p/let [query-result (db-async/<get-block (state/get-current-repo) page-name {:children? false})
                        result (if (e/entity? query-result)
                                 query-result
@@ -923,7 +928,7 @@
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [state {:keys [label children preview? disable-preview? show-non-exists-page? tag?] :as config} page]
+  [state {:keys [label children preview? disable-preview? show-non-exists-page? tag? _skip-async-load?] :as config} page]
   (when-let [entity' (rum/react (:*entity state))]
     (let [entity (db/sub-block (:db/id entity'))]
       (cond
@@ -953,8 +958,10 @@
         (invalid-node-ref (:block/name page))
 
         (and (:block/name page) show-non-exists-page?)
-        (page-inner config {:block/title (:block/name page)
-                            :block/name (:block/name page)} children label)
+        (page-inner config (merge
+                            {:block/title (:block/name page)
+                             :block/name (:block/name page)}
+                            page) children label)
 
         (:block/name page)
         [:span (str (when tag? "#")
@@ -2448,7 +2455,7 @@
       :else
       nil)))
 
-(rum/defcs db-properties-cp <
+(rum/defcs db-properties-cp < rum/static
   {:init (fn [state]
            (let [container-id (or (:container-id (first (:rum/args state)))
                                   (state/get-next-container-id))]
@@ -3388,10 +3395,12 @@
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [*ref (atom nil)
-                 block (nth (:rum/args state) 3)
+                 args (:rum/args state)
+                 [_state _ config block] args
                  block-id (:db/id block)
                  repo (state/get-current-repo)]
-             (db-async/<get-block repo block-id :children? true)
+             (when-not (or (:table-view? config) (:property-block? config))
+               (db-async/<get-block repo block-id :children? true))
              (assoc state ::ref *ref)))}
   [state container-state repo config* block {:keys [navigating-block navigated?]}]
   (let [*ref (::ref state)
@@ -3617,9 +3626,22 @@
   [old-block new-block]
   (not= (:block/tx-id old-block) (:block/tx-id new-block)))
 
+(defn- config-block-should-update?
+  [old-state new-state]
+  (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet?]
+        b1                  (second (:rum/args old-state))
+        b2                  (second (:rum/args new-state))
+        result              (or
+                             (block-changed? b1 b2)
+                                               ;; config changed
+                             (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                                   (select-keys (first (:rum/args new-state)) config-compare-keys)))]
+    (boolean result)))
+
 (rum/defcs block-container < rum/reactive db-mixins/query
   (rum/local false ::show-block-left-menu?)
   (rum/local false ::show-block-right-menu?)
+  {:should-update config-block-should-update?}
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)
@@ -4111,16 +4133,7 @@
   (map #(markup-element-cp config %) col))
 
 (rum/defc block-item <
-  {:should-update (fn [old-state new-state]
-                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet?]
-                          b1                  (second (:rum/args old-state))
-                          b2                  (second (:rum/args new-state))
-                          result              (or
-                                               (block-changed? b1 b2)
-                                               ;; config changed
-                                               (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
-                                                     (select-keys (first (:rum/args new-state)) config-compare-keys)))]
-                      (boolean result)))}
+  {:should-update config-block-should-update?}
   [config item {:keys [top? bottom?]}]
   (let [original-block item
         linked-block (:block/link item)

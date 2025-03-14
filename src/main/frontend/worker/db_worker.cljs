@@ -620,21 +620,6 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (ldb/write-transit-str (sqlite-common-db/get-page->refs-count @conn))))
 
-  (fetch-all-pages
-   [_this repo exclude-page-ids-str]
-   ;; (when-let [conn (worker-state/get-datascript-conn repo)]
-   ;;   (async/go
-   ;;     (let [all-pages (sqlite-common-db/get-all-pages @conn (ldb/read-transit-str exclude-page-ids-str))
-   ;;           partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 all-pages))]
-   ;;       (doseq [[idx tx-data] partitioned-data]
-   ;;         (worker-util/post-message :sync-db-changes {:repo repo
-   ;;                                                     :tx-data tx-data
-   ;;                                                     :tx-meta {:initial-pages? true
-   ;;                                                               :end? (= idx (dec (count partitioned-data)))}})
-   ;;         (async/<! (async/timeout 100)))))
-   ;;   nil)
-   )
-
   (closeDB
    [_this repo]
    (close-db! repo))
@@ -924,6 +909,13 @@
          (worker-util/post-message :notification
                                    ["An unexpected error occurred during export. See the javascript console for details."
                                     :error])))))
+
+  (get-view-data
+   [_this repo view-id opts-str]
+   (let [conn (worker-state/get-datascript-conn repo)
+         opts (ldb/read-transit-str opts-str)
+         data (ldb/get-view-data repo @conn view-id opts)]
+     (ldb/write-transit-str data)))
 
   (dangerousRemoveAllDbs
    [this repo]

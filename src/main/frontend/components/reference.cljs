@@ -213,6 +213,7 @@
 (rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::ref-pages)
   {:init (fn [state]
+           ;; TODO: move refs
            (let [page (first (:rum/args state))]
              (when page (db-async/<get-block-refs (state/get-current-repo) (:db/id page))))
            (assoc state ::filters (atom nil)))}

@@ -18,6 +18,7 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
+            [logseq.db.frontend.view :as db-view]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
 
@@ -437,10 +438,21 @@
 
 (defn get-block-refs
   [db id]
-  (let [alias (->> (get-block-alias db id)
+  (let [entity (d/entity db id)
+        alias (->> (get-block-alias db id)
                    (cons id)
                    distinct)
-        refs (->> (mapcat (fn [id] (:block/_path-refs (d/entity db id))) alias)
+        refs (->> (mapcat (fn [id]
+                            (->> (:block/_refs (d/entity db id))
+                                 (remove (fn [ref]
+                                           ;; remove refs that have the block as either tag or property
+                                           (or (and
+                                                (class? entity)
+                                                (d/datom db :eavt (:db/id ref) :block/tags (:db/id entity)))
+                                               (and
+                                                (property? entity)
+                                                (d/datom db :eavt (:db/id ref) (:db/ident entity))))))))
+                          alias)
                   distinct)]
     (when (seq refs)
       (d/pull-many db '[*] (map :db/id refs)))))
@@ -467,19 +479,18 @@
     (when (seq eids)
       (d/pull-many db '[*] eids))))
 
+(def hidden-or-internal-tag? db-view/hidden-or-internal-tag?)
+
 (defn get-all-pages
   [db]
   (->>
    (d/datoms db :avet :block/name)
    (keep (fn [d]
            (let [e (d/entity db (:e d))]
-             (when-not (or (hidden? e) (internal-tags (:db/ident e)))
+             (when-not (hidden-or-internal-tag? e)
                e))))))
 
-(defn built-in?
-  "Built-in page or block"
-  [entity]
-  (:logseq.property/built-in? entity))
+(def built-in? entity-util/built-in?)
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
@@ -602,12 +613,6 @@
     :logseq.class/Quote-block :quote
     nil))
 
-(defn get-recent-updated-pages
-  [db]
-  (->> (d/datoms db :avet :block/updated-at)
-       (reverse)
-       (keep (fn [datom]
-               (let [e (d/entity db (:e datom))]
-                 (when (and (page? e) (not (hidden? e)))
-                   e))))
-       (take 30)))
+(def get-recent-updated-pages sqlite-common-db/get-recent-updated-pages)
+
+(def get-view-data db-view/get-view-data)

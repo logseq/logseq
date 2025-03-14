@@ -294,6 +294,7 @@
                                                          (.focus input)))}
                                    :align "start"
                                    :as-dropdown? true}))}
+
    (:block/title property)))
 
 (rum/defc property-key-cp < rum/static
@@ -568,7 +569,7 @@
                                                  {:db/id (:db/id block)})]
                                                {:outliner-op :save-block})))})))
 
-(rum/defc properties-section < rum/reactive db-mixins/query
+(rum/defc properties-section < rum/static
   [block properties opts]
   (when (seq properties)
       ;; Sort properties by :block/order
