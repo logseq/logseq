@@ -169,14 +169,16 @@
                                         (map :block/title)
                                         set))))
      [])
-    (let [items (concat
-                 (map (fn [x]
-                        {:label (:block/title x)
-                         :value (:block/uuid x)}) properties)
-                 (map (fn [x]
-                        {:label (:block/title x)
-                         :value (:block/uuid x)
-                         :group "Tags"}) classes))]
+    (let [items (->>
+                 (concat
+                  (map (fn [x]
+                         {:label (:block/title x)
+                          :value (:block/uuid x)}) properties)
+                  (map (fn [x]
+                         {:label (:block/title x)
+                          :value (:block/uuid x)
+                          :group "Tags"}) classes))
+                 (util/distinct-by-last-wins :value))]
       [:div.ls-property-add.flex.flex-row.items-center.property-key
        {:data-keep-selection true}
        [:div.ls-property-key
