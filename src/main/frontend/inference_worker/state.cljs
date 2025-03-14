@@ -1,6 +1,8 @@
 (ns frontend.inference-worker.state
   "State hub for inference-worker")
 
+(defonce *db-worker (atom nil))
+
 (defonce *hnswlib (atom nil))
 
 ;;repo -> index

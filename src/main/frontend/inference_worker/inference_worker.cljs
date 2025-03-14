@@ -1,13 +1,15 @@
 (ns frontend.inference-worker.inference-worker
   "Worker used for text embedding and vector-db"
   (:require ["comlink" :as Comlink]
+            [frontend.inference-worker.state :as infer-worker.state]
             [frontend.inference-worker.text-embedding :as infer-worker.text-embedding]
+            [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.db :as ldb]
             [promesa.core :as p]
             [shadow.cljs.modern :refer [defclass]]))
 
-#_:clj-kondo/ignore
+#_{:clj-kondo/ignore [:unresolved-symbol]}
 (defclass InferenceWorker
   (extends js/Object)
   (constructor
@@ -18,6 +20,11 @@
   (init
    [_this]
    (infer-worker.text-embedding/<init))
+
+  (set-db-worker-proxy
+   [_this proxy]
+   (reset! infer-worker.state/*db-worker proxy)
+   (log/info :set-db-worker-proxy :done))
 
   (text-embedding
    [_this text-coll]
