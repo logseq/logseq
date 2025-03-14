@@ -53,6 +53,10 @@
            (.resizeIndex hnsw new-size)
            (.addItems hnsw data-coll true)))))
 
+(defn delete-items
+  [repo labels]
+  (.markDeleteItems ^js (ensure-hnsw-index! repo) (into-array labels)))
+
 (defn <text-embedding&store!
   "return labels"
   [repo text-coll delete-labels]
