@@ -311,7 +311,7 @@ a.control-link {
 
   .property-icon {
     @apply flex items-center;
-    height: 28px;
+    height: 24px;
 
     button {
       margin-top: -1px;
