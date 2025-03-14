@@ -68,13 +68,13 @@
     }
 
     .property-k {
+      @apply inline-block overflow-hidden text-ellipsis whitespace-nowrap leading-[27px];
+
       .jtrigger {
         &-id {
           @apply left-[16px];
         }
       }
-
-      @apply inline-block overflow-hidden text-ellipsis whitespace-nowrap;
     }
 
     .property-value {
