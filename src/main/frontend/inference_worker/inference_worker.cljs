@@ -36,9 +36,13 @@
    (p/let [labels (infer-worker.text-embedding/<text-embedding&store! repo text-coll delete-labels)]
      (ldb/write-transit-str labels)))
 
+  (delete-labels
+   [_this repo labels]
+   (infer-worker.text-embedding/delete-items repo labels))
+
   (search
    [_this repo query-string nums-neighbors]
-    (infer-worker.text-embedding/<search-knn repo query-string nums-neighbors)))
+   (infer-worker.text-embedding/<search-knn repo query-string nums-neighbors)))
 
 (defn init
   []
