@@ -163,6 +163,13 @@
        (.init wrapped-worker)
        (log/info "init infer-worker spent:" (str  (- (util/time-ms) t1) "ms"))))))
 
+(defn <connect-db-worker-and-infer-worker!
+  []
+  (assert (and @state/*infer-worker @state/*db-worker))
+  (p/do!
+    (.set-db-worker-proxy ^js @state/*infer-worker (Comlink/proxy @state/*db-worker))
+    (.set-infer-worker-proxy ^js @state/*db-worker (Comlink/proxy @state/*infer-worker))))
+
 (defn <export-db!
   [repo data]
   (cond

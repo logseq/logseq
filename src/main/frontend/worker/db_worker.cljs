@@ -437,7 +437,8 @@
      (let [result (when-not (= result @worker-state/*state) result)]
        (ldb/write-transit-str result)))))
 
-#_:clj-kondo/ignore
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
 (defclass DBWorker
   (extends js/Object)
 
@@ -456,6 +457,11 @@
    [_this rtc-ws-url]
    (reset! worker-state/*rtc-ws-url rtc-ws-url)
    (init-sqlite-module!))
+
+  (set-infer-worker-proxy
+   [_this proxy]
+   (reset! worker-state/*infer-worker proxy)
+   (log/info :set-infer-worker-proxy :done))
 
   (storeMetadata
    [_this repo metadata-str]
@@ -634,7 +640,7 @@
    [_this repo]
    (p/let [pool (<get-opfs-pool repo)
            _ (close-db! repo)
-           result (remove-vfs! pool)]
+           _result (remove-vfs! pool)]
      nil))
 
   (releaseAccessHandles
@@ -965,7 +971,8 @@
   []
   (glogi-console/install!)
   (check-worker-scope!)
-  (let [^js obj (DBWorker.)]
+  (let [^js obj #_{:clj-kondo/ignore [:unresolved-symbol]}
+                (DBWorker.)]
     (outliner-register-op-handlers!)
     (worker-state/set-worker-object! obj)
     (<ratelimit-file-writes!)

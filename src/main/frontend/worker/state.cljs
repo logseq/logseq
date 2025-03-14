@@ -9,6 +9,7 @@
   :undo/repo->page-block-uuid->redo-ops {:doc "{repo {<page-block-uuid> [op1 op2 ...]}}"})
 
 (defonce *main-thread (atom nil))
+(defonce *infer-worker (atom nil))
 
 (defonce *state (atom {:worker/object nil
 
