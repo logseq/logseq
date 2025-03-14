@@ -189,12 +189,12 @@
 (defn- build-node-export
   "Given a block/page entity and optional existing properties, build an export map of its
    tags and properties"
-  [db entity {:keys [properties include-uuid-fn shallow-copy? include-timestamps?]
+  [db entity {:keys [properties include-uuid-fn shallow-copy? include-timestamps? exclude-ontology?]
               :or {include-uuid-fn (constantly false)}
               :as options}]
   (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
-        new-properties (when-not shallow-copy?
+        new-properties (when-not (or shallow-copy? exclude-ontology?)
                          (build-node-properties db entity ent-properties (dissoc options :shallow-copy? :include-uuid-fn)))
         build-node (cond-> {:block/title (block-title entity)}
                      (:block/link entity)
@@ -208,7 +208,8 @@
                      (and (not shallow-copy?) (seq ent-properties))
                      (assoc :build/properties
                             (buildable-properties db ent-properties (merge properties new-properties) options)))
-        new-classes (when-not shallow-copy? (build-node-classes db build-node (:block/tags entity) new-properties))]
+        new-classes (when-not (or shallow-copy? exclude-ontology?)
+                      (build-node-classes db build-node (:block/tags entity) new-properties))]
     (cond-> {:node build-node}
       (seq new-classes)
       (assoc :classes new-classes)
@@ -312,15 +313,16 @@
   "Given a vec of block entities, returns the blocks in a sqlite.build EDN format
    and all properties and classes used in these blocks"
   [db blocks {:keys [include-children?] :or {include-children? true} :as opts}]
-  (let [*properties (atom {})
-        *classes (atom {})
+  (let [*properties (atom (or (get-in opts [:graph-ontology :properties]) {}))
+        *classes (atom (or (get-in opts [:graph-ontology :classes]) {}))
         *pvalue-uuids (atom #{})
         id-map (into {} (map (juxt :db/id identity)) blocks)
         children (if include-children? (group-by #(get-in % [:block/parent :db/id]) blocks) {})
         build-block (fn build-block [block*]
                       (let [child-nodes (mapv build-block (get children (:db/id block*) []))
                             {:keys [node properties classes]}
-                            (build-node-export db block* (assoc opts :properties @*properties))
+                            (build-node-export db block* (-> (dissoc opts :graph-ontology)
+                                                             (assoc :properties @*properties)))
                             new-pvalue-uuids (get-pvalue-uuids node)]
                         (when (seq properties) (swap! *properties merge properties))
                         (when (seq classes) (swap! *classes merge classes))
@@ -329,10 +331,12 @@
                           (seq child-nodes) (assoc :build/children child-nodes))))
         roots (remove #(contains? id-map (get-in % [:block/parent :db/id])) blocks)
         exported-blocks (mapv build-block roots)]
-    {:blocks exported-blocks
-     :properties @*properties
-     :classes @*classes
-     :pvalue-uuids @*pvalue-uuids}))
+    (cond-> {:blocks exported-blocks
+             :pvalue-uuids @*pvalue-uuids}
+      (not= @*properties (get-in opts [:graph-ontology :properties]))
+      (assoc :properties @*properties)
+      (not= @*classes (get-in opts [:graph-ontology :classes]))
+      (assoc :classes @*classes))))
 
 (defn- build-uuid-block-export [db pvalue-uuids content-ref-ents {:keys [page-entity]}]
   (let [content-ref-blocks (set (remove entity-util/page? content-ref-ents))
@@ -380,7 +384,10 @@
            block-export)))
 
 (defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks] :as options}]
-  (let [page-ent-export (build-node-export db page-entity (dissoc options :classes :blocks))
+  (let [options' (cond-> (dissoc options :classes :blocks :graph-ontology)
+                   (:exclude-ontology? options)
+                   (assoc :properties (get-in options [:graph-ontology :properties])))
+        page-ent-export (build-node-export db page-entity options')
         page-pvalue-uuids (get-pvalue-uuids (:node page-ent-export))
         page (merge (dissoc (:node page-ent-export) :block/title)
                     (shallow-copy-page page-entity))
@@ -473,10 +480,10 @@
                                     [?p :block/tags :logseq.class/Property]
                                     (not [?p :logseq.property/built-in?])]
                                   db)
-        user-property-idents (if (seq exclude-namespaces)
+        user-property-idents' (if (seq exclude-namespaces)
                                (remove #(re-find exclude-regex (namespace %)) user-property-idents)
                                user-property-idents)
-        properties (build-export-properties db user-property-idents (merge options {:include-properties? true}))
+        properties (build-export-properties db user-property-idents' (merge options {:include-properties? true}))
         class-ents (->> (d/q '[:find [?class ...]
                                :where [?class :block/tags :logseq.class/Tag]
                                (not [?class :logseq.property/built-in?])]
@@ -513,8 +520,13 @@
 
 (defn- build-graph-pages-export
   "Handles pages, journals and their blocks"
-  [db options]
-  (let [page-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Page))
+  [db graph-ontology options]
+  (let [options (merge options
+                       {:graph-ontology graph-ontology}
+                       ;; when ontology is incomplete, :closed values can fail so have to build ontology
+                       (when (empty? (:exclude-namespaces options))
+                         {:exclude-ontology? true}))
+        page-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Page))
                          (map :e (d/datoms db :avet :block/tags :logseq.class/Journal)))
         page-exports (mapv (fn [eid]
                              (let [page-blocks* (get-page-blocks db eid)]
@@ -589,11 +601,11 @@
         ontology-export (build-graph-ontology-export db ontology-options)
         ontology-pvalue-uuids (set (concat (mapcat get-pvalue-uuids (vals (:properties ontology-export)))
                                            (mapcat get-pvalue-uuids (vals (:classes ontology-export)))))
-        pages-export (build-graph-pages-export db options)
+        pages-export (build-graph-pages-export db ontology-export options)
         graph-export* (-> (merge ontology-export pages-export) (dissoc :pvalue-uuids))
         graph-export (if (seq (:exclude-namespaces options))
-                         (assoc graph-export* ::auto-include-namespaces (:exclude-namespaces options))
-                         graph-export*)
+                       (assoc graph-export* ::auto-include-namespaces (:exclude-namespaces options))
+                       graph-export*)
         all-ref-uuids (set/union content-ref-uuids ontology-pvalue-uuids (:pvalue-uuids pages-export))
         files (build-graph-files db options)
         ;; Remove all non-ref uuids after all nodes are built.
