@@ -508,10 +508,15 @@
       (assoc :classes classes))))
 
 (defn- get-graph-content-ref-uuids
-  [db]
-  (let [block-titles (map :v (d/datoms db :avet :block/title))
-        block-links (->> (d/datoms db :avet :block/link)
-                         (map #(:block/uuid (d/entity db (:v %)))))
+  [db {:keys [:exclude-built-in-pages?]}]
+  (let [;; Add support for exclude-built-in-pages? and block-titles as needed
+        block-titles (map :v (d/datoms db :avet :block/title))
+        block-links (if exclude-built-in-pages?
+                      (->> (d/datoms db :avet :block/link)
+                           (keep #(when-not (:logseq.property/built-in? (:block/page (d/entity db (:e %))))
+                                    (:block/uuid (d/entity db (:v %))))))
+                      (->> (d/datoms db :avet :block/link)
+                           (map #(:block/uuid (d/entity db (:v %))))))
         content-ref-uuids (concat (->> block-titles
                                        (filter string?)
                                        (mapcat db-content/get-matched-ids))
@@ -520,26 +525,24 @@
 
 (defn- build-graph-pages-export
   "Handles pages, journals and their blocks"
-  [db graph-ontology options]
-  (let [options (merge options
+  [db graph-ontology options*]
+  (let [options (merge options*
                        {:graph-ontology graph-ontology}
-                       ;; when ontology is incomplete, :closed values can fail so have to build ontology
-                       (when (empty? (:exclude-namespaces options))
+                       ;; dont exclude when ontology is incomplete because :closed values can fail so have to build ontology
+                       (when (empty? (:exclude-namespaces options*))
                          {:exclude-ontology? true}))
         page-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Page))
                          (map :e (d/datoms db :avet :block/tags :logseq.class/Journal)))
         page-exports (mapv (fn [eid]
                              (let [page-blocks* (get-page-blocks db eid)]
-                               ;; TODO: Configure so that no ontologies are exported
                                (build-page-export* db eid page-blocks* (merge options {:include-uuid-fn (constantly true)}))))
                            page-ids)
-        pages-and-blocks* (mapcat :pages-and-blocks page-exports)
-        pages-and-blocks (if (:ignore-built-ins? options)
-                           (vec (remove #(get-in % [:page :build/properties :logseq.property/built-in?])
-                                        pages-and-blocks*))
-                           pages-and-blocks*)
-        pages-export {:pages-and-blocks pages-and-blocks
-                      :pvalue-uuids (set (mapcat :pvalue-uuids page-exports))}]
+        page-exports' (remove (fn [page-export]
+                                (and (:exclude-built-in-pages? options)
+                                     (get-in page-export [:pages-and-blocks 0 :page :build/properties :logseq.property/built-in?])))
+                              page-exports)
+        pages-export {:pages-and-blocks (vec (mapcat :pages-and-blocks page-exports'))
+                      :pvalue-uuids (set (mapcat :pvalue-uuids page-exports'))}]
     pages-export))
 
 (defn- build-graph-files
@@ -569,7 +572,7 @@
    and readability"
   [pages-and-blocks]
   (vec
-   (sort-by #(or (get-in % [:page :block/title]) (get-in % [:page :block/title]))
+   (sort-by #(or (get-in % [:page :block/title]) (str (get-in % [:page :build/journal])))
             pages-and-blocks)))
 
 (defn- add-ontology-for-include-namespaces
@@ -593,10 +596,11 @@
    * :include-timestamps? - When set timestamps are included on all blocks
    * :exclude-namespaces - A set of parent namespaces to exclude from properties and classes.
      This is useful for graphs seeded with an ontology e.g. schema.org as it eliminates noisy and needless
-     export+import"
+     export+import
+   * :exclude-built-in-pages? - When set built-in pages are excluded from export"
   [db options*]
   (let [options (merge options* {:property-value-uuids? true})
-        content-ref-uuids (get-graph-content-ref-uuids db)
+        content-ref-uuids (get-graph-content-ref-uuids db options)
         ontology-options (merge options {:include-uuid? true})
         ontology-export (build-graph-ontology-export db ontology-options)
         ontology-pvalue-uuids (set (concat (mapcat get-pvalue-uuids (vals (:properties ontology-export)))
