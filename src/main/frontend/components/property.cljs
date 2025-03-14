@@ -243,6 +243,12 @@
                  (shui/popup-hide!)
                  (shui/dialog-close!))
 
+                ;; using class as property
+                (and property (ldb/class? property))
+                (p/do!
+                 (pv/<set-class-as-property! (state/get-current-repo) property)
+                 (reset! *show-new-property-config? false))
+
                 (and batch? (or (= :checkbox type) (and batch? default-or-url?)))
                 nil
 
@@ -258,10 +264,6 @@
 
                 default-or-url?
                 (pv/<create-new-block! block property "" {:batch-op? true})
-
-            ;; using class as property
-                (and property (ldb/class? property))
-                (pv/<set-class-as-property! (state/get-current-repo) property)
 
                 (or (not= :default type)
                     (and (= :default type) (seq (:property/closed-values property))))
@@ -390,7 +392,8 @@
                                (and
                                 batch?
                                 (contains? #{:default :url} (:logseq.property/type property))
-                                (not (seq (:property/closed-values property)))))]
+                                (not (seq (:property/closed-values property))))
+                               (and property (ldb/class? property)))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      (if property-key
        [:div.ls-property-add.gap-1.flex.flex-1.flex-row.items-center
