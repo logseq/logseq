@@ -2,9 +2,11 @@
   "text embedding fns"
   (:require ["@huggingface/transformers" :refer [pipeline]]
             ["hnswlib-wasm" :refer [loadHnswlib]]
+            [frontend.common.missionary :as c.m]
             [frontend.inference-worker.state :as infer-worker.state]
             [frontend.worker-common.util :as worker-util]
             [lambdaisland.glogi :as log]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
 (def ^:private embedding-opts #js{"pooling" "mean" "normalize" true})
@@ -22,50 +24,103 @@
         (recur (+ i chunk-size))))
     result))
 
-(defn- ensure-hnsw-index!
+(defn- init-index
+  [^js hnsw]
+  (.initIndex hnsw init-max-elems 16 200 100)
+  (.setEfSearch hnsw 64 ;;default 32
+                ))
+
+(defn- ^js ensure-hnsw-index!
   [repo]
   (or (@infer-worker.state/*hnsw-index repo)
       (let [hnsw-ctor (.-HierarchicalNSW ^js @infer-worker.state/*hnswlib)
-            hnsw (new hnsw-ctor "l2" num-dimensions repo)
+            hnsw (new hnsw-ctor "cosine" num-dimensions "")
             file-exists? (.checkFileExists (.-EmscriptenFileSystemManager ^js @infer-worker.state/*hnswlib) repo)]
         (if file-exists?
           (.readIndex hnsw repo init-max-elems)
-          (.initIndex hnsw init-max-elems 16 200 100))
-        (.setEfSearch hnsw 32)
+          (init-index hnsw))
         (swap! infer-worker.state/*hnsw-index assoc repo hnsw)
         (@infer-worker.state/*hnsw-index repo))))
 
 (defn <text-embedding
-  [text-coll]
-  (p/let [text-coll (if (array? text-coll) text-coll (into-array text-coll))
-          ^js r (._call ^js @infer-worker.state/*extractor text-coll embedding-opts)]
+  [text-array]
+  (assert (and (array? text-array) (every? string? text-array)))
+  (p/let [^js r (._call ^js @infer-worker.state/*extractor text-array embedding-opts)]
     {:data (.-data r)
      :type (.-type r)
      :dims (.-dims r)
      :size (.-size r)}))
 
 (defn- add-items
-  [^js hnsw data-coll]
-  (try (.addItems hnsw data-coll true)
-       (catch js/WebAssembly.Exception _
-         (let [current-count (.getCurrentCount hnsw)
-               new-size (+ current-count (max (* 2 (alength data-coll)) current-count))]
-           (.resizeIndex hnsw new-size)
-           (.addItems hnsw data-coll true)))))
+  [^js hnsw data-coll replace-deleted?]
+  (let [max-elems (.getMaxElements hnsw)
+        current-count (.getCurrentCount hnsw)
+        add-count (count data-coll)]
+    (when (>= (+ add-count current-count) max-elems)
+      (let [new-size (+ current-count (max (* 2 add-count) current-count))]
+        (log/info :hnsw-resize {:from current-count :to new-size})
+        (.resizeIndex hnsw new-size)))
+    (.addItems hnsw data-coll replace-deleted?)))
 
 (defn delete-items
   [repo labels]
   (.markDeleteItems ^js (ensure-hnsw-index! repo) (into-array labels)))
 
-(defn <text-embedding&store!
-  "return labels"
-  [repo text-coll delete-labels]
-  (p/let [{:keys [data _type dims _size]} (<text-embedding text-coll)
+(defn task--text-embedding&store!
+  "return labels(js-array)"
+  [repo text-array delete-labels replace-deleted?]
+  (m/sp
+    (let [{:keys [data _type dims _size]} (worker-util/profile :<text-embedding
+                                            (c.m/<? (<text-embedding text-array)))
           data-coll (split-into-chunks data (last dims))
-          _ (assert (= (count text-coll) (count data-coll)))
+          _ (assert (= (count text-array) (count data-coll)))
           ^js hnsw (ensure-hnsw-index! repo)]
-    (when (seq delete-labels) (.markDeleteItems hnsw (into-array delete-labels)))
-    (worker-util/profile (keyword "add-items" (str (alength data-coll))) (add-items hnsw data-coll))))
+      (when (seq delete-labels) (.markDeleteItems hnsw (into-array delete-labels)))
+      (worker-util/profile (keyword "add-items" (str (alength data-coll)))
+        (add-items hnsw data-coll replace-deleted?)))))
+
+(def ^:private write-index-wait-delays-flow
+  (m/ap
+    (loop [[delay-ms & others]
+           ;; 50ms + 100 * 100ms = ~10s
+           (cons 50 (repeat 100 100))]
+      (if delay-ms
+        (m/amb
+         (m/? (m/sleep delay-ms))
+         (recur others))
+        (m/amb :timeout)))))
+
+(defn- task--write-index!*
+  "NOTE: writeIndex return nil, but it should be a promise.
+  so we loop check fs-synced here, until synced=true"
+  [repo ^js hnsw]
+  (m/sp
+    (.writeIndex hnsw repo)
+    (let [^js fs (.-EmscriptenFileSystemManager ^js @infer-worker.state/*hnswlib)]
+      (m/?
+       (m/reduce
+        (fn [_ x]
+          (if-not (keyword-identical? :timeout x)
+            (when (.isSynced fs)
+              (reduced true))
+            (reduced false)))
+        write-index-wait-delays-flow)))))
+
+(defn task--force-reset-index!
+  "Remove all data in hnsw-index.
+  Return synced? (bool)"
+  [repo]
+  (m/sp
+    (let [hnsw (ensure-hnsw-index! repo)]
+      (when-not (zero? (.getCurrentCount hnsw))
+        (init-index hnsw)
+        (m/? (task--write-index!* repo hnsw))))))
+
+(defn task--write-index!
+  [repo]
+  (m/sp
+    (let [hnsw (ensure-hnsw-index! repo)]
+      (m/? (task--write-index!* repo hnsw)))))
 
 (defn- search-knn
   [repo query-point num-neighbors]
@@ -75,7 +130,7 @@
 (defn <search-knn
   "return labels"
   [repo query-string num-neighbors]
-  (p/let [query-embedding (<text-embedding [query-string])
+  (p/let [query-embedding (<text-embedding #js[query-string])
           query-point (:data query-embedding)]
     (search-knn repo query-point num-neighbors)))
 
