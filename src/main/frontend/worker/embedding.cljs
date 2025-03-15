@@ -6,6 +6,7 @@
             [frontend.common.missionary :as c.m]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.state :as worker-state]
+            [logseq.db :as ldb]
             [missionary.core :as m]))
 
 (defn- stale-block-filter-preds
@@ -15,11 +16,11 @@
                        (fn [b]
                          (let [title (:block/title b)]
                            (and (not (string/blank? title))
-                                (not (string/starts-with? title "$$$")))))
-                       (fn [b]
-                         (not (keyword-identical?
-                               :logseq.property/description
-                               (:db/ident (:logseq.property/created-from-property b)))))]
+                                (not (ldb/hidden? title))
+                                (nil? (:logseq.property/view-for b))
+                                (not (keyword-identical?
+                                      :logseq.property/description
+                                      (:db/ident (:logseq.property/created-from-property b)))))))]
 
                 (not reset?)
                 (conj (fn [b]
@@ -38,6 +39,7 @@
               (mapcat #(d/pull-many db [:db/id :db/ident :block/uuid :block/title :block/updated-at
                                         {:logseq.property/description [:block/title]}
                                         {:logseq.property/created-from-property [:db/ident]}
+                                        :logseq.property/view-for
                                         :logseq.property.embedding/hnsw-label-updated-at
                                         :logseq.property.embedding/hnsw-label] %))
               (filter (stale-block-filter-preds reset?))
@@ -113,8 +115,18 @@
             (d/transact! conn tx-data))))
       (c.m/<? (.write-index! infer-worker repo)))))
 
+(defn- remove-outdated-hnsw-label!
+  [conn es]
+  (when (seq es)
+    (d/transact!
+     conn (mapcat
+           (fn [e]
+             [[:db.fn/retractAttribute e :logseq.property.embedding/hnsw-label]
+              [:db.fn/retractAttribute e :logseq.property.embedding/hnsw-label-updated-at]])
+           es))))
+
 (defn <search
-  [repo db query-string nums-neighbors]
+  [repo conn query-string nums-neighbors]
   (m/sp
     (let [^js infer-worker @worker-state/*infer-worker]
       (assert (some? infer-worker))
@@ -123,15 +135,22 @@
               (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))
             labels (->> (map vector distances neighbors)
                         (keep (fn [[distance label]] (when-not (js/isNaN distance) label))))
-            datoms (mapcat #(d/datoms db :avet :logseq.property.embedding/hnsw-label %) labels)
-            blocks (d/pull-many db [:block/uuid :block/title] (map :e datoms))]
+            datoms (map (fn [label]
+                          (->> label
+                               (d/datoms @conn :avet :logseq.property.embedding/hnsw-label)
+                               (sort-by :tx >))) labels)
+            result-es (keep (comp :e first) datoms)
+            es-with-outdated-hnsw-label (map :e (mapcat next datoms))
+            blocks (d/pull-many @conn [:block/uuid :block/title] result-es)]
+        (remove-outdated-hnsw-label! conn es-with-outdated-hnsw-label)
         (prn :query-result r)
         (pp/pprint blocks)))))
 
 (comment
   (def repo (frontend.worker.state/get-current-repo))
   (def conn (frontend.worker.state/get-datascript-conn (frontend.worker.state/get-current-repo)))
+  (.force-reset-index! @worker-state/*infer-worker repo)
   ((<embedding-stale-blocks! repo conn) prn js/console.log)
   ((<re-embedding-graph-data! repo conn) prn js/console.log)
 
-  ((<search repo @conn "semantic" 5) prn js/console.log))
+  ((<search repo conn "semantic" 10) prn js/console.log))
