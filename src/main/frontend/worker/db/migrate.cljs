@@ -758,7 +758,7 @@
             :fix migrate-views}]
    ["64.3" {:properties [:logseq.property/used-template :logseq.property/template-applied-to]
             :classes [:logseq.class/Template]}]
-   ["64.4" {:properties [:logseq.property.search/hnsw-label]}]])
+   ["64.4" {:properties [:logseq.property.embedding/hnsw-label :logseq.property.embedding/hnsw-label-updated-at]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))
