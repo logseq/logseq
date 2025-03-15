@@ -9,13 +9,19 @@
             [logseq.db :as ldb]
             [missionary.core :as m]))
 
+;;; TODOs:
+;;; - [x] add :logseq.property/description into text-to-embedding
+;;; - add tags to text-to-embedding
+
 (defn- stale-block-filter-preds
   "When `reset?`, ignore :logseq.property.embedding/hnsw-label-updated-at in block"
   [reset?]
-  (let [preds (cond-> [(comp nil? :db/ident)
-                       (fn [b]
-                         (let [title (:block/title b)]
-                           (and (not (string/blank? title))
+  (let [preds (cond-> [(fn [b]
+                         (let [db-ident (:db/ident b)
+                               title (:block/title b)]
+                           (and (or (nil? db-ident)
+                                    (not (string/starts-with? (namespace db-ident) "logseq.")))
+                                (not (string/blank? title))
                                 (not (ldb/hidden? title))
                                 (nil? (:logseq.property/view-for b))
                                 (not (keyword-identical?
@@ -34,7 +40,8 @@
   [db reset?]
   (->> (rseq (d/index-range db :block/updated-at nil nil))
        (sequence
-        (comp (map #(d/entity db (:e %)))
+        ;; NOTE: assoc :block.temp/search?, so uuid in :block/title will be replaced by content
+        (comp (map #(assoc (d/entity db (:e %)) :block.temp/search? true))
               (filter (stale-block-filter-preds reset?))
               (map (fn [b]
                      (assoc b :block.temp/text-to-embedding
@@ -124,7 +131,7 @@
     (let [^js infer-worker @worker-state/*infer-worker]
       (assert (some? infer-worker))
       (let [{:keys [distances neighbors] :as r}
-            (worker-util/profile :search
+            (worker-util/profile (str "search: '" query-string "'")
               (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))
             labels (->> (map vector distances neighbors)
                         (keep (fn [[distance label]] (when-not (js/isNaN distance) label))))
@@ -134,10 +141,17 @@
                                (sort-by :tx >))) labels)
             result-es (keep (comp :e first) datoms)
             es-with-outdated-hnsw-label (map :e (mapcat next datoms))
-            blocks (map #(select-keys (d/entity @conn %) [:db/id :block/title]) result-es)]
+            blocks (map #(select-keys (assoc (d/entity @conn %) :block.temp/search? true)
+                                      [:db/id :block/title :logseq.property.embedding/hnsw-label]) result-es)]
         (remove-outdated-hnsw-label! conn es-with-outdated-hnsw-label)
         (prn :query-result r)
-        (pp/pprint blocks)))))
+        (pp/print-table ["id" "hnsw-label" "title"] (map #(-> %
+                                                              (update-keys name)
+                                                              (update-vals (fn [v]
+                                                                             (if (and (string? v) (> (count v) 60))
+                                                                               (str (subs v 0 60) "[TRUNCATED]")
+                                                                               v))))
+                                                         blocks))))))
 
 (comment
   (def repo (frontend.worker.state/get-current-repo))
@@ -146,4 +160,4 @@
   ((<embedding-stale-blocks! repo conn) prn js/console.log)
   ((<re-embedding-graph-data! repo conn) prn js/console.log)
 
-  ((<search repo conn "note zhiyuan" 10) prn js/console.log))
+  ((<search repo conn "perf performance datomic stat" 10) prn js/console.log))
