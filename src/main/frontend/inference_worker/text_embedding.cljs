@@ -120,7 +120,8 @@
   [repo]
   (m/sp
     (let [hnsw (ensure-hnsw-index! repo)]
-      (m/? (task--write-index!* repo hnsw)))))
+      (m/? (task--write-index!* repo hnsw))
+      (.getCurrentCount hnsw))))
 
 (defn- search-knn
   [repo query-point num-neighbors]
