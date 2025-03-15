@@ -34,14 +34,7 @@
   [db reset?]
   (->> (rseq (d/index-range db :block/updated-at nil nil))
        (sequence
-        (comp (map :e)
-              (partition-all 100)
-              (mapcat #(d/pull-many db [:db/id :db/ident :block/uuid :block/title :block/updated-at
-                                        {:logseq.property/description [:block/title]}
-                                        {:logseq.property/created-from-property [:db/ident]}
-                                        :logseq.property/view-for
-                                        :logseq.property.embedding/hnsw-label-updated-at
-                                        :logseq.property.embedding/hnsw-label] %))
+        (comp (map #(d/entity db (:e %)))
               (filter (stale-block-filter-preds reset?))
               (map (fn [b]
                      (assoc b :block.temp/text-to-embedding
@@ -141,7 +134,7 @@
                                (sort-by :tx >))) labels)
             result-es (keep (comp :e first) datoms)
             es-with-outdated-hnsw-label (map :e (mapcat next datoms))
-            blocks (d/pull-many @conn [:block/uuid :block/title] result-es)]
+            blocks (map #(select-keys (d/entity @conn %) [:db/id :block/title]) result-es)]
         (remove-outdated-hnsw-label! conn es-with-outdated-hnsw-label)
         (prn :query-result r)
         (pp/pprint blocks)))))
@@ -153,4 +146,4 @@
   ((<embedding-stale-blocks! repo conn) prn js/console.log)
   ((<re-embedding-graph-data! repo conn) prn js/console.log)
 
-  ((<search repo conn "semantic" 10) prn js/console.log))
+  ((<search repo conn "note zhiyuan" 10) prn js/console.log))
