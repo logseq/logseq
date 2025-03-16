@@ -878,16 +878,18 @@
                             {:keys [page page-entity]} (state/sub :page-title/context)]
 
                         (let [show!
-                              (fn [content]
+                              (fn [content & {:as option}]
                                 (shui/popup-show! e
                                                   (fn [{:keys [id]}]
                                                     [:div {:on-click #(shui/popup-hide! id)
                                                            :data-keep-selection true}
                                                      content])
-                                                  {:on-before-hide state/dom-clear-selection!
-                                                   :on-after-hide state/state-clear-selection!
-                                                   :content-props {:class "w-[280px] ls-context-menu-content"}
-                                                   :as-dropdown? true}))
+                                                  (merge
+                                                   {:on-before-hide state/dom-clear-selection!
+                                                    :on-after-hide state/state-clear-selection!
+                                                    :content-props {:class "w-[280px] ls-context-menu-content"}
+                                                    :as-dropdown? true}
+                                                   option)))
 
                               handled
                               (cond
@@ -901,11 +903,12 @@
                                   (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
                                   (state/set-state! :block-ref/context nil))
 
-                      ;; block selection
+                                ;; block selection
                                 (and (state/selection?) (not (d/has-class? target "bullet")))
-                                (show! (cp-content/custom-context-menu-content))
+                                (show! (cp-content/custom-context-menu-content)
+                                       {:id :blocks-selection-context-menu})
 
-                      ;; block bullet
+                                ;; block bullet
                                 (and block-id (parse-uuid block-id))
                                 (let [block (.closest target ".ls-block")
                                       property-default-value? (when block
@@ -921,6 +924,10 @@
                             (util/stop e))))))))
   []
   nil)
+
+(defn- on-mouse-up
+  [_e]
+  (editor-handler/show-action-bar!))
 
 (rum/defcs ^:large-vars/cleanup-todo root-container < rum/reactive
   (mixins/event-mixin
@@ -1014,6 +1021,7 @@
                        (ui/focus-element (ui/main-node))))}
        (t :accessibility/skip-to-main-content)]
       [:div.#app-container
+       {:on-mouse-up on-mouse-up}
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
         (header/header {:light? light?

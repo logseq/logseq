@@ -16,6 +16,7 @@
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.device :as worker-device]
+            [frontend.worker.embedding]
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
             [frontend.worker.handler.page :as worker-page]
@@ -42,8 +43,7 @@
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]
-            [frontend.worker.embedding]))
+            [shadow.cljs.modern :refer [defclass]]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -336,6 +336,8 @@
                                         (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type)))))]
         (swap! *datascript-conns assoc repo conn)
         (swap! *client-ops-conns assoc repo client-ops-conn)
+        (when (not= client-op/schema-in-db (d/schema @client-ops-conn))
+          (d/reset-schema! client-ops-conn client-op/schema-in-db))
         (when (and db-based? (not initial-data-exists?) (not datoms))
           (let [config (or config "")
                 initial-data (sqlite-create-graph/build-db-initial-data config
@@ -437,7 +439,6 @@
    (fn [result]
      (let [result (when-not (= result @worker-state/*state) result)]
        (ldb/write-transit-str result)))))
-
 
 #_{:clj-kondo/ignore [:unresolved-symbol]}
 (defclass DBWorker
@@ -594,7 +595,7 @@
            ;; (prn :debug :transact :tx-data tx-data' :tx-meta tx-meta')
 
            (worker-util/profile "Worker db transact"
-                                (ldb/transact! conn tx-data' tx-meta')))
+             (ldb/transact! conn tx-data' tx-meta')))
          nil)
        (catch :default e
          (prn :debug :error)
@@ -705,11 +706,11 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (try
        (worker-util/profile
-        "apply outliner ops"
-        (let [ops (ldb/read-transit-str ops-str)
-              opts (ldb/read-transit-str opts-str)
-              result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
-          (ldb/write-transit-str result)))
+         "apply outliner ops"
+         (let [ops (ldb/read-transit-str ops-str)
+               opts (ldb/read-transit-str opts-str)
+               result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
+           (ldb/write-transit-str result)))
        (catch :default e
          (let [data (ex-data e)
                {:keys [type payload]} (when (map? data) data)]
@@ -973,7 +974,7 @@
   (glogi-console/install!)
   (check-worker-scope!)
   (let [^js obj #_{:clj-kondo/ignore [:unresolved-symbol]}
-                (DBWorker.)]
+        (DBWorker.)]
     (outliner-register-op-handlers!)
     (worker-state/set-worker-object! obj)
     (<ratelimit-file-writes!)

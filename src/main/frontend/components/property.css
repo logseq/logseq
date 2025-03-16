@@ -68,13 +68,13 @@
     }
 
     .property-k {
+      @apply inline-block overflow-hidden text-ellipsis whitespace-nowrap leading-[26px];
+
       .jtrigger {
         &-id {
           @apply left-[16px];
         }
       }
-
-      @apply inline-block overflow-hidden text-ellipsis whitespace-nowrap;
     }
 
     .property-value {
@@ -188,6 +188,10 @@
     @apply flex items-center shrink;
   }
 
+  &[data-type] {
+    @apply flex items-center;
+  }
+
   &[data-type="datetime"] {
     @apply whitespace-nowrap;
   }
@@ -270,7 +274,7 @@ a.control-link {
 .property-value-container {
   @apply flex-1 shrink-0;
   min-width: 100px;
-  min-height: 29px;
+  min-height: 28px;
 }
 
 .ls-page-properties .property-key, .ls-properties-area .property-key {
@@ -280,7 +284,7 @@ a.control-link {
 .property-key {
   /* Same height with one-line block container */
   min-width: 160px;
-  min-height: 29px;
+  min-height: 28px;
 
   h1.title, h2.title {
     border-bottom: 0;
@@ -303,16 +307,14 @@ a.control-link {
 }
 
 .property-key-inner {
-  @apply flex flex-row items-start gap-1 relative;
+  @apply flex flex-row items-center gap-1 relative;
 
   .property-icon {
     @apply flex items-center;
-    height: 28px;
-
-    button {
-      margin-top: -1px;
-    }
+    height: 26px;
+    margin-top: 1px;
   }
+
   .editor-inner {
     textarea {
       field-sizing: content;

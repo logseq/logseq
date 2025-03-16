@@ -2,12 +2,12 @@
   "This ns is a wrapper around the chokidar file watcher,
   https://www.npmjs.com/package/chokidar. File watcher events are sent to the
   `file-watcher` ipc channel"
-  (:require [cljs-bean.core :as bean]
-            ["fs" :as fs]
-            ["chokidar" :as watcher]
-            [electron.utils :as utils]
-            [electron.logger :as logger]
+  (:require ["chokidar" :as watcher]
             ["electron" :refer [app]]
+            ["fs" :as fs]
+            [cljs-bean.core :as bean]
+            [electron.logger :as logger]
+            [electron.utils :as utils]
             [electron.window :as window]
             [logseq.common.graph :as common-graph]))
 
@@ -52,7 +52,7 @@
                   (utils/read-file path))
         stat (when (and (not= event "unlink")
                         (not dir-path?))
-               (fs/statSync path))]
+               (utils/fs-stat->clj path))]
     (send-file-watcher! dir event (merge {:dir (utils/fix-win-path! dir)
                                           :path (utils/fix-win-path! path)
                                           :content content

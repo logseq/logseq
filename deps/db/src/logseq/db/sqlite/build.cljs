@@ -178,7 +178,7 @@
           (let [db-ident (get-ident all-idents prop-name)]
             (db-property-build/build-closed-values
              db-ident
-             prop-name
+             (:block/title prop-m)
              (assoc prop-m :db/ident db-ident :closed-values closed-values)
              {:property-attributes
               (merge {:db/id (or (property-db-ids prop-name)
@@ -344,7 +344,7 @@
                                              (mapcat (fn [m]
                                                        (if-let [pvalue-pages
                                                                 (->> (vals (:build/properties m))
-                                                                     (mapcat #(if (set? %) % [%]) )
+                                                                     (mapcat #(if (set? %) % [%]))
                                                                      (filter page-prop-value?)
                                                                      (map second)
                                                                      seq)]

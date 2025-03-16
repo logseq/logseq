@@ -3,15 +3,15 @@
   (:require ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
+            #_:clj-kondo/ignore
             [babashka.cli :as cli]
             [clojure.edn :as edn]
             [clojure.string :as string]
             [datascript.core :as d]
-            #_:clj-kondo/ignore
             [logseq.outliner.cli :as outliner-cli]
-            [validate-db]
             [nbb.classpath :as cp]
-            [nbb.core :as nbb]))
+            [nbb.core :as nbb]
+            [validate-db]))
 
 (defn- resolve-path
   "If relative path, resolve with $ORIGINAL_PWD"

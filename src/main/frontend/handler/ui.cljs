@@ -177,10 +177,23 @@
   (state/toggle-wide-mode!))
 
 ;; auto-complete
+(defn- reorder-matched
+  "Reorder matched if grouped"
+  [state]
+  (let [[matched {:keys [grouped?]}] (:rum/args state)]
+    (if grouped?
+      (let [*idx (atom -1)
+            inc-idx #(swap! *idx inc)]
+        (->>
+         (for [[_group matched] (group-by :group matched)]
+           (doall (map (fn [item] (inc-idx) item) matched)))
+         (apply concat)))
+      matched)))
+
 (defn auto-complete-prev
   [state e]
   (let [current-idx (get state :frontend.ui/current-idx)
-        matched (first (:rum/args state))]
+        matched (reorder-matched state)]
     (util/stop e)
     (cond
       (>= @current-idx 1)
@@ -197,7 +210,7 @@
 (defn auto-complete-next
   [state e]
   (let [current-idx (get state :frontend.ui/current-idx)
-        matched (first (:rum/args state))]
+        matched (reorder-matched state)]
     (util/stop e)
     (let [total (count matched)]
       (if (>= @current-idx (dec total))
@@ -211,7 +224,8 @@
 
 (defn auto-complete-complete
   [state e]
-  (let [[matched {:keys [on-chosen on-enter]}] (:rum/args state)
+  (let [[_matched {:keys [on-chosen on-enter]}] (:rum/args state)
+        matched (reorder-matched state)
         current-idx (get state :frontend.ui/current-idx)]
     (util/stop e)
     (if (and (seq matched)
@@ -222,7 +236,8 @@
 
 (defn auto-complete-shift-complete
   [state e]
-  (let [[matched {:keys [on-chosen on-shift-chosen on-enter]}] (:rum/args state)
+  (let [[_matched {:keys [on-chosen on-shift-chosen on-enter]}] (:rum/args state)
+        matched (reorder-matched state)
         current-idx (get state :frontend.ui/current-idx)]
     (util/stop e)
     (if (and (seq matched)

@@ -3,12 +3,12 @@
             ["electron" :refer [app BrowserWindow]]
             ["fs-extra" :as fs]
             ["path" :as node-path]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.configs :as cfgs]
+            [electron.db :as db]
             [electron.logger :as logger]
             [logseq.db.sqlite.util :as sqlite-util]
-            [cljs-bean.core :as bean]
-            [electron.db :as db]
             [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
@@ -150,7 +150,6 @@
       (do
         (logger/warn "Unknown PAC rule:" line)
         nil))))
-
 
 (defn <get-system-proxy
   "Get system proxy for url, requires proxy to be set to system"
@@ -295,3 +294,10 @@
     (catch :default _
       (println "decodeURIComponent failed: " uri)
       uri)))
+
+(defn fs-stat->clj
+  [path]
+  (let [stat (fs/statSync path)]
+    {:size (.-size stat)
+     :mtime (.-mtime stat)
+     :ctime (.-ctime stat)}))
