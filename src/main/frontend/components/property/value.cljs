@@ -1243,7 +1243,7 @@
                    (when (some? value) #{value}))]
     (multiple-values-inner block property value' opts)))
 
-(rum/defcs property-value < rum/reactive db-mixins/query
+(rum/defcs ^:large-vars/cleanup-todo property-value < rum/reactive db-mixins/query
   [state block property {:keys [show-tooltip? p-block p-property editing?]
                          :as opts}]
   (ui/catch-error
@@ -1335,10 +1335,12 @@
                              value-cp)))]]
          (if show-tooltip?
            (shui/tooltip-provider
-            (shui/tooltip
-             {:delayDuration 1200}
-             (shui/tooltip-trigger
-              {:onFocusCapture #(util/stop-propagation %)} value-cp)
-             (shui/tooltip-content
-              (str "Change " (:block/title property)))))
+             (shui/tooltip
+               {:delayDuration 1200}
+               (shui/tooltip-trigger
+                 {:onFocusCapture #(util/stop-propagation %)
+                  :as-child true}
+                 value-cp)
+               (shui/tooltip-content
+                 (str "Change " (:block/title property)))))
            value-cp))))))

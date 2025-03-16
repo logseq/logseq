@@ -169,14 +169,16 @@
                                         (map :block/title)
                                         set))))
      [])
-    (let [items (concat
-                 (map (fn [x]
-                        {:label (:block/title x)
-                         :value (:block/uuid x)}) properties)
-                 (map (fn [x]
-                        {:label (:block/title x)
-                         :value (:block/uuid x)
-                         :group "Tags"}) classes))]
+    (let [items (->>
+                 (concat
+                  (map (fn [x]
+                         {:label (:block/title x)
+                          :value (:block/uuid x)}) properties)
+                  (map (fn [x]
+                         {:label (:block/title x)
+                          :value (:block/uuid x)
+                          :group "Tags"}) classes))
+                 (util/distinct-by-last-wins :value))]
       [:div.ls-property-add.flex.flex-row.items-center.property-key
        {:data-keep-selection true}
        [:div.ls-property-key
@@ -241,6 +243,12 @@
                  (shui/popup-hide!)
                  (shui/dialog-close!))
 
+                ;; using class as property
+                (and property (ldb/class? property))
+                (p/do!
+                 (pv/<set-class-as-property! (state/get-current-repo) property)
+                 (reset! *show-new-property-config? false))
+
                 (and batch? (or (= :checkbox type) (and batch? default-or-url?)))
                 nil
 
@@ -256,10 +264,6 @@
 
                 default-or-url?
                 (pv/<create-new-block! block property "" {:batch-op? true})
-
-            ;; using class as property
-                (and property (ldb/class? property))
-                (pv/<set-class-as-property! (state/get-current-repo) property)
 
                 (or (not= :default type)
                     (and (= :default type) (seq (:property/closed-values property))))
@@ -332,7 +336,6 @@
        (property-key-title block property class-schema?))]))
 
 (rum/defcs ^:large-vars/cleanup-todo property-input < rum/reactive
-  (rum/local nil ::ref)
   (rum/local false ::show-new-property-config?)
   (rum/local false ::show-class-select?)
   (rum/local {} ::property-schema)
@@ -364,8 +367,7 @@
                    state)}
   [state block *property-key {:keys [class-schema?]
                               :as opts}]
-  (let [*ref (::ref state)
-        *property (::property state)
+  (let [*property (::property state)
         *show-new-property-config? (::show-new-property-config? state)
         *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
@@ -391,9 +393,9 @@
                                (and
                                 batch?
                                 (contains? #{:default :url} (:logseq.property/type property))
-                                (not (seq (:property/closed-values property)))))]
+                                (not (seq (:property/closed-values property))))
+                               (and property (ldb/class? property)))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
-     {:ref #(reset! *ref %)}
      (if property-key
        [:div.ls-property-add.gap-1.flex.flex-1.flex-row.items-center
         (when-not hide-property-key?
