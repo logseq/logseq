@@ -546,11 +546,7 @@
      [:div.sticky-columns.flex.flex-row
       (map #(row-cell-f % {}) pinned-columns)]
      [:div.flex.flex-row
-      (let [pin-count (count pinned-columns)]
-        (map-indexed (fn [idx column]
-                       (if (and (> (+ pin-count idx) 5) scrolling?)
-                         (row-cell-f column {:hide? true})
-                         (row-cell-f column {}))) unpinned-columns))])))
+      (map #(row-cell-f % {}) unpinned-columns)])))
 
 (rum/defc react-table-row < rum/reactive db-mixins/query
   [table row props option]
@@ -1610,10 +1606,10 @@
           property-values (mapcat :properties data)]
     (when-not (= feature-type :all-pages)
       (let [blocks' (->> (concat property-values blocks)
-                         (remove (fn [b]
-                                   (:block.temp/fully-loaded? (db/entity (:db/id b))))))]
+                         ;; Avoid transacting existing entities
+                         (remove (fn [b] (db/entity (:db/id b)))))]
         (when (seq blocks')
-          (d/transact! (db/get-db false) blocks'))))
+          (util/profile "transact" (d/transact! (db/get-db false) blocks')))))
     {:count count
      :data blocks}))
 
