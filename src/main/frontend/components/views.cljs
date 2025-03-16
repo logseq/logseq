@@ -552,11 +552,33 @@
                          (row-cell-f column {:hide? true})
                          (row-cell-f column {}))) unpinned-columns))])))
 
-(rum/defc table-row < rum/reactive db-mixins/query
+(rum/defc react-table-row < rum/reactive db-mixins/query
   [table row props option]
   (let [row' (merge (db/sub-block (:id row))
                     row)]
     (table-row-inner table row' props option)))
+
+(def ^:private lookup-sentinel (js-obj))
+
+(defn- row-memoize
+  [f]
+  (let [mem (atom {})]
+    (fn [& args]
+      (let [[_table row _props option] args
+            id (:db/id row)
+            view-id (:view-id option)
+            ks [view-id id]
+            v (get @mem ks lookup-sentinel)]
+        (if (identical? v lookup-sentinel)
+          (let [ret (apply f args)]
+            (swap! mem assoc ks ret)
+            ret)
+          v)))))
+
+(def table-row-memo (row-memoize react-table-row))
+(rum/defc table-row
+  [table row props option]
+  (table-row-memo table row props option))
 
 (rum/defc search
   [input {:keys [on-change set-input!]}]
@@ -1280,15 +1302,16 @@
    (ui/icon "arrows-up-down")))
 
 (defn- view-cp
-  [view-entity table option {:keys [*scroller-ref display-type row-selection]}]
-  (case display-type
-    :logseq.property.view/type.list
-    (list-view option view-entity (:rows table))
+  [view-entity table option* {:keys [*scroller-ref display-type row-selection]}]
+  (let [option (assoc option* :view-id (:db/id view-entity))]
+    (case display-type
+      :logseq.property.view/type.list
+      (list-view option view-entity (:rows table))
 
-    :logseq.property.view/type.gallery
-    (gallery-view option table view-entity (:rows table) *scroller-ref)
+      :logseq.property.view/type.gallery
+      (gallery-view option table view-entity (:rows table) *scroller-ref)
 
-    (table-view table option row-selection *scroller-ref)))
+      (table-view table option row-selection *scroller-ref))))
 
 (defn- get-views
   [ent view-feature-type]
@@ -1620,7 +1643,7 @@
                                      new-view)))]
             (if (and current-view
                      (nil? (:data option)))
-              (p/let [{:keys [count data]} (<load-view-data current-view 0 25)
+              (p/let [{:keys [count data]} (<load-view-data current-view 0 100)
                       set-data! (:set-data! option)]
                 (set-data! data)
                 (set-count! count)
@@ -1645,7 +1668,7 @@
                                                                  finished? (= (count prev-data) items-count)]
                                                              (when-not finished?
                                                                ;; (set-loading-more! true)
-                                                               (p/let [{:keys [_count data]} (<load-view-data view-entity (count prev-data) 100)
+                                                               (p/let [{:keys [_count data]} (<load-view-data view-entity (count prev-data) 25)
                                                                        set-data! (:set-data! option)]
                                                                  ;; (set-loading-more! false)
                                                                  (set-data! (into prev-data data)))))))))
