@@ -1,6 +1,6 @@
 (ns frontend.worker.search
   "Full-text and fuzzy search"
-  (:require ["fuse.js" :as fuse]
+  (:require ["fuse.js" :as Fuse]
             [cljs-bean.core :as bean]
             [clojure.set :as set]
             [clojure.string :as string]
@@ -12,6 +12,8 @@
             [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.text :as text]))
+
+(def fuse (aget Fuse "default"))
 
 ;; TODO: use sqlite for fuzzy search
 ;; maybe https://github.com/nalgeon/sqlean/blob/main/docs/fuzzy.md?
