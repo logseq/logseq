@@ -12,7 +12,7 @@ the remaining chars for data of this type"
   (let [journal-day-str  (str journal-day)
         part1 (subs journal-day-str 0 4)
         part2 (subs journal-day-str 4 8)]
-    (uuid (str "00000001-" part1 "-" part2 "-0000-000000000000"))))
+    (uuid (str "00000001" "-" part1 "-" part2 "-0000-000000000000"))))
 
 (defn- fill-with-0
   [s length]
@@ -49,3 +49,16 @@ the remaining chars for data of this type"
      :db-ident-block-uuid (gen-db-ident-block-uuid v)
      :migrate-new-block-uuid (gen-block-uuid v "00000003")
      :builtin-block-uuid (gen-block-uuid v "00000004"))))
+
+(defn gen-journal-template-block
+  "Persistent uuid for journal template block"
+  [journal-uuid template-block-uuid]
+  (assert (uuid? journal-uuid) (str journal-uuid))
+  (assert (uuid? template-block-uuid) (str template-block-uuid))
+  (uuid
+   (str "00000005"
+        "-"
+       ;; journal day
+        (subs (str journal-uuid) 9 23)
+       ;; template block uuid
+        (subs (str template-block-uuid) 23))))
