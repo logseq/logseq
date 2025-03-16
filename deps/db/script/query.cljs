@@ -39,18 +39,15 @@
              :desc "Print more info"}
    :raw {:alias :r
          :desc "Print results plainly. Useful when piped to bb"}
+   :additional-graphs {:alias :a
+                       :coerce []
+                       :desc "Additional graphs to query"}
    :entity {:alias :e
             :coerce []
             :desc "Lookup entities instead of query"}})
 
-(defn -main [args]
-  (let [{options :opts args' :args} (cli/parse-args args {:spec spec})
-        [graph-dir & args''] args'
-        _ (when (or (nil? graph-dir) (:help options))
-            (println (str "Usage: $0 GRAPH-NAME [& ARGS] [OPTIONS]\nOptions:\n"
-                          (cli/format-opts {:spec spec})))
-            (js/process.exit 1))
-        [dir db-name] (get-dir-and-db-name graph-dir)
+(defn query-graph [graph-dir args'' options]
+  (let [[dir db-name] (get-dir-and-db-name graph-dir)
         conn (sqlite-cli/open-db! dir db-name)
         results (if (:entity options)
                   (map #(when-let [ent (d/entity @conn
@@ -70,6 +67,19 @@
       (if (zero? (.-status (child-process/spawnSync "which" #js ["puget"])))
         (sh ["puget"] {:input (pr-str results) :stdio ["pipe" "inherit" "inherit"]})
         (pprint/pprint results)))))
+
+(defn -main [args]
+  (let [{options :opts args' :args} (cli/parse-args args {:spec spec})
+        [graph-dir & args''] args'
+        _ (when (or (nil? graph-dir) (:help options))
+            (println (str "Usage: $0 GRAPH-NAME [& ARGS] [OPTIONS]\nOptions:\n"
+                          (cli/format-opts {:spec spec})))
+            (js/process.exit 1))
+        graph-dirs (cond-> [graph-dir]
+                     (:additional-graphs options)
+                     (into (:additional-graphs options)))]
+    (doseq [graph-dir graph-dirs]
+      (query-graph graph-dir args'' options))))
 
 (when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))
