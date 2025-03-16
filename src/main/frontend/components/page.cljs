@@ -244,7 +244,7 @@
                                            block' (if last-child-id (db/entity last-child-id) (last blocks))
                                            link (:block/link block')]
                                        (string/blank? (:block/title (or link block'))))))]
-            [:div
+            [:div.relative
              {:class (when add-button? "show-add-button")}
              (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
              (let [args (if block-id

@@ -40,7 +40,25 @@
   (testing "user.property/xxx creation"
     (let [block-uuid (random-uuid)
           block-order "b0P"
-          db (d/db-with empty-db [{:db/index true
+          db (d/db-with empty-db [{:block/uuid #uuid "00000002-5389-0208-3000-000000000000",
+                                   :block/updated-at 1741424828774,
+                                   :block/created-at 1741424828774,
+                                   :logseq.property/built-in? true,
+                                   :block/tags [2],
+                                   :block/title "Tag",
+                                   :db/id 2,
+                                   :db/ident :logseq.class/Tag,
+                                   :block/name "tag"}
+                                  {:block/uuid #uuid "00000002-1038-7670-4800-000000000000",
+                                   :block/updated-at 1741424828774,
+                                   :block/created-at 1741424828774,
+                                   :logseq.property/built-in? true,
+                                   :block/tags [2]
+                                   :block/title "Property",
+                                   :db/id 3,
+                                   :db/ident :logseq.class/Property,
+                                   :block/name "property"}
+                                  {:db/index true
                                    :block/uuid block-uuid
                                    :db/valueType :db.type/ref
                                    :block/updated-at 1716880036491
@@ -48,6 +66,7 @@
                                    :logseq.property/type :number
                                    :db/cardinality :db.cardinality/one
                                    :db/ident :user.property/xxx,
+                                   :block/tags [3]
                                    :block/type "property",
                                    :block/order block-order,
                                    :block/name "xxx",

@@ -53,7 +53,7 @@ env:
 
 jobs:
   compile-cljs:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Check build options
         if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta') && github.event.inputs.git-ref != 'master' }}
@@ -173,7 +173,7 @@ jobs:
 
   e2e-test:
     name: E2E Test Shard ${{ matrix.shard }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         shard: [1, 2, 3]
@@ -183,7 +183,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -223,11 +223,11 @@ jobs:
           RELEASE: true # skip dev only test
 
   build-linux-x64:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -269,11 +269,11 @@ jobs:
           path: builds
 
   build-linux-arm64:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -327,7 +327,7 @@ jobs:
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -394,7 +394,7 @@ jobs:
 
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -470,7 +470,7 @@ jobs:
 
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -560,7 +560,7 @@ jobs:
     runs-on: [self-hosted, macos, token]
     steps:
       - name: Download Windows Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-win64-unsigned-builds
           path: ./builds
@@ -581,46 +581,46 @@ jobs:
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-x64-builds
           path: ./
 
       - name: Download MacOS arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-arm64-builds
           path: ./
 
       - name: Download The Linux x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-x64-builds
           path: ./
 
       - name: Download The Linux arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-arm64-builds
           path: ./
 
       - name: Download The Windows Artifact (Signed)
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-win64-signed-builds
           path: ./
 
       - name: Download The Windows Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-win64-builds
           path: ./
 
       - name: Download Android Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-android-builds
           path: ./
@@ -661,46 +661,46 @@ jobs:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-x64-builds
           path: ./
 
       - name: Download MacOS arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-arm64-builds
           path: ./
 
       - name: Download The Linux x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-x64-builds
           path: ./
 
       - name: Download The Linux arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-arm64-builds
           path: ./
 
       - name: Download The Windows Artifact (Signed)
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-win64-signed-builds
           path: ./
 
       - name: Download The Windows Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-win64-builds
           path: ./
 
       - name: Download Android Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
         with:
           name: logseq-android-builds

@@ -317,10 +317,10 @@ so need to pull earlier remote-data from websocket."})
 
 (defn- affected-blocks->diff-type-ops
   [repo affected-blocks]
-  (let [unpushed-ops (client-op/get-all-block-ops repo)
-        affected-blocks-map* (if unpushed-ops
+  (let [unpushed-block-ops (client-op/get-all-block-ops repo)
+        affected-blocks-map* (if unpushed-block-ops
                                (update-remote-data-by-local-unpushed-ops
-                                affected-blocks unpushed-ops)
+                                affected-blocks unpushed-block-ops)
                                affected-blocks)
         {remove-ops-map :remove move-ops-map :move update-ops-map :update-attrs
          move+update-ops-map :move+update-attrs

@@ -139,10 +139,13 @@
 
 (defn- add-new-property-object!
   [property set-data! properties]
-  (p/let [block (editor-handler/api-insert-new-block! ""
+  (p/let [default-value (if (= :checkbox (:logseq.property/type property))
+                          false
+                          (:db/id (db/entity :logseq.property/empty-placeholder)))
+          block (editor-handler/api-insert-new-block! ""
                                                       {:page (:block/uuid property)
                                                        :properties (merge
-                                                                    {(:db/ident property) (:db/id (db/entity :logseq.property/empty-placeholder))}
+                                                                    {(:db/ident property) default-value}
                                                                     properties)
                                                        :edit-block? false})
           _ (set-data! (get-property-related-objects (state/get-current-repo) property))]

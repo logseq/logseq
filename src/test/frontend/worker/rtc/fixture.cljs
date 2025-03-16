@@ -4,6 +4,7 @@
             [frontend.test.helper :as test-helper]
             [frontend.worker.db-listener :as worker-db-listener]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.db-listener]
             [frontend.worker.state :as worker-state]))
 
 (def listen-test-db-to-gen-rtc-ops-fixture
