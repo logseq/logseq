@@ -3367,7 +3367,7 @@
 
                 :else
                 block*)
-        result (merge (db/sub-block (:db/id block))
+        result (merge (or (db/sub-block (:db/id block)) block*)
                       (select-keys block [:block/level :block.temp/top? :block.temp/bottom?]))]
     (if linked-block
       [block* result]

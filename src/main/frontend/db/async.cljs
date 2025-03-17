@@ -111,9 +111,8 @@
 
 ;; TODO: batch queries for better performance and UX
 (defn <get-block
-  [graph name-or-uuid & {:keys [children? nested-children?]
-                         :or {children? true
-                              nested-children? false}
+  [graph name-or-uuid & {:keys [children? skip-refresh?]
+                         :or {children? true}
                          :as opts}]
   (let [name' (str name-or-uuid)
         *async-queries (:db/async-queries @state/state)
@@ -133,16 +132,19 @@
       (when-let [^Object sqlite @db-browser/*worker]
         (swap! *async-queries assoc [name' opts] true)
         (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
-        (p/let [result (.get-block-and-children sqlite graph id (ldb/write-transit-str
-                                                                 {:children? children?
-                                                                  :nested-children? nested-children?}))
-                {:keys [properties block children] :as result'} (ldb/read-transit-str result)
+        (p/let [result-str (.get-blocks sqlite graph
+                                        (ldb/write-transit-str
+                                         [{:id id :opts opts}]))
+                result (ldb/read-transit-str result-str)
+                {:keys [properties block children] :as result'} (first result)
                 conn (db/get-db graph false)
-                block-and-children (concat properties [block] children)
-                _ (d/transact! conn block-and-children)
-                affected-keys (->> (keep :db/id block-and-children)
-                                   (map #(vector :frontend.worker.react/block %)))]
-          (react/refresh-affected-queries! graph affected-keys)
+                block-and-children (concat properties [block] children)]
+          (d/transact! conn block-and-children)
+          (when-not skip-refresh?
+            (let [affected-keys (->> (keep :db/id block-and-children)
+                                     (map #(vector :frontend.worker.react/block %)))]
+              (react/refresh-affected-queries! graph affected-keys)))
+
           (state/update-state! :db/async-query-loading (fn [s] (disj s name')))
           (if children?
             block
@@ -160,18 +162,6 @@
               _ (d/transact! conn result)]
         (state/update-state! :db/async-query-loading (fn [s] (disj s (str block-id "-parents"))))
         result))))
-
-(defn <get-page-all-blocks
-  [page-name]
-  (when-let [page (some-> page-name (db-model/get-page))]
-    (when-let [^Object worker @db-browser/*worker]
-      (p/let [result (.get-block-and-children worker
-                                              (state/get-current-repo)
-                                              (str (:block/uuid page))
-                                              (ldb/write-transit-str
-                                               {:children? true
-                                                :nested-children? false}))]
-        (some-> result (ldb/read-transit-str) (:children))))))
 
 (defn <get-block-refs
   [graph eid]

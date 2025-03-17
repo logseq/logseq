@@ -5,7 +5,6 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
-            [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
