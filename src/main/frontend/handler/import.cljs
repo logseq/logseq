@@ -5,7 +5,6 @@
             [clojure.edn :as edn]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.format.block :as block]
@@ -13,12 +12,8 @@
             [frontend.handler.editor :as editor]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [medley.core :as medley]
@@ -165,25 +160,6 @@
                            form))]
      (walk/postwalk tree-trans-fn tree-vec))))
 
-(defn import-from-sqlite-db!
-  [buffer bare-graph-name finished-ok-handler]
-  (let [graph (str config/db-version-prefix bare-graph-name)]
-    (->
-     (p/do!
-      (persist-db/<import-db graph buffer)
-      (state/add-repo! {:url graph})
-      (repo-handler/restore-and-setup-repo! graph {:import-type :sqlite-db})
-      (state/set-current-repo! graph)
-      (persist-db/<export-db graph {})
-      (db/transact! graph (sqlite-util/import-tx :sqlite-db))
-      (finished-ok-handler))
-     (p/catch
-      (fn [e]
-        (js/console.error e)
-        (notification/show!
-         (str (.-message e))
-         :error))))))
-
 (defn import-from-edn!
   [raw finished-ok-handler]
   (try
@@ -230,16 +206,3 @@
     (async/go
       (async/<! (import-from-tree! clj-data tree-vec-translate-json))
       (finished-ok-handler nil)))) ;; it was designed to accept a list of imported page names but now deprecated
-
-(defn import-from-debug-transit!
-  [bare-graph-name raw finished-ok-handler]
-  (let [graph (str config/db-version-prefix bare-graph-name)
-        datoms (ldb/read-transit-str raw)]
-    (p/do!
-     (persist-db/<new graph {:import-type :debug-transit
-                             :datoms datoms})
-     (state/add-repo! {:url graph})
-     (repo-handler/restore-and-setup-repo! graph {:import-type :debug-transit})
-     (db/transact! graph (sqlite-util/import-tx :debug-transit))
-     (state/set-current-repo! graph)
-     (finished-ok-handler nil))))
