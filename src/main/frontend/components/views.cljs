@@ -6,7 +6,6 @@
             [cljs-time.format :as tf]
             [clojure.set :as set]
             [clojure.string :as string]
-            [datascript.core :as d]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.components.dnd :as dnd]
@@ -548,33 +547,11 @@
      [:div.flex.flex-row
       (map #(row-cell-f % {}) unpinned-columns)])))
 
-(rum/defc react-table-row < rum/reactive db-mixins/query
+(rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
   (let [row' (merge (db/sub-block (:id row))
                     row)]
     (table-row-inner table row' props option)))
-
-(def ^:private lookup-sentinel (js-obj))
-
-(defn- row-memoize
-  [f]
-  (let [mem (atom {})]
-    (fn [& args]
-      (let [[_table row _props option] args
-            id (:db/id row)
-            view-id (:view-id option)
-            ks [view-id id]
-            v (get @mem ks lookup-sentinel)]
-        (if (identical? v lookup-sentinel)
-          (let [ret (apply f args)]
-            (swap! mem assoc ks ret)
-            ret)
-          v)))))
-
-(def table-row-memo (row-memoize react-table-row))
-(rum/defc table-row
-  [table row props option]
-  (table-row-memo table row props option))
 
 (rum/defc search
   [input {:keys [on-change set-input!]}]
@@ -1111,6 +1088,21 @@
        (set-sized-columns! sized-columns)
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
+(rum/defc lazy-item
+  [idx full-block-ids item-render]
+  (let [db-id (util/nth-safe full-block-ids idx)
+        [item set-item!] (hooks/use-state (db/entity db-id))]
+    (hooks/use-effect!
+     (fn []
+       (when (and db-id (not item))
+         (p/let [result (db-async/<get-block (state/get-current-repo) db-id {:children? false})]
+           (when-let [e (db/entity (:db/id (:block result)))]
+             (set-item! e)))))
+     [db-id item])
+    (if item
+      (item-render (assoc item :id (:db/id item)))
+      [:div "loading"])))
+
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
   (let [[scrolling? set-scrolling!] (rum/use-state false)]
@@ -1120,14 +1112,15 @@
                                 (gdom/getElement "main-content-container"))
       :increase-viewport-by {:top 300 :bottom 300}
       :compute-item-key (fn [idx]
-                          (let [block (nth rows idx)]
-                            (str "table-row-" (:db/id block))))
+                          (let [block (util/nth-safe rows idx)]
+                            (str "table-row-" (or (:db/id block) idx))))
       :skipAnimationFrameInResizeObserver true
-      :total-count (count rows)
+      :total-count (or (:items-count option) (count rows))
       :item-content (fn [idx _user ^js context]
-                      (let [scrolling? (.-scrolling context)
-                            row (nth rows idx)]
-                        (table-row table row {} (assoc option :scrolling? scrolling?))))
+                      (let [scrolling? (.-scrolling context)]
+                        (lazy-item idx (:full-block-ids option)
+                                   (fn [row]
+                                     (table-row table row {} (assoc option :scrolling? scrolling?))))))
       :items-rendered (fn [props]
                         (when (seq props)
                           (set-items-rendered! true)))
@@ -1598,20 +1591,9 @@
 
 (defn- <load-view-data
   [view offset limit]
-  (p/let [feature-type (:logseq.property.view/feature-type view)
-          data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view)
-                                   (ldb/write-transit-str {:offset offset :limit limit}))
-          {:keys [count data]} (ldb/read-transit-str data-str)
-          blocks (mapv :block data)
-          property-values (mapcat :properties data)]
-    (when-not (= feature-type :all-pages)
-      (let [blocks' (->> (concat property-values blocks)
-                         ;; Avoid transacting existing entities
-                         (remove (fn [b] (db/entity (:db/id b)))))]
-        (when (seq blocks')
-          (util/profile "transact" (d/transact! (db/get-db false) blocks')))))
-    {:count count
-     :data blocks}))
+  (p/let [data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view)
+                                   (ldb/write-transit-str {:offset offset :limit limit}))]
+    (ldb/read-transit-str data-str)))
 
 (rum/defc view < rum/static
   [{:keys [view-parent view-feature-type view-entity] :as option}]
@@ -1619,8 +1601,7 @@
         [views set-views!] (hooks/use-state nil)
         [items-count set-count!] (hooks/use-state (count (:data option)))
         [loading? set-loading!] (hooks/use-state true)
-        ;; [loading-more? set-loading-more!] (hooks/use-state nil)
-        ]
+        [full-block-ids set-full-block-ids!] (hooks/use-state [])]
     (hooks/use-effect!
      (fn []
        (let [repo (state/get-current-repo)]
@@ -1639,9 +1620,8 @@
                                      new-view)))]
             (if (and current-view
                      (nil? (:data option)))
-              (p/let [{:keys [count data]} (<load-view-data current-view 0 100)
-                      set-data! (:set-data! option)]
-                (set-data! data)
+              (p/let [{:keys [count full-block-ids]} (<load-view-data current-view 0 100)]
+                (set-full-block-ids! full-block-ids)
                 (set-count! count)
                 (set-loading! false))
               (set-loading! false)))
@@ -1655,20 +1635,7 @@
       [:div.flex.flex-col.gap-2
        (view-container view-entity (assoc option
                                           :items-count items-count
+                                          :full-block-ids full-block-ids
                                           :views views
                                           :set-views! set-views!
-                                          :set-view-entity! set-view-entity!
-                                          :end-reached (fn []
-                                                         (when view-entity
-                                                           (let [prev-data (:data option)
-                                                                 finished? (= (count prev-data) items-count)]
-                                                             (when-not finished?
-                                                               ;; (set-loading-more! true)
-                                                               (p/let [{:keys [_count data]} (<load-view-data view-entity (count prev-data) 25)
-                                                                       set-data! (:set-data! option)]
-                                                                 ;; (set-loading-more! false)
-                                                                 (set-data! (into prev-data data)))))))))
-       ;; (when loading-more?
-       ;;   [:div.text-sm.text-muted-foreground
-       ;;    (util/format "Loading more (%d left)..." (- items-count (count (:data option))))])
-       ])))
+                                          :set-view-entity! set-view-entity!))])))
