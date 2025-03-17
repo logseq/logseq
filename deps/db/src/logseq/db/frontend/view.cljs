@@ -258,38 +258,24 @@
                       (let [view-for (:logseq.property/view-for view)]
                         (:db/ident view-for))
                       nil)
-         all-pages? (= feat-type :all-pages)
          filters (:logseq.property.table/filters view)]
      (when index-attr
-       (let [data* (if-let [cache (get-in @*view-cache [repo view-id])]
-                     cache
-                     (let [entities (get-entities db view feat-type index-attr)
-                           sorting (let [sorting* (:logseq.property.table/sorting view)]
-                                     (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
-                                       [{:id :block/updated-at, :asc? false}]
-                                       sorting*))
+       (let [data (if-let [cache (get-in @*view-cache [repo view-id])]
+                    cache
+                    (let [entities (get-entities db view feat-type index-attr)
+                          sorting (let [sorting* (:logseq.property.table/sorting view)]
+                                    (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
+                                      [{:id :block/updated-at, :asc? false}]
+                                      sorting*))
 
-                           result (->>
+                          result (->>
                                    ;; filter
-                                   (cond->> entities
-                                     (seq filters)
-                                     (filter (fn [row] (row-matched? db row filters))))
+                                  (cond->> entities
+                                    (seq filters)
+                                    (filter (fn [row] (row-matched? db row filters))))
                                    ;; sort
-                                   (sort-rows db sorting))]
-                       (swap! *view-cache assoc-in [repo view-id] result)
-                       result))
-             data (->> data*
-                       ;; pagination
-                       (drop offset)
-                       (take limit)
-                       ;; convert entity to map for serialization
-                       (map (fn [e]
-                              (if all-pages?
-                                {:block
-                                 (-> (into {} e)
-                                     (assoc
-                                      :db/id (:db/id e)
-                                      :block.temp/refs-count (count (:block/_refs e))))}
-                                (sqlite-common-db/get-block-and-children db (:db/id e) {})))))]
-         {:count (count data*)
-          :data (vec data)})))))
+                                  (sort-rows db sorting))]
+                      (swap! *view-cache assoc-in [repo view-id] result)
+                      result))]
+         {:count (count data)
+          :full-block-ids (mapv :db/id data)})))))
