@@ -332,7 +332,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   (drop-tables-and-triggers! db)
   (create-tables-and-triggers! db))
 
-(defn get-all-block-contents
+(defn get-all-blocks
   [db]
   (when db
     (->> (d/datoms db :avet :block/uuid)
@@ -345,7 +345,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn build-blocks-indice
   [repo db]
   (build-fuzzy-search-indice repo db)
-  (->> (get-all-block-contents db)
+  (->> (get-all-blocks db)
        (keep block->index)
        (bean/->js)))
 
