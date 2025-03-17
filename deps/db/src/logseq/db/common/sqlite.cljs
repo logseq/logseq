@@ -83,11 +83,13 @@
     (dissoc property :db/index :db/valueType :db/cardinality)))
 
 (defn- property-with-values
-  [db block]
+  [db block properties]
   (when (entity-plus/db-based-graph? db)
-    (let [block (d/entity db (:db/id block))]
-      (->> (:block/properties block)
-           vals
+    (let [block (d/entity db (:db/id block))
+          property-vals (if properties
+                          (map block properties)
+                          (vals (:block/properties block)))]
+      (->> property-vals
            (mapcat
             (fn [property-values]
               (let [values (->>
@@ -104,7 +106,7 @@
                                     (map
                                      (fn [id] (d/pull db '[*] id))
                                      value-ids))
-                             ;; FIXME: why d/pull returns {:db/id db-ident} instead of {:db/id number-eid}?
+                                  ;; FIXME: why d/pull returns {:db/id db-ident} instead of {:db/id number-eid}?
                                   (keep (fn [block]
                                           (let [from-property-id (get-in block [:logseq.property/created-from-property :db/id])]
                                             (if (keyword? from-property-id)
@@ -140,7 +142,8 @@
         (d/pull-many db '[*] ids')))))
 
 (defn get-block-and-children
-  [db id {:keys [children? nested-children? properties]}]
+  [db id {:keys [children? nested-children? including-property-vals? properties]
+          :or {including-property-vals? true}}]
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
                              id))]
@@ -157,8 +160,9 @@
                      (mark-block-fully-loaded block')
                      block')]
         (cond->
-         {:block block'
-          :properties (property-with-values db block)}
+         {:block block'}
+          including-property-vals?
+          (assoc :properties (property-with-values db block properties))
           children?
           (assoc :children
                  (let [page? (common-entity-util/page? block)
@@ -180,7 +184,7 @@
                                     (let [e (d/entity db (:db/id block))]
                                       (conj
                                        (if (seq (:block/properties e))
-                                         (vec (property-with-values db e))
+                                         (vec (property-with-values db e nil))
                                          [])
                                        block)))))))))))))
 

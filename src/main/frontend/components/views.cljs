@@ -522,21 +522,18 @@
                                   :cell (fn [_table _row _column])})
                            unpinned)
         sized-columns (get-in table [:state :sized-columns])
-        row-cell-f (fn [column {:keys [hide?]}]
-                     (let [id (str (:id row) "-" (:id column))
-                           render (get column :cell)
-                           width (get-column-size column sized-columns)
-                           select? (= (:id column) :select)
-                           add-property? (= (:id column) :add-property)
-                           style {:width width :min-width width}
-                           cell-opts {:key id
-                                      :select? select?
-                                      :add-property? add-property?
-                                      :style style}]
-                       (if hide?
-                         [:div.h-8 {:style style}]
-                         (when render
-                           (shui/table-cell cell-opts (render table row column))))))]
+        row-cell-f (fn [column {:keys [_lazy?]}]
+                     (when-let [render (get column :cell)]
+                       (let [id (str (:id row) "-" (:id column))
+                             width (get-column-size column sized-columns)
+                             select? (= (:id column) :select)
+                             add-property? (= (:id column) :add-property)
+                             style {:width width :min-width width}
+                             cell-opts {:key id
+                                        :select? select?
+                                        :add-property? add-property?
+                                        :style style}]
+                         (shui/table-cell cell-opts (render table row column)))))]
     (shui/table-row
      (merge
       props
@@ -545,7 +542,7 @@
      [:div.sticky-columns.flex.flex-row
       (map #(row-cell-f % {}) pinned-columns)]
      [:div.flex.flex-row
-      (map #(row-cell-f % {}) unpinned-columns)])))
+      (map #(row-cell-f % {:lazy? true}) unpinned-columns)])))
 
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
@@ -1093,16 +1090,18 @@
   (let [db-id (util/nth-safe full-block-ids idx)
         [item set-item!] (hooks/use-state
                           (or (db/entity db-id)
-                              (get-in view-entity [:cached-item db-id])))]
+                              (get-in view-entity [:cached-item db-id])))
+        skip-transact? (contains? #{:all-pages} (:logseq.property.view/feature-type view-entity))]
     (hooks/use-effect!
      (fn []
        (when (and db-id (not item))
          (p/let [result (db-async/<get-block
                          (state/get-current-repo) db-id
                          {:children? false
-                          :skip-transact? true
+                          :skip-transact? skip-transact?
                           :properties properties
-                          :cache? false})]
+                          :cache? false
+                          :including-property-vals? (not skip-transact?)})]
            (let [e (db/entity (:db/id (:block result)))
                  e' (or e (:block result))]
              (when e' (assoc-in view-entity [:cached-item db-id] e'))
