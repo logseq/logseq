@@ -1601,9 +1601,8 @@
       (str "view-" (:db/id view-entity')))))
 
 (defn- <load-view-data
-  [view offset limit]
-  (p/let [data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view)
-                                   (ldb/write-transit-str {:offset offset :limit limit}))]
+  [view]
+  (p/let [data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view))]
     (ldb/read-transit-str data-str)))
 
 (rum/defc view < rum/static
@@ -1631,7 +1630,7 @@
                                      new-view)))]
             (if (and current-view
                      (nil? (:data option)))
-              (p/let [{:keys [count full-block-ids]} (<load-view-data current-view 0 100)]
+              (p/let [{:keys [count full-block-ids]} (<load-view-data current-view)]
                 (set-full-block-ids! full-block-ids)
                 (set-count! count)
                 (set-loading! false))
