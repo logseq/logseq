@@ -1089,21 +1089,26 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc lazy-item
-  [idx {:keys [full-block-ids properties]} item-render]
+  [idx {:keys [full-block-ids properties view-entity]} item-render]
   (let [db-id (util/nth-safe full-block-ids idx)
-        [item set-item!] (hooks/use-state (db/entity db-id))]
+        [item set-item!] (hooks/use-state
+                          (or (db/entity db-id)
+                              (get-in view-entity [:cached-item db-id])))]
     (hooks/use-effect!
      (fn []
        (when (and db-id (not item))
          (p/let [result (db-async/<get-block
                          (state/get-current-repo) db-id
                          {:children? false
-                          :skip-refresh? true
-                          :properties properties})]
-           (let [e (db/entity (:db/id (:block result)))]
-             (set-item! (or e (:block result)))))))
+                          :skip-transact? true
+                          :properties properties
+                          :cache? false})]
+           (let [e (db/entity (:db/id (:block result)))
+                 e' (or e (:block result))]
+             (when e' (assoc-in view-entity [:cached-item db-id] e'))
+             (set-item! e')))))
      [db-id])
-    (item-render (assoc item :id (:db/id item)))))
+    (item-render (assoc item :id (:db/id item) :db/id (:db/id item)))))
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
