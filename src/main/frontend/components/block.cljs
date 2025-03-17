@@ -1241,7 +1241,7 @@
              (db-async/<get-block (state/get-current-repo) block-id :children? false))
            state)}
   [config id label]
-  (if (= (:block/uuid (:block config)) id)
+  (if (and id (= (:block/uuid (:block config)) id))
     [:span.warning.text-sm "Self reference"]
     (if-let [block-id (and id (if (uuid? id) id (parse-uuid id)))]
       (if (state/sub-async-query-loading (str block-id))
