@@ -5,8 +5,6 @@
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.ui :as ui-handler]
-            [frontend.modules.outliner.op :as outliner-op]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
