@@ -526,11 +526,15 @@
      (let [result (ldb/get-right-sibling (d/entity @conn db-id))]
        (ldb/write-transit-str result))))
 
-  (get-block-and-children
-   [_this repo id opts]
+  (get-blocks
+   [_this repo requests-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [id (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-       (ldb/write-transit-str (sqlite-common-db/get-block-and-children @conn id (ldb/read-transit-str opts))))))
+     (let [requests (ldb/read-transit-str requests-str)
+           results (mapv (fn [{:keys [id opts]}]
+                           (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
+                             (-> (sqlite-common-db/get-block-and-children @conn id' opts)
+                                 (assoc :id id)))) requests)]
+       (ldb/write-transit-str results))))
 
   (get-block-refs
    [_this repo id]

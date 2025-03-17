@@ -513,7 +513,7 @@
         (action-bar table selected-rows option)]))))
 
 (rum/defc table-row-inner < rum/static
-  [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
+  [{:keys [row-selected?] :as table} row props {:keys [show-add-property?]}]
   (let [pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (if show-add-property?
@@ -1089,19 +1089,21 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc lazy-item
-  [idx full-block-ids item-render]
+  [idx {:keys [full-block-ids properties]} item-render]
   (let [db-id (util/nth-safe full-block-ids idx)
         [item set-item!] (hooks/use-state (db/entity db-id))]
     (hooks/use-effect!
      (fn []
        (when (and db-id (not item))
-         (p/let [result (db-async/<get-block (state/get-current-repo) db-id {:children? false})]
-           (when-let [e (db/entity (:db/id (:block result)))]
-             (set-item! e)))))
-     [db-id item])
-    (if item
-      (item-render (assoc item :id (:db/id item)))
-      [:div "loading"])))
+         (p/let [result (db-async/<get-block
+                         (state/get-current-repo) db-id
+                         {:children? false
+                          :skip-refresh? true
+                          :properties properties})]
+           (let [e (db/entity (:db/id (:block result)))]
+             (set-item! (or e (:block result)))))))
+     [db-id])
+    (item-render (assoc item :id (:db/id item)))))
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
@@ -1118,7 +1120,7 @@
       :total-count (or (:items-count option) (count rows))
       :item-content (fn [idx _user ^js context]
                       (let [scrolling? (.-scrolling context)]
-                        (lazy-item idx (:full-block-ids option)
+                        (lazy-item idx option
                                    (fn [row]
                                      (table-row table row {} (assoc option :scrolling? scrolling?))))))
       :items-rendered (fn [props]
@@ -1292,7 +1294,7 @@
 
 (defn- view-cp
   [view-entity table option* {:keys [*scroller-ref display-type row-selection]}]
-  (let [option (assoc option* :view-id (:db/id view-entity))]
+  (let [option (assoc option* :view-entity view-entity)]
     (case display-type
       :logseq.property.view/type.list
       (list-view option view-entity (:rows table))
@@ -1442,9 +1444,13 @@
       (when add-new-object! (new-record-button table view-entity))]]))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
-  [view-entity {:keys [view-parent data set-data! columns add-new-object! foldable-options] :as option}
+  [view-entity {:keys [view-parent data set-data! columns add-new-object! foldable-options] :as option*}
    *scroller-ref]
   (let [[input set-input!] (rum/use-state "")
+        option (assoc option* :properties
+                      (-> (remove #{:id :select} (map :id columns))
+                          (conj :block/uuid :block/name)
+                          vec))
         sorting* (:logseq.property.table/sorting view-entity)
         sorting (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
                   [{:id :block/updated-at, :asc? false}]

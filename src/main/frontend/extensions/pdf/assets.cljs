@@ -1,35 +1,35 @@
 (ns frontend.extensions.pdf.assets
   (:require [cljs.reader :as reader]
             [clojure.string :as string]
+            [fipp.edn :refer [pprint]]
             [frontend.config :as config]
-            [frontend.db.conn :as conn]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
+            [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
-            [frontend.db.async :as db-async]
-            [frontend.fs :as fs]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.property :as property-handler]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.assets :as assets-handler]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.property.util :as pu]
-            [frontend.ui :as ui]
-            [frontend.context.i18n :refer [t]]
             [frontend.extensions.lightbox :as lightbox]
-            [frontend.state :as state]
-            [frontend.util :as util]
-            [logseq.publishing.db :as publish-db]
             [frontend.extensions.pdf.windows :as pdf-windows]
-            [logseq.common.path :as path]
+            [frontend.fs :as fs]
+            [frontend.handler.assets :as assets-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
+            [frontend.handler.route :as route-handler]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
             [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
             [logseq.common.util.block-ref :as block-ref]
+            [logseq.publishing.db :as publish-db]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [fipp.edn :refer [pprint]]))
+            [rum.core :as rum]))
 
 (defn get-in-repo-assets-full-filename
   [url]
@@ -189,8 +189,11 @@
 
 (defn construct-highlights-from-hls-page
   [hls-page]
-  (p/let [blocks (db-async/<get-page-all-blocks (:block/uuid hls-page))]
-    {:highlights (keep :logseq.property.pdf/hl-value blocks)}))
+  (p/let [result (db-async/<get-block (state/get-current-repo)
+                                      (:block/uuid hls-page)
+                                      {:children? true
+                                       :nested-children? false})]
+    {:highlights (keep :logseq.property.pdf/hl-value (:children result))}))
 
 (defn file-based-load-hls-data$
   [{:keys [hls-file]}]
@@ -422,7 +425,7 @@
             {:style {:width (if style "100%" "auto")}}
             [:span.asset-action-bar
              (when-let [asset-uuid (and (config/db-based-graph?)
-                                     (some-> asset-block (:block/uuid)))]
+                                        (some-> asset-block (:block/uuid)))]
                [:button.asset-action-btn
                 {:title (t :asset/ref-block)
                  :tabIndex "-1"
@@ -438,7 +441,7 @@
                  :on-click (fn [e]
                              (util/stop e)
                              (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol @*src))
-                               (p/then #(notification/show! "Copied!" :success))))}
+                                 (p/then #(notification/show! "Copied!" :success))))}
                 (ui/icon "copy")])
 
              [:button.asset-action-btn
