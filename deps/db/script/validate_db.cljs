@@ -50,6 +50,17 @@
         (js/process.exit 1))
       (println "Valid!"))))
 
+(defn- get-dir-and-db-name
+  "Gets dir and db name for use with open-db! Works for relative and absolute paths and
+   defaults to ~/logseq/graphs/ when no '/' present in name"
+  [graph-dir]
+  (if (string/includes? graph-dir "/")
+    (let [resolve-path' #(if (node-path/isAbsolute %) %
+                             ;; $ORIGINAL_PWD used by bb tasks to correct current dir
+                             (node-path/join (or js/process.env.ORIGINAL_PWD ".") %))]
+      ((juxt node-path/dirname node-path/basename) (resolve-path' graph-dir)))
+    [(node-path/join (os/homedir) "logseq" "graphs") graph-dir]))
+
 (def spec
   "Options spec"
   {:help {:alias :h
@@ -75,11 +86,7 @@
     (validate-db* db ent-maps options)))
 
 (defn- validate-graph [graph-dir options]
-  (let [[dir db-name] (if (string/includes? graph-dir "/")
-                        (let [graph-dir'
-                              (node-path/join (or js/process.env.ORIGINAL_PWD ".") graph-dir)]
-                          ((juxt node-path/dirname node-path/basename) graph-dir'))
-                        [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
+  (let [[dir db-name] (get-dir-and-db-name graph-dir)
         conn (try (sqlite-cli/open-db! dir db-name)
                   (catch :default e
                     (println "Error: For graph" (str (pr-str graph-dir) ":") (str e))
