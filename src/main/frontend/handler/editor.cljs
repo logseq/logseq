@@ -1941,7 +1941,8 @@
                                             size)
       (let [new-meta (merge metadata size)
             image-part (first (string/split full_text #"\{"))
-            new-full-text (str image-part (pr-str new-meta))
+            md-link? (string/starts-with? image-part "![")
+            new-full-text (str (if md-link? image-part (str "![image](" image-part ")")) (pr-str new-meta))
             block (db/entity [:block/uuid block-id])
             value (:block/title block)
             new-value (string/replace value full_text new-full-text)]
