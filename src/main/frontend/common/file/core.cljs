@@ -31,11 +31,16 @@
 
 (defn- transform-content
   [repo db {:block/keys [collapsed? format pre-block? title page properties] :as b} level {:keys [heading-to-list?]} context]
-  (let [block-ref-not-saved? (and (seq (:block/_refs (d/entity db (:db/id b))))
+  (let [db-based? (sqlite-util/db-based-graph? repo)
+        block-ref-not-saved? (and (seq (:block/_refs (d/entity db (:db/id b))))
                                   (not (string/includes? title (str (:block/uuid b))))
-                                  (not (sqlite-util/db-based-graph? repo)))
+                                  (not db-based?))
         heading (:heading properties)
         markdown? (= :markdown format)
+        title (if db-based?
+                ;; replace [[uuid]] with block's content
+                (:block/title (assoc (d/entity db (:db/id b)) :block.temp/search? true))
+                title)
         content (or title "")
         page-first-child? (= (:db/id b) (ldb/get-first-child db (:db/id page)))
         pre-block? (or pre-block?
@@ -82,11 +87,10 @@
                                     (string/blank? new-content))
                               ""
                               " ")]
-                    (str prefix sep new-content)))
-        content (if block-ref-not-saved?
-                  (gp-property/insert-property repo format content :id (str (:block/uuid b)))
-                  content)]
-    content))
+                    (str prefix sep new-content)))]
+    (if block-ref-not-saved?
+      (gp-property/insert-property repo format content :id (str (:block/uuid b)))
+      content)))
 
 (defn- tree->file-content-aux
   [repo db tree {:keys [init-level] :as opts} context]
