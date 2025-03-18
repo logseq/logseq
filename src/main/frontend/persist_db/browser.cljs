@@ -149,6 +149,12 @@
                      (js/console.error error)
                      (notification/show! "It seems that OPFS is not supported on this browser, please upgrade this browser to the latest version or use another browser." :error)))))))
 
+(defn <check-webgpu-available?
+  []
+  (if (some? js/navigator.gpu)
+    (p/chain (js/navigator.gpu.requestAdapter) some?)
+    (p/promise false)))
+
 (defn start-inference-worker!
   []
   (when-not util/node-test?
@@ -167,8 +173,8 @@
   []
   (assert (and @state/*infer-worker @state/*db-worker))
   (p/do!
-    (.set-db-worker-proxy ^js @state/*infer-worker (Comlink/proxy @state/*db-worker))
-    (.set-infer-worker-proxy ^js @state/*db-worker (Comlink/proxy @state/*infer-worker))))
+   (.set-db-worker-proxy ^js @state/*infer-worker (Comlink/proxy @state/*db-worker))
+   (.set-infer-worker-proxy ^js @state/*db-worker (Comlink/proxy @state/*infer-worker))))
 
 (defn <export-db!
   [repo data]
