@@ -119,10 +119,7 @@
                     [(:db/ident ent)
                      (cond-> build-property
                        (seq ent-properties)
-                       (assoc :build/properties (buildable-properties db ent-properties properties-config options))
-                       ;; built-in properties with :entity need additional config
-                       (contains? ent-properties :logseq.property/default-value)
-                       (assoc :build/properties-ref-types {:entity :number}))])))
+                       (assoc :build/properties (buildable-properties db ent-properties properties-config options)))])))
            (into {}))
       properties-config)))
 

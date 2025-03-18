@@ -111,7 +111,10 @@
                    (let [property-map {:db/ident k
                                        :logseq.property/type built-in-type}]
                      [property-map v])
-                   (when-let [built-in-type' (get (:build/properties-ref-types new-block) built-in-type)]
+                   (when-let [built-in-type' (get (or (:build/properties-ref-types new-block)
+                                                      ;; Reasonable default for properties like logseq.property/default-value
+                                                      {:entity :number})
+                                                  built-in-type)]
                      (let [property-map {:db/ident k
                                          :logseq.property/type built-in-type'}]
                        [property-map v])))
@@ -730,7 +733,8 @@
      * :build/closed-values - Define closed values with a vec of maps. A map contains keys :uuid, :value and :icon.
      * :build/property-classes - Vec of class name keywords. Defines a property's range classes
      * :build/properties-ref-types - Map of internal ref types to public ref types that are valid only for this property.
-       Useful when remapping value ref types e.g. for :logseq.property/default-value
+       Useful when remapping value ref types e.g. for :logseq.property/default-value.
+       Default is `{:entity :number}`
      * :build/keep-uuid? - Keeps :block/uuid because another block depends on it
    * :classes - This is a map to configure classes where the keys are class name keywords
      and the values are maps of datascript attributes e.g. `{:block/title \"Foo\"}`.

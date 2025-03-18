@@ -55,7 +55,6 @@
       {:error "An unexpected error occurred building the import. See the javascript console for details."})))
 
 (defn- import-edn-data-from-file
-  "Similar to import-submit"
   [export-map]
   (let [{:keys [init-tx block-props-tx misc-tx error] :as _txs} (safe-build-edn-import export-map {})]
     ;; (cljs.pprint/pprint _txs)
