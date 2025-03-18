@@ -264,7 +264,7 @@
 
     (import-second-time-assertions conn conn2 "page1" original-data)))
 
-(deftest ^:focus3 import-page-with-different-ref-types
+(deftest import-page-with-different-ref-types
   (let [block-uuid (random-uuid)
         internal-block-uuid (random-uuid)
         class-uuid (random-uuid)
@@ -548,7 +548,6 @@
          {:user.property/num {:logseq.property/type :number
                               :block/uuid property-uuid
                               :build/keep-uuid? true
-                              :build/properties-ref-types {:entity :number}
                               :build/properties (if exclude-namespaces?
                                                   {}
                                                   {:user.property/node #{[:block/uuid property-pvalue-uuid]}
@@ -641,7 +640,7 @@
            :file/content "// comment"}]}]
     original-data))
 
-(deftest ^:focus import-graph
+(deftest import-graph
   (let [original-data (build-original-graph-data)
         conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
         _ (d/transact! conn (::sqlite-export/graph-files original-data))
@@ -687,8 +686,6 @@
         conn2 (db-test/create-conn)
         imported-graph (export-graph-and-import-to-another-graph conn conn2 {:include-timestamps? true})]
 
-    ;; (cljs.pprint/pprint (set (:pages-and-blocks original-data)))
-    ;; (cljs.pprint/pprint (set (:pages-and-blocks imported-graph)))
     ;; (cljs.pprint/pprint (butlast (clojure.data/diff (sort-pages-and-blocks (:pages-and-blocks original-data))
     ;;                                                 (:pages-and-blocks imported-graph))))
     (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
