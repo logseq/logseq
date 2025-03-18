@@ -31,6 +31,8 @@
                         :desc "Namespaces to exclude from properties and classes"}
    :exclude-built-in-pages? {:alias :b
                              :desc "Exclude built-in pages"}
+   :set-diff {:alias :s
+              :desc "Use set to reduce noisy diff caused by ordering"}
    :include-timestamps? {:alias :t
                          :desc "Include timestamps in export"}})
 
@@ -48,12 +50,15 @@
         export-map2 (sqlite-export/build-export @conn2 {:export-type :graph :graph-options export-options})
         prepare-export-to-diff
         (fn [m]
-          (-> m
-              (update :classes update-vals (fn [m]
-                                             (update m :build/class-properties sort)))
+          (cond->
+           (-> m
+               (update :classes update-vals (fn [m]
+                                              (update m :build/class-properties sort)))
               ;; TODO: fix built-in views for schema export
-              (update :pages-and-blocks (fn [pbs]
-                                          (vec (remove #(= (:block/title (:page %)) common-config/views-page-name) pbs))))))
+               (update :pages-and-blocks (fn [pbs]
+                                           (vec (remove #(= (:block/title (:page %)) common-config/views-page-name) pbs)))))
+            (:set-diff options)
+            (update :pages-and-blocks set)))
         diff (->> (data/diff (prepare-export-to-diff export-map) (prepare-export-to-diff export-map2))
                   butlast)]
     (if (= diff [nil nil])
