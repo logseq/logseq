@@ -16,7 +16,7 @@
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.device :as worker-device]
-            [frontend.worker.embedding]
+            [frontend.worker.embedding :as embedding]
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
             [frontend.worker.handler.page :as worker-page]
@@ -924,7 +924,24 @@
    [this repo]
    (p/let [r (.listDB this)
            dbs (ldb/read-transit-str r)]
-     (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
+     (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs))))
+
+  (vec-search-embedding-stale-blocks
+   [this repo]
+   (embedding/embedding-stale-blocks! repo))
+
+  (vec-search-re-embedding-graph-data
+   [this repo]
+   (embedding/re-embedding-graph-data! repo))
+
+  (vec-search-search
+   [this repo query-string nums-neighbors]
+   (with-write-transit-str
+     (embedding/task--search repo query-string nums-neighbors)))
+
+  (vec-search-cancel-indexing
+   [this repo]
+   (embedding/cancel-indexing repo)))
 
 (defn- rename-page!
   [repo conn page-uuid new-name]
