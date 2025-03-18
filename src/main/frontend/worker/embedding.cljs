@@ -12,6 +12,7 @@
 ;;; TODOs:
 ;;; - [x] add :logseq.property/description into text-to-embedding
 ;;; - add tags to text-to-embedding
+;;; - [x] check webgpu available, transformers.js is slow without webgpu(the difference is ~70 times)
 
 (defn- stale-block-filter-preds
   "When `reset?`, ignore :logseq.property.embedding/hnsw-label-updated-at in block"
@@ -81,8 +82,7 @@
   outdate rule: block/updated-at > :logseq.property.embedding/hnsw-label-updated-at"
   [repo conn]
   (m/sp
-    (let [^js infer-worker @worker-state/*infer-worker]
-      (assert (some? infer-worker))
+    (when-let [^js infer-worker @worker-state/*infer-worker]
       (let [stale-blocks (stale-block-lazy-seq @conn false)]
         (doseq [stale-block-chunk (sequence (partition-by-text-size 2000) stale-blocks)]
           (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) stale-block-chunk)
@@ -100,8 +100,7 @@
   "force re-embedding all block-data in graph"
   [repo conn]
   (m/sp
-    (let [^js infer-worker @worker-state/*infer-worker]
-      (assert (some? infer-worker))
+    (when-let [^js infer-worker @worker-state/*infer-worker]
       (c.m/<? (.force-reset-index! infer-worker repo))
       (let [all-blocks (stale-block-lazy-seq @conn true)]
         (doseq [block-chunk (sequence (partition-by-text-size 2000) all-blocks)]
@@ -128,8 +127,7 @@
 (defn <search
   [repo conn query-string nums-neighbors]
   (m/sp
-    (let [^js infer-worker @worker-state/*infer-worker]
-      (assert (some? infer-worker))
+    (when-let [^js infer-worker @worker-state/*infer-worker]
       (let [{:keys [distances neighbors] :as r}
             (worker-util/profile (str "search: '" query-string "'")
               (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))

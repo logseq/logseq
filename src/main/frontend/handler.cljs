@@ -169,15 +169,18 @@
    (when (mobile-util/native-platform?)
      (mobile/mobile-preinit))
    (-> (p/let [_ (db-browser/start-db-worker!)
-               _ (db-browser/start-inference-worker!)
-               _ (db-browser/<connect-db-worker-and-infer-worker!)
                repos (repo-handler/get-repos)
                _ (state/set-repos! repos)
                _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                repo (or (state/get-current-repo) (:url (first repos)))
                _ (if (empty? repos)
                    (repo-handler/new-db! config/demo-repo)
-                   (restore-and-setup! repo))]
+                   (restore-and-setup! repo))
+               webgpu-available? (db-browser/<check-webgpu-available?)]
+         (log/info :webgpu-available? webgpu-available?)
+         (when webgpu-available?
+           (p/do! (db-browser/start-inference-worker!)
+                  (db-browser/<connect-db-worker-and-infer-worker!)))
          (when (util/electron?)
            (persist-db/run-export-periodically!))
          (when (mobile-util/native-platform?)
