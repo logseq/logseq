@@ -2,12 +2,15 @@
   "Handles DB graph exports and imports across graphs"
   (:require [cljs.pprint :as pprint]
             [clojure.edn :as edn]
+            [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
+            [goog.dom :as gdom]
             [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.shui.ui :as shui]
@@ -61,14 +64,35 @@
                            (count (:properties result)) " properties"))
       (notification/show! "Copied graphs's ontology data!" :success))))
 
-(defn ^:export export-graph-data []
+(defn- export-graph-edn-data []
   (when-let [^Object worker @state/*db-worker]
-    (p/let [result* (.export-edn worker (state/get-current-repo) (ldb/write-transit-str {:export-type :graph}))
+    (p/let [result* (.export-edn worker
+                                 (state/get-current-repo)
+                                 (ldb/write-transit-str {:export-type :graph
+                                                         :graph-options {:include-timestamps? true}}))
             result (ldb/read-transit-str result*)
             pull-data (with-out-str (pprint/pprint result))]
-      (.writeText js/navigator.clipboard pull-data)
-      (println pull-data)
-      (notification/show! "Copied graphs's data!" :success))))
+      pull-data)))
+
+;; Copied from handler.export
+(defn- file-name [repo extension]
+  (-> (string/replace repo config/local-db-prefix "")
+      (string/replace #"^/+" "")
+      (str "_" (quot (util/time-ms) 1000))
+      (str "." (string/lower-case (name extension)))))
+
+(defn export-repo-as-db-edn!
+  [repo]
+  (p/let [edn-str (export-graph-edn-data)]
+    (when edn-str
+      (let [data-str (some->> edn-str
+                              js/encodeURIComponent
+                              (str "data:text/edn;charset=utf-8,"))
+            filename (file-name repo :edn)]
+        (when-let [anchor (gdom/getElement "download-as-db-edn")]
+          (.setAttribute anchor "href" data-str)
+          (.setAttribute anchor "download" filename)
+          (.click anchor))))))
 
 (defn- import-submit [import-inputs _e]
   (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))

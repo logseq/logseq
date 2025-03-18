@@ -102,6 +102,7 @@
              frontend.handler.common.plugin plugin-common-handler
              frontend.handler.config config-handler
              frontend.handler.db-based.editor db-editor-handler
+             frontend.handler.db-based.export db-export-handler
              frontend.handler.db-based.page db-page-handler
              frontend.handler.db-based.property db-property-handler
              frontend.handler.db-based.property.util db-pu
