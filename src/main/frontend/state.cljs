@@ -330,7 +330,9 @@
       :favorites/updated?                    (atom 0)
       :db/async-query-loading                (atom #{})
       :db/async-queries                      (atom {})
-      :db/latest-transacted-entity-uuids     (atom {})})))
+      :db/latest-transacted-entity-uuids     (atom {})
+
+      :vector-search/state                   (atom {})})))
 
 ;; Block ast state
 ;; ===============

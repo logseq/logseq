@@ -1044,6 +1044,9 @@
   (state/set-state! :error/multiple-tabs-access-opfs? true)
   (shui/dialog-open! multi-tabs-dialog))
 
+(defmethod handle :vector-search/sync-state [[_ state]]
+  (state/set-state! :vector-search/state state))
+
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
 

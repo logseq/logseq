@@ -6,13 +6,44 @@
             [frontend.common.missionary :as c.m]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.state :as worker-state]
+            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
+            [medley.core :as medley]
             [missionary.core :as m]))
 
 ;;; TODOs:
 ;;; - [x] add :logseq.property/description into text-to-embedding
-;;; - add tags to text-to-embedding
+;;; - [ ] add tags to text-to-embedding
 ;;; - [x] check webgpu available, transformers.js is slow without webgpu(the difference is ~70 times)
+;;; - [ ] expose index-state to ui
+
+(def ^:private empty-vector-search-state
+  {:repo->index-info {}              ;; repo->index-info
+   :repo->index-building-canceler {} ;; repo->canceler
+   :repo->search-canceler {}}) ;; repo->canceler
+
+(def ^:private vector-search-state-keys (set (keys empty-vector-search-state)))
+
+(def ^:private *vector-search-state (atom empty-vector-search-state
+                                          :validator
+                                          (fn [v] (= vector-search-state-keys (set (keys v))))))
+
+(defn- reset-*vector-search-state!
+  [repo & {:keys [index-info index-building-canceler search-canceler]}]
+  (reset! *vector-search-state
+          (cond-> @*vector-search-state
+            index-info              (assoc :repo->index-info {repo index-info})
+            index-building-canceler (assoc-in [:repo->index-building-canceler repo] index-building-canceler)
+            search-canceler         (assoc-in [:repo->search-canceler repo] search-canceler))))
+
+(defn- cancel-action!
+  [repo action]
+  (assert (contains? #{:index-building :search} action))
+  (let [k {:index-building :repo->index-building-canceler
+           :search :repo->search-canceler}]
+    (when-let [canceler (get-in @*vector-search-state [k repo])]
+      (canceler))
+    (swap! *vector-search-state medley/dissoc-in [k repo])))
 
 (defn- stale-block-filter-preds
   "When `reset?`, ignore :logseq.property.embedding/hnsw-label-updated-at in block"
@@ -77,7 +108,13 @@
           [:db/add e :logseq.property.embedding/hnsw-label-updated-at updated-at]]))
      e+updated-at-coll added-labels)))
 
-(defn <embedding-stale-blocks!
+(defn- task--update-index-info!
+  [repo infer-worker]
+  (m/sp
+    (reset-*vector-search-state! repo :index-info
+                                 (js->clj (c.m/<? (.index-info infer-worker repo))
+                                          :keywordize-keys true))))
+(defn task--embedding-stale-blocks!
   "embedding outdated block-data
   outdate rule: block/updated-at > :logseq.property.embedding/hnsw-label-updated-at"
   [repo conn]
@@ -93,15 +130,17 @@
                                  infer-worker repo (into-array (map :block.temp/text-to-embedding stale-block-chunk))
                                  delete-labels false)))
                 tx-data (labels-update-tx-data @conn e+updated-at-coll added-labels)]
-            (d/transact! conn tx-data)))
+            (d/transact! conn tx-data)
+            (m/? (task--update-index-info! repo infer-worker))))
         (c.m/<? (.write-index! infer-worker repo))))))
 
-(defn <re-embedding-graph-data!
+(defn task--re-embedding-graph-data!
   "force re-embedding all block-data in graph"
   [repo conn]
   (m/sp
     (when-let [^js infer-worker @worker-state/*infer-worker]
       (c.m/<? (.force-reset-index! infer-worker repo))
+      (m/? (task--update-index-info! repo infer-worker))
       (let [all-blocks (stale-block-lazy-seq @conn true)]
         (doseq [block-chunk (sequence (partition-by-text-size 2000) all-blocks)]
           (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) block-chunk)
@@ -111,7 +150,8 @@
                                  infer-worker repo (into-array (map :block.temp/text-to-embedding block-chunk))
                                  nil false)))
                 tx-data (labels-update-tx-data @conn e+updated-at-coll added-labels)]
-            (d/transact! conn tx-data))))
+            (d/transact! conn tx-data)
+            (m/? (task--update-index-info! repo infer-worker)))))
       (c.m/<? (.write-index! infer-worker repo)))))
 
 (defn- remove-outdated-hnsw-label!
@@ -124,7 +164,7 @@
               [:db.fn/retractAttribute e :logseq.property.embedding/hnsw-label-updated-at]])
            es))))
 
-(defn <search
+(defn task--search
   [repo conn query-string nums-neighbors]
   (m/sp
     (when-let [^js infer-worker @worker-state/*infer-worker]
@@ -151,11 +191,25 @@
                                                                                v))))
                                                          blocks))))))
 
+(def ^:private vector-search-state-flow
+  (m/eduction
+   (map (fn [m] (-> m
+                    (update :index-building-canceler keys)
+                    (update :search-canceler keys))))
+   (c.m/throttle 300 (m/watch *vector-search-state))))
+
+(when-not common-config/PUBLISHING ; NOTE: we may support vector-search in publishing mode later
+  (c.m/run-background-task
+   ::subscribe-state
+   (m/reduce
+    (fn [_ m] (worker-util/post-message :vector-search-sync-state m))
+    vector-search-state-flow)))
+
 (comment
   (def repo (frontend.worker.state/get-current-repo))
   (def conn (frontend.worker.state/get-datascript-conn (frontend.worker.state/get-current-repo)))
   (.force-reset-index! @worker-state/*infer-worker repo)
-  ((<embedding-stale-blocks! repo conn) prn js/console.log)
-  ((<re-embedding-graph-data! repo conn) prn js/console.log)
+  ((task--embedding-stale-blocks! repo conn) prn js/console.log)
+  ((task--re-embedding-graph-data! repo conn) prn js/console.log)
 
-  ((<search repo conn "perf performance datomic stat" 10) prn js/console.log))
+  ((task--search repo conn "perf performance datomic stat" 10) prn js/console.log))
