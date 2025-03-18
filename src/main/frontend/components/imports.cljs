@@ -114,7 +114,7 @@
             (state/set-state! :graph/importing :logseq)
             (let [reader (js/FileReader.)
                   import-f (if db-edn?
-                             db-import-handler/import-from-edn!
+                             db-import-handler/import-from-edn-file!
                              db-import-handler/import-from-debug-transit!)]
               (set! (.-onload reader)
                     (fn [e]
