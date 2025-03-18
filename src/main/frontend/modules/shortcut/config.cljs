@@ -625,10 +625,6 @@
                                      :db-graph? true
                                      :fn :frontend.handler.db-based.export/export-graph-ontology-data}
 
-   :misc/export-graph-data {:binding []
-                            :db-graph? true
-                            :fn :frontend.handler.db-based.export/export-graph-data}
-
    :misc/import-edn-data {:binding []
                           :db-graph? true
                           :fn :frontend.handler.db-based.export/import-edn-data}
@@ -651,8 +647,9 @@
   [keyword-fn]
   (fn []
     (if-let [resolved-fn (some-> (namespace keyword-fn)
-                                 ;; export is reserved word
+                                 ;; handle reserved words
                                  (string/replace-first ".export" ".export$")
+                                 (string/replace-first ".import" ".import$")
                                  find-ns-obj
                                  (aget (munge (name keyword-fn))))]
       (resolved-fn)
@@ -855,7 +852,6 @@
           :sidebar/close-top
           :misc/export-block-data
           :misc/export-page-data
-          :misc/export-graph-data
           :misc/export-graph-ontology-data
           :misc/import-edn-data
           :dev/show-block-data
@@ -1048,7 +1044,6 @@
      :git/commit
      :misc/export-block-data
      :misc/export-page-data
-     :misc/export-graph-data
      :misc/export-graph-ontology-data
      :misc/import-edn-data
      :dev/show-block-data
