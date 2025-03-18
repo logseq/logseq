@@ -289,10 +289,11 @@
    :canceler nil
    :*last-stop-exception nil})
 
+(def ^:private rtc-loop-metadata-keys (set (keys empty-rtc-loop-metadata)))
+
 (defonce ^:private *rtc-loop-metadata (atom empty-rtc-loop-metadata
                                             :validator
-                                            (fn [v] (= (set (keys empty-rtc-loop-metadata))
-                                                       (set (keys v))))))
+                                            (fn [v] (= rtc-loop-metadata-keys (set (keys v))))))
 
 (defn- validate-rtc-start-conditions
   "Return exception if validation failed"

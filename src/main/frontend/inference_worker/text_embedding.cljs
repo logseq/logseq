@@ -120,8 +120,7 @@
   [repo]
   (m/sp
     (let [hnsw (ensure-hnsw-index! repo)]
-      (m/? (task--write-index!* repo hnsw))
-      (.getCurrentCount hnsw))))
+      (m/? (task--write-index!* repo hnsw)))))
 
 (defn- search-knn
   [repo query-point num-neighbors]
@@ -135,6 +134,14 @@
           query-point (:data query-embedding)]
     (search-knn repo query-point num-neighbors)))
 
+(defn index-info
+  [repo]
+  (let [^js hnsw (ensure-hnsw-index! repo)]
+    {:current-count (.getCurrentCount hnsw)
+     :max-elements (.getMaxElements hnsw)
+     :ef-search (.getEfSearch hnsw)
+     :num-dims (.getNumDimensions hnsw)}))
+
 (defn <init
   []
   (p/do!
@@ -145,6 +152,7 @@
    (p/let [extractor (pipeline "feature-extraction" "Xenova/all-MiniLM-L6-v2" #js{"device" "webgpu" "dtype" "fp32"})]
      (reset! infer-worker.state/*extractor extractor)
      (log/info :loaded :extractor))))
+
 
 (comment
   (def repo "repo-1")
