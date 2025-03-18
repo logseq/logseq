@@ -109,7 +109,7 @@
      e+updated-at-coll added-labels)))
 
 (defn- task--update-index-info!
-  [repo infer-worker]
+  [repo ^js infer-worker]
   (m/sp
     (reset-*vector-search-state! repo :index-info
                                  (js->clj (c.m/<? (.index-info infer-worker repo))
@@ -195,7 +195,8 @@
   (m/eduction
    (map (fn [m] (-> m
                     (update :index-building-canceler keys)
-                    (update :search-canceler keys))))
+                    (update :search-canceler keys)
+                    (dissoc :repo->search-canceler :repo->index-building-canceler))))
    (c.m/throttle 300 (m/watch *vector-search-state))))
 
 (when-not common-config/PUBLISHING ; NOTE: we may support vector-search in publishing mode later
