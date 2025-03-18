@@ -24,7 +24,7 @@ env:
 jobs:
   e2e-test-build:
     name: Build Test Artifact
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
@@ -88,7 +88,7 @@ jobs:
         run: tar czf static.tar.gz static
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-e2e-artifact
           path: static.tar.gz
@@ -97,7 +97,7 @@ jobs:
   e2e-test-run:
     needs: [ e2e-test-build ]
     name: Test Shard ${{ matrix.shard }} Repeat ${{ matrix.repeat }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         repeat: [1, 2]
@@ -157,7 +157,7 @@ jobs:
 
       - name: Save e2e artifacts
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: e2e-repeat-report-${{ matrix.shard}}-${{ matrix.repeat }}
           path: e2e-dump/*

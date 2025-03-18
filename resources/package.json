@@ -14,7 +14,7 @@
     "electron:make-linux-arm64": "electron-forge make --platform=linux --arch=arm64",
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
-    "rebuild:all": "electron-rebuild -v 28.3.1 -f",
+    "rebuild:all": "electron-rebuild -v 35.0.1 -f",
     "postinstall": "install-app-deps"
   },
   "config": {
@@ -25,7 +25,7 @@
     "@logseq/rsapi": "0.0.91",
     "@sentry/electron": "2.5.1",
     "abort-controller": "3.0.0",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^11.8.1",
     "chokidar": "^3.5.1",
     "command-exists": "1.2.9",
     "diff-match-patch": "1.0.5",
@@ -55,14 +55,14 @@
     "@electron-forge/maker-squirrel": "^7.3.1",
     "@electron-forge/maker-zip": "^7.3.1",
     "@electron/rebuild": "3.2.10",
-    "electron": "31.7.5",
+    "electron": "35.0.1",
     "electron-builder": "25.1.8",
     "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git"
   },
   "resolutions": {
-    "**/electron": "31.7.5",
-    "**/node-abi": "3.68.0",
-    "**/node-gyp": "10.0.0",
+    "**/electron": "35.0.1",
+    "**/node-abi": "3.74.0",
+    "**/node-gyp": "11.1.0",
     "string-width": "4.2.0",
     "wrap-ansi": "^7.0.0",
     "strip-ansi": "^6.0.1"
