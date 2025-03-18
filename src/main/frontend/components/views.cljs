@@ -1088,24 +1088,24 @@
 (rum/defc lazy-item
   [idx {:keys [full-block-ids properties view-entity]} item-render]
   (let [db-id (util/nth-safe full-block-ids idx)
-        [item set-item!] (hooks/use-state
-                          (or (db/entity db-id)
-                              (get-in view-entity [:cached-item db-id])))
-        skip-transact? (contains? #{:all-pages} (:logseq.property.view/feature-type view-entity))]
+        block (or (get-in view-entity [:cached-item db-id])
+                  (let [e (db/entity db-id)]
+                    (when (:block.temp/fully-loaded? e)
+                      e)))
+        [item set-item!] (hooks/use-state block)]
     (hooks/use-effect!
      (fn []
-       (when (and db-id (not item))
+       (when (and db-id (not block))
          (p/let [result (db-async/<get-block
                          (state/get-current-repo) db-id
                          {:children? false
-                          :skip-transact? skip-transact?
+                          :skip-transact? true
                           :properties properties
                           :cache? false
-                          :including-property-vals? (not skip-transact?)})]
-           (let [e (db/entity (:db/id (:block result)))
-                 e' (or e (:block result))]
-             (when e' (assoc-in view-entity [:cached-item db-id] e'))
-             (set-item! e')))))
+                          :including-property-vals? false})]
+           (let [block (:block result)]
+             (when block (assoc-in view-entity [:cached-item db-id] block))
+             (set-item! block)))))
      [db-id])
     (item-render (assoc item :id (:db/id item) :db/id (:db/id item)))))
 

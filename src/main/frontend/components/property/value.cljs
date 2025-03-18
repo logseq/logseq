@@ -1244,11 +1244,33 @@
     (multiple-values-inner block property value' opts)))
 
 (rum/defcs ^:large-vars/cleanup-todo property-value < rum/reactive db-mixins/query
+  {:init (fn [state]
+           (let [[block property _opts] (:rum/args state)
+                 v (get block (:db/ident property))
+                 ids (cond
+                       (and (map? v) (:db/id v))
+                       [(:db/id v)]
+                       (and (coll? v) (every? map? v))
+                       (map :db/id v)
+                       :else
+                       nil)
+                 not-loaded-ids (keep (fn [id] (when (and id (not (db/entity id))) id)) ids)
+                 repo (state/get-current-repo)
+                 *v (atom v)
+                 multiple-values? (db-property/many? property)]
+             (when (seq not-loaded-ids)
+               (p/do!
+                (p/all (map (fn [id] (db-async/<get-block repo id {:children? false})) not-loaded-ids))
+                (let [loaded-value (if multiple-values?
+                                     (map db/entity ids)
+                                     (db/entity (first ids)))]
+                  (reset! *v loaded-value))))
+             (assoc state ::v *v)))}
   [state block property {:keys [show-tooltip? p-block p-property editing?]
                          :as opts}]
   (ui/catch-error
    (ui/block-error "Something wrong" {})
-   (let [block (db/sub-block (:db/id block))
+   (let [block (or (db/sub-block (:db/id block)) block)
          block-cp (state/get-component :block/blocks-container)
          properties-cp (state/get-component :block/properties-cp)
          opts (merge opts
@@ -1261,16 +1283,19 @@
          editor-id (str dom-id "-editor")
          type (:logseq.property/type property)
          multiple-values? (db-property/many? property)
-         v (get block (:db/ident property))
-         v (cond
-             (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
-             v
-             multiple-values?
-             #{v}
-             (set? v)
-             (first v)
-             :else
-             v)
+         *v (::v state)
+         v (or
+            (rum/react *v)
+            (let [v (get block (:db/ident property))]
+              (cond
+                (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
+                v
+                multiple-values?
+                #{v}
+                (set? v)
+                (first v)
+                :else
+                v)))
          self-value-or-embedded? (fn [v]
                                    (or (= (:db/id v) (:db/id block))
                                        ;; property value self embedded
@@ -1335,12 +1360,12 @@
                              value-cp)))]]
          (if show-tooltip?
            (shui/tooltip-provider
-             (shui/tooltip
-               {:delayDuration 1200}
-               (shui/tooltip-trigger
-                 {:onFocusCapture #(util/stop-propagation %)
-                  :as-child true}
-                 value-cp)
-               (shui/tooltip-content
-                 (str "Change " (:block/title property)))))
+            (shui/tooltip
+             {:delayDuration 1200}
+             (shui/tooltip-trigger
+              {:onFocusCapture #(util/stop-propagation %)
+               :as-child true}
+              value-cp)
+             (shui/tooltip-content
+              (str "Change " (:block/title property)))))
            value-cp))))))
