@@ -1,7 +1,7 @@
 (ns frontend.extensions.graph.pixi
   (:require [cljs-bean.core :as bean]
             ["d3-force"
-             :refer [forceCenter forceCollide forceLink forceManyBody forceSimulation forceX forceY]
+             :refer [forceCenter forceCollide forceLink forceManyBody forceSimulation]
              :as force]
             [goog.object :as gobj]
             [frontend.colors :as colors]
