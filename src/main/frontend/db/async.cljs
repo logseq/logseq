@@ -137,17 +137,16 @@
                                         (ldb/write-transit-str
                                          [{:id id :opts opts}]))
                 result (ldb/read-transit-str result-str)
-                {:keys [properties block children] :as result'} (first result)]
-
+                {:keys [block children] :as result'} (first result)]
           (when-not skip-transact?
             (let [conn (db/get-db graph false)
-                  block-and-children (concat properties [block] children)
-                  affected-keys (->> (keep :db/id block-and-children)
-                                     (map #(vector :frontend.worker.react/block %)))]
-              (d/transact! conn block-and-children)
+                  block-and-children (cons block children)
+                  affected-keys [[:frontend.worker.react/block (:db/id block)]]]
+              (d/transact! conn (remove (fn [b] (:block.temp/fully-loaded? (db/entity (:db/id b)))) block-and-children))
               (react/refresh-affected-queries! graph affected-keys)))
 
-          (state/update-state! :db/async-query-loading (fn [s] (disj s name')))
+          (when cache?
+            (state/update-state! :db/async-query-loading (fn [s] (disj s name'))))
           (if children?
             block
             result'))))))

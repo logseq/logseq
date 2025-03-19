@@ -1086,53 +1086,43 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc lazy-item
-  [idx {:keys [full-block-ids properties view-entity]} item-render]
+  [idx {:keys [full-block-ids properties]} item-render]
   (let [db-id (util/nth-safe full-block-ids idx)
-        block (or (get-in view-entity [:cached-item db-id])
-                  (let [e (db/entity db-id)]
-                    (when (:block.temp/fully-loaded? e)
-                      e)))
+        block (db/entity db-id)
         [item set-item!] (hooks/use-state block)]
     (hooks/use-effect!
      (fn []
-       (when (and db-id (not block))
+       (when (and db-id (not (:block.temp/fully-loaded? block)))
          (p/let [result (db-async/<get-block
                          (state/get-current-repo) db-id
                          {:children? false
-                          :skip-transact? true
                           :properties properties
-                          :cache? false
-                          :including-property-vals? false})]
+                          :skip-transact? true
+                          :cache? false})]
            (let [block (:block result)]
-             (when block (assoc-in view-entity [:cached-item db-id] block))
-             (set-item! block)))))
+             (set-item! (or block (some-> (:db/id block) db/entity)))))))
      [db-id])
     (item-render (assoc item :id (:db/id item) :db/id (:db/id item)))))
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
-  (let [[scrolling? set-scrolling!] (rum/use-state false)]
-    (ui/virtualized-list
-     {:ref #(reset! *scroller-ref %)
-      :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
-                                (gdom/getElement "main-content-container"))
-      :increase-viewport-by {:top 300 :bottom 300}
-      :compute-item-key (fn [idx]
-                          (let [block (util/nth-safe rows idx)]
-                            (str "table-row-" (or (:db/id block) idx))))
-      :skipAnimationFrameInResizeObserver true
-      :total-count (or (:items-count option) (count rows))
-      :item-content (fn [idx _user ^js context]
-                      (let [scrolling? (.-scrolling context)]
-                        (lazy-item idx option
-                                   (fn [row]
-                                     (table-row table row {} (assoc option :scrolling? scrolling?))))))
-      :items-rendered (fn [props]
-                        (when (seq props)
-                          (set-items-rendered! true)))
-      :context {:scrolling scrolling?}
-      :is-scrolling set-scrolling!
-      :end-reached (:end-reached option)})))
+  (ui/virtualized-list
+   {:ref #(reset! *scroller-ref %)
+    :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
+                              (gdom/getElement "main-content-container"))
+    :increase-viewport-by {:top 300 :bottom 300}
+    :compute-item-key (fn [idx]
+                        (let [block (util/nth-safe rows idx)]
+                          (str "table-row-" (or (:db/id block) idx))))
+    :skipAnimationFrameInResizeObserver true
+    :total-count (or (:items-count option) (count rows))
+    :item-content (fn [idx]
+                    (lazy-item idx option
+                               (fn [row]
+                                 (table-row table row {} option))))
+    :items-rendered (fn [props]
+                      (when (seq props)
+                        (set-items-rendered! true)))}))
 
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]
@@ -1181,7 +1171,7 @@
                      table)]])
 
 (rum/defcs gallery-view < rum/static mixins/container-id
-  [state {:keys [config end-reached]} table view-entity blocks *scroller-ref]
+  [state {:keys [config]} table view-entity blocks *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))]
     [:div.ls-cards
      (when (seq blocks)
@@ -1191,8 +1181,7 @@
          :custom-scroll-parent (gdom/getElement "main-content-container")
          :item-content (fn [idx]
                          (when-let [block (nth blocks idx)]
-                           (gallery-card-item table view-entity block config')))
-         :end-reached end-reached}))]))
+                           (gallery-card-item table view-entity block config')))}))]))
 
 (defn- run-effects!
   [option {:keys [data state data-fns]} input input-filters set-input-filters! *scroller-ref gallery?]

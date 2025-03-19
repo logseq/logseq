@@ -2546,25 +2546,29 @@
             (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
               (editor-handler/clear-selection!)
               (editor-handler/unhighlight-blocks!)
-              (let [f #(let [cursor-range (some-> (gdom/getElement block-id)
-                                                  (dom/by-class "block-content-inner")
-                                                  first
-                                                  util/caret-range)
-                             {:block/keys [title format]} block
-                             content (if (config/db-based-graph? (state/get-current-repo))
-                                       (:block/title block)
-                                       (->> title
-                                            (property-file/remove-built-in-properties-when-file-based
-                                             (state/get-current-repo) format)
-                                            (drawer/remove-logbook)))]
-                         (state/set-editing!
-                          edit-input-id
-                          content
-                          block
-                          cursor-range
-                          {:db (db/get-db)
-                           :move-cursor? false
-                           :container-id (:container-id config)}))]
+              (let [f #(p/do!
+                        (when-not (:block.temp/fully-loaded? (db/entity (:db/id block)))
+                          (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
+                        (let [cursor-range (some-> (gdom/getElement block-id)
+                                                   (dom/by-class "block-content-inner")
+                                                   first
+                                                   util/caret-range)
+                              block (db/entity (:db/id block))
+                              {:block/keys [title format]} block
+                              content (if (config/db-based-graph? (state/get-current-repo))
+                                        (:block/title block)
+                                        (->> title
+                                             (property-file/remove-built-in-properties-when-file-based
+                                              (state/get-current-repo) format)
+                                             (drawer/remove-logbook)))]
+                          (state/set-editing!
+                           edit-input-id
+                           content
+                           block
+                           cursor-range
+                           {:db (db/get-db)
+                            :move-cursor? false
+                            :container-id (:container-id config)})))]
                 ;; wait a while for the value of the caret range
                 (p/do!
                  (state/pub-event! [:editor/save-code-editor])

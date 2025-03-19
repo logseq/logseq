@@ -7,6 +7,7 @@
    [dommy.core :as dom]
    [frontend.config :as config]
    [frontend.db :as db]
+   [frontend.db.async :as db-async]
    [frontend.db.model :as db-model]
    [frontend.handler.file-based.property.util :as property-util]
    [frontend.handler.property.util :as pu]
@@ -219,30 +220,32 @@
                      save-code-editor? true}
                 :as opts}]
   (when (and (not config/publishing?) (:block/uuid block))
-    (p/do!
-     (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
-     (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
-       (state/clear-edit! {:clear-editing-block? false}))
-     (when-let [block-id (:block/uuid block)]
-       (let [repo (state/get-current-repo)
-             block (or (db/entity [:block/uuid block-id]) block)
-             content (or custom-content (:block/title block) "")
-             content-length (count content)
-             text-range (cond
-                          (vector? pos)
-                          (text-range-by-lst-fst-line content pos)
+    (let [repo (state/get-current-repo)]
+      (p/do!
+       (when-not (:block.temp/fully-loaded? (db/entity (:db/id block)))
+         (db-async/<get-block repo (:db/id block) {:children? false}))
+       (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
+       (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
+         (state/clear-edit! {:clear-editing-block? false}))
+       (when-let [block-id (:block/uuid block)]
+         (let [block (or (db/entity [:block/uuid block-id]) block)
+               content (or custom-content (:block/title block) "")
+               content-length (count content)
+               text-range (cond
+                            (vector? pos)
+                            (text-range-by-lst-fst-line content pos)
 
-                          (and (> tail-len 0) (>= (count content) tail-len))
-                          (subs content 0 (- (count content) tail-len))
+                            (and (> tail-len 0) (>= (count content) tail-len))
+                            (subs content 0 (- (count content) tail-len))
 
-                          (or (= :max pos) (<= content-length pos))
-                          content
+                            (or (= :max pos) (<= content-length pos))
+                            content
 
-                          :else
-                          (subs content 0 pos))
-             content (sanity-block-content repo (get block :block/format :markdown) content)]
-         (state/clear-selection!)
-         (edit-block-aux repo block content text-range (assoc opts :pos pos)))))))
+                            :else
+                            (subs content 0 pos))
+               content (sanity-block-content repo (get block :block/format :markdown) content)]
+           (state/clear-selection!)
+           (edit-block-aux repo block content text-range (assoc opts :pos pos))))))))
 
 (defn- get-original-block-by-dom
   [node]

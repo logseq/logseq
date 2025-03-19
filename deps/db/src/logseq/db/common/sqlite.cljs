@@ -5,6 +5,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
@@ -96,15 +97,18 @@
                             (if (and (coll? property-values)
                                      (map? (first property-values)))
                               property-values
-                              #{property-values})
-                            (remove entity-util/page?))
+                              #{property-values}))
                     value-ids (when (every? map? values)
                                 (->> (map :db/id values)
                                      (filter (fn [id] (or (int? id) (keyword? id))))))
                     value-blocks (->>
                                   (when (seq value-ids)
                                     (map
-                                     (fn [id] (d/pull db '[*] id))
+                                     (fn [id] (d/pull db '[:db/id :block/uuid
+                                                           :block/name :block/title
+                                                           :logseq.property/value
+                                                           :block/tags :block/page
+                                                           :logseq.property/created-from-property] id))
                                      value-ids))
                                   ;; FIXME: why d/pull returns {:db/id db-ident} instead of {:db/id number-eid}?
                                   (keep (fn [block]
@@ -146,23 +150,32 @@
           :or {including-property-vals? true}}]
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
-                             id))]
+                             id))
+        property-value-ks [:db/id :block/uuid :db/ident
+                           :block/name :block/title
+                           :logseq.property/value
+                           :block/tags :block/page]]
     (when block
-      (let [block' (->> (assoc
-                         (d/pull db (or properties '[*]) (:db/id block))
-                         :db/id (:db/id block))
-                        (with-block-link db))
-            block' (if properties block'
-                       (->> block'
-                            (with-parent db)
-                            (with-block-refs db)))
-            block' (if (or children? nested-children?)
-                     (mark-block-fully-loaded block')
-                     block')]
+      (let [block' (if (seq properties)
+                     (select-keys block properties)
+                     block)
+            block' (cond->
+                    (if (or children? nested-children?)
+                      (mark-block-fully-loaded block')
+                      block')
+                     including-property-vals?
+                     (update-vals (fn [v]
+                                    (cond
+                                      (de/entity? v)
+                                      (select-keys v property-value-ks)
+
+                                      (and (coll? v) (every? de/entity? v))
+                                      (map #(select-keys % property-value-ks) v)
+
+                                      :else
+                                      v))))]
         (cond->
-         {:block block'}
-          including-property-vals?
-          (assoc :properties (property-with-values db block properties))
+         {:block (assoc (into {} block') :db/id (:db/id block))}
           children?
           (assoc :children
                  (let [page? (common-entity-util/page? block)
