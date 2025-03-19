@@ -594,7 +594,9 @@
              (filter #(re-find include-regex (namespace %)))
              (map #(vector % (select-keys (d/entity db %) [:logseq.property/type :db/cardinality])))
              (into {}))]
-    (merge-export-maps graph-export {:properties used-properties})))
+    (-> (merge-export-maps (select-keys graph-export [:properties])
+                           {:properties used-properties})
+        (select-keys [:properties]))))
 
 (defn- build-graph-export
   "Exports whole graph. Has the following options:
@@ -699,7 +701,7 @@
           :graph
           (build-graph-export db (:graph-options options)))]
     (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values) options)
-    export-map))
+    (assoc export-map ::export-type export-type)))
 
 ;; Import fns
 ;; ==========
@@ -719,7 +721,7 @@
 (defn- check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
-  [db {:keys [pages-and-blocks classes properties] ::keys [graph-files kv-values]} property-conflicts]
+  [db {:keys [pages-and-blocks classes properties] ::keys [export-type] :as export-map} property-conflicts]
   (let [export-map
         (cond-> {:build-existing-tx? true
                  :extract-content-refs? false}
@@ -751,17 +753,19 @@
                                  [k (assoc v :block/uuid (:block/uuid ent))])
                                [k v])))
                       (into {})))
-          (seq kv-values)
-          (assoc ::kv-values kv-values)
-          ;; Currently all files are created by app so no need to distinguish between user and built-in ones yet
-          (seq graph-files)
-          (assoc ::graph-files graph-files))
-        export-map'
-        (walk/postwalk (fn [f]
-                         (if (and (vector? f) (= :build/page (first f)))
-                           [:build/page (add-uuid-to-page-if-exists db (second f))]
-                           f))
-                       export-map)]
+          ;; Graph export doesn't use :build/page so this speeds up build
+          (= :graph export-type)
+          (assoc :translate-property-values? false)
+          (= :graph export-type)
+          ;; Currently all graph-files are created by app so no need to distinguish between user and built-in ones yet
+          (merge (dissoc export-map :pages-and-blocks :classes :properties)))
+        export-map' (if (= :graph export-type)
+                      export-map
+                      (walk/postwalk (fn [f]
+                                       (if (and (vector? f) (= :build/page (first f)))
+                                         [:build/page (add-uuid-to-page-if-exists db (second f))]
+                                         f))
+                                     export-map))]
     export-map'))
 
 (defn- build-block-import-options
@@ -778,6 +782,7 @@
 (defn build-import
   "Given an entity's export map, build the import tx to create it. In addition to standard sqlite.build keys,
    an export map can have the following namespaced keys:
+   * ::export-type - Keyword indicating export type
    * ::block - Block map for a :block export
    * ::graph-files - Vec of files for a :graph export
    * ::kv-values - Vec of :kv/value maps for a :graph export
@@ -792,8 +797,8 @@
   (let [export-map (if (and (::block export-map*) current-block)
                      (build-block-import-options current-block export-map*)
                      export-map*)
-        export-map' (if (seq (::auto-include-namespaces export-map*))
-                      (merge (select-keys export-map [::graph-files ::kv-values])
+        export-map' (if (and (= :graph (::export-type export-map*)) (seq (::auto-include-namespaces export-map*)))
+                      (merge (dissoc export-map :properties ::auto-include-namespaces)
                              (add-ontology-for-include-namespaces db export-map))
                       export-map)
         property-conflicts (atom [])
@@ -803,9 +808,8 @@
         (js/console.error :property-conflicts @property-conflicts)
         {:error (str "The following imported properties conflict with the current graph: "
                      (pr-str (mapv :property-id @property-conflicts)))})
-      (if (or (::graph-files export-map') (::kv-values export-map'))
-        ;; only for :graph export-type
-        (-> (sqlite-build/build-blocks-tx (dissoc export-map'' ::graph-files ::kv-values))
+      (if (= :graph (::export-type export-map''))
+        (-> (sqlite-build/build-blocks-tx (dissoc export-map'' ::graph-files ::kv-values ::export-type))
             (assoc :misc-tx (vec (concat (::graph-files export-map'')
                                          (::kv-values export-map'')))))
         (sqlite-build/build-blocks-tx export-map'')))))
