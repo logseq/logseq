@@ -2078,16 +2078,7 @@
 
 (defn- block-content-empty?
   [block]
-  (let [ast-title (:block.temp/ast-title block)
-        ast-body (:block.temp/ast-body block)
-        db-based? (config/db-based-graph? (state/get-current-repo))]
-    (and
-     (or db-based?
-         (property-file/properties-hidden? (:block/properties block)))
-
-     (empty? ast-title)
-
-     (every? #(= % ["Horizontal_Rule"]) ast-body))))
+  (string/blank? (:block/title block)))
 
 (rum/defcs block-control < rum/reactive
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected?]}]
@@ -3371,8 +3362,8 @@
 
                 :else
                 block*)
-        result (merge (or (db/sub-block (:db/id block)) block*)
-                      (select-keys block [:block/level :block.temp/top? :block.temp/bottom?]))]
+        result (merge block*
+                      (db/sub-block (:db/id block)))]
     (if linked-block
       [block* result]
       [nil result])))
