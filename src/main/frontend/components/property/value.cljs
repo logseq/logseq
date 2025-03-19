@@ -828,7 +828,13 @@
                                                                (:db/ident block)
                                                                (:db/ident property))
                                               result (db-async/<get-block-property-values (state/get-current-repo)
-                                                                                          property-ident)]
+                                                                                          property-ident)
+                                              non-loaded-ids (filter (fn [id] (not (db/entity id))) result)
+                                              repo (state/get-current-repo)
+                                              _ (p/all (map (fn [id] (db-async/<get-block repo id
+                                                                                          {:children? false
+                                                                                           :including-property-vals? false
+                                                                                           :skip-refresh? true})) non-loaded-ids))]
                                         (reset! *values result))))]
              (refresh-result-f)
              (assoc state
