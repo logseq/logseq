@@ -776,6 +776,14 @@ Similar to re-frame subscriptions"
   []
   (:graph/forcesettings (sub-config)))
 
+(defn graph-color-property
+  []
+  (:graph/color-property (sub-config)))
+
+(defn graph-color-settings
+ []
+ (:graph/color-settings (sub-config)))
+
 ;; Enable by default
 (defn show-brackets?
   []

@@ -3,6 +3,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.state :as state]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
@@ -21,7 +22,8 @@
   [dark? current-page page-links tags nodes namespaces]
   (let [page-parents (set (map last namespaces))
         current-page (or current-page "")
-        pages (common-util/distinct-by :db/id nodes)]
+        pages (common-util/distinct-by :db/id nodes)
+        color-settings (state/graph-color-settings)]]
     (->>
      pages
      (remove ldb/hidden?)
@@ -29,14 +31,14 @@
      (mapv (fn [p]
              (let [page-title (:block/title p)
                    current-page? (= page-title current-page)
-                   color (case [dark? current-page?] ; FIXME: Put it into CSS
-                           [false false] "#999"
-                           [false true]  "#045591"
-                           [true false]  "#93a1a1"
-                           [true true]   "#ffffff")
-                   color (if (contains? tags (:db/id p))
-                           (if dark? "orange" "green")
-                           color)
+                   properties (:block/properties p)
+                   color-type (get properties (state/graph-color-property))
+                   color (get color-settings color-type)
+                   color (if current-page?
+                           (if dark? "#ffffff" "#045591")
+                           (if (nil? color)
+                             (if dark? "#93a1a1" "#999")
+                             color))
                    n (get page-links page-title 1)
                    size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
                (cond->

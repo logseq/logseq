@@ -63,6 +63,8 @@
     [:ref/linked-references-collapsed-threshold :int]
     [:graph/settings [:map-of :keyword [:or :boolean :int :nil]]]
     [:graph/forcesettings [:map-of :keyword :int]]
+    [:graph/color-property :keyword]
+    [:graph/color-settings [:map-of :string :string]]
     [:favorites [:vector :string]]
     ;; There isn't a :float yet
     [:srs/learning-fraction float?]
