@@ -35,6 +35,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.view :as db-view]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -554,12 +555,6 @@
                         (map (fn [b] (d/pull @conn '[*] (:db/id b)))))]
        (ldb/write-transit-str parents))))
 
-  (get-page-unlinked-refs
-   [_this repo page-id search-result-eids-str]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [search-result-eids (ldb/read-transit-str search-result-eids-str)]
-       (ldb/write-transit-str (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))))
-
   (set-context
    [_this context]
    (let [context (if (string? context)
@@ -917,7 +912,7 @@
   (get-view-data
    [_this repo view-id opts-str]
    (let [conn (worker-state/get-datascript-conn repo)
-         data (ldb/get-view-data repo @conn view-id)]
+         data (db-view/get-view-data repo @conn view-id)]
      (ldb/write-transit-str data)))
 
   (dangerousRemoveAllDbs

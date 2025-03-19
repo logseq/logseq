@@ -45,8 +45,7 @@
 
 (rum/defc class-objects-inner < rum/static
   [config class properties]
-  (let [[data set-data!] (rum/use-state nil)
-        ;; Properties can be nil for published private graphs
+  (let [;; Properties can be nil for published private graphs
         properties' (remove nil? properties)
         columns* (views/build-columns config properties' {:add-tags-column? true})
         columns (cond
@@ -63,12 +62,10 @@
                   columns)]
 
     (views/view {:config config
-                 :data data
-                 :set-data! set-data!
                  :view-parent class
                  :view-feature-type :class-objects
                  :columns columns
-                 :add-new-object! (fn [{:keys [properties]}]
+                 :add-new-object! (fn [{:keys [properties set-data!]}]
                                     (if (= :logseq.class/Asset (:db/ident class))
                                       (shui/dialog-open!
                                        (fn []
@@ -78,8 +75,9 @@
                                            {:on-change (fn [_e files]
                                                          (p/do!
                                                           (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)
-                                                          (set-data! (get-class-objects class))
-                                                          (shui/dialog-close!)))})]))
+                                                          (shui/dialog-close!)
+                                                          ;; FIXME: set-data!
+                                                          ))})]))
                                       (add-new-class-object! class set-data! properties)))
                  :show-add-property? true
                  :show-items-count? true
@@ -134,15 +132,12 @@
 
 (rum/defc property-related-objects-inner < rum/static
   [config property properties]
-  (let [[data set-data!] (rum/use-state nil)
-        columns (views/build-columns config properties)]
+  (let [columns (views/build-columns config properties)]
     (views/view {:config config
-                 :data data
                  :view-parent property
                  :view-feature-type :property-objects
-                 :set-data! set-data!
                  :columns columns
-                 :add-new-object! (fn [{:keys [properties]}]
+                 :add-new-object! (fn [{:keys [properties set-data!]}]
                                     (add-new-property-object! property set-data! properties))
                  ;; TODO: Add support for adding column
                  :show-add-property? false
@@ -152,7 +147,6 @@
                                      (let [pages (->> selected-rows (filter entity-util/page?) (remove :logseq.property/built-in?))
                                            blocks (->> selected-rows (remove entity-util/page?) (remove :logseq.property/built-in?))]
                                        (p/do!
-                                        (set-data! (get-property-related-objects (state/get-current-repo) property))
                                         (when-let [f (get-in table [:data-fns :set-row-selection!])]
                                           (f {}))
                                         (ui-outliner-tx/transact!

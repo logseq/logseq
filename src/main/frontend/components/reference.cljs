@@ -44,111 +44,37 @@
              (content/content block-id
                               {:hiccup ref-hiccup})]))))))
 
-(rum/defc references-inner
-  [page-entity filters filtered-ref-blocks]
-  (let [*ref (rum/use-ref nil)]
-    [:div.references-blocks.faster.fade-in {:ref *ref}
-     (let [ref-hiccup (block/->hiccup filtered-ref-blocks
-                                      {:id (str (:block/uuid page-entity))
-                                       :ref? true
-                                       :breadcrumb-show? true
-                                       :group-by-page? true
-                                       :editor-box editor/box
-                                       :filters filters}
-                                      {})]
-       (content/content (str (:block/uuid page-entity)) {:hiccup ref-hiccup}))]))
-
-(defn- columns
-  [config result]
-  (->> (mapcat :block.temp/property-keys result)
-       distinct
-       (map db/entity)
-       (ldb/sort-by-order)
-       ((fn [cs] (views/build-columns config cs {:add-tags-column? false})))))
-
 (rum/defc references-cp
   [page-entity *filters total filter-n filtered-ref-blocks *ref-pages]
   (let [filters @*filters
-        *collapsed? (atom nil)
-        db-based? (config/db-based-graph?)
-        reference-filter (if db-based?
-                           (shui/button
-                            {:title "Page filter"
-                             :variant "ghost"
-                             :class "text-muted-foreground !px-1"
-                             :size :sm
-                             :on-click (fn [e]
-                                         (shui/popup-show! (.-target e)
-                                                           (fn []
-                                                             [:div.p-4
-                                                              (filters/filter-dialog page-entity *filters *ref-pages)])
-                                                           {:align "end"}))}
-                            (ui/icon "filter-cog"
-                                     {:class (cond
-                                               (and (empty? (:included filters)) (empty? (:excluded filters)))
-                                               ""
+        reference-filter (shui/button
+                          {:title "Page filter"
+                           :variant "ghost"
+                           :class "text-muted-foreground !px-1"
+                           :size :sm
+                           :on-click (fn [e]
+                                       (shui/popup-show! (.-target e)
+                                                         (fn []
+                                                           [:div.p-4
+                                                            (filters/filter-dialog page-entity *filters *ref-pages)])
+                                                         {:align "end"}))}
+                          (ui/icon "filter-cog"
+                                   {:class (cond
+                                             (and (empty? (:included filters)) (empty? (:excluded filters)))
+                                             ""
 
-                                               (and (seq (:included filters)) (empty? (:excluded filters)))
-                                               "text-success"
+                                             (and (seq (:included filters)) (empty? (:excluded filters)))
+                                             "text-success"
 
-                                               (and (empty? (:included filters)) (seq (:excluded filters)))
-                                               "text-error"
-                                               :else
-                                               "text-warning")}))
-                           [:a.filter.fade-link
-                            {:title (t :linked-references/filter-heading)
-                             :on-mouse-over (fn [_e]
-                                              (when @*collapsed? ; collapsed
-                           ;; expand
-                                                (reset! @*collapsed? false)))
-                             :on-pointer-down (fn [e]
-                                                (util/stop-propagation e)
-                                                (shui/popup-show! (.-target e)
-                                                                  (fn []
-                                                                    [:div.p-4
-                                                                     (filters/filter-dialog page-entity *filters *ref-pages)])
-                                                                  {:align "end"}))}
-                            (ui/icon "filter" {:class (cond
-                                                        (and (empty? (:included filters)) (empty? (:excluded filters)))
-                                                        "opacity-60 hover:opacity-100"
-
-                                                        (and (seq (:included filters)) (empty? (:excluded filters)))
-                                                        "text-success"
-
-                                                        (and (empty? (:included filters)) (seq (:excluded filters)))
-                                                        "text-error"
-                                                        :else
-                                                        "text-warning")
-                                               :size  22})])]
-    (if db-based?
-      (let [blocks (->> (mapcat second filtered-ref-blocks)
-                        (map (fn [b] (assoc (db/entity (:db/id b)) :id (:db/id b)))))
-            columns' (columns {} blocks)]
-        (when (or (seq blocks)
-                  (seq (:included filters))
-                  (seq (:excluded filters)))
-          (views/view
-           {:view-parent page-entity
-            :view-feature-type :linked-references
-            :additional-actions [reference-filter]
-            :data blocks
-            :columns columns'})))
-      (let [threshold (state/get-linked-references-collapsed-threshold)
-            default-collapsed? (or (>= total threshold) (ldb/class? page-entity))]
-        (ui/foldable
-         [:div.flex.flex-row.flex-1.justify-between.items-center
-          [:div.font-medium.opacity-50
-           (t :linked-references/reference-count (when (or (seq (:included filters))
-                                                           (seq (:excluded filters))) filter-n) total)]
-          reference-filter]
-
-         (fn []
-           (references-inner page-entity filters filtered-ref-blocks))
-
-         {:default-collapsed? default-collapsed?
-          :title-trigger? true
-          :init-collapsed (fn [collapsed-atom]
-                            (reset! *collapsed? collapsed-atom))})))))
+                                             (and (empty? (:included filters)) (seq (:excluded filters)))
+                                             "text-error"
+                                             :else
+                                             "text-warning")}))]
+    (views/view
+     {:view-parent page-entity
+      :view-feature-type :linked-references
+      :additional-actions [reference-filter]
+      :columns (views/build-columns {} [] {})})))
 
 (defn- get-filtered-children
   [block parent->blocks]
@@ -238,37 +164,12 @@
    (references* entity)))
 
 (rum/defcs unlinked-references-aux
-  < rum/reactive db-mixins/query
-  {:init
-   (fn [state]
-     (let [*result (atom nil)
-           [page *n-ref] (:rum/args state)]
-       (p/let [result (search/get-unlinked-refs (:db/id page))]
-         (reset! *n-ref (count result))
-         (reset! *result result))
-       (assoc state ::result *result)))}
   [state page _n-ref]
-  (let [ref-blocks (rum/react (::result state))]
-    (when (seq ref-blocks)
-      (if (config/db-based-graph?)
-        (let [blocks (->> (mapcat val ref-blocks)
-                          (map (fn [b] (assoc (db/entity (:db/id b)) :id (:db/id b)))))
-              columns' (columns {} blocks)]
-          (views/view
-           {:view-parent page
-            :view-feature-type :unlinked-references
-            :data blocks
-            :columns columns'
-            :foldable-options {:default-collapsed? true}}))
-        [:div.references-blocks
-         (let [ref-hiccup (block/->hiccup ref-blocks
-                                          {:id (str (:block/title page) "-unlinked-")
-                                           :ref? true
-                                           :group-by-page? true
-                                           :editor-box editor/box}
-                                          {})]
-           (content/content (:block/name page)
-                            {:hiccup ref-hiccup}))]))))
+  (views/view
+   {:view-parent page
+    :view-feature-type :unlinked-references
+    :columns (views/build-columns {} [] {})
+    :foldable-options {:default-collapsed? true}}))
 
 (rum/defcs unlinked-references < rum/reactive
   (rum/local nil ::n-ref)

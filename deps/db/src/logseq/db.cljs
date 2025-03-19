@@ -18,7 +18,6 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.frontend.view :as db-view]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
 
@@ -463,23 +462,9 @@
           :block/_refs
           count))
 
-(defn get-page-unlinked-refs
-  "Get unlinked refs from search result"
-  [db page-id search-result-eids]
-  (let [alias (->> (get-block-alias db page-id)
-                   (cons page-id)
-                   set)
-        eids (remove
-              (fn [eid]
-                (when-let [e (d/entity db eid)]
-                  (or (some alias (map :db/id (:block/refs e)))
-                      (:block/link e)
-                      (nil? (:block/title e)))))
-              search-result-eids)]
-    (when (seq eids)
-      (d/pull-many db '[*] eids))))
-
-(def hidden-or-internal-tag? db-view/hidden-or-internal-tag?)
+(defn hidden-or-internal-tag?
+  [e]
+  (or (entity-util/hidden? e) (db-class/internal-tags (:db/ident e))))
 
 (defn get-all-pages
   [db]
@@ -614,5 +599,3 @@
     nil))
 
 (def get-recent-updated-pages sqlite-common-db/get-recent-updated-pages)
-
-(def get-view-data db-view/get-view-data)

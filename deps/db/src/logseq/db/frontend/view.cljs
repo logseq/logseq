@@ -5,6 +5,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
@@ -47,10 +48,6 @@
               valid-type? (some-fn number? string? boolean?)]
           (when (valid-type? v)
             v))))))
-
-(defn hidden-or-internal-tag?
-  [e]
-  (or (entity-util/hidden? e) (db-class/internal-tags (:db/ident e))))
 
 (defn- by [sorting]
   (fn [a b]
@@ -206,6 +203,39 @@
            result)))
      (:filters filters))))
 
+(defn- get-linked-references
+  [db id]
+  (let [entity (d/entity db id)
+        ids (set (cons id (ldb/get-block-alias db id)))
+        refs (mapcat (fn [id] (:block/_refs (d/entity db id))) ids)]
+    (->> refs
+         (remove (fn [block]
+                   (or
+                    (= (:db/id block) id)
+                    (= id (:db/id (:block/page block)))
+                    (ldb/hidden? (:block/page block))
+                    (contains? (set (map :db/id (:block/tags block))) (:db/id entity))
+                    (some? (get block (:db/ident entity))))))
+         (common-util/distinct-by :db/id))))
+
+(defn- get-unlinked-references
+  [db id]
+  (let [entity (d/entity db id)
+        title (string/lower-case (:block/title entity))]
+    (when-not (string/blank? title)
+      (let [ids (->> (d/datoms db :avet :block/title)
+                     (keep (fn [d]
+                             (when (and (not= id (:e d)) (string/includes? (string/lower-case (:v d)) title))
+                               (:e d)))))]
+        (keep
+         (fn [eid]
+           (let [e (d/entity db eid)]
+             (when-not (or (some #(= id %) (map :db/id (:block/refs e)))
+                           (:block/link e)
+                           (ldb/page? e))
+               e)))
+         ids)))))
+
 (defn- get-entities
   [db view feat-type property-ident]
   (let [view-for (:logseq.property/view-for view)
@@ -216,7 +246,7 @@
       :all-pages
       (keep (fn [d]
               (let [e (d/entity db (:e d))]
-                (when-not (or (hidden-or-internal-tag? e)
+                (when-not (or (ldb/hidden-or-internal-tag? e)
                               (entity-util/property? e)
                               (entity-util/built-in? e))
                   e)))
@@ -239,41 +269,45 @@
                              {:deps rules/rules-dependencies})
         property-ident)
        (keep (fn [id] (non-hidden-e id))))
+      :linked-references
+      (get-linked-references db (:db/id view-for))
+      :unlinked-references
+      (get-unlinked-references db (:db/id view-for))
+      :query-result
+      nil
       nil)))
 
 (defonce *view-cache (atom {}))
 (defn get-view-data
   [repo db view-id]
-  (time
-   (let [view (d/entity db view-id)
-         feat-type (:logseq.property.view/feature-type view)
-         index-attr (case feat-type
-                      :all-pages
-                      :block/name
-                      :class-objects
-                      :block/tags
-                      :property-objects
-                      (let [view-for (:logseq.property/view-for view)]
-                        (:db/ident view-for))
-                      nil)
-         filters (:logseq.property.table/filters view)]
-     (when index-attr
-       (let [data (if-let [cache (get-in @*view-cache [repo view-id])]
-                    cache
-                    (let [entities (get-entities db view feat-type index-attr)
-                          sorting (let [sorting* (:logseq.property.table/sorting view)]
-                                    (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
-                                      [{:id :block/updated-at, :asc? false}]
-                                      sorting*))
+  (let [view (d/entity db view-id)
+        feat-type (:logseq.property.view/feature-type view)
+        index-attr (case feat-type
+                     :all-pages
+                     :block/name
+                     :class-objects
+                     :block/tags
+                     :property-objects
+                     (let [view-for (:logseq.property/view-for view)]
+                       (:db/ident view-for))
+                     nil)
+        filters (:logseq.property.table/filters view)
+        data (if-let [cache (get-in @*view-cache [repo view-id])]
+               cache
+               (let [entities (get-entities db view feat-type index-attr)
+                     sorting (let [sorting* (:logseq.property.table/sorting view)]
+                               (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
+                                 [{:id :block/updated-at, :asc? false}]
+                                 sorting*))
 
-                          result (->>
-                                   ;; filter
-                                  (cond->> entities
-                                    (seq filters)
-                                    (filter (fn [row] (row-matched? db row filters))))
+                     result (->>
+                                  ;; filter
+                             (cond->> entities
+                               (seq filters)
+                               (filter (fn [row] (row-matched? db row filters))))
                                    ;; sort
-                                  (sort-rows db sorting))]
-                      (swap! *view-cache assoc-in [repo view-id] result)
-                      result))]
-         {:count (count data)
-          :full-block-ids (mapv :db/id data)})))))
+                             (sort-rows db sorting))]
+                 (swap! *view-cache assoc-in [repo view-id] result)
+                 result))]
+    {:count (count data)
+     :data (mapv :db/id data)}))

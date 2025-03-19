@@ -1086,8 +1086,8 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc lazy-item
-  [idx {:keys [full-block-ids properties]} item-render]
-  (let [db-id (util/nth-safe full-block-ids idx)
+  [data idx {:keys [properties]} item-render]
+  (let [db-id (util/nth-safe data idx)
         block (db/entity db-id)
         [item set-item!] (hooks/use-state block)
         opts {:children? false
@@ -1116,7 +1116,7 @@
     :skipAnimationFrameInResizeObserver true
     :total-count (or (:items-count option) (count rows))
     :item-content (fn [idx]
-                    (lazy-item idx option
+                    (lazy-item (:data table) idx option
                                (fn [row]
                                  (table-row table row {} option))))
     :items-rendered (fn [props]
@@ -1179,8 +1179,9 @@
          :total-count (count blocks)
          :custom-scroll-parent (gdom/getElement "main-content-container")
          :item-content (fn [idx]
-                         (when-let [block (nth blocks idx)]
-                           (gallery-card-item table view-entity block config')))}))]))
+                         (lazy-item (:data table) idx {}
+                                    (fn [block]
+                                      (gallery-card-item table view-entity block config'))))}))]))
 
 (defn- run-effects!
   [option {:keys [data state data-fns]} input input-filters set-input-filters! *scroller-ref gallery?]
@@ -1598,7 +1599,7 @@
         [views set-views!] (hooks/use-state nil)
         [items-count set-count!] (hooks/use-state (count (:data option)))
         [loading? set-loading!] (hooks/use-state true)
-        [full-block-ids set-full-block-ids!] (hooks/use-state [])]
+        [data set-data!] (hooks/use-state [])]
     (hooks/use-effect!
      (fn []
        (let [repo (state/get-current-repo)]
@@ -1616,9 +1617,9 @@
                                      (set-views! (concat views [new-view]))
                                      new-view)))]
             (if (and current-view
-                     (nil? (:data option)))
-              (p/let [{:keys [count full-block-ids]} (<load-view-data current-view)]
-                (set-full-block-ids! full-block-ids)
+                     (empty? (:data option)))
+              (p/let [{:keys [count data]} (<load-view-data current-view)]
+                (set-data! data)
                 (set-count! count)
                 (set-loading! false))
               (set-loading! false)))
@@ -1631,8 +1632,8 @@
        (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
       [:div.flex.flex-col.gap-2
        (view-container view-entity (assoc option
+                                          :data data
                                           :items-count items-count
-                                          :full-block-ids full-block-ids
                                           :views views
                                           :set-views! set-views!
                                           :set-view-entity! set-view-entity!))])))
