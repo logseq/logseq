@@ -104,13 +104,14 @@
                          [(not= ?v ?empty-id)]]
                        property-id
                        empty-id)]
-      (if default-value-id
+      (distinct
+       (if default-value-id
         ;; put default value the first
-        (concat [default-value-id] result)
-        result))))
+         (cons default-value-id result)
+         result)))))
 
 (defn <get-block
-  [graph name-or-uuid & {:keys [children? skip-transact? cache?]
+  [graph name-or-uuid & {:keys [children? skip-transact? skip-refresh? cache?]
                          :or {children? true
                               cache? true}
                          :as opts}]
@@ -143,7 +144,8 @@
                   block-and-children (cons block children)
                   affected-keys [[:frontend.worker.react/block (:db/id block)]]]
               (d/transact! conn (remove (fn [b] (:block.temp/fully-loaded? (db/entity (:db/id b)))) block-and-children))
-              (react/refresh-affected-queries! graph affected-keys)))
+              (when-not skip-refresh?
+                (react/refresh-affected-queries! graph affected-keys))))
 
           (when cache?
             (state/update-state! :db/async-query-loading (fn [s] (disj s name'))))

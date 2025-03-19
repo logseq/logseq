@@ -1,10 +1,10 @@
 (ns frontend.db.async.util
   "Async util helper"
-  (:require [frontend.state :as state]
-            [promesa.core :as p]
+  (:require [datascript.core :as d]
             [frontend.db.conn :as db-conn]
-            [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [frontend.state :as state]
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defn <q
   [graph {:keys [transact-db?]
@@ -14,7 +14,7 @@
   (when-let [^Object sqlite @state/*db-worker]
     (let [*async-queries (:db/async-queries @state/state)
           async-requested? (get @*async-queries [inputs opts])]
-      (if async-requested?
+      (if (and async-requested? transact-db?)
         (let [db (db-conn/get-db graph)]
           (apply d/q (first inputs) db (rest inputs)))
         (p/let [result (.q sqlite graph (ldb/write-transit-str inputs))]
