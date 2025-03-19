@@ -987,28 +987,28 @@
 (rum/defc closed-value-item < rum/reactive db-mixins/query
   [value {:keys [inline-text icon?]}]
   (when value
-    (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])]
-      (when-let [block (db/sub-block (:db/id (db/entity eid)))]
-        (let [property-block? (db-property/property-created-block? block)
-              value' (db-property/closed-value-content block)
-              icon (pu/get-block-property-value block :logseq.property/icon)]
-          (cond
-            icon
-            (if icon?
-              (icon-component/icon icon {:color? true})
-              [:div.flex.flex-row.items-center.gap-1.h-6
-               (icon-component/icon icon {:color? true})
-               (when value'
-                 [:span value'])])
+    (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])
+          block (or (db/sub-block (:db/id (db/entity eid))) value)
+          property-block? (db-property/property-created-block? block)
+          value' (db-property/closed-value-content block)
+          icon (pu/get-block-property-value block :logseq.property/icon)]
+      (cond
+        icon
+        (if icon?
+          (icon-component/icon icon {:color? true})
+          [:div.flex.flex-row.items-center.gap-1.h-6
+           (icon-component/icon icon {:color? true})
+           (when value'
+             [:span value'])])
 
-            property-block?
-            value'
+        property-block?
+        value'
 
-            (= type :number)
-            [:span.number (str value')]
+        (= type :number)
+        [:span.number (str value')]
 
-            :else
-            (inline-text {} :markdown (str value'))))))))
+        :else
+        (inline-text {} :markdown (str value'))))))
 
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text other-position? property-position _icon?] :as opts}]
@@ -1233,7 +1233,7 @@
              (concat
               (->> (for [item items]
                      (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
-                   (interpose [:span.opacity-50.-ml-2 ","]))
+                   (interpose [:span.opacity-50.-ml-1 ","]))
               (when date?
                 [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
              (if date?

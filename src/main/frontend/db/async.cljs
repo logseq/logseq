@@ -3,6 +3,7 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
+            [cljs.cache :as cache]
             [datascript.core :as d]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -110,36 +111,44 @@
          (cons default-value-id result)
          result)))))
 
+(defonce *block-cache (atom (cache/lru-cache-factory {} :threshold 1000)))
 (defn <get-block
-  [graph name-or-uuid & {:keys [children? skip-transact? skip-refresh? cache?]
-                         :or {children? true
-                              cache? true}
-                         :as opts}]
-  (let [name' (str name-or-uuid)
-        *async-queries (:db/async-queries @state/state)
-        async-requested? (when cache? (get @*async-queries [name' opts]))
+  [graph id-uuid-or-name & {:keys [children? skip-transact? skip-refresh? _properties]
+                            :or {children? true}
+                            :as opts}]
+  (let [name' (str id-uuid-or-name)
+        cache-key [id-uuid-or-name opts]
+        cached-response (when (cache/has? @*block-cache cache-key)
+                          (reset! *block-cache (cache/hit @*block-cache cache-key))
+                          (get @*block-cache cache-key))
         e (cond
-            (number? name-or-uuid)
-            (db/entity name-or-uuid)
+            (number? id-uuid-or-name)
+            (db/entity id-uuid-or-name)
             (util/uuid-string? name')
             (db/entity [:block/uuid (uuid name')])
             :else
             (db/get-page name'))
         id (or (and (:block/uuid e) (str (:block/uuid e)))
                (and (util/uuid-string? name') name')
-               name-or-uuid)]
-    (if (or (:block.temp/fully-loaded? e) async-requested?)
+               id-uuid-or-name)]
+    (cond
+      (:block.temp/fully-loaded? e)
       e
+
+      cached-response
+      cached-response
+
+      :else
       (when-let [^Object sqlite @db-browser/*worker]
-        (when cache?
-          (swap! *async-queries assoc [name' opts] true)
-          (state/update-state! :db/async-query-loading (fn [s] (conj s name'))))
+        (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
         (p/let [result-str (.get-blocks sqlite graph
                                         (ldb/write-transit-str
                                          [{:id id :opts opts}]))
                 result (ldb/read-transit-str result-str)
                 {:keys [block children] :as result'} (first result)]
-          (when-not skip-transact?
+          (state/update-state! :db/async-query-loading (fn [s] (disj s name')))
+          (if skip-transact?
+            (reset! *block-cache (cache/miss @*block-cache cache-key result'))
             (let [conn (db/get-db graph false)
                   block-and-children (cons block children)
                   affected-keys [[:frontend.worker.react/block (:db/id block)]]]
@@ -147,8 +156,6 @@
               (when-not skip-refresh?
                 (react/refresh-affected-queries! graph affected-keys))))
 
-          (when cache?
-            (state/update-state! :db/async-query-loading (fn [s] (disj s name'))))
           (if children?
             block
             result'))))))

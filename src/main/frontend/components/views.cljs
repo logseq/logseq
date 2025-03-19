@@ -1089,16 +1089,15 @@
   [idx {:keys [full-block-ids properties]} item-render]
   (let [db-id (util/nth-safe full-block-ids idx)
         block (db/entity db-id)
-        [item set-item!] (hooks/use-state block)]
+        [item set-item!] (hooks/use-state block)
+        opts {:children? false
+              :properties properties
+              :skip-transact? true
+              :skip-refresh? true}]
     (hooks/use-effect!
      (fn []
-       (when (and db-id (not (:block.temp/fully-loaded? block)))
-         (p/let [result (db-async/<get-block
-                         (state/get-current-repo) db-id
-                         {:children? false
-                          :properties properties
-                          :skip-transact? true
-                          :cache? false})]
+       (when (and db-id (not block))
+         (p/let [result (db-async/<get-block (state/get-current-repo) db-id opts)]
            (let [block (:block result)]
              (set-item! (or block (some-> (:db/id block) db/entity)))))))
      [db-id])
