@@ -71,17 +71,19 @@
     (or (get all-idents kw)
         (throw (ex-info (str "No ident found for " (pr-str kw)) {})))))
 
-(defn- ->block-properties [properties page-uuids all-idents]
-  (->>
-   (map
-    (fn [[prop-name val]]
-      [(get-ident all-idents prop-name)
-       ;; set indicates a :many value
-       (if (set? val)
-         (set (map #(translate-property-value % page-uuids) val))
-         (translate-property-value val page-uuids))])
-    properties)
-   (into {})))
+(defn- ->block-properties [properties page-uuids all-idents {:keys [translate-property-values?]}]
+  (let [translate-property-values (if translate-property-values?
+                                    (fn translate-property-values [val]
+                                      ;; set indicates a :many value
+                                      (if (set? val)
+                                        (set (map #(translate-property-value % page-uuids) val))
+                                        (translate-property-value val page-uuids)))
+                                    identity)]
+    (->> (map (fn [[prop-name val]]
+                [(get-ident all-idents prop-name)
+                 (translate-property-values val)])
+              properties)
+         (into {}))))
 
 (defn- create-page-uuids
   "Creates maps of unique page names, block contents and property names to their uuids. Used to
@@ -140,7 +142,7 @@
     (map second (re-seq page-ref/page-ref-re s))))
 
 (defn- ->block-tx [{:keys [build/properties] :as m} page-uuids all-idents page-id
-                   {properties-config :properties :keys [build-existing-tx? extract-content-refs?]}]
+                   {properties-config :properties :keys [build-existing-tx? extract-content-refs?] :as options}]
   (let [build-existing-tx?' (and build-existing-tx? (::existing-block? (meta m)) (not (:build/keep-uuid? m)))
         block (if build-existing-tx?'
                 (select-keys m [:block/uuid])
@@ -159,7 +161,7 @@
                    (dissoc m :build/properties :build/tags :build/keep-uuid?)
                    (when (seq properties)
                      (->block-properties (merge properties (db-property-build/build-properties-with-ref-values pvalue-tx-m))
-                                         page-uuids all-idents))
+                                         page-uuids all-idents options))
                    (when-let [tags (:build/tags m)]
                      {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
                                         tags)})
@@ -177,7 +179,7 @@
                         :block/refs block-refs})))))))
 
 (defn- build-property-tx
-  [properties page-uuids all-idents property-db-ids
+  [properties page-uuids all-idents property-db-ids options
    [prop-name {:build/keys [property-classes] :as prop-m}]]
   (let [[new-block & additional-tx]
         (if-let [closed-values (seq (map #(merge {:uuid (random-uuid)} %) (:build/closed-values prop-m)))]
@@ -207,7 +209,8 @@
        (merge
         (dissoc new-block :build/properties-ref-types)
         (when-let [props (not-empty (:build/properties prop-m))]
-          (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) page-uuids all-idents))
+          (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+                              page-uuids all-idents options))
         (when (seq property-classes)
           {:logseq.property/classes
            (mapv #(hash-map :db/ident (get-ident all-idents %))
@@ -215,7 +218,7 @@
       true
       (into additional-tx))))
 
-(defn- build-properties-tx [properties page-uuids all-idents {:keys [build-existing-tx?]}]
+(defn- build-properties-tx [properties page-uuids all-idents {:keys [build-existing-tx?] :as options}]
   (let [properties' (if build-existing-tx?
                       (->> properties
                            (remove (fn [[_ v]] (and (:block/uuid v) (not (:build/keep-uuid? v)))))
@@ -225,11 +228,11 @@
                              (map #(vector % (new-db-id)))
                              (into {}))
         new-properties-tx (vec
-                           (mapcat (partial build-property-tx properties' page-uuids all-idents property-db-ids)
+                           (mapcat (partial build-property-tx properties' page-uuids all-idents property-db-ids options)
                                    properties'))]
     new-properties-tx))
 
-(defn- build-classes-tx [classes properties-config uuid-maps all-idents {:keys [build-existing-tx?]}]
+(defn- build-classes-tx [classes properties-config uuid-maps all-idents {:keys [build-existing-tx?] :as options}]
   (let [classes' (if build-existing-tx?
                    (->> classes
                         (remove (fn [[_ v]] (and (:block/uuid v) (not (:build/keep-uuid? v)))))
@@ -261,7 +264,8 @@
                              new-block
                              (dissoc class-m :build/properties :build/class-parent :build/class-properties :build/keep-uuid?)
                              (when-let [props (not-empty (:build/properties class-m))]
-                               (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) uuid-maps all-idents))
+                               (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+                                                   uuid-maps all-idents options))
                              (when class-parent
                                {:logseq.property/parent
                                 (or (class-db-ids class-parent)
@@ -338,7 +342,8 @@
    [:page-id-fn {:optional true} :any]
    [:auto-create-ontology? {:optional true} :boolean]
    [:build-existing-tx? {:optional true} :boolean]
-   [:extract-content-refs? {:optional true} :boolean]])
+   [:extract-content-refs? {:optional true} :boolean]
+   [:translate-property-values? {:optional true} :boolean]])
 
 (defn get-used-properties-from-options
   "Extracts all used properties as a map of properties to their property values. Looks at properties
@@ -395,7 +400,7 @@
             "Class and property db-idents have no overlap")
     all-idents))
 
-(defn- build-page-tx [page all-idents page-uuids properties]
+(defn- build-page-tx [page all-idents page-uuids properties options]
   (let [page' (dissoc page :build/tags :build/properties :build/keep-uuid?)
         pvalue-tx-m (->property-value-tx-m page' (:build/properties page) properties all-idents)]
     (cond-> []
@@ -408,8 +413,7 @@
          page'
          (when (seq (:build/properties page))
            (->block-properties (merge (:build/properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
-                               page-uuids
-                               all-idents))
+                               page-uuids all-idents options))
          (when-let [tag-idents (->> (:build/tags page) (map #(get-ident all-idents %)) seq)]
            {:block/tags (cond-> (mapv #(hash-map :db/ident %) tag-idents)
                           (empty? (set/intersection (set tag-idents) db-class/page-classes))
@@ -418,7 +422,7 @@
 (defn- build-pages-and-blocks-tx
   [pages-and-blocks all-idents page-uuids {:keys [page-id-fn properties build-existing-tx?]
                                            :or {page-id-fn :db/id}
-                                           :as opts}]
+                                           :as options}]
   (vec
    (mapcat
     (fn [{:keys [page blocks]}]
@@ -439,11 +443,11 @@
          ;; page tx
          (if build-existing-tx?'
            [(select-keys page [:block/uuid :block/created-at :block/updated-at])]
-           (build-page-tx page' all-idents page-uuids properties))
+           (build-page-tx page' all-idents page-uuids properties options))
          ;; blocks tx
          (reduce (fn [acc m]
                    (into acc
-                         (->block-tx m page-uuids all-idents (page-id-fn' page') opts)))
+                         (->block-tx m page-uuids all-idents (page-id-fn' page') options)))
                  []
                  blocks))))
     pages-and-blocks)))
@@ -753,6 +757,8 @@
   * :extract-content-refs? - When set to true, plain text refs e.g. `[[foo]]` are automatically extracted to create pages
     and to create refs in blocks. This is useful for testing but since it only partially works, not useful for exporting.
     Default is true
+  * :translate-property-values? - When set to true, property values support special interpretation e.g. `[:build/page ..]`.
+    Default is true
   * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
     Default is :db/id
 
@@ -763,7 +769,7 @@
    :number values are written as booleans and integers/floats. :node references
    are written as vectors e.g. `[:build/page {:block/title \"PAGE NAME\"}]`"
   [options*]
-  (let [options (merge {:extract-content-refs? true} options*)]
+  (let [options (merge {:extract-content-refs? true :translate-property-values? true} options*)]
     (validate-options options)
     (build-blocks-tx* options)))
 
