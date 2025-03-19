@@ -54,11 +54,15 @@
            (-> m
                (update :classes update-vals (fn [m]
                                               (update m :build/class-properties sort)))
+               (update ::sqlite-export/kv-values
+                       (fn [kvs]
+                         ;; Ignore extra metadata that a copied graph can add
+                         (vec (remove #(#{:logseq.kv/import-type :logseq.kv/imported-at} (:db/ident %)) kvs))))
               ;; TODO: fix built-in views for schema export
                (update :pages-and-blocks (fn [pbs]
                                            (vec (remove #(= (:block/title (:page %)) common-config/views-page-name) pbs)))))
             (:set-diff options)
-            (update :pages-and-blocks set)))
+            (update-vals set)))
         diff (->> (data/diff (prepare-export-to-diff export-map) (prepare-export-to-diff export-map2))
                   butlast)]
     (if (= diff [nil nil])

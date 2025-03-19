@@ -478,8 +478,8 @@
                                     (not [?p :logseq.property/built-in?])]
                                   db)
         user-property-idents' (if (seq exclude-namespaces)
-                               (remove #(re-find exclude-regex (namespace %)) user-property-idents)
-                               user-property-idents)
+                                (remove #(re-find exclude-regex (namespace %)) user-property-idents)
+                                user-property-idents)
         properties (build-export-properties db user-property-idents' (merge options {:include-properties? true}))
         class-ents (->> (d/q '[:find [?class ...]
                                :where [?class :block/tags :logseq.class/Tag]
@@ -550,6 +550,14 @@
                 (select-keys % [:file/path :file/content :file/created-at :file/last-modified-at])
                 (select-keys % [:file/path :file/content])))))
 
+(defn- build-kv-values
+  [db]
+  (->> (d/q '[:find [(pull ?b [:db/ident :kv/value]) ...]
+              :where [?b :kv/value]] db)
+       ;; Don't export schema-version as frontend sets this and shouldn't be overridden
+       (remove #(= :logseq.kv/schema-version (:db/ident %)))
+       vec))
+
 (defn remove-uuids-if-not-ref [export-map all-ref-uuids]
   (let [remove-uuid-if-not-ref (fn [m] (if (contains? all-ref-uuids (:block/uuid m))
                                          m
@@ -609,12 +617,14 @@
                        graph-export*)
         all-ref-uuids (set/union content-ref-uuids ontology-pvalue-uuids (:pvalue-uuids pages-export))
         files (build-graph-files db options)
+        kv-values (build-kv-values db)
         ;; Remove all non-ref uuids after all nodes are built.
         ;; Only way to ensure all pvalue uuids present across block types
         graph-export' (-> (remove-uuids-if-not-ref graph-export all-ref-uuids)
                           (update :pages-and-blocks sort-pages-and-blocks))]
     (merge graph-export'
-           {::graph-files files})))
+           {::graph-files files
+            ::kv-values kv-values})))
 
 (defn- find-undefined-classes-and-properties [{:keys [classes properties pages-and-blocks]}]
   (let [referenced-classes
@@ -688,7 +698,7 @@
           (build-graph-ontology-export db {})
           :graph
           (build-graph-export db (:graph-options options)))]
-    (ensure-export-is-valid (dissoc export-map ::block ::graph-files) options)
+    (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values) options)
     export-map))
 
 ;; Import fns
@@ -709,7 +719,7 @@
 (defn- check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
-  [db {:keys [pages-and-blocks classes properties] ::keys [graph-files]} property-conflicts]
+  [db {:keys [pages-and-blocks classes properties] ::keys [graph-files kv-values]} property-conflicts]
   (let [export-map
         (cond-> {:build-existing-tx? true
                  :extract-content-refs? false}
@@ -741,6 +751,8 @@
                                  [k (assoc v :block/uuid (:block/uuid ent))])
                                [k v])))
                       (into {})))
+          (seq kv-values)
+          (assoc ::kv-values kv-values)
           ;; Currently all files are created by app so no need to distinguish between user and built-in ones yet
           (seq graph-files)
           (assoc ::graph-files graph-files))
@@ -764,8 +776,15 @@
     (merge-export-maps export-map {:pages-and-blocks pages-and-blocks})))
 
 (defn build-import
-  "Given an entity's export map, build the import tx to create it. Returns a map
-   of txs to transact with the following keys:
+  "Given an entity's export map, build the import tx to create it. In addition to standard sqlite.build keys,
+   an export map can have the following namespaced keys:
+   * ::block - Block map for a :block export
+   * ::graph-files - Vec of files for a :graph export
+   * ::kv-values - Vec of :kv/value maps for a :graph export
+   * ::auto-include-namespaces - A set of parent namespaces to include from properties and classes
+     for a :graph export. See :exclude-namespaces in build-graph-export for a similar option
+
+   This fn then returns a map of txs to transact with the following keys:
    * :init-tx - Txs that must be transacted first, usually because they define new properties
    * :block-props-tx - Txs to transact after :init-tx, usually because they use newly defined properties
    * :misc-tx - Txs to transact unrelated to other txs"
@@ -774,7 +793,7 @@
                      (build-block-import-options current-block export-map*)
                      export-map*)
         export-map' (if (seq (::auto-include-namespaces export-map*))
-                      (merge (select-keys export-map [::graph-files])
+                      (merge (select-keys export-map [::graph-files ::kv-values])
                              (add-ontology-for-include-namespaces db export-map))
                       export-map)
         property-conflicts (atom [])
@@ -784,6 +803,9 @@
         (js/console.error :property-conflicts @property-conflicts)
         {:error (str "The following imported properties conflict with the current graph: "
                      (pr-str (mapv :property-id @property-conflicts)))})
-      (cond-> (sqlite-build/build-blocks-tx (dissoc export-map'' ::graph-files))
-        (seq (::graph-files export-map''))
-        (assoc :misc-tx (::graph-files export-map''))))))
+      (if (or (::graph-files export-map') (::kv-values export-map'))
+        ;; only for :graph export-type
+        (-> (sqlite-build/build-blocks-tx (dissoc export-map'' ::graph-files ::kv-values))
+            (assoc :misc-tx (vec (concat (::graph-files export-map'')
+                                         (::kv-values export-map'')))))
+        (sqlite-build/build-blocks-tx export-map'')))))

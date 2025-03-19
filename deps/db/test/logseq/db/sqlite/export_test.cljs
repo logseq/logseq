@@ -643,6 +643,10 @@
 (deftest import-graph
   (let [original-data (build-original-graph-data)
         conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
+        ;; set to an unobtainable version to test this ident
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version :kv/value {:major 1 :minor 0}}])
+        original-kv-values (remove #(= :logseq.kv/schema-version (:db/ident %))
+                                   (d/q '[:find [(pull ?b [:db/ident :kv/value]) ...] :where [?b :kv/value]] @conn))
         _ (d/transact! conn (::sqlite-export/graph-files original-data))
         conn2 (db-test/create-conn)
         imported-graph (export-graph-and-import-to-another-graph conn conn2 {})]
@@ -657,7 +661,12 @@
     (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))
     (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
-        "All :file/path entities are imported")))
+        "All :file/path entities are imported")
+    (is (= original-kv-values (::sqlite-export/kv-values imported-graph))
+        "All :kv/value entities are imported except for ignored ones")
+    (is (not= (:kv/value (d/entity @conn :logseq.kv/schema-version))
+              (:kv/value (d/entity @conn2 :logseq.kv/schema-version)))
+        "Ignored :kv/value is not updated")))
 
 (deftest import-graph-with-timestamps
   (let [original-data* (build-original-graph-data)
@@ -665,13 +674,8 @@
                           (update :pages-and-blocks
                                   (fn [pages-and-blocks]
                                     (walk/postwalk (fn [e]
-                                                     (cond
-                                                       (and (map? e) (or (:block/title e) (:build/journal e)))
+                                                     (if (and (map? e) (or (:block/title e) (:build/journal e)))
                                                        (common-util/block-with-timestamps e)
-                                                       ;; Don't add timestamps to pvalues
-                                                       (and (vector? e) (= :build/page (first e)))
-                                                       [(first e) (dissoc (second e) :block/updated-at :block/created-at)]
-                                                       :else
                                                        e))
                                                    pages-and-blocks)))
                           (update :classes update-vals common-util/block-with-timestamps)

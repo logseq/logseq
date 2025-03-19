@@ -1,6 +1,7 @@
 (ns frontend.handler.db-based.import
   "Handles DB graph imports"
   (:require [clojure.edn :as edn]
+            [cljs.pprint :as pprint]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
@@ -109,9 +110,9 @@
                   (notification/show! "No block found" :warning)))]
     (if (= ::invalid-import export-map)
       (notification/show! "The submitted EDN data is invalid! Please fix and try again." :warning)
-      (let [{:keys [init-tx block-props-tx misc-tx error] :as _txs}
+      (let [{:keys [init-tx block-props-tx misc-tx error] :as txs}
             (safe-build-edn-import export-map (when block {:current-block block}))]
-        ;; (cljs.pprint/pprint _txs)
+        (pprint/pprint txs)
         (if error
           (notification/show! error :error)
           ;; TODO: When not import-block, use metadata that supports undo
