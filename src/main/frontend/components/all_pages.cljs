@@ -36,14 +36,11 @@
 
 (rum/defc all-pages < rum/static
   []
-  (let [[data set-data!] (rum/use-state nil)
-        columns' (views/build-columns {} (columns)
+  (let [columns' (views/build-columns {} (columns)
                                       {:with-object-name? false
                                        :with-id? false})]
     [:div.ls-all-pages.w-full.mx-auto
-     (views/view {:data data
-                  :set-data! set-data!
-                  :view-parent (db/get-page common-config/views-page-name)
+     (views/view {:view-parent (db/get-page common-config/views-page-name)
                   :view-feature-type :all-pages
                   :show-items-count? true
                   :columns columns'
