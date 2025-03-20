@@ -7,6 +7,7 @@
             [frontend.inference-worker.state :as infer-worker.state]
             [frontend.worker-common.util :as worker-util]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [missionary.core :as m]
             [promesa.core :as p]))
 
@@ -173,13 +174,15 @@
    "Xenova/jina-embeddings-v2-base-zh" {:tf-config {:dtype "fp32"}
                                         :hnsw-config {:dims 768}}})
 
+(def ^:private *load-model-progress (atom nil))
+
 (defn <load-model
   [model-name]
   (when-let [config (get available-embedding-models model-name)]
     (p/let [extractor (pipeline "feature-extraction" model-name
                                 (clj->js (-> (:tf-config config)
                                              (assoc "device" "webgpu")
-                                             (assoc "progress_callback" #(log/info :progress %)))))]
+                                             (assoc "progress_callback" #(reset! *load-model-progress %)))))]
       (reset! infer-worker.state/*extractor extractor)
       (reset! infer-worker.state/*model-name+config [model-name config])
       true)))
@@ -191,6 +194,13 @@
      (reset! infer-worker.state/*hnswlib hnswlib)
      (.setDebugLogs (.-EmscriptenFileSystemManager ^js @infer-worker.state/*hnswlib) true)
      (log/info :loaded :hnswlib))))
+
+(when-not common-config/PUBLISHING
+  (c.m/run-background-task
+   ::push-load-model-progress
+   (m/reduce
+    (fn [_ v] (worker-util/post-message :vector-search/load-model-progress v))
+    (c.m/throttle 500 (m/watch *load-model-progress)))))
 
 (comment
   (def repo "repo-1")

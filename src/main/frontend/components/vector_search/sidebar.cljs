@@ -17,6 +17,7 @@
         ^js worker @db-browser/*worker
         [model-info set-model-info] (hooks/use-state nil)
         [vec-search-state set-vec-search-state] (hooks/use-state nil)
+        [load-model-progress set-load-model-progress] (hooks/use-state nil)
         [query-string set-query-string] (hooks/use-state nil)
         [result set-result] (hooks/use-state nil)]
     (hooks/use-effect!
@@ -24,8 +25,19 @@
        (c.m/run-task
         (m/reduce
          (fn [_ v] (set-vec-search-state v))
-         vector-search-flows/vector-search-state-flow)
+         (m/ap
+          (m/?> vector-search-flows/infer-worker-ready-flow)
+          (c.m/<? (.vec-search-update-index-info worker repo))
+          (m/?> vector-search-flows/vector-search-state-flow)))
         ::update-vec-search-state :succ (constantly nil)))
+     [])
+    (hooks/use-effect!
+     (fn []
+       (c.m/run-task
+        (m/reduce
+         (fn [_ v] (set-load-model-progress v))
+         vector-search-flows/load-model-progress-flow)
+        ::update-load-model-progress :succ (constantly nil)))
      [])
     (hooks/use-effect!
      (fn []
@@ -50,7 +62,8 @@
      [(hooks/use-debounced-value query-string 200)])
     [:div
      [:b "State"]
-     (let [state-map (get-in vec-search-state [:repo->index-info repo])]
+     (let [state-map (assoc (get-in vec-search-state [:repo->index-info repo])
+                            :load-model-progress load-model-progress)]
        [:pre.select-text
         (with-out-str
           (fipp/pprint state-map {:width 10}))])

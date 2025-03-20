@@ -332,7 +332,8 @@
       :db/async-queries                      (atom {})
       :db/latest-transacted-entity-uuids     (atom {})
 
-      :vector-search/state                   (atom {})})))
+      :vector-search/state                   (atom {})
+      :vector-search/load-model-progress     (atom nil)})))
 
 ;; Block ast state
 ;; ===============

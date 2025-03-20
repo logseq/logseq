@@ -1,5 +1,5 @@
 (ns frontend.handler.worker
-  "Handle messages received from the db worker"
+  "Handle messages received from the webworkers"
   (:require [cljs-bean.core :as bean]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.notification :as notification]
@@ -51,6 +51,9 @@
 
 (defmethod handle :capture-error [_ _worker data]
   (state/pub-event! [:capture-error data]))
+
+(defmethod handle :vector-search/load-model-progress [_ _ data]
+  (state/pub-event! [:vector-search/load-model-progress data]))
 
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))

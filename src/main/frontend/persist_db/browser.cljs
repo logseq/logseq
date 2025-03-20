@@ -164,6 +164,7 @@
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
           wrapped-worker (Comlink/wrap worker)
           t1 (util/time-ms)]
+      (worker-handler/handle-message! worker wrapped-worker)
       (reset! state/*infer-worker wrapped-worker)
       (p/do!
        (.init wrapped-worker)
