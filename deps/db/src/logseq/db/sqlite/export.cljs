@@ -115,7 +115,8 @@
     (if include-properties?
       (->> properties-config-by-ent
            (map (fn [[ent build-property]]
-                  (let [ent-properties (apply dissoc (db-property/properties ent) :block/tags db-property/schema-properties)]
+                  (let [ent-properties (apply dissoc (db-property/properties ent)
+                                              (into db-property/schema-properties db-property/public-db-attribute-properties))]
                     [(:db/ident ent)
                      (cond-> build-property
                        (seq ent-properties)
@@ -136,6 +137,8 @@
     (and (:logseq.property.class/properties class-ent) (not shallow-copy?))
     (assoc :build/class-properties
            (mapv :db/ident (:logseq.property.class/properties class-ent)))
+    (and (not shallow-copy?) (:block/alias class-ent))
+    (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias class-ent))))
     ;; It's caller's responsibility to ensure parent is included in final export
     (and include-parents?
          (not shallow-copy?)
@@ -189,7 +192,7 @@
   [db entity {:keys [properties include-uuid-fn shallow-copy? include-timestamps? exclude-ontology?]
               :or {include-uuid-fn (constantly false)}
               :as options}]
-  (let [ent-properties (dissoc (db-property/properties entity) :block/tags)
+  (let [ent-properties (apply dissoc (db-property/properties entity) db-property/public-db-attribute-properties)
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
         new-properties (when-not (or shallow-copy? exclude-ontology?)
                          (build-node-properties db entity ent-properties (dissoc options :shallow-copy? :include-uuid-fn)))
@@ -387,7 +390,9 @@
         page-ent-export (build-node-export db page-entity options')
         page-pvalue-uuids (get-pvalue-uuids (:node page-ent-export))
         page (merge (dissoc (:node page-ent-export) :block/title)
-                    (shallow-copy-page page-entity))
+                    (shallow-copy-page page-entity)
+                    (when (:block/alias page-entity)
+                      {:block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias page-entity)))}))
         page-blocks-export {:pages-and-blocks [{:page page :blocks blocks}]
                             :properties properties
                             :classes classes}]
@@ -453,7 +458,7 @@
   "Exports given nodes from a view. Nodes are a random mix of blocks and pages"
   [db eids]
   (let [nodes (map #(d/entity db %) eids)
-        property-value-ents (mapcat #(->> (dissoc (db-property/properties %) :block/tags)
+        property-value-ents (mapcat #(->> (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties)
                                           vals
                                           (filter de/entity?))
                                     nodes)
@@ -490,7 +495,7 @@
         classes
         (->> class-ents
              (map (fn [ent]
-                    (let [ent-properties (dissoc (db-property/properties ent) :block/tags :logseq.property/parent)]
+                    (let [ent-properties (apply dissoc (db-property/properties ent) :logseq.property/parent db-property/public-db-attribute-properties)]
                       (vector (:db/ident ent)
                               (cond-> (build-export-class ent options)
                                 (seq ent-properties)
@@ -538,8 +543,14 @@
                                 (and (:exclude-built-in-pages? options)
                                      (get-in page-export [:pages-and-blocks 0 :page :build/properties :logseq.property/built-in?])))
                               page-exports)
+        alias-uuids  (mapcat (fn [{:keys [pages-and-blocks]}]
+                               (mapcat #(when-let [aliases (get-in % [:page :block/alias])]
+                                          (map second aliases))
+                                       pages-and-blocks))
+                             page-exports')
         pages-export {:pages-and-blocks (vec (mapcat :pages-and-blocks page-exports'))
-                      :pvalue-uuids (set (mapcat :pvalue-uuids page-exports'))}]
+                      :pvalue-uuids (into (set (mapcat :pvalue-uuids page-exports'))
+                                          alias-uuids)}]
     pages-export))
 
 (defn- build-graph-files

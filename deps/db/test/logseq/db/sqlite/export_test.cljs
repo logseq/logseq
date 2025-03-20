@@ -539,6 +539,7 @@
         property-pvalue-uuid (random-uuid)
         page-pvalue-uuid (random-uuid)
         page-object-uuid (random-uuid)
+        page-alias-uuid (random-uuid)
         closed-value-uuid (random-uuid)
         property-uuid (random-uuid)
         class-uuid (random-uuid)
@@ -606,7 +607,11 @@
                        :build/properties {:user.property/node #{[:block/uuid block-pvalue-uuid]}}}
                       {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}
                       {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}]}]}
-          {:page {:build/journal 20250228 :build/properties {:user.property/num 1}}
+          {:page {:block/title "Alias for 2/28" :block/uuid page-alias-uuid :build/keep-uuid? true}
+           :blocks []}
+          {:page {:build/journal 20250228
+                  :block/alias #{[:block/uuid page-alias-uuid]}
+                  :build/properties {:user.property/num 1}}
            :blocks [{:block/title "journal block"}]}
           {:page {:build/journal 19650201
                   :block/uuid journal-uuid
