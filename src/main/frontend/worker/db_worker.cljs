@@ -955,7 +955,11 @@
 
   (vec-search-cancel-indexing
    [this repo]
-   (embedding/cancel-indexing repo)))
+   (embedding/cancel-indexing repo))
+
+  (vec-search-update-index-info
+   [this repo]
+   (js/Promise. (embedding/task--update-index-info! repo))))
 
 (defn- rename-page!
   [repo conn page-uuid new-name]

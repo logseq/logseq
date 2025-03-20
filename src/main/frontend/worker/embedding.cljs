@@ -111,13 +111,25 @@
           [:db/add e :logseq.property.embedding/hnsw-label-updated-at updated-at]]))
      e+updated-at-coll added-labels)))
 
-(defn- task--update-index-info!
-  [repo ^js infer-worker indexing?*]
+(defn- task--update-index-info!*
+  ([repo ^js infer-worker]
+   (m/sp
+     (reset-*vector-search-state! repo :index-info
+                                  (merge (:index-info @*vector-search-state)
+                                         (js->clj (c.m/<? (.index-info infer-worker repo))
+                                                  :keywordize-keys true)))))
+  ([repo ^js infer-worker indexing?*]
+   (m/sp
+     (reset-*vector-search-state! repo :index-info
+                                  (assoc (js->clj (c.m/<? (.index-info infer-worker repo))
+                                                  :keywordize-keys true)
+                                         :indexing? indexing?*)))))
+
+(defn task--update-index-info!
+  [repo]
   (m/sp
-    (reset-*vector-search-state! repo :index-info
-                                 (assoc (js->clj (c.m/<? (.index-info infer-worker repo))
-                                                 :keywordize-keys true)
-                                        :indexing? indexing?*))))
+    (when-let [^js infer-worker @worker-state/*infer-worker]
+      (m/? (task--update-index-info!* repo infer-worker)))))
 
 (defn- task--embedding-stale-blocks!
   "embedding outdated block-data
@@ -126,21 +138,20 @@
   (m/sp
     (when-let [^js infer-worker @worker-state/*infer-worker]
       (when-let [conn (worker-state/get-datascript-conn repo)]
-        (m/? (task--update-index-info! repo infer-worker true))
+        (m/? (task--update-index-info!* repo infer-worker true))
         (let [stale-blocks (stale-block-lazy-seq @conn false)]
           (doseq [stale-block-chunk (sequence (partition-by-text-size 2000) stale-blocks)]
             (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) stale-block-chunk)
                   delete-labels (into-array (keep :logseq.property.embedding/hnsw-label stale-block-chunk))
-                  added-labels (worker-util/profile :text-embedding
-                                 (c.m/<?
-                                  (.text-embedding+store!
-                                   infer-worker repo (into-array (map :block.temp/text-to-embedding stale-block-chunk))
-                                   delete-labels false)))
+                  added-labels (c.m/<?
+                                (.text-embedding+store!
+                                 infer-worker repo (into-array (map :block.temp/text-to-embedding stale-block-chunk))
+                                 delete-labels false))
                   tx-data (labels-update-tx-data @conn e+updated-at-coll added-labels)]
               (d/transact! conn tx-data)
-              (m/? (task--update-index-info! repo infer-worker true))))
+              (m/? (task--update-index-info!* repo infer-worker true))))
           (c.m/<? (.write-index! infer-worker repo))
-          (m/? (task--update-index-info! repo infer-worker false)))))))
+          (m/? (task--update-index-info!* repo infer-worker false)))))))
 
 (defn- task--re-embedding-graph-data!
   "force re-embedding all block-data in graph"
@@ -148,21 +159,20 @@
   (m/sp
     (when-let [^js infer-worker @worker-state/*infer-worker]
       (when-let [conn (worker-state/get-datascript-conn repo)]
-        (m/? (task--update-index-info! repo infer-worker true))
+        (m/? (task--update-index-info!* repo infer-worker true))
         (c.m/<? (.force-reset-index! infer-worker repo))
         (let [all-blocks (stale-block-lazy-seq @conn true)]
           (doseq [block-chunk (sequence (partition-by-text-size 2000) all-blocks)]
             (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) block-chunk)
-                  added-labels (worker-util/profile :text-embedding
-                                 (c.m/<?
-                                  (.text-embedding+store!
-                                   infer-worker repo (into-array (map :block.temp/text-to-embedding block-chunk))
-                                   nil false)))
+                  added-labels (c.m/<?
+                                (.text-embedding+store!
+                                 infer-worker repo (into-array (map :block.temp/text-to-embedding block-chunk))
+                                 nil false))
                   tx-data (labels-update-tx-data @conn e+updated-at-coll added-labels)]
               (d/transact! conn tx-data)
-              (m/? (task--update-index-info! repo infer-worker true)))))
+              (m/? (task--update-index-info!* repo infer-worker true)))))
         (c.m/<? (.write-index! infer-worker repo))
-        (m/? (task--update-index-info! repo infer-worker false))))))
+        (m/? (task--update-index-info!* repo infer-worker false))))))
 
 (defn embedding-stale-blocks!
   [repo]

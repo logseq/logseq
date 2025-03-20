@@ -1095,6 +1095,9 @@
 (defmethod handle :editor/hide-action-bar []
   (shui/popup-hide! :selection-action-bar))
 
+(defmethod handle :vector-search/load-model-progress [[_ data]]
+  (state/set-state! :vector-search/load-model-progress data))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]
