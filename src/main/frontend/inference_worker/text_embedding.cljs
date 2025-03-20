@@ -2,6 +2,7 @@
   "text embedding fns"
   (:require ["@huggingface/transformers" :refer [pipeline]]
             ["hnswlib-wasm" :refer [loadHnswlib]]
+            [clojure.data :as data]
             [frontend.common.missionary :as c.m]
             [frontend.inference-worker.state :as infer-worker.state]
             [frontend.worker-common.util :as worker-util]
@@ -9,9 +10,16 @@
             [missionary.core :as m]
             [promesa.core :as p]))
 
+(add-watch infer-worker.state/*hnsw-index :delete-obj-when-dissoc
+           (fn [_ _ o n]
+             (let [[old-only] (data/diff o n)]
+               (doseq [[repo ^js hnsw-index] old-only]
+                 (when hnsw-index
+                   (log/info :delete-hnsw-index repo)
+                   (.delete hnsw-index))))))
+
 (def ^:private embedding-opts #js{"pooling" "mean" "normalize" true})
 
-(def ^:private num-dimensions 384)
 (def ^:private init-max-elems 100)
 
 (defn- split-into-chunks
@@ -24,23 +32,37 @@
         (recur (+ i chunk-size))))
     result))
 
-(defn- init-index
+(defn- init-index!
   [^js hnsw]
   (.initIndex hnsw init-max-elems 16 200 100)
   (.setEfSearch hnsw 64 ;;default 32
                 ))
 
-(defn- ^js ensure-hnsw-index!
+(defn- ^js get-hnsw-index
   [repo]
   (or (@infer-worker.state/*hnsw-index repo)
       (let [hnsw-ctor (.-HierarchicalNSW ^js @infer-worker.state/*hnswlib)
-            hnsw (new hnsw-ctor "cosine" num-dimensions "")
+            hnsw (new hnsw-ctor "cosine" (or (:dims (:hnsw-config (second @infer-worker.state/*model-name+config))) 384) "")
             file-exists? (.checkFileExists (.-EmscriptenFileSystemManager ^js @infer-worker.state/*hnswlib) repo)]
-        (if file-exists?
+        (when file-exists?
           (.readIndex hnsw repo init-max-elems)
-          (init-index hnsw))
-        (swap! infer-worker.state/*hnsw-index assoc repo hnsw)
-        (@infer-worker.state/*hnsw-index repo))))
+          (swap! infer-worker.state/*hnsw-index assoc repo hnsw)
+          hnsw))))
+
+(defn- ^js new-hnsw-index!
+  [repo]
+  (when (get-hnsw-index repo)
+    (swap! infer-worker.state/*hnsw-index dissoc repo))
+  (let [hnsw-ctor (.-HierarchicalNSW ^js @infer-worker.state/*hnswlib)
+        hnsw (new hnsw-ctor "cosine" (or (:dims (:hnsw-config (second @infer-worker.state/*model-name+config))) 384) "")]
+    (init-index! hnsw)
+    (swap! infer-worker.state/*hnsw-index assoc repo hnsw)
+    hnsw))
+
+(defn- model-loaded?
+  []
+  (and @infer-worker.state/*extractor
+       @infer-worker.state/*model-name+config))
 
 (defn <text-embedding
   [text-array]
@@ -64,20 +86,22 @@
 
 (defn delete-items
   [repo labels]
-  (.markDeleteItems ^js (ensure-hnsw-index! repo) (into-array labels)))
+  (when-let [hnsw (get-hnsw-index repo)]
+    (.markDeleteItems hnsw (into-array labels))))
 
 (defn task--text-embedding&store!
   "return labels(js-array)"
   [repo text-array delete-labels replace-deleted?]
   (m/sp
-    (let [{:keys [data _type dims _size]} (worker-util/profile :<text-embedding
-                                            (c.m/<? (<text-embedding text-array)))
-          data-coll (split-into-chunks data (last dims))
-          _ (assert (= (count text-array) (count data-coll)))
-          ^js hnsw (ensure-hnsw-index! repo)]
-      (when (seq delete-labels) (.markDeleteItems hnsw (into-array delete-labels)))
-      (worker-util/profile (keyword "add-items" (str (alength data-coll)))
-        (add-items hnsw data-coll replace-deleted?)))))
+    (when (model-loaded?)
+      (let [hnsw (or (get-hnsw-index repo) (new-hnsw-index! repo))
+            {:keys [data _type dims _size]} (worker-util/profile :<text-embedding
+                                              (c.m/<? (<text-embedding text-array)))
+            data-coll (split-into-chunks data (last dims))
+            _ (assert (= (count text-array) (count data-coll)))]
+        (when (seq delete-labels) (.markDeleteItems hnsw (into-array delete-labels)))
+        (worker-util/profile (keyword "add-items" (str (alength data-coll)))
+          (add-items hnsw data-coll replace-deleted?))))))
 
 (def ^:private write-index-wait-delays-flow
   (m/ap
@@ -111,36 +135,54 @@
   Return synced? (bool)"
   [repo]
   (m/sp
-    (let [hnsw (ensure-hnsw-index! repo)]
+    (when-let [hnsw (get-hnsw-index repo)]
       (when-not (zero? (.getCurrentCount hnsw))
-        (init-index hnsw)
+        (init-index! hnsw)
         (m/? (task--write-index!* repo hnsw))))))
 
 (defn task--write-index!
   [repo]
   (m/sp
-    (let [hnsw (ensure-hnsw-index! repo)]
+    (when-let [hnsw (get-hnsw-index repo)]
       (m/? (task--write-index!* repo hnsw)))))
 
 (defn- search-knn
   [repo query-point num-neighbors]
-  (let [^js hnsw (ensure-hnsw-index! repo)]
+  (when-let [hnsw (get-hnsw-index repo)]
     (.searchKnn hnsw query-point num-neighbors nil)))
 
 (defn <search-knn
   "return labels"
   [repo query-string num-neighbors]
-  (p/let [query-embedding (<text-embedding #js[query-string])
-          query-point (:data query-embedding)]
-    (search-knn repo query-point num-neighbors)))
+  (when (model-loaded?)
+    (p/let [query-embedding (<text-embedding #js[query-string])
+            query-point (:data query-embedding)]
+      (search-knn repo query-point num-neighbors))))
 
 (defn index-info
   [repo]
-  (let [^js hnsw (ensure-hnsw-index! repo)]
+  (when-let [hnsw (get-hnsw-index repo)]
     {:current-count (.getCurrentCount hnsw)
      :max-elements (.getMaxElements hnsw)
      :ef-search (.getEfSearch hnsw)
      :num-dims (.getNumDimensions hnsw)}))
+
+(def available-embedding-models
+  {"Xenova/all-MiniLM-L6-v2" {:tf-config {:dtype "fp32"}
+                              :hnsw-config {:dims 384}}
+   "Xenova/jina-embeddings-v2-base-zh" {:tf-config {:dtype "fp32"}
+                                        :hnsw-config {:dims 768}}})
+
+(defn <load-model
+  [model-name]
+  (when-let [config (get available-embedding-models model-name)]
+    (p/let [extractor (pipeline "feature-extraction" model-name
+                                (clj->js (-> (:tf-config config)
+                                             (assoc "device" "webgpu")
+                                             (assoc "progress_callback" #(log/info :progress %)))))]
+      (reset! infer-worker.state/*extractor extractor)
+      (reset! infer-worker.state/*model-name+config [model-name config])
+      true)))
 
 (defn <init
   []
@@ -148,11 +190,7 @@
    (p/let [hnswlib (loadHnswlib)]
      (reset! infer-worker.state/*hnswlib hnswlib)
      (.setDebugLogs (.-EmscriptenFileSystemManager ^js @infer-worker.state/*hnswlib) true)
-     (log/info :loaded :hnswlib))
-   (p/let [extractor (pipeline "feature-extraction" "Xenova/all-MiniLM-L6-v2" #js{"device" "webgpu" "dtype" "fp32"})]
-     (reset! infer-worker.state/*extractor extractor)
-     (log/info :loaded :extractor))))
-
+     (log/info :loaded :hnswlib))))
 
 (comment
   (def repo "repo-1")

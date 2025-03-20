@@ -6,20 +6,21 @@
             [frontend.common.missionary :as c.m]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.state :as worker-state]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
-            [medley.core :as medley]
             [missionary.core :as m]))
 
 ;;; TODOs:
 ;;; - [x] add :logseq.property/description into text-to-embedding
 ;;; - [ ] add tags to text-to-embedding
 ;;; - [x] check webgpu available, transformers.js is slow without webgpu(the difference is ~70 times)
-;;; - [ ] expose index-state to ui
+;;; - [x] expose index-state to ui
+;;; - [ ] show progress when loading/downloading models
 
 (def ^:private empty-vector-search-state
   {:repo->index-info {} ;; repo->index-info
-   :repo->canceler {} ;; repo->canceler
+   :repo->canceler {}   ;; repo->canceler
    })
 
 (def ^:private vector-search-state-keys (set (keys empty-vector-search-state)))
@@ -98,7 +99,7 @@
 
 (defn- labels-update-tx-data
   [db e+updated-at-coll added-labels]
-  (assert (= (count e+updated-at-coll) (count added-labels)))
+  (assert (= (count e+updated-at-coll) (count added-labels)) [e+updated-at-coll added-labels])
   (let [es (map first e+updated-at-coll)
         exist-es (set (keep
                        (fn [b] (when (:block/uuid b) (:db/id b)))
@@ -178,6 +179,34 @@
                     (task--re-embedding-graph-data! repo)
                     :re-embedding-graph-data! :succ (constantly nil))]
       (reset-*vector-search-state! repo :canceler canceler))))
+
+(defn task--embedding-model-info
+  [repo]
+  (m/sp
+    (when-let [^js infer-worker @worker-state/*infer-worker]
+      (let [available-model-names (c.m/<? (.available-embedding-models infer-worker))
+            conn (worker-state/get-datascript-conn repo)
+            embedding-model-name (ldb/get-key-value @conn :logseq.kv/graph-text-embedding-model-name)]
+        {:available-model-names available-model-names
+         :graph-text-embedding-model-name embedding-model-name}))))
+
+(defn task--init-embedding-model
+  [repo]
+  (m/sp
+    (when-let [^js infer-worker @worker-state/*infer-worker]
+      (let [conn (worker-state/get-datascript-conn repo)]
+        (if-let [embedding-model-name (ldb/get-key-value @conn :logseq.kv/graph-text-embedding-model-name)]
+          (c.m/<? (.load-model infer-worker embedding-model-name))
+          (log/info :init-load-model "model-name has not been set yet, skip"))))))
+
+(defn task--load-model
+  [repo model-name]
+  (m/sp
+    (when-let [^js infer-worker @worker-state/*infer-worker]
+      (let [conn (worker-state/get-datascript-conn repo)]
+        (when (c.m/<? (.load-model infer-worker model-name))
+          (d/transact! conn [(ldb/kv :logseq.kv/graph-text-embedding-model-name model-name)])
+          (log/info :loaded-model model-name))))))
 
 (defn- remove-outdated-hnsw-label!
   [conn es]

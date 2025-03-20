@@ -3,6 +3,15 @@
   (:require [frontend.state :as state]
             [missionary.core :as m]))
 
+;; input atoms
+(def *infer-worker-ready (atom nil))
+
+(def infer-worker-ready-flow
+  (m/eduction
+   (filter some?)
+   (take 1)
+   (m/watch *infer-worker-ready)))
+
 (def vector-search-state-flow
   (m/watch (:vector-search/state @state/state)))
 

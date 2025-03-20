@@ -9,3 +9,4 @@
 (defonce *hnsw-index (atom {}))
 
 (defonce *extractor (atom nil))
+(defonce *model-name+config (atom nil))

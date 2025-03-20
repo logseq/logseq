@@ -926,6 +926,20 @@
            dbs (ldb/read-transit-str r)]
      (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs))))
 
+  ;; vec-search ;;;
+  (vec-search-embedding-model-info
+   [this repo]
+   (with-write-transit-str
+     (embedding/task--embedding-model-info repo)))
+
+  (vec-search-init-embedding-model
+   [this repo]
+   (js/Promise. (embedding/task--init-embedding-model repo)))
+
+  (vec-search-load-model
+   [this repo model-name]
+   (js/Promise. (embedding/task--load-model repo model-name)))
+
   (vec-search-embedding-stale-blocks
    [this repo]
    (embedding/embedding-stale-blocks! repo))
