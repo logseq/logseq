@@ -20,6 +20,14 @@
    [_this]
    (infer-worker.text-embedding/<init))
 
+  (load-model
+   [_this model-name]
+   (infer-worker.text-embedding/<load-model model-name))
+
+  (available-embedding-models
+   [_]
+   (clj->js (keys infer-worker.text-embedding/available-embedding-models)))
+
   (set-db-worker-proxy
    [_this proxy]
    (reset! infer-worker.state/*db-worker proxy)
