@@ -93,7 +93,7 @@
                       [property
                        (cond-> (select-keys property
                                             (-> (disj db-property/schema-properties :logseq.property/classes)
-                                                (conj :block/title)))
+                                                (into [:block/title :block/collapsed?])))
                          include-uuid?
                          (assoc :block/uuid (:block/uuid property) :build/keep-uuid? true)
                          include-timestamps?
@@ -129,7 +129,7 @@
    unless shallow-copy?"
   [class-ent {:keys [include-parents? include-uuid? shallow-copy? include-timestamps?]
               :or {include-parents? true}}]
-  (cond-> (select-keys class-ent [:block/title])
+  (cond-> (select-keys class-ent [:block/title :block/collapsed?])
     include-uuid?
     (assoc :block/uuid (:block/uuid class-ent) :build/keep-uuid? true)
     include-timestamps?
@@ -197,6 +197,8 @@
         new-properties (when-not (or shallow-copy? exclude-ontology?)
                          (build-node-properties db entity ent-properties (dissoc options :shallow-copy? :include-uuid-fn)))
         build-node (cond-> {:block/title (block-title entity)}
+                     (some? (:block/collapsed? entity))
+                     (assoc :block/collapsed? (:block/collapsed? entity))
                      (:block/link entity)
                      (assoc :block/link [:block/uuid (:block/uuid (:block/link entity))])
                      (include-uuid-fn (:block/uuid entity))
