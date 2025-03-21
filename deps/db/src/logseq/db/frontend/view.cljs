@@ -238,8 +238,9 @@
          ids)))))
 
 (defn- get-entities
-  [db view feat-type property-ident]
+  [db view feat-type property-ident view-for-id*]
   (let [view-for (:logseq.property/view-for view)
+        view-for-id (or (:db/id view-for) view-for-id*)
         non-hidden-e (fn [id] (let [e (d/entity db id)]
                                 (when-not (entity-util/hidden? e)
                                   e)))]
@@ -254,7 +255,7 @@
             (d/datoms db :avet property-ident))
 
       :class-objects
-      (let [class-id (:db/id view-for)
+      (let [class-id view-for-id
             class-children (db-class/get-structured-children db class-id)
             class-ids (distinct (conj class-children class-id))
             datoms (mapcat (fn [id] (d/datoms db :avet :block/tags id)) class-ids)]
@@ -274,10 +275,10 @@
        (keep (fn [id] (non-hidden-e id))))
 
       :linked-references
-      (get-linked-references db (:db/id view-for))
+      (get-linked-references db view-for-id)
 
       :unlinked-references
-      (get-unlinked-references db (:db/id view-for))
+      (get-unlinked-references db view-for-id)
 
       :query-result
       nil
@@ -286,7 +287,8 @@
 
 (defonce *view-cache (atom {}))
 (defn get-view-data
-  [repo db view-id {:keys [journals?]}]
+  [repo db view-id {:keys [journals? view-for-id view-feature-type]
+                    :as opts}]
   ;; TODO: create a view for journals maybe?
   (if journals?
     (let [ids (->> (ldb/get-latest-journals db)
@@ -294,7 +296,7 @@
       {:count (count ids)
        :data ids})
     (let [view (d/entity db view-id)
-          feat-type (:logseq.property.view/feature-type view)
+          feat-type (or view-feature-type (:logseq.property.view/feature-type view))
           index-attr (case feat-type
                        :all-pages
                        :block/name
@@ -309,8 +311,8 @@
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
           filters (:logseq.property.table/filters view)]
-      (or (get-in @*view-cache [repo view-id])
-          (let [entities (get-entities db view feat-type index-attr)
+      (or (and view-id (get-in @*view-cache [repo view-id]))
+          (let [entities (get-entities db view feat-type index-attr view-for-id)
                 sorting (let [sorting* (:logseq.property.table/sorting view)]
                           (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
                             [{:id :block/updated-at, :asc? false}]

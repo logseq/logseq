@@ -1399,9 +1399,14 @@
            (t (or title-key :views.table/default-title)
               (count (:rows table)))]
           (views-tab view-parent view-entity option hover?))
-        [:div.font-medium.opacity-50.text-sm
-         (t (or title-key :views.table/default-title)
-            (count (:rows table)))])]
+        [:div.font-medium.text-sm
+         [:span
+          (case view-feature-type
+            :all-pages "All pages"
+            :linked-references "Linked references"
+            :unlinked-references "Unlinked references"
+            "Nodes")]
+         [:span.ml-1 (count (:rows table))]])]
      [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
       {:class (if hover? "opacity-100" "opacity-75")}
 
@@ -1588,30 +1593,31 @@
         [views set-views!] (hooks/use-state nil)
         [items-count set-count!] (hooks/use-state (count (:data option)))
         [loading? set-loading!] (hooks/use-state true)
-        [data set-data!] (hooks/use-state [])]
+        [data set-data!] (hooks/use-state [])
+        db-based? (config/db-based-graph?)]
     (hooks/use-effect!
      (fn []
        (let [repo (state/get-current-repo)]
          (->
-          (p/let [_result (db-async/<get-views repo (:db/id view-parent) view-feature-type)
-                  views (get-views view-parent view-feature-type)
-                  current-view (if-let [v (first views)]
-                                 (do
-                                   (when-not view-entity (set-view-entity! v))
-                                   (set-views! views)
-                                   v)
-                                 (when (and view-parent view-feature-type (not view-entity))
-                                   (p/let [new-view (create-view! view-parent view-feature-type)]
-                                     (set-view-entity! new-view)
-                                     (set-views! (concat views [new-view]))
-                                     new-view)))]
-            (if (and current-view
-                     (empty? (:data option)))
-              (p/let [{:keys [count data]} (<load-view-data current-view nil)]
-                (set-data! data)
-                (set-count! count)
-                (set-loading! false))
-              (set-loading! false)))
+          (p/let [_result (when db-based?  (db-async/<get-views repo (:db/id view-parent) view-feature-type))
+                  views (when db-based?  (get-views view-parent view-feature-type))
+                  current-view (when db-based?
+                                 (if-let [v (first views)]
+                                   (do
+                                     (when-not view-entity (set-view-entity! v))
+                                     (set-views! views)
+                                     v)
+                                   (when (and view-parent view-feature-type (not view-entity))
+                                     (p/let [new-view (create-view! view-parent view-feature-type)]
+                                       (set-view-entity! new-view)
+                                       (set-views! (concat views [new-view]))
+                                       new-view))))
+                  {:keys [count data]} (<load-view-data current-view {:view-for-id (or (:db/id (:logseq.property/view-for current-view))
+                                                                                       (:db/id view-parent))
+                                                                      :view-feature-type view-feature-type})]
+            (set-data! data)
+            (set-count! count)
+            (set-loading! false))
           (p/catch (fn [e]
                      (js/console.error e)
                      (set-loading! false))))))
