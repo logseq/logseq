@@ -555,23 +555,8 @@ independent of format as format specific heading characters are stripped"
   ([n]
    (get-latest-journals (state/get-current-repo) n))
   ([repo-url n]
-   (when (conn/get-db repo-url)
-     (let [date (js/Date.)
-           _ (.setDate date (- (.getDate date) (dec n)))
-           today (date-time-util/date->int (js/Date.))]
-       (->>
-        (react/q repo-url [:frontend.worker.react/journals] {:use-cache? false}
-                 '[:find [(pull ?page [*]) ...]
-                   :in $ ?today
-                   :where
-                   [?page :block/name ?page-name]
-                   [?page :block/journal-day ?journal-day]
-                   [(<= ?journal-day ?today)]]
-                 today)
-        (react)
-        (sort-by :block/journal-day)
-        (reverse)
-        (take n))))))
+   (when-let [db (conn/get-db repo-url)]
+     (take n (ldb/get-latest-journals db)))))
 
 ;; get pages that this page referenced
 (defn get-page-referenced-pages

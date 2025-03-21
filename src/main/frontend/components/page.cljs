@@ -735,9 +735,9 @@
 
 (rum/defcs page-aux < rum/reactive
   {:init (fn [state]
-           (let [page (first (:rum/args state))
-                 page-name (:page-name page)
-                 page-id-uuid-or-name (or (:db/id page) (:block/uuid page)
+           (let [page* (first (:rum/args state))
+                 page-name (:page-name page*)
+                 page-id-uuid-or-name (or (:db/id page*) (:block/uuid page*)
                                           (get-sanity-page-name state page-name))
                  option (last (:rum/args state))
                  preview-or-sidebar? (or (:preview? option) (:sidebar? option))
@@ -751,7 +751,7 @@
                (reset! *page (db/entity (:db/id page-block)))
                (when page-block
                  (when-not preview-or-sidebar?
-                   (if-let [page-uuid (and (not page-uuid?) (:block/uuid page-block))]
+                   (if-let [page-uuid (and (not (:db/id page*)) (not page-uuid?) (:block/uuid page-block))]
                      (route-handler/redirect-to-page! (str page-uuid) {:push false})
                      (route-handler/update-page-title-and-label! (state/get-route-match))))))
              (assoc state
