@@ -3362,8 +3362,7 @@
 
                 :else
                 block*)
-        result (merge block*
-                      (db/sub-block (:db/id block)))]
+        result (or (db/sub-block (:db/id block)) block*)]
     (if linked-block
       [block* result]
       [nil result])))
@@ -3693,7 +3692,7 @@
        (fn []
          (p/do!
           (db-async/<get-block (state/get-current-repo) (:db/id block*))
-          (set-block! (some-> (:db/id block*) db/entity))))
+          (set-block! (or (some-> (:db/id block*) db/entity) block*))))
        []))
     (loaded-block-container config block)))
 
