@@ -903,7 +903,10 @@
   [k]
   (this-as this
            (p/let [prop (-get-property this k)]
-             (bean/->js (sdk-utils/normalize-keyword-for-json prop)))))
+             (-> prop
+               (assoc :type (:logseq.property/type prop))
+               (sdk-utils/normalize-keyword-for-json)
+               (bean/->js)))))
 
 (defn ^:export upsert_property
   "schema:
@@ -929,7 +932,8 @@
                                 (string? (:cardinality schema))
                                 (update :cardinality keyword)
                                 (string? (:type schema))
-                                (update :type keyword))
+                                (-> (assoc :logseq.property/type (keyword (:type schema)))
+                                  (dissoc :type)))
                        p (db-property-handler/upsert-property! k schema
                                                                (cond-> opts
                                                                  name
