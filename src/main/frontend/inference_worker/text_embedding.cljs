@@ -136,7 +136,7 @@
   Return synced? (bool)"
   [repo]
   (m/sp
-    (when-let [hnsw (get-hnsw-index repo)]
+    (when-let [hnsw (new-hnsw-index! repo)]
       (when-not (zero? (.getCurrentCount hnsw))
         (init-index! hnsw)
         (m/? (task--write-index!* repo hnsw))))))
