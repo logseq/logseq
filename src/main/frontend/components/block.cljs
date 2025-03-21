@@ -2079,7 +2079,7 @@
   (string/blank? (:block/title block)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected?]}]
+  [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
   (let [doc-mode?          (state/sub :document/mode?)
         control-show?      (util/react *control-show?)
         ref?               (:ref? config)
@@ -2160,8 +2160,8 @@
            (or
             (and empty-content?
                  (not edit?)
-                 (not (:block.temp/top? block))
-                 (not (:block.temp/bottom? block))
+                 (not top?)
+                 (not bottom?)
                  (not (util/react *control-show?))
                  (not (:logseq.property/created-from-property  block)))
             (and doc-mode?
@@ -3360,7 +3360,7 @@
 
                 :else
                 block*)
-        result (or (db/sub-block (:db/id block)) block*)]
+        result (db/sub-block (:db/id block))]
     (if linked-block
       [block* result]
       [nil result])))
@@ -3388,7 +3388,7 @@
   {:init (fn [state]
            (let [*ref (atom nil)]
              (assoc state ::ref *ref)))}
-  [state container-state repo config* block {:keys [navigating-block navigated?]}]
+  [state container-state repo config* block {:keys [navigating-block navigated?] :as opts}]
   (let [*ref (::ref state)
         _ (when (:block/uuid block) (state/sub-async-query-loading (:block/uuid block)))
         [original-block block] (build-block config* block {:navigating-block navigating-block :navigated? navigated?})
@@ -3539,11 +3539,12 @@
                           (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))
                            block
-                           {:uuid uuid
-                            :block-id block-id
-                            :collapsed? collapsed?
-                            :*control-show? *control-show?
-                            :edit? edit?})))
+                           (merge opts
+                                  {:uuid uuid
+                                   :block-id block-id
+                                   :collapsed? collapsed?
+                                   :*control-show? *control-show?
+                                   :edit? edit?}))))
 
         (when (and @*show-left-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-left-menu config block))
@@ -3660,7 +3661,7 @@
                      (when (root-block? config block)
                        (state/set-collapsed-block! block-id nil)))
                    state)}
-  [state config block]
+  [state config block & {:as opts}]
   (let [repo (state/get-current-repo)
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
@@ -3676,23 +3677,26 @@
           [:code.flex.p-1.text-red-rx-09 "Block render error: " (.-message error)]])
        (rum/with-key
          (block-container-inner state repo config' block
-                                {:navigating-block navigating-block :navigated? navigated?})
+                                (merge
+                                 opts
+                                 {:navigating-block navigating-block :navigated? navigated?}))
          (str "block-inner-"
               (:container-id config)
               "-"
               (:block/uuid block)))))))
 
 (rum/defc block-container
-  [config block*]
-  (let [[block set-block!] (hooks/use-state (some-> (:db/id block*) db/entity))]
+  [config block* & {:as opts}]
+  (let [[block set-block!] (hooks/use-state
+                            (some-> (:db/id block*) db/entity))]
     (when-not (:page-title? config)
       (hooks/use-effect!
        (fn []
          (p/do!
           (db-async/<get-block (state/get-current-repo) (:db/id block*))
-          (set-block! (or (some-> (:db/id block*) db/entity) block*))))
+          (set-block! (some-> (:db/id block*) db/entity))))
        []))
-    (loaded-block-container config block)))
+    (loaded-block-container config block opts)))
 
 (defn divide-lists
   [[f & l]]
@@ -4141,15 +4145,15 @@
                      (update :links (fn [ids] (conj (or ids #{}) (:db/id linked-block)))))
                  config)
         item (or (if loop-linked? item linked-block) item)
-        item (cond-> (dissoc item :block/meta)
-               (not (:block-children? config))
-               (assoc :block.temp/top? top?
-                      :block.temp/bottom? bottom?))
+        item (dissoc item :block/meta)
         config' (assoc config
                        :block/uuid (:block/uuid item)
                        :loop-linked? loop-linked?)]
     (when-not (and loop-linked? (:block/name linked-block))
-      (rum/with-key (block-container config' item)
+      (rum/with-key (block-container config' item
+                                     (when (not (:block-children? config))
+                                       {:top? top?
+                                        :bottom? bottom?}))
         (str (:block/uuid item)
              (when linked-block
                (str "-" (:block/uuid original-block))))))))

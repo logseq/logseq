@@ -20,7 +20,7 @@
     ;; File graph only attributes. Can these be removed if this is only called in db graphs?
     :block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker
 
-    :block.temp/ast-title :block.temp/top? :block.temp/bottom? :block.temp/search?
+    :block.temp/ast-title :block.temp/search?
     :block.temp/fully-loaded? :block.temp/ast-body
 
     :db/valueType :db/cardinality :db/ident :db/index
