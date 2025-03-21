@@ -347,7 +347,7 @@
         uuid-block-pages
         (when (seq uuid-block-ents-to-export)
           (->> uuid-block-ents-to-export
-               (group-by :block/parent)
+               (group-by :block/page)
                ;; Remove page-entity because it's already been built for content-ref-ents
                ;; and it's unlikely and complex to handle for pvalue-uuids
                ((fn [m] (dissoc m page-entity)))
@@ -443,7 +443,7 @@
         ;; Similar to build-uuid-block-export
         pages-to-blocks
         (->> node-blocks
-             (group-by :block/parent)
+             (group-by :block/page)
              (map (fn [[parent-page-ent blocks]]
                     (merge (build-blocks-export db
                                                 (sort-by :block/order blocks)
