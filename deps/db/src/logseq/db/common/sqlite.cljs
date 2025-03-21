@@ -205,7 +205,7 @@
   [db]
   (let [today (date-time-util/date->int (js/Date.))]
     (->> (d/datoms db :avet :block/journal-day)
-         reverse
+         rseq
          (keep (fn [d]
                  (and (<= (:v d) today)
                       (let [e (d/entity db (:e d))]
@@ -257,7 +257,7 @@
 (defn get-recent-updated-pages
   [db]
   (->> (d/datoms db :avet :block/updated-at)
-       (reverse)
+       (rseq)
        (keep (fn [datom]
                (let [e (d/entity db (:e datom))]
                  (when (and (common-entity-util/page? e) (not (entity-util/hidden? e)))
