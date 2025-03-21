@@ -72,7 +72,7 @@
                  (re-find #"(?i)^/[a-zA-Z]:" path))
              (callback #js {:path path})
 
-             ;; assume winwdows unc path
+             ;; assume windows unc path
              utils/win32?
              (do (logger/debug :resolve-assets-url url)
                  (callback #js {:path (str "//" path)}))

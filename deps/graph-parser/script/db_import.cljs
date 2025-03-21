@@ -125,6 +125,17 @@
       (p/let [_ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
         {:import-state (:import-state doc-options)}))))
 
+(defn- get-dir-and-db-name
+  "Gets dir and db name for use with open-db! Works for relative and absolute paths and
+   defaults to ~/logseq/graphs/ when no '/' present in name"
+  [graph-dir]
+  (if (string/includes? graph-dir "/")
+    (let [resolve-path' #(if (node-path/isAbsolute %) %
+                             ;; $ORIGINAL_PWD used by bb tasks to correct current dir
+                             (node-path/join (or js/process.env.ORIGINAL_PWD ".") %))]
+      ((juxt node-path/dirname node-path/basename) (resolve-path' graph-dir)))
+    [(node-path/join (os/homedir) "logseq" "graphs") graph-dir]))
+
 (def spec
   "Options spec"
   {:help {:alias :h
@@ -160,10 +171,7 @@
             (println (str "Usage: $0 FILE-GRAPH DB-GRAPH [OPTIONS]\nOptions:\n"
                           (cli/format-opts {:spec spec})))
             (js/process.exit 1))
-        [dir db-name] (if (string/includes? db-graph-dir "/")
-                        (let [graph-dir' (resolve-path db-graph-dir)]
-                          ((juxt node-path/dirname node-path/basename) graph-dir'))
-                        [(node-path/join (os/homedir) "logseq" "graphs") db-graph-dir])
+        [dir db-name] (get-dir-and-db-name db-graph-dir)
         file-graph' (resolve-path file-graph)
         conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
         directory? (.isDirectory (fs/statSync file-graph'))

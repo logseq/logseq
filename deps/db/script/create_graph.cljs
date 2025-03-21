@@ -20,6 +20,17 @@
     path
     (node-path/join (or js/process.env.ORIGINAL_PWD ".") path)))
 
+(defn- get-dir-and-db-name
+  "Gets dir and db name for use with open-db! Works for relative and absolute paths and
+   defaults to ~/logseq/graphs/ when no '/' present in name"
+  [graph-dir]
+  (if (string/includes? graph-dir "/")
+    (let [resolve-path' #(if (node-path/isAbsolute %) %
+                             ;; $ORIGINAL_PWD used by bb tasks to correct current dir
+                             (node-path/join (or js/process.env.ORIGINAL_PWD ".") %))]
+      ((juxt node-path/dirname node-path/basename) (resolve-path' graph-dir)))
+    [(node-path/join (os/homedir) "logseq" "graphs") graph-dir]))
+
 (def spec
   "Options spec"
   {:help {:alias :h
@@ -34,9 +45,7 @@
             (println (str "Usage: $0 GRAPH-NAME EDN-PATH [OPTIONS]\nOptions:\n"
                           (cli/format-opts {:spec spec})))
             (js/process.exit 1))
-        [dir db-name] (if (string/includes? graph-dir "/")
-                        ((juxt node-path/dirname node-path/basename) graph-dir)
-                        [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
+        [dir db-name] (get-dir-and-db-name graph-dir)
         sqlite-build-edn (merge {:auto-create-ontology? true}
                                 (-> (resolve-path edn-path) fs/readFileSync str edn/read-string))
         conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath) :import-type :cli/create-graph})

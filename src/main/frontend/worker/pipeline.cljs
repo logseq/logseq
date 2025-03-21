@@ -7,6 +7,7 @@
             [frontend.worker.react :as worker-react]
             [frontend.worker.state :as worker-state]
             [logseq.common.defkeywords :refer [defkeywords]]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -49,6 +50,8 @@
 (defn- insert-tag-templates
   [repo conn tx-report]
   (let [db (:db-after tx-report)
+        journal-id (:db/id (d/entity db :logseq.class/Journal))
+        journal-template? (some (fn [d] (and (:added d) (= (:a d) :block/tags) (= (:v d) journal-id))) (:tx-data tx-report))
         tx-data (some->> (:tx-data tx-report)
                          (filter (fn [d] (and (= (:a d) :block/tags) (:added d))))
                          (group-by :e)
@@ -56,9 +59,12 @@
                                    (let [object (d/entity db e)
                                          template-blocks (->> (mapcat (fn [id]
                                                                         (let [tag (d/entity db id)
+                                                                              journal? (= journal-id id)
                                                                               parents (ldb/get-page-parents tag {:node-class? true})
                                                                               templates (mapcat :logseq.property/_template-applied-to (conj parents tag))]
-                                                                          templates))
+                                                                          (cond->> templates
+                                                                            journal?
+                                                                            (map (fn [t] (assoc t :journal tag))))))
                                                                       (set (map :v datoms)))
                                                               distinct
                                                               (sort-by :block/created-at)
@@ -68,10 +74,17 @@
                                                                               blocks (->>
                                                                                       (cons (assoc (first template-blocks) :logseq.property/used-template (:db/id template))
                                                                                             (rest template-blocks))
-                                                                                      (map (fn [e] (assoc (into {} e) :db/id (:db/id e)))))]
+                                                                                      (map (fn [e]
+                                                                                             (cond->
+                                                                                              (assoc (into {} e) :db/id (:db/id e))
+                                                                                               (:journal template)
+                                                                                               (assoc :block/uuid
+                                                                                                      (common-uuid/gen-journal-template-block (:block/uuid (:journal template))
+                                                                                                                                              (:block/uuid e)))))))]
                                                                           blocks))))]
                                      (when (seq template-blocks)
-                                       (let [result (outliner-core/insert-blocks repo conn template-blocks object {:sibling? false})]
+                                       (let [result (outliner-core/insert-blocks repo conn template-blocks object {:sibling? false
+                                                                                                                   :keep-uuid? journal-template?})]
                                          (:tx-data result)))))))]
     tx-data))
 
