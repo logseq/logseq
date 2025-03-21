@@ -217,7 +217,8 @@
                         rum.core/defcs hooks.rum/defcs
                         clojure.string/join hooks.path-invalid-construct/string-join
                         clojure.string/replace hooks.regex-checks/double-escaped-regex
-                        logseq.common.defkeywords/defkeywords hooks.defkeywords/defkeywords}}
+                        logseq.common.defkeywords/defkeywords hooks.defkeywords/defkeywords
+                        frontend.common.thread-api/def-thread-api hooks.def-thread-api/def-thread-api}}
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur
@@ -233,7 +234,8 @@
            frontend.test.helper/deftest-async clojure.test/deftest
            frontend.worker.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
            frontend.react/defc clojure.core/defn
-           logseq.common.defkeywords/defkeyword cljs.spec.alpha/def}
+           logseq.common.defkeywords/defkeyword cljs.spec.alpha/def
+           frontend.common.thread-api/defkeyword cljs.spec.alpha/def}
  :skip-comments true
  :output {:progress true
           :exclude-files ["src/test/docs-0.10.9/"]}}
