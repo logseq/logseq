@@ -908,20 +908,18 @@
            (let [args (:rum/args state)
                  page (last args)
                  *result (atom nil)
-                 page-name (or (:block/uuid page)
-                               (when-let [s (:block/name page)]
-                                 (string/trim s)))
-                 page-entity (if (e/entity? page) page (db/get-page page-name))]
+                 page-id-or-name (or (:db/id page)
+                                     (:block/uuid page)
+                                     (when-let [s (:block/name page)]
+                                       (string/trim s)))
+                 page-entity (if (e/entity? page) page (db/get-page page-id-or-name))]
              (cond
                page-entity
                (reset! *result page-entity)
                (:skip-async-load? (first args))
                (reset! *result page)
                :else
-               (p/let [query-result (db-async/<get-block (state/get-current-repo) page-name {:children? false})
-                       result (if (e/entity? query-result)
-                                query-result
-                                (:block query-result))]
+               (p/let [result (db-async/<get-block (state/get-current-repo) page-id-or-name {:children? false :block-only? true})]
                  (reset! *result result)))
 
              (assoc state :*entity *result)))}
@@ -975,7 +973,7 @@
 (rum/defc page-cp
   [config page]
   (rum/with-key (page-cp-inner config page)
-    (or (str (:block/uuid page)) (:block/name page))))
+    (or (str (:db/id page)) (str (:block/uuid page)) (:block/name page))))
 
 (rum/defc asset-reference
   [config title path]

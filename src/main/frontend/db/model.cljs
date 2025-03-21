@@ -483,9 +483,9 @@ independent of format as format specific heading characters are stripped"
        first))))
 
 (defn get-page
-  [page-name-or-uuid]
-  (when page-name-or-uuid
-    (ldb/get-page (conn/get-db) page-name-or-uuid)))
+  [page-id-name-or-uuid]
+  (when page-id-name-or-uuid
+    (ldb/get-page (conn/get-db) page-id-name-or-uuid)))
 
 (defn get-case-page
   [page-name-or-uuid]

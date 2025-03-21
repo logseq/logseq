@@ -327,7 +327,7 @@
                             (map
                              (fn [[by-value entities]]
                                [(if (de/entity? by-value)
-                                  (select-keys by-value [:db/id :block/title :logseq.property/value :logseq.property/icon])
+                                  (select-keys by-value [:db/id :block/uuid :block/title :logseq.property/value :logseq.property/icon :block/tags])
                                   by-value)
                                 (->> entities
                                      ldb/sort-by-order

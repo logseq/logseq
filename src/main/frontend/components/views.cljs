@@ -1141,10 +1141,9 @@
            (shui/table-footer (add-new-row table)))]]))))
 
 (rum/defc list-view < rum/static
-  [{:keys [config view-feature-type]} view-entity result]
+  [{:keys [config]} result]
   (for [id result]
-    [:div
-     (block-container {} {:db/id id} {})]))
+    (block-container config {:db/id id} {})))
 
 (rum/defc gallery-card-item
   [table view-entity block config]
@@ -1278,7 +1277,7 @@
   (let [option (assoc option* :view-entity view-entity)]
     (case display-type
       :logseq.property.view/type.list
-      (list-view option view-entity (:rows table))
+      (list-view option (:rows table))
 
       :logseq.property.view/type.gallery
       (gallery-view option table view-entity (:rows table) *scroller-ref)
@@ -1535,12 +1534,18 @@
                                                (db-property/property-value-content %)
                                                (str %))]
                 (ui/foldable
-                 [:div.text-sm.font-medium.ml-2
-                  (if (some? value)
+                 [:div
+                  (cond
+                    (= :block/page (:db/ident group-by-property))
+                    (let [c (state/get-component :block/page-cp)]
+                      (c {:disable-preview? true} value))
+
+                    (some? value)
                     (let [icon (pu/get-block-property-value value :logseq.property/icon)]
                       [:div.flex.flex-row.gap-1.items-center
                        (when icon (icon-component/icon icon {:color? true}))
                        (readable-property-value value)])
+                    :else
                     (str "No " (:block/title group-by-property)))]
                  [:div.mt-2
                   (view-cp view-entity (assoc table' :rows group) option view-opts)]

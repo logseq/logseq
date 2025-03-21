@@ -232,12 +232,14 @@
 
 (defn get-page
   "Get a page given its unsanitized name"
-  [db page-name-or-uuid]
+  [db page-id-name-or-uuid]
   (when db
-    (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
-                    (parse-uuid page-name-or-uuid))]
-      (d/entity db [:block/uuid id])
-      (d/entity db (get-first-page-by-name db (name page-name-or-uuid))))))
+    (if (number? page-id-name-or-uuid)
+      (d/entity db page-id-name-or-uuid)
+      (if-let [id (if (uuid? page-id-name-or-uuid) page-id-name-or-uuid
+                      (parse-uuid page-id-name-or-uuid))]
+        (d/entity db [:block/uuid id])
+        (d/entity db (get-first-page-by-name db (name page-id-name-or-uuid)))))))
 
 (defn get-case-page
   "Case sensitive version of get-page. For use with DB graphs"
