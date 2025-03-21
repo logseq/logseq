@@ -1,6 +1,7 @@
 (ns frontend.worker.db-metadata
   "Fns to read/write metadata.edn file for db-based."
-  (:require [frontend.worker.util :as worker-util]
+  (:require [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.worker.util :as worker-util]
             [promesa.core :as p]))
 
 (defn <store
@@ -11,3 +12,7 @@
           writable (.createWritable file-handle)
           _ (.write writable metadata-str)]
     (.close writable)))
+
+(def-thread-api :db-metadata/store
+  [repo metadata-str]
+  (<store repo metadata-str))

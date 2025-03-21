@@ -1,7 +1,9 @@
 (ns frontend.worker.crypt
   "Fns to en/decrypt some block attrs"
   (:require [datascript.core :as d]
+            [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.state :as worker-state]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defonce ^:private encoder (new js/TextEncoder "utf-8"))
@@ -122,3 +124,14 @@
     (assert (some? conn) repo)
     (let [aes-key-datom (first (d/datoms @conn :avet :aes-key-jwk))]
       {:aes-key-jwk (:v aes-key-datom)})))
+
+(defn- with-write-transit-str
+  [task]
+  (p/chain
+   (js/Promise. task)
+   ldb/write-transit-str))
+
+(def-thread-api :rtc/get-graph-keys
+  [repo]
+  (with-write-transit-str
+    (get-graph-keys-jwk repo)))
