@@ -30,7 +30,7 @@ import {
   IUserOffHook,
   IGitProxy,
   IUIProxy,
-  UserProxyTags,
+  UserProxyNSTags,
   BlockUUID,
   BlockEntity,
   IDatom,
@@ -734,7 +734,7 @@ export class LSPluginUser
   /**
    * @internal
    */
-  _makeUserProxy(target: any, tag?: UserProxyTags) {
+  _makeUserProxy(target: any, nstag?: UserProxyNSTags) {
     const that = this
     const caller = this.caller
 
@@ -744,13 +744,13 @@ export class LSPluginUser
 
         return function (this: any, ...args: any) {
           if (origMethod) {
-            if (args?.length !== 0) args.concat(tag)
+            if (args?.length !== 0) args.concat(nstag)
             const ret = origMethod.apply(that, args)
             if (ret !== PROXY_CONTINUE) return ret
           }
 
           // Handle hook
-          if (tag) {
+          if (nstag) {
             const hookMatcher = propKey.toString().match(/^(once|off|on)/i)
 
             if (hookMatcher != null) {
@@ -771,7 +771,7 @@ export class LSPluginUser
                 opts = args[2]
               }
 
-              type = `hook:${tag}:${safeSnakeCase(type)}`
+              type = `hook:${nstag}:${safeSnakeCase(type)}`
 
               caller[f](type, handler)
 
@@ -796,13 +796,13 @@ export class LSPluginUser
           let method = propKey as string
 
           // TODO: refactor api call with the explicit tag
-          if ((['git', 'ui', 'assets', 'utils'] as UserProxyTags[]).includes(tag)) {
-            method = tag + '_' + method
+          if ((['git', 'ui', 'assets', 'utils'] as UserProxyNSTags[]).includes(nstag)) {
+            method = nstag + '_' + method
           }
 
           // Call host
           return caller.callAsync(`api:call`, {
-            tag,
+            tag: nstag,
             method,
             args: args,
           })
