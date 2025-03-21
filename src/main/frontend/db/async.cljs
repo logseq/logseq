@@ -113,7 +113,7 @@
 
 (defonce *block-cache (atom (cache/lru-cache-factory {} :threshold 1000)))
 (defn <get-block
-  [graph id-uuid-or-name & {:keys [children? skip-transact? skip-refresh? _properties]
+  [graph id-uuid-or-name & {:keys [children? skip-transact? skip-refresh? block-only? _properties]
                             :or {children? true}
                             :as opts}]
   (let [name' (str id-uuid-or-name)
@@ -157,8 +157,8 @@
               (when-not skip-refresh?
                 (react/refresh-affected-queries! graph affected-keys))))
 
-          (if children?
-            block
+          (if (or children? block-only?)
+            (or (db/entity (:db/id block)) block)
             result'))))))
 
 (defn <get-block-parents
