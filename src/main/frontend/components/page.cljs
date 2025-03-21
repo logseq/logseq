@@ -748,7 +748,7 @@
                  page-uuid? (util/uuid-string? page-name')
                  *loading? (atom true)
                  page (db/get-page page-name')]
-             (when page (reset! *loading? false))
+             (when (:block.temp/fully-loaded? page) (reset! *loading? false))
              (p/let [page-block (db-async/<get-block (state/get-current-repo) page-name')]
                (reset! *loading? false)
                (when page-block
@@ -763,8 +763,9 @@
                    (state/set-state! :editor/virtualized-scroll-fn nil)
                    state)}
   [state option]
-  (when-not (rum/react (::loading? state))
-    (page-inner option)))
+  (let [loading? (rum/react (::loading? state))]
+    (when-not loading?
+      (page-inner option))))
 
 (rum/defcs page-cp
   [state option]

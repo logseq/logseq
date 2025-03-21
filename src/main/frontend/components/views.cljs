@@ -1142,21 +1142,25 @@
 
 (rum/defc list-view < rum/static
   [{:keys [config view-feature-type]} view-entity result]
-  (when-let [->hiccup (state/get-component :block/->hiccup)]
-    (let [group-by-page? (not (every? db/page? result))
-          result (if group-by-page?
-                   (-> (group-by :block/page result)
-                       (update-vals ldb/sort-by-order))
-                   result)
-          config' (cond-> (assoc config
-                                 :current-block (:db/id view-entity)
-                                 :query (:block/title view-entity)
-                                 :breadcrumb-show? (if group-by-page? true false)
-                                 :group-by-page? group-by-page?
-                                 :ref? true)
-                    (= view-feature-type :query-result)
-                    (assoc :query (:block/title view-entity)))]
-      (->hiccup result config'))))
+  (for [id result]
+    [:div
+     (block-container {} {:db/id id} {})])
+  ;; (when-let [->hiccup (state/get-component :block/->hiccup)]
+  ;;   (let [group-by-page? (not (every? db/page? result))
+  ;;         result (if group-by-page?
+  ;;                  (-> (group-by :block/page result)
+  ;;                      (update-vals ldb/sort-by-order))
+  ;;                  result)
+  ;;         config' (cond-> (assoc config
+  ;;                                :current-block (:db/id view-entity)
+  ;;                                :query (:block/title view-entity)
+  ;;                                :breadcrumb-show? (if group-by-page? true false)
+  ;;                                :group-by-page? group-by-page?
+  ;;                                :ref? true)
+  ;;                   (= view-feature-type :query-result)
+  ;;                   (assoc :query (:block/title view-entity)))]
+  ;;     (->hiccup result config')))
+  )
 
 (rum/defc gallery-card-item
   [table view-entity block config]

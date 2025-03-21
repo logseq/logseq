@@ -117,6 +117,7 @@
                             :or {children? true}
                             :as opts}]
   (let [name' (str id-uuid-or-name)
+        opts (assoc opts :children? children?)
         cache-key [id-uuid-or-name opts]
         cached-response (when (cache/has? @*block-cache cache-key)
                           (reset! *block-cache (cache/hit @*block-cache cache-key))

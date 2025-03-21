@@ -3389,13 +3389,7 @@
 
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
   {:init (fn [state]
-           (let [*ref (atom nil)
-                 args (:rum/args state)
-                 [_state _ config block] args
-                 block-id (:db/id block)
-                 repo (state/get-current-repo)]
-             (when-not (or (:table-view? config) (:property-block? config))
-               (db-async/<get-block repo block-id :children? true))
+           (let [*ref (atom nil)]
              (assoc state ::ref *ref)))}
   [state container-state repo config* block {:keys [navigating-block navigated?]}]
   (let [*ref (::ref state)
@@ -3633,7 +3627,7 @@
                                    (select-keys (first (:rum/args new-state)) config-compare-keys)))]
     (boolean result)))
 
-(rum/defcs block-container < rum/reactive db-mixins/query
+(rum/defcs loaded-block-container < rum/reactive db-mixins/query
   (rum/local false ::show-block-left-menu?)
   (rum/local false ::show-block-right-menu?)
   {:should-update config-block-should-update?}
@@ -3690,6 +3684,18 @@
               (:container-id config)
               "-"
               (:block/uuid block)))))))
+
+(rum/defc block-container
+  [config block*]
+  (let [[block set-block!] (hooks/use-state (some-> (:db/id block*) db/entity))]
+    (when-not (:page-title? config)
+      (hooks/use-effect!
+       (fn []
+         (p/do!
+          (db-async/<get-block (state/get-current-repo) (:db/id block*))
+          (set-block! (some-> (:db/id block*) db/entity))))
+       []))
+    (loaded-block-container config block)))
 
 (defn divide-lists
   [[f & l]]
