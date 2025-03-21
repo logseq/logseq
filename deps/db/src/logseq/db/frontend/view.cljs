@@ -291,23 +291,48 @@
                      (let [view-for (:logseq.property/view-for view)]
                        (:db/ident view-for))
                      nil)
-        filters (:logseq.property.table/filters view)
-        data (if-let [cache (get-in @*view-cache [repo view-id])]
-               cache
-               (let [entities (get-entities db view feat-type index-attr)
-                     sorting (let [sorting* (:logseq.property.table/sorting view)]
-                               (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
-                                 [{:id :block/updated-at, :asc? false}]
-                                 sorting*))
-
-                     result (->>
-                                  ;; filter
-                             (cond->> entities
-                               (seq filters)
-                               (filter (fn [row] (row-matched? db row filters))))
-                                   ;; sort
-                             (sort-rows db sorting))]
-                 (swap! *view-cache assoc-in [repo view-id] result)
-                 result))]
-    {:count (count data)
-     :data (mapv :db/id data)}))
+        group-by-property (:logseq.property.view/group-by-property view)
+        group-by-property-ident (:db/ident group-by-property)
+        group-by-closed-values? (some? (:property/closed-values group-by-property))
+        ref-property? (= (:db/valueType group-by-property) :db.type/ref)
+        filters (:logseq.property.table/filters view)]
+    (or (get-in @*view-cache [repo view-id])
+        (let [entities (get-entities db view feat-type index-attr)
+              sorting (let [sorting* (:logseq.property.table/sorting view)]
+                        (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
+                          [{:id :block/updated-at, :asc? false}]
+                          sorting*))
+              filtered-entities (if (seq filters)
+                                  (filter (fn [row] (row-matched? db row filters)) entities)
+                                  entities)
+              group-by-page? (= group-by-property-ident :block/page)
+              result (if group-by-property
+                       (->> filtered-entities
+                            (group-by group-by-property-ident)
+                            (seq)
+                            (sort-by (fn [[by-value _]]
+                                       (cond
+                                         group-by-page?
+                                         (:block/updated-at by-value)
+                                         group-by-closed-values?
+                                         (:block/order by-value)
+                                         ref-property?
+                                         (db-property/property-value-content by-value)
+                                         :else
+                                         by-value))
+                                     (if group-by-page? #(compare %2 %1) compare)))
+                       (sort-rows db sorting filtered-entities))
+              data {:count (count filtered-entities)
+                    :data (if group-by-property
+                            (map
+                             (fn [[by-value entities]]
+                               [(if (de/entity? by-value)
+                                  (select-keys by-value [:db/id :block/title :logseq.property/value :logseq.property/icon])
+                                  by-value)
+                                (->> entities
+                                     ldb/sort-by-order
+                                     (map :db/id))])
+                             result)
+                            (mapv :db/id result))}]
+          (swap! *view-cache assoc-in [repo view-id] data)
+          data))))
