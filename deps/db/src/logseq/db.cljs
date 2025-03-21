@@ -601,3 +601,5 @@
     nil))
 
 (def get-recent-updated-pages sqlite-common-db/get-recent-updated-pages)
+
+(def get-latest-journals sqlite-common-db/get-latest-journals)

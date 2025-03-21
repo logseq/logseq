@@ -60,8 +60,6 @@
       :draw?                   false
       :db/restoring?           nil
 
-      :journals-length                       3
-
       :search/q                              ""
       :search/mode                           nil ; nil -> global mode, :graph -> add graph filter, etc.
       :search/args                           nil
@@ -1499,11 +1497,6 @@ Similar to re-frame subscriptions"
 (defn clear-file-component!
   []
   (set-state! :ui/file-component nil))
-
-(defn set-journals-length!
-  [value]
-  (when value
-    (set-state! :journals-length value)))
 
 (defn save-scroll-position!
   ([value]

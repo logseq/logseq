@@ -156,16 +156,6 @@
               (outliner-op/save-block! (assoc block :block/link page-block-db-id)))))
          (state/update-favorites-updated!))))))
 
-(defn has-more-journals?
-  []
-  (let [current-length (:journals-length @state/state)]
-    (< current-length (db/get-journals-length))))
-
-(defn load-more-journals!
-  []
-  (when (has-more-journals?)
-    (state/set-journals-length! (+ (:journals-length @state/state) 7))))
-
 (defn update-public-attribute!
   [repo page value]
   (if (config/db-based-graph? repo)

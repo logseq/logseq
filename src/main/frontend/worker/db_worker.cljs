@@ -912,7 +912,7 @@
   (get-view-data
    [_this repo view-id opts-str]
    (let [conn (worker-state/get-datascript-conn repo)
-         data (db-view/get-view-data repo @conn view-id)]
+         data (db-view/get-view-data repo @conn view-id (ldb/read-transit-str opts-str))]
      (ldb/write-transit-str data)))
 
   (dangerousRemoveAllDbs

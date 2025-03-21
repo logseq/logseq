@@ -1577,9 +1577,9 @@
                               (::scroller-ref state))
       (str "view-" (:db/id view-entity')))))
 
-(defn- <load-view-data
-  [view]
-  (p/let [data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view))]
+(defn <load-view-data
+  [view opts]
+  (p/let [data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view) (ldb/write-transit-str opts))]
     (ldb/read-transit-str data-str)))
 
 (rum/defc view < rum/static
@@ -1607,7 +1607,7 @@
                                      new-view)))]
             (if (and current-view
                      (empty? (:data option)))
-              (p/let [{:keys [count data]} (<load-view-data current-view)]
+              (p/let [{:keys [count data]} (<load-view-data current-view nil)]
                 (set-data! data)
                 (set-count! count)
                 (set-loading! false))

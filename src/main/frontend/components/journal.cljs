@@ -1,50 +1,34 @@
 (ns frontend.components.journal
   (:require [frontend.components.page :as page]
-            [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.handler.page :as page-handler]
-            [frontend.mixins :as mixins]
-            [frontend.state :as state]
+            [frontend.components.views :as views]
+            [frontend.hooks :as hooks]
+            [frontend.ui :as ui]
             [frontend.util :as util]
-            [goog.functions :refer [debounce]]
+            [goog.dom :as gdom]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
-(rum/defc journal-cp < rum/reactive
-  [page]
-  [:div.journal-item.content {:key (:db/id page)}
-   (let [repo (state/sub :git/current-repo)]
-     (page/page-cp {:repo repo
-                    :page-name (str (:block/uuid page))}))])
+(rum/defc journal-cp < rum/static
+  [id]
+  [:div.journal-item.content
+   (page/page-cp {:db/id id})])
 
-(defn on-scroll
-  [node {:keys [threshold on-load]
-         :or {threshold 500}}]
-  (when (util/bottom-reached? node threshold)
-    (on-load)))
-
-(defn attach-listeners
-  "Attach scroll and resize listeners."
-  [state]
-  (let [node (js/document.getElementById "main-content-container")
-        opts {:on-load page-handler/load-more-journals!}
-        debounced-on-scroll (debounce #(on-scroll node opts) 100)]
-    (mixins/listen state node :scroll debounced-on-scroll)))
-
-(rum/defc journals < rum/reactive
-  (mixins/event-mixin attach-listeners)
-  {:will-unmount (fn [state]
-                   (state/set-journals-length! 3)
-                   state)}
-  [latest-journals]
-  (when (seq latest-journals)
-    [:div#journals
-     (for [journal latest-journals]
-       (rum/with-key
-         (journal-cp journal)
-         (str "journal-" (:db/id journal))))]))
-
-(rum/defc all-journals < rum/reactive db-mixins/query
+(rum/defc all-journals
   []
-  (let [journals-length (state/sub :journals-length)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
-    (journals latest-journals)))
+  (let [[data set-data!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
+         (set-data! (remove nil? data))))
+     [])
+    [:div#journals
+     (ui/virtualized-list
+      {:custom-scroll-parent (gdom/getElement "main-content-container")
+       :increase-viewport-by {:top 300 :bottom 300}
+       :compute-item-key (fn [idx]
+                           (let [id (util/nth-safe data idx)]
+                             (str "journal-" id)))
+       :total-count (count data)
+       :item-content (fn [idx]
+                       (let [id (util/nth-safe data idx)]
+                         (journal-cp id)))})]))

@@ -202,22 +202,15 @@
                                        block)))))))))))))
 
 (defn get-latest-journals
-  [db n]
+  [db]
   (let [today (date-time-util/date->int (js/Date.))]
-    (->>
-     (d/q '[:find [(pull ?page [:db/id :block/journal-day]) ...]
-            :in $ ?today
-            :where
-            [?page :block/name ?page-name]
-            [?page :block/journal-day ?journal-day]
-            [(<= ?journal-day ?today)]]
-          db
-          today)
-     (sort-by :block/journal-day)
-     (reverse)
-     (take n)
-     (mapcat (fn [p]
-               (d/datoms db :eavt (:db/id p)))))))
+    (->> (d/datoms db :avet :block/journal-day)
+         reverse
+         (keep (fn [d]
+                 (and (<= (:v d) today)
+                      (let [e (d/entity db (:e d))]
+                        (when (and (common-entity-util/journal? e) (:db/id e))
+                          e))))))))
 
 (defn get-page->refs-count
   [db]
@@ -290,7 +283,6 @@
                         :logseq.property/empty-placeholder])
         favorites (when db-graph? (get-favorites db))
         views (when db-graph? (get-views-data db))
-        latest-journals (get-latest-journals db 1)
         all-files (get-all-files db)
         structured-datoms (when db-graph?
                             (get-structured-datoms db))
@@ -302,7 +294,6 @@
                       favorites
                       recent-updated-pages
                       views
-                      latest-journals
                       all-files))]
     {:schema schema
      :initial-data data}))

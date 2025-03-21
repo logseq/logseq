@@ -707,8 +707,7 @@
   (let [default-home (get-default-home-if-valid)
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
-        journals-length (state/sub :journals-length)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
+        latest-journals (db/get-latest-journals (state/get-current-repo) 1)
         graph-parsing-state (state/sub [:graph/parsing-state current-repo])]
     (cond
       (or
@@ -736,7 +735,7 @@
          (ui/loading (t :loading-files))
 
          (seq latest-journals)
-         (journal/journals latest-journals)
+         (journal/all-journals)
 
          ;; FIXME: why will this happen?
          :else
