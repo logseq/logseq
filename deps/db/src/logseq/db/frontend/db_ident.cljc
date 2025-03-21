@@ -68,7 +68,7 @@
          :cljs (exists? js/process)
          :default false)
     ;; So that we don't have to change :user.{property|class} in our tests
-    (keyword user-namespace (-> name-string (string/replace #"/|\s+" "-") (string/replace-first #"^(\d)" "NUM-$1")))
+    (keyword user-namespace (-> name-string (string/replace #"[/()]|\s+" "-") (string/replace-first #"^(\d)" "NUM-$1")))
     (keyword user-namespace
              (str
               (->> (filter #(re-find #"[0-9a-zA-Z-]{1}" %) (seq name-string)) (apply str))

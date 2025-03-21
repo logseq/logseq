@@ -12,6 +12,7 @@
             [frontend.fs :as fs]
             [frontend.handler.file-based.import :as file-import-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
+            [frontend.handler.db-based.import :as db-import-handler]
             [frontend.handler.import :as import-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
@@ -70,7 +71,7 @@
                           :error))))
 
 (defn- lsq-import-handler
-  [e & {:keys [sqlite? debug-transit? graph-name]}]
+  [e & {:keys [sqlite? debug-transit? graph-name db-edn?]}]
   (let [file      (first (array-seq (.-files (.-target e))))
         file-name (some-> (gobj/get file "name")
                           (string/lower-case))
@@ -91,7 +92,7 @@
             (set! (.-onload reader)
                   (fn []
                     (let [buffer (.-result ^js reader)]
-                      (import-handler/import-from-sqlite-db! buffer graph-name finished-cb)
+                      (db-import-handler/import-from-sqlite-db! buffer graph-name finished-cb)
                       (shui/dialog-close!))))
             (set! (.-onerror reader) (fn [e] (js/console.error e)))
             (set! (.-onabort reader) (fn [e]
@@ -99,7 +100,7 @@
                                        (js/console.error e)))
             (.readAsArrayBuffer reader file))))
 
-      debug-transit?
+      (or debug-transit? db-edn?)
       (let [graph-name (string/trim graph-name)]
         (cond
           (string/blank? graph-name)
@@ -112,7 +113,9 @@
           (do
             (state/set-state! :graph/importing :logseq)
             (let [reader (js/FileReader.)
-                  import-f import-handler/import-from-debug-transit!]
+                  import-f (if db-edn?
+                             db-import-handler/import-from-edn-file!
+                             db-import-handler/import-from-debug-transit!)]
               (set! (.-onload reader)
                     (fn [e]
                       (let [text (.. e -target -result)]
@@ -121,7 +124,9 @@
                          text
                          #(do
                             (state/set-state! :graph/importing nil)
-                            (finished-cb))))))
+                            (finished-cb)
+                            ;; graph input not closing
+                            (shui/dialog-close-all!))))))
               (.readAsText reader file)))))
 
       (or edn? json?)
@@ -449,7 +454,7 @@
    [importing?])
   [:<>])
 
-(rum/defc importer < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo importer < rum/reactive
   [{:keys [query-params]}]
   (let [support-file-based? (config/local-file-based-graph? (state/get-current-repo))
         importing? (state/sub :graph/importing)]
@@ -497,8 +502,6 @@
              [:span.flex.flex-col
               [[:strong "Debug Transit"]
                [:small "Import debug transit file into a new DB graph"]]]
-             ;; Test form style changes
-             #_[:a.button {:on-click #(import-file-to-db-handler nil {:import-graph-fn js/alert})} "Open"]
              [:input.absolute.hidden
               {:id "import-debug-transit"
                :type "file"
@@ -506,11 +509,24 @@
                             (shui/dialog-open!
                              #(set-graph-name-dialog e {:debug-transit? true})))}]])
 
+          (when (or (util/electron?) util/web-platform?)
+            [:label.action-input.flex.items-center.mx-2.my-2
+             [:span.as-flex-center [:i (svg/logo 28)]]
+             [:span.flex.flex-col
+              [[:strong "EDN to DB graph"]
+               [:small "Import a DB graph's EDN export into a new DB graph"]]]
+             [:input.absolute.hidden
+              {:id "import-db-edn"
+               :type "file"
+               :on-change (fn [e]
+                            (shui/dialog-open!
+                             #(set-graph-name-dialog e {:db-edn? true})))}]])
+
           (when (and (util/electron?) support-file-based?)
             [:label.action-input.flex.items-center.mx-2.my-2
              [:span.as-flex-center [:i (svg/logo 28)]]
              [:span.flex.flex-col
-              [[:strong "EDN / JSON"]
+              [[:strong "EDN / JSON to plain text graph"]
                [:small (t :on-boarding/importing-lsq-desc)]]]
              [:input.absolute.hidden
               {:id "import-lsq"

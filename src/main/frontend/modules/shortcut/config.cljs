@@ -627,7 +627,7 @@
 
    :misc/import-edn-data {:binding []
                           :db-graph? true
-                          :fn :frontend.handler.db-based.export/import-edn-data}
+                          :fn :frontend.handler.db-based.import/import-edn-data-dialog}
 
    :dev/validate-db   {:binding []
                        :db-graph? true
@@ -647,8 +647,9 @@
   [keyword-fn]
   (fn []
     (if-let [resolved-fn (some-> (namespace keyword-fn)
-                                 ;; export is reserved word
+                                 ;; handle reserved words
                                  (string/replace-first ".export" ".export$")
+                                 (string/replace-first ".import" ".import$")
                                  find-ns-obj
                                  (aget (munge (name keyword-fn))))]
       (resolved-fn)
