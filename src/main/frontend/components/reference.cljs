@@ -164,7 +164,7 @@
    (references* entity)))
 
 (rum/defcs unlinked-references-aux
-  [state page _n-ref]
+  [state page]
   (views/view
    {:view-parent page
     :view-feature-type :unlinked-references
@@ -172,17 +172,8 @@
     :foldable-options {:default-collapsed? true}}))
 
 (rum/defcs unlinked-references < rum/reactive
-  (rum/local nil ::n-ref)
   [state page]
-  (let [n-ref (get state ::n-ref)]
-    (when page
-      [:div.references.page-unlinked.mt-6.flex-1.flex-row.faster.fade-in
-       [:div.content.flex-1
-        (if (config/db-based-graph?)
-          (unlinked-references-aux page n-ref)
-          (ui/foldable
-           [:div.font-medium.opacity-50
-            (t :unlinked-references/reference-count @n-ref)]
-           (fn [] (unlinked-references-aux page n-ref))
-           {:default-collapsed? true
-            :title-trigger? true}))]])))
+  (when page
+    [:div.references.page-unlinked.mt-6.flex-1.flex-row.faster.fade-in
+     [:div.content.flex-1
+      (unlinked-references-aux page)]]))

@@ -579,28 +579,13 @@
                                    (:block/order (db/entity k)))) properties)]
       (ordered-properties block properties' opts))))
 
-(defn- async-load-classes!
-  [block]
-  (let [repo (state/get-current-repo)
-        classes (concat (:block/tags block) (outliner-property/get-classes-parents (:block/tags block)))]
-    (doseq [class classes]
-      (db-async/<get-block repo (:db/id class) :children? false))
-    (when (ldb/class? block)
-      (doseq [property (:logseq.property.class/properties block)]
-        (db-async/<get-block repo (:db/id property) :children? false)))
-    classes))
-
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [target-block (first (:rum/args state))
                  block (resolve-linked-block-if-exists target-block)]
              (assoc state
                     ::id (str (random-uuid))
-                    ::block block
-                    ::classes (async-load-classes! block))))
-   :will-remount (fn [state]
-                   (let [block (db/entity (:db/id (::block state)))]
-                     (assoc state ::classes (async-load-classes! block))))}
+                    ::block block)))}
   [state _target-block {:keys [sidebar-properties?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
@@ -609,8 +594,6 @@
                                             (and show?
                                                  (or (= mode :global)
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
-        _ (doseq [class (::classes state)]
-            (db/sub-block (:db/id class)))
         class? (ldb/class? block)
         properties (:block/properties block)
         remove-built-in-or-other-position-properties
