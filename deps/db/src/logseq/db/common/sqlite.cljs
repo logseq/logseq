@@ -205,6 +205,7 @@
   [db]
   (let [today (date-time-util/date->int (js/Date.))]
     (->> (d/datoms db :avet :block/journal-day)
+         vec
          rseq
          (keep (fn [d]
                  (and (<= (:v d) today)
@@ -257,7 +258,8 @@
 (defn get-recent-updated-pages
   [db]
   (->> (d/datoms db :avet :block/updated-at)
-       (rseq)
+       vec
+       rseq
        (keep (fn [datom]
                (let [e (d/entity db (:e datom))]
                  (when (and (common-entity-util/page? e) (not (entity-util/hidden? e)))
