@@ -1,9 +1,14 @@
 (ns logseq.db.sqlite.export-test
   (:require [cljs.pprint]
             [cljs.test :refer [deftest is testing]]
+            [clojure.walk :as walk]
             [datascript.core :as d]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.uuid :as common-uuid]
+            [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
@@ -35,6 +40,54 @@
     (sqlite-export/build-export @import-conn {:export-type :block
                                               :block-id (:db/id import-block)})))
 
+(defn- export-page-and-import-to-another-graph
+  "Exports given page from one graph/conn, imports it to a 2nd graph, validates
+  it and then exports the page from the 2nd graph"
+  [export-conn import-conn page-title]
+  (let [page (db-test/find-page-by-title @export-conn page-title)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (-> (sqlite-export/build-export @export-conn {:export-type :page :page-id (:db/id page)})
+            ;; ((fn [x] (cljs.pprint/pprint {:export x}) x))
+            (sqlite-export/build-import @import-conn {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! import-conn init-tx)
+        _ (d/transact! import-conn block-props-tx)
+        _ (validate-db @import-conn)
+        page2 (db-test/find-page-by-title @import-conn page-title)]
+    (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
+
+(defn- import-second-time-assertions [conn conn2 page-title original-data
+                                      & {:keys [transform-expected-blocks]
+                                         :or {transform-expected-blocks (fn [bs] (into bs bs))}}]
+  (let [page (db-test/find-page-by-title @conn2 page-title)
+        imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
+        updated-page (db-test/find-page-by-title @conn2 page-title)
+        expected-page-and-blocks
+        (update-in (:pages-and-blocks original-data) [0 :blocks] transform-expected-blocks)]
+
+    ;; Assume first page is one being imported for now
+    (is (= (first expected-page-and-blocks)
+           (first (:pages-and-blocks imported-page)))
+        "Blocks are appended to existing page")
+    (is (= (:block/created-at page) (:block/created-at updated-page))
+        "Existing page didn't get re-created")
+    (is (= (:block/updated-at page) (:block/updated-at updated-page))
+        "Existing page didn't get updated")))
+
+(defn- export-graph-and-import-to-another-graph
+  "Exports graph and imports it to a 2nd graph, validates it and then exports the 2nd graph"
+  [export-conn import-conn export-options]
+  (let [{:keys [init-tx block-props-tx misc-tx] :as _txs}
+        (-> (sqlite-export/build-export @export-conn {:export-type :graph :graph-options export-options})
+            (sqlite-export/build-import @import-conn {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! import-conn init-tx)
+        _ (d/transact! import-conn block-props-tx)
+        _ (d/transact! import-conn misc-tx)
+        _ (validate-db @import-conn)
+        imported-graph (sqlite-export/build-export @import-conn {:export-type :graph :graph-options export-options})]
+    imported-graph))
+
 (defn- expand-properties
   "Add default values to properties of an input export map to test against a
   db-based export map"
@@ -60,6 +113,8 @@
                  (not (:block/title m))
                  (assoc :block/title (name k)))]))
        (into {})))
+
+(def sort-pages-and-blocks sqlite-export/sort-pages-and-blocks)
 
 ;; Tests
 ;; =====
@@ -173,40 +228,6 @@
            (first (:pages-and-blocks imported-block)))
         "Imported page equals exported page of page ref")))
 
-(defn- export-page-and-import-to-another-graph
-  "Exports given page from one graph/conn, imports it to a 2nd graph, validates
-  it and then exports the page from the 2nd graph"
-  [export-conn import-conn page-title]
-  (let [page (db-test/find-page-by-title @export-conn page-title)
-        {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-export @export-conn {:export-type :page :page-id (:db/id page)})
-            ;; ((fn [x] (cljs.pprint/pprint {:export x}) x))
-            (sqlite-export/build-import @import-conn {}))
-        ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)
-        _ (validate-db @import-conn)
-        page2 (db-test/find-page-by-title @import-conn page-title)]
-    (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
-
-(defn- import-second-time-assertions [conn conn2 page-title original-data
-                                      & {:keys [transform-expected-blocks]
-                                         :or {transform-expected-blocks (fn [bs] (into bs bs))}}]
-  (let [page (db-test/find-page-by-title @conn2 page-title)
-        imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
-        updated-page (db-test/find-page-by-title @conn2 page-title)
-        expected-page-and-blocks
-        (update-in (:pages-and-blocks original-data) [0 :blocks] transform-expected-blocks)]
-
-    ;; Assume first page is one being imported for now
-    (is (= (first expected-page-and-blocks)
-           (first (:pages-and-blocks imported-page)))
-        "Blocks are appended to existing page")
-    (is (= (:block/created-at page) (:block/created-at updated-page))
-        "Existing page didn't get re-created")
-    (is (= (:block/updated-at page) (:block/updated-at updated-page))
-        "Existing page didn't get updated")))
-
 ;; Tests a variety of blocks including block children with new properties, blocks with users classes
 ;; and blocks with built-in properties and classes
 (deftest import-page-with-different-blocks
@@ -262,9 +283,11 @@
                        :build/property-classes [:user.class/NodeClass]}
                       :user.property/p2
                       {:logseq.property/type :default}}
+         :extract-content-refs? false
          :pages-and-blocks
          [{:page {:block/title "page1"}
            :blocks [{:block/title (str "page ref to " (page-ref/->page-ref page-uuid))}
+                    {:block/title (str "not a page ref `" (page-ref/->page-ref "foo") "`")}
                     {:block/title (str "block ref to " (page-ref/->page-ref block-uuid))}
                     {:block/title "ref in properties"
                      :build/properties {:user.property/p2 (str "pvalue ref to " (page-ref/->page-ref pvalue-page-uuid))}}
@@ -507,3 +530,190 @@
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-nodes)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
+
+(defn- build-original-graph-data
+  [& {:keys [exclude-namespaces?]}]
+  (let [internal-block-uuid (random-uuid)
+        favorited-uuid (random-uuid)
+        block-pvalue-uuid (random-uuid)
+        property-pvalue-uuid (random-uuid)
+        page-pvalue-uuid (random-uuid)
+        page-object-uuid (random-uuid)
+        page-alias-uuid (random-uuid)
+        closed-value-uuid (random-uuid)
+        property-uuid (random-uuid)
+        class-uuid (random-uuid)
+        journal-uuid (common-uuid/gen-uuid :journal-page-uuid 19650201)
+        original-data
+        {:properties
+         {:user.property/num {:logseq.property/type :number
+                              :block/uuid property-uuid
+                              :build/keep-uuid? true
+                              :build/properties (if exclude-namespaces?
+                                                  {}
+                                                  {:user.property/node #{[:block/uuid property-pvalue-uuid]}
+                                                   :logseq.property/default-value 42})}
+          :user.property/default-closed
+          {:logseq.property/type :default
+           :build/closed-values [{:value "joy" :uuid closed-value-uuid}
+                                 {:value "sad" :uuid (random-uuid)}]}
+          :user.property/checkbox {:logseq.property/type :checkbox}
+          :user.property/date {:logseq.property/type :date}
+          :user.property/url {:logseq.property/type :url
+                              :build/properties {:logseq.property/description "desc for url"}}
+          :user.property/node {:logseq.property/type :node
+                               :db/cardinality :db.cardinality/many
+                               :build/property-classes [:user.class/MyClass]}}
+         :classes
+         {:user.class/MyClass {:build/properties {:user.property/url "https://example.com/MyClass"}
+                               :block/uuid class-uuid
+                               :build/keep-uuid? true}
+          :user.class/MyClass2 {:build/class-parent :user.class/MyClass
+                                :build/properties {:logseq.property/description "tests child class"}}}
+         :pages-and-blocks
+         [{:page {:block/title "page1"
+                  :block/uuid favorited-uuid :build/keep-uuid? true
+                  :build/properties {:user.property/checkbox false
+                                     :user.property/node #{[:block/uuid page-pvalue-uuid]}}}
+           :blocks [{:block/title "b1"
+                     :build/properties {:user.property/num 1
+                                        :user.property/default-closed [:block/uuid closed-value-uuid]
+                                        :user.property/date [:block/uuid journal-uuid]}}
+                    {:block/title "b2" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}
+                    {:block/title "b3" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}]}
+          {:page {:block/title "page object"
+                  :block/uuid page-object-uuid
+                  :build/keep-uuid? true}
+           :blocks []}
+          {:page {:block/title "page2" :build/tags [:user.class/MyClass2]}
+           :blocks [{:block/title "hola" :block/uuid internal-block-uuid :build/keep-uuid? true}
+                    {:block/title "myclass object 1"
+                     :build/tags [:user.class/MyClass]
+                     :block/uuid block-pvalue-uuid
+                     :build/keep-uuid? true}
+                    (cond-> {:block/title "myclass object 2"
+                             :build/tags [:user.class/MyClass]}
+                      (not exclude-namespaces?)
+                      (merge {:block/uuid property-pvalue-uuid
+                              :build/keep-uuid? true}))
+                    {:block/title "myclass object 3"
+                     :build/tags [:user.class/MyClass]
+                     :block/uuid page-pvalue-uuid
+                     :build/keep-uuid? true}
+                    {:block/title "ref blocks"
+                     :build/children
+                     [{:block/title (str "internal block ref to " (page-ref/->page-ref internal-block-uuid))}
+                      {:block/title "node block"
+                       :build/properties {:user.property/node #{[:block/uuid block-pvalue-uuid]}}}
+                      {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}
+                      {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}]}]}
+          {:page {:block/title "Alias for 2/28" :block/uuid page-alias-uuid :build/keep-uuid? true}
+           :blocks []}
+          {:page {:build/journal 20250228
+                  :block/alias #{[:block/uuid page-alias-uuid]}
+                  :build/properties {:user.property/num 1}}
+           :blocks [{:block/title "journal block"}]}
+          {:page {:build/journal 19650201
+                  :block/uuid journal-uuid
+                  :build/keep-uuid? true}
+           :blocks []}
+          ;; built-in pages
+          {:page {:block/title "Contents" :build/properties {:logseq.property/built-in? true}}
+           :blocks [{:block/title "right sidebar"}]}
+          {:page {:block/title common-config/favorites-page-name
+                  :build/properties {:logseq.property/built-in? true, :logseq.property/hide? true}}
+           :blocks [(ldb/build-favorite-tx favorited-uuid)]}
+          {:page {:block/title common-config/views-page-name
+                  :build/properties {:logseq.property/built-in? true, :logseq.property/hide? true}}
+           :blocks [{:block/title "All"
+                     :build/properties {:logseq.property/view-for :logseq.class/Task
+                                        :logseq.property.view/feature-type :class-objects}}
+                    {:block/title "All"
+                     :build/properties {:logseq.property/view-for :user.class/MyClass
+                                        :logseq.property.view/feature-type :class-objects}}
+                    {:block/title "Linked references",
+                     :build/properties
+                     {:logseq.property.view/type :logseq.property.view/type.list,
+                      :logseq.property.view/feature-type :linked-references,
+                      :logseq.property/view-for [:block/uuid journal-uuid]}}]}]
+         ::sqlite-export/graph-files
+         [{:file/path "logseq/config.edn"
+           :file/content "{:foo :bar}"}
+          {:file/path "logseq/custom.css"
+           :file/content ".foo {background-color: blue}"}
+          {:file/path "logseq/custom.js"
+           :file/content "// comment"}]}]
+    original-data))
+
+(deftest import-graph
+  (let [original-data (build-original-graph-data)
+        conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
+        ;; set to an unobtainable version to test this ident
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version :kv/value {:major 1 :minor 0}}])
+        original-kv-values (remove #(= :logseq.kv/schema-version (:db/ident %))
+                                   (d/q '[:find [(pull ?b [:db/ident :kv/value]) ...] :where [?b :kv/value]] @conn))
+        _ (d/transact! conn (::sqlite-export/graph-files original-data))
+        conn2 (db-test/create-conn)
+        imported-graph (export-graph-and-import-to-another-graph conn conn2 {})]
+
+    ;; (cljs.pprint/pprint (set (:pages-and-blocks original-data)))
+    ;; (cljs.pprint/pprint (set (:pages-and-blocks imported-graph)))
+    ;; (cljs.pprint/pprint (butlast (clojure.data/diff (sort-pages-and-blocks (:pages-and-blocks original-data))
+    ;;                                                 (:pages-and-blocks imported-graph))))
+    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
+    (is (= 1 (count (d/datoms @conn2 :avet :block/title "page object")))
+        "No duplicate pages for pvalue uuids used more than once")
+    (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))
+    (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
+        "All :file/path entities are imported")
+    (is (= original-kv-values (::sqlite-export/kv-values imported-graph))
+        "All :kv/value entities are imported except for ignored ones")
+    (is (not= (:kv/value (d/entity @conn :logseq.kv/schema-version))
+              (:kv/value (d/entity @conn2 :logseq.kv/schema-version)))
+        "Ignored :kv/value is not updated")))
+
+(deftest import-graph-with-timestamps
+  (let [original-data* (build-original-graph-data)
+        original-data (-> original-data*
+                          (update :pages-and-blocks
+                                  (fn [pages-and-blocks]
+                                    (walk/postwalk (fn [e]
+                                                     (if (and (map? e) (or (:block/title e) (:build/journal e)))
+                                                       (common-util/block-with-timestamps e)
+                                                       e))
+                                                   pages-and-blocks)))
+                          (update :classes update-vals common-util/block-with-timestamps)
+                          (update :properties update-vals common-util/block-with-timestamps)
+                          (update ::sqlite-export/graph-files
+                                  (fn [files]
+                                    (mapv #(let [now (js/Date.)]
+                                             (merge % {:file/created-at now :file/last-modified-at now}))
+                                          files))))
+        conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
+        _ (d/transact! conn (::sqlite-export/graph-files original-data))
+        conn2 (db-test/create-conn)
+        imported-graph (export-graph-and-import-to-another-graph conn conn2 {:include-timestamps? true})]
+
+    ;; (cljs.pprint/pprint (butlast (clojure.data/diff (sort-pages-and-blocks (:pages-and-blocks original-data))
+    ;;                                                 (:pages-and-blocks imported-graph))))
+    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))
+    (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
+        "All :file/path entities are imported")))
+
+(deftest import-graph-with-exclude-namespaces
+  (let [original-data (build-original-graph-data {:exclude-namespaces? true})
+        conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
+        _ (d/transact! conn (::sqlite-export/graph-files original-data))
+        conn2 (db-test/create-conn-with-blocks
+               {:properties (update-vals (:properties original-data) #(dissoc % :build/properties))
+                :classes (update-vals (:classes original-data) #(dissoc % :build/properties))})
+        imported-graph (export-graph-and-import-to-another-graph conn conn2 {:exclude-namespaces #{:user}})]
+
+    ;; (cljs.pprint/pprint (butlast (clojure.data/diff (sort-pages-and-blocks (:pages-and-blocks original-data))
+    ;;                                                 (:pages-and-blocks imported-graph))))
+    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
+    (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
+        "All :file/path entities are imported")))
