@@ -65,9 +65,10 @@
 
 (defn- sort-by-single-property
   [db {:keys [id asc?]} rows]
-  (let [datoms (cond->> (d/datoms db :avet id)
-                 true
-                 (common-util/distinct-by :e)
+  (let [datoms (cond->
+                (->> (d/datoms db :avet id)
+                     (common-util/distinct-by :e)
+                     vec)
                  (not asc?)
                  rseq)
         row-ids (set (map :db/id rows))
