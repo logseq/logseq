@@ -1144,23 +1144,7 @@
   [{:keys [config view-feature-type]} view-entity result]
   (for [id result]
     [:div
-     (block-container {} {:db/id id} {})])
-  ;; (when-let [->hiccup (state/get-component :block/->hiccup)]
-  ;;   (let [group-by-page? (not (every? db/page? result))
-  ;;         result (if group-by-page?
-  ;;                  (-> (group-by :block/page result)
-  ;;                      (update-vals ldb/sort-by-order))
-  ;;                  result)
-  ;;         config' (cond-> (assoc config
-  ;;                                :current-block (:db/id view-entity)
-  ;;                                :query (:block/title view-entity)
-  ;;                                :breadcrumb-show? (if group-by-page? true false)
-  ;;                                :group-by-page? group-by-page?
-  ;;                                :ref? true)
-  ;;                   (= view-feature-type :query-result)
-  ;;                   (assoc :query (:block/title view-entity)))]
-  ;;     (->hiccup result config')))
-  )
+     (block-container {} {:db/id id} {})]))
 
 (rum/defc gallery-card-item
   [table view-entity block config]
@@ -1316,7 +1300,8 @@
                         {:logseq.property/view-for (:db/id view-parent)
                          :logseq.property.view/feature-type view-feature-type}
                          (contains? #{:linked-references :unlinked-references} view-feature-type)
-                         (assoc :logseq.property.view/type (:db/id (db/entity :logseq.property.view/type.list))))
+                         (assoc :logseq.property.view/type (:db/id (db/entity :logseq.property.view/type.list))
+                                :logseq.property.view/group-by-property (:db/id (db/entity :block/page))))
             view-exists? (seq (get-views view-parent view-feature-type))
             view-title (if view-exists?
                          ""
@@ -1538,33 +1523,28 @@
                         :row-selection row-selection
                         :add-new-object! add-new-object!}]
          (if group-by-property
-           (let [readable-property-value #(if (de/entity? %) (db-property/property-value-content %) (str %))
-                 ;; similar to readable-property but return entity if :db/ident to allow for icons
-                 readable-property-value-or-ent #(if (de/entity? %)
-                                                   (if (:db/ident %) % (db-property/property-value-content %))
-                                                   (str %))
-                 groups (->> (group-by #(-> (:db/ident group-by-property) % readable-property-value-or-ent)
-                                       (:rows table))
-                             (sort-by #(db-property/property-value-content (first %))))]
-             [:div.flex.flex-col.gap-4.border-t.py-4
-              (for [[value group] groups]
-                (let [add-new-object! (fn [_]
-                                        (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}}))
-                      table' (shui/table-option (-> table-map
-                                                    (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                    (assoc :data group
-                                                           :all-data (:data table))))]
-                  (ui/foldable
-                   [:div.text-sm.font-medium.ml-2
-                    (if (some? value)
-                      (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                        [:div.flex.flex-row.gap-1.items-center
-                         (when icon (icon-component/icon icon {:color? true}))
-                         (readable-property-value value)])
-                      (str "No " (:block/title group-by-property)))]
-                   [:div.mt-2
-                    (view-cp view-entity (assoc table' :rows group) option view-opts)]
-                   {:title-trigger? false})))])
+           [:div.flex.flex-col.gap-4.border-t.py-4
+            (for [[value group] (:rows table)]
+              (let [add-new-object! (fn [_]
+                                      (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}}))
+                    table' (shui/table-option (-> table-map
+                                                  (assoc-in [:data-fns :add-new-object!] add-new-object!)
+                                                  (assoc :data group
+                                                         :all-data (:data table))))
+                    readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
+                                               (db-property/property-value-content %)
+                                               (str %))]
+                (ui/foldable
+                 [:div.text-sm.font-medium.ml-2
+                  (if (some? value)
+                    (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                      [:div.flex.flex-row.gap-1.items-center
+                       (when icon (icon-component/icon icon {:color? true}))
+                       (readable-property-value value)])
+                    (str "No " (:block/title group-by-property)))]
+                 [:div.mt-2
+                  (view-cp view-entity (assoc table' :rows group) option view-opts)]
+                 {:title-trigger? false})))]
            (view-cp view-entity table option view-opts)))]
       (merge {:title-trigger? false} foldable-options))]))
 
