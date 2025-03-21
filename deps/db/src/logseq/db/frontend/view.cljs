@@ -69,7 +69,7 @@
                  true
                  (common-util/distinct-by :e)
                  (not asc?)
-                 reverse)
+                 rseq)
         row-ids (set (map :db/id rows))
         id->row (zipmap (map :db/id rows) rows)]
     (keep
