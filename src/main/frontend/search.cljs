@@ -127,7 +127,7 @@
                       (remove (fn [b] (= (:block/uuid b) (:block/uuid entity))))
                       (map (fn [b] [:block/uuid (:block/uuid b)])))
             result (when (seq eids)
-                     (.get-page-unlinked-refs ^Object @state/*db-worker repo (:db/id entity) (ldb/write-transit-str eids)))
+                     (@state/*db-worker :general/get-page-unlinked-refs repo (:db/id entity) (ldb/write-transit-str eids)))
             result' (when result (ldb/read-transit-str result))]
       (when result' (d/transact! (db/get-db repo false) result'))
       (some->> result'

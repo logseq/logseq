@@ -354,10 +354,10 @@
                {:key "(Dev) Show block content history"
                 :on-click
                 (fn []
-                  (let [^object worker @db-browser/*worker
+                  (let [worker @db-browser/*worker
                         token (state/get-auth-id-token)
                         graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-                    (p/let [result (.rtc-get-block-content-versions worker token graph-uuid (str block-id))
+                    (p/let [result (worker :rtc/get-block-content-versions token graph-uuid (str block-id))
                             blocks-versions (ldb/read-transit-str result)]
                       (prn :Dev-show-block-content-history)
                       (doseq [[block-uuid versions] blocks-versions]

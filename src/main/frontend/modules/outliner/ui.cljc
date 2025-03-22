@@ -31,12 +31,13 @@
                                                 ~opts))
                (when (and worker# (seq r#))
                  (let [request-id# (frontend.state/get-worker-next-request-id)
-                       request# #(.apply-outliner-ops ^Object worker# (frontend.state/get-current-repo)
-                                                      (logseq.db/write-transit-str r#)
-                                                      (logseq.db/write-transit-str
-                                                       (assoc ~opts
-                                                              :request-id request-id#
-                                                              :editor-info editor-info#)))
+                       request# #(worker# :general/apply-outliner-ops
+                                          (frontend.state/get-current-repo)
+                                          (logseq.db/write-transit-str r#)
+                                          (logseq.db/write-transit-str
+                                           (assoc ~opts
+                                                  :request-id request-id#
+                                                  :editor-info editor-info#)))
                        response# (frontend.state/add-worker-request! request-id# request#)]
 
                    response#)))))))))

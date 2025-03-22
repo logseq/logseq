@@ -10,18 +10,18 @@
 
 (defmulti handle identity)
 
-(defmethod handle :write-files [_ ^js worker data]
+(defmethod handle :write-files [_ worker data]
   (let [{:keys [request-id page-id repo files]} data]
     (->
      (p/let [_ (file-handler/alter-files repo files {})]
-       (.page-file-saved worker request-id page-id))
+       (worker :general/page-file-saved request-id page-id))
      (p/catch (fn [error]
                 (notification/show!
                  [:div
                   [:p "Write file failed, please copy the changes to other editors in case of losing data."]
                   "Error: " (str (.-stack error))]
                  :error)
-                (.page-file-saved worker request-id page-id))))))
+                (worker :general/page-file-saved request-id page-id))))))
 
 (defmethod handle :notification [_ _worker data]
   (apply notification/show! data))

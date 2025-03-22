@@ -56,8 +56,8 @@
       (state/set-current-repo! repo)
       (p/let [_ (repo-handler/restore-and-setup-repo! repo)
               _ (let [db-transit-str (unescape-html data)]
-                  (when-let [^js worker @state/*db-worker]
-                    (.resetDB worker repo db-transit-str)))
+                  (when-let [worker @state/*db-worker]
+                    (worker :general/reset-db repo db-transit-str)))
               _ (repo-handler/restore-and-setup-repo! repo)]
         (state/set-db-restoring! false)
         (ui-handler/re-render-root!)))))

@@ -205,8 +205,8 @@
   (st/refresh!)
   (reset! r/*key->atom {})
 
-  (let [^js sqlite @db-browser/*worker]
-    (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
+  (let [worker @db-browser/*worker]
+    (p/let [writes-finished? (when worker (worker :general/file-writes-finished? (state/get-current-repo)))
             request-finished? (db-transact/request-finished?)]
       (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
         (do
@@ -365,8 +365,9 @@
                  :journals-directory (config/get-journals-directory)
                  :whiteboards-directory (config/get-whiteboards-directory)
                  :pages-directory (config/get-pages-directory)}
-        worker ^Object @state/*db-worker]
-    (when worker (.set-context worker (ldb/write-transit-str context)))))
+        worker @state/*db-worker]
+    (when worker
+      (worker :general/set-context (ldb/write-transit-str context)))))
 
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/restored, as :graph/restored is for window reloaded

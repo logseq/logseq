@@ -147,12 +147,12 @@
                name-or-uuid)]
     (if (or (:block.temp/fully-loaded? e) async-requested?)
       e
-      (when-let [^Object sqlite @db-browser/*worker]
+      (when-let [worker @db-browser/*worker]
         (swap! *async-queries assoc [name' opts] true)
         (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
-        (p/let [result (.get-block-and-children sqlite graph id (ldb/write-transit-str
-                                                                 {:children? children?
-                                                                  :nested-children? nested-children?}))
+        (p/let [result (worker :general/get-block-and-children graph id (ldb/write-transit-str
+                                                                         {:children? children?
+                                                                          :nested-children? nested-children?}))
                 {:keys [properties block children] :as result'} (ldb/read-transit-str result)
                 conn (db/get-db graph false)
                 block-and-children (concat properties [block] children)
@@ -168,10 +168,10 @@
 (defn <get-block-parents
   [graph id depth]
   (assert (integer? id))
-  (when-let [^Object worker @db-browser/*worker]
+  (when-let [worker @db-browser/*worker]
     (when-let [block-id (:block/uuid (db/entity graph id))]
       (state/update-state! :db/async-query-loading (fn [s] (conj s (str block-id "-parents"))))
-      (p/let [result-str (.get-block-parents worker graph id depth)
+      (p/let [result-str (worker :general/get-block-parents graph id depth)
               result (ldb/read-transit-str result-str)
               conn (db/get-db graph false)
               _ (d/transact! conn result)]
@@ -182,20 +182,20 @@
   [page-name]
   (when-let [page (some-> page-name (db-model/get-page))]
     (when-let [^Object worker @db-browser/*worker]
-      (p/let [result (.get-block-and-children worker
-                                              (state/get-current-repo)
-                                              (str (:block/uuid page))
-                                              (ldb/write-transit-str
-                                               {:children? true
-                                                :nested-children? false}))]
+      (p/let [result (worker :general/get-block-and-children
+                             (state/get-current-repo)
+                             (str (:block/uuid page))
+                             (ldb/write-transit-str
+                              {:children? true
+                               :nested-children? false}))]
         (some-> result (ldb/read-transit-str) (:children))))))
 
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))
-  (when-let [^Object worker @db-browser/*worker]
+  (when-let [worker @db-browser/*worker]
     (state/update-state! :db/async-query-loading (fn [s] (conj s (str eid "-refs"))))
-    (p/let [result-str (.get-block-refs worker graph eid)
+    (p/let [result-str (worker :general/get-block-refs graph eid)
             result (ldb/read-transit-str result-str)
             conn (db/get-db graph false)
             _ (d/transact! conn result)]
@@ -205,8 +205,8 @@
 (defn <get-block-refs-count
   [graph eid]
   (assert (integer? eid))
-  (when-let [^Object worker @db-browser/*worker]
-    (.get-block-refs-count worker graph eid)))
+  (when-let [worker @db-browser/*worker]
+    (worker :general/get-block-refs-count graph eid)))
 
 (defn <get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."
@@ -381,13 +381,3 @@
                            (recur (cons item others) time'))))
                      (quot time 1000)))]
         [status-history time]))))
-
-(comment
-  (defn <fetch-all-pages
-    [graph]
-    (when-let [^Object worker @db-browser/*worker]
-      (let [db (db/get-db graph)
-            exclude-ids (->> (d/datoms db :avet :block/name)
-                             (map :db/id)
-                             (ldb/write-transit-str))]
-        (.fetch-all-pages worker graph exclude-ids)))))
