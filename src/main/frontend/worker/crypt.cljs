@@ -3,7 +3,6 @@
   (:require [datascript.core :as d]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.state :as worker-state]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defonce ^:private encoder (new js/TextEncoder "utf-8"))

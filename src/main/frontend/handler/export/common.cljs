@@ -13,7 +13,6 @@
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
-            [logseq.db :as ldb]
             [malli.core :as m]
             [malli.util :as mu]
             [promesa.core :as p]))
