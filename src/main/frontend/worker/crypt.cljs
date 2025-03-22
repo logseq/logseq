@@ -125,13 +125,6 @@
     (let [aes-key-datom (first (d/datoms @conn :avet :aes-key-jwk))]
       {:aes-key-jwk (:v aes-key-datom)})))
 
-(defn- with-write-transit-str
-  [task]
-  (p/chain
-   (js/Promise. task)
-   ldb/write-transit-str))
-
 (def-thread-api :rtc/get-graph-keys
   [repo]
-  (with-write-transit-str
-    (get-graph-keys-jwk repo)))
+  (get-graph-keys-jwk repo))

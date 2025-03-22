@@ -38,16 +38,15 @@
     (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
     (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
             token (state/get-auth-id-token)
-            download-info-uuid* (worker :rtc/request-download-graph token graph-uuid graph-schema-version)
-            download-info-uuid (ldb/read-transit-str download-info-uuid*)
-            result (worker :rtc/wait-download-graph-info-ready
-                           token download-info-uuid graph-uuid graph-schema-version timeout-ms)
+            download-info-uuid (worker :rtc/request-download-graph token graph-uuid graph-schema-version)
             {:keys [_download-info-uuid
                     download-info-s3-url
                     _download-info-tx-instant
                     _download-info-t
                     _download-info-created-at]
-             :as result} (ldb/read-transit-str result)]
+             :as result}
+            (worker :rtc/wait-download-graph-info-ready
+                    token download-info-uuid graph-uuid graph-schema-version timeout-ms)]
       (->
        (when (not= result :timeout)
          (assert (some? download-info-s3-url) result)
@@ -65,8 +64,7 @@
   (when-let [worker @state/*db-worker]
     (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
             token (state/get-auth-id-token)
-            result (worker :rtc/async-branch-graph repo token)
-            start-ex (ldb/read-transit-str result)]
+            start-ex (worker :rtc/async-branch-graph repo token)]
       (when-let [ex-data* (:ex-data start-ex)]
         (throw (ex-info (:ex-message start-ex) ex-data*))))))
 
@@ -105,8 +103,7 @@
        (js/Promise. user-handler/task--ensure-id&access-token)
        (when stop-before-start? (<rtc-stop!))
        (let [token (state/get-auth-id-token)]
-         (p/let [result (worker :rtc/start repo token)
-                 start-ex (ldb/read-transit-str result)
+         (p/let [start-ex (worker :rtc/start repo token)
                  ex-data* (:ex-data start-ex)
                  _ (case (:type ex-data*)
                      (:rtc.exception/not-rtc-graph
@@ -141,8 +138,7 @@
   (when-let [worker @state/*db-worker]
     (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
             token (state/get-auth-id-token)
-            result (worker :rtc/get-graphs token)
-            graphs (ldb/read-transit-str result)
+            graphs (worker :rtc/get-graphs token)
             result (->> graphs
                         (remove (fn [graph] (= (:graph-status graph) "deleting")))
                         (mapv (fn [graph]
@@ -162,8 +158,7 @@
     (when-let [worker @state/*db-worker]
       (p/let [token (state/get-auth-id-token)
               repo (state/get-current-repo)
-              result (worker :rtc/get-users-info token (str graph-uuid))
-              result (ldb/read-transit-str result)]
+              result (worker :rtc/get-users-info token (str graph-uuid))]
         (state/set-state! :rtc/users-info {repo result})))))
 
 (defn <rtc-invite-email

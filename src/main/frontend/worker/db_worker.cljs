@@ -18,6 +18,7 @@
             [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
             [frontend.worker.rtc.asset-db-listener]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.core]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state] ;; [frontend.worker.undo-redo :as undo-redo]
@@ -284,8 +285,7 @@
                                          (set! (.-storage s) (.-storage (:eavt @conn)))
                                          s))]
       (d/reset-conn! conn new-db' {:reset-conn! true})
-      (d/reset-schema! conn (:schema new-db))
-      nil)))
+      (d/reset-schema! conn (:schema new-db)))))
 
 (defn- get-dbs
   [repo]
@@ -420,8 +420,7 @@
 
 (def-thread-api :general/list-db
   []
-  (p/let [dbs (<list-all-dbs)]
-    (ldb/write-transit-str dbs)))
+  (<list-all-dbs))
 
 (defn- <db-exists?
   [graph]
@@ -449,7 +448,6 @@
 
 (def-thread-api :general/init
   [rtc-ws-url]
-  (prn :debug/calling :general/init)
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
 
@@ -459,14 +457,14 @@
     (p/do!
      (when close-other-db?
        (close-other-dbs! repo))
-     (create-or-open-db! repo (dissoc opts :close-other-db?)))))
+     (create-or-open-db! repo (dissoc opts :close-other-db?))
+     nil)))
 
 (def-thread-api :general/q
   [repo inputs-str]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [inputs (ldb/read-transit-str inputs-str)
-          result (apply d/q (first inputs) @conn (rest inputs))]
-      (ldb/write-transit-str result))))
+    (let [inputs (ldb/read-transit-str inputs-str)]
+      (apply d/q (first inputs) @conn (rest inputs)))))
 
 (def-thread-api :general/pull
   [repo selector-str id-str]
@@ -475,22 +473,21 @@
           id (ldb/read-transit-str id-str)
           eid (if (and (vector? id) (= :block/name (first id)))
                 (:db/id (ldb/get-page @conn (second id)))
-                id)
-          result (some->> eid
-                          (d/pull @conn selector)
-                          (sqlite-common-db/with-parent @conn))]
-      (ldb/write-transit-str result))))
+                id)]
+      (some->> eid
+               (d/pull @conn selector)
+               (sqlite-common-db/with-parent @conn)))))
 
 (def-thread-api :general/get-block-and-children
   [repo id opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [id (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-      (ldb/write-transit-str (sqlite-common-db/get-block-and-children @conn id (ldb/read-transit-str opts))))))
+      (sqlite-common-db/get-block-and-children @conn id (ldb/read-transit-str opts)))))
 
 (def-thread-api :general/get-block-refs
   [repo id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/write-transit-str (ldb/get-block-refs @conn id))))
+    (ldb/get-block-refs @conn id)))
 
 (def-thread-api :general/get-block-refs-count
   [repo id]
@@ -500,16 +497,15 @@
 (def-thread-api :general/get-block-parents
   [repo id depth]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [block-id (:block/uuid (d/entity @conn id))
-          parents (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
-                       (map (fn [b] (d/pull @conn '[*] (:db/id b)))))]
-      (ldb/write-transit-str parents))))
+    (let [block-id (:block/uuid (d/entity @conn id))]
+      (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
+           (map (fn [b] (d/pull @conn '[*] (:db/id b))))))))
 
 (def-thread-api :general/get-page-unlinked-refs
   [repo page-id search-result-eids-str]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [search-result-eids (ldb/read-transit-str search-result-eids-str)]
-      (ldb/write-transit-str (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))))
+      (ldb/get-page-unlinked-refs @conn page-id search-result-eids))))
 
 (def-thread-api :general/set-context
   [context]
@@ -568,20 +564,22 @@
 (def-thread-api :general/get-initial-data
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/write-transit-str (sqlite-common-db/get-initial-data @conn))))
+    (sqlite-common-db/get-initial-data @conn)))
 
 (def-thread-api :general/get-page-refs-count
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/write-transit-str (sqlite-common-db/get-page->refs-count @conn))))
+    (sqlite-common-db/get-page->refs-count @conn)))
 
 (def-thread-api :general/close-db
   [repo]
-  (close-db! repo))
+  (close-db! repo)
+  nil)
 
 (def-thread-api :general/reset-db
   [repo db-transit]
-  (reset-db! repo db-transit))
+  (reset-db! repo db-transit)
+  nil)
 
 (def-thread-api :general/unsafe-unlink-db
   [repo]
@@ -593,7 +591,8 @@
 (def-thread-api :general/release-access-handles
   [repo]
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
-    (.releaseAccessHandles pool)))
+    (.releaseAccessHandles pool)
+    nil))
 
 (def-thread-api :general/db-exists
   [repo]
@@ -609,14 +608,14 @@
   [repo data]
   (when-not (string/blank? repo)
     (p/let [pool (<get-opfs-pool repo)]
-      (<import-db pool data))))
+      (<import-db pool data)
+      nil)))
 
 (def-thread-api :search/search-blocks
   [repo q option]
   (p/let [search-db (get-search-db repo)
-          conn (worker-state/get-datascript-conn repo)
-          result (search/search-blocks repo conn search-db q (bean/->clj option))]
-    (ldb/write-transit-str result)))
+          conn (worker-state/get-datascript-conn repo)]
+    (search/search-blocks repo conn search-db q (bean/->clj option))))
 
 (def-thread-api :search/upsert-blocks
   [repo blocks]
@@ -652,9 +651,8 @@
       (worker-util/profile
        "apply outliner ops"
        (let [ops (ldb/read-transit-str ops-str)
-             opts (ldb/read-transit-str opts-str)
-             result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
-         (ldb/write-transit-str result)))
+             opts (ldb/read-transit-str opts-str)]
+         (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)))
       (catch :default e
         (let [data (ex-data e)
               {:keys [type payload]} (when (map? data) data)]
@@ -699,27 +697,27 @@
   [repo]
   (when-let [db (worker-state/get-sqlite-conn repo)]
     (let [conn (worker-state/get-datascript-conn repo)]
-      (ldb/write-transit-str (worker-export/get-debug-datoms conn db)))))
+      (worker-export/get-debug-datoms conn db))))
 
 (def-thread-api :export/get-all-pages
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/write-transit-str (worker-export/get-all-pages repo @conn))))
+    (worker-export/get-all-pages repo @conn)))
 
 (def-thread-api :export/get-all-page->content
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/write-transit-str (worker-export/get-all-page->content repo @conn))))
+    (worker-export/get-all-page->content repo @conn)))
 
 (def-thread-api :undo-redo/undo
   [repo _page-block-uuid-str]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/write-transit-str (undo-redo/undo repo conn))))
+    (undo-redo/undo repo conn)))
 
 (def-thread-api :undo-redo/redo
   [repo _page-block-uuid-str]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/write-transit-str (undo-redo/redo repo conn))))
+    (undo-redo/redo repo conn)))
 
 (def-thread-api :undo-redo/record-editor-info
   [repo _page-block-uuid-str editor-info-str]
@@ -738,8 +736,7 @@
   (let [conn (worker-state/get-datascript-conn repo)]
     (try
       (->> (ldb/read-transit-str options)
-           (sqlite-export/build-export @conn)
-           ldb/write-transit-str)
+           (sqlite-export/build-export @conn))
       (catch :default e
         (js/console.error "export-edn error: " e)
         (worker-util/post-message :notification
@@ -795,13 +792,6 @@
              (file/write-files! conn col (worker-state/get-context)))
            (js/console.error (str "DB is not found for " repo))))))))
 
-(defn- remote-function
-  [qkw-str args-transit-str]
-  (let [qkw (keyword qkw-str)]
-    (if-let [f (@thread-api/*thread-apis qkw)]
-      (apply f (ldb/read-transit-str args-transit-str))
-      (throw (ex-info (str "not found thread-api: " qkw-str) {})))))
-
 (defn init
   "web worker entry"
   []
@@ -810,8 +800,7 @@
   (outliner-register-op-handlers!)
   (<ratelimit-file-writes!)
   (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
-    ;; (Comlink/expose obj)
-  (Comlink/expose #js{"remoteInvoke" remote-function})
+  (Comlink/expose #js{"remoteInvoke" thread-api/remote-function})
   (reset! worker-state/*main-thread (Comlink/wrap js/self)))
 
 (comment
