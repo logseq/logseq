@@ -11,13 +11,13 @@
           :or {transact-db? true}
           :as opts} & inputs]
   (assert (not-any? fn? inputs) "Async query inputs can't include fns because fn can't be serialized")
-  (when-let [^Object sqlite @state/*db-worker]
+  (when-let [worker @state/*db-worker]
     (let [*async-queries (:db/async-queries @state/state)
           async-requested? (get @*async-queries [inputs opts])]
       (if async-requested?
         (let [db (db-conn/get-db graph)]
           (apply d/q (first inputs) db (rest inputs)))
-        (p/let [result (.q sqlite graph (ldb/write-transit-str inputs))]
+        (p/let [result (worker :general/q graph (ldb/write-transit-str inputs))]
           (swap! *async-queries assoc [inputs opts] true)
           (when result
             (let [result' (ldb/read-transit-str result)]
@@ -42,19 +42,10 @@
   ([graph id]
    (<pull graph '[*] id))
   ([graph selector id]
-   (when-let [^Object sqlite @state/*db-worker]
-     (p/let [result (.pull sqlite graph (ldb/write-transit-str selector) (ldb/write-transit-str id))]
+   (when-let [worker @state/*db-worker]
+     (p/let [result (worker :general/pull graph (ldb/write-transit-str selector) (ldb/write-transit-str id))]
        (when result
          (let [result' (ldb/read-transit-str result)]
            (when-let [conn (db-conn/get-db graph false)]
              (d/transact! conn [result']))
            result'))))))
-
-(comment
-  (defn <pull-many
-    [graph selector ids]
-    (assert (seq ids))
-    (when-let [^Object sqlite @state/*db-worker]
-      (p/let [result (.pull-many sqlite graph (ldb/write-transit-str selector) (ldb/write-transit-str ids))]
-        (when result
-          (ldb/read-transit-str result))))))

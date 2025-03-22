@@ -14,10 +14,10 @@
 (defn ^:export export-block-data []
   ;; Use editor state to locate most recent block
   (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
-    (when-let [^Object worker @state/*db-worker]
-      (p/let [result* (.export-edn worker
-                                   (state/get-current-repo)
-                                   (ldb/write-transit-str {:export-type :block :block-id [:block/uuid block-uuid]}))
+    (when-let [worker @state/*db-worker]
+      (p/let [result* (worker :general/export-edn
+                              (state/get-current-repo)
+                              (ldb/write-transit-str {:export-type :block :block-id [:block/uuid block-uuid]}))
               result (ldb/read-transit-str result*)
               pull-data (with-out-str (pprint/pprint result))]
         (.writeText js/navigator.clipboard pull-data)
@@ -27,10 +27,10 @@
 
 (defn export-view-nodes-data [nodes]
   (let [block-uuids (mapv #(vector :block/uuid (:block/uuid %)) nodes)]
-    (when-let [^Object worker @state/*db-worker]
-      (p/let [result* (.export-edn worker
-                                   (state/get-current-repo)
-                                   (ldb/write-transit-str {:export-type :view-nodes :node-ids block-uuids}))
+    (when-let [worker @state/*db-worker]
+      (p/let [result* (worker :general/export-edn
+                              (state/get-current-repo)
+                              (ldb/write-transit-str {:export-type :view-nodes :node-ids block-uuids}))
               result (ldb/read-transit-str result*)
               pull-data (with-out-str (pprint/pprint result))]
         (.writeText js/navigator.clipboard pull-data)
@@ -39,8 +39,9 @@
 
 (defn ^:export export-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
-    (when-let [^Object worker @state/*db-worker]
-      (p/let [result* (.export-edn worker (state/get-current-repo) (ldb/write-transit-str {:export-type :page :page-id page-id}))
+    (when-let [worker @state/*db-worker]
+      (p/let [result* (worker :general/export-edn
+                              (state/get-current-repo) (ldb/write-transit-str {:export-type :page :page-id page-id}))
               result (ldb/read-transit-str result*)
               pull-data (with-out-str (pprint/pprint result))]
         (.writeText js/navigator.clipboard pull-data)
@@ -49,8 +50,9 @@
     (notification/show! "No page found" :warning)))
 
 (defn ^:export export-graph-ontology-data []
-  (when-let [^Object worker @state/*db-worker]
-    (p/let [result* (.export-edn worker (state/get-current-repo) (ldb/write-transit-str {:export-type :graph-ontology}))
+  (when-let [worker @state/*db-worker]
+    (p/let [result* (worker :general/export-edn
+                            (state/get-current-repo) (ldb/write-transit-str {:export-type :graph-ontology}))
             result (ldb/read-transit-str result*)
             pull-data (with-out-str (pprint/pprint result))]
       (.writeText js/navigator.clipboard pull-data)
@@ -60,11 +62,11 @@
       (notification/show! "Copied graphs's ontology data!" :success))))
 
 (defn- export-graph-edn-data []
-  (when-let [^Object worker @state/*db-worker]
-    (p/let [result* (.export-edn worker
-                                 (state/get-current-repo)
-                                 (ldb/write-transit-str {:export-type :graph
-                                                         :graph-options {:include-timestamps? true}}))
+  (when-let [worker @state/*db-worker]
+    (p/let [result* (worker :general/export-edn
+                            (state/get-current-repo)
+                            (ldb/write-transit-str {:export-type :graph
+                                                    :graph-options {:include-timestamps? true}}))
             result (ldb/read-transit-str result*)
             pull-data (with-out-str (pprint/pprint result))]
       pull-data)))

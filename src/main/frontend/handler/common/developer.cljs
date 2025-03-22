@@ -90,8 +90,8 @@
         (notification/show! "No page found" :warning)))))
 
 (defn ^:export validate-db []
-  (when-let [^Object worker @state/*db-worker]
-    (.validate-db worker (state/get-current-repo))))
+  (when-let [worker @state/*db-worker]
+    (worker :general/validate-db (state/get-current-repo))))
 
 (defn import-chosen-graph
   [repo]

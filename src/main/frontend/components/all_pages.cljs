@@ -50,8 +50,8 @@
                                        :with-id? false})]
     (hooks/use-effect!
      (fn []
-       (when-let [^js worker @state/*db-worker]
-         (p/let [result-str (.get-page-refs-count worker (state/get-current-repo))
+       (when-let [worker @state/*db-worker]
+         (p/let [result-str (worker :general/get-page-refs-count (state/get-current-repo))
                  result (ldb/read-transit-str result-str)
                  data (get-all-pages)
                  data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]

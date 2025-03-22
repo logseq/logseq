@@ -190,19 +190,19 @@
 
 (defn <get-all-pages
   [repo]
-  (when-let [^object worker @db-browser/*worker]
-    (p/let [result (.get-all-pages worker repo)]
+  (when-let [worker @db-browser/*worker]
+    (p/let [result (worker :export/get-all-pages repo)]
       (ldb/read-transit-str result))))
 
 (defn <get-debug-datoms
   [repo]
-  (when-let [^object worker @db-browser/*worker]
-    (.get-debug-datoms worker repo)))
+  (when-let [worker @db-browser/*worker]
+    (worker :export/get-debug-datoms repo)))
 
 (defn <get-all-page->content
   [repo]
-  (when-let [^object worker @db-browser/*worker]
-    (p/let [result (.get-all-page->content worker repo)]
+  (when-let [worker @db-browser/*worker]
+    (p/let [result (worker :export/get-all-page->content repo)]
       (ldb/read-transit-str result))))
 
 (defn <get-file-contents

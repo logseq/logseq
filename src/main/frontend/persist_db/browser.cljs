@@ -26,7 +26,7 @@
       (js/console.warn "OPFS storage may be cleared by the browser under storage pressure."))))
 
 (defn- sync-app-state!
-  [^js worker]
+  [worker]
   (add-watch state/state
              :sync-worker-state
              (fn [_ _ prev current]
@@ -37,7 +37,7 @@
                                  (not= (:config prev) (:config current))
                                  (assoc :config (:config current)))]
                  (when (seq new-state)
-                   (.sync-app-state worker (ldb/write-transit-str new-state)))))))
+                   (worker :general/sync-app-state (ldb/write-transit-str new-state)))))))
 
 (defn get-route-data
   [route-match]
@@ -58,12 +58,13 @@
                        old-state (f prev)
                        new-state (f current)]
                    (when (not= new-state old-state)
-                     (.sync-ui-state worker (state/get-current-repo)
-                                     (ldb/write-transit-str {:old-state old-state
-                                                             :new-state new-state}))))))))
+                     (worker :general/sync-ui-state
+                             (state/get-current-repo)
+                             (ldb/write-transit-str {:old-state old-state
+                                                     :new-state new-state}))))))))
 
 (defn transact!
-  [^js worker repo tx-data tx-meta]
+  [worker repo tx-data tx-meta]
   (let [tx-meta' (ldb/write-transit-str tx-meta)
         tx-data' (ldb/write-transit-str tx-data)
         ;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
@@ -80,8 +81,7 @@
                  :whiteboards-directory (config/get-whiteboards-directory)
                  :pages-directory (config/get-pages-directory)}]
     (if worker
-      (.transact worker repo tx-data' tx-meta'
-                 (ldb/write-transit-str context))
+      (worker :general/transact repo tx-data' tx-meta' (ldb/write-transit-str context))
       (notification/show! "Latest change was not saved! Please restart the application." :error))))
 
 (defn- with-write-transit-str
@@ -120,17 +120,21 @@
                        "js/db-worker.js"
                        "static/js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
-          wrapped-worker (Comlink/wrap worker)
+          wrapped-worker* (Comlink/wrap worker)
+          wrapped-worker (fn [qkw & args]
+                           (.remoteInvoke ^js wrapped-worker*
+                                          (str (namespace qkw) "/" (name qkw))
+                                          (ldb/write-transit-str args)))
           t1 (util/time-ms)]
       (Comlink/expose (Main.) worker)
-      (worker-handler/handle-message! worker wrapped-worker)
+      (worker-handler/handle-message! worker wrapped-worker*)
       (reset! *worker wrapped-worker)
-      (-> (p/let [_ (.init wrapped-worker config/RTC-WS-URL)
+      (-> (p/let [_ (wrapped-worker :general/init config/RTC-WS-URL)
                   _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
-                  _ (.sync-app-state wrapped-worker
-                                     (ldb/write-transit-str
-                                      {:git/current-repo (state/get-current-repo)
-                                       :config (:config @state/state)}))
+                  _ (wrapped-worker :general/sync-app-state
+                                    (ldb/write-transit-str
+                                     {:git/current-repo (state/get-current-repo)
+                                      :config (:config @state/state)}))
                   _ (sync-app-state! wrapped-worker)
                   _ (sync-ui-state! wrapped-worker)
                   _ (ask-persist-permission!)
@@ -171,36 +175,36 @@
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo opts]
-    (when-let [^js sqlite @*worker]
-      (.createOrOpenDB sqlite repo (ldb/write-transit-str opts))))
+    (when-let [worker @*worker]
+      (worker :general/create-or-open-db repo (ldb/write-transit-str opts))))
 
   (<list-db [_this]
-    (when-let [^js sqlite @*worker]
-      (-> (.listDB sqlite)
+    (when-let [worker @*worker]
+      (-> (worker :general/list-db)
           (p/then ldb/read-transit-str)
           (p/catch sqlite-error-handler))))
 
   (<unsafe-delete [_this repo]
-    (when-let [^js sqlite @*worker]
-      (.unsafeUnlinkDB sqlite repo)))
+    (when-let [worker @*worker]
+      (worker :general/unsafe-unlink-db repo)))
 
   (<release-access-handles [_this repo]
-    (when-let [^js sqlite @*worker]
-      (.releaseAccessHandles sqlite repo)))
+    (when-let [worker @*worker]
+      (worker :general/release-access-handles repo)))
 
   (<fetch-initial-data [_this repo opts]
-    (when-let [^js sqlite @*worker]
-      (-> (p/let [db-exists? (.dbExists sqlite repo)
+    (when-let [^js worker @*worker]
+      (-> (p/let [db-exists? (worker :general/db-exists repo)
                   disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                   _ (when disk-db-data
-                      (.importDb sqlite repo disk-db-data))
-                  _ (.createOrOpenDB sqlite repo (ldb/write-transit-str opts))]
-            (.getInitialData sqlite repo))
+                      (worker :general/import-db repo disk-db-data))
+                  _ (worker :general/create-or-open-db repo (ldb/write-transit-str opts))]
+            (worker :general/get-initial-data repo))
           (p/catch sqlite-error-handler))))
 
   (<export-db [_this repo opts]
-    (when-let [^js sqlite @*worker]
-      (-> (p/let [data (.exportDB sqlite repo)]
+    (when-let [worker @*worker]
+      (-> (p/let [data (worker :general/export-db repo)]
             (when data
               (if (:return-data? opts)
                 data
@@ -211,8 +215,8 @@
                      (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {})))))
 
   (<import-db [_this repo data]
-    (when-let [^js sqlite @*worker]
-      (-> (.importDb sqlite repo data)
+    (when-let [worker @*worker]
+      (-> (worker :general/import-db repo data)
           (p/catch (fn [error]
                      (prn :debug :import-db-error repo)
                      (js/console.error error)
@@ -221,6 +225,6 @@
 (comment
   (defn clean-all-dbs!
     []
-    (when-let [sqlite @*sqlite]
-      (.dangerousRemoveAllDbs sqlite)
+    (when-let [worker @*worker]
+      (worker :general/dangerousRemoveAllDbs)
       (state/set-current-repo! nil))))

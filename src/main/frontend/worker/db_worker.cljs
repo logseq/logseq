@@ -9,7 +9,7 @@
             [datascript.core :as d]
             [datascript.storage :refer [IStorage] :as storage]
             [frontend.common.file.core :as common-file]
-            [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.worker.crypt :as worker-crypt]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
@@ -29,6 +29,7 @@
             [frontend.worker.undo-redo2 :as undo-redo]
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -424,9 +425,10 @@
                       {:name graph-name
                        :metadata (edn/read-string metadata)})) db-dirs)))))
 
-(def-thread-api :general/list-all-dbs
+(def-thread-api :general/list-db
   []
-  (<list-all-dbs))
+  (p/let [dbs (<list-all-dbs)]
+    (ldb/write-transit-str dbs)))
 
 (defn- <db-exists?
   [graph]
@@ -462,6 +464,7 @@
 
 (def-thread-api :general/init
   [rtc-ws-url]
+  (prn :debug/calling :general/init)
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
 
@@ -532,7 +535,7 @@
     nil))
 
 (def-thread-api :general/transact
-  [this repo tx-data tx-meta context]
+  [repo tx-data tx-meta context]
   (when repo (worker-state/set-db-latest-tx-time! repo))
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (try
@@ -760,486 +763,10 @@
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
-    [this repo]
-    (p/let [r (.listDB this)
+    []
+    (p/let [r (<list-all-dbs)
             dbs (ldb/read-transit-str r)]
       (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
-
-#_:clj-kondo/ignore
-(defclass DBWorker
-  (extends js/Object)
-
-  (constructor
-   [this]
-   (super))
-
-  Object
-
-  (getVersion
-   [_this]
-   (when-let [sqlite @*sqlite]
-     (.-version sqlite)))
-
-  (init
-   [_this rtc-ws-url]
-   (reset! worker-state/*rtc-ws-url rtc-ws-url)
-   (init-sqlite-module!))
-
-  (storeMetadata
-   [_this repo metadata-str]
-   (worker-db-metadata/<store repo metadata-str))
-
-  (listDB
-   [_this]
-   (p/let [dbs (<list-all-dbs)]
-     (ldb/write-transit-str dbs)))
-
-  (createOrOpenDB
-   [_this repo opts-str]
-   (let [{:keys [close-other-db?] :or {close-other-db? true} :as opts} (ldb/read-transit-str opts-str)]
-     (p/do!
-      (when close-other-db?
-        (close-other-dbs! repo))
-      (create-or-open-db! repo (dissoc opts :close-other-db?)))))
-
-  (q [_this repo inputs-str]
-     "Datascript q"
-     (when-let [conn (worker-state/get-datascript-conn repo)]
-       (let [inputs (ldb/read-transit-str inputs-str)
-             result (apply d/q (first inputs) @conn (rest inputs))]
-         (ldb/write-transit-str result))))
-
-  (pull
-   [_this repo selector-str id-str]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [selector (ldb/read-transit-str selector-str)
-           id (ldb/read-transit-str id-str)
-           eid (if (and (vector? id) (= :block/name (first id)))
-                 (:db/id (ldb/get-page @conn (second id)))
-                 id)
-           result (some->> eid
-                           (d/pull @conn selector)
-                           (sqlite-common-db/with-parent @conn))]
-       (ldb/write-transit-str result))))
-
-  (pull-many
-   [_this repo selector-str ids-str]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [selector (ldb/read-transit-str selector-str)
-           ids (ldb/read-transit-str ids-str)
-           result (d/pull-many @conn selector ids)]
-       (ldb/write-transit-str result))))
-
-  (get-right-sibling
-   [_this repo db-id]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [result (ldb/get-right-sibling (d/entity @conn db-id))]
-       (ldb/write-transit-str result))))
-
-  (get-block-and-children
-   [_this repo id opts]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [id (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-       (ldb/write-transit-str (sqlite-common-db/get-block-and-children @conn id (ldb/read-transit-str opts))))))
-
-  (get-block-refs
-   [_this repo id]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/write-transit-str (ldb/get-block-refs @conn id))))
-
-  (get-block-refs-count
-   [_this repo id]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/get-block-refs-count @conn id)))
-
-  (get-block-parents
-   [_this repo id depth]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [block-id (:block/uuid (d/entity @conn id))
-           parents (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
-                        (map (fn [b] (d/pull @conn '[*] (:db/id b)))))]
-       (ldb/write-transit-str parents))))
-
-  (get-page-unlinked-refs
-   [_this repo page-id search-result-eids-str]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [search-result-eids (ldb/read-transit-str search-result-eids-str)]
-       (ldb/write-transit-str (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))))
-
-  (set-context
-   [_this context]
-   (let [context (if (string? context)
-                   (ldb/read-transit-str context)
-                   context)]
-     (when context (worker-state/update-context! context))
-     nil))
-
-  (transact
-   [_this repo tx-data tx-meta context]
-   (when repo (worker-state/set-db-latest-tx-time! repo))
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (try
-       (let [tx-data' (if (string? tx-data)
-                        (ldb/read-transit-str tx-data)
-                        tx-data)
-             tx-meta (if (string? tx-meta)
-                       (ldb/read-transit-str tx-meta)
-                       tx-meta)
-             tx-data' (if (contains? #{:insert-blocks} (:outliner-op tx-meta))
-                        (map (fn [m]
-                               (if (and (map? m) (nil? (:block/order m)))
-                                 (assoc m :block/order (db-order/gen-key nil))
-                                 m)) tx-data')
-                        tx-data')
-             context (if (string? context)
-                       (ldb/read-transit-str context)
-                       context)
-             _ (when context (worker-state/set-context! context))
-             tx-meta' (cond-> tx-meta
-                        (and (not (:whiteboard/transact? tx-meta))
-                             (not (:rtc-download-graph? tx-meta))) ; delay writes to the disk
-                        (assoc :skip-store? true)
-
-                        true
-                        (dissoc :insert-blocks?))]
-         (when-not (and (:create-today-journal? tx-meta)
-                        (:today-journal-name tx-meta)
-                        (seq tx-data')
-                        (ldb/get-page @conn (:today-journal-name tx-meta))) ; today journal created already
-
-           ;; (prn :debug :transact :tx-data tx-data' :tx-meta tx-meta')
-
-           (worker-util/profile "Worker db transact"
-                                (ldb/transact! conn tx-data' tx-meta')))
-         nil)
-       (catch :default e
-         (prn :debug :error)
-         (let [tx-data (if (string? tx-data)
-                         (ldb/read-transit-str tx-data)
-                         tx-data)]
-           (js/console.error e)
-           (prn :debug :tx-data @conn tx-data))))))
-
-  (getInitialData
-   [_this repo]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/write-transit-str (sqlite-common-db/get-initial-data @conn))))
-
-  (get-page-refs-count
-   [_this repo]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/write-transit-str (sqlite-common-db/get-page->refs-count @conn))))
-
-  (fetch-all-pages
-   [_this repo exclude-page-ids-str]
-   ;; (when-let [conn (worker-state/get-datascript-conn repo)]
-   ;;   (async/go
-   ;;     (let [all-pages (sqlite-common-db/get-all-pages @conn (ldb/read-transit-str exclude-page-ids-str))
-   ;;           partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 all-pages))]
-   ;;       (doseq [[idx tx-data] partitioned-data]
-   ;;         (worker-util/post-message :sync-db-changes {:repo repo
-   ;;                                                     :tx-data tx-data
-   ;;                                                     :tx-meta {:initial-pages? true
-   ;;                                                               :end? (= idx (dec (count partitioned-data)))}})
-   ;;         (async/<! (async/timeout 100)))))
-   ;;   nil)
-   )
-
-  (closeDB
-   [_this repo]
-   (close-db! repo))
-
-  (resetDB
-   [_this repo db-transit]
-   (reset-db! repo db-transit))
-
-  (unsafeUnlinkDB
-   [_this repo]
-   (p/let [pool (<get-opfs-pool repo)
-           _ (close-db! repo)
-           result (remove-vfs! pool)]
-     nil))
-
-  (releaseAccessHandles
-   [_this repo]
-   (when-let [^js pool (worker-state/get-opfs-pool repo)]
-     (.releaseAccessHandles pool)))
-
-  (dbExists
-   [_this repo]
-   (<db-exists? repo))
-
-  (exportDB
-   [_this repo]
-   (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
-     (.exec db "PRAGMA wal_checkpoint(2)"))
-   (<export-db-file repo))
-
-  (importDb
-   [this repo data]
-   (when-not (string/blank? repo)
-     (p/let [pool (<get-opfs-pool repo)]
-       (<import-db pool data))))
-
-  ;; Search
-  (search-blocks
-   [this repo q option]
-   (p/let [search-db (get-search-db repo)
-           conn (worker-state/get-datascript-conn repo)
-           result (search/search-blocks repo conn search-db q (bean/->clj option))]
-     (ldb/write-transit-str result)))
-
-  (search-upsert-blocks
-   [this repo blocks]
-   (p/let [db (get-search-db repo)]
-     (search/upsert-blocks! db blocks)
-     nil))
-
-  (search-delete-blocks
-   [this repo ids]
-   (p/let [db (get-search-db repo)]
-     (search/delete-blocks! db ids)
-     nil))
-
-  (search-truncate-tables
-   [this repo]
-   (p/let [db (get-search-db repo)]
-     (search/truncate-table! db)
-     nil))
-
-  (search-build-blocks-indice
-   [this repo]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (search/build-blocks-indice repo @conn)))
-
-  (search-build-pages-indice
-   [this repo]
-   nil)
-
-  (apply-outliner-ops
-   [this repo ops-str opts-str]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (try
-       (worker-util/profile
-        "apply outliner ops"
-        (let [ops (ldb/read-transit-str ops-str)
-              opts (ldb/read-transit-str opts-str)
-              result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
-          (ldb/write-transit-str result)))
-       (catch :default e
-         (let [data (ex-data e)
-               {:keys [type payload]} (when (map? data) data)]
-           (case type
-             :notification
-             (worker-util/post-message type [(:message payload) (:type payload)])
-             (throw e)))))))
-
-  (file-writes-finished?
-   [this repo]
-   (let [conn (worker-state/get-datascript-conn repo)
-         writes @file/*writes]
-     ;; Clean pages that have been deleted
-     (when conn
-       (swap! file/*writes (fn [writes]
-                             (->> writes
-                                  (remove (fn [[_ pid]] (d/entity @conn pid)))
-                                  (into {})))))
-     (if (empty? writes)
-       true
-       (do
-         (prn "Unfinished file writes:" @file/*writes)
-         false))))
-
-  (page-file-saved
-   [this request-id page-id]
-   (file/dissoc-request! request-id)
-   nil)
-
-  (sync-app-state
-   [this new-state-str]
-   (let [new-state (ldb/read-transit-str new-state-str)]
-     (worker-state/set-new-state! new-state)
-     nil))
-
-  (sync-ui-state
-   [_this repo state-str]
-   (undo-redo/record-ui-state! repo state-str)
-   nil)
-
-  ;; Export
-  (block->content
-   [this repo block-uuid-str tree->file-opts context]
-   (assert (common-util/uuid-string? block-uuid-str))
-   (let [block-uuid (uuid block-uuid-str)]
-     (when-let [conn (worker-state/get-datascript-conn repo)]
-       (common-file/block->content repo @conn block-uuid
-                                   (ldb/read-transit-str tree->file-opts)
-                                   (ldb/read-transit-str context)))))
-
-  (get-debug-datoms
-   [this repo]
-   (when-let [db (worker-state/get-sqlite-conn repo)]
-     (let [conn (worker-state/get-datascript-conn repo)]
-       (ldb/write-transit-str (worker-export/get-debug-datoms conn db)))))
-
-  (get-all-pages
-   [this repo]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/write-transit-str (worker-export/get-all-pages repo @conn))))
-
-  (get-all-page->content
-   [this repo]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/write-transit-str (worker-export/get-all-page->content repo @conn))))
-
-  ;; RTC
-  (rtc-start
-   [this repo token]
-   (with-write-transit-str
-     (rtc-core/new-task--rtc-start repo token)))
-
-  (rtc-stop
-   [this]
-   (rtc-core/rtc-stop))
-
-  (rtc-toggle-auto-push
-   [this]
-   (rtc-core/rtc-toggle-auto-push))
-
-  (rtc-toggle-remote-profile
-   [this]
-   (rtc-core/rtc-toggle-remote-profile))
-
-  (rtc-grant-graph-access
-   [this token graph-uuid target-user-uuids-str target-user-emails-str]
-   (let [target-user-uuids (ldb/read-transit-str target-user-uuids-str)
-         target-user-emails (ldb/read-transit-str target-user-emails-str)]
-     (with-write-transit-str
-       (rtc-core/new-task--grant-access-to-others token graph-uuid
-                                                  :target-user-uuids target-user-uuids
-                                                  :target-user-emails target-user-emails))))
-
-  (rtc-get-graphs
-   [this token]
-   (with-write-transit-str
-     (rtc-core/new-task--get-graphs token)))
-
-  (rtc-delete-graph
-   [this token graph-uuid schema-version]
-   (with-write-transit-str
-     (rtc-core/new-task--delete-graph token graph-uuid schema-version)))
-
-  (rtc-get-users-info
-   [this token graph-uuid]
-   (with-write-transit-str
-     (rtc-core/new-task--get-users-info token graph-uuid)))
-
-  (rtc-get-block-content-versions
-   [this token graph-uuid block-uuid]
-   (with-write-transit-str
-     (rtc-core/new-task--get-block-content-versions token graph-uuid block-uuid)))
-
-  (rtc-get-debug-state
-   [this]
-   (with-write-transit-str
-     (rtc-core/new-task--get-debug-state)))
-
-  (rtc-async-upload-graph
-   [this repo token remote-graph-name]
-   (with-write-transit-str
-     (rtc-core/new-task--upload-graph token repo remote-graph-name)))
-
-  (rtc-async-branch-graph
-   [this repo token]
-   (with-write-transit-str
-     (rtc-core/new-task--branch-graph token repo)))
-
-  (rtc-request-download-graph
-   [this token graph-uuid schema-version]
-   (with-write-transit-str
-     (rtc-core/new-task--request-download-graph token graph-uuid schema-version)))
-
-  (rtc-wait-download-graph-info-ready
-   [this token download-info-uuid graph-uuid schema-version timeout-ms]
-   (with-write-transit-str
-     (rtc-core/new-task--wait-download-info-ready token download-info-uuid graph-uuid schema-version timeout-ms)))
-
-  (rtc-download-graph-from-s3
-   [this graph-uuid graph-name s3-url]
-   (with-write-transit-str
-     (rtc-core/new-task--download-graph-from-s3 graph-uuid graph-name s3-url)))
-
-  (rtc-download-info-list
-   [this token graph-uuid schema-version]
-   (with-write-transit-str
-     (rtc-core/new-task--download-info-list token graph-uuid schema-version)))
-
-  (rtc-get-graph-keys
-   [this repo]
-   (with-write-transit-str
-     (worker-crypt/get-graph-keys-jwk repo)))
-
-  (rtc-sync-current-graph-encrypted-aes-key
-   [this token device-uuids-transit-str]
-   (with-write-transit-str
-     (worker-device/new-task--sync-current-graph-encrypted-aes-key
-      token device-uuids-transit-str)))
-
-  (device-list-devices
-   [this token]
-   (with-write-transit-str
-     (worker-device/new-task--list-devices token)))
-
-  (device-remove-device-public-key
-   [this token device-uuid key-name]
-   (with-write-transit-str
-     (worker-device/new-task--remove-device-public-key token device-uuid key-name)))
-
-  (device-remove-device
-   [this token device-uuid]
-   (with-write-transit-str
-     (worker-device/new-task--remove-device token device-uuid)))
-
-  (undo
-   [_this repo _page-block-uuid-str]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/write-transit-str (undo-redo/undo repo conn))))
-
-  (redo
-   [_this repo _page-block-uuid-str]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/write-transit-str (undo-redo/redo repo conn))))
-
-  (record-editor-info
-   [_this repo _page-block-uuid-str editor-info-str]
-   (undo-redo/record-editor-info! repo (ldb/read-transit-str editor-info-str))
-   nil)
-
-  (validate-db
-   [_this repo]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [result (worker-db-validate/validate-db @conn)]
-       (db-migrate/fix-db! conn {:invalid-entity-ids (:invalid-entity-ids result)})
-       result)))
-
-  (export-edn
-   [_this repo options]
-   (let [conn (worker-state/get-datascript-conn repo)]
-     (try
-       (->> (ldb/read-transit-str options)
-            (sqlite-export/build-export @conn)
-            ldb/write-transit-str)
-       (catch :default e
-         (js/console.error "export-edn error: " e)
-         (worker-util/post-message :notification
-                                   ["An unexpected error occurred during export. See the javascript console for details."
-                                    :error])))))
-
-  (dangerousRemoveAllDbs
-   [this repo]
-   (p/let [r (.listDB this)
-           dbs (ldb/read-transit-str r)]
-     (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
 
 (defn- rename-page!
   [repo conn page-uuid new-name]
@@ -1283,18 +810,25 @@
              (file/write-files! conn col (worker-state/get-context)))
            (js/console.error (str "DB is not found for " repo))))))))
 
+(defn- remote-function
+  [qkw-str args-transit-str]
+  (let [qkw (keyword qkw-str)]
+    (if-let [f (@thread-api/*thread-apis qkw)]
+      (apply f (ldb/read-transit-str args-transit-str))
+      (throw (ex-info (str "not found thread-api: " qkw-str) {})))))
+
 (defn init
   "web worker entry"
   []
   (glogi-console/install!)
   (check-worker-scope!)
-  (let [^js obj (DBWorker.)]
-    (outliner-register-op-handlers!)
-    (worker-state/set-worker-object! obj)
-    (<ratelimit-file-writes!)
-    (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
-    (Comlink/expose obj)
-    (reset! worker-state/*main-thread (Comlink/wrap js/self))))
+  (outliner-register-op-handlers!)
+  (worker-state/set-worker-object! 11111)
+  (<ratelimit-file-writes!)
+  (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
+    ;; (Comlink/expose obj)
+  (Comlink/expose #js{"remoteInvoke" remote-function})
+  (reset! worker-state/*main-thread (Comlink/wrap js/self)))
 
 (comment
   (defn <remove-all-files!
