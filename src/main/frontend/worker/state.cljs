@@ -10,9 +10,7 @@
 
 (defonce *main-thread (atom nil))
 
-(defonce *state (atom {:worker/object nil
-
-                       :db/latest-transact-time {}
+(defonce *state (atom {:db/latest-transact-time {}
                        :worker/context {}
 
                        ;; FIXME: this name :config is too general
@@ -101,14 +99,6 @@
   [new-state]
   (swap! *state (fn [old-state]
                   (merge old-state new-state))))
-
-(defn set-worker-object!
-  [worker]
-  (swap! *state assoc :worker/object worker))
-
-(defn get-worker-object
-  []
-  (:worker/object @*state))
 
 (defn get-date-formatter
   [repo]

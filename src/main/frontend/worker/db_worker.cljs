@@ -8,28 +8,22 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage] :as storage]
-            [frontend.common.file.core :as common-file]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
-            [frontend.worker.crypt :as worker-crypt]
             [frontend.worker.db-listener :as db-listener]
-            [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db.validate :as worker-db-validate]
-            [frontend.worker.device :as worker-device]
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
             [frontend.worker.rtc.asset-db-listener]
             [frontend.worker.rtc.client-op :as client-op]
-            [frontend.worker.rtc.core :as rtc-core]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state] ;; [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.undo-redo2 :as undo-redo]
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -42,8 +36,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
-            [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]))
+            [promesa.core :as p]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -449,14 +442,6 @@
   [repo]
   (worker-state/get-sqlite-conn repo :search))
 
-(defn- with-write-transit-str
-  [task]
-  (p/chain
-   (js/Promise. task)
-   (fn [result]
-     (let [result (when-not (= result @worker-state/*state) result)]
-       (ldb/write-transit-str result)))))
-
 (def-thread-api :general/get-version
   []
   (when-let [sqlite @*sqlite]
@@ -823,7 +808,6 @@
   (glogi-console/install!)
   (check-worker-scope!)
   (outliner-register-op-handlers!)
-  (worker-state/set-worker-object! 11111)
   (<ratelimit-file-writes!)
   (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
     ;; (Comlink/expose obj)

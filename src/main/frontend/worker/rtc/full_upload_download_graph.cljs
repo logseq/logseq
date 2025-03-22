@@ -348,8 +348,7 @@
         tx-data (concat
                  (blocks-resolve-temp-id normal-blocks)
                  [(ldb/kv :logseq.kv/graph-uuid graph-uuid)])
-        init-tx-data (cons (ldb/kv :logseq.kv/db-type "db") schema-blocks)
-        worker-obj (:worker/object @worker-state/*state)]
+        init-tx-data (cons (ldb/kv :logseq.kv/db-type "db") schema-blocks)]
     (m/sp
       (client-op/update-local-tx repo t)
       (rtc-log-and-state/update-local-t graph-uuid t)
