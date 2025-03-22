@@ -24,8 +24,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [malli.core :as ma]
-            [missionary.core :as m]
-            [promesa.core :as p])
+            [missionary.core :as m])
   (:import [missionary Cancelled]))
 
 (def ^:private rtc-state-schema
@@ -532,16 +531,9 @@
 
 (def new-task--download-graph-from-s3 r.upload-download/new-task--download-graph-from-s3)
 
-(defn- with-write-transit-str
-  [task]
-  (p/chain
-   (js/Promise. task)
-   ldb/write-transit-str))
-
 (def-thread-api :rtc/start
   [repo token]
-  (with-write-transit-str
-    (new-task--rtc-start repo token)))
+  (new-task--rtc-start repo token))
 
 (def-thread-api :rtc/stop
   []
@@ -559,65 +551,53 @@
   [token graph-uuid target-user-uuids-str target-user-emails-str]
   (let [target-user-uuids (ldb/read-transit-str target-user-uuids-str)
         target-user-emails (ldb/read-transit-str target-user-emails-str)]
-    (with-write-transit-str
-      (new-task--grant-access-to-others token graph-uuid
-                                        :target-user-uuids target-user-uuids
-                                        :target-user-emails target-user-emails))))
+    (new-task--grant-access-to-others token graph-uuid
+                                      :target-user-uuids target-user-uuids
+                                      :target-user-emails target-user-emails)))
 
 (def-thread-api :rtc/get-graphs
   [token]
-  (with-write-transit-str
-    (new-task--get-graphs token)))
+  (new-task--get-graphs token))
 
 (def-thread-api :rtc/delete-graph
   [token graph-uuid schema-version]
-  (with-write-transit-str
-    (new-task--delete-graph token graph-uuid schema-version)))
+  (new-task--delete-graph token graph-uuid schema-version))
 
 (def-thread-api :rtc/get-users-info
   [token graph-uuid]
-  (with-write-transit-str
-    (new-task--get-users-info token graph-uuid)))
+  (new-task--get-users-info token graph-uuid))
 
 (def-thread-api :rtc/get-block-content-versions
   [token graph-uuid block-uuid]
-  (with-write-transit-str
-    (new-task--get-block-content-versions token graph-uuid block-uuid)))
+  (new-task--get-block-content-versions token graph-uuid block-uuid))
 
 (def-thread-api :rtc/get-debug-state
   []
-  (with-write-transit-str
-    (new-task--get-debug-state)))
+  (new-task--get-debug-state))
 
 (def-thread-api :rtc/async-upload-graph
   [repo token remote-graph-name]
-  (with-write-transit-str
-    (new-task--upload-graph token repo remote-graph-name)))
+  (new-task--upload-graph token repo remote-graph-name))
 
 (def-thread-api :rtc/async-branch-graph
   [repo token]
-  (with-write-transit-str
-    (new-task--branch-graph token repo)))
+  (new-task--branch-graph token repo))
 
 (def-thread-api :rtc/request-download-graph
   [token graph-uuid schema-version]
-  (with-write-transit-str
-    (new-task--request-download-graph token graph-uuid schema-version)))
+  (new-task--request-download-graph token graph-uuid schema-version))
 
 (def-thread-api :rtc/wait-download-graph-info-ready
   [token download-info-uuid graph-uuid schema-version timeout-ms]
-  (with-write-transit-str
-    (new-task--wait-download-info-ready token download-info-uuid graph-uuid schema-version timeout-ms)))
+  (new-task--wait-download-info-ready token download-info-uuid graph-uuid schema-version timeout-ms))
 
 (def-thread-api :rtc/download-graph-from-s3
   [graph-uuid graph-name s3-url]
-  (with-write-transit-str
-    (new-task--download-graph-from-s3 graph-uuid graph-name s3-url)))
+  (new-task--download-graph-from-s3 graph-uuid graph-name s3-url))
 
 (def-thread-api :rtc/download-info-list
-  [ token graph-uuid schema-version]
-   (with-write-transit-str
-     (new-task--download-info-list token graph-uuid schema-version)))
+  [token graph-uuid schema-version]
+  (new-task--download-info-list token graph-uuid schema-version))
 
 ;;; ================ API (ends) ================
 

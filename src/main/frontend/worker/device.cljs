@@ -208,29 +208,18 @@
                 (m/? (new-task--sync-encrypted-aes-key*
                       get-ws-create-task device-uuid->encrypted-aes-key graph-uuid))))))))))
 
-(defn- with-write-transit-str
-  [task]
-  (p/chain
-   (js/Promise. task)
-   ldb/write-transit-str))
-
 (def-thread-api :rtc/sync-current-graph-encrypted-aes-key
   [token device-uuids-transit-str]
-  (with-write-transit-str
-    (new-task--sync-current-graph-encrypted-aes-key
-     token device-uuids-transit-str)))
+  (new-task--sync-current-graph-encrypted-aes-key token device-uuids-transit-str))
 
 (def-thread-api :device/list-devices
   [token]
-  (with-write-transit-str
-    (new-task--list-devices token)))
+  (new-task--list-devices token))
 
 (def-thread-api :device/remove-device-public-key
   [token device-uuid key-name]
-  (with-write-transit-str
-    (new-task--remove-device-public-key token device-uuid key-name)))
+  (new-task--remove-device-public-key token device-uuid key-name))
 
 (def-thread-api :device/remove-device
   [token device-uuid]
-  (with-write-transit-str
-    (new-task--remove-device token device-uuid)))
+  (new-task--remove-device token device-uuid))

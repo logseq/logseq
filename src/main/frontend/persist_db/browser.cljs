@@ -122,9 +122,11 @@
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
           wrapped-worker* (Comlink/wrap worker)
           wrapped-worker (fn [qkw & args]
-                           (.remoteInvoke ^js wrapped-worker*
-                                          (str (namespace qkw) "/" (name qkw))
-                                          (ldb/write-transit-str args)))
+                           (p/chain
+                            (.remoteInvoke ^js wrapped-worker*
+                                           (str (namespace qkw) "/" (name qkw))
+                                           (ldb/write-transit-str args))
+                            ldb/read-transit-str))
           t1 (util/time-ms)]
       (Comlink/expose (Main.) worker)
       (worker-handler/handle-message! worker wrapped-worker*)
@@ -181,7 +183,6 @@
   (<list-db [_this]
     (when-let [worker @*worker]
       (-> (worker :general/list-db)
-          (p/then ldb/read-transit-str)
           (p/catch sqlite-error-handler))))
 
   (<unsafe-delete [_this repo]

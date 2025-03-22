@@ -6,7 +6,6 @@
             [frontend.persist-db.browser :as browser]
             [frontend.search.protocol :as protocol]
             [frontend.state :as state]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defonce *worker browser/*worker)
@@ -15,8 +14,7 @@
   protocol/Engine
   (query [_this q option]
     (if-let [worker @*worker]
-      (p/let [result (worker :search/search-blocks (state/get-current-repo) q (bean/->js option))]
-        (ldb/read-transit-str result))
+      (worker :search/search-blocks (state/get-current-repo) q (bean/->js option))
       (p/resolved nil)))
   (rebuild-pages-indice! [_this]
     (if-let [worker @*worker]

@@ -61,8 +61,7 @@
        {:size :sm
         :on-click (fn [_]
                     (let [worker @db-browser/*worker]
-                      (p/let [result (worker :rtc/get-debug-state)
-                              new-state (ldb/read-transit-str result)]
+                      (p/let [new-state (worker :rtc/get-debug-state)]
                         (swap! debug-state (fn [old] (merge old new-state))))))}
        (shui/tabler-icon "refresh") "state")
 
@@ -72,8 +71,7 @@
         (fn [_]
           (let [token (state/get-auth-id-token)
                 worker @db-browser/*worker]
-            (p/let [result (worker :rtc/get-graphs token)
-                    graph-list (ldb/read-transit-str result)]
+            (p/let [graph-list (worker :rtc/get-graphs token)]
               (swap! debug-state assoc
                      :remote-graphs
                      (map
@@ -188,15 +186,14 @@
                                     (p/let [token (state/get-auth-id-token)
                                             download-info-uuid (worker :rtc/request-download-graph
                                                                        token graph-uuid graph-schema-version)
-                                            download-info-uuid (ldb/read-transit-str download-info-uuid)
-                                            result (worker :rtc/wait-download-graph-info-ready
-                                                           token download-info-uuid graph-uuid graph-schema-version 60000)
                                             {:keys [_download-info-uuid
                                                     download-info-s3-url
                                                     _download-info-tx-instant
                                                     _download-info-t
                                                     _download-info-created-at]
-                                             :as result} (ldb/read-transit-str result)]
+                                             :as result}
+                                            (worker :rtc/wait-download-graph-info-ready
+                                                    token download-info-uuid graph-uuid graph-schema-version 60000)]
                                       (when (not= result :timeout)
                                         (assert (some? download-info-s3-url) result)
                                         (worker :rtc/download-graph-from-s3
@@ -281,10 +278,8 @@
           {:size :sm
            :on-click (fn [_]
                        (let [worker @db-browser/*worker]
-                         (p/let [result1 (worker :rtc/get-graph-keys (state/get-current-repo))
-                                 graph-keys (ldb/read-transit-str result1)
-                                 result2 (some->> (state/get-auth-id-token) (worker :device/list-devices))
-                                 devices (ldb/read-transit-str result2)]
+                         (p/let [graph-keys (worker :rtc/get-graph-keys (state/get-current-repo))
+                                 devices (some->> (state/get-auth-id-token) (worker :device/list-devices))]
                            (swap! (get state ::keys-state) #(merge % graph-keys {:devices devices})))))}
           (shui/tabler-icon "refresh") "keys-state")]
         [:div.pb-4

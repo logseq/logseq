@@ -127,9 +127,8 @@
                       (remove (fn [b] (= (:block/uuid b) (:block/uuid entity))))
                       (map (fn [b] [:block/uuid (:block/uuid b)])))
             result (when (seq eids)
-                     (@state/*db-worker :general/get-page-unlinked-refs repo (:db/id entity) (ldb/write-transit-str eids)))
-            result' (when result (ldb/read-transit-str result))]
-      (when result' (d/transact! (db/get-db repo false) result'))
-      (some->> result'
+                     (@state/*db-worker :general/get-page-unlinked-refs repo (:db/id entity) (ldb/write-transit-str eids)))]
+      (when result (d/transact! (db/get-db repo false) result))
+      (some->> result
                db-model/sort-by-order-recursive
                db-utils/group-by-page))))

@@ -150,10 +150,10 @@
       (when-let [worker @db-browser/*worker]
         (swap! *async-queries assoc [name' opts] true)
         (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
-        (p/let [result (worker :general/get-block-and-children graph id (ldb/write-transit-str
-                                                                         {:children? children?
-                                                                          :nested-children? nested-children?}))
-                {:keys [properties block children] :as result'} (ldb/read-transit-str result)
+        (p/let [{:keys [properties block children] :as result'}
+                (worker :general/get-block-and-children graph id (ldb/write-transit-str
+                                                                  {:children? children?
+                                                                   :nested-children? nested-children?}))
                 conn (db/get-db graph false)
                 block-and-children (concat properties [block] children)
                 _ (d/transact! conn block-and-children)
@@ -171,8 +171,7 @@
   (when-let [worker @db-browser/*worker]
     (when-let [block-id (:block/uuid (db/entity graph id))]
       (state/update-state! :db/async-query-loading (fn [s] (conj s (str block-id "-parents"))))
-      (p/let [result-str (worker :general/get-block-parents graph id depth)
-              result (ldb/read-transit-str result-str)
+      (p/let [result (worker :general/get-block-parents graph id depth)
               conn (db/get-db graph false)
               _ (d/transact! conn result)]
         (state/update-state! :db/async-query-loading (fn [s] (disj s (str block-id "-parents"))))
@@ -188,15 +187,14 @@
                              (ldb/write-transit-str
                               {:children? true
                                :nested-children? false}))]
-        (some-> result (ldb/read-transit-str) (:children))))))
+        (:children result)))))
 
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))
   (when-let [worker @db-browser/*worker]
     (state/update-state! :db/async-query-loading (fn [s] (conj s (str eid "-refs"))))
-    (p/let [result-str (worker :general/get-block-refs graph eid)
-            result (ldb/read-transit-str result-str)
+    (p/let [result (worker :general/get-block-refs graph eid)
             conn (db/get-db graph false)
             _ (d/transact! conn result)]
       (state/update-state! :db/async-query-loading (fn [s] (disj s (str eid "-refs"))))
