@@ -10,7 +10,6 @@
             [frontend.hooks :as hooks]
             [frontend.state :as state]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
