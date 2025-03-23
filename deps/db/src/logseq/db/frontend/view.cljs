@@ -287,8 +287,7 @@
 
 (defonce *view-cache (atom {}))
 (defn get-view-data
-  [repo db view-id {:keys [journals? view-for-id view-feature-type]
-                    :as opts}]
+  [repo db view-id {:keys [journals? view-for-id view-feature-type]}]
   ;; TODO: create a view for journals maybe?
   (if journals?
     (let [ids (->> (ldb/get-latest-journals db)

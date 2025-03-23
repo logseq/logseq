@@ -11,8 +11,8 @@
             [frontend.state :as state]
             [frontend.template :as template]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defn trigger-custom-query!
   [config query *query-error set-result!]
@@ -27,7 +27,7 @@
               form (common-util/safe-read-string {:log-error? false} q)]
           (cond
             (and (symbol? form)
-                                ;; Queries only containing template should trigger a query
+                 ;; Queries only containing template should trigger a query
                  (not (re-matches template/template-re (string/trim q))))
             nil
 
