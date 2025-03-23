@@ -54,7 +54,7 @@
        :title-key :views.table/live-query-title
        :view-entity view-entity
        :view-feature-type :query-result
-       :data result'
+       :data (mapv :db/id result')
        :set-data! set-data!
        :columns columns'
        :on-delete-rows (fn [table selected-rows]

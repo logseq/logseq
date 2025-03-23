@@ -1105,6 +1105,7 @@
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
+  (prn :debug :rows rows)
   (ui/virtualized-list
    {:ref #(reset! *scroller-ref %)
     :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
@@ -1588,40 +1589,42 @@
     (ldb/read-transit-str data-str)))
 
 (rum/defc view < rum/static
-  [{:keys [view-parent view-feature-type view-entity] :as option}]
+  [{:keys [view-parent view-feature-type view-entity data] :as option}]
   (let [[view-entity set-view-entity!] (hooks/use-state view-entity)
         [views set-views!] (hooks/use-state nil)
-        [items-count set-count!] (hooks/use-state (count (:data option)))
-        [loading? set-loading!] (hooks/use-state true)
-        [data set-data!] (hooks/use-state [])
+        [items-count set-count!] (hooks/use-state (count data))
+        query? (= view-feature-type :query-result)
+        [loading? set-loading!] (hooks/use-state (not query?))
+        [data set-data!] (hooks/use-state data)
         db-based? (config/db-based-graph?)]
-    (hooks/use-effect!
-     (fn []
-       (let [repo (state/get-current-repo)]
-         (->
-          (p/let [_result (when db-based?  (db-async/<get-views repo (:db/id view-parent) view-feature-type))
-                  views (when db-based?  (get-views view-parent view-feature-type))
-                  current-view (when db-based?
-                                 (if-let [v (first views)]
-                                   (do
-                                     (when-not view-entity (set-view-entity! v))
-                                     (set-views! views)
-                                     v)
-                                   (when (and view-parent view-feature-type (not view-entity))
-                                     (p/let [new-view (create-view! view-parent view-feature-type)]
-                                       (set-view-entity! new-view)
-                                       (set-views! (concat views [new-view]))
-                                       new-view))))
-                  {:keys [count data]} (<load-view-data current-view {:view-for-id (or (:db/id (:logseq.property/view-for current-view))
-                                                                                       (:db/id view-parent))
-                                                                      :view-feature-type view-feature-type})]
-            (set-data! data)
-            (set-count! count)
-            (set-loading! false))
-          (p/catch (fn [e]
-                     (js/console.error e)
-                     (set-loading! false))))))
-     [])
+    (when-not query? ; FIXME: move query logic to worker
+      (hooks/use-effect!
+       (fn []
+         (let [repo (state/get-current-repo)]
+           (->
+            (p/let [_result (when db-based?  (db-async/<get-views repo (:db/id view-parent) view-feature-type))
+                    views (when db-based?  (get-views view-parent view-feature-type))
+                    current-view (when db-based?
+                                   (if-let [v (first views)]
+                                     (do
+                                       (when-not view-entity (set-view-entity! v))
+                                       (set-views! views)
+                                       v)
+                                     (when (and view-parent view-feature-type (not view-entity))
+                                       (p/let [new-view (create-view! view-parent view-feature-type)]
+                                         (set-view-entity! new-view)
+                                         (set-views! (concat views [new-view]))
+                                         new-view))))
+                    {:keys [count data]} (<load-view-data current-view {:view-for-id (or (:db/id (:logseq.property/view-for current-view))
+                                                                                         (:db/id view-parent))
+                                                                        :view-feature-type view-feature-type})]
+              (set-data! data)
+              (set-count! count)
+              (set-loading! false))
+            (p/catch (fn [e]
+                       (js/console.error e)
+                       (set-loading! false))))))
+       []))
     (if loading?
       [:div.flex.flex-col.space-2.gap-2.my-2
        (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
