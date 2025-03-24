@@ -1188,7 +1188,7 @@
        :size :sm
        :on-click (get-in table [:data-fns :add-new-object!])}
       (ui/icon (if asset? "upload" "plus")))
-     [:div "New record"])))
+     [:div "New node"])))
 
 (rum/defc add-new-row < rum/static
   [table]
