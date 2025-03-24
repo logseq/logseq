@@ -154,7 +154,8 @@
         property-value-ks [:db/id :block/uuid :db/ident
                            :block/name :block/title
                            :logseq.property/value
-                           :block/tags :block/page]]
+                           :block/tags :block/page]
+        block-refs-count? (some #{:block.temp/refs-count} properties)]
     (when block
       (let [block' (if (seq properties)
                      (select-keys block properties)
@@ -173,7 +174,9 @@
                                       (map #(select-keys % property-value-ks) v)
 
                                       :else
-                                      v))))]
+                                      v)))
+                     block-refs-count?
+                     (assoc :block.temp/refs-count (count (:block/_refs block))))]
         (cond->
          {:block (assoc (into {} block') :db/id (:db/id block))}
           children?

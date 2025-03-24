@@ -45,7 +45,8 @@
                    new-state)}
   [state config view-entity result]
   (let [*result (::result state)
-        result' (or @*result (init-result result view-entity))
+        result' (->> (or @*result (init-result result view-entity))
+                     (remove :logseq.property/view-for))
         columns' (columns (assoc config :container-id (::container-id state)) result')
         set-data! (fn [data] (reset! *result data))]
     [:div.query-result.w-full
