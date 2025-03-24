@@ -367,7 +367,7 @@
                  :pages-directory (config/get-pages-directory)}
         worker @state/*db-worker]
     (when worker
-      (worker :general/set-context (ldb/write-transit-str context)))))
+      (worker :general/set-context context))))
 
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/restored, as :graph/restored is for window reloaded

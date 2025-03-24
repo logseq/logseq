@@ -548,12 +548,10 @@
   (rtc-toggle-remote-profile))
 
 (def-thread-api :rtc/grant-graph-access
-  [token graph-uuid target-user-uuids-str target-user-emails-str]
-  (let [target-user-uuids (ldb/read-transit-str target-user-uuids-str)
-        target-user-emails (ldb/read-transit-str target-user-emails-str)]
-    (new-task--grant-access-to-others token graph-uuid
-                                      :target-user-uuids target-user-uuids
-                                      :target-user-emails target-user-emails)))
+  [token graph-uuid target-user-uuids target-user-emails]
+  (new-task--grant-access-to-others token graph-uuid
+                                    :target-user-uuids target-user-uuids
+                                    :target-user-emails target-user-emails))
 
 (def-thread-api :rtc/get-graphs
   [token]

@@ -14,7 +14,6 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
@@ -127,7 +126,7 @@
                       (remove (fn [b] (= (:block/uuid b) (:block/uuid entity))))
                       (map (fn [b] [:block/uuid (:block/uuid b)])))
             result (when (seq eids)
-                     (@state/*db-worker :general/get-page-unlinked-refs repo (:db/id entity) (ldb/write-transit-str eids)))]
+                     (@state/*db-worker :general/get-page-unlinked-refs repo (:db/id entity) eids))]
       (when result (d/transact! (db/get-db repo false) result))
       (some->> result
                db-model/sort-by-order-recursive

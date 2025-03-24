@@ -357,7 +357,7 @@
         (create-graph-for-rtc-test repo init-tx-data tx-data)
         (c.m/<?
          (p/do!
-          ((@thread-api/*thread-apis :general/create-or-open-db) repo (ldb/write-transit-str {:close-other-db? false}))
+          ((@thread-api/*thread-apis :general/create-or-open-db) repo {:close-other-db? false})
           ((@thread-api/*thread-apis :general/export-db) repo)
           ((@thread-api/*thread-apis :general/transact)
            repo init-tx-data

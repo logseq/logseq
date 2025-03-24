@@ -1,7 +1,6 @@
 (ns frontend.search.browser
   "Browser implementation of search protocol"
-  (:require [cljs-bean.core :as bean]
-            [frontend.config :as config]
+  (:require [frontend.config :as config]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.persist-db.browser :as browser]
             [frontend.search.protocol :as protocol]
@@ -14,7 +13,7 @@
   protocol/Engine
   (query [_this q option]
     (if-let [worker @*worker]
-      (worker :search/search-blocks (state/get-current-repo) q (bean/->js option))
+      (worker :search/search-blocks (state/get-current-repo) q option)
       (p/resolved nil)))
   (rebuild-pages-indice! [_this]
     (if-let [worker @*worker]
@@ -27,12 +26,12 @@
               _ (protocol/truncate-blocks! this)
               result (worker :search/build-blocks-indice repo)
               blocks (if file-based?
-                       (->> (bean/->clj result)
+                       (->> result
                             ;; remove built-in properties from content
-                            (map #(update % :content
-                                          (fn [content]
-                                            (property-util/remove-built-in-properties (get % :format :markdown) content))))
-                            bean/->js)
+                            (map
+                             #(update % :content
+                                      (fn [content]
+                                        (property-util/remove-built-in-properties (get % :format :markdown) content)))))
                        result)
               _ (when (seq blocks)
                   (worker :search/upsert-blocks repo blocks))])
@@ -42,9 +41,9 @@
     (if-let [worker @*worker]
       (let [repo (state/get-current-repo)]
         (p/let [_ (when (seq blocks-to-remove-set)
-                    (worker :search/delete-blocks repo (bean/->js blocks-to-remove-set)))]
+                    (worker :search/delete-blocks repo blocks-to-remove-set))]
           (when (seq blocks-to-add)
-            (worker :search/upsert-blocks repo (bean/->js blocks-to-add)))))
+            (worker :search/upsert-blocks repo blocks-to-add))))
       (p/resolved nil)))
   (truncate-blocks! [_this]
     (if-let [worker @*worker]

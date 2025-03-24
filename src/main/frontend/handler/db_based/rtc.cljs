@@ -158,7 +158,7 @@
     (when-let [worker @state/*db-worker]
       (p/let [token (state/get-auth-id-token)
               repo (state/get-current-repo)
-              result (worker :rtc/get-users-info token (str graph-uuid))]
+              result (worker :rtc/get-users-info token graph-uuid)]
         (state/set-state! :rtc/users-info {repo result})))))
 
 (defn <rtc-invite-email
@@ -168,9 +168,7 @@
       (->
        (p/do!
         (worker :rtc/grant-graph-access
-                token (str graph-uuid)
-                (ldb/write-transit-str [])
-                (ldb/write-transit-str [email]))
+                token (str graph-uuid) [] [email])
         (notification/show! "Invitation sent!" :success))
        (p/catch (fn [e]
                   (notification/show! "Something wrong, please try again." :error)

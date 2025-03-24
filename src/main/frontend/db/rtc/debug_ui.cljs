@@ -9,7 +9,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -160,8 +159,8 @@
                                     (let [worker @db-browser/*worker]
                                       (worker :rtc/grant-graph-access
                                               token graph-uuid
-                                              (some-> user-uuid vector ldb/write-transit-str)
-                                              (some-> user-email vector ldb/write-transit-str))))))})
+                                              (some-> user-uuid vector)
+                                              (some-> user-email vector))))))})
 
         [:b "➡️"]
         [:input.form-input.my-2.py-1
@@ -330,7 +329,7 @@
                         (when-let [token (state/get-auth-id-token)]
                           (when-let [device-uuid (not-empty (:sync-private-key-device-uuid keys-state))]
                             (worker :rtc/sync-current-graph-encrypted-aes-key
-                                    token (ldb/write-transit-str [(parse-uuid device-uuid)]))))))}
+                                    token [(parse-uuid device-uuid)])))))}
          "Sync CurrentGraph EncryptedAesKey")
         [:input.form-input.my-2.py-1.w-32
          {:on-change (fn [e] (swap! *keys-state assoc :sync-private-key-device-uuid (util/evalue e)))

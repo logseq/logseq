@@ -8,7 +8,6 @@
             [frontend.util :as util]
             [frontend.util.page :as page-util]
             [goog.dom :as gdom]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defn ^:export export-block-data []
@@ -17,7 +16,7 @@
     (when-let [worker @state/*db-worker]
       (p/let [result (worker :general/export-edn
                              (state/get-current-repo)
-                             (ldb/write-transit-str {:export-type :block :block-id [:block/uuid block-uuid]}))
+                             {:export-type :block :block-id [:block/uuid block-uuid]})
               pull-data (with-out-str (pprint/pprint result))]
         (.writeText js/navigator.clipboard pull-data)
         (println pull-data)
@@ -29,7 +28,7 @@
     (when-let [worker @state/*db-worker]
       (p/let [result (worker :general/export-edn
                              (state/get-current-repo)
-                             (ldb/write-transit-str {:export-type :view-nodes :node-ids block-uuids}))
+                             {:export-type :view-nodes :node-ids block-uuids})
               pull-data (with-out-str (pprint/pprint result))]
         (.writeText js/navigator.clipboard pull-data)
         (println pull-data)
@@ -39,7 +38,8 @@
   (if-let [page-id (page-util/get-current-page-id)]
     (when-let [worker @state/*db-worker]
       (p/let [result (worker :general/export-edn
-                             (state/get-current-repo) (ldb/write-transit-str {:export-type :page :page-id page-id}))
+                             (state/get-current-repo)
+                             {:export-type :page :page-id page-id})
               pull-data (with-out-str (pprint/pprint result))]
         (.writeText js/navigator.clipboard pull-data)
         (println pull-data)
@@ -49,7 +49,8 @@
 (defn ^:export export-graph-ontology-data []
   (when-let [worker @state/*db-worker]
     (p/let [result (worker :general/export-edn
-                           (state/get-current-repo) (ldb/write-transit-str {:export-type :graph-ontology}))
+                           (state/get-current-repo)
+                           {:export-type :graph-ontology})
             pull-data (with-out-str (pprint/pprint result))]
       (.writeText js/navigator.clipboard pull-data)
       (println pull-data)
@@ -61,8 +62,8 @@
   (when-let [worker @state/*db-worker]
     (p/let [result (worker :general/export-edn
                            (state/get-current-repo)
-                           (ldb/write-transit-str {:export-type :graph
-                                                   :graph-options {:include-timestamps? true}}))
+                           {:export-type :graph
+                            :graph-options {:include-timestamps? true}})
             pull-data (with-out-str (pprint/pprint result))]
       pull-data)))
 

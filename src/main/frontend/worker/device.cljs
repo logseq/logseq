@@ -173,9 +173,8 @@
         (m/? (new-task--remove-user-device* get-ws-create-task device-uuid*))))))
 
 (defn new-task--sync-current-graph-encrypted-aes-key
-  [token device-uuids-transit-str]
-  (let [repo (worker-state/get-current-repo)
-        device-uuids (ldb/read-transit-str device-uuids-transit-str)]
+  [token device-uuids]
+  (let [repo (worker-state/get-current-repo)]
     (assert (and (seq device-uuids) (every? uuid? device-uuids)) device-uuids)
     (m/sp
       (when-let [graph-uuid (client-op/get-graph-uuid repo)]
@@ -209,8 +208,8 @@
                       get-ws-create-task device-uuid->encrypted-aes-key graph-uuid))))))))))
 
 (def-thread-api :rtc/sync-current-graph-encrypted-aes-key
-  [token device-uuids-transit-str]
-  (new-task--sync-current-graph-encrypted-aes-key token device-uuids-transit-str))
+  [token device-uuids]
+  (new-task--sync-current-graph-encrypted-aes-key token device-uuids))
 
 (def-thread-api :device/list-devices
   [token]

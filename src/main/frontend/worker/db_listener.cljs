@@ -1,7 +1,6 @@
 (ns frontend.worker.db-listener
   "Db listeners for worker-db."
-  (:require [cljs-bean.core :as bean]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.search :as search]
@@ -33,9 +32,9 @@
         (p/do!
          (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')]
            (when (seq blocks-to-remove-set)
-             ((@thread-api/*thread-apis :search/delete-blocks) repo (bean/->js blocks-to-remove-set)))
+             ((@thread-api/*thread-apis :search/delete-blocks) repo blocks-to-remove-set))
            (when (seq blocks-to-add)
-             ((@thread-api/*thread-apis :search/upsert-blocks) repo (bean/->js blocks-to-add)))))))
+             ((@thread-api/*thread-apis :search/upsert-blocks) repo blocks-to-add))))))
     tx-report'))
 
 (comment
