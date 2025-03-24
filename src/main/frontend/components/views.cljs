@@ -1100,11 +1100,11 @@
            (let [block (:block result)]
              (set-item! (or block (some-> (:db/id block) db/entity)))))))
      [db-id])
-    (item-render (assoc item :id (:db/id item) :db/id (:db/id item)))))
+    (when item
+      (item-render (assoc item :id (:db/id item) :db/id (:db/id item))))))
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
-  (prn :debug :rows rows)
   (ui/virtualized-list
    {:ref #(reset! *scroller-ref %)
     :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
@@ -1141,9 +1141,19 @@
            (shui/table-footer (add-new-row table)))]]))))
 
 (rum/defc list-view < rum/static
-  [{:keys [config]} result]
-  (for [id result]
-    (block-container config {:db/id id} {})))
+  [{:keys [config] :as option} _view-entity rows *scroller-ref]
+  (ui/virtualized-list
+   {:ref #(reset! *scroller-ref %)
+    :custom-scroll-parent (gdom/getElement "main-content-container")
+    :increase-viewport-by {:top 300 :bottom 300}
+    :compute-item-key (fn [idx]
+                        (str "list-row-" idx))
+    :skipAnimationFrameInResizeObserver true
+    :total-count (count rows)
+    :item-content (fn [idx]
+                    (lazy-item rows idx option
+                               (fn [block]
+                                 (block-container config block {}))))}))
 
 (rum/defc gallery-card-item
   [table view-entity block config]
@@ -1277,7 +1287,7 @@
   (let [option (assoc option* :view-entity view-entity)]
     (case display-type
       :logseq.property.view/type.list
-      (list-view option (:rows table))
+      (list-view option view-entity (:rows table) *scroller-ref)
 
       :logseq.property.view/type.gallery
       (gallery-view option table view-entity (:rows table) *scroller-ref)
@@ -1512,7 +1522,8 @@
                          (when (= (:view-type option) :linked-references)
                            :logseq.property.view/type.list)
                          :logseq.property.view/type.table)
-        gallery? (= display-type :logseq.property.view/type.gallery)]
+        gallery? (= display-type :logseq.property.view/type.gallery)
+        list-view? (= display-type :logseq.property.view/type.list)]
     (run-effects! option table-map input input-filters set-input-filters! *scroller-ref gallery?)
 
     [:div.flex.flex-col.gap-2.grid
@@ -1527,7 +1538,8 @@
                         :row-selection row-selection
                         :add-new-object! add-new-object!}]
          (if group-by-property
-           [:div.flex.flex-col.gap-4.border-t.py-4
+           [:div.flex.flex-col.border-t.py-4
+            {:class (when-not list-view? "gap-4")}
             (for [[value group] (:rows table)]
               (let [add-new-object! (fn [_]
                                       (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}}))
@@ -1537,24 +1549,28 @@
                                                          :all-data (:data table))))
                     readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
                                                (db-property/property-value-content %)
-                                               (str %))]
-                (ui/foldable
-                 [:div
-                  (cond
-                    (= :block/page (:db/ident group-by-property))
-                    (let [c (state/get-component :block/page-cp)]
-                      (c {:disable-preview? true} value))
+                                               (str %))
+                    group-by-page? (= :block/page (:db/ident group-by-property))]
+                (if (and (nil? value) group-by-page?)
+                  [:div
+                   {:class (when list-view? "-ml-6")}
+                   (view-cp view-entity (assoc table' :rows group) option view-opts)]
+                  (ui/foldable
+                   [:div
+                    (cond
+                      group-by-page?
+                      (let [c (state/get-component :block/page-cp)]
+                        (c {:disable-preview? true} value))
 
-                    (some? value)
-                    (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                      [:div.flex.flex-row.gap-1.items-center
-                       (when icon (icon-component/icon icon {:color? true}))
-                       (readable-property-value value)])
-                    :else
-                    (str "No " (:block/title group-by-property)))]
-                 [:div.mt-2
-                  (view-cp view-entity (assoc table' :rows group) option view-opts)]
-                 {:title-trigger? false})))]
+                      (some? value)
+                      (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                        [:div.flex.flex-row.gap-1.items-center
+                         (when icon (icon-component/icon icon {:color? true}))
+                         (readable-property-value value)])
+                      :else
+                      (str "No " (:block/title group-by-property)))]
+                   (view-cp view-entity (assoc table' :rows group) option view-opts)
+                   {:title-trigger? false}))))]
            (view-cp view-entity table option view-opts)))]
       (merge {:title-trigger? false} foldable-options))]))
 
