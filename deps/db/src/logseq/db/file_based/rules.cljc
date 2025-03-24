@@ -89,5 +89,5 @@
 
    :page-ref
    '[(page-ref ?b ?page-name)
-     [?b :block/path-refs ?br]
+     [?b :block/refs ?br]
      [?br :block/name ?page-name]]})

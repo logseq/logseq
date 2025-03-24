@@ -65,19 +65,23 @@
 
 (defn- sort-by-single-property
   [db {:keys [id asc?]} rows]
-  (let [datoms (cond->
-                (->> (d/datoms db :avet id)
-                     (common-util/distinct-by :e)
-                     vec)
-                 (not asc?)
-                 rseq)
-        row-ids (set (map :db/id rows))
-        id->row (zipmap (map :db/id rows) rows)]
-    (keep
-     (fn [d]
-       (when (row-ids (:e d))
-         (id->row (:e d))))
-     datoms)))
+  (if (= id :block.temp/refs-count)
+    (cond-> (sort-by :block.temp/refs-count rows)
+      (not asc?)
+      reverse)
+    (let [datoms (cond->
+                  (->> (d/datoms db :avet id)
+                       (common-util/distinct-by :e)
+                       vec)
+                   (not asc?)
+                   rseq)
+          row-ids (set (map :db/id rows))
+          id->row (zipmap (map :db/id rows) rows)]
+      (keep
+       (fn [d]
+         (when (row-ids (:e d))
+           (id->row (:e d))))
+       datoms))))
 
 (defn- sort-by-multiple-properties
   [db sorting rows]
@@ -246,13 +250,17 @@
                                   e)))]
     (case feat-type
       :all-pages
-      (keep (fn [d]
-              (let [e (d/entity db (:e d))]
-                (when-not (or (ldb/hidden-or-internal-tag? e)
-                              (entity-util/property? e)
-                              (entity-util/built-in? e))
-                  e)))
-            (d/datoms db :avet property-ident))
+      (let [sorting (:logseq.property.table/sorting view)
+            refs-count? (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting)]
+        (keep (fn [d]
+                (let [e (d/entity db (:e d))]
+                  (when-not (or (ldb/hidden-or-internal-tag? e)
+                                (entity-util/property? e)
+                                (entity-util/built-in? e))
+                    (cond-> e
+                      refs-count?
+                      (assoc :block.temp/refs-count (count (:block/_refs e)))))))
+              (d/datoms db :avet property-ident)))
 
       :class-objects
       (let [class-id view-for-id

@@ -546,8 +546,7 @@
 
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
-  (let [row' (merge (db/sub-block (:id row))
-                    row)]
+  (let [row' (or (db/sub-block (:id row)) row)]
     (table-row-inner table row' props option)))
 
 (rum/defc search
