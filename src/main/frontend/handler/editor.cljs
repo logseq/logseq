@@ -3977,6 +3977,7 @@
     (>= (:block/level block) (state/get-ref-open-blocks-level))
     ;; has children
     (first (:block/_parent (db/entity (:db/id block)))))
+   (ldb/page? block)
    (util/collapsed? block)))
 
 (defn batch-set-heading!
