@@ -3416,7 +3416,9 @@
         *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
-                     (or ref-or-custom-query? (root-block? config block)
+                     (or ref-or-custom-query?
+                         (:view? config)
+                         (root-block? config block)
                          (and (or (ldb/class? block) (ldb/property? block)) (:page-title? config)))
                      (state/sub-block-collapsed uuid)
 
@@ -3642,7 +3644,7 @@
                (root-block? config block)
                (state/set-collapsed-block! block-id false)
 
-               (or (:ref? config) (:custom-query? config))
+               (or (:ref? config) (:custom-query? config) (:view? config))
                (state/set-collapsed-block! block-id
                                            (boolean (editor-handler/block-default-collapsed? block config)))
 

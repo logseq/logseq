@@ -295,7 +295,8 @@
 
 (defonce *view-cache (atom {}))
 (defn get-view-data
-  [repo db view-id {:keys [journals? view-for-id view-feature-type]}]
+  [repo db view-id {:keys [journals? view-for-id view-feature-type cached?]
+                    :or {cached? true}}]
   ;; TODO: create a view for journals maybe?
   (if journals?
     (let [ids (->> (ldb/get-latest-journals db)
@@ -317,8 +318,9 @@
           group-by-property-ident (:db/ident group-by-property)
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
-          filters (:logseq.property.table/filters view)]
-      (or (and view-id (get-in @*view-cache [repo view-id]))
+          filters (:logseq.property.table/filters view)
+          list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))]
+      (or (and view-id cached? (get-in @*view-cache [repo view-id]))
           (let [entities (get-entities db view feat-type index-attr view-for-id)
                 sorting (let [sorting* (:logseq.property.table/sorting view)]
                           (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
@@ -348,13 +350,24 @@
                       :data (if group-by-property
                               (map
                                (fn [[by-value entities]]
-                                 [(if (de/entity? by-value)
-                                    (select-keys by-value [:db/id :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
-                                    by-value)
-                                  (->> entities
-                                       ldb/sort-by-order
-                                       (map :db/id))])
+                                 (let [by-value' (if (de/entity? by-value)
+                                                   (select-keys by-value [:db/id :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
+                                                   by-value)
+                                       pages? (not (some :block/page entities))
+                                       group (if (and list-view? (not pages?))
+                                               (let [parent-groups (->> entities
+                                                                        (group-by :block/parent)
+                                                                        (sort-by (fn [[parent _]] (:block/order parent))))]
+                                                 (map
+                                                  (fn [[_parent blocks]]
+                                                    [(:block/uuid (first blocks))
+                                                     (map (fn [b]
+                                                            {:db/id (:db/id b)
+                                                             :block/parent (:block/uuid (:block/parent b))}) blocks)])
+                                                  parent-groups))
+                                               (map :db/id entities))]
+                                   [by-value' group]))
                                result)
-                              (mapv :db/id result))}]
-            (swap! *view-cache assoc-in [repo view-id] data)
+                              (map :db/id result))}]
+            (when cached? (swap! *view-cache assoc-in [repo view-id] data))
             data)))))

@@ -166,7 +166,8 @@
 (rum/defcs block-container < (rum/local false ::deleted?)
   [state config row table]
   (let [*deleted? (::deleted? state)
-        container (state/get-component :block/container)]
+        container (state/get-component :block/container)
+        page? (ldb/page? row)]
     (if (nil? (:db/id row))                    ; this row has been deleted
       (when-not @*deleted?
         (when-let [f (get-in table [:data-fns :set-data!])]
@@ -174,7 +175,7 @@
           (reset! *deleted? true)
           nil))
       [:div.relative.w-full
-       (container config row)])))
+       (container (assoc config :view? true) (if page? row row))])))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column?]
@@ -1086,7 +1087,8 @@
 
 (rum/defc lazy-item
   [data idx {:keys [properties]} item-render]
-  (let [db-id (util/nth-safe data idx)
+  (let [item (util/nth-safe data idx)
+        db-id (if (map? item) (:db/id item) item)
         block (db/entity db-id)
         [item set-item!] (hooks/use-state block)
         opts {:children? false
@@ -1100,8 +1102,7 @@
            (let [block (:block result)]
              (set-item! (or block (some-> (:db/id block) db/entity)))))))
      [db-id])
-    (when item
-      (item-render (assoc item :id (:db/id item) :db/id (:db/id item))))))
+    (item-render (assoc item :id (:db/id item) :db/id (:db/id item)))))
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
@@ -1142,18 +1143,30 @@
 
 (rum/defc list-view < rum/static
   [{:keys [config] :as option} _view-entity rows *scroller-ref]
-  (ui/virtualized-list
-   {:ref #(reset! *scroller-ref %)
-    :custom-scroll-parent (gdom/getElement "main-content-container")
-    :increase-viewport-by {:top 300 :bottom 300}
-    :compute-item-key (fn [idx]
-                        (str "list-row-" idx))
-    :skipAnimationFrameInResizeObserver true
-    :total-count (count rows)
-    :item-content (fn [idx]
-                    (lazy-item rows idx option
-                               (fn [block]
-                                 (block-container config block {}))))}))
+  (let [list-cp (fn [rows]
+                  (ui/virtualized-list
+                   {:ref #(reset! *scroller-ref %)
+                    :custom-scroll-parent (gdom/getElement "main-content-container")
+                    :increase-viewport-by {:top 300 :bottom 300}
+                    :compute-item-key (fn [idx]
+                                        (str "list-row-" idx))
+                    :skipAnimationFrameInResizeObserver true
+                    :total-count (count rows)
+                    :item-content (fn [idx]
+                                    (lazy-item rows idx option
+                                               (fn [block]
+                                                 (block-container config block {}))))}))
+        pages? (every? number? rows)
+        breadcrumb (state/get-component :block/breadcrumb)]
+    (if pages?
+      (list-cp rows)
+      (for [[first-block-id blocks] rows]
+        [:div
+         [:div.ml-2
+          (breadcrumb config
+                      (state/get-current-repo) first-block-id
+                      {:show-page? false})]
+         (list-cp blocks)]))))
 
 (rum/defc gallery-card-item
   [table view-entity block config]
@@ -1539,7 +1552,7 @@
                         :add-new-object! add-new-object!}]
          (if group-by-property
            [:div.flex.flex-col.border-t.py-4
-            {:class (when-not list-view? "gap-4")}
+            {:class (if list-view? "gap-2" "gap-4")}
             (for [[value group] (:rows table)]
               (let [add-new-object! (fn [_]
                                       (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}}))
@@ -1551,26 +1564,26 @@
                                                (db-property/property-value-content %)
                                                (str %))
                     group-by-page? (= :block/page (:db/ident group-by-property))]
-                (if (and (nil? value) group-by-page?)
-                  [:div
-                   {:class (when list-view? "-ml-6")}
-                   (view-cp view-entity (assoc table' :rows group) option view-opts)]
-                  (ui/foldable
-                   [:div
-                    (cond
-                      group-by-page?
+                (ui/foldable
+                 [:div
+                  (cond
+                    group-by-page?
+                    (if value
                       (let [c (state/get-component :block/page-cp)]
                         (c {:disable-preview? true} value))
+                      [:div.text-muted-foreground
+                       "Other pages"])
 
-                      (some? value)
-                      (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                        [:div.flex.flex-row.gap-1.items-center
-                         (when icon (icon-component/icon icon {:color? true}))
-                         (readable-property-value value)])
-                      :else
-                      (str "No " (:block/title group-by-property)))]
-                   (view-cp view-entity (assoc table' :rows group) option view-opts)
-                   {:title-trigger? false}))))]
+                    (some? value)
+                    (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                      [:div.flex.flex-row.gap-1.items-center
+                       (when icon (icon-component/icon icon {:color? true}))
+                       (readable-property-value value)])
+                    :else
+                    (str "No " (:block/title group-by-property)))]
+                 (let [render (view-cp view-entity (assoc table' :rows group) option view-opts)]
+                   (if list-view? [:div.-ml-2 render] render))
+                 {:title-trigger? false})))]
            (view-cp view-entity table option view-opts)))]
       (merge {:title-trigger? false} foldable-options))]))
 
