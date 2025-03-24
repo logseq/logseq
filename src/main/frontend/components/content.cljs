@@ -357,7 +357,7 @@
                   (let [worker @db-browser/*worker
                         token (state/get-auth-id-token)
                         graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-                    (p/let [blocks-versions (worker :rtc/get-block-content-versions token graph-uuid (str block-id))]
+                    (p/let [blocks-versions (worker :rtc/get-block-content-versions token graph-uuid block-id)]
                       (prn :Dev-show-block-content-history)
                       (doseq [[block-uuid versions] blocks-versions]
                         (prn :block-uuid block-uuid)

@@ -3,7 +3,6 @@
   (:require [datascript.core :as d]
             [frontend.db.conn :as db-conn]
             [frontend.state :as state]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defn <q
@@ -17,7 +16,7 @@
       (if async-requested?
         (let [db (db-conn/get-db graph)]
           (apply d/q (first inputs) db (rest inputs)))
-        (p/let [result (worker :general/q graph (ldb/write-transit-str inputs))]
+        (p/let [result (worker :general/q graph inputs)]
           (swap! *async-queries assoc [inputs opts] true)
           (when result
             (when (and transact-db? (seq result) (coll? result))
@@ -42,7 +41,7 @@
    (<pull graph '[*] id))
   ([graph selector id]
    (when-let [worker @state/*db-worker]
-     (p/let [result' (worker :general/pull graph (ldb/write-transit-str selector) (ldb/write-transit-str id))]
+     (p/let [result' (worker :general/pull graph selector id)]
        (when result'
          (when-let [conn (db-conn/get-db graph false)]
            (d/transact! conn [result']))

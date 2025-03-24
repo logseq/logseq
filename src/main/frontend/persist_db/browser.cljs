@@ -37,7 +37,7 @@
                                  (not= (:config prev) (:config current))
                                  (assoc :config (:config current)))]
                  (when (seq new-state)
-                   (worker :general/sync-app-state (ldb/write-transit-str new-state)))))))
+                   (worker :general/sync-app-state new-state))))))
 
 (defn get-route-data
   [route-match]
@@ -60,14 +60,11 @@
                    (when (not= new-state old-state)
                      (worker :general/sync-ui-state
                              (state/get-current-repo)
-                             (ldb/write-transit-str {:old-state old-state
-                                                     :new-state new-state}))))))))
+                             {:old-state old-state :new-state new-state})))))))
 
 (defn transact!
   [worker repo tx-data tx-meta]
-  (let [tx-meta' (ldb/write-transit-str tx-meta)
-        tx-data' (ldb/write-transit-str tx-data)
-        ;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
+  (let [;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
         context {:dev? config/dev?
                  :node-test? util/node-test?
                  :validate-db-options (:dev/validate-db-options (state/get-config))
@@ -81,7 +78,7 @@
                  :whiteboards-directory (config/get-whiteboards-directory)
                  :pages-directory (config/get-pages-directory)}]
     (if worker
-      (worker :general/transact repo tx-data' tx-meta' (ldb/write-transit-str context))
+      (worker :general/transact repo tx-data tx-meta context)
       (notification/show! "Latest change was not saved! Please restart the application." :error))))
 
 (defn- with-write-transit-str
@@ -134,9 +131,8 @@
       (-> (p/let [_ (wrapped-worker :general/init config/RTC-WS-URL)
                   _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
                   _ (wrapped-worker :general/sync-app-state
-                                    (ldb/write-transit-str
-                                     {:git/current-repo (state/get-current-repo)
-                                      :config (:config @state/state)}))
+                                    {:git/current-repo (state/get-current-repo)
+                                     :config (:config @state/state)})
                   _ (sync-app-state! wrapped-worker)
                   _ (sync-ui-state! wrapped-worker)
                   _ (ask-persist-permission!)
@@ -178,7 +174,7 @@
   protocol/PersistentDB
   (<new [_this repo opts]
     (when-let [worker @*worker]
-      (worker :general/create-or-open-db repo (ldb/write-transit-str opts))))
+      (worker :general/create-or-open-db repo opts)))
 
   (<list-db [_this]
     (when-let [worker @*worker]
@@ -199,7 +195,7 @@
                   disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                   _ (when disk-db-data
                       (worker :general/import-db repo disk-db-data))
-                  _ (worker :general/create-or-open-db repo (ldb/write-transit-str opts))]
+                  _ (worker :general/create-or-open-db repo opts)]
             (worker :general/get-initial-data repo))
           (p/catch sqlite-error-handler))))
 

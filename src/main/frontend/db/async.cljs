@@ -151,9 +151,8 @@
         (swap! *async-queries assoc [name' opts] true)
         (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
         (p/let [{:keys [properties block children] :as result'}
-                (worker :general/get-block-and-children graph id (ldb/write-transit-str
-                                                                  {:children? children?
-                                                                   :nested-children? nested-children?}))
+                (worker :general/get-block-and-children graph id {:children? children?
+                                                                  :nested-children? nested-children?})
                 conn (db/get-db graph false)
                 block-and-children (concat properties [block] children)
                 _ (d/transact! conn block-and-children)
@@ -183,10 +182,9 @@
     (when-let [^Object worker @db-browser/*worker]
       (p/let [result (worker :general/get-block-and-children
                              (state/get-current-repo)
-                             (str (:block/uuid page))
-                             (ldb/write-transit-str
-                              {:children? true
-                               :nested-children? false}))]
+                             (:block/uuid page)
+                             {:children? true
+                              :nested-children? false})]
         (:children result)))))
 
 (defn <get-block-refs
