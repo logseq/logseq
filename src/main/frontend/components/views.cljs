@@ -1146,6 +1146,7 @@
   (let [list-cp (fn [rows]
                   (ui/virtualized-list
                    {:ref #(reset! *scroller-ref %)
+                    :class "content"
                     :custom-scroll-parent (gdom/getElement "main-content-container")
                     :increase-viewport-by {:top 300 :bottom 300}
                     :compute-item-key (fn [idx]
@@ -1618,49 +1619,40 @@
   (p/let [data-str (.get-view-data ^js @state/*db-worker (state/get-current-repo) (:db/id view) (ldb/write-transit-str opts))]
     (ldb/read-transit-str data-str)))
 
-(rum/defc view < rum/static
-  [{:keys [view-parent view-feature-type view-entity data] :as option}]
-  (let [[view-entity set-view-entity!] (hooks/use-state view-entity)
-        [views set-views!] (hooks/use-state nil)
+(rum/defc view-aux
+  [view-entity {:keys [view-parent view-feature-type data] :as option}]
+  (let [[view-entity set-view-entity!] (db/sub-entity view-entity (str "view-" (:db/id view-entity)))
         [items-count set-count!] (hooks/use-state (count data))
         query? (= view-feature-type :query-result)
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
-        [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
-        db-based? (config/db-based-graph?)]
-    (when-not query? ; FIXME: move query logic to worker
-      (hooks/use-effect!
-       (fn []
-         (let [repo (state/get-current-repo)]
-           (->
-            (p/let [_result (when db-based?  (db-async/<get-views repo (:db/id view-parent) view-feature-type))
-                    views (when db-based?  (get-views view-parent view-feature-type))
-                    current-view (when db-based?
-                                   (if-let [v (first views)]
-                                     (do
-                                       (when-not view-entity (set-view-entity! v))
-                                       (set-views! views)
-                                       v)
-                                     (when (and view-parent view-feature-type (not view-entity))
-                                       (p/let [new-view (create-view! view-parent view-feature-type)]
-                                         (set-view-entity! new-view)
-                                         (set-views! (concat views [new-view]))
-                                         new-view))))
-                    {:keys [count data ref-pages-count]} (<load-view-data current-view {:view-for-id (or (:db/id (:logseq.property/view-for current-view))
-                                                                                                         (:db/id view-parent))
-                                                                                        :view-feature-type view-feature-type})]
-              (set-data! data)
-              (set-count! count)
-              (when ref-pages-count
-                (set-ref-pages-count! ref-pages-count))
-              (set-loading! false))
-            (p/catch (fn [e]
-                       (js/console.error e)
-                       (set-loading! false))))))
-       []))
+        [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (when-not query?                 ; TODO: move query logic to worker
+         (->
+          (p/let [{:keys [count data ref-pages-count]} (<load-view-data view-entity
+                                                                        {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
+                                                                                          (:db/id view-parent))
+                                                                         :view-feature-type view-feature-type})]
+            (set-data! data)
+            (set-count! count)
+            (when ref-pages-count
+              (set-ref-pages-count! ref-pages-count))
+            (set-loading! false))
+          (p/catch (fn [e]
+                     (js/console.error e)
+                     (set-loading! false))))))
+     [;; page filters
+      (:logseq.property.linked-references/includes view-parent)
+      (:logseq.property.linked-references/excludes view-parent)
+      (:filters view-parent)
+      (select-keys view-entity [:logseq.property.table/sorting :logseq.property.table/filters])])
+
     (let [linked-refs? (= :linked-references view-feature-type)]
       (when-not (and linked-refs? (empty? data)
-                     (empty? (db-view/get-filters (db/get-db) view-parent)))
+                     (empty? (db-view/get-filters (db/get-db) view-parent))
+                     (empty? (:logseq.property.table/filters view-entity)))
         (if loading?
           [:div.flex.flex-col.space-2.gap-2.my-2
            (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
@@ -1668,7 +1660,33 @@
            (view-container view-entity (assoc option
                                               :data data
                                               :items-count items-count
-                                              :views views
                                               :ref-pages-count ref-pages-count
-                                              :set-views! set-views!
                                               :set-view-entity! set-view-entity!))])))))
+
+(rum/defc view < rum/static
+  [{:keys [view-parent view-feature-type view-entity] :as option}]
+  (let [[views set-views!] (hooks/use-state nil)
+        [view-entity set-view-entity!] (hooks/use-state view-entity)
+        query? (= view-feature-type :query-result)
+        db-based? (config/db-based-graph?)]
+    (hooks/use-effect!
+     (fn []
+       (when-not query?                 ; TODO: move query logic to worker
+         (let [repo (state/get-current-repo)]
+           (when (and db-based? (not view-entity))
+             (p/let [_ (db-async/<get-views repo (:db/id view-parent) view-feature-type)
+                     views (get-views view-parent view-feature-type)]
+               (if-let [v (first views)]
+                 (do
+                   (when-not view-entity (set-view-entity! v))
+                   (set-views! views))
+                 (when (and view-parent view-feature-type (not view-entity))
+                   (p/let [new-view (create-view! view-parent view-feature-type)]
+                     (set-view-entity! new-view)
+                     (set-views! (concat views [new-view]))))))))))
+     [])
+    (when view-entity
+      (let [option' (assoc option
+                           :views views
+                           :set-views! set-views!)]
+        (view-aux view-entity option')))))
