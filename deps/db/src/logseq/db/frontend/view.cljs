@@ -123,93 +123,97 @@
       entity)))
 
 (defn- ^:large-vars/cleanup-todo row-matched?
-  [db row filters]
+  [db row filters input]
   (let [or? (:or? filters)
         check-f (if or? some every?)]
-    (check-f
-     (fn [[property-ident operator match]]
-       (if (nil? match)
-         true
-         (let [value (get row property-ident)
-               value' (cond
-                        (set? value) value
-                        (nil? value) #{}
-                        :else #{value})
-               entity? (de/entity? (first value'))
-               result
-               (case operator
-                 :is
-                 (if (boolean? match)
-                   (= (boolean (get-property-value-content db (get row property-ident))) match)
-                   (cond
-                     (empty? match)
-                     true
-                     (and (empty? match) (empty? value'))
-                     true
-                     :else
-                     (if entity?
-                       (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
-                       (boolean (seq (set/intersection (set value') match))))))
+    (and
+     (if (string/blank? input)
+       true
+       (string/includes? (string/lower-case (:block/title row)) (string/lower-case input)))
+     (check-f
+      (fn [[property-ident operator match]]
+        (if (nil? match)
+          true
+          (let [value (get row property-ident)
+                value' (cond
+                         (set? value) value
+                         (nil? value) #{}
+                         :else #{value})
+                entity? (de/entity? (first value'))
+                result
+                (case operator
+                  :is
+                  (if (boolean? match)
+                    (= (boolean (get-property-value-content db (get row property-ident))) match)
+                    (cond
+                      (empty? match)
+                      true
+                      (and (empty? match) (empty? value'))
+                      true
+                      :else
+                      (if entity?
+                        (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
+                        (boolean (seq (set/intersection (set value') match))))))
 
-                 :is-not
-                 (if (boolean? match)
-                   (not= (boolean (get-property-value-content db (get row property-ident))) match)
-                   (cond
-                     (and (empty? match) (seq value'))
-                     true
-                     (and (seq match) (empty? value'))
-                     true
-                     :else
-                     (if entity?
-                       (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
-                       (boolean (empty? (set/intersection (set value') match))))))
+                  :is-not
+                  (if (boolean? match)
+                    (not= (boolean (get-property-value-content db (get row property-ident))) match)
+                    (cond
+                      (and (empty? match) (seq value'))
+                      true
+                      (and (seq match) (empty? value'))
+                      true
+                      :else
+                      (if entity?
+                        (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
+                        (boolean (empty? (set/intersection (set value') match))))))
 
-                 :text-contains
-                 (some (fn [v]
-                         (if-let [property-value (get-property-value-content db v)]
-                           (string/includes? (string/lower-case property-value) (string/lower-case match))
-                           false))
-                       value')
+                  :text-contains
+                  (some (fn [v]
+                          (if-let [property-value (get-property-value-content db v)]
+                            (string/includes? (string/lower-case property-value) (string/lower-case match))
+                            false))
+                        value')
 
-                 :text-not-contains
-                 (not-any? #(string/includes? (str (get-property-value-content db %)) match) value')
+                  :text-not-contains
+                  (not-any? #(string/includes? (str (get-property-value-content db %)) match) value')
 
-                 :number-gt
-                 (if match (some #(> (get-property-value-content db %) match) value') true)
-                 :number-gte
-                 (if match (some #(>= (get-property-value-content db %) match) value') true)
-                 :number-lt
-                 (if match (some #(< (get-property-value-content db %) match) value') true)
-                 :number-lte
-                 (if match (some #(<= (get-property-value-content db %) match) value') true)
+                  :number-gt
+                  (if match (some #(> (get-property-value-content db %) match) value') true)
+                  :number-gte
+                  (if match (some #(>= (get-property-value-content db %) match) value') true)
+                  :number-lt
+                  (if match (some #(< (get-property-value-content db %) match) value') true)
+                  :number-lte
+                  (if match (some #(<= (get-property-value-content db %) match) value') true)
 
-                 :between
-                 (if (seq match)
-                   (some (fn [value-entity]
-                           (let [[start end] match
-                                 value (get-property-value-content db value-entity)
-                                 conditions [(if start (<= start value) true)
-                                             (if end (<= value end) true)]]
-                             (if (seq match) (every? true? conditions) true))) value')
-                   true)
+                  :between
+                  (if (seq match)
+                    (some (fn [value-entity]
+                            (let [[start end] match
+                                  value (get-property-value-content db value-entity)
+                                  conditions [(if start (<= start value) true)
+                                              (if end (<= value end) true)]]
+                              (if (seq match) (every? true? conditions) true))) value')
+                    true)
 
-                 :date-before
-                 (if match (some #(< (:block/journal-day %) (:block/journal-day match)) value') true)
+                  :date-before
+                  (if match (some #(< (:block/journal-day %) (:block/journal-day match)) value') true)
 
-                 :date-after
-                 (if match (some #(> (:block/journal-day %) (:block/journal-day match)) value') true)
+                  :date-after
+                  (if match (some #(> (:block/journal-day %) (:block/journal-day match)) value') true)
 
-                 :before
-                 (let [search-value (common-util/get-timestamp match)]
-                   (if search-value (<= (get row property-ident) search-value) true))
+                  :before
+                  (let [search-value (common-util/get-timestamp match)]
+                    (if search-value (<= (get row property-ident) search-value) true))
 
-                 :after
-                 (let [search-value (common-util/get-timestamp match)]
-                   (if search-value (>= (get row property-ident) search-value) true))
+                  :after
+                  (let [search-value (common-util/get-timestamp match)]
+                    (if search-value (>= (get row property-ident) search-value) true))
 
-                 true)]
-           result)))
-     (:filters filters))))
+                  true)]
+            result)))
+      (:filters filters)))))
 
 (defn filter-blocks
   [filters ref-blocks]
@@ -357,7 +361,7 @@
       nil)))
 
 (defn get-view-data
-  [db view-id {:keys [journals? view-for-id view-feature-type]}]
+  [db view-id {:keys [journals? view-for-id view-feature-type input]}]
   ;; TODO: create a view for journals maybe?
   (if journals?
     (let [ids (->> (ldb/get-latest-journals db)
@@ -390,7 +394,7 @@
                       [{:id :block/updated-at, :asc? false}]
                       sorting*))
           filtered-entities (if (seq filters)
-                              (filter (fn [row] (row-matched? db row filters)) entities)
+                              (filter (fn [row] (row-matched? db row filters input)) entities)
                               entities)
           group-by-page? (= group-by-property-ident :block/page)
           result (if group-by-property
