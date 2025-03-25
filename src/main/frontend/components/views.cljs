@@ -326,53 +326,52 @@
                                (and (not (db-property/many? p))
                                     (contains? #{:default :number :checkbox :url :node :date}
                                                (:logseq.property/type p)))))) columns)]
-    (when (or table? (seq columns'))
-      (shui/dropdown-menu
-       (shui/dropdown-menu-trigger
-        {:asChild true}
-        (shui/button
-         {:variant "ghost"
-          :class "text-muted-foreground !px-1"
-          :size :sm}
-         (ui/icon "dots" {:size 15})))
-       (shui/dropdown-menu-content
-        {:align "end"}
-        (shui/dropdown-menu-group
-         (when table?
-           (shui/dropdown-menu-sub
-            (shui/dropdown-menu-sub-trigger
-             "Columns visibility")
-            (shui/dropdown-menu-sub-content
-             (for [column (remove #(or (false? (:column-list? %))
-                                       (:disable-hide? %)) columns)]
-               (shui/dropdown-menu-checkbox-item
-                {:key (str (:id column))
-                 :className "capitalize"
-                 :checked (column-visible? column)
-                 :onCheckedChange #(column-toggle-visibility column %)
-                 :onSelect (fn [e] (.preventDefault e))}
-                (:name column))))))
-         (when (seq columns')
-           (shui/dropdown-menu-sub
-            (shui/dropdown-menu-sub-trigger
-             "Group by")
-            (shui/dropdown-menu-sub-content
-             (for [column columns']
-               (shui/dropdown-menu-checkbox-item
-                {:key (str (:id column))
-                 :className "capitalize"
-                 :checked (= (:id column) (:db/ident (:logseq.property.view/group-by-property view-entity)))
-                 :onCheckedChange (fn [result]
-                                    (if result
-                                      (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/group-by-property
-                                                                               (:db/id (db/entity (:id column))))
-                                      (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/group-by-property)))
-                 :onSelect (fn [e] (.preventDefault e))}
-                (:name column))))))
-         (shui/dropdown-menu-item
-          {:key "export-edn"
-           :on-click #(db-export-handler/export-view-nodes-data rows)}
-          "Export EDN")))))))
+    (shui/dropdown-menu
+     (shui/dropdown-menu-trigger
+      {:asChild true}
+      (shui/button
+       {:variant "ghost"
+        :class "text-muted-foreground !px-1"
+        :size :sm}
+       (ui/icon "dots" {:size 15})))
+     (shui/dropdown-menu-content
+      {:align "end"}
+      (shui/dropdown-menu-group
+       (when table?
+         (shui/dropdown-menu-sub
+          (shui/dropdown-menu-sub-trigger
+           "Columns visibility")
+          (shui/dropdown-menu-sub-content
+           (for [column (remove #(or (false? (:column-list? %))
+                                     (:disable-hide? %)) columns)]
+             (shui/dropdown-menu-checkbox-item
+              {:key (str (:id column))
+               :className "capitalize"
+               :checked (column-visible? column)
+               :onCheckedChange #(column-toggle-visibility column %)
+               :onSelect (fn [e] (.preventDefault e))}
+              (:name column))))))
+       (when (seq columns')
+         (shui/dropdown-menu-sub
+          (shui/dropdown-menu-sub-trigger
+           "Group by")
+          (shui/dropdown-menu-sub-content
+           (for [column columns']
+             (shui/dropdown-menu-checkbox-item
+              {:key (str (:id column))
+               :className "capitalize"
+               :checked (= (:id column) (:db/ident (:logseq.property.view/group-by-property view-entity)))
+               :onCheckedChange (fn [result]
+                                  (if result
+                                    (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/group-by-property
+                                                                             (:db/id (db/entity (:id column))))
+                                    (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/group-by-property)))
+               :onSelect (fn [e] (.preventDefault e))}
+              (:name column))))))
+       (shui/dropdown-menu-item
+        {:key "export-edn"
+         :on-click #(db-export-handler/export-view-nodes-data rows)}
+        "Export EDN"))))))
 
 (defn- get-column-size
   [column sized-columns]
@@ -1188,7 +1187,7 @@
        :size :sm
        :on-click (get-in table [:data-fns :add-new-object!])}
       (ui/icon (if asset? "upload" "plus")))
-     [:div "New record"])))
+     [:div "New node"])))
 
 (rum/defc add-new-row < rum/static
   [table]
