@@ -5,24 +5,17 @@
             [frontend.components.reference-filters :as filters]
             [frontend.components.views :as views]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.utils :as db-utils]
-            [frontend.handler.block :as block-handler]
-            [frontend.handler.page :as page-handler]
-            [frontend.modules.outliner.tree :as tree]
-            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util]
-            [logseq.db :as ldb]
             [logseq.db.frontend.view :as db-view]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
             [rum.core :as rum]))
 
+;; TODO: merge both page and block linked refs
 (rum/defc block-linked-references < rum/reactive db-mixins/query
   {:init (fn [state]
            (when-let [e (db/entity [:block/uuid (first (:rum/args state))])]
@@ -78,33 +71,20 @@
       :additional-actions [reference-filter]
       :columns (views/build-columns {} [] {})})))
 
-(rum/defc references* < rum/reactive db-mixins/query
-  [block-entity]
-  (when block-entity
-    (when block-entity
-      (when-not (state/sub-async-query-loading (str (:db/id block-entity) "-refs"))
-        (let [block-entity (db/sub-block (:db/id block-entity))]
-          (references-cp block-entity))))))
-
-(rum/defc references
+(rum/defc references < rum/reactive db-mixins/query
   [entity]
   (ui/catch-error
    (ui/component-error (if (config/db-based-graph? (state/get-current-repo))
                          "Linked References: Unexpected error."
                          "Linked References: Unexpected error. Please re-index your graph first."))
-   (references* entity)))
+   (when-let [block-entity (db/sub-block (:db/id entity))]
+     (references-cp block-entity))))
 
-(rum/defcs unlinked-references-aux
-  [state page]
-  (views/view
-   {:view-parent page
-    :view-feature-type :unlinked-references
-    :columns (views/build-columns {} [] {})
-    :foldable-options {:default-collapsed? true}}))
-
-(rum/defcs unlinked-references < rum/reactive
-  [state page]
+(rum/defc unlinked-references
+  [page]
   (when page
-    [:div.references.page-unlinked.mt-6.flex-1.flex-row.faster.fade-in
-     [:div.content.flex-1
-      (unlinked-references-aux page)]]))
+    (views/view
+     {:view-parent page
+      :view-feature-type :unlinked-references
+      :columns (views/build-columns {} [] {})
+      :foldable-options {:default-collapsed? true}})))
