@@ -1008,15 +1008,6 @@
              (shui/select-item {:value "and"} "Match all filters")
              (shui/select-item {:value "or"} "Match any filter"))))])])))
 
-(defn- row-matched?
-  [row input]
-  ;; full-text-search match
-  (if (not (string/blank? input))
-    (when row
-       ;; fuzzy search is too slow
-      (string/includes? (string/lower-case (:block/title row)) (string/lower-case input)))
-    true))
-
 (rum/defc new-record-button < rum/static
   [table view-entity]
   (let [asset? (and (:logseq.property/built-in? view-entity)
@@ -1196,26 +1187,18 @@
                                       (gallery-card-item table view-entity block config'))))}))]))
 
 (defn- run-effects!
-  [option {:keys [data state data-fns]} input input-filters set-input-filters! *scroller-ref gallery?]
-  (let [{:keys [filters]} state
-        {:keys [set-row-filter!]} data-fns]
-    (hooks/use-effect!
-     (fn []
-       (let [new-input-filters [input filters]]
-         (when-not (= input-filters new-input-filters)
-           (set-input-filters! [input filters])
-           (set-row-filter!
-            (fn []
-              (fn [row]
-                (row-matched? row input)))))))
-     [input filters])
+  [{:keys [load-view-data] :as option} {:keys [data]} input *scroller-ref gallery?]
+  (hooks/use-effect!
+   (fn []
+     (load-view-data input))
+   [input])
 
-    (hooks/use-effect!
-     (fn []
-       (when (and (:current-page? (:config option)) (seq data) (map? (first data)) (:block/uuid (first data)))
-         (ui-handler/scroll-to-anchor-block @*scroller-ref data gallery?)
-         (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data gallery?))))
-     [])))
+  (hooks/use-effect!
+   (fn []
+     (when (and (:current-page? (:config option)) (seq data) (map? (first data)) (:block/uuid (first data)))
+       (ui-handler/scroll-to-anchor-block @*scroller-ref data gallery?)
+       (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data gallery?))))
+   []))
 
 (rum/defc view-sorting-item
   [table sorting id name asc? set-sorting!]
@@ -1491,10 +1474,6 @@
                                           :set-visible-columns! set-visible-columns!
                                           :set-sized-columns! set-sized-columns!
                                           :set-ordered-columns! set-ordered-columns!})
-        row-filter-fn (fn []
-                        (fn [row]
-                          (row-matched? row input)))
-        [row-filter set-row-filter!] (rum/use-state row-filter-fn)
         [input-filters set-input-filters!] (rum/use-state [input filters])
         [row-selection set-row-selection!] (rum/use-state {})
         columns (sort-columns columns ordered-columns)
@@ -1516,7 +1495,6 @@
                    :columns columns
                    :state {:sorting sorting
                            :filters filters
-                           :row-filter row-filter
                            :row-selection row-selection
                            :visible-columns visible-columns
                            :sized-columns sized-columns
@@ -1525,7 +1503,6 @@
                            :unpinned-columns unpinned
                            :group-by-property group-by-property}
                    :data-fns {:set-data! set-data!
-                              :set-row-filter! set-row-filter!
                               :set-filters! set-filters!
                               :set-sorting! set-sorting!
                               :set-visible-columns! set-visible-columns!
@@ -1541,7 +1518,7 @@
                          :logseq.property.view/type.table)
         gallery? (= display-type :logseq.property.view/type.gallery)
         list-view? (= display-type :logseq.property.view/type.list)]
-    (run-effects! option table-map input input-filters set-input-filters! *scroller-ref gallery?)
+    (run-effects! option table-map input *scroller-ref gallery?)
 
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
@@ -1628,24 +1605,26 @@
         query? (= view-feature-type :query-result)
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
-        [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)]
+        [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
+        load-view-data (fn load-view-data [input]
+                         (when-not query?                 ; TODO: move query logic to worker
+                           (set-data! nil)
+                           (->
+                            (p/let [{:keys [count data ref-pages-count]} (<load-view-data view-entity
+                                                                                          {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
+                                                                                                            (:db/id view-parent))
+                                                                                           :view-feature-type view-feature-type
+                                                                                           :input input})]
+                              (set-data! data)
+                              (set-count! count)
+                              (when ref-pages-count
+                                (set-ref-pages-count! ref-pages-count))
+                              (set-loading! false))
+                            (p/catch (fn [e]
+                                       (js/console.error e)
+                                       (set-loading! false))))))]
     (hooks/use-effect!
-     (fn []
-       (when-not query?                 ; TODO: move query logic to worker
-         (set-data! nil)
-         (->
-          (p/let [{:keys [count data ref-pages-count]} (<load-view-data view-entity
-                                                                        {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
-                                                                                          (:db/id view-parent))
-                                                                         :view-feature-type view-feature-type})]
-            (set-data! data)
-            (set-count! count)
-            (when ref-pages-count
-              (set-ref-pages-count! ref-pages-count))
-            (set-loading! false))
-          (p/catch (fn [e]
-                     (js/console.error e)
-                     (set-loading! false))))))
+     #(load-view-data nil)
      [;; page filters
       (:logseq.property.linked-references/includes view-parent)
       (:logseq.property.linked-references/excludes view-parent)
@@ -1665,6 +1644,7 @@
                                               :data data
                                               :items-count items-count
                                               :ref-pages-count ref-pages-count
+                                              :load-view-data load-view-data
                                               :set-view-entity! set-view-entity!))])))))
 
 (rum/defc view < rum/static
