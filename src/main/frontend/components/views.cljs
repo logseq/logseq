@@ -1435,7 +1435,9 @@
 
       (when (seq additional-actions)
         [:<> (for [action additional-actions]
-               action)])
+               (if (fn? action)
+                 (action option)
+                 action))])
       (when (seq sorting)
         (view-sorting table columns sorting))
 
@@ -1624,6 +1626,7 @@
         query? (= view-feature-type :query-result)
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
+        [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
         db-based? (config/db-based-graph?)]
     (when-not query? ; FIXME: move query logic to worker
       (hooks/use-effect!
@@ -1643,11 +1646,13 @@
                                          (set-view-entity! new-view)
                                          (set-views! (concat views [new-view]))
                                          new-view))))
-                    {:keys [count data]} (<load-view-data current-view {:view-for-id (or (:db/id (:logseq.property/view-for current-view))
-                                                                                         (:db/id view-parent))
-                                                                        :view-feature-type view-feature-type})]
+                    {:keys [count data ref-pages-count]} (<load-view-data current-view {:view-for-id (or (:db/id (:logseq.property/view-for current-view))
+                                                                                                         (:db/id view-parent))
+                                                                                        :view-feature-type view-feature-type})]
               (set-data! data)
               (set-count! count)
+              (when ref-pages-count
+                (set-ref-pages-count! ref-pages-count))
               (set-loading! false))
             (p/catch (fn [e]
                        (js/console.error e)
@@ -1661,5 +1666,6 @@
                                           :data data
                                           :items-count items-count
                                           :views views
+                                          :ref-pages-count ref-pages-count
                                           :set-views! set-views!
                                           :set-view-entity! set-view-entity!))])))
