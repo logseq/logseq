@@ -15,7 +15,7 @@
 
 (defn- row-selected?
   [row row-selection]
-  (let [id (:id row)]
+  (let [id (:db/id row)]
     (or
      (and (:selected-all? row-selection)
           ;; exclude ids
@@ -29,14 +29,14 @@
   (boolean
    (or
     (and (seq (:selected-ids row-selection))
-         (some (:selected-ids row-selection) (map :db/id rows)))
+         (some (:selected-ids row-selection) rows))
     (and (seq (:exclude-ids row-selection))
          (not= (count rows) (count (:exclude-ids row-selection)))))))
 
 (defn- select-all?
   [row-selection rows]
   (and (seq (:selected-ids row-selection))
-       (set/subset? (set (map :db/id rows))
+       (set/subset? (set rows)
                     (:selected-ids row-selection))))
 
 (defn- toggle-selected-all!
@@ -47,7 +47,7 @@
       (and group-by-property value)
       (let [new-selection (update row-selection :selected-ids
                                   (fn [ids]
-                                    (set/union (set ids) (set (map :db/id (:rows table))))))]
+                                    (set/union (set ids) (set (:rows table)))))]
         (set-row-selection! new-selection))
 
       value
@@ -56,7 +56,7 @@
       group-by-property
       (let [new-selection (update row-selection :selected-ids
                                   (fn [ids]
-                                    (set/difference (set ids) (set (map :db/id (:rows table))))))]
+                                    (set/difference (set ids) (set (:rows table)))))]
         (set-row-selection! new-selection))
 
       :else
@@ -70,7 +70,7 @@
 
 (defn- row-toggle-selected!
   [row value set-row-selection! row-selection]
-  (let [id (:id row)
+  (let [id (:db/id row)
         new-selection (if (:selected-all? row-selection)
                         (update row-selection :excluded-ids (if value disj set-conj) id)
                         (update row-selection :selected-ids (if value set-conj disj) id))]
@@ -96,11 +96,11 @@
   (if (:selected-all? row-selection)
     (let [excluded-ids (:excluded-ids row-selection)]
       (if (seq excluded-ids)
-        (remove #(excluded-ids (:id %)) rows)
+        (remove #(excluded-ids %) rows)
         rows))
     (let [selected-ids (:selected-ids row-selection)]
       (when (seq selected-ids)
-        (filter #(selected-ids (:id %)) rows)))))
+        (filter #(selected-ids %) rows)))))
 
 (defn table-option
   [{:keys [data columns state data-fns]

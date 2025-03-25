@@ -76,7 +76,8 @@
      (shui/checkbox
       {:id id
        :checked checked?
-       :on-checked-change (fn [v] (row-toggle-selected! row v))
+       :on-checked-change (fn [v]
+                            (row-toggle-selected! row v))
        :aria-label "Select row"
        :class (str "flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
