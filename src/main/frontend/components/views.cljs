@@ -1658,14 +1658,16 @@
                        (js/console.error e)
                        (set-loading! false))))))
        []))
-    (if loading?
-      [:div.flex.flex-col.space-2.gap-2.my-2
-       (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
-      [:div.flex.flex-col.gap-2
-       (view-container view-entity (assoc option
-                                          :data data
-                                          :items-count items-count
-                                          :views views
-                                          :ref-pages-count ref-pages-count
-                                          :set-views! set-views!
-                                          :set-view-entity! set-view-entity!))])))
+    (let [linked-refs? (= :linked-references view-feature-type)]
+      (when-not (and linked-refs? (empty? data))
+        (if loading?
+          [:div.flex.flex-col.space-2.gap-2.my-2
+           (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
+          [:div.flex.flex-col.gap-2
+           (view-container view-entity (assoc option
+                                              :data data
+                                              :items-count items-count
+                                              :views views
+                                              :ref-pages-count ref-pages-count
+                                              :set-views! set-views!
+                                              :set-view-entity! set-view-entity!))])))))
