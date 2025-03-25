@@ -228,6 +228,10 @@ html[data-theme=dark] {
 
 div[data-radix-popper-content-wrapper] {
   @apply !z-[999];
+
+  &:has(> .repos-list) {
+    @apply !z-[var(--ls-z-index-level-5)];
+  }
 }
 
 .ui__dialog-overlay {
