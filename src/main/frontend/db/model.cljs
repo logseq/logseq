@@ -12,6 +12,7 @@
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
+            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.common.util :as common-util]
@@ -245,17 +246,34 @@ independent of format as format specific heading characters are stripped"
 (def sort-by-order ldb/sort-by-order)
 
 (defn sub-block
-  [id]
+  "Used together with rum/reactive db-mixins/query"
+  [id & {:keys [ref?]
+         :or {ref? false}}]
   (when-let [repo (state/get-current-repo)]
     (when id
       (let [ref (react/q repo [:frontend.worker.react/block id]
                          {:query-fn (fn [_]
-                                      (let [e (db-utils/entity id)]
-                                        [e (:block/tx-id e)]))}
-                         nil)
-            e (-> ref react first)]
-        (when-let [id (:db/id e)]
-          (db-utils/entity id))))))
+                                      (db-utils/entity id))}
+                         nil)]
+        (if ref? ref
+            (let [e (-> ref react)]
+              (when-let [id (:db/id e)]
+                (db-utils/entity id))))))))
+
+(defn sub-entity
+  "Used for react function components"
+  [entity* watch-id]
+  (let [id (:db/id entity*)
+        *ref (sub-block id {:ref? true})
+        [entity set-entity!] (hooks/use-state @*ref)]
+    (add-watch *ref watch-id (fn [_ _ _ new-value]
+                               (set-entity! new-value)))
+    (hooks/use-effect!
+     (fn []
+       #(remove-watch *ref watch-id))
+     [])
+
+    [entity set-entity!]))
 
 (defn sort-by-order-recursive
   [form]
