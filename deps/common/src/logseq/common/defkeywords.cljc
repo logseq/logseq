@@ -33,3 +33,9 @@
 (defmacro get-all-defined-kw->config
   []
   `'~(deref *defined-kw->config))
+
+(comment
+  "update anything here to trigger this ns to be recompiled,
+so macro get-all-defined-kw->config's result will be updated."
+  1
+  )
