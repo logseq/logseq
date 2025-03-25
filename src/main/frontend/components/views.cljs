@@ -37,6 +37,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.view :as db-view]
             [logseq.shui.ui :as shui]
+            [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -1113,9 +1114,9 @@
     :increase-viewport-by {:top 300 :bottom 300}
     :compute-item-key (fn [idx]
                         (let [block (util/nth-safe rows idx)]
-                          (str "table-row-" (or (:db/id block) idx))))
+                          (str "table-row-" (:group-idx option) "-" (or (:db/id block) idx))))
     :skipAnimationFrameInResizeObserver true
-    :total-count (or (:items-count option) (count rows))
+    :total-count (count rows)
     :item-content (fn [idx]
                     (lazy-item (:data table) idx option
                                (fn [row]
@@ -1556,7 +1557,7 @@
          (if group-by-property
            [:div.flex.flex-col.border-t.py-4
             {:class (if list-view? "gap-2" "gap-4")}
-            (for [[value group] (:rows table)]
+            (for [[idx [value group]] (medley/indexed (:rows table))]
               (let [add-new-object! (fn [_]
                                       (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}}))
                     table' (shui/table-option (-> table-map
@@ -1567,26 +1568,28 @@
                                                (db-property/property-value-content %)
                                                (str %))
                     group-by-page? (= :block/page (:db/ident group-by-property))]
-                (ui/foldable
-                 [:div
-                  (cond
-                    group-by-page?
-                    (if value
-                      (let [c (state/get-component :block/page-cp)]
-                        (c {:disable-preview? true} value))
-                      [:div.text-muted-foreground
-                       "Other pages"])
+                (rum/with-key
+                  (ui/foldable
+                   [:div
+                    (cond
+                      group-by-page?
+                      (if value
+                        (let [c (state/get-component :block/page-cp)]
+                          (c {:disable-preview? true} value))
+                        [:div.text-muted-foreground
+                         "Other pages"])
 
-                    (some? value)
-                    (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                      [:div.flex.flex-row.gap-1.items-center
-                       (when icon (icon-component/icon icon {:color? true}))
-                       (readable-property-value value)])
-                    :else
-                    (str "No " (:block/title group-by-property)))]
-                 (let [render (view-cp view-entity (assoc table' :rows group) option view-opts)]
-                   (if list-view? [:div.-ml-2 render] render))
-                 {:title-trigger? false})))]
+                      (some? value)
+                      (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                        [:div.flex.flex-row.gap-1.items-center
+                         (when icon (icon-component/icon icon {:color? true}))
+                         (readable-property-value value)])
+                      :else
+                      (str "No " (:block/title group-by-property)))]
+                   (let [render (view-cp view-entity (assoc table' :rows group :group-idx idx) option view-opts)]
+                     (if list-view? [:div.-ml-2 render] render))
+                   {:title-trigger? false})
+                  (str "group-" idx))))]
            (view-cp view-entity table option view-opts)))]
       (merge {:title-trigger? false} foldable-options))]))
 
@@ -1630,6 +1633,7 @@
     (hooks/use-effect!
      (fn []
        (when-not query?                 ; TODO: move query logic to worker
+         (set-data! nil)
          (->
           (p/let [{:keys [count data ref-pages-count]} (<load-view-data view-entity
                                                                         {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
@@ -1647,7 +1651,8 @@
       (:logseq.property.linked-references/includes view-parent)
       (:logseq.property.linked-references/excludes view-parent)
       (:filters view-parent)
-      (select-keys view-entity [:logseq.property.table/sorting :logseq.property.table/filters])])
+      (select-keys view-entity [:logseq.property.table/sorting :logseq.property.table/filters
+                                :logseq.property.view/type])])
 
     (let [linked-refs? (= :linked-references view-feature-type)]
       (when-not (and linked-refs? (empty? data)

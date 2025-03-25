@@ -314,7 +314,7 @@
     (case feat-type
       :all-pages
       (let [sorting (:logseq.property.table/sorting view)
-            refs-count? (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting)]
+            refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))]
         (keep (fn [d]
                 (let [e (d/entity db (:e d))]
                   (when-not (or (ldb/hidden-or-internal-tag? e)
