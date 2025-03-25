@@ -1659,7 +1659,8 @@
                        (set-loading! false))))))
        []))
     (let [linked-refs? (= :linked-references view-feature-type)]
-      (when-not (and linked-refs? (empty? data))
+      (when-not (and linked-refs? (empty? data)
+                     (empty? (db-view/get-filters (db/get-db) view-parent)))
         (if loading?
           [:div.flex.flex-col.space-2.gap-2.my-2
            (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
