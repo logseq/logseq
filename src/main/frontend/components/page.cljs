@@ -452,19 +452,9 @@
 
 (rum/defc db-page-title
   [page whiteboard-page? sidebar? container-id]
-  (let [[with-actions? set-with-actions!] (rum/use-state false)
-        *el (rum/use-ref nil)]
-
-    (hooks/use-effect!
-     (fn []
-       (when (and (not config/publishing?)
-                  (some-> (rum/deref *el) (.closest "#main-content-container")))
-         (set-with-actions! true)))
-     [])
-
+  (let [with-actions? (not config/publishing?)]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
-      :ref *el
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)
