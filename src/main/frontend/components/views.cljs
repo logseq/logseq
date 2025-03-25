@@ -1080,21 +1080,24 @@
 (rum/defc lazy-item
   [data idx {:keys [properties]} item-render]
   (let [item (util/nth-safe data idx)
-        db-id (if (map? item) (:db/id item) item)
-        block (db/entity db-id)
-        [item set-item!] (hooks/use-state block)
-        opts {:children? false
-              :properties properties
-              :skip-transact? true
-              :skip-refresh? true}]
-    (hooks/use-effect!
-     (fn []
-       (when (and db-id (not block))
-         (p/let [result (db-async/<get-block (state/get-current-repo) db-id opts)]
-           (let [block (:block result)]
-             (set-item! (or block (some-> (:db/id block) db/entity)))))))
-     [db-id])
-    (item-render (assoc item :id (:db/id item) :db/id (:db/id item)))))
+        db-id (cond (map? item) (:db/id item)
+                    (number? item) item
+                    :else nil)]
+    (when db-id
+      (let [block (db/entity db-id)
+            [item set-item!] (hooks/use-state block)
+            opts {:children? false
+                  :properties properties
+                  :skip-transact? true
+                  :skip-refresh? true}]
+        (hooks/use-effect!
+         (fn []
+           (when (and db-id (not block))
+             (p/let [result (db-async/<get-block (state/get-current-repo) db-id opts)]
+               (let [block (:block result)]
+                 (set-item! (or block (some-> (:db/id block) db/entity)))))))
+         [db-id])
+        (item-render (assoc item :id (:db/id item) :db/id (:db/id item)))))))
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
@@ -1608,7 +1611,6 @@
         [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
         load-view-data (fn load-view-data [input]
                          (when-not query?                 ; TODO: move query logic to worker
-                           (set-data! nil)
                            (->
                             (p/let [{:keys [count data ref-pages-count]} (<load-view-data view-entity
                                                                                           {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
