@@ -214,58 +214,63 @@
 (defn filter-blocks
   [filters ref-blocks]
   (let [exclude-ids (set (map :db/id (:excluded filters)))
-        include-ids (set (map :db/id (:included filters)))]
+        include-ids (set (map :db/id (:included filters)))
+        get-ids (fn [block]
+                  (set (->> (map :db/id (:block/refs block))
+                            (cons (:db/id (:block/page block)))
+                            (remove nil?))))]
     (cond->> ref-blocks
       (seq exclude-ids)
       (remove (fn [block]
-                (let [ids (set (map :db/id (:block/refs block)))]
+                (let [ids (get-ids block)]
                   (seq (set/intersection exclude-ids ids)))))
 
       (seq include-ids)
       (filter (fn [block]
-                (let [ids (set (map :db/id (:block/refs block)))]
+                (let [ids (get-ids block)]
                   (set/subset? include-ids ids)))))))
 
 (defn get-filters
-  [db page db-based?]
-  (if db-based?
-    (let [included-pages (:logseq.property.linked-references/includes page)
-          excluded-pages (:logseq.property.linked-references/excludes page)]
-      {:included included-pages
-       :excluded excluded-pages})
-    (let [k :filters
-          properties (:block/properties page)
-          properties-str (or (get properties k) "{}")]
-      (try (let [result (reader/read-string properties-str)]
-             (when (seq result)
-               (let [excluded-pages (->> (filter #(false? (second %)) result)
-                                         (keep first)
-                                         (keep #(ldb/get-page db %)))
-                     included-pages (->> (filter #(true? (second %)) result)
-                                         (keep first)
-                                         (keep #(ldb/get-page db %)))]
-                 {:included included-pages
-                  :excluded excluded-pages})))
-           (catch :default e
-             (log/error :syntax/filters e))))))
+  [db page]
+  (let [db-based? (entity-plus/db-based-graph? db)]
+    (if db-based?
+      (let [included-pages (:logseq.property.linked-references/includes page)
+            excluded-pages (:logseq.property.linked-references/excludes page)]
+        (when (or (seq included-pages) (seq excluded-pages))
+          {:included included-pages
+           :excluded excluded-pages}))
+      (let [k :filters
+            properties (:block/properties page)
+            properties-str (or (get properties k) "{}")]
+        (try (let [result (reader/read-string properties-str)]
+               (when (seq result)
+                 (let [excluded-pages (->> (filter #(false? (second %)) result)
+                                           (keep first)
+                                           (keep #(ldb/get-page db %)))
+                       included-pages (->> (filter #(true? (second %)) result)
+                                           (keep first)
+                                           (keep #(ldb/get-page db %)))]
+                   {:included included-pages
+                    :excluded excluded-pages})))
+             (catch :default e
+               (log/error :syntax/filters e)))))))
 
 (defn- get-linked-references
   [db id]
-  (let [db-based? (entity-plus/db-based-graph? db)
-        entity (d/entity db id)
+  (let [entity (d/entity db id)
         ids (set (cons id (ldb/get-block-alias db id)))
         refs (mapcat (fn [id] (:block/_refs (d/entity db id))) ids)
-        page-filters (get-filters db entity db-based?)
-        ref-blocks (cond->>
-                    (->> refs
-                         (remove (fn [block]
-                                   (or
-                                    (= (:db/id block) id)
-                                    (= id (:db/id (:block/page block)))
-                                    (ldb/hidden? (:block/page block))
-                                    (contains? (set (map :db/id (:block/tags block))) (:db/id entity))
-                                    (some? (get block (:db/ident entity))))))
-                         (common-util/distinct-by :db/id))
+        page-filters (get-filters db entity)
+        full-ref-blocks (->> refs
+                             (remove (fn [block]
+                                       (or
+                                        (= (:db/id block) id)
+                                        (= id (:db/id (:block/page block)))
+                                        (ldb/hidden? (:block/page block))
+                                        (contains? (set (map :db/id (:block/tags block))) (:db/id entity))
+                                        (some? (get block (:db/ident entity))))))
+                             (common-util/distinct-by :db/id))
+        ref-blocks (cond->> full-ref-blocks
                      (seq page-filters)
                      (filter-blocks page-filters))
         ref-pages-count (->> (mapcat (fn [block]
@@ -277,7 +282,7 @@
                                                   (:block/title b)))
                                               (:block/refs block)))
                                         distinct))
-                                     ref-blocks)
+                                     full-ref-blocks)
                              (remove nil?)
                              (frequencies))]
     {:ref-pages-count ref-pages-count

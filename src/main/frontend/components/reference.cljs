@@ -40,7 +40,7 @@
 
 (rum/defc references-cp
   [page-entity]
-  (let [filters (db-view/get-filters (db/get-db) page-entity (config/db-based-graph?))
+  (let [filters (db-view/get-filters (db/get-db) page-entity)
         reference-filter (fn [{:keys [ref-pages-count]}]
                            (shui/button
                             {:title "Page filter"
@@ -51,7 +51,7 @@
                                          (shui/popup-show! (.-target e)
                                                            (fn []
                                                              [:div.p-4
-                                                              (filters/filter-dialog page-entity filters ref-pages-count)])
+                                                              (filters/filter-dialog page-entity ref-pages-count)])
                                                            {:align "end"}))}
                             (ui/icon "filter-cog"
                                      {:class (cond

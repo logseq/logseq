@@ -10,6 +10,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.db.frontend.view :as db-view]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -51,9 +52,11 @@
                :variant :outline
                :key ref-name)))))])
 
-(rum/defcs filter-dialog < (rum/local "" ::filterSearch)
-  [state page-entity filters references]
-  (let [filter-search (get state ::filterSearch)
+(rum/defcs filter-dialog < (rum/local "" ::filterSearch) rum/reactive
+  [state page references]
+  (let [page-entity (db/sub-block (:db/id page))
+        filter-search (get state ::filterSearch)
+        filters (db-view/get-filters (db/get-db) page-entity)
         filtered-references  (frequencies-sort
                               (if (= @filter-search "")
                                 references
