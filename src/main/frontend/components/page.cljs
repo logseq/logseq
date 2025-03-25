@@ -667,7 +667,7 @@
 
            (if (and whiteboard-page? (not sidebar?))
              [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
-             [:div.relative.grid.gap-8.page-inner
+             [:div.relative.grid.gap-6.page-inner
               (when-not (or block? sidebar?)
                 [:div.flex.flex-row.space-between
                  (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))

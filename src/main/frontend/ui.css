@@ -55,7 +55,7 @@
 .ui__notifications {
   @apply fixed top-12 pointer-events-none w-full;
 
-  z-index: var(--ls-z-index-level-4);
+  z-index: var(--ls-z-index-level-5);
 
   &-content {
     @apply inset-0 flex items-end justify-center px-4 py-2
