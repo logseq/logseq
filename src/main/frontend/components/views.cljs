@@ -1558,8 +1558,9 @@
            [:div.flex.flex-col.border-t.py-4
             {:class (if list-view? "gap-2" "gap-4")}
             (for [[idx [value group]] (medley/indexed (:rows table))]
-              (let [add-new-object! (fn [_]
-                                      (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}}))
+              (let [add-new-object! (when (fn? add-new-object!)
+                                      (fn [_]
+                                        (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
                     table' (shui/table-option (-> table-map
                                                   (assoc-in [:data-fns :add-new-object!] add-new-object!)
                                                   (assoc :data group
@@ -1606,16 +1607,14 @@
      * show-add-property?: whether to show `Add property`
      * add-property!: `fn` to add a new property (or column)
      * on-delete-rows: `fn` to trigger when deleting selected objects"
-  < rum/reactive db-mixins/query
-  (rum/local nil ::scroller-ref)
+  < (rum/local nil ::scroller-ref)
   [state view-entity option]
-  (let [view-entity' (or (db/sub-block (:db/id view-entity)) view-entity)]
-    (rum/with-key (view-inner view-entity'
-                              (cond-> option
-                                config/publishing?
-                                (dissoc :add-new-object!))
-                              (::scroller-ref state))
-      (str "view-" (:db/id view-entity')))))
+  (rum/with-key (view-inner view-entity
+                            (cond-> option
+                              config/publishing?
+                              (dissoc :add-new-object!))
+                            (::scroller-ref state))
+    (str "view-" (:db/id view-entity))))
 
 (defn <load-view-data
   [view opts]
