@@ -233,29 +233,6 @@
         (not db-based?)
         (common-handler/fix-pages-timestamps)))))
 
-(defn get-filters
-  [page]
-  (if (config/db-based-graph? (state/get-current-repo))
-    (let [included-pages (:logseq.property.linked-references/includes page)
-          excluded-pages (:logseq.property.linked-references/excludes page)]
-      {:included included-pages
-       :excluded excluded-pages})
-    (let [k :filters
-          properties (:block/properties page)
-          properties-str (or (get properties k) "{}")]
-      (try (let [result (reader/read-string properties-str)]
-             (when (seq result)
-               (let [excluded-pages (->> (filter #(false? (second %)) result)
-                                         (keep first)
-                                         (keep db/get-page))
-                     included-pages (->> (filter #(true? (second %)) result)
-                                         (keep first)
-                                         (keep db/get-page))]
-                 {:included included-pages
-                  :excluded excluded-pages})))
-           (catch :default e
-             (log/error :syntax/filters e))))))
-
 (defn file-based-save-filter!
   [page filter-state]
   (property-handler/add-page-property! page :filters filter-state))
