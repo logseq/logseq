@@ -127,7 +127,7 @@
                 auto-width? close-btn? root-props content-props]} config
         props (dissoc config
                       :id :title :description :content :footer :auto-width? :close-btn?
-                      :align :on-open-change :open? :root-props :content-props)
+                      :close :align :on-open-change :open? :root-props :content-props)
         props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
     (rum/use-effect!
