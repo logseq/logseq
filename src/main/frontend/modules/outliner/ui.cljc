@@ -31,7 +31,7 @@
                                                 ~opts))
                (when (and worker# (seq r#))
                  (let [request-id# (frontend.state/get-worker-next-request-id)
-                       request# #(worker# :general/apply-outliner-ops
+                       request# #(worker# :thread-api/apply-outliner-ops
                                           (frontend.state/get-current-repo)
                                           r#
                                           (assoc ~opts

@@ -21,7 +21,7 @@
      (js/Promise. user-handler/task--ensure-id&access-token)
      (let [token (state/get-auth-id-token)
            repo-name (sqlite-common-db/sanitize-db-name repo)]
-       (worker :rtc/async-upload-graph repo token repo-name)))))
+       (worker :thread-api/rtc-async-upload-graph repo token repo-name)))))
 
 (defn <rtc-delete-graph!
   [graph-uuid schema-version]
@@ -29,7 +29,7 @@
     (p/do!
      (js/Promise. user-handler/task--ensure-id&access-token)
      (let [token (state/get-auth-id-token)]
-       (worker :rtc/delete-graph token graph-uuid schema-version)))))
+       (worker :thread-api/rtc-delete-graph token graph-uuid schema-version)))))
 
 (defn <rtc-download-graph!
   [graph-name graph-uuid graph-schema-version timeout-ms]
@@ -38,33 +38,33 @@
     (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
     (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
             token (state/get-auth-id-token)
-            download-info-uuid (worker :rtc/request-download-graph token graph-uuid graph-schema-version)
+            download-info-uuid (worker :thread-api/rtc-request-download-graph token graph-uuid graph-schema-version)
             {:keys [_download-info-uuid
                     download-info-s3-url
                     _download-info-tx-instant
                     _download-info-t
                     _download-info-created-at]
              :as result}
-            (worker :rtc/wait-download-graph-info-ready
+            (worker :thread-api/rtc-wait-download-graph-info-ready
                     token download-info-uuid graph-uuid graph-schema-version timeout-ms)]
       (->
        (when (not= result :timeout)
          (assert (some? download-info-s3-url) result)
-         (worker :rtc/download-graph-from-s3 graph-uuid graph-name download-info-s3-url))
+         (worker :thread-api/rtc-download-graph-from-s3 graph-uuid graph-name download-info-s3-url))
        (p/finally
          #(state/set-state! :rtc/downloading-graph-uuid nil))))))
 
 (defn <rtc-stop!
   []
   (when-let [worker @state/*db-worker]
-    (worker :rtc/stop)))
+    (worker :thread-api/rtc-stop)))
 
 (defn <rtc-branch-graph!
   [repo]
   (when-let [worker @state/*db-worker]
     (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
             token (state/get-auth-id-token)
-            start-ex (worker :rtc/async-branch-graph repo token)]
+            start-ex (worker :thread-api/rtc-async-branch-graph repo token)]
       (when-let [ex-data* (:ex-data start-ex)]
         (throw (ex-info (:ex-message start-ex) ex-data*))))))
 
@@ -103,7 +103,7 @@
        (js/Promise. user-handler/task--ensure-id&access-token)
        (when stop-before-start? (<rtc-stop!))
        (let [token (state/get-auth-id-token)]
-         (p/let [start-ex (worker :rtc/start repo token)
+         (p/let [start-ex (worker :thread-api/rtc-start repo token)
                  ex-data* (:ex-data start-ex)
                  _ (case (:type ex-data*)
                      (:rtc.exception/not-rtc-graph
@@ -138,7 +138,7 @@
   (when-let [worker @state/*db-worker]
     (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
             token (state/get-auth-id-token)
-            graphs (worker :rtc/get-graphs token)
+            graphs (worker :thread-api/rtc-get-graphs token)
             result (->> graphs
                         (remove (fn [graph] (= (:graph-status graph) "deleting")))
                         (mapv (fn [graph]
@@ -158,7 +158,7 @@
     (when-let [worker @state/*db-worker]
       (p/let [token (state/get-auth-id-token)
               repo (state/get-current-repo)
-              result (worker :rtc/get-users-info token graph-uuid)]
+              result (worker :thread-api/rtc-get-users-info token graph-uuid)]
         (state/set-state! :rtc/users-info {repo result})))))
 
 (defn <rtc-invite-email
@@ -167,7 +167,7 @@
     (let [token (state/get-auth-id-token)]
       (->
        (p/do!
-        (worker :rtc/grant-graph-access
+        (worker :thread-api/rtc-grant-graph-access
                 token (str graph-uuid) [] [email])
         (notification/show! "Invitation sent!" :success))
        (p/catch (fn [e]

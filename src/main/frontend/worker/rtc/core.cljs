@@ -531,69 +531,69 @@
 
 (def new-task--download-graph-from-s3 r.upload-download/new-task--download-graph-from-s3)
 
-(def-thread-api :rtc/start
+(def-thread-api :thread-api/rtc-start
   [repo token]
   (new-task--rtc-start repo token))
 
-(def-thread-api :rtc/stop
+(def-thread-api :thread-api/rtc-stop
   []
   (rtc-stop))
 
-(def-thread-api :rtc/toggle-auto-push
+(def-thread-api :thread-api/rtc-toggle-auto-push
   []
   (rtc-toggle-auto-push))
 
-(def-thread-api :rtc/toggle-remote-profile
+(def-thread-api :thread-api/rtc-toggle-remote-profile
   []
   (rtc-toggle-remote-profile))
 
-(def-thread-api :rtc/grant-graph-access
+(def-thread-api :thread-api/rtc-grant-graph-access
   [token graph-uuid target-user-uuids target-user-emails]
   (new-task--grant-access-to-others token graph-uuid
                                     :target-user-uuids target-user-uuids
                                     :target-user-emails target-user-emails))
 
-(def-thread-api :rtc/get-graphs
+(def-thread-api :thread-api/rtc-get-graphs
   [token]
   (new-task--get-graphs token))
 
-(def-thread-api :rtc/delete-graph
+(def-thread-api :thread-api/rtc-delete-graph
   [token graph-uuid schema-version]
   (new-task--delete-graph token graph-uuid schema-version))
 
-(def-thread-api :rtc/get-users-info
+(def-thread-api :thread-api/rtc-get-users-info
   [token graph-uuid]
   (new-task--get-users-info token graph-uuid))
 
-(def-thread-api :rtc/get-block-content-versions
+(def-thread-api :thread-api/rtc-get-block-content-versions
   [token graph-uuid block-uuid]
   (new-task--get-block-content-versions token graph-uuid block-uuid))
 
-(def-thread-api :rtc/get-debug-state
+(def-thread-api :thread-api/rtc-get-debug-state
   []
   (new-task--get-debug-state))
 
-(def-thread-api :rtc/async-upload-graph
+(def-thread-api :thread-api/rtc-async-upload-graph
   [repo token remote-graph-name]
   (new-task--upload-graph token repo remote-graph-name))
 
-(def-thread-api :rtc/async-branch-graph
+(def-thread-api :thread-api/rtc-async-branch-graph
   [repo token]
   (new-task--branch-graph token repo))
 
-(def-thread-api :rtc/request-download-graph
+(def-thread-api :thread-api/rtc-request-download-graph
   [token graph-uuid schema-version]
   (new-task--request-download-graph token graph-uuid schema-version))
 
-(def-thread-api :rtc/wait-download-graph-info-ready
+(def-thread-api :thread-api/rtc-wait-download-graph-info-ready
   [token download-info-uuid graph-uuid schema-version timeout-ms]
   (new-task--wait-download-info-ready token download-info-uuid graph-uuid schema-version timeout-ms))
 
-(def-thread-api :rtc/download-graph-from-s3
+(def-thread-api :thread-api/rtc-download-graph-from-s3
   [graph-uuid graph-name s3-url]
   (new-task--download-graph-from-s3 graph-uuid graph-name s3-url))
 
-(def-thread-api :rtc/download-info-list
+(def-thread-api :thread-api/rtc-download-info-list
   [token graph-uuid schema-version]
   (new-task--download-info-list token graph-uuid schema-version))
 

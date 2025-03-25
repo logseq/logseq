@@ -37,7 +37,7 @@
             page-id (:block/uuid (:block/page (db/entity (:db/id (state/get-edit-block)))))
             repo (state/get-current-repo)]
         (when page-id
-          (worker :undo-redo/record-editor-info repo (str page-id) (state/get-editor-info)))))
+          (worker :thread-api/record-editor-info repo (str page-id) (state/get-editor-info)))))
 
     (state/set-state! :editor/op nil))
   state)

@@ -91,7 +91,7 @@
 
 (defn ^:export validate-db []
   (when-let [worker @state/*db-worker]
-    (worker :general/validate-db (state/get-current-repo))))
+    (worker :thread-api/validate-db (state/get-current-repo))))
 
 (defn import-chosen-graph
   [repo]

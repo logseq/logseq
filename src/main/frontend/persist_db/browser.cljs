@@ -37,7 +37,7 @@
                                  (not= (:config prev) (:config current))
                                  (assoc :config (:config current)))]
                  (when (seq new-state)
-                   (worker :general/sync-app-state new-state))))))
+                   (worker :thread-api/sync-app-state new-state))))))
 
 (defn get-route-data
   [route-match]
@@ -58,7 +58,7 @@
                        old-state (f prev)
                        new-state (f current)]
                    (when (not= new-state old-state)
-                     (worker :general/sync-ui-state
+                     (worker :thread-api/sync-ui-state
                              (state/get-current-repo)
                              {:old-state old-state :new-state new-state})))))))
 
@@ -78,7 +78,7 @@
                  :whiteboards-directory (config/get-whiteboards-directory)
                  :pages-directory (config/get-pages-directory)}]
     (if worker
-      (worker :general/transact repo tx-data tx-meta context)
+      (worker :thread-api/transact repo tx-data tx-meta context)
       (notification/show! "Latest change was not saved! Please restart the application." :error))))
 
 (defn- with-write-transit-str
@@ -128,9 +128,9 @@
       (Comlink/expose (Main.) worker)
       (worker-handler/handle-message! worker wrapped-worker*)
       (reset! *worker wrapped-worker)
-      (-> (p/let [_ (wrapped-worker :general/init config/RTC-WS-URL)
+      (-> (p/let [_ (wrapped-worker :thread-api/init config/RTC-WS-URL)
                   _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
-                  _ (wrapped-worker :general/sync-app-state
+                  _ (wrapped-worker :thread-api/sync-app-state
                                     {:git/current-repo (state/get-current-repo)
                                      :config (:config @state/state)})
                   _ (sync-app-state! wrapped-worker)
@@ -174,34 +174,34 @@
   protocol/PersistentDB
   (<new [_this repo opts]
     (when-let [worker @*worker]
-      (worker :general/create-or-open-db repo opts)))
+      (worker :thread-api/create-or-open-db repo opts)))
 
   (<list-db [_this]
     (when-let [worker @*worker]
-      (-> (worker :general/list-db)
+      (-> (worker :thread-api/list-db)
           (p/catch sqlite-error-handler))))
 
   (<unsafe-delete [_this repo]
     (when-let [worker @*worker]
-      (worker :general/unsafe-unlink-db repo)))
+      (worker :thread-api/unsafe-unlink-db repo)))
 
   (<release-access-handles [_this repo]
     (when-let [worker @*worker]
-      (worker :general/release-access-handles repo)))
+      (worker :thread-api/release-access-handles repo)))
 
   (<fetch-initial-data [_this repo opts]
     (when-let [^js worker @*worker]
-      (-> (p/let [db-exists? (worker :general/db-exists repo)
+      (-> (p/let [db-exists? (worker :thread-api/db-exists repo)
                   disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                   _ (when disk-db-data
-                      (worker :general/import-db repo disk-db-data))
-                  _ (worker :general/create-or-open-db repo opts)]
-            (worker :general/get-initial-data repo))
+                      (worker :thread-api/import-db repo disk-db-data))
+                  _ (worker :thread-api/create-or-open-db repo opts)]
+            (worker :thread-api/get-initial-data repo))
           (p/catch sqlite-error-handler))))
 
   (<export-db [_this repo opts]
     (when-let [worker @*worker]
-      (-> (p/let [data (worker :general/export-db repo)]
+      (-> (p/let [data (worker :thread-api/export-db repo)]
             (when data
               (if (:return-data? opts)
                 data
@@ -213,7 +213,7 @@
 
   (<import-db [_this repo data]
     (when-let [worker @*worker]
-      (-> (worker :general/import-db repo data)
+      (-> (worker :thread-api/import-db repo data)
           (p/catch (fn [error]
                      (prn :debug :import-db-error repo)
                      (js/console.error error)

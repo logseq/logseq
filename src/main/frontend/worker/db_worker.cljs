@@ -418,7 +418,7 @@
                       {:name graph-name
                        :metadata (edn/read-string metadata)})) db-dirs)))))
 
-(def-thread-api :general/list-db
+(def-thread-api :thread-api/list-db
   []
   (<list-all-dbs))
 
@@ -441,17 +441,17 @@
   [repo]
   (worker-state/get-sqlite-conn repo :search))
 
-(def-thread-api :general/get-version
+(def-thread-api :thread-api/get-version
   []
   (when-let [sqlite @*sqlite]
     (.-version sqlite)))
 
-(def-thread-api :general/init
+(def-thread-api :thread-api/init
   [rtc-ws-url]
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
 
-(def-thread-api :general/create-or-open-db
+(def-thread-api :thread-api/create-or-open-db
   [repo opts]
   (let [{:keys [close-other-db?] :or {close-other-db? true} :as opts} opts]
     (p/do!
@@ -460,12 +460,12 @@
      (create-or-open-db! repo (dissoc opts :close-other-db?))
      nil)))
 
-(def-thread-api :general/q
+(def-thread-api :thread-api/q
   [repo inputs]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (apply d/q (first inputs) @conn (rest inputs))))
 
-(def-thread-api :general/pull
+(def-thread-api :thread-api/pull
   [repo selector id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [eid (if (and (vector? id) (= :block/name (first id)))
@@ -475,40 +475,40 @@
                (d/pull @conn selector)
                (sqlite-common-db/with-parent @conn)))))
 
-(def-thread-api :general/get-block-and-children
+(def-thread-api :thread-api/get-block-and-children
   [repo id opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [id (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
       (sqlite-common-db/get-block-and-children @conn id opts))))
 
-(def-thread-api :general/get-block-refs
+(def-thread-api :thread-api/get-block-refs
   [repo id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/get-block-refs @conn id)))
 
-(def-thread-api :general/get-block-refs-count
+(def-thread-api :thread-api/get-block-refs-count
   [repo id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/get-block-refs-count @conn id)))
 
-(def-thread-api :general/get-block-parents
+(def-thread-api :thread-api/get-block-parents
   [repo id depth]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [block-id (:block/uuid (d/entity @conn id))]
       (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
            (map (fn [b] (d/pull @conn '[*] (:db/id b))))))))
 
-(def-thread-api :general/get-page-unlinked-refs
+(def-thread-api :thread-api/get-page-unlinked-refs
   [repo page-id search-result-eids]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))
 
-(def-thread-api :general/set-context
+(def-thread-api :thread-api/set-context
   [context]
   (when context (worker-state/update-context! context))
   nil)
 
-(def-thread-api :general/transact
+(def-thread-api :thread-api/transact
   [repo tx-data tx-meta context]
   (when repo (worker-state/set-db-latest-tx-time! repo))
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -542,90 +542,90 @@
         (js/console.error e)
         (prn :debug :tx-data @conn tx-data)))))
 
-(def-thread-api :general/get-initial-data
+(def-thread-api :thread-api/get-initial-data
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (sqlite-common-db/get-initial-data @conn)))
 
-(def-thread-api :general/get-page-refs-count
+(def-thread-api :thread-api/get-page-refs-count
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (sqlite-common-db/get-page->refs-count @conn)))
 
-(def-thread-api :general/close-db
+(def-thread-api :thread-api/close-db
   [repo]
   (close-db! repo)
   nil)
 
-(def-thread-api :general/reset-db
+(def-thread-api :thread-api/reset-db
   [repo db-transit]
   (reset-db! repo db-transit)
   nil)
 
-(def-thread-api :general/unsafe-unlink-db
+(def-thread-api :thread-api/unsafe-unlink-db
   [repo]
   (p/let [pool (<get-opfs-pool repo)
           _ (close-db! repo)
           _result (remove-vfs! pool)]
     nil))
 
-(def-thread-api :general/release-access-handles
+(def-thread-api :thread-api/release-access-handles
   [repo]
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
     (.releaseAccessHandles pool)
     nil))
 
-(def-thread-api :general/db-exists
+(def-thread-api :thread-api/db-exists
   [repo]
   (<db-exists? repo))
 
-(def-thread-api :general/export-db
+(def-thread-api :thread-api/export-db
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
     (.exec db "PRAGMA wal_checkpoint(2)"))
   (<export-db-file repo))
 
-(def-thread-api :general/import-db
+(def-thread-api :thread-api/import-db
   [repo data]
   (when-not (string/blank? repo)
     (p/let [pool (<get-opfs-pool repo)]
       (<import-db pool data)
       nil)))
 
-(def-thread-api :search/search-blocks
+(def-thread-api :thread-api/search-blocks
   [repo q option]
   (p/let [search-db (get-search-db repo)
           conn (worker-state/get-datascript-conn repo)]
     (search/search-blocks repo conn search-db q option)))
 
-(def-thread-api :search/upsert-blocks
+(def-thread-api :thread-api/search-upsert-blocks
   [repo blocks]
   (p/let [db (get-search-db repo)]
     (search/upsert-blocks! db (bean/->js blocks))
     nil))
 
-(def-thread-api :search/delete-blocks
+(def-thread-api :thread-api/search-delete-blocks
   [repo ids]
   (p/let [db (get-search-db repo)]
     (search/delete-blocks! db ids)
     nil))
 
-(def-thread-api :search/truncate-tables
+(def-thread-api :thread-api/search-truncate-tables
   [repo]
   (p/let [db (get-search-db repo)]
     (search/truncate-table! db)
     nil))
 
-(def-thread-api :search/build-blocks-indice
+(def-thread-api :thread-api/search-build-blocks-indice
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (search/build-blocks-indice repo @conn)))
 
-(def-thread-api :search/build-pages-indice
+(def-thread-api :thread-api/search-build-pages-indice
   [_repo]
   nil)
 
-(def-thread-api :general/apply-outliner-ops
+(def-thread-api :thread-api/apply-outliner-ops
   [repo ops opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (try
@@ -640,7 +640,7 @@
             (worker-util/post-message type [(:message payload) (:type payload)])
             (throw e)))))))
 
-(def-thread-api :general/file-writes-finished?
+(def-thread-api :thread-api/file-writes-finished?
   [repo]
   (let [conn (worker-state/get-datascript-conn repo)
         writes @file/*writes]
@@ -656,60 +656,60 @@
         (prn "Unfinished file writes:" @file/*writes)
         false))))
 
-(def-thread-api :general/page-file-saved
+(def-thread-api :thread-api/page-file-saved
   [request-id _page-id]
   (file/dissoc-request! request-id)
   nil)
 
-(def-thread-api :general/sync-app-state
+(def-thread-api :thread-api/sync-app-state
   [new-state]
   (worker-state/set-new-state! new-state)
   nil)
 
-(def-thread-api :general/sync-ui-state
+(def-thread-api :thread-api/sync-ui-state
   [repo state]
   (undo-redo/record-ui-state! repo (ldb/write-transit-str state))
   nil)
 
-(def-thread-api :export/get-debug-datoms
+(def-thread-api :thread-api/export-get-debug-datoms
   [repo]
   (when-let [db (worker-state/get-sqlite-conn repo)]
     (let [conn (worker-state/get-datascript-conn repo)]
       (worker-export/get-debug-datoms conn db))))
 
-(def-thread-api :export/get-all-pages
+(def-thread-api :thread-api/export-get-all-pages
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-export/get-all-pages repo @conn)))
 
-(def-thread-api :export/get-all-page->content
+(def-thread-api :thread-api/export-get-all-page->content
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-export/get-all-page->content repo @conn)))
 
-(def-thread-api :undo-redo/undo
+(def-thread-api :thread-api/undo
   [repo _page-block-uuid-str]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (undo-redo/undo repo conn)))
 
-(def-thread-api :undo-redo/redo
+(def-thread-api :thread-api/redo
   [repo _page-block-uuid-str]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (undo-redo/redo repo conn)))
 
-(def-thread-api :undo-redo/record-editor-info
+(def-thread-api :thread-api/record-editor-info
   [repo _page-block-uuid-str editor-info]
   (undo-redo/record-editor-info! repo editor-info)
   nil)
 
-(def-thread-api :general/validate-db
+(def-thread-api :thread-api/validate-db
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [result (worker-db-validate/validate-db @conn)]
       (db-migrate/fix-db! conn {:invalid-entity-ids (:invalid-entity-ids result)})
       result)))
 
-(def-thread-api :general/export-edn
+(def-thread-api :thread-api/export-edn
   [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
     (try

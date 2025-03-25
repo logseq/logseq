@@ -357,9 +357,9 @@
         (create-graph-for-rtc-test repo init-tx-data tx-data)
         (c.m/<?
          (p/do!
-          ((@thread-api/*thread-apis :general/create-or-open-db) repo {:close-other-db? false})
-          ((@thread-api/*thread-apis :general/export-db) repo)
-          ((@thread-api/*thread-apis :general/transact)
+          ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
+          ((@thread-api/*thread-apis :thread-api/export-db) repo)
+          ((@thread-api/*thread-apis :thread-api/transact)
            repo init-tx-data
            {:rtc-download-graph? true
             :gen-undo-ops? false
@@ -367,7 +367,7 @@
             :frontend.worker.pipeline/skip-validate-db? true
             :persist-op? false}
            (worker-state/get-context))
-          ((@thread-api/*thread-apis :general/transact)
+          ((@thread-api/*thread-apis :thread-api/transact)
            repo tx-data {:rtc-download-graph? true
                          :gen-undo-ops? false
                          :persist-op? false} (worker-state/get-context))

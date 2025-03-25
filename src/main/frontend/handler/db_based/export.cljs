@@ -14,7 +14,7 @@
   ;; Use editor state to locate most recent block
   (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
     (when-let [worker @state/*db-worker]
-      (p/let [result (worker :general/export-edn
+      (p/let [result (worker :thread-api/export-edn
                              (state/get-current-repo)
                              {:export-type :block :block-id [:block/uuid block-uuid]})
               pull-data (with-out-str (pprint/pprint result))]
@@ -26,7 +26,7 @@
 (defn export-view-nodes-data [nodes]
   (let [block-uuids (mapv #(vector :block/uuid (:block/uuid %)) nodes)]
     (when-let [worker @state/*db-worker]
-      (p/let [result (worker :general/export-edn
+      (p/let [result (worker :thread-api/export-edn
                              (state/get-current-repo)
                              {:export-type :view-nodes :node-ids block-uuids})
               pull-data (with-out-str (pprint/pprint result))]
@@ -37,7 +37,7 @@
 (defn ^:export export-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
     (when-let [worker @state/*db-worker]
-      (p/let [result (worker :general/export-edn
+      (p/let [result (worker :thread-api/export-edn
                              (state/get-current-repo)
                              {:export-type :page :page-id page-id})
               pull-data (with-out-str (pprint/pprint result))]
@@ -48,7 +48,7 @@
 
 (defn ^:export export-graph-ontology-data []
   (when-let [worker @state/*db-worker]
-    (p/let [result (worker :general/export-edn
+    (p/let [result (worker :thread-api/export-edn
                            (state/get-current-repo)
                            {:export-type :graph-ontology})
             pull-data (with-out-str (pprint/pprint result))]
@@ -60,7 +60,7 @@
 
 (defn- export-graph-edn-data []
   (when-let [worker @state/*db-worker]
-    (p/let [result (worker :general/export-edn
+    (p/let [result (worker :thread-api/export-edn
                            (state/get-current-repo)
                            {:export-type :graph
                             :graph-options {:include-timestamps? true}})

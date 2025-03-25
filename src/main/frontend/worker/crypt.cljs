@@ -124,6 +124,6 @@
     (let [aes-key-datom (first (d/datoms @conn :avet :aes-key-jwk))]
       {:aes-key-jwk (:v aes-key-datom)})))
 
-(def-thread-api :rtc/get-graph-keys
+(def-thread-api :thread-api/rtc-get-graph-keys
   [repo]
   (get-graph-keys-jwk repo))
