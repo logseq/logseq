@@ -12,9 +12,9 @@
 
 (defmacro def-thread-api
   "Define a api invokeable by other threads.
-e.g. (def-thread-api :rtc/a-api [arg1 arg2] body)"
+e.g. (def-thread-api :thread-api/a-api [arg1 arg2] body)"
   [qualified-keyword-name params & body]
-  (assert (qualified-keyword? qualified-keyword-name) qualified-keyword-name)
+  (assert (= "thread-api" (namespace qualified-keyword-name)) qualified-keyword-name)
   (assert (vector? params) params)
   `(vswap! *thread-apis assoc
            ~qualified-keyword-name

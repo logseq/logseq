@@ -59,7 +59,7 @@
               (editor/save-current-block!)
               (state/clear-editor-action!)
               (let [worker @state/*db-worker]
-                (reset! *last-request (worker :undo-redo/undo repo current-page-uuid-str))
+                (reset! *last-request (worker :thread-api/undo repo current-page-uuid-str))
                 (p/let [result @*last-request]
                   (restore-cursor-and-state! result)))))))))))
 (defonce undo! (debounce undo-aux! 20))
@@ -80,7 +80,7 @@
              (util/stop e)
              (state/clear-editor-action!)
              (let [worker @state/*db-worker]
-               (reset! *last-request (worker :undo-redo/redo repo current-page-uuid-str))
+               (reset! *last-request (worker :thread-api/redo repo current-page-uuid-str))
                (p/let [result @*last-request]
                  (restore-cursor-and-state! result))))))))))
 (defonce redo! (debounce redo-aux! 20))

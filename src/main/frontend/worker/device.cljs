@@ -207,18 +207,18 @@
                 (m/? (new-task--sync-encrypted-aes-key*
                       get-ws-create-task device-uuid->encrypted-aes-key graph-uuid))))))))))
 
-(def-thread-api :rtc/sync-current-graph-encrypted-aes-key
+(def-thread-api :thread-api/rtc-sync-current-graph-encrypted-aes-key
   [token device-uuids]
   (new-task--sync-current-graph-encrypted-aes-key token device-uuids))
 
-(def-thread-api :device/list-devices
+(def-thread-api :thread-api/list-devices
   [token]
   (new-task--list-devices token))
 
-(def-thread-api :device/remove-device-public-key
+(def-thread-api :thread-api/remove-device-public-key
   [token device-uuid key-name]
   (new-task--remove-device-public-key token device-uuid key-name))
 
-(def-thread-api :device/remove-device
+(def-thread-api :thread-api/remove-device
   [token device-uuid]
   (new-task--remove-device token device-uuid))

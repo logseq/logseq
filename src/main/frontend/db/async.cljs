@@ -151,7 +151,7 @@
         (swap! *async-queries assoc [name' opts] true)
         (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
         (p/let [{:keys [properties block children] :as result'}
-                (worker :general/get-block-and-children graph id {:children? children?
+                (worker :thread-api/get-block-and-children graph id {:children? children?
                                                                   :nested-children? nested-children?})
                 conn (db/get-db graph false)
                 block-and-children (concat properties [block] children)
@@ -170,7 +170,7 @@
   (when-let [worker @db-browser/*worker]
     (when-let [block-id (:block/uuid (db/entity graph id))]
       (state/update-state! :db/async-query-loading (fn [s] (conj s (str block-id "-parents"))))
-      (p/let [result (worker :general/get-block-parents graph id depth)
+      (p/let [result (worker :thread-api/get-block-parents graph id depth)
               conn (db/get-db graph false)
               _ (d/transact! conn result)]
         (state/update-state! :db/async-query-loading (fn [s] (disj s (str block-id "-parents"))))
@@ -180,7 +180,7 @@
   [page-name]
   (when-let [page (some-> page-name (db-model/get-page))]
     (when-let [^Object worker @db-browser/*worker]
-      (p/let [result (worker :general/get-block-and-children
+      (p/let [result (worker :thread-api/get-block-and-children
                              (state/get-current-repo)
                              (:block/uuid page)
                              {:children? true
@@ -192,7 +192,7 @@
   (assert (integer? eid))
   (when-let [worker @db-browser/*worker]
     (state/update-state! :db/async-query-loading (fn [s] (conj s (str eid "-refs"))))
-    (p/let [result (worker :general/get-block-refs graph eid)
+    (p/let [result (worker :thread-api/get-block-refs graph eid)
             conn (db/get-db graph false)
             _ (d/transact! conn result)]
       (state/update-state! :db/async-query-loading (fn [s] (disj s (str eid "-refs"))))
@@ -202,7 +202,7 @@
   [graph eid]
   (assert (integer? eid))
   (when-let [worker @db-browser/*worker]
-    (worker :general/get-block-refs-count graph eid)))
+    (worker :thread-api/get-block-refs-count graph eid)))
 
 (defn <get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."

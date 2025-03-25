@@ -50,7 +50,7 @@
     (hooks/use-effect!
      (fn []
        (when-let [worker @state/*db-worker]
-         (p/let [result (worker :general/get-page-refs-count (state/get-current-repo))
+         (p/let [result (worker :thread-api/get-page-refs-count (state/get-current-repo))
                  data (get-all-pages)
                  data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
            (set-data! data))))
