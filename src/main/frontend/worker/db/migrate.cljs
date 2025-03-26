@@ -960,6 +960,88 @@
             (js/console.error e)
             (throw e)))))))
 
+(defn- build-invalid-tx [entity eid]
+  (cond
+    (and (:db/ident entity) (= "logseq.property.attribute" (namespace (:db/ident entity))))
+    [[:db/retractEntity (:db/id entity)]]
+
+    (and (:logseq.property.history/property entity)
+         (nil? (:logseq.property.history/block entity)))
+    [[:db/retractEntity (:db/id entity)]]
+
+    (and (:db/valueType entity)
+         (not (or (:db/ident entity)
+                  (:db/cardinality entity))))
+    [[:db/retract eid :db/valueType]
+     [:db/retract eid :db/cardinality]]
+
+    (= #{:block/tx-id} (set (keys entity)))
+    [[:db/retractEntity (:db/id entity)]]
+
+    (and (seq (:block/refs entity))
+         (not (or (:block/title entity) (:block/content entity) (:property.value/content entity))))
+    [[:db/retractEntity (:db/id entity)]]
+
+    (:logseq.property.node/type entity)
+    [[:db/retract eid :logseq.property.node/type]
+     [:db/retractEntity :logseq.property.node/type]
+     [:db/add eid :logseq.property.node/display-type (:logseq.property.node/type entity)]]
+
+    (and (:db/cardinality entity) (not (ldb/property? entity)))
+    [[:db/add eid :block/tags :logseq.class/Property]
+     [:db/retract eid :block/tags :logseq.class/Page]]
+
+                                ;; (when-let [schema (:block/schema entity)]
+                                ;;   (or (:cardinality schema) (:classes schema)))
+                                ;; (let [schema (:block/schema entity)]
+                                ;;   [[:db/add eid :block/schema (dissoc schema :cardinality :classes)]])
+
+    (and (:logseq.property.asset/type entity)
+         (or (nil? (:logseq.property.asset/checksum entity))
+             (nil? (:logseq.property.asset/size entity))))
+    [[:db/retractEntity eid]]
+
+                                ;; add missing :db/ident for classes && properties
+    (and (ldb/class? entity) (nil? (:db/ident entity)))
+    [[:db/add (:db/id entity) :db/ident (db-class/create-user-class-ident-from-name (:block/title entity))]]
+
+                                ;; fix blocks missing title
+    (and (:block/parent entity) (nil? (:block/title entity)))
+    [[:db/add (:db/id entity) :block/title ""]]
+
+    (and (ldb/property? entity) (nil? (:db/ident entity)))
+    [[:db/add (:db/id entity) :db/ident (db-property/create-user-property-ident-from-name (:block/title entity))]]
+
+                                ;; remove #Page for classes/properties/journals
+    (and (ldb/internal-page? entity) (or (ldb/class? entity) (ldb/property? entity) (ldb/journal? entity)))
+    [[:db/retract (:db/id entity) :block/tags :logseq.class/Page]]
+
+                                ;; remove file entities
+    (and (:file/path entity)
+         (not (contains? #{"logseq/custom.css" "logseq/config.js"  "logseq/config.edn"} (:file/path entity))))
+    [[:db/retractEntity (:db/id entity)]]
+
+                                ;; remove page-less blocks
+    (and (:block/uuid entity) (nil? (:block/title entity)) (nil? (:block/page entity)))
+    [[:db/retractEntity (:db/id entity)]]
+
+    (:block/properties-order entity)
+    [[:db/retract (:db/id entity) :block/properties-order]]
+
+    (:block/macros entity)
+    [[:db/retract (:db/id entity) :block/macros]]
+
+    (and (seq (:block/tags entity)) (not (every? ldb/class? (:block/tags entity))))
+    (let [tags (remove ldb/class? (:block/tags entity))]
+      (map
+       (fn [tag]
+         {:db/id (:db/id tag)
+          :db/ident (or (:db/ident tag) (db-class/create-user-class-ident-from-name (:block/title entity)))
+          :block/tags :logseq.class/Tag})
+       tags))
+    :else
+    nil))
+
 (defn fix-invalid-data!
   [conn invalid-entity-ids]
   (let [db @conn
@@ -981,86 +1063,7 @@
                                                     [:db/retract (:db/id entity) k]))))))
                                         (into {} entity))
                           eid (:db/id entity)
-                          fix (cond
-                                (and (:db/ident entity) (= "logseq.property.attribute" (namespace (:db/ident entity))))
-                                [[:db/retractEntity (:db/id entity)]]
-
-                                (and (:logseq.property.history/property entity)
-                                     (nil? (:logseq.property.history/block entity)))
-                                [[:db/retractEntity (:db/id entity)]]
-
-                                (and (:db/valueType entity)
-                                     (not (or (:db/ident entity)
-                                              (:db/cardinality entity))))
-                                [[:db/retract eid :db/valueType]
-                                 [:db/retract eid :db/cardinality]]
-
-                                (= #{:block/tx-id} (set (keys entity)))
-                                [[:db/retractEntity (:db/id entity)]]
-
-                                (and (seq (:block/refs entity))
-                                     (not (or (:block/title entity) (:block/content entity) (:property.value/content entity))))
-                                [[:db/retractEntity (:db/id entity)]]
-
-                                (:logseq.property.node/type entity)
-                                [[:db/retract eid :logseq.property.node/type]
-                                 [:db/retractEntity :logseq.property.node/type]
-                                 [:db/add eid :logseq.property.node/display-type (:logseq.property.node/type entity)]]
-
-                                (and (:db/cardinality entity) (not (ldb/property? entity)))
-                                [[:db/add eid :block/tags :logseq.class/Property]
-                                 [:db/retract eid :block/tags :logseq.class/Page]]
-
-                                ;; (when-let [schema (:block/schema entity)]
-                                ;;   (or (:cardinality schema) (:classes schema)))
-                                ;; (let [schema (:block/schema entity)]
-                                ;;   [[:db/add eid :block/schema (dissoc schema :cardinality :classes)]])
-
-                                (and (:logseq.property.asset/type entity)
-                                     (or (nil? (:logseq.property.asset/checksum entity))
-                                         (nil? (:logseq.property.asset/size entity))))
-                                [[:db/retractEntity eid]]
-
-                                ;; add missing :db/ident for classes && properties
-                                (and (ldb/class? entity) (nil? (:db/ident entity)))
-                                [[:db/add (:db/id entity) :db/ident (db-class/create-user-class-ident-from-name (:block/title entity))]]
-
-                                ;; fix blocks missing title
-                                (and (:block/parent entity) (nil? (:block/title entity)))
-                                [[:db/add (:db/id entity) :block/title ""]]
-
-                                (and (ldb/property? entity) (nil? (:db/ident entity)))
-                                [[:db/add (:db/id entity) :db/ident (db-property/create-user-property-ident-from-name (:block/title entity))]]
-
-                                ;; remove #Page for classes/properties/journals
-                                (and (ldb/internal-page? entity) (or (ldb/class? entity) (ldb/property? entity) (ldb/journal? entity)))
-                                [[:db/retract (:db/id entity) :block/tags :logseq.class/Page]]
-
-                                ;; remove file entities
-                                (and (:file/path entity)
-                                     (not (contains? #{"logseq/custom.css" "logseq/config.js"  "logseq/config.edn"} (:file/path entity))))
-                                [[:db/retractEntity (:db/id entity)]]
-
-                                ;; remove page-less blocks
-                                (and (:block/uuid entity) (nil? (:block/title entity)) (nil? (:block/page entity)))
-                                [[:db/retractEntity (:db/id entity)]]
-
-                                (:block/properties-order entity)
-                                [[:db/retract (:db/id entity) :block/properties-order]]
-
-                                (:block/macros entity)
-                                [[:db/retract (:db/id entity) :block/macros]]
-
-                                (and (seq (:block/tags entity)) (not (every? ldb/class? (:block/tags entity))))
-                                (let [tags (remove ldb/class? (:block/tags entity))]
-                                  (map
-                                   (fn [tag]
-                                     {:db/id (:db/id tag)
-                                      :db/ident (or (:db/ident tag) (db-class/create-user-class-ident-from-name (:block/title entity)))
-                                      :block/tags :logseq.class/Tag})
-                                   tags))
-                                :else
-                                nil)]
+                          fix (build-invalid-tx entity eid)]
                       (into fix wrong-choice)))
                   invalid-entity-ids)
                  distinct)]
