@@ -71,11 +71,11 @@
 
 (rum/defc row-checkbox < rum/static
   [{:keys [row-selected? row-toggle-selected!]} row _column]
-  (let [id (str row "-" "checkbox")
+  (let [id (str (:db/id row) "-" "checkbox")
         [show? set-show!] (rum/use-state false)
         checked? (row-selected? row)]
     [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
-     {:html-for (str row "-" "checkbox")
+     {:html-for (str (:db/id row) "-" "checkbox")
       :on-mouse-over #(set-show! true)
       :on-mouse-out #(set-show! false)}
      (shui/checkbox
@@ -204,7 +204,7 @@
               :name "ID"
               :header (fn [_table _column] (header-index))
               :cell (fn [table row _column]
-                      (inc (.indexOf (:rows table) row)))
+                      (inc (.indexOf (:rows table) (:db/id row))))
               :resizable? false})
            (when with-object-name?
              {:id :block/title
@@ -592,7 +592,7 @@
     (shui/table-row
      (merge
       props
-      {:key (str row)
+      {:key (str (:db/id row))
        :data-state (when (row-selected? row) "selected")})
      [:div.sticky-columns.flex.flex-row
       (map #(row-cell-f % {}) pinned-columns)]
@@ -601,7 +601,7 @@
 
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
-  (let [row' (or (db/sub-block row) row)]
+  (let [row' (or (db/sub-block (:db/id row)) row)]
     (table-row-inner table row' props option)))
 
 (rum/defc search
