@@ -645,7 +645,7 @@
            :file/content "// comment"}]}]
     original-data))
 
-(deftest ^:focus import-graph
+(deftest import-graph
   (let [original-data (build-original-graph-data)
         conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
         ;; set to an unobtainable version to test this ident

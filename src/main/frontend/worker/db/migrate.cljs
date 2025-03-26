@@ -1041,6 +1041,10 @@
                                      (not (contains? #{"logseq/custom.css" "logseq/config.js"  "logseq/config.edn"} (:file/path entity))))
                                 [[:db/retractEntity (:db/id entity)]]
 
+                                ;; remove page-less blocks
+                                (and (:block/uuid entity) (nil? (:block/title entity)) (nil? (:block/page entity)))
+                                [[:db/retractEntity (:db/id entity)]]
+
                                 (:block/properties-order entity)
                                 [[:db/retract (:db/id entity) :block/properties-order]]
 
