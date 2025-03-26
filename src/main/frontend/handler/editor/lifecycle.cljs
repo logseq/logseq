@@ -33,11 +33,10 @@
 
     ;; skip recording editor info when undo or redo is still running
     (when-not (contains? #{:undo :redo} @(:editor/op @state/state))
-      (let [worker @state/*db-worker
-            page-id (:block/uuid (:block/page (db/entity (:db/id (state/get-edit-block)))))
+      (let [page-id (:block/uuid (:block/page (db/entity (:db/id (state/get-edit-block)))))
             repo (state/get-current-repo)]
         (when page-id
-          (worker :thread-api/record-editor-info repo (str page-id) (state/get-editor-info)))))
+          (state/<invoke-db-worker :thread-api/record-editor-info repo (str page-id) (state/get-editor-info)))))
 
     (state/set-state! :editor/op nil))
   state)
