@@ -49,11 +49,10 @@
                                        :with-id? false})]
     (hooks/use-effect!
      (fn []
-       (when-let [worker @state/*db-worker]
-         (p/let [result (worker :thread-api/get-page-refs-count (state/get-current-repo))
-                 data (get-all-pages)
-                 data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
-           (set-data! data))))
+       (p/let [result (state/<invoke-db-worker :thread-api/get-page-refs-count (state/get-current-repo))
+               data (get-all-pages)
+               data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
+         (set-data! data)))
      [])
     [:div.ls-all-pages.w-full.mx-auto
      (views/view {:data data

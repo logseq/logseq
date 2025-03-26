@@ -16,8 +16,6 @@
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
-(defonce *worker state/*db-worker)
-
 (defn- ask-persist-permission!
   []
   (p/let [persistent? (.persist js/navigator.storage)]
@@ -127,7 +125,7 @@
           t1 (util/time-ms)]
       (Comlink/expose (Main.) worker)
       (worker-handler/handle-message! worker wrapped-worker)
-      (reset! *worker wrapped-worker)
+      (reset! state/*db-worker wrapped-worker)
       (-> (p/let [_ (wrapped-worker :thread-api/init config/RTC-WS-URL)
                   _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
                   _ (wrapped-worker :thread-api/sync-app-state
@@ -173,55 +171,41 @@
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo opts]
-    (when-let [worker @*worker]
-      (worker :thread-api/create-or-open-db repo opts)))
+    (state/<invoke-db-worker :thread-api/create-or-open-db repo opts))
 
   (<list-db [_this]
-    (when-let [worker @*worker]
-      (-> (worker :thread-api/list-db)
-          (p/catch sqlite-error-handler))))
+    (-> (state/<invoke-db-worker :thread-api/list-db)
+        (p/catch sqlite-error-handler)))
 
   (<unsafe-delete [_this repo]
-    (when-let [worker @*worker]
-      (worker :thread-api/unsafe-unlink-db repo)))
+    (state/<invoke-db-worker :thread-api/unsafe-unlink-db repo))
 
   (<release-access-handles [_this repo]
-    (when-let [worker @*worker]
-      (worker :thread-api/release-access-handles repo)))
+    (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
   (<fetch-initial-data [_this repo opts]
-    (when-let [^js worker @*worker]
-      (-> (p/let [db-exists? (worker :thread-api/db-exists repo)
-                  disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
-                  _ (when disk-db-data
-                      (worker :thread-api/import-db repo disk-db-data))
-                  _ (worker :thread-api/create-or-open-db repo opts)]
-            (worker :thread-api/get-initial-data repo))
-          (p/catch sqlite-error-handler))))
+    (-> (p/let [db-exists? (state/<invoke-db-worker :thread-api/db-exists repo)
+                disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
+                _ (when disk-db-data
+                    (state/<invoke-db-worker :thread-api/import-db repo disk-db-data))
+                _ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
+          (state/<invoke-db-worker :thread-api/get-initial-data repo))
+        (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
-    (when-let [worker @*worker]
-      (-> (p/let [data (worker :thread-api/export-db repo)]
-            (when data
-              (if (:return-data? opts)
-                data
-                (<export-db! repo data))))
-          (p/catch (fn [error]
-                     (prn :debug :save-db-error repo)
-                     (js/console.error error)
-                     (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {})))))
+    (-> (p/let [data (state/<invoke-db-worker :thread-api/export-db repo)]
+          (when data
+            (if (:return-data? opts)
+              data
+              (<export-db! repo data))))
+        (p/catch (fn [error]
+                   (prn :debug :save-db-error repo)
+                   (js/console.error error)
+                   (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {}))))
 
   (<import-db [_this repo data]
-    (when-let [worker @*worker]
-      (-> (worker :thread-api/import-db repo data)
-          (p/catch (fn [error]
-                     (prn :debug :import-db-error repo)
-                     (js/console.error error)
-                     (notification/show! [:div (str "SQLiteDB import error: " error)] :error) {}))))))
-
-(comment
-  (defn clean-all-dbs!
-    []
-    (when-let [worker @*worker]
-      (worker :general/dangerousRemoveAllDbs)
-      (state/set-current-repo! nil))))
+    (-> (state/<invoke-db-worker :thread-api/import-db repo data)
+        (p/catch (fn [error]
+                   (prn :debug :import-db-error repo)
+                   (js/console.error error)
+                   (notification/show! [:div (str "SQLiteDB import error: " error)] :error) {})))))

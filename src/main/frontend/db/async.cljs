@@ -13,7 +13,6 @@
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.handler.file-based.property.util :as property-util]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.db :as ldb]
@@ -147,12 +146,13 @@
                name-or-uuid)]
     (if (or (:block.temp/fully-loaded? e) async-requested?)
       e
-      (when-let [worker @db-browser/*worker]
+      (do
         (swap! *async-queries assoc [name' opts] true)
         (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
         (p/let [{:keys [properties block children] :as result'}
-                (worker :thread-api/get-block-and-children graph id {:children? children?
-                                                                  :nested-children? nested-children?})
+                (state/<invoke-db-worker :thread-api/get-block-and-children
+                                         graph id {:children? children?
+                                                   :nested-children? nested-children?})
                 conn (db/get-db graph false)
                 block-and-children (concat properties [block] children)
                 _ (d/transact! conn block-and-children)
@@ -167,42 +167,38 @@
 (defn <get-block-parents
   [graph id depth]
   (assert (integer? id))
-  (when-let [worker @db-browser/*worker]
-    (when-let [block-id (:block/uuid (db/entity graph id))]
-      (state/update-state! :db/async-query-loading (fn [s] (conj s (str block-id "-parents"))))
-      (p/let [result (worker :thread-api/get-block-parents graph id depth)
-              conn (db/get-db graph false)
-              _ (d/transact! conn result)]
-        (state/update-state! :db/async-query-loading (fn [s] (disj s (str block-id "-parents"))))
-        result))))
+  (when-let [block-id (:block/uuid (db/entity graph id))]
+    (state/update-state! :db/async-query-loading (fn [s] (conj s (str block-id "-parents"))))
+    (p/let [result (state/<invoke-db-worker :thread-api/get-block-parents graph id depth)
+            conn (db/get-db graph false)
+            _ (d/transact! conn result)]
+      (state/update-state! :db/async-query-loading (fn [s] (disj s (str block-id "-parents"))))
+      result)))
 
 (defn <get-page-all-blocks
   [page-name]
   (when-let [page (some-> page-name (db-model/get-page))]
-    (when-let [^Object worker @db-browser/*worker]
-      (p/let [result (worker :thread-api/get-block-and-children
-                             (state/get-current-repo)
-                             (:block/uuid page)
-                             {:children? true
-                              :nested-children? false})]
-        (:children result)))))
+    (p/let [result (state/<invoke-db-worker :thread-api/get-block-and-children
+                                            (state/get-current-repo)
+                                            (:block/uuid page)
+                                            {:children? true
+                                             :nested-children? false})]
+      (:children result))))
 
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))
-  (when-let [worker @db-browser/*worker]
-    (state/update-state! :db/async-query-loading (fn [s] (conj s (str eid "-refs"))))
-    (p/let [result (worker :thread-api/get-block-refs graph eid)
-            conn (db/get-db graph false)
-            _ (d/transact! conn result)]
-      (state/update-state! :db/async-query-loading (fn [s] (disj s (str eid "-refs"))))
-      result)))
+  (state/update-state! :db/async-query-loading (fn [s] (conj s (str eid "-refs"))))
+  (p/let [result (state/<invoke-db-worker :thread-api/get-block-refs graph eid)
+          conn (db/get-db graph false)
+          _ (d/transact! conn result)]
+    (state/update-state! :db/async-query-loading (fn [s] (disj s (str eid "-refs"))))
+    result))
 
 (defn <get-block-refs-count
   [graph eid]
   (assert (integer? eid))
-  (when-let [worker @db-browser/*worker]
-    (worker :thread-api/get-block-refs-count graph eid)))
+  (state/<invoke-db-worker :thread-api/get-block-refs-count graph eid))
 
 (defn <get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."

@@ -10,7 +10,6 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [malli.core :as m]
@@ -189,18 +188,15 @@
 
 (defn <get-all-pages
   [repo]
-  (when-let [worker @db-browser/*worker]
-    (worker :thread-api/export-get-all-pages repo)))
+  (state/<invoke-db-worker :thread-api/export-get-all-pages repo))
 
 (defn <get-debug-datoms
   [repo]
-  (when-let [worker @db-browser/*worker]
-    (worker :thread-api/export-get-debug-datoms repo)))
+  (state/<invoke-db-worker :thread-api/export-get-debug-datoms repo))
 
 (defn <get-all-page->content
   [repo]
-  (when-let [worker @db-browser/*worker]
-    (worker :thread-api/export-get-all-page->content repo)))
+  (state/<invoke-db-worker :thread-api/export-get-all-page->content repo))
 
 (defn <get-file-contents
   [repo suffix]
