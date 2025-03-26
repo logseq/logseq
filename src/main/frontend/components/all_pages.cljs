@@ -44,11 +44,4 @@
                   :view-feature-type :all-pages
                   :show-items-count? true
                   :columns columns'
-                  :title-key :all-pages/table-title
-                  :on-delete-rows (fn [table selected-rows]
-                                    (shui/dialog-open!
-                                     (component-page/batch-delete-dialog
-                                      selected-rows false
-                                      (fn []
-                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                          (f {}))))))})]))
+                  :title-key :all-pages/table-title})]))

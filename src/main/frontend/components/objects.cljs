@@ -7,10 +7,7 @@
             [frontend.db.model :as db-model]
             [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
-            [frontend.modules.outliner.op :as outliner-op]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
-            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.ui :as shui]
@@ -83,22 +80,7 @@
                  :show-items-count? true
                  :add-property! (fn []
                                   (state/pub-event! [:editor/new-property {:block class
-                                                                           :class-schema? true}]))
-                 :on-delete-rows (fn [table selected-rows]
-                                     ;; Built-in objects must not be deleted e.g. Tag, Property and Root
-                                   (let [pages (->> selected-rows (filter entity-util/page?) (remove :logseq.property/built-in?))
-                                         blocks (->> selected-rows (remove entity-util/page?) (remove :logseq.property/built-in?))]
-                                     (p/do!
-                                      (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                        (f {}))
-                                      (ui-outliner-tx/transact!
-                                       {:outliner-op :delete-blocks}
-                                       (when (seq blocks)
-                                         (outliner-op/delete-blocks! blocks nil))
-                                       (let [page-ids (map :db/id pages)
-                                             tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id class)]) page-ids)]
-                                         (when (seq tx-data)
-                                           (outliner-op/transact! tx-data {:outliner-op :save-block})))))))})))
+                                                                           :class-schema? true}]))})))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class {:keys [current-page? sidebar?]}]
@@ -140,23 +122,7 @@
                  :add-new-object! (fn [{:keys [properties set-data!]}]
                                     (add-new-property-object! property set-data! properties))
                  ;; TODO: Add support for adding column
-                 :show-add-property? false
-                 ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
-                 :on-delete-rows (when-not (:logseq.property/built-in? property)
-                                   (fn [table selected-rows]
-                                     (let [pages (->> selected-rows (filter entity-util/page?) (remove :logseq.property/built-in?))
-                                           blocks (->> selected-rows (remove entity-util/page?) (remove :logseq.property/built-in?))]
-                                       (p/do!
-                                        (when-let [f (get-in table [:data-fns :set-row-selection!])]
-                                          (f {}))
-                                        (ui-outliner-tx/transact!
-                                         {:outliner-op :delete-blocks}
-                                         (when (seq blocks)
-                                           (outliner-op/delete-blocks! blocks nil))
-                                         (let [page-ids (map :db/id pages)
-                                               tx-data (map (fn [pid] [:db/retract pid (:db/ident property)]) page-ids)]
-                                           (when (seq tx-data)
-                                             (outliner-op/transact! tx-data {:outliner-op :save-block}))))))))})))
+                 :show-add-property? false})))
 
 ;; Show all nodes containing the given property
 (rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
