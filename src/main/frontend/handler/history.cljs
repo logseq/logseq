@@ -33,7 +33,7 @@
 (defn- restore-cursor-and-state!
   [result]
   (state/set-state! :history/paused? true)
-  (let [{:keys [ui-state-str undo?] :as data} (ldb/read-transit-str result)]
+  (let [{:keys [ui-state-str undo?] :as data} result]
     (if ui-state-str
       (let [{:keys [old-state new-state]} (ldb/read-transit-str ui-state-str)]
         (if undo? (restore-app-state! old-state) (restore-app-state! new-state)))

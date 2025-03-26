@@ -6,6 +6,7 @@
             [datascript.core]
             [datascript.impl.entity :as de]
             [datascript.transit :as dt]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.order :as db-order]
@@ -50,7 +51,11 @@
                                    "datascript/Entity" identity)
                             (merge read-handlers))
         reader (transit/reader :json {:handlers read-handlers*})]
-    (fn read-transit-str* [s] (transit/read reader s))))
+    (fn read-transit-str* [s]
+      (if (and (string? s) (identical? "[" (first s)))
+        (transit/read reader s)
+        (do (log/error :invalid-transit-string s)
+            s)))))
 
 (defn db-based-graph?
   [graph-name]
