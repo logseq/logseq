@@ -1655,7 +1655,7 @@
   [state view-entity option]
   (rum/with-key (view-inner view-entity
                             (cond-> option
-                              config/publishing?
+                              (or config/publishing? (:logseq.property.view/group-by-property view-entity))
                               (dissoc :add-new-object!))
                             (::scroller-ref state))
     (str "view-" (:db/id view-entity))))
