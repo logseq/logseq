@@ -700,8 +700,9 @@
           undeclared-properties (-> (set (keys used-properties))
                                     (set/difference (set (keys properties)))
                                     ((fn [x] (remove db-property/logseq-property? x))))]
-      (assert (empty? undeclared-properties)
-              (str "The following properties used in EDN were not declared in :properties: " undeclared-properties)))))
+      (when (seq undeclared-properties)
+        (throw (ex-info (str "The following properties used in EDN were not declared in :properties: " undeclared-properties)
+                        {:used-properties (select-keys used-properties undeclared-properties)}))))))
 
 (defn ^:large-vars/doc-var build-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a map
