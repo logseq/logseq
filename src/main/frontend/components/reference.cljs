@@ -242,9 +242,10 @@
    (fn [state]
      (let [*result (atom nil)
            [page *n-ref] (:rum/args state)]
-       (p/let [result (search/get-unlinked-refs (:db/id page))]
-         (reset! *n-ref (count result))
-         (reset! *result result))
+       (p/let [result (search/get-unlinked-refs (:db/id page))
+               result' (remove nil? result)]
+         (reset! *n-ref (count result'))
+         (reset! *result result'))
        (assoc state ::result *result)))}
   [state page _n-ref]
   (let [ref-blocks (rum/react (::result state))]
