@@ -37,6 +37,8 @@
                          :desc "Include timestamps in export"}
    :file {:alias :f
           :desc "Saves edn to file"}
+   :catch-validation-errors? {:alias :c
+                              :desc "Catch validation errors for dev"}
    :exclude-namespaces {:alias :e
                         :coerce #{}
                         :desc "Namespaces to exclude from properties and classes"}
@@ -54,7 +56,7 @@
             (js/process.exit 1))
         [dir db-name] (get-dir-and-db-name graph-dir)
         conn (sqlite-cli/open-db! dir db-name)
-        export-options (merge (select-keys options [:include-timestamps? :exclude-namespaces :exclude-built-in-pages?])
+        export-options (merge (dissoc options :file :export-options)
                               (edn/read-string (:export-options options)))
         export-map (sqlite-export/build-export @conn {:export-type :graph :graph-options export-options})]
     (if (:file options)

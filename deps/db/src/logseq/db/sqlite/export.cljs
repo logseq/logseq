@@ -713,7 +713,12 @@
           (build-graph-ontology-export db {})
           :graph
           (build-graph-export db (:graph-options options)))]
-    (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values) options)
+    (if (get-in options [:graph-options :catch-validation-errors?])
+      (try
+        (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values) options)
+        (catch ExceptionInfo e
+          (println "Caught error:" e)))
+      (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values) options))
     (assoc export-map ::export-type export-type)))
 
 ;; Import fns
