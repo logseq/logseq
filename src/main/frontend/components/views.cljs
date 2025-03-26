@@ -613,9 +613,9 @@
         {:placeholder "Type to search"
          :auto-focus true
          :value input
-         :onChange (fn [e]
-                     (let [value (util/evalue e)]
-                       (on-change value)))
+         :on-change (fn [e]
+                      (let [value (util/evalue e)]
+                        (on-change value)))
          :on-key-down (fn [e]
                         (when (= "Escape" (util/ekey e))
                           (set-show-input! false)
@@ -1245,9 +1245,8 @@
 (defn- run-effects!
   [{:keys [load-view-data] :as option} {:keys [data]} input *scroller-ref gallery?]
   (hooks/use-effect!
-   (fn []
-     (load-view-data input))
-   [input])
+   (fn [] (load-view-data input))
+   [(hooks/use-debounced-value input 300)])
 
   (hooks/use-effect!
    (fn []
@@ -1498,7 +1497,7 @@
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [view-parent data set-data! columns add-new-object! foldable-options] :as option*}
    *scroller-ref]
-  (let [[input set-input!] (rum/use-state "")
+  (let [[input set-input!] (hooks/use-state "")
         option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)

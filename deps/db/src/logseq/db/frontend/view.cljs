@@ -393,7 +393,7 @@
                     (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
                       [{:id :block/updated-at, :asc? false}]
                       sorting*))
-          filtered-entities (if (seq filters)
+          filtered-entities (if (or (seq filters) (not (string/blank? input)))
                               (filter (fn [row] (row-matched? db row filters input)) entities)
                               entities)
           group-by-page? (= group-by-property-ident :block/page)
