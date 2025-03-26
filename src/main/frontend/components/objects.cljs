@@ -14,18 +14,12 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(defn- get-class-objects
-  [class]
-  (->> (db-model/get-class-objects (state/get-current-repo) (:db/id class))
-       (map (fn [row] (assoc row :id (:db/id row))))))
-
 (defn- add-new-class-object!
-  [class set-data! properties]
+  [class properties]
   (p/let [block (editor-handler/api-insert-new-block! ""
                                                       {:page (:block/uuid class)
                                                        :properties (merge properties {:block/tags (:db/id class)})
-                                                       :edit-block? false})
-          _ (set-data! (get-class-objects class))]
+                                                       :edit-block? false})]
     (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
     block))
 
@@ -62,20 +56,22 @@
                  :view-parent class
                  :view-feature-type :class-objects
                  :columns columns
-                 :add-new-object! (fn [{:keys [properties set-data!]}]
-                                    (if (= :logseq.class/Asset (:db/ident class))
-                                      (shui/dialog-open!
-                                       (fn []
-                                         [:div.flex.flex-col.gap-2
-                                          [:div.font-medium "Add assets"]
-                                          (filepicker/picker
-                                           {:on-change (fn [_e files]
-                                                         (p/do!
-                                                          (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)
-                                                          (shui/dialog-close!)
-                                                          ;; FIXME: set-data!
-                                                          ))})]))
-                                      (add-new-class-object! class set-data! properties)))
+                 :add-new-object! (fn [_view table {:keys [properties]}]
+                                    (let [set-data! (get-in table [:data-fns :set-data!])
+                                          full-data (:full-data table)]
+                                      (if (= :logseq.class/Asset (:db/ident class))
+                                        (shui/dialog-open!
+                                         (fn []
+                                           [:div.flex.flex-col.gap-2
+                                            [:div.font-medium "Add assets"]
+                                            (filepicker/picker
+                                             {:on-change (fn [_e files]
+                                                           (p/let [entities (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
+                                                             (shui/dialog-close!)
+                                                             (when (seq entities)
+                                                               (set-data! (concat full-data (map :db/id entities))))))})]))
+                                        (p/let [block (add-new-class-object! class properties)]
+                                          (set-data! (conj (vec full-data) (:db/id block)))))))
                  :show-add-property? true
                  :show-items-count? true
                  :add-property! (fn []
@@ -93,12 +89,8 @@
       [:div.ml-1
        (class-objects-inner config class properties)])))
 
-(defn- get-property-related-objects [repo property]
-  (->> (db-model/get-property-related-objects repo (:db/id property))
-       (map (fn [row] (assoc row :id (:db/id row))))))
-
 (defn- add-new-property-object!
-  [property set-data! properties]
+  [property properties]
   (p/let [default-value (if (= :checkbox (:logseq.property/type property))
                           false
                           (:db/id (db/entity :logseq.property/empty-placeholder)))
@@ -107,8 +99,7 @@
                                                        :properties (merge
                                                                     {(:db/ident property) default-value}
                                                                     properties)
-                                                       :edit-block? false})
-          _ (set-data! (get-property-related-objects (state/get-current-repo) property))]
+                                                       :edit-block? false})]
     (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
     block))
 
@@ -119,8 +110,11 @@
                  :view-parent property
                  :view-feature-type :property-objects
                  :columns columns
-                 :add-new-object! (fn [{:keys [properties set-data!]}]
-                                    (add-new-property-object! property set-data! properties))
+                 :add-new-object! (fn [_view table {:keys [properties]}]
+                                    (p/let [set-data! (get-in table [:data-fns :set-data!])
+                                            full-data (:full-data table)
+                                            block (add-new-property-object! property properties)]
+                                      (set-data! (conj (vec full-data) (:db/id block)))))
                  ;; TODO: Add support for adding column
                  :show-add-property? false})))
 
