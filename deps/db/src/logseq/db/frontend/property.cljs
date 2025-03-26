@@ -655,6 +655,15 @@
   [s]
   (string/includes? s ".class"))
 
+(defn internal-property?
+  "Determines if ident kw is an internal property. This includes db-attribute properties
+   unlike logseq-property? and doesn't include non-property idents unlike internal-ident?"
+  [k]
+  (let [k-name (namespace k)]
+    (and k-name
+         (or (contains? logseq-property-namespaces k-name)
+             (contains? public-db-attribute-properties k)))))
+
 (defn property?
   "Determines if ident kw is a property visible to user"
   [k]
