@@ -1025,6 +1025,10 @@
                                 (and (ldb/class? entity) (nil? (:db/ident entity)))
                                 [[:db/add (:db/id entity) :db/ident (db-class/create-user-class-ident-from-name (:block/title entity))]]
 
+                                ;; fix blocks missing title
+                                (and (:block/parent entity) (nil? (:block/title entity)))
+                                [[:db/add (:db/id entity) :block/title ""]]
+
                                 (and (ldb/property? entity) (nil? (:db/ident entity)))
                                 [[:db/add (:db/id entity) :db/ident (db-property/create-user-property-ident-from-name (:block/title entity))]]
 
