@@ -126,7 +126,7 @@
                             ldb/read-transit-str))
           t1 (util/time-ms)]
       (Comlink/expose (Main.) worker)
-      (worker-handler/handle-message! worker wrapped-worker*)
+      (worker-handler/handle-message! worker wrapped-worker)
       (reset! *worker wrapped-worker)
       (-> (p/let [_ (wrapped-worker :thread-api/init config/RTC-WS-URL)
                   _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
