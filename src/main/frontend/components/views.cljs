@@ -71,11 +71,11 @@
 
 (rum/defc row-checkbox < rum/static
   [{:keys [row-selected? row-toggle-selected!]} row _column]
-  (let [id (str (:id row) "-" "checkbox")
+  (let [id (str row "-" "checkbox")
         [show? set-show!] (rum/use-state false)
         checked? (row-selected? row)]
     [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
-     {:html-for (str (:id row) "-" "checkbox")
+     {:html-for (str row "-" "checkbox")
       :on-mouse-over #(set-show! true)
       :on-mouse-out #(set-show! false)}
      (shui/checkbox
@@ -83,7 +83,7 @@
        :checked checked?
        :on-checked-change (fn [v]
                             (p/do!
-                             (when v (db-async/<get-block (state/get-current-repo) v {:skip-refresh? true}))
+                             (when v (db-async/<get-block (state/get-current-repo) row {:skip-refresh? true}))
                              (row-toggle-selected! row v)))
        :aria-label "Select row"
        :class (str "flex transition-opacity "
@@ -204,8 +204,7 @@
               :name "ID"
               :header (fn [_table _column] (header-index))
               :cell (fn [table row _column]
-                      (let [rows (map :id (:rows table))]
-                        (inc (.indexOf rows (:id row)))))
+                      (inc (.indexOf (:rows table) row)))
               :resizable? false})
            (when with-object-name?
              {:id :block/title
@@ -580,7 +579,7 @@
         sized-columns (get-in table [:state :sized-columns])
         row-cell-f (fn [column {:keys [_lazy?]}]
                      (when-let [render (get column :cell)]
-                       (let [id (str (:id row) "-" (:id column))
+                       (let [id (str row "-" (:id column))
                              width (get-column-size column sized-columns)
                              select? (= (:id column) :select)
                              add-property? (= (:id column) :add-property)
@@ -593,7 +592,7 @@
     (shui/table-row
      (merge
       props
-      {:key (str (:id row))
+      {:key (str row)
        :data-state (when (row-selected? row) "selected")})
      [:div.sticky-columns.flex.flex-row
       (map #(row-cell-f % {}) pinned-columns)]
@@ -602,7 +601,7 @@
 
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
-  (let [row' (or (db/sub-block (:id row)) row)]
+  (let [row' (or (db/sub-block row) row)]
     (table-row-inner table row' props option)))
 
 (rum/defc search
