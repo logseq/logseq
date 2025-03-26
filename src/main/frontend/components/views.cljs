@@ -485,7 +485,7 @@
         page-ids (map :db/id pages)
         {:keys [set-data! set-row-selection!]} (:data-fns table)
         update-table-state! (fn []
-                              (let [data (or (:all-data table) (:data table))
+                              (let [data (:full-data table)
                                     selected-ids (set (map :db/id selected-rows))
                                     new-data (if (every? number? data)
                                                (remove selected-ids data)
@@ -1070,14 +1070,18 @@
       {:variant "ghost"
        :class "!px-1 text-muted-foreground"
        :size :sm
-       :on-click (get-in table [:data-fns :add-new-object!])}
+       :on-click (fn [_]
+                   (let [f (get-in table [:data-fns :add-new-object!])]
+                     (f view-entity table)))}
       (ui/icon (if asset? "upload" "plus")))
      [:div "New record"])))
 
 (rum/defc add-new-row < rum/static
-  [table]
+  [view-entity table]
   [:div.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm.border-b
-   {:on-click (get-in table [:data-fns :add-new-object!])}
+   {:on-click (fn [_]
+                (let [f (get-in table [:data-fns :add-new-object!])]
+                  (f view-entity table)))}
    (ui/icon "plus" {:size 14})
    [:div "New"]])
 
@@ -1187,7 +1191,7 @@
          (table-body table option rows *scroller-ref *rows-wrap set-items-rendered!)
 
          (when (and (get-in table [:data-fns :add-new-object!]) (or (empty? rows) items-rendered?))
-           (shui/table-footer (add-new-row table)))]]))))
+           (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
 
 (rum/defc list-view < rum/static
   [{:keys [config] :as option} _view-entity rows *scroller-ref]
@@ -1495,7 +1499,7 @@
       (when add-new-object! (new-record-button table view-entity))]]))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
-  [view-entity {:keys [view-parent data set-data! columns add-new-object! foldable-options] :as option*}
+  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options] :as option*}
    *scroller-ref]
   (let [[input set-input!] (hooks/use-state "")
         option (assoc option* :properties
@@ -1546,6 +1550,7 @@
         group-by-property (:logseq.property.view/group-by-property view-entity)
         table-map {:view-entity view-entity
                    :data data
+                   :full-data full-data
                    :columns columns
                    :state {:sorting sorting
                            :filters filters
@@ -1598,11 +1603,12 @@
                               (let [[value group] (nth (:rows table) idx)
                                     add-new-object! (when (fn? add-new-object!)
                                                       (fn [_]
-                                                        (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
+                                                        (add-new-object! view-entity table
+                                                                         {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
                                     table' (shui/table-option (-> table-map
                                                                   (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                                  (assoc :data group
-                                                                         :all-data (:data table))))
+                                                                  (assoc :data group ; data for this group
+                                                                         )))
                                     readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
                                                                (db-property/property-value-content %)
                                                                (str %))
@@ -1662,7 +1668,6 @@
 (rum/defc view-aux
   [view-entity {:keys [view-parent view-feature-type data] :as option}]
   (let [[view-entity set-view-entity!] (db/sub-entity view-entity (str "view-" (:db/id view-entity)))
-        [items-count set-count!] (hooks/use-state (count data))
         query? (= view-feature-type :query-result)
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
@@ -1670,13 +1675,12 @@
         load-view-data (fn load-view-data [input]
                          (when-not query?                 ; TODO: move query logic to worker
                            (->
-                            (p/let [{:keys [count data ref-pages-count]} (<load-view-data view-entity
-                                                                                          {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
-                                                                                                            (:db/id view-parent))
-                                                                                           :view-feature-type view-feature-type
-                                                                                           :input input})]
+                            (p/let [{:keys [data ref-pages-count]} (<load-view-data view-entity
+                                                                                    {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
+                                                                                                      (:db/id view-parent))
+                                                                                     :view-feature-type view-feature-type
+                                                                                     :input input})]
                               (set-data! data)
-                              (set-count! count)
                               (when ref-pages-count
                                 (set-ref-pages-count! ref-pages-count))
                               (set-loading! false))
@@ -1702,8 +1706,13 @@
           [:div.flex.flex-col.gap-2
            (view-container view-entity (assoc option
                                               :data data
+                                              :full-data data
                                               :set-data! set-data!
-                                              :items-count items-count
+                                              :items-count (if (every? number? data)
+                                                             (count data)
+                                                             ;; grouped
+                                                             (reduce (fn [total [_ col]]
+                                                                       (+ total (count col))) 0 data))
                                               :ref-pages-count ref-pages-count
                                               :load-view-data load-view-data
                                               :set-view-entity! set-view-entity!))])))))

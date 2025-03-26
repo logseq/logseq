@@ -599,7 +599,8 @@
                         (string/blank? (:block/title last-block)))
                  (edit-block! last-block :max)
                  (edit-block! new-block :max)))
-             new-block)))))))
+             (when-let [id (:block/uuid new-block)]
+               (db/entity [:block/uuid id])))))))))
 
 (defn insert-first-page-block-if-not-exists!
   [page-uuid-or-title]
@@ -1635,7 +1636,8 @@
               format
               {:last-pattern (if drop-or-paste? "" commands/command-trigger)
                :restore?     true
-               :command      :insert-asset}))))
+               :command      :insert-asset})
+             entities)))
         (p/catch (fn [e]
                    (js/console.error e)))
         (p/finally
