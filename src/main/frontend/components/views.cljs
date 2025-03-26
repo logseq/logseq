@@ -1585,43 +1585,50 @@
                         :display-type display-type
                         :row-selection row-selection
                         :add-new-object! add-new-object!}]
-         (if group-by-property
+         (if (and group-by-property (not (number? (first (:rows table)))))
            [:div.flex.flex-col.border-t.py-4
-            {:class (if list-view? "gap-2" "gap-4")}
-            (for [[idx [value group]] (medley/indexed (:rows table))]
-              (let [add-new-object! (when (fn? add-new-object!)
-                                      (fn [_]
-                                        (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
-                    table' (shui/table-option (-> table-map
-                                                  (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                  (assoc :data group
-                                                         :all-data (:data table))))
-                    readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
-                                               (db-property/property-value-content %)
-                                               (str %))
-                    group-by-page? (= :block/page (:db/ident group-by-property))]
-                (rum/with-key
-                  (ui/foldable
-                   [:div
-                    (cond
-                      group-by-page?
-                      (if value
-                        (let [c (state/get-component :block/page-cp)]
-                          (c {:disable-preview? true} value))
-                        [:div.text-muted-foreground
-                         "Other pages"])
+            (ui/virtualized-list
+             {:custom-scroll-parent (gdom/getElement "main-content-container")
+              :increase-viewport-by {:top 300 :bottom 300}
+              :compute-item-key (fn [idx]
+                                  (str "table-group" idx))
+              :skipAnimationFrameInResizeObserver true
+              :total-count (count (:rows table))
+              :item-content (fn [idx]
+                              (let [[value group] (nth (:rows table) idx)
+                                    add-new-object! (when (fn? add-new-object!)
+                                                      (fn [_]
+                                                        (add-new-object! {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
+                                    table' (shui/table-option (-> table-map
+                                                                  (assoc-in [:data-fns :add-new-object!] add-new-object!)
+                                                                  (assoc :data group
+                                                                         :all-data (:data table))))
+                                    readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
+                                                               (db-property/property-value-content %)
+                                                               (str %))
+                                    group-by-page? (= :block/page (:db/ident group-by-property))]
+                                (rum/with-key
+                                  (ui/foldable
+                                   [:div
+                                    (cond
+                                      group-by-page?
+                                      (if value
+                                        (let [c (state/get-component :block/page-cp)]
+                                          (c {:disable-preview? true} value))
+                                        [:div.text-muted-foreground
+                                         "Other pages"])
 
-                      (some? value)
-                      (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                        [:div.flex.flex-row.gap-1.items-center
-                         (when icon (icon-component/icon icon {:color? true}))
-                         (readable-property-value value)])
-                      :else
-                      (str "No " (:block/title group-by-property)))]
-                   (let [render (view-cp view-entity (assoc table' :rows group :group-idx idx) option view-opts)]
-                     (if list-view? [:div.-ml-2 render] render))
-                   {:title-trigger? false})
-                  (str "group-" idx))))]
+                                      (some? value)
+                                      (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                                        [:div.flex.flex-row.gap-1.items-center
+                                         (when icon (icon-component/icon icon {:color? true}))
+                                         (readable-property-value value)])
+                                      :else
+                                      (str "No " (:block/title group-by-property)))]
+                                   (let [render (view-cp view-entity (assoc table' :rows group :group-idx idx) option view-opts)]
+                                     (if list-view? [:div.-ml-2 render] render))
+                                   {:title-trigger? false})
+                                  (str "group-" idx))))})]
            (view-cp view-entity table option view-opts)))]
       (merge {:title-trigger? false} foldable-options))]))
 
